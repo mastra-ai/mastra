@@ -1,5 +1,4 @@
 import type { Mastra } from '@mastra/core';
-import type { RuntimeContext } from '@mastra/core/di';
 import {
   getWorkflowsHandler as getOriginalWorkflowsHandler,
   getWorkflowByIdHandler as getOriginalWorkflowByIdHandler,
@@ -72,8 +71,7 @@ export async function startAsyncWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const { inputData } = await c.req.json();
+    const { inputData, runtimeContext } = await c.req.json();
     const runId = c.req.query('runId');
 
     const result = await getOriginalStartAsyncWorkflowHandler({
@@ -94,8 +92,7 @@ export async function startWorkflowRunHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const { inputData } = await c.req.json();
+    const { inputData, runtimeContext } = await c.req.json();
     const runId = c.req.query('runId');
 
     await getOriginalStartWorkflowRunHandler({
@@ -161,8 +158,7 @@ export async function streamWorkflowHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const logger = mastra.getLogger();
     const workflowId = c.req.param('workflowId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const { inputData } = await c.req.json();
+    const { inputData, runtimeContext } = await c.req.json();
     const runId = c.req.query('runId');
 
     return stream(
@@ -205,8 +201,7 @@ export async function resumeAsyncWorkflowHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const { step, resumeData } = await c.req.json();
+    const { step, resumeData, runtimeContext } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });

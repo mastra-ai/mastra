@@ -13,22 +13,9 @@ You could write everything in a single file, or separate each agent, tool, and w
 
 We don't enforce a specific folder structure, but we do recommend some best practices, and the CLI will scaffold a project with a sensible structure.
 
-## Using the CLI
+## Example Project Structure
 
-The Mastra CLI is [interactive](/docs/getting-started/installation#interactive) and allows you to:
-
-- **Choose a directory for Mastra files**: Specify where you want the Mastra files to be placed (default is `src/mastra`).
-- **Select components to install**: Choose which components you want to include in your project:
-  - Agents
-  - Tools
-  - Workflows
-- **Select a default LLM provider**: Choose from supported providers like OpenAI, Anthropic, Groq, Google or Cerebras.
-- **Include example code**: Decide whether to include example code to help you get started.
-- **Install Mastra docs MCP server**: Make your AI IDE a Mastra expert
-
-### Example Project Structure
-
-Assuming you select all components and include example code, your project structure will look like this:
+A default project created with the CLI looks like this:
 
 <FileTree>
   <FileTree.Folder name="src" defaultOpen>
@@ -49,7 +36,7 @@ Assuming you select all components and include example code, your project struct
   <FileTree.File name="package.json" />
   <FileTree.File name="tsconfig.json" />
 </FileTree>
-{/* 
+{/*
 ```
 root/
 ├── src/

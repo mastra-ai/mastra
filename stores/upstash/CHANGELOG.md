@@ -1,5 +1,16 @@
 # @mastra/upstash
 
+## 0.11.0-alpha.1
+
+### Patch Changes
+
+- 2fda031: Clarify upstash argument concepts.
+- Updated dependencies [ee9af57]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6-alpha.1
+
 ## 0.11.0-alpha.0
 
 ### Minor Changes

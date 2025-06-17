@@ -108,8 +108,14 @@ export abstract class Bundler extends MastraBundler {
     return createBundlerUtil(inputOptions, outputOptions);
   }
 
-  protected async analyze(entry: string, mastraFile: string, outputDirectory: string) {
-    return await analyzeBundle(entry, mastraFile, join(outputDirectory, this.analyzeOutputDir), 'node', this.logger);
+  protected async analyze(entry: string | string[], mastraFile: string, outputDirectory: string) {
+    return await analyzeBundle(
+      ([] as string[]).concat(entry),
+      mastraFile,
+      join(outputDirectory, this.analyzeOutputDir),
+      'node',
+      this.logger,
+    );
   }
 
   protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
@@ -203,7 +209,7 @@ export abstract class Bundler extends MastraBundler {
     let analyzedBundleInfo;
     try {
       analyzedBundleInfo = await analyzeBundle(
-        serverFile,
+        [serverFile, ...Object.values(resolvedToolsPaths)],
         mastraEntryFile,
         join(outputDirectory, this.analyzeOutputDir),
         'node',
@@ -308,6 +314,7 @@ export abstract class Bundler extends MastraBundler {
         analyzedBundleInfo,
         toolsPaths,
       );
+
       const bundler = await this.createBundler(inputOptions, {
         dir: bundleLocation,
         manualChunks: {

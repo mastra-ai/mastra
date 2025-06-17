@@ -60,7 +60,7 @@ export async function prepareMonorepo(monorepoDir, glob) {
 
         const parsed = JSON.parse(content);
         if (parsed?.peerDependencies?.['@mastra/core']) {
-          parsed.peerDependencies['@mastra/core'] = '*';
+          parsed.peerDependencies['@mastra/core'] = 'workspace:*';
         }
 
         writeFileSync(join(monorepoDir, file), JSON.stringify(parsed, null, 2));

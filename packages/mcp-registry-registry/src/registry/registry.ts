@@ -116,6 +116,14 @@ export const registryData: RegistryFile = {
       count: '100+',
     },
     {
+      id: 'mcpbar',
+      name: 'MCP Bar',
+      description: 'Open Registry & Package Manager for MCP Servers',
+      url: 'https://www.mcp.bar/',
+      tags: ['open-source'],
+      count: 4429,
+    },
+    {
       id: 'mcpget',
       name: 'MCP-Get',
       description: 'mcp-get helps you easily install protocol servers.',

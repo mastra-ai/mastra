@@ -1,5 +1,52 @@
 # mastra
 
+## 0.10.6-alpha.4
+
+### Patch Changes
+
+- 4051477: dependencies updates:
+  - Updated dependency [`@clack/prompts@^0.11.0` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/0.11.0) (from `^0.8.2`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/instrumentation@^0.202.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/instrumentation/v/0.202.0) (from `^0.57.2`, in `dependencies`)
+  - Updated dependency [`posthog-node@4.18.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/4.18.0) (from `4.16.0`, in `dependencies`)
+  - Updated dependency [`yocto-spinner@^0.2.3` ↗︎](https://www.npmjs.com/package/yocto-spinner/v/0.2.3) (from `^0.1.2`, in `dependencies`)
+  - Added dependency [`open@^10.1.2` ↗︎](https://www.npmjs.com/package/open/v/10.1.2) (to `dependencies`)
+- b40f365: dependencies updates:
+  - Updated dependency [`@clack/prompts@^0.11.0` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/0.11.0) (from `^0.8.2`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/instrumentation@^0.202.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/instrumentation/v/0.202.0) (from `^0.57.2`, in `dependencies`)
+  - Updated dependency [`posthog-node@4.18.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/4.18.0) (from `4.16.0`, in `dependencies`)
+  - Updated dependency [`yocto-spinner@^0.2.3` ↗︎](https://www.npmjs.com/package/yocto-spinner/v/0.2.3) (from `^0.1.2`, in `dependencies`)
+- Updated dependencies [4051477]
+- Updated dependencies [c28ed65]
+- Updated dependencies [d70c420]
+- Updated dependencies [2a16996]
+  - @mastra/deployer@0.10.6-alpha.3
+  - @mastra/core@0.10.6-alpha.3
+
+## 0.10.6-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [ec7f824]
+  - @mastra/core@0.10.6-alpha.2
+  - @mastra/deployer@0.10.6-alpha.2
+
+## 0.10.6-alpha.2
+
+### Patch Changes
+
+- 143b4e4: Fix globbing of tools to only capture js/ts files
+- 44ba52d: Add proper error message when installation of mastra fails
+- 3270d9d: Fix runtime context being undefined
+- fc677d7: For final result for a workflow
+- Updated dependencies [ee9af57]
+- Updated dependencies [3270d9d]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/deployer@0.10.6-alpha.1
+  - @mastra/core@0.10.6-alpha.1
+
 ## 0.10.6-alpha.1
 
 ### Patch Changes
