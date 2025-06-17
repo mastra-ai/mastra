@@ -1039,7 +1039,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               payload: {
                 id: step.id,
                 status: 'failed',
-                output: undefined,
               },
             });
 
@@ -1077,7 +1076,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 type: 'step-suspended',
                 payload: {
                   id: step.id,
-                  output: undefined,
                 },
               });
 
