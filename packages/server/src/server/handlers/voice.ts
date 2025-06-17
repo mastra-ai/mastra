@@ -72,11 +72,7 @@ export async function generateSpeechHandler({
       throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
     }
 
-<<<<<<< voice-fixes
-    const audioStream = await agent.voice.speak(text!, { speaker: speakerId, ...providerOptions });
-=======
-    const audioStream = await voice.speak(body!.text!, { speaker: body!.speakerId! });
->>>>>>> main
+    const audioStream = await voice.speak(text!, { speaker: speakerId, ...providerOptions });
 
     if (!audioStream) {
       throw new HTTPException(500, { message: 'Failed to generate speech' });
