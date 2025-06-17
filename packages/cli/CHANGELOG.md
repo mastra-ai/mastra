@@ -1,5 +1,15 @@
 # mastra
 
+## 0.10.6-alpha.7
+
+### Patch Changes
+
+- b29c802: Remove open browser
+- Updated dependencies [bd1674f]
+- Updated dependencies [69f76f7]
+  - @mastra/mcp@0.10.4-alpha.1
+  - @mastra/deployer@0.10.6-alpha.5
+
 ## 0.10.6-alpha.6
 
 ### Patch Changes

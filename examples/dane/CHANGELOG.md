@@ -1,5 +1,13 @@
 # @mastra/dane
 
+## 0.0.27-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [bd1674f]
+- Updated dependencies [69f76f7]
+  - @mastra/mcp@0.10.4-alpha.1
+
 ## 0.0.27-alpha.6
 
 ### Patch Changes
