@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 5.1.6-alpha.5
+
+### Patch Changes
+
+- 5f2aa3e: Move workflow hooks to playground
+- Updated dependencies [12a95fc]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+  - @mastra/core@0.10.6-alpha.5
+  - @mastra/client-js@0.10.5-alpha.5
+
 ## 5.1.6-alpha.4
 
 ### Patch Changes

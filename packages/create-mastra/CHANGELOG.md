@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.5-alpha.2
+
+### Patch Changes
+
+- 5f2aa3e: Move workflow hooks to playground
+
 ## 0.10.5-alpha.1
 
 ### Patch Changes
