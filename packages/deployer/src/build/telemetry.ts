@@ -99,13 +99,12 @@ export async function writeTelemetryConfig(
 
   const bundle = await getTelemetryBundler(entryFile, result);
 
-  let externals: string[] = [];
   const { output } = await bundle.write({
     dir: outputDir,
     format: 'es',
     entryFileNames: '[name].mjs',
   });
-  externals = output[0].imports.filter(x => !x.startsWith('./'));
+  const externals = output[0].imports.filter(x => !x.startsWith('./'));
 
   return { ...result, externalDependencies: externals };
 }
