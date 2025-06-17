@@ -592,7 +592,7 @@ export class Agent<
     userMessages?: CoreMessage[];
     systemMessage?: CoreMessage;
     runId?: string;
-    messageList: MessageList;
+    messageList?: MessageList;
   }) {
     const memory = this.getMemory();
     if (memory) {
