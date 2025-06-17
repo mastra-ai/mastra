@@ -1,5 +1,17 @@
 # @mastra/memory
 
+## 0.10.4-alpha.1
+
+### Patch Changes
+
+- 4051477: dependencies updates:
+  - Added dependency [`zod-to-json-schema@^3.24.5` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.24.5) (to `dependencies`)
+- d70c420: fix(core, memory): fix fetchMemory regression
+- 2a16996: Working Memory Schema and Template
+- Updated dependencies [d70c420]
+- Updated dependencies [2a16996]
+  - @mastra/core@0.10.6-alpha.3
+
 ## 0.10.4-alpha.0
 
 ### Patch Changes

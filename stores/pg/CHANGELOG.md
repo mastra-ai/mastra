@@ -1,5 +1,14 @@
 # @mastra/pg
 
+## 0.11.0-alpha.2
+
+### Patch Changes
+
+- eed55d7: quotes table and schema names for vector and storage to allow for camelcase
+- Updated dependencies [d70c420]
+- Updated dependencies [2a16996]
+  - @mastra/core@0.10.6-alpha.3
+
 ## 0.11.0-alpha.1
 
 ### Minor Changes

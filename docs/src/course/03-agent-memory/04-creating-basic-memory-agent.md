@@ -13,7 +13,7 @@ import { openai } from "@ai-sdk/openai";
 // Create a basic memory instance
 const memory = new Memory({
   storage: new LibSQLStore({
-    url: "../../memory.db",
+    url: "file:../../memory.db", // relative path from the `.mastra/output` directory
   }),
 });
 

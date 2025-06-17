@@ -96,9 +96,14 @@ export class PostgresStore extends MastraStorage {
   }
 
   private getTableName(indexName: string) {
-    const parsedIndexName = parseSqlIdentifier(indexName, 'table name');
-    const parsedSchemaName = this.schema ? parseSqlIdentifier(this.schema, 'schema name') : undefined;
-    return parsedSchemaName ? `${parsedSchemaName}."${parsedIndexName}"` : `"${parsedIndexName}"`;
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    const quotedIndexName = `"${parsedIndexName}"`;
+    const quotedSchemaName = this.getSchemaName();
+    return quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName;
+  }
+
+  private getSchemaName() {
+    return this.schema ? `"${parseSqlIdentifier(this.schema, 'schema name')}"` : undefined;
   }
 
   /** @deprecated use getEvals instead */
@@ -311,7 +316,7 @@ export class PostgresStore extends MastraStorage {
 
           if (!schemaExists?.exists) {
             try {
-              await this.db.none(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);
+              await this.db.none(`CREATE SCHEMA IF NOT EXISTS ${this.getSchemaName()}`);
               this.logger.info(`Schema "${this.schema}" created successfully`);
             } catch (error) {
               this.logger.error(`Failed to create schema "${this.schema}"`, { error });

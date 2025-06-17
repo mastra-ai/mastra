@@ -31,6 +31,7 @@ import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import { MessageList } from './message-list';
+import type { MessageInput } from './message-list';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -483,14 +484,19 @@ export class Agent<
     message,
     runtimeContext = new RuntimeContext(),
   }: {
-    message: UIMessage;
+    message: string | MessageInput;
     runtimeContext?: RuntimeContext;
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ runtimeContext });
 
+    const normMessage = new MessageList().add(message, 'user').get.all.ui().at(-1);
+    if (!normMessage) {
+      throw new Error(`Could not generate title from input ${JSON.stringify(message)}`);
+    }
+
     const partsToGen: TextPart[] = [];
-    for (const part of message.parts) {
+    for (const part of normMessage.parts) {
       if (part.type === `text`) {
         partsToGen.push(part);
       } else if (part.type === `source`) {
@@ -535,17 +541,20 @@ export class Agent<
     return userMessages.at(-1);
   }
 
-  async genTitle(userMessage: UIMessage | undefined, runtimeContext: RuntimeContext) {
+  async genTitle(userMessage: string | MessageInput | undefined, runtimeContext: RuntimeContext) {
     let title = `New Thread ${new Date().toISOString()}`;
     try {
       if (userMessage) {
-        title = await this.generateTitleFromUserMessage({
-          message: userMessage,
-          runtimeContext,
-        });
+        const normMessage = new MessageList().add(userMessage, 'user').get.all.ui().at(-1);
+        if (normMessage) {
+          title = await this.generateTitleFromUserMessage({
+            message: normMessage,
+            runtimeContext,
+          });
+        }
       }
     } catch (e) {
-      console.error('Error generating title:', e);
+      this.logger.error('Error generating title:', e);
     }
     return title;
   }
@@ -557,12 +566,16 @@ export class Agent<
     memoryConfig,
     resourceId,
     runId,
+    userMessages,
+    systemMessage,
     messageList = new MessageList({ threadId, resourceId }),
   }: {
     resourceId: string;
     threadId: string;
     thread?: StorageThreadType;
     memoryConfig?: MemoryConfig;
+    userMessages?: CoreMessage[];
+    systemMessage?: CoreMessage;
     runId?: string;
     messageList: MessageList;
   }) {
@@ -574,6 +587,14 @@ export class Agent<
         // If no thread, nothing to fetch from memory.
         // The messageList already contains the current user messages and system message.
         return { threadId: threadId || '' };
+      }
+
+      if (userMessages) {
+        messageList.add(userMessages, 'memory');
+      }
+
+      if (systemMessage && systemMessage.role === 'system') {
+        messageList.addSystem(systemMessage, 'memory');
       }
 
       const [memoryMessages, memorySystemMessage] =
@@ -603,8 +624,29 @@ export class Agent<
 
       messageList.add(memoryMessages, 'memory');
 
+      const systemMessages =
+        messageList
+          .getSystemMessages()
+          ?.map(m => m.content)
+          ?.join(`\n`) ?? undefined;
+
+      const newMessages = messageList.get.input.v1() as CoreMessage[];
+
+      const processedMemoryMessages = memory.processMessages({
+        // these will be processed
+        messages: messageList.get.remembered.v1() as CoreMessage[],
+        // these are here for inspecting but shouldn't be returned by the processor
+        // - ex TokenLimiter needs to measure all tokens even though it's only processing remembered messages
+        newMessages,
+        systemMessage: systemMessages,
+        memorySystemMessage: memorySystemMessage || undefined,
+      });
+
       return {
         threadId: thread.id,
+        messages: [...systemMessages, ...processedMemoryMessages, ...newMessages].filter(
+          (message): message is NonNullable<typeof message> => Boolean(message),
+        ),
       };
     }
 
@@ -1102,7 +1144,7 @@ export class Agent<
             memoryConfig,
           }));
 
-        let [memoryMessages, memorySystemMessage] =
+        let [memoryMessages, memorySystemMessage, userContextMessage] =
           threadId && memory
             ? await Promise.all([
                 memory
@@ -1115,8 +1157,9 @@ export class Agent<
                   })
                   .then(r => r.messagesV2),
                 memory.getSystemMessage({ threadId, memoryConfig }),
+                memory.getUserContextMessage({ threadId }),
               ])
-            : [[], null];
+            : [[], null, null];
 
         this.logger.debug('Fetched messages from memory', {
           threadId,
@@ -1140,6 +1183,10 @@ export class Agent<
 
         if (memorySystemMessage) {
           messageList.addSystem(memorySystemMessage, 'memory');
+        }
+
+        if (userContextMessage) {
+          messageList.add(userContextMessage, 'context');
         }
 
         messageList
@@ -1170,6 +1217,7 @@ export class Agent<
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
           .add(context || [], 'context')
+          .add(userContextMessage || [], 'context')
           .add(processedMemoryMessages, 'memory')
           .add(messageList.get.input.v2(), 'user')
           .get.all.prompt();
@@ -1636,6 +1684,8 @@ export class Agent<
         telemetry,
         memory: this.getMemory(),
         runtimeContext,
+        threadId,
+        resourceId,
         ...args,
       });
 
@@ -1679,6 +1729,8 @@ export class Agent<
         telemetry,
         memory: this.getMemory(),
         runtimeContext,
+        threadId,
+        resourceId,
         ...args,
       }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
     }
@@ -1720,6 +1772,8 @@ export class Agent<
       telemetry,
       memory: this.getMemory(),
       runtimeContext,
+      threadId,
+      resourceId,
       ...args,
     }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
   }

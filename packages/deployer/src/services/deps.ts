@@ -153,12 +153,18 @@ export class Deps extends MastraBase {
       root: dir,
     });
 
+    const env: Record<string, string> = {
+      PATH: process.env.PATH!,
+    };
+
+    if (process.env.npm_config_registry) {
+      env.npm_config_registry = process.env.npm_config_registry;
+    }
+
     return cpLogger({
       cmd: runCommand,
       args,
-      env: {
-        PATH: process.env.PATH!,
-      },
+      env,
     });
   }
 
@@ -170,6 +176,14 @@ export class Deps extends MastraBase {
       runCommand = `${this.packageManager} add`;
     }
 
+    const env: Record<string, string> = {
+      PATH: process.env.PATH!,
+    };
+
+    if (process.env.npm_config_registry) {
+      env.npm_config_registry = process.env.npm_config_registry;
+    }
+
     const cpLogger = createChildProcessLogger({
       logger: this.logger,
       root: '',
@@ -178,9 +192,7 @@ export class Deps extends MastraBase {
     return cpLogger({
       cmd: `${runCommand}`,
       args: packages,
-      env: {
-        PATH: process.env.PATH!,
-      },
+      env,
     });
   }
 
