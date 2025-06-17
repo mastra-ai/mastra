@@ -758,7 +758,7 @@ export class PostgresStore extends MastraStorage {
                   (m.row_num >= target.row_num - $${paramIdx + 3} AND m.row_num < target.row_num)
                 )
               )
-            ) 
+            ) AS query_${paramIdx}
             `, // Keep ASC for final sorting after fetching context
           );
           params.push(searchId, id, withPreviousMessages, withNextMessages);
