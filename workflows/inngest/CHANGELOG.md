@@ -1,5 +1,16 @@
 # @mastra/inngest
 
+## 0.10.5-alpha.1
+
+### Patch Changes
+
+- ee9af57: Add api for polling run execution result and get run by id
+- Updated dependencies [ee9af57]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6-alpha.1
+
 ## 0.10.5-alpha.0
 
 ### Patch Changes

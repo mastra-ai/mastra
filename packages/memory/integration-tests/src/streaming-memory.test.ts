@@ -113,7 +113,8 @@ describe('Memory Streaming Tests', () => {
     const { messages } = await agent.getMemory()!.query({ threadId });
 
     expect(messages).toHaveLength(2);
-    expect(messages.length).toBe(customIds.length);
+    // Removing user context message from customIds length
+    expect(messages.length).toBe(customIds.length - 1);
     for (const message of messages) {
       if (!(`id` in message)) {
         throw new Error(`Expected message.id`);

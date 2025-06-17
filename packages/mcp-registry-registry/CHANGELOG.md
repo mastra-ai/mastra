@@ -1,5 +1,28 @@
 # @mastra/mcp-registry-registry
 
+## 0.10.3-alpha.2
+
+### Patch Changes
+
+- 6dacc4d: dependencies updates:
+  - Updated dependency [`@modelcontextprotocol/sdk@^1.12.3` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/sdk/v/1.12.3) (from `^1.12.1`, in `dependencies`)
+- 4051477: dependencies updates:
+  - Updated dependency [`@modelcontextprotocol/sdk@^1.12.3` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/sdk/v/1.12.3) (from `^1.12.1`, in `dependencies`)
+- Updated dependencies [d70c420]
+- Updated dependencies [2a16996]
+  - @mastra/core@0.10.6-alpha.3
+
+## 0.10.3-alpha.1
+
+### Patch Changes
+
+- 4c62489: feat: add MCP Bar to registry with description and URL
+- Updated dependencies [ee9af57]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6-alpha.1
+
 ## 0.10.3-alpha.0
 
 ### Patch Changes

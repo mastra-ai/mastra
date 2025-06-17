@@ -5,6 +5,7 @@ import type {
   QueryResult,
   StorageThreadType,
   WorkflowRuns,
+  WorkflowRun,
   LegacyWorkflowRuns,
 } from '@mastra/core';
 import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput } from '@mastra/core/agent';
@@ -114,6 +115,10 @@ export interface GetWorkflowRunsParams {
 export type GetLegacyWorkflowRunsResponse = LegacyWorkflowRuns;
 
 export type GetWorkflowRunsResponse = WorkflowRuns;
+
+export type GetWorkflowRunByIdResponse = WorkflowRun;
+
+export type GetWorkflowRunExecutionResultResponse = WatchEvent['payload']['workflowState'];
 
 export type LegacyWorkflowRunResult = {
   activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
