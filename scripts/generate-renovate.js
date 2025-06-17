@@ -68,7 +68,7 @@ const renovateConfig = {
   major: {
     dependencyDashboardApproval: true,
   },
-  ignorePaths: ['docs/**', 'packages/memory/integration-tests/**', 'explorations/**'],
+  ignorePaths: ['docs/**', 'packages/memory/integration-tests/**', 'explorations/**', '.github/scripts'],
   packageRules: [
     {
       matchDepTypes: ['engines'],
@@ -104,6 +104,7 @@ const renovateConfig = {
       matchFileNames: ['e2e-tests/**/package.json'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       dependencyDashboardApproval: false,
+      automerge: true,
       enabled: true,
     },
     {
@@ -124,6 +125,7 @@ const renovateConfig = {
       matchUpdateTypes: ['major', 'minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       dependencyDashboardApproval: false,
+      automerge: true,
       enabled: true,
     },
     {
@@ -142,6 +144,7 @@ const renovateConfig = {
       matchUpdateTypes: ['major', 'minor', 'patch'],
       matchDepTypes: ['devDependencies'],
       matchPackageNames: ['vitest', '@vitest/*'],
+      automerge: true,
       enabled: true,
     },
     {
@@ -201,6 +204,7 @@ for (const pkg of listOfPackages) {
       matchUpdateTypes: ['minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       matchPackageNames: ['*', ...ignorePackages.map(pkg => `!${pkg}`)], // Match all except ignored packages
+      matchCurrentVersion: '!/^0/',
       enabled: true,
     });
 
@@ -221,6 +225,7 @@ for (const pkg of listOfPackages) {
       matchFileNames: [`${pkg}/package.json`],
       matchUpdateTypes: ['minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
+      matchCurrentVersion: '!/^0/',
       matchPackageNames: ['*', ...ignorePackages.map(pkg => `!${pkg}`)], // Match all except ignored packages
       enabled: true,
     });

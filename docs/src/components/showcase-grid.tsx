@@ -76,6 +76,12 @@ export const ShowcaseGrid = () => {
       link: "https://vetnio.com/home/en",
     },
     {
+      title: "ChatHub",
+      description: "Unlock the Power of Multiple AIs",
+      image: "chathub.png",
+      link: "https://chathub.gg",
+    },
+    {
       title: "Dalus",
       description:
         "AI-Powered Systems Engineering for Mission-Critical Hardware",

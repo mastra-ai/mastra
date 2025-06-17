@@ -1,5 +1,22 @@
 # @mastra/pg
 
+## 0.11.0-alpha.3
+
+### Patch Changes
+
+- 6c23252: [MASTRA-3982] Fix Memory Retrieval for PG when scope is resource
+- Updated dependencies [9589624]
+  - @mastra/core@0.10.6-alpha.4
+
+## 0.11.0-alpha.2
+
+### Patch Changes
+
+- eed55d7: quotes table and schema names for vector and storage to allow for camelcase
+- Updated dependencies [d70c420]
+- Updated dependencies [2a16996]
+  - @mastra/core@0.10.6-alpha.3
+
 ## 0.11.0-alpha.1
 
 ### Minor Changes

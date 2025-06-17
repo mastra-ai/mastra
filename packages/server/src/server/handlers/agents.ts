@@ -24,6 +24,8 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
         const instructions = await agent.getInstructions({ runtimeContext });
         const tools = await agent.getTools({ runtimeContext });
         const llm = await agent.getLLM({ runtimeContext });
+        const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext });
+        const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext });
 
         const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
           const _tool = tool as any;
@@ -62,8 +64,8 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
           workflows: serializedAgentWorkflows,
           provider: llm?.getProvider(),
           modelId: llm?.getModelId(),
-          defaultGenerateOptions: agent.getDefaultGenerateOptions() as any,
-          defaultStreamOptions: agent.getDefaultStreamOptions() as any,
+          defaultGenerateOptions: defaultGenerateOptions as any,
+          defaultStreamOptions: defaultStreamOptions as any,
         };
       }),
     );
@@ -150,6 +152,8 @@ export async function getAgentByIdHandler({
 
     const instructions = await agent.getInstructions({ runtimeContext: proxyRuntimeContext });
     const llm = await agent.getLLM({ runtimeContext });
+    const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext: proxyRuntimeContext });
+    const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext: proxyRuntimeContext });
 
     return {
       name: agent.name,
@@ -158,8 +162,8 @@ export async function getAgentByIdHandler({
       workflows: serializedAgentWorkflows,
       provider: llm?.getProvider(),
       modelId: llm?.getModelId(),
-      defaultGenerateOptions: agent.getDefaultGenerateOptions() as any,
-      defaultStreamOptions: agent.getDefaultStreamOptions() as any,
+      defaultGenerateOptions: defaultGenerateOptions as any,
+      defaultStreamOptions: defaultStreamOptions as any,
     };
   } catch (error) {
     return handleError(error, 'Error getting agent');

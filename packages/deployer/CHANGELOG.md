@@ -1,5 +1,43 @@
 # @mastra/deployer
 
+## 0.10.6-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [12a95fc]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+  - @mastra/core@0.10.6-alpha.5
+  - @mastra/server@0.10.6-alpha.5
+
+## 0.10.6-alpha.4
+
+### Patch Changes
+
+- 79b9909: Optimize dependencies of tools even when unused.
+
+  Fixes #5149
+
+- 084f6aa: Add logs to circular dependency to warn people when starting server might break
+- 9589624: Throw Mastra Errors when building and bundling mastra application
+- Updated dependencies [9589624]
+  - @mastra/core@0.10.6-alpha.4
+  - @mastra/server@0.10.6-alpha.4
+
+## 0.10.6-alpha.3
+
+### Patch Changes
+
+- 4051477: dependencies updates:
+  - Updated dependency [`@rollup/plugin-commonjs@^28.0.5` ↗︎](https://www.npmjs.com/package/@rollup/plugin-commonjs/v/28.0.5) (from `^28.0.3`, in `dependencies`)
+- c28ed65: dependencies updates:
+  - Updated dependency [`@rollup/plugin-commonjs@^28.0.5` ↗︎](https://www.npmjs.com/package/@rollup/plugin-commonjs/v/28.0.5) (from `^28.0.3`, in `dependencies`)
+- Updated dependencies [d70c420]
+- Updated dependencies [2a16996]
+- Updated dependencies [2002c59]
+  - @mastra/core@0.10.6-alpha.3
+  - @mastra/server@0.10.6-alpha.3
+
 ## 0.10.6-alpha.2
 
 ### Patch Changes
