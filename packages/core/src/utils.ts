@@ -202,7 +202,7 @@ export interface ToolOptions {
   model?: MastraLanguageModel;
 }
 
-type ToolToConvert = VercelTool | ToolAction<any, any, any>;
+type ToolToConvert = Omit<VercelTool | ToolAction<any, any, any>, 'id'> & { id?: string };
 
 /**
  * Checks if a value is a Zod type

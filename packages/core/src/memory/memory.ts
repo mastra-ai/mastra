@@ -14,7 +14,13 @@ export type AllMastraMessageTypesList =
   | MastraMessageV2[]
   | MastraMessageV3[];
 
-import type { SharedMemoryConfig, StorageThreadType, MemoryConfig, MastraMessageV1 } from './types';
+import type {
+  SharedMemoryConfig,
+  StorageThreadType,
+  MemoryConfig,
+  MastraMessageV1,
+  WorkingMemoryTemplate,
+} from './types';
 
 export type MemoryProcessorOpts = {
   systemMessage?: string;
@@ -135,6 +141,15 @@ export abstract class MastraMemory extends MastraBase {
   }
 
   /**
+   * Get a user context message to inject into the conversation.
+   * This will be called before each conversation turn.
+   * Implementations can override this to inject custom system messages.
+   */
+  public async getUserContextMessage(_input: { threadId: string }): Promise<string | null> {
+    return null;
+  }
+
+  /**
    * Get tools that should be available to the agent.
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.
@@ -166,7 +181,15 @@ export abstract class MastraMemory extends MastraBase {
     if (config?.workingMemory && 'use' in config.workingMemory) {
       throw new Error('The workingMemory.use option has been removed. Working memory always uses tool-call mode.');
     }
-    return deepMerge(this.threadConfig, config || {});
+    const mergedConfig = deepMerge(this.threadConfig, config || {});
+
+    if (config?.workingMemory?.schema) {
+      if (mergedConfig.workingMemory) {
+        mergedConfig.workingMemory.schema = config.workingMemory.schema;
+      }
+    }
+
+    return mergedConfig;
   }
 
   /**
@@ -371,4 +394,24 @@ export abstract class MastraMemory extends MastraBase {
   public generateId(): string {
     return crypto.randomUUID();
   }
+
+  /**
+   * Retrieves working memory for a specific thread
+   * @param threadId - The unique identifier of the thread
+   * @param format - Optional format for the returned data ('json' or 'markdown')
+   * @returns Promise resolving to working memory data or null if not found
+   */
+  abstract getWorkingMemory({
+    threadId,
+  }: {
+    threadId: string;
+    format?: 'json' | 'markdown';
+  }): Promise<Record<string, any> | string | null>;
+
+  /**
+   * Retrieves working memory template for a specific thread
+   * @param threadId - The unique identifier of the thread
+   * @returns Promise resolving to working memory template or null if not found
+   */
+  abstract getWorkingMemoryTemplate(): Promise<WorkingMemoryTemplate | null>;
 }

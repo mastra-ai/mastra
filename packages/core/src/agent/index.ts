@@ -43,7 +43,10 @@ import type {
 } from './types';
 
 export { MessageList };
+
 export * from './types';
+export * from './message-list/ai-sdk-5/index';
+
 type IDGenerator = () => string;
 
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
@@ -565,12 +568,16 @@ export class Agent<
     memoryConfig,
     resourceId,
     runId,
+    userMessages,
+    systemMessage,
     messageList = new MessageList({ threadId, resourceId }),
   }: {
     resourceId: string;
     threadId: string;
     thread?: StorageThreadType;
     memoryConfig?: MemoryConfig;
+    userMessages?: CoreMessage[];
+    systemMessage?: CoreMessage;
     runId?: string;
     messageList: MessageList;
   }) {
@@ -582,6 +589,14 @@ export class Agent<
         // If no thread, nothing to fetch from memory.
         // The messageList already contains the current user messages and system message.
         return { threadId: threadId || '' };
+      }
+
+      if (userMessages) {
+        messageList.add(userMessages, 'memory');
+      }
+
+      if (systemMessage && systemMessage.role === 'system') {
+        messageList.addSystem(systemMessage, 'memory');
       }
 
       const [memoryMessages, memorySystemMessage] =
@@ -611,8 +626,29 @@ export class Agent<
 
       messageList.add(memoryMessages, 'memory');
 
+      const systemMessages =
+        messageList
+          .getSystemMessages()
+          ?.map(m => m.content)
+          ?.join(`\n`) ?? undefined;
+
+      const newMessages = messageList.get.input.v1() as CoreMessage[];
+
+      const processedMemoryMessages = memory.processMessages({
+        // these will be processed
+        messages: messageList.get.remembered.v1() as CoreMessage[],
+        // these are here for inspecting but shouldn't be returned by the processor
+        // - ex TokenLimiter needs to measure all tokens even though it's only processing remembered messages
+        newMessages,
+        systemMessage: systemMessages,
+        memorySystemMessage: memorySystemMessage || undefined,
+      });
+
       return {
         threadId: thread.id,
+        messages: [...systemMessages, ...processedMemoryMessages, ...newMessages].filter(
+          (message): message is NonNullable<typeof message> => Boolean(message),
+        ),
       };
     }
 
@@ -1118,7 +1154,7 @@ export class Agent<
             memoryConfig,
           }));
 
-        let [memoryMessages, memorySystemMessage] =
+        let [memoryMessages, memorySystemMessage, userContextMessage] =
           threadId && memory
             ? await Promise.all([
                 memory
@@ -1131,8 +1167,9 @@ export class Agent<
                   })
                   .then(r => r.messagesV2),
                 memory.getSystemMessage({ threadId, memoryConfig }),
+                memory.getUserContextMessage({ threadId }),
               ])
-            : [[], null];
+            : [[], null, null];
 
         this.logger.debug('Fetched messages from memory', {
           threadId,
@@ -1156,6 +1193,10 @@ export class Agent<
 
         if (memorySystemMessage) {
           messageList.addSystem(memorySystemMessage, 'memory');
+        }
+
+        if (userContextMessage) {
+          messageList.add(userContextMessage, 'context');
         }
 
         messageList
@@ -1186,6 +1227,7 @@ export class Agent<
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
           .add(context || [], 'context')
+          .add(userContextMessage || [], 'context')
           .add(processedMemoryMessages, 'memory')
           .add(messageList.get.input.v2(), 'user')
           .get.all.prompt();

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.10.6-alpha.1",
+  "version": "0.10.6-alpha.2",
   "license": "Elastic-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -140,7 +140,7 @@
     "zod": "^3.25.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "2.0.0-alpha.10",
+    "@ai-sdk/openai": "2.0.0-alpha.14",
     "@babel/core": "^7.27.4",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",

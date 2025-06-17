@@ -1,5 +1,14 @@
 # @mastra/dane
 
+## 0.0.27-alpha.3
+
+### Patch Changes
+
+- 42ec363: dependencies updates:
+  - Updated dependency [`@ai-sdk/anthropic@^1.2.12` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/1.2.12) (from `^1.2.11`, in `dependencies`)
+- Updated dependencies [4b0f8a6]
+  - @mastra/core@0.10.6-alpha.2
+
 ## 0.0.27-alpha.2
 
 ### Patch Changes

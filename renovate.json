@@ -18,7 +18,7 @@
   "major": {
     "dependencyDashboardApproval": true
   },
-  "ignorePaths": ["docs/**", "packages/memory/integration-tests/**", "explorations/**"],
+  "ignorePaths": ["docs/**", "packages/memory/integration-tests/**", "explorations/**", ".github/scripts"],
   "packageRules": [
     {
       "matchDepTypes": ["engines"],
@@ -58,6 +58,7 @@
       "matchFileNames": ["e2e-tests/**/package.json"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
+      "automerge": true,
       "enabled": true
     },
     {
@@ -78,6 +79,7 @@
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
+      "automerge": true,
       "enabled": true
     },
     {
@@ -96,14 +98,25 @@
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["devDependencies"],
       "matchPackageNames": ["vitest", "@vitest/*"],
+      "automerge": true,
       "enabled": true
     },
     {
       "groupName": "Schema",
       "commitMessageTopic": "Schema",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["zod", "json-schema", "zod-to-json-schema", "zod-from-json-schema"],
+      "matchPackageNames": ["zod", "json-schema", "zod-to-json-schema"],
       "matchUpdateTypes": ["major", "minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false,
+      "enabled": true
+    },
+    {
+      "groupName": "Cloudflare",
+      "commitMessageTopic": "Cloudflare",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["cloudflare", "miniflare"],
+      "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
       "enabled": true
@@ -128,9 +141,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -162,9 +177,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -196,9 +213,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -230,9 +249,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -264,9 +285,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -298,9 +321,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -332,9 +357,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -366,9 +393,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -400,9 +429,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -434,9 +465,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -468,9 +501,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -502,9 +537,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -536,9 +573,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -570,9 +609,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -604,9 +645,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -638,9 +681,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -672,9 +717,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -706,9 +753,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -740,9 +789,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -774,9 +825,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -808,9 +861,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -842,9 +897,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -876,9 +933,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -910,9 +969,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -944,9 +1005,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -978,9 +1041,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1012,9 +1077,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1046,9 +1113,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1080,9 +1149,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1114,9 +1185,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1129,6 +1202,42 @@
       "dependencyDashboardApproval": true
     },
     {
+      "groupName": "Mastra lance",
+      "commitMessageTopic": "Mastra lance",
+      "matchFileNames": ["stores/lance/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
+      ],
+      "matchCurrentVersion": "!/^0/",
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra lance",
+      "commitMessageTopic": "Mastra lance",
+      "matchFileNames": ["stores/lance/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
       "groupName": "Mastra libsql",
       "commitMessageTopic": "Mastra libsql",
       "matchFileNames": ["stores/libsql/package.json"],
@@ -1148,9 +1257,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1182,9 +1293,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1216,9 +1329,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1250,9 +1365,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1284,9 +1401,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1318,9 +1437,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1352,9 +1473,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1386,9 +1509,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1420,9 +1545,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1435,346 +1562,6 @@
       "dependencyDashboardApproval": true
     },
     {
-      "groupName": "speech/azure",
-      "commitMessageTopic": "speech/azure",
-      "matchFileNames": ["speech/azure/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "matchPackageNames": [
-        "*",
-        "!@microsoft/api-extractor",
-        "!tsup",
-        "!rollup",
-        "!eslint",
-        "!prettier",
-        "!typescript",
-        "!vitest",
-        "!@types/node",
-        "!dotenv",
-        "!zod",
-        "!json-schema",
-        "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
-      ],
-      "enabled": true
-    },
-    {
-      "groupName": "major-speech/azure",
-      "commitMessageTopic": "speech/azure",
-      "matchFileNames": ["speech/azure/package.json"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true,
-      "dependencyDashboardApproval": true
-    },
-    {
-      "groupName": "speech/deepgram",
-      "commitMessageTopic": "speech/deepgram",
-      "matchFileNames": ["speech/deepgram/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "matchPackageNames": [
-        "*",
-        "!@microsoft/api-extractor",
-        "!tsup",
-        "!rollup",
-        "!eslint",
-        "!prettier",
-        "!typescript",
-        "!vitest",
-        "!@types/node",
-        "!dotenv",
-        "!zod",
-        "!json-schema",
-        "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
-      ],
-      "enabled": true
-    },
-    {
-      "groupName": "major-speech/deepgram",
-      "commitMessageTopic": "speech/deepgram",
-      "matchFileNames": ["speech/deepgram/package.json"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true,
-      "dependencyDashboardApproval": true
-    },
-    {
-      "groupName": "speech/elevenlabs",
-      "commitMessageTopic": "speech/elevenlabs",
-      "matchFileNames": ["speech/elevenlabs/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "matchPackageNames": [
-        "*",
-        "!@microsoft/api-extractor",
-        "!tsup",
-        "!rollup",
-        "!eslint",
-        "!prettier",
-        "!typescript",
-        "!vitest",
-        "!@types/node",
-        "!dotenv",
-        "!zod",
-        "!json-schema",
-        "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
-      ],
-      "enabled": true
-    },
-    {
-      "groupName": "major-speech/elevenlabs",
-      "commitMessageTopic": "speech/elevenlabs",
-      "matchFileNames": ["speech/elevenlabs/package.json"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true,
-      "dependencyDashboardApproval": true
-    },
-    {
-      "groupName": "speech/google",
-      "commitMessageTopic": "speech/google",
-      "matchFileNames": ["speech/google/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "matchPackageNames": [
-        "*",
-        "!@microsoft/api-extractor",
-        "!tsup",
-        "!rollup",
-        "!eslint",
-        "!prettier",
-        "!typescript",
-        "!vitest",
-        "!@types/node",
-        "!dotenv",
-        "!zod",
-        "!json-schema",
-        "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
-      ],
-      "enabled": true
-    },
-    {
-      "groupName": "major-speech/google",
-      "commitMessageTopic": "speech/google",
-      "matchFileNames": ["speech/google/package.json"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true,
-      "dependencyDashboardApproval": true
-    },
-    {
-      "groupName": "speech/ibm",
-      "commitMessageTopic": "speech/ibm",
-      "matchFileNames": ["speech/ibm/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "matchPackageNames": [
-        "*",
-        "!@microsoft/api-extractor",
-        "!tsup",
-        "!rollup",
-        "!eslint",
-        "!prettier",
-        "!typescript",
-        "!vitest",
-        "!@types/node",
-        "!dotenv",
-        "!zod",
-        "!json-schema",
-        "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
-      ],
-      "enabled": true
-    },
-    {
-      "groupName": "major-speech/ibm",
-      "commitMessageTopic": "speech/ibm",
-      "matchFileNames": ["speech/ibm/package.json"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true,
-      "dependencyDashboardApproval": true
-    },
-    {
-      "groupName": "speech/murf",
-      "commitMessageTopic": "speech/murf",
-      "matchFileNames": ["speech/murf/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "matchPackageNames": [
-        "*",
-        "!@microsoft/api-extractor",
-        "!tsup",
-        "!rollup",
-        "!eslint",
-        "!prettier",
-        "!typescript",
-        "!vitest",
-        "!@types/node",
-        "!dotenv",
-        "!zod",
-        "!json-schema",
-        "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
-      ],
-      "enabled": true
-    },
-    {
-      "groupName": "major-speech/murf",
-      "commitMessageTopic": "speech/murf",
-      "matchFileNames": ["speech/murf/package.json"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true,
-      "dependencyDashboardApproval": true
-    },
-    {
-      "groupName": "speech/openai",
-      "commitMessageTopic": "speech/openai",
-      "matchFileNames": ["speech/openai/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "matchPackageNames": [
-        "*",
-        "!@microsoft/api-extractor",
-        "!tsup",
-        "!rollup",
-        "!eslint",
-        "!prettier",
-        "!typescript",
-        "!vitest",
-        "!@types/node",
-        "!dotenv",
-        "!zod",
-        "!json-schema",
-        "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
-      ],
-      "enabled": true
-    },
-    {
-      "groupName": "major-speech/openai",
-      "commitMessageTopic": "speech/openai",
-      "matchFileNames": ["speech/openai/package.json"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true,
-      "dependencyDashboardApproval": true
-    },
-    {
-      "groupName": "speech/playai",
-      "commitMessageTopic": "speech/playai",
-      "matchFileNames": ["speech/playai/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "matchPackageNames": [
-        "*",
-        "!@microsoft/api-extractor",
-        "!tsup",
-        "!rollup",
-        "!eslint",
-        "!prettier",
-        "!typescript",
-        "!vitest",
-        "!@types/node",
-        "!dotenv",
-        "!zod",
-        "!json-schema",
-        "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
-      ],
-      "enabled": true
-    },
-    {
-      "groupName": "major-speech/playai",
-      "commitMessageTopic": "speech/playai",
-      "matchFileNames": ["speech/playai/package.json"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true,
-      "dependencyDashboardApproval": true
-    },
-    {
-      "groupName": "speech/replicate",
-      "commitMessageTopic": "speech/replicate",
-      "matchFileNames": ["speech/replicate/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "matchPackageNames": [
-        "*",
-        "!@microsoft/api-extractor",
-        "!tsup",
-        "!rollup",
-        "!eslint",
-        "!prettier",
-        "!typescript",
-        "!vitest",
-        "!@types/node",
-        "!dotenv",
-        "!zod",
-        "!json-schema",
-        "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
-      ],
-      "enabled": true
-    },
-    {
-      "groupName": "major-speech/replicate",
-      "commitMessageTopic": "speech/replicate",
-      "matchFileNames": ["speech/replicate/package.json"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true,
-      "dependencyDashboardApproval": true
-    },
-    {
-      "groupName": "speech/speechify",
-      "commitMessageTopic": "speech/speechify",
-      "matchFileNames": ["speech/speechify/package.json"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "matchPackageNames": [
-        "*",
-        "!@microsoft/api-extractor",
-        "!tsup",
-        "!rollup",
-        "!eslint",
-        "!prettier",
-        "!typescript",
-        "!vitest",
-        "!@types/node",
-        "!dotenv",
-        "!zod",
-        "!json-schema",
-        "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
-      ],
-      "enabled": true
-    },
-    {
-      "groupName": "major-speech/speechify",
-      "commitMessageTopic": "speech/speechify",
-      "matchFileNames": ["speech/speechify/package.json"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
-      "enabled": true,
-      "dependencyDashboardApproval": true
-    },
-    {
       "groupName": "Mastra voice-azure",
       "commitMessageTopic": "Mastra voice-azure",
       "matchFileNames": ["voice/azure/package.json"],
@@ -1794,9 +1581,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1828,9 +1617,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1862,9 +1653,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1896,9 +1689,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1911,6 +1706,42 @@
       "dependencyDashboardApproval": true
     },
     {
+      "groupName": "Mastra voice-gladia",
+      "commitMessageTopic": "Mastra voice-gladia",
+      "matchFileNames": ["voice/gladia/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
+      ],
+      "matchCurrentVersion": "!/^0/",
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra voice-gladia",
+      "commitMessageTopic": "Mastra voice-gladia",
+      "matchFileNames": ["voice/gladia/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
       "groupName": "Mastra voice-google",
       "commitMessageTopic": "Mastra voice-google",
       "matchFileNames": ["voice/google/package.json"],
@@ -1930,9 +1761,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1964,9 +1797,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1998,9 +1833,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2032,9 +1869,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2066,9 +1905,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2100,9 +1941,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2134,9 +1977,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2168,9 +2013,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2202,9 +2049,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2236,9 +2085,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2270,9 +2121,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2304,9 +2157,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2338,9 +2193,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2372,9 +2229,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2406,9 +2265,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2440,9 +2301,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2474,9 +2337,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2508,9 +2373,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2542,9 +2409,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2576,9 +2445,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2610,9 +2481,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2644,9 +2517,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2678,9 +2553,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2712,9 +2589,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2746,9 +2625,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2780,9 +2661,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2814,9 +2697,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2848,9 +2733,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2882,9 +2769,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2916,9 +2805,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2950,9 +2841,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2984,9 +2877,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -3018,9 +2913,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -3052,9 +2949,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -3086,9 +2985,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -3120,9 +3021,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -3154,9 +3057,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -3188,9 +3093,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -3222,9 +3129,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -3256,9 +3165,11 @@
         "!zod",
         "!json-schema",
         "!zod-to-json-schema",
-        "!zod-from-json-schema",
-        "!@vitest/*"
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {

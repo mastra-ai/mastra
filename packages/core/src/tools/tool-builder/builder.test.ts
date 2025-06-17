@@ -1,10 +1,10 @@
 import { openai } from '@ai-sdk/openai';
+import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import type { MastraLanguageModel } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 // import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
 import 'dotenv/config';
 
 type Result = {
@@ -172,25 +172,25 @@ async function runSingleInputTest(
     const toolCall = response.toolCalls.find(tc => tc.toolName === toolName);
     const toolResult = response.toolResults.find(tr => tr.toolCallId === toolCall?.toolCallId);
 
-    if (toolResult?.result?.success) {
+    if (toolResult?.output?.success) {
       return {
         modelName: model.modelId,
         modelProvider: model.provider,
         testName: toolName,
         status: 'success',
         error: null,
-        receivedContext: toolResult.result.receivedContext,
+        receivedContext: toolResult.output.receivedContext,
         testId,
       };
     } else {
-      const error = toolResult?.result?.error || response.text || 'Tool call failed or result missing';
+      const error = toolResult?.output?.error || response.text || 'Tool call failed or result missing';
       return {
         modelName: model.modelId,
         testName: toolName,
         modelProvider: model.provider,
         status: 'failure',
         error: error,
-        receivedContext: toolResult?.result?.receivedContext || null,
+        receivedContext: toolResult?.output?.receivedContext || null,
         testId,
       };
     }

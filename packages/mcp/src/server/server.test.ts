@@ -42,7 +42,7 @@ const mockToolExecute = vi.fn(async (args: any) => ({ result: 'tool executed', a
 const mockTools: ToolsInput = {
   testTool: {
     description: 'A test tool',
-    parameters: z.object({ input: z.string().optional() }),
+    inputSchema: z.object({ input: z.string().optional() }),
     execute: mockToolExecute,
   },
 };
@@ -50,7 +50,7 @@ const mockTools: ToolsInput = {
 const minimalTestTool: ToolsInput = {
   minTool: {
     description: 'A minimal tool',
-    parameters: z.object({}),
+    inputSchema: z.object({}),
     execute: async () => ({ result: 'ok' }),
   },
 };
@@ -1117,7 +1117,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     expect(tools[agentToolName].description).toContain("Ask agent 'MyTestAgent' a question.");
     expect(tools[agentToolName].description).toContain('Agent description: Simple mock description.');
 
-    const schema = tools[agentToolName].parameters.jsonSchema;
+    const schema = tools[agentToolName].inputSchema.jsonSchema;
     expect(schema.type).toBe('object');
     if (schema.properties) {
       expect(schema.properties.message).toBeDefined();
@@ -1174,7 +1174,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
       tools: {
         [explicitToolName]: {
           description: 'An explicit tool that collides.',
-          parameters: z.object({ query: z.string() }),
+          inputSchema: z.object({ query: z.string() }),
           execute: explicitToolExecute,
         },
       },
@@ -1240,8 +1240,8 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
     expect(tools[workflowToolName].description).toBe(
       "Run workflow 'testWorkflowKey'. Workflow description: A test workflow.",
     );
-    expect(tools[workflowToolName].parameters.jsonSchema).toBeDefined();
-    expect(tools[workflowToolName].parameters.jsonSchema.type).toBe('object');
+    expect(tools[workflowToolName].inputSchema.jsonSchema).toBeDefined();
+    expect(tools[workflowToolName].inputSchema.jsonSchema.type).toBe('object');
   });
 
   it('should throw an error if workflow.description is undefined or empty', () => {
@@ -1323,7 +1323,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
       tools: {
         [explicitToolName]: {
           description: 'An explicit tool that collides with a workflow.',
-          parameters: z.object({ query: z.string() }),
+          inputSchema: z.object({ query: z.string() }),
           execute: explicitToolExecute,
         },
       },

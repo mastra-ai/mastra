@@ -7,7 +7,7 @@ import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
 import { Agent } from '@mastra/core/agent';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { DefaultChatTransport } from 'ai';
+import { DefaultChatTransport, isToolUIPart } from 'ai';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { memory, weatherAgent } from './mastra/agents/weather';
@@ -117,7 +117,8 @@ describe('Memory Streaming Tests', () => {
     const { messages } = await agent.getMemory()!.query({ threadId });
 
     expect(messages).toHaveLength(2);
-    expect(messages.length).toBe(customIds.length);
+    // Removing user context message from customIds length
+    expect(messages.length).toBe(customIds.length - 1);
     for (const message of messages) {
       if (!(`id` in message)) {
         throw new Error(`Expected message.id`);
@@ -308,7 +309,7 @@ describe('Memory Streaming Tests', () => {
         if (
           latestMessage.role === `assistant` &&
           latestMessage.parts.length === 2 &&
-          latestMessage.parts[1].type === `tool-invocation`
+          isToolUIPart(latestMessage.parts[1])
         ) {
           // client side tool call
           return;
@@ -320,8 +321,8 @@ describe('Memory Streaming Tests', () => {
             if (part.type === `text`) {
               searchString += `\n${part.text}`;
             }
-            if (part.type === `tool-invocation`) {
-              searchString += `\n${JSON.stringify(part.toolInvocation)}`;
+            if (isToolUIPart(part)) {
+              searchString += `\n${JSON.stringify(part)}`;
             }
           }
 

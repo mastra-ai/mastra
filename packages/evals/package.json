@@ -75,7 +75,7 @@
     "ai": "5.0.0-alpha.14"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "latest",
+    "@ai-sdk/openai": "2.0.0-alpha.14",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",

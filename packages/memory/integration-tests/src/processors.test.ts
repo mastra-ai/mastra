@@ -99,7 +99,7 @@ describe('Memory with Processors', () => {
           type: 'tool-result',
           toolCallId: 'tool-9',
           toolName: 'weather',
-          result: 'Pretty hot',
+          output: 'Pretty hot',
         },
       ],
     });
@@ -329,7 +329,7 @@ describe('Memory with Processors', () => {
 
     // make sure all user messages are there
     const allUserMessages = responseMessages2.filter((m: ModelMessage) => m.role === 'user');
-    expect(allUserMessages.length).toBe(2);
+    expect(allUserMessages.length).toBe(3);
 
     const remembered = await memory.query({
       threadId: thread.id,

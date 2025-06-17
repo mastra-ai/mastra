@@ -109,7 +109,7 @@ const mockFindUserToolModel = new MockLanguageModelV2({
           toolCallId: 'mock-find-user-call-id',
           toolName: 'findUserTool',
           toolCallType: 'function',
-          args: JSON.stringify({ name: 'Dero Israel' }),
+          input: JSON.stringify({ name: 'Dero Israel' }),
         },
       ],
       finishReason: 'tool-calls',
@@ -125,7 +125,7 @@ const mockFindUserToolModel = new MockLanguageModelV2({
               type: 'tool-call',
               toolCallId: 'mock-find-user-call-id',
               toolName: 'findUserTool',
-              args: { name: 'Dero Israel' },
+              input: { name: 'Dero Israel' },
             },
           ],
           text: '',
@@ -202,28 +202,28 @@ const mockFindUserToolModel = new MockLanguageModelV2({
             toolCallId: 'mock-find-user-call-id-stream',
             toolName: 'findUserTool',
             toolCallType: 'function',
-            argsTextDelta: '{',
+            inputTextDelta: '{',
           },
           {
             type: 'tool-call-delta',
             toolCallId: 'mock-find-user-call-id-stream',
             toolName: 'findUserTool',
             toolCallType: 'function',
-            argsTextDelta: '"name":"',
+            inputTextDelta: '"name":"',
           },
           {
             type: 'tool-call-delta',
             toolCallId: 'mock-find-user-call-id-stream',
             toolName: 'findUserTool',
             toolCallType: 'function',
-            argsTextDelta: 'Dero Israel"',
+            inputTextDelta: 'Dero Israel"',
           },
           {
             type: 'tool-call-delta',
             toolCallId: 'mock-find-user-call-id-stream',
             toolName: 'findUserTool',
             toolCallType: 'function',
-            argsTextDelta: '}',
+            inputTextDelta: '}',
           },
           { type: 'text', text: 'Found user Dero Israel.' },
           {
@@ -525,7 +525,7 @@ describe('agent', () => {
 
     const toolCall: any = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
 
-    const name = toolCall?.result?.name;
+    const name = toolCall?.output?.name;
 
     expect(mockFindUser).toHaveBeenCalled();
     expect(name).toBe('Dero Israel');
@@ -618,7 +618,7 @@ describe('agent', () => {
 
     expect(res.steps.length > 1);
     expect(res.text.includes('joe@mail.com'));
-    expect(toolCall?.result?.email).toBe('joe@mail.com');
+    expect(toolCall?.output?.email).toBe('joe@mail.com');
     expect(mockFindUser).toHaveBeenCalled();
   });
 
@@ -645,7 +645,7 @@ describe('agent', () => {
 
     const toolCall: any = response.toolResults.find((result: any) => result.toolName === 'testTool');
 
-    const message = toolCall?.result?.message;
+    const message = toolCall?.output?.message;
 
     expect(message).toBe('Executed successfully');
   }, 500000);
@@ -672,19 +672,19 @@ describe('agent', () => {
     // Original CoreMessages for context, but we'll test the output of list.get.all.core()
     const toolResultOne_Core: CoreMessage = {
       role: 'tool',
-      content: [{ type: 'tool-result', toolName: 'test-tool-1', toolCallId: 'tool-1', result: 'res1' }],
+      content: [{ type: 'tool-result', toolName: 'testTool1', toolCallId: 'tool-1', output: 'res1' }],
     };
     const toolCallTwo_Core: CoreMessage = {
       role: 'assistant',
-      content: [{ type: 'tool-call', toolName: 'test-tool-2', toolCallId: 'tool-2', args: {} }],
+      content: [{ type: 'tool-call', toolName: 'testTool2', toolCallId: 'tool-2', input: {} }],
     };
     const toolResultTwo_Core: CoreMessage = {
       role: 'tool',
-      content: [{ type: 'tool-result', toolName: 'test-tool-2', toolCallId: 'tool-2', result: 'res2' }],
+      content: [{ type: 'tool-result', toolName: 'testTool2', toolCallId: 'tool-2', output: 'res2' }],
     };
     const toolCallThree_Core: CoreMessage = {
       role: 'assistant',
-      content: [{ type: 'tool-call', toolName: 'test-tool-3', toolCallId: 'tool-3', args: {} }],
+      content: [{ type: 'tool-call', toolName: 'testTool3', toolCallId: 'tool-3', input: {} }],
     };
 
     // Add messages. addOne will merge toolCallTwo and toolResultTwo.
@@ -726,7 +726,7 @@ describe('agent', () => {
     expect(assistantCallForTool2).toBeDefined();
     expect(assistantCallForTool2?.content).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'tool-call', toolCallId: 'tool-2', toolName: 'test-tool-2' }),
+        expect.objectContaining({ type: 'tool-call', toolCallId: 'tool-2', toolName: 'testTool2', input: {} }),
       ]),
     );
 
@@ -736,7 +736,7 @@ describe('agent', () => {
     expect(toolResultForTool2).toBeDefined();
     expect(toolResultForTool2?.content).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'tool-result', toolCallId: 'tool-2', toolName: 'test-tool-2', result: 'res2' }),
+        expect.objectContaining({ type: 'tool-result', toolCallId: 'tool-2', toolName: 'testTool2', output: 'res2' }),
       ]),
     );
 
@@ -756,11 +756,11 @@ describe('agent', () => {
 
     const assistantToolCall_Core: CoreMessage = {
       role: 'assistant',
-      content: [{ type: 'tool-call', toolName: 'testTool', toolCallId: 'tool-1', args: {} }],
+      content: [{ type: 'tool-call', toolName: 'testTool', toolCallId: 'tool-1', input: {} }],
     };
     const toolMessage_Core: CoreMessage = {
       role: 'tool',
-      content: [{ type: 'tool-result', toolName: 'testTool', toolCallId: 'tool-1', result: 'res1' }],
+      content: [{ type: 'tool-result', toolName: 'testTool', toolCallId: 'tool-1', output: 'res1' }],
     };
     const emptyAssistant_Core: CoreMessage = {
       role: 'assistant',
@@ -944,7 +944,7 @@ describe('agent', () => {
         }),
         vercelTool: {
           description: 'test',
-          parameters: jsonSchema({
+          inputSchema: jsonSchema({
             type: 'object',
             properties: {
               name: { type: 'string' },
@@ -1080,8 +1080,8 @@ describe('agent', () => {
 
     const toolCall = response.toolResults.find(result => result.toolName === 'testTool');
 
-    expect(toolCall?.result?.runtimeContextAvailable).toBe(true);
-    expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
+    expect(toolCall?.output?.runtimeContextAvailable).toBe(true);
+    expect(toolCall?.output?.runtimeContextValue).toBe('runtimeContext-value');
     expect(capturedValue).toBe('runtimeContext-value');
   }, 500000);
 
@@ -1131,8 +1131,8 @@ describe('agent', () => {
 
     const toolCall = (await stream.toolResults).find(result => result.toolName === 'testTool');
 
-    expect(toolCall?.result?.runtimeContextAvailable).toBe(true);
-    expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
+    expect(toolCall?.output?.runtimeContextAvailable).toBe(true);
+    expect(toolCall?.output?.runtimeContextValue).toBe('runtimeContext-value');
     expect(capturedValue).toBe('runtimeContext-value');
   }, 500000);
 });

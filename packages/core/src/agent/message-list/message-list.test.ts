@@ -198,7 +198,7 @@ describe('MessageList', () => {
       const messageOne = { role: 'user' as const, content: 'Run the tool' as const } satisfies AIV5.ModelMessage;
       const messageTwo = {
         role: 'assistant' as const,
-        content: [{ type: 'tool-call', toolName: 'test-tool', toolCallId: 'call-3', args: { query: 'test' } }],
+        content: [{ type: 'tool-call', toolName: 'testTool', toolCallId: 'call-3', input: { query: 'test' } }],
       } satisfies AIV5.ModelMessage;
 
       const initialMessages = [messageOne, messageTwo];
@@ -208,9 +208,9 @@ describe('MessageList', () => {
       const messageThree = {
         role: 'tool',
         content: [
-          { type: 'tool-result', toolName: 'test-tool', toolCallId: 'call-3', result: 'Tool execution successful' },
+          { type: 'tool-result', toolName: 'testTool', toolCallId: 'call-3', output: 'Tool execution successful' },
         ],
-      } satisfies AIV4.CoreMessage;
+      } satisfies AIV5.CoreMessage;
 
       list.add(messageThree, 'response');
 
@@ -227,14 +227,11 @@ describe('MessageList', () => {
           metadata: { createdAt: expect.any(Date) },
           parts: [
             {
-              type: 'tool-invocation',
-              toolInvocation: {
-                state: 'result',
-                toolName: 'test-tool',
-                toolCallId: 'call-3',
-                args: messageTwo.content[0].args,
-                result: messageThree.content[0].result,
-              },
+              type: 'tool-testTool',
+              state: 'output-available',
+              toolCallId: 'call-3',
+              input: messageTwo.content[0].input,
+              output: messageThree.content[0].output,
             },
           ],
         },
@@ -245,7 +242,7 @@ describe('MessageList', () => {
       const messageOne = { role: 'user' as const, content: 'Run the tool' as const } satisfies AIV5.ModelMessage;
       const messageTwo = {
         role: 'assistant' as const,
-        content: [{ type: 'tool-call', toolName: 'test-tool', toolCallId: 'call-3', args: { query: 'test' } }],
+        content: [{ type: 'tool-call', toolName: 'testTool', toolCallId: 'call-3', input: { query: 'test' } }],
       } satisfies AIV5.ModelMessage;
 
       const initialMessages = [messageOne, messageTwo];
@@ -255,9 +252,9 @@ describe('MessageList', () => {
       const messageThree = {
         role: 'tool',
         content: [
-          { type: 'tool-result', toolName: 'test-tool', toolCallId: 'call-3', result: 'Tool execution successful' },
+          { type: 'tool-result', toolName: 'testTool', toolCallId: 'call-3', output: 'Tool execution successful' },
         ],
-      } satisfies AIV4.CoreMessage;
+      } satisfies AIV5.CoreMessage;
 
       list.add(messageThree, 'response');
 
@@ -279,14 +276,11 @@ describe('MessageList', () => {
             format: 3,
             parts: [
               {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  state: 'result',
-                  toolName: 'test-tool',
-                  toolCallId: 'call-3',
-                  args: messageTwo.content[0].args,
-                  result: messageThree.content[0].result,
-                },
+                type: 'tool-testTool',
+                state: 'output-available',
+                toolCallId: 'call-3',
+                input: messageTwo.content[0].input,
+                output: messageThree.content[0].output,
               },
             ],
           },
@@ -300,7 +294,7 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Okay, checking the weather.' },
-          { type: 'tool-call', toolName: 'weather-tool', toolCallId: 'call-2', args: { location: 'London' } },
+          { type: 'tool-call', toolName: 'weatherTool', toolCallId: 'call-2', args: { location: 'London' } },
         ],
         threadId,
         resourceId,
@@ -323,7 +317,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'call',
-                  toolName: 'weather-tool',
+                  toolName: 'weatherTool',
                   toolCallId: 'call-2',
                   args: { location: 'London' },
                 },
@@ -332,7 +326,7 @@ describe('MessageList', () => {
             toolInvocations: [
               {
                 state: 'call',
-                toolName: 'weather-tool',
+                toolName: 'weatherTool',
                 toolCallId: 'call-2',
                 args: { location: 'London' },
               },
@@ -350,7 +344,7 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Okay, checking the weather.' },
-          { type: 'tool-call', toolName: 'weather-tool', toolCallId: 'call-2', args: { location: 'London' } },
+          { type: 'tool-call', toolName: 'weatherTool', toolCallId: 'call-2', args: { location: 'London' } },
         ],
         threadId,
         resourceId,
@@ -370,13 +364,10 @@ describe('MessageList', () => {
             parts: [
               { type: 'text', text: 'Okay, checking the weather.' },
               {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  state: 'call',
-                  toolName: 'weather-tool',
-                  toolCallId: 'call-2',
-                  args: { location: 'London' },
-                },
+                type: 'tool-weatherTool',
+                state: 'input-available',
+                toolCallId: 'call-2',
+                input: { location: 'London' },
               },
             ],
           },
@@ -423,7 +414,7 @@ describe('MessageList', () => {
             type: 'tool-call',
             toolName: 'calculator',
             toolCallId: 'call-1',
-            args: { operation: 'add', numbers: [1, 2] },
+            input: { operation: 'add', numbers: [1, 2] },
           },
         ],
       } satisfies AIV5.ModelMessage;
@@ -473,7 +464,7 @@ describe('MessageList', () => {
             type: 'tool-call',
             toolName: 'calculator',
             toolCallId: 'call-1',
-            args: { operation: 'add', numbers: [1, 2] },
+            input: { operation: 'add', numbers: [1, 2] },
           },
         ],
       } satisfies AIV5.ModelMessage;
@@ -490,13 +481,10 @@ describe('MessageList', () => {
             parts: [
               { type: 'text', text: 'Okay, I can do that.' },
               {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  state: 'call',
-                  toolName: 'calculator',
-                  toolCallId: 'call-1',
-                  args: { operation: 'add', numbers: [1, 2] },
-                },
+                type: 'tool-calculator',
+                state: 'input-available',
+                toolCallId: 'call-1',
+                input: { operation: 'add', numbers: [1, 2] },
               },
             ],
           },
@@ -516,13 +504,13 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Thinking...' },
-          { type: 'tool-call', toolName: 'search-tool', toolCallId: 'call-seq-1', args: { query: 'some query' } },
+          { type: 'tool-call', toolName: 'searchTool', toolCallId: 'call-seq-1', input: { query: 'some query' } },
         ],
       } satisfies AIV5.ModelMessage;
       const msg3 = {
         role: 'tool',
         content: [
-          { type: 'tool-result', toolName: 'search-tool', toolCallId: 'call-seq-1', result: 'Search results data' },
+          { type: 'tool-result', toolName: 'searchTool', toolCallId: 'call-seq-1', output: 'Search results data' },
         ],
       } satisfies AIV5.ModelMessage;
       const msg4 = {
@@ -559,8 +547,8 @@ describe('MessageList', () => {
                   state: 'result',
                   toolName: msg2.content[1].toolName,
                   toolCallId: msg2.content[1].toolCallId,
-                  args: msg2.content[1].args,
-                  result: msg3.content[0].result,
+                  args: msg2.content[1].input,
+                  result: msg3.content[0].output,
                 },
               },
             ],
@@ -569,8 +557,8 @@ describe('MessageList', () => {
                 state: 'result',
                 toolName: msg2.content[1].toolName,
                 toolCallId: msg2.content[1].toolCallId,
-                args: msg2.content[1].args,
-                result: msg3.content[0].result,
+                args: msg2.content[1].input,
+                result: msg3.content[0].output,
               },
             ],
           },
@@ -905,23 +893,23 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Step 1: Call tool A' },
-          { type: 'tool-call', toolName: 'tool-a', toolCallId: 'call-a-1', args: {} },
+          { type: 'tool-call', toolName: 'toolA', toolCallId: 'call-a-1', input: {} },
         ],
       } satisfies AIV5.ModelMessage;
       const msg2 = {
         role: 'tool',
-        content: [{ type: 'tool-result', toolName: 'tool-a', toolCallId: 'call-a-1', result: 'Result A' }],
+        content: [{ type: 'tool-result', toolName: 'toolA', toolCallId: 'call-a-1', output: 'Result A' }],
       } satisfies AIV5.ModelMessage;
       const msg3 = {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Step 2: Call tool B' },
-          { type: 'tool-call', toolName: 'tool-b', toolCallId: 'call-b-1', args: {} },
+          { type: 'tool-call', toolName: 'toolB', toolCallId: 'call-b-1', input: {} },
         ],
       } satisfies AIV5.ModelMessage;
       const msg4 = {
         role: 'tool',
-        content: [{ type: 'tool-result', toolName: 'tool-b', toolCallId: 'call-b-1', result: 'Result B' }],
+        content: [{ type: 'tool-result', toolName: 'toolB', toolCallId: 'call-b-1', output: 'Result B' }],
       } satisfies AIV5.ModelMessage;
       const msg5 = {
         role: 'assistant',
@@ -945,7 +933,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result',
-                  toolName: 'tool-a',
+                  toolName: 'toolA',
                   toolCallId: 'call-a-1',
                   args: {},
                   result: 'Result A',
@@ -955,7 +943,7 @@ describe('MessageList', () => {
             toolInvocations: [
               {
                 state: 'result',
-                toolName: 'tool-a',
+                toolName: 'toolA',
                 toolCallId: 'call-a-1',
                 args: {},
                 result: 'Result A',
@@ -977,7 +965,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result',
-                  toolName: 'tool-b',
+                  toolName: 'toolB',
                   toolCallId: 'call-b-1',
                   args: {},
                   result: 'Result B',
@@ -987,7 +975,7 @@ describe('MessageList', () => {
             toolInvocations: [
               {
                 state: 'result',
-                toolName: 'tool-b',
+                toolName: 'toolB',
                 toolCallId: 'call-b-1',
                 args: {},
                 result: 'Result B',
@@ -1016,23 +1004,23 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Step 1: Call tool A' },
-          { type: 'tool-call', toolName: 'tool-a', toolCallId: 'call-a-1', args: {} },
+          { type: 'tool-call', toolName: 'toolA', toolCallId: 'call-a-1', input: {} },
         ],
       } satisfies AIV5.ModelMessage;
       const msg2 = {
         role: 'tool',
-        content: [{ type: 'tool-result', toolName: 'tool-a', toolCallId: 'call-a-1', result: 'Result A' }],
+        content: [{ type: 'tool-result', toolName: 'toolA', toolCallId: 'call-a-1', output: 'Result A' }],
       } satisfies AIV5.ModelMessage;
       const msg3 = {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Step 2: Call tool B' },
-          { type: 'tool-call', toolName: 'tool-b', toolCallId: 'call-b-1', args: {} },
+          { type: 'tool-call', toolName: 'toolB', toolCallId: 'call-b-1', input: {} },
         ],
       } satisfies AIV5.ModelMessage;
       const msg4 = {
         role: 'tool',
-        content: [{ type: 'tool-result', toolName: 'tool-b', toolCallId: 'call-b-1', result: 'Result B' }],
+        content: [{ type: 'tool-result', toolName: 'toolB', toolCallId: 'call-b-1', output: 'Result B' }],
       } satisfies AIV5.ModelMessage;
       const msg5 = {
         role: 'assistant',
@@ -1053,14 +1041,11 @@ describe('MessageList', () => {
             parts: [
               { type: 'text', text: 'Step 1: Call tool A' },
               {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  state: 'result',
-                  toolName: 'tool-a',
-                  toolCallId: 'call-a-1',
-                  args: {},
-                  result: 'Result A',
-                },
+                type: 'tool-toolA',
+                state: 'output-available',
+                toolCallId: 'call-a-1',
+                input: {},
+                output: 'Result A',
               },
             ],
           },
@@ -1076,14 +1061,11 @@ describe('MessageList', () => {
             parts: [
               { type: 'text', text: 'Step 2: Call tool B' },
               {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  state: 'result',
-                  toolName: 'tool-b',
-                  toolCallId: 'call-b-1',
-                  args: {},
-                  result: 'Result B',
-                },
+                type: 'tool-toolB',
+                state: 'output-available',
+                toolCallId: 'call-b-1',
+                input: {},
+                output: 'Result B',
               },
             ],
           },
@@ -1115,14 +1097,14 @@ describe('MessageList', () => {
         content: [
           { type: 'reasoning', text: 'First, I need to gather some data.' },
           { type: 'text', text: 'Calling data tool...' },
-          { type: 'tool-call', toolName: 'data-tool', toolCallId: 'call-data-1', args: { query: 'required data' } },
+          { type: 'tool-call', toolName: 'dataTool', toolCallId: 'call-data-1', input: { query: 'required data' } },
         ],
       } satisfies AIV5.ModelMessage;
 
       const toolResultMsg = {
         role: 'tool',
         content: [
-          { type: 'tool-result', toolName: 'data-tool', toolCallId: 'call-data-1', result: '{"data": "gathered"}' },
+          { type: 'tool-result', toolName: 'dataTool', toolCallId: 'call-data-1', output: '{"data": "gathered"}' },
         ],
       } satisfies AIV5.ModelMessage;
 
@@ -1167,7 +1149,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result', // State should be updated to result
-                  toolName: 'data-tool',
+                  toolName: 'dataTool',
                   toolCallId: 'call-data-1',
                   args: { query: 'required data' },
                   result: '{"data": "gathered"}', // Result from the tool message
@@ -1177,7 +1159,7 @@ describe('MessageList', () => {
             toolInvocations: [
               {
                 state: 'result', // State should be updated to result
-                toolName: 'data-tool',
+                toolName: 'dataTool',
                 toolCallId: 'call-data-1',
                 args: { query: 'required data' },
                 result: '{"data": "gathered"}', // Result from the tool message
@@ -1219,14 +1201,14 @@ describe('MessageList', () => {
         content: [
           { type: 'reasoning', text: 'First, I need to gather some data.' },
           { type: 'text', text: 'Calling data tool...' },
-          { type: 'tool-call', toolName: 'data-tool', toolCallId: 'call-data-1', args: { query: 'required data' } },
+          { type: 'tool-call', toolName: 'dataTool', toolCallId: 'call-data-1', input: { query: 'required data' } },
         ],
       } satisfies AIV5.ModelMessage;
 
       const toolResultMsg = {
         role: 'tool',
         content: [
-          { type: 'tool-result', toolName: 'data-tool', toolCallId: 'call-data-1', result: '{"data": "gathered"}' },
+          { type: 'tool-result', toolName: 'dataTool', toolCallId: 'call-data-1', output: '{"data": "gathered"}' },
         ],
       } satisfies AIV5.ModelMessage;
 
@@ -1267,14 +1249,11 @@ describe('MessageList', () => {
               },
               { type: 'text', text: 'Calling data tool...' },
               {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  state: 'result', // State should be updated to result
-                  toolName: 'data-tool',
-                  toolCallId: 'call-data-1',
-                  args: { query: 'required data' },
-                  result: '{"data": "gathered"}', // Result from the tool message
-                },
+                type: 'tool-dataTool',
+                state: 'output-available', // State should be updated to output-available
+                toolCallId: 'call-data-1',
+                input: { query: 'required data' },
+                output: '{"data": "gathered"}', // Result from the tool message
               },
             ],
           },
@@ -1521,7 +1500,7 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Searching...' },
-          { type: 'tool-call', toolName: 'search-tool', toolCallId: 'call-mix-1', args: { query: 'info' } },
+          { type: 'tool-call', toolName: 'searchTool', toolCallId: 'call-mix-1', args: { query: 'info' } },
         ],
         threadId,
         resourceId,
@@ -1533,7 +1512,7 @@ describe('MessageList', () => {
         id: 'v1-tool-1',
         role: 'tool',
         content: [
-          { type: 'tool-result', toolName: 'search-tool', toolCallId: 'call-mix-1', result: 'Found relevant data.' },
+          { type: 'tool-result', toolName: 'searchTool', toolCallId: 'call-mix-1', result: 'Found relevant data.' },
         ],
         threadId,
         resourceId,
@@ -1578,7 +1557,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result', // State should be updated to result
-                  toolName: 'search-tool',
+                  toolName: 'searchTool',
                   toolCallId: 'call-mix-1',
                   args: { query: 'info' },
                   result: 'Found relevant data.', // Result from the tool message
@@ -1588,7 +1567,7 @@ describe('MessageList', () => {
             toolInvocations: [
               {
                 state: 'result', // State should be updated to result
-                toolName: 'search-tool',
+                toolName: 'searchTool',
                 toolCallId: 'call-mix-1',
                 args: { query: 'info' },
                 result: 'Found relevant data.', // Result from the tool message
@@ -1630,7 +1609,7 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Searching...' },
-          { type: 'tool-call', toolName: 'search-tool', toolCallId: 'call-mix-1', args: { query: 'info' } },
+          { type: 'tool-call', toolName: 'searchTool', toolCallId: 'call-mix-1', args: { query: 'info' } },
         ],
         threadId,
         resourceId,
@@ -1642,7 +1621,7 @@ describe('MessageList', () => {
         id: 'v1-tool-1',
         role: 'tool',
         content: [
-          { type: 'tool-result', toolName: 'search-tool', toolCallId: 'call-mix-1', result: 'Found relevant data.' },
+          { type: 'tool-result', toolName: 'searchTool', toolCallId: 'call-mix-1', result: 'Found relevant data.' },
         ],
         threadId,
         resourceId,
@@ -1684,14 +1663,11 @@ describe('MessageList', () => {
             parts: [
               { type: 'text', text: 'Searching...' },
               {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  state: 'result', // State should be updated to result
-                  toolName: 'search-tool',
-                  toolCallId: 'call-mix-1',
-                  args: { query: 'info' },
-                  result: 'Found relevant data.', // Result from the tool message
-                },
+                type: 'tool-searchTool',
+                state: 'output-available', // State should be updated to result
+                toolCallId: 'call-mix-1',
+                input: { query: 'info' },
+                output: 'Found relevant data.', // Result from the tool message
               },
             ],
           },
@@ -1724,7 +1700,7 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Okay, I will perform the task.' },
-          { type: 'tool-call', toolName: 'task-tool', toolCallId: 'call-task-1', args: { task: 'perform' } },
+          { type: 'tool-call', toolName: 'taskTool', toolCallId: 'call-task-1', input: { task: 'perform' } },
         ],
       } satisfies AIV5.ModelMessage;
 
@@ -1733,9 +1709,9 @@ describe('MessageList', () => {
         content: [
           {
             type: 'tool-result',
-            toolName: 'task-tool',
+            toolName: 'taskTool',
             toolCallId: 'call-task-1',
-            result: 'Task completed successfully.',
+            output: 'Task completed successfully.',
           },
         ],
       } satisfies AIV5.ModelMessage;
@@ -1773,7 +1749,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result',
-                  toolName: 'task-tool',
+                  toolName: 'taskTool',
                   toolCallId: 'call-task-1',
                   args: { task: 'perform' },
                   result: 'Task completed successfully.',
@@ -1783,7 +1759,7 @@ describe('MessageList', () => {
             toolInvocations: [
               {
                 state: 'result',
-                toolName: 'task-tool',
+                toolName: 'taskTool',
                 toolCallId: 'call-task-1',
                 args: { task: 'perform' },
                 result: 'Task completed successfully.',
@@ -1817,7 +1793,7 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Okay, I will perform the task.' },
-          { type: 'tool-call', toolName: 'task-tool', toolCallId: 'call-task-1', args: { task: 'perform' } },
+          { type: 'tool-call', toolName: 'taskTool', toolCallId: 'call-task-1', input: { task: 'perform' } },
         ],
       } satisfies AIV5.ModelMessage;
 
@@ -1826,9 +1802,9 @@ describe('MessageList', () => {
         content: [
           {
             type: 'tool-result',
-            toolName: 'task-tool',
+            toolName: 'taskTool',
             toolCallId: 'call-task-1',
-            result: 'Task completed successfully.',
+            output: 'Task completed successfully.',
           },
         ],
       } satisfies AIV5.ModelMessage;
@@ -1863,14 +1839,11 @@ describe('MessageList', () => {
             parts: [
               { type: 'text', text: 'Okay, I will perform the task.' },
               {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  state: 'result',
-                  toolName: 'task-tool',
-                  toolCallId: 'call-task-1',
-                  args: { task: 'perform' },
-                  result: 'Task completed successfully.',
-                },
+                type: 'tool-taskTool',
+                state: 'output-available',
+                toolCallId: 'call-task-1',
+                input: { task: 'perform' },
+                output: 'Task completed successfully.',
               },
             ],
           },
@@ -2008,7 +1981,7 @@ describe('MessageList', () => {
         content: [
           { type: 'reasoning', text: 'First, I need to gather some data.' },
           { type: 'text', text: 'Gathering data...' },
-          { type: 'tool-call', toolName: 'data-tool', toolCallId: 'call-data-1', args: { query: 'required data' } },
+          { type: 'tool-call', toolName: 'dataTool', toolCallId: 'call-data-1', input: { query: 'required data' } },
           { type: 'reasoning', text: 'Data gathered, now I will process it.' },
         ],
       } satisfies AIV5.ModelMessage;
@@ -2033,7 +2006,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'call',
-                  toolName: 'data-tool',
+                  toolName: 'dataTool',
                   toolCallId: 'call-data-1',
                   args: { query: 'required data' },
                 },
@@ -2047,7 +2020,7 @@ describe('MessageList', () => {
             toolInvocations: [
               {
                 state: 'call',
-                toolName: 'data-tool',
+                toolName: 'dataTool',
                 toolCallId: 'call-data-1',
                 args: { query: 'required data' },
               },
@@ -2065,7 +2038,7 @@ describe('MessageList', () => {
         content: [
           { type: 'reasoning', text: 'First, I need to gather some data.' },
           { type: 'text', text: 'Gathering data...' },
-          { type: 'tool-call', toolName: 'data-tool', toolCallId: 'call-data-1', args: { query: 'required data' } },
+          { type: 'tool-call', toolName: 'dataTool', toolCallId: 'call-data-1', input: { query: 'required data' } },
           { type: 'reasoning', text: 'Data gathered, now I will process it.' },
         ],
       } satisfies AIV5.ModelMessage;
@@ -2086,13 +2059,10 @@ describe('MessageList', () => {
               },
               { type: 'text', text: 'Gathering data...' },
               {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  state: 'call',
-                  toolName: 'data-tool',
-                  toolCallId: 'call-data-1',
-                  args: { query: 'required data' },
-                },
+                type: 'tool-dataTool',
+                state: 'input-available',
+                toolCallId: 'call-data-1',
+                input: { query: 'required data' },
               },
               {
                 type: 'reasoning',
@@ -2116,20 +2086,20 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Okay, I will check the weather for both cities.' },
-          { type: 'tool-call', toolName: 'weather-tool', toolCallId: 'call-london', args: { city: 'London' } },
+          { type: 'tool-call', toolName: 'weatherTool', toolCallId: 'call-london', input: { city: 'London' } },
           { type: 'text', text: 'And now for Paris.' },
-          { type: 'tool-call', toolName: 'weather-tool', toolCallId: 'call-paris', args: { city: 'Paris' } },
+          { type: 'tool-call', toolName: 'weatherTool', toolCallId: 'call-paris', input: { city: 'Paris' } },
         ],
       } satisfies AIV5.ModelMessage;
 
       const toolResultLondon = {
         role: 'tool',
-        content: [{ type: 'tool-result', toolName: 'weather-tool', toolCallId: 'call-london', result: '20°C, sunny' }],
+        content: [{ type: 'tool-result', toolName: 'weatherTool', toolCallId: 'call-london', output: '20°C, sunny' }],
       } satisfies AIV5.ModelMessage;
 
       const toolResultParis = {
         role: 'tool',
-        content: [{ type: 'tool-result', toolName: 'weather-tool', toolCallId: 'call-paris', result: '15°C, cloudy' }],
+        content: [{ type: 'tool-result', toolName: 'weatherTool', toolCallId: 'call-paris', output: '15°C, cloudy' }],
       } satisfies AIV5.ModelMessage;
 
       const assistantMsgWithFinalText = {
@@ -2171,7 +2141,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result',
-                  toolName: 'weather-tool',
+                  toolName: 'weatherTool',
                   toolCallId: 'call-london',
                   args: { city: 'London' },
                   result: '20°C, sunny',
@@ -2182,7 +2152,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result',
-                  toolName: 'weather-tool',
+                  toolName: 'weatherTool',
                   toolCallId: 'call-paris',
                   args: { city: 'Paris' },
                   result: '15°C, cloudy',
@@ -2192,14 +2162,14 @@ describe('MessageList', () => {
             toolInvocations: [
               {
                 state: 'result',
-                toolName: 'weather-tool',
+                toolName: 'weatherTool',
                 toolCallId: 'call-london',
                 args: { city: 'London' },
                 result: '20°C, sunny',
               },
               {
                 state: 'result',
-                toolName: 'weather-tool',
+                toolName: 'weatherTool',
                 toolCallId: 'call-paris',
                 args: { city: 'Paris' },
                 result: '15°C, cloudy',
@@ -2235,20 +2205,20 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Okay, I will check the weather for both cities.' },
-          { type: 'tool-call', toolName: 'weather-tool', toolCallId: 'call-london', args: { city: 'London' } },
+          { type: 'tool-call', toolName: 'weatherTool', toolCallId: 'call-london', input: { city: 'London' } },
           { type: 'text', text: 'And now for Paris.' },
-          { type: 'tool-call', toolName: 'weather-tool', toolCallId: 'call-paris', args: { city: 'Paris' } },
+          { type: 'tool-call', toolName: 'weatherTool', toolCallId: 'call-paris', input: { city: 'Paris' } },
         ],
       } satisfies AIV5.ModelMessage;
 
       const toolResultLondon = {
         role: 'tool',
-        content: [{ type: 'tool-result', toolName: 'weather-tool', toolCallId: 'call-london', result: '20°C, sunny' }],
+        content: [{ type: 'tool-result', toolName: 'weatherTool', toolCallId: 'call-london', output: '20°C, sunny' }],
       } satisfies AIV5.ModelMessage;
 
       const toolResultParis = {
         role: 'tool',
-        content: [{ type: 'tool-result', toolName: 'weather-tool', toolCallId: 'call-paris', result: '15°C, cloudy' }],
+        content: [{ type: 'tool-result', toolName: 'weatherTool', toolCallId: 'call-paris', output: '15°C, cloudy' }],
       } satisfies AIV5.ModelMessage;
 
       const assistantMsgWithFinalText = {
@@ -2287,25 +2257,19 @@ describe('MessageList', () => {
             parts: [
               { type: 'text', text: 'Okay, I will check the weather for both cities.' },
               {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  state: 'result',
-                  toolName: 'weather-tool',
-                  toolCallId: 'call-london',
-                  args: { city: 'London' },
-                  result: '20°C, sunny',
-                },
+                type: 'tool-weatherTool',
+                state: 'output-available',
+                toolCallId: 'call-london',
+                input: { city: 'London' },
+                output: '20°C, sunny',
               },
               { type: 'text', text: 'And now for Paris.' },
               {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  state: 'result',
-                  toolName: 'weather-tool',
-                  toolCallId: 'call-paris',
-                  args: { city: 'Paris' },
-                  result: '15°C, cloudy',
-                },
+                type: 'tool-weatherTool',
+                state: 'output-available',
+                toolCallId: 'call-paris',
+                input: { city: 'Paris' },
+                output: '15°C, cloudy',
               },
             ],
           },
@@ -2577,14 +2541,11 @@ describe('MessageList', () => {
             role: 'assistant',
             parts: [
               {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  state: 'result',
-                  toolCallId: 'call_fziykqCGOygt5QGj6xVnkQaE',
-                  toolName: 'updateWorkingMemory',
-                  args: { memory: '<user><location>LA</location></user>' },
-                  result: { success: true },
-                },
+                type: 'tool-updateWorkingMemory',
+                state: 'output-available',
+                toolCallId: 'call_fziykqCGOygt5QGj6xVnkQaE',
+                input: { memory: '<user><location>LA</location></user>' },
+                output: { success: true },
               },
             ],
           },
@@ -2797,7 +2758,7 @@ describe('MessageList', () => {
         role: 'assistant',
         content: [
           { type: 'text', text: 'Okay' },
-          { type: 'tool-call', toolCallId: 'orphan-call-1', toolName: 'test-tool', args: {} },
+          { type: 'tool-call', toolCallId: 'orphan-call-1', toolName: 'testTool', input: {} },
         ],
       };
 
@@ -2817,14 +2778,14 @@ describe('MessageList', () => {
       const assistantMessage: AIV5.CoreMessage = {
         role: 'assistant',
         content: [
-          { type: 'tool-call', toolCallId: 'valid-1', toolName: 'tool-a', args: {} },
+          { type: 'tool-call', toolCallId: 'valid-1', toolName: 'toolA', input: {} },
           { type: 'text', text: 'Some text in between' },
-          { type: 'tool-call', toolCallId: 'orphan-3', toolName: 'tool-b', args: {} },
+          { type: 'tool-call', toolCallId: 'orphan-3', toolName: 'toolB', input: {} },
         ],
       };
       const toolMessageResult: AIV5.CoreMessage = {
         role: 'tool',
-        content: [{ type: 'tool-result', toolCallId: 'valid-1', toolName: 'tool-a', result: 'Result for valid-1' }],
+        content: [{ type: 'tool-result', toolCallId: 'valid-1', toolName: 'toolA', output: 'Result for valid-1' }],
       };
 
       list.add(assistantMessage, 'response');
@@ -2836,14 +2797,14 @@ describe('MessageList', () => {
       const finalAssistantMsg = [...coreMessages].reverse().find(m => m.role === 'assistant');
       expect(finalAssistantMsg).toBeDefined();
       expect(finalAssistantMsg?.content).toEqual([
-        { args: {}, toolCallId: 'valid-1', toolName: 'tool-a', type: 'tool-call' },
+        { input: {}, toolCallId: 'valid-1', toolName: 'toolA', type: 'tool-call' },
         { type: 'text', text: 'Some text in between' },
       ]);
 
       const finalToolMsg = coreMessages.find(m => m.role === 'tool');
       expect(finalToolMsg).toBeDefined();
       expect(finalToolMsg?.content).toEqual([
-        { type: 'tool-result', toolCallId: 'valid-1', toolName: 'tool-a', result: 'Result for valid-1' },
+        { type: 'tool-result', toolCallId: 'valid-1', toolName: 'toolA', output: 'Result for valid-1' },
       ]);
     });
   });

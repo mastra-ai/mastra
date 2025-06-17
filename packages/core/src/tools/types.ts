@@ -2,7 +2,6 @@ import type { JSONObject } from '@ai-sdk/provider';
 import type { ToolCallOptions, Tool, Schema } from 'ai';
 import type { JSONSchema7Type } from 'json-schema';
 import type { z } from 'zod';
-// import type { ZodSchema, z } from 'zod';
 import type * as z3 from 'zod/v3';
 import type * as z4 from 'zod/v4/core';
 
@@ -54,7 +53,7 @@ export type ConvertedToolSet = ToolSet<Exclude<ToolParameters, JSONSchema7Type>>
 export type InternalCoreTool = {
   id?: string;
   description?: string;
-  parameters: Schema;
+  inputSchema: Schema;
   execute?: (params: any, options: ToolCallOptions) => Promise<any>;
 } & (
   | {

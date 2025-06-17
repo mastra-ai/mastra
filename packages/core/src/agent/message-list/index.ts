@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import * as AIV5 from 'ai';
 import type * as AIV4 from './ai-sdk-4';
+import { getToolName } from './ai-sdk-5';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 import { convertDataContentToBase64String } from './prompt/data-content';
 
@@ -609,14 +610,14 @@ ${JSON.stringify(message, null, 2)}`,
               args: p.input,
               result: p.output,
               toolCallId: p.toolCallId,
-              toolName: AIV5.getToolName(p),
+              toolName: getToolName(p),
               state: 'result',
             } satisfies AIV4.ToolInvocation;
           }
           return {
             args: p.input,
             state: 'call',
-            toolName: AIV5.getToolName(p),
+            toolName: getToolName(p),
             toolCallId: p.toolCallId,
           } satisfies AIV4.ToolInvocation;
         })
@@ -633,7 +634,7 @@ ${JSON.stringify(message, null, 2)}`,
         parts: message.content.parts
           .map((p): MastraMessageV2['content']['parts'][0] | null => {
             if (AIV5.isToolUIPart(p)) {
-              const shared = { state: p.state, args: p.input, toolCallId: p.toolCallId, toolName: AIV5.getToolName(p) };
+              const shared = { state: p.state, args: p.input, toolCallId: p.toolCallId, toolName: getToolName(p) };
 
               if (p.state === `output-available`) {
                 return {
