@@ -1,5 +1,21 @@
 # create-mastra
 
+## 0.10.5
+
+### Patch Changes
+
+- 02560d4: lift evals fetching to the playground package instead
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`execa@^9.6.0` ↗︎](https://www.npmjs.com/package/execa/v/9.6.0) (from `^9.5.2`, in `dependencies`)
+  - Updated dependency [`pino@^9.7.0` ↗︎](https://www.npmjs.com/package/pino/v/9.7.0) (from `^9.6.0`, in `dependencies`)
+  - Updated dependency [`posthog-node@^4.18.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/4.18.0) (from `^4.10.1`, in `dependencies`)
+- 5f2aa3e: Move workflow hooks to playground
+- 44ba52d: Add proper error message when installation of mastra fails
+- 311132e: move useWorkflow to playground instead of playground-ui
+- 3270d9d: Fix runtime context being undefined
+- 53d3c37: Get workflows from an agent if not found from Mastra instance #5083
+- fc677d7: For final result for a workflow
+
 ## 0.10.5-alpha.2
 
 ### Patch Changes

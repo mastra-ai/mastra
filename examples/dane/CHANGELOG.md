@@ -1,5 +1,48 @@
 # @mastra/dane
 
+## 0.0.27
+
+### Patch Changes
+
+- 4051477: dependencies updates:
+  - Updated dependency [`@ai-sdk/anthropic@^1.2.12` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/1.2.12) (from `^1.2.11`, in `dependencies`)
+- 42ec363: dependencies updates:
+  - Updated dependency [`@ai-sdk/anthropic@^1.2.12` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/1.2.12) (from `^1.2.11`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [4051477]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [12a95fc]
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+- Updated dependencies [d70c420]
+- Updated dependencies [ee9af57]
+- Updated dependencies [36f1c36]
+- Updated dependencies [2a16996]
+- Updated dependencies [2fda031]
+- Updated dependencies [10d352e]
+- Updated dependencies [9589624]
+- Updated dependencies [bd1674f]
+- Updated dependencies [69f76f7]
+- Updated dependencies [53d3c37]
+- Updated dependencies [704d1ca]
+- Updated dependencies [751c894]
+- Updated dependencies [75136cd]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+- Updated dependencies [e8fdbdd]
+  - @mastra/core@0.10.6
+  - @mastra/github@1.2.3
+  - @mastra/libsql@0.10.3
+  - @mastra/mcp@0.10.4
+  - @mastra/memory@0.10.4
+  - @mastra/rag@1.0.0
+  - @mastra/upstash@0.11.0
+
 ## 0.0.27-alpha.7
 
 ### Patch Changes

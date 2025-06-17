@@ -1,5 +1,68 @@
 # mastra
 
+## 0.10.6
+
+### Patch Changes
+
+- 02560d4: lift evals fetching to the playground package instead
+- 084f6aa: Add logs to circular dependency to warn people when starting server might break
+- b29c802: Remove open browser
+- 5f2aa3e: Move workflow hooks to playground
+- 4051477: dependencies updates:
+  - Updated dependency [`@clack/prompts@^0.11.0` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/0.11.0) (from `^0.8.2`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/instrumentation@^0.202.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/instrumentation/v/0.202.0) (from `^0.57.2`, in `dependencies`)
+  - Updated dependency [`posthog-node@4.18.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/4.18.0) (from `4.16.0`, in `dependencies`)
+  - Updated dependency [`yocto-spinner@^0.2.3` ↗︎](https://www.npmjs.com/package/yocto-spinner/v/0.2.3) (from `^0.1.2`, in `dependencies`)
+  - Added dependency [`open@^10.1.2` ↗︎](https://www.npmjs.com/package/open/v/10.1.2) (to `dependencies`)
+- b40f365: dependencies updates:
+  - Updated dependency [`@clack/prompts@^0.11.0` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/0.11.0) (from `^0.8.2`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/instrumentation@^0.202.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/instrumentation/v/0.202.0) (from `^0.57.2`, in `dependencies`)
+  - Updated dependency [`posthog-node@4.18.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/4.18.0) (from `4.16.0`, in `dependencies`)
+  - Updated dependency [`yocto-spinner@^0.2.3` ↗︎](https://www.npmjs.com/package/yocto-spinner/v/0.2.3) (from `^0.1.2`, in `dependencies`)
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`execa@^9.6.0` ↗︎](https://www.npmjs.com/package/execa/v/9.6.0) (from `^9.5.2`, in `dependencies`)
+  - Updated dependency [`json-schema-to-zod@^2.6.1` ↗︎](https://www.npmjs.com/package/json-schema-to-zod/v/2.6.1) (from `^2.6.0`, in `dependencies`)
+  - Updated dependency [`shell-quote@^1.8.3` ↗︎](https://www.npmjs.com/package/shell-quote/v/1.8.3) (from `^1.8.2`, in `dependencies`)
+  - Updated dependency [`strip-json-comments@^5.0.2` ↗︎](https://www.npmjs.com/package/strip-json-comments/v/5.0.2) (from `^5.0.1`, in `dependencies`)
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+- 143b4e4: Fix globbing of tools to only capture js/ts files
+- 44ba52d: Add proper error message when installation of mastra fails
+- 311132e: move useWorkflow to playground instead of playground-ui
+- 3270d9d: Fix runtime context being undefined
+- 906f992: CLI error log
+- 53d3c37: Get workflows from an agent if not found from Mastra instance #5083
+- fc677d7: For final result for a workflow
+- 47e7029: Add open browser functionality when running mastra dev
+- Updated dependencies [63f6b7d]
+- Updated dependencies [4051477]
+- Updated dependencies [2d12edd]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [c28ed65]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [12a95fc]
+- Updated dependencies [79b9909]
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+- Updated dependencies [d70c420]
+- Updated dependencies [ee9af57]
+- Updated dependencies [ec7f824]
+- Updated dependencies [36f1c36]
+- Updated dependencies [084f6aa]
+- Updated dependencies [2a16996]
+- Updated dependencies [10d352e]
+- Updated dependencies [9589624]
+- Updated dependencies [bd1674f]
+- Updated dependencies [69f76f7]
+- Updated dependencies [3270d9d]
+- Updated dependencies [53d3c37]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6
+  - @mastra/deployer@0.10.6
+  - @mastra/mcp@0.10.4
+
 ## 0.10.6-alpha.7
 
 ### Patch Changes
