@@ -48,8 +48,8 @@ export interface AgentConfig<
   model: DynamicArgument<MastraLanguageModel>;
   tools?: DynamicArgument<TTools>;
   workflows?: DynamicArgument<Record<string, Workflow>>;
-  defaultGenerateOptions?: AgentGenerateOptions;
-  defaultStreamOptions?: AgentStreamOptions;
+  defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
+  defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
   mastra?: Mastra;
   evals?: TMetrics;
   memory?: MastraMemory;
