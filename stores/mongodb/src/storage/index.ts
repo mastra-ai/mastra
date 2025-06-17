@@ -1,4 +1,5 @@
 import { MessageList } from '@mastra/core/agent';
+import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type {
@@ -740,5 +741,16 @@ export class MongoDBStore extends MastraStorage {
 
   async close(): Promise<void> {
     await this.#client.close();
+  }
+
+  async updateMessages(_args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]> {
+    this.logger.error('updateMessages is not yet implemented in MongoDBStore');
+    throw new Error('Method not implemented');
   }
 }
