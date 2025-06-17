@@ -1,5 +1,5 @@
 const meta = {
-  "mastra-dev": "Development Environment",
+  "mastra-dev": "Playground",
 };
 
 export default meta;

@@ -3,10 +3,11 @@ title: "Inspecting agents and workflows with mastra dev | Mastra Local Dev Docs"
 description: Documentation for the Mastra local development environment for Mastra applications.
 ---
 
+import YouTube from "@/components/youtube";
 import { Tabs, Tab } from "@/components/tabs";
 import Image from 'next/image'
 
-# Local Development
+# Playground
 
 Mastra provides a local development environment where you can test your agents, workflows, and tools during development.
 
@@ -32,9 +33,11 @@ The local development server provides access to the following interfaces:
 - OpenAPI Spec: [http://localhost:4111/openapi.json](http://localhost:4111/openapi.json)
 - Swagger UI – API explorer: [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui)
 
-## Playground
+## Local Development Playground
 
 The Playground lets you interact with your agents, workflows, and tools. It provides dedicated interfaces for testing each component of your Mastra application during development and is available at: [http://localhost:4111/](http://localhost:4111/).
+
+<YouTube id="spGlcTEjuXY" startTime={126}/>
 
 ### Agents
 
@@ -44,11 +47,11 @@ Quickly test and debug your agents during development using the interactive chat
 
 Key features:
 
-- **Chat Interface**: Directly interact with your agents to test their responses and behavior.
-- **Model Settings**: View and modify sampling parameters that control how the model generates responses.
-- **Agent Endpoints**: See all available REST API routes to understand how to interact with your agents.
-- **Agent Traces**: View detailed execution traces to understand how your agent processes requests.
-- **Agent Evals**: Run evaluations and view results to compare agent performance.
+- **Chat Interface**: Talk to your agent and see how it responds in real time.
+- **Model Settings**: Tweak settings like temperature and top-p to see how they affect output.
+- **Agent Endpoints**: See the available REST API routes your agent exposes and how to use them.
+- **Agent Traces**: Step through what the agent did behind the scenes, tool calls, decisions, and more.
+- **Agent Evals**: Run tests against your agent and see how well it performs.
 
 ### Workflows
 
@@ -58,11 +61,11 @@ Validate workflows by supplying defined inputs and visualizing each step within 
 
 Key features:
 
-- **Workflow Visualization**: Explore a visual graph of your workflow structure to understand step flow and branching logic.
-- **Step Inputs & Outputs**: View the input and output data for each step to understand how information moves through the workflow.
-- **Run Workflows**: Trigger test runs using defined inputs to validate logic, simulate paths, and debug execution.
-- **Execution JSON**: View and copy the complete workflow run as JSON, including inputs, outputs, errors, and step results.
-- **Workflow Traces**: Inspect detailed traces showing step-by-step execution, data flow, tool calls, and error handling.
+- **Workflow Visualization**: See your workflow as a visual graph so you can follow the steps and branches at a glance.
+- **Step Inputs & Outputs**: Check the data going into and coming out of each step to see how everything flows.
+- **Run Workflows**: Test your workflow with real inputs to validate the logic and debug any issues.
+- **Execution JSON**: Get the full picture of a run as raw JSON—inputs, outputs, errors, and results included.
+- **Workflow Traces**: Dig into a detailed breakdown of each step, including data flow, tool calls, and any errors along the way.
 
 ### Tools
 
@@ -72,9 +75,10 @@ Quickly test and debug custom tools in isolation using the Tools Playground, wit
 
 Key features:
 
-- **Test Tools in Isolation**: Run tools independently without needing to execute a full agent or workflow.
-- **Input & Responses**: Provide test data and view how the tool responds.
-- **Tool Usage**: See which agents are using a tool to understand its integration and impact.
+- **Test Tools in Isolation**: Try out individual tools on their own without running a full agent or workflow.
+- **Input & Responses**: Send sample inputs to see how the tool responds.
+- **Tool Usage**: Find out which agents rely on this tool and how they’re using it.
+
 
 ### MCP Servers
 
@@ -84,9 +88,10 @@ Explore connection details, tool usage, and IDE configuration for local MCP serv
 
 Key features:
 
-- **Connection Details**: View the SSE and HTTP URLs, along with cursor and `windsurf` configuration for connecting MCP clients to this server.
-- **Included Tools**: See a list of all tools currently published to the server, including their names, versions, and usage metadata.
-- **IDE Configuration**: Copy-paste-ready config to link your local setup with the MCP server for tool testing and publishing.
+- **Connection Details**: Access the endpoints and config needed to wire up your MCP environment.
+- **Available Tools**:  See all tools currently published, including their names, versions, and which agents use them.
+- **IDE Configuration**: Grab ready-to-use config you can drop into your local setup for testing and publishing tools.
+
 
 ## REST API Endpoints
 
@@ -142,7 +147,7 @@ The local development server runs fully self-contained without external dependen
 
 This setup lets you start developing immediately with production-like behavior, no database or vector store setup required.
 
-### Server Configuration
+## Configuration
 
 By default, the server runs on port `4111`. You can customize the host and port through the Mastra server configuration.
 
