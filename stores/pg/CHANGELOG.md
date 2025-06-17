@@ -1,5 +1,13 @@
 # @mastra/pg
 
+## 0.11.0-alpha.3
+
+### Patch Changes
+
+- 6c23252: [MASTRA-3982] Fix Memory Retrieval for PG when scope is resource
+- Updated dependencies [9589624]
+  - @mastra/core@0.10.6-alpha.4
+
 ## 0.11.0-alpha.2
 
 ### Patch Changes
