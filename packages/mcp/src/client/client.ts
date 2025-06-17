@@ -450,38 +450,188 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
-  private convertInputSchema(
+    private convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema,
   ): z.ZodType {
     if (isZodType(inputSchema)) {
       return inputSchema;
     }
 
+    // Strategy 1: Try original conversion
     try {
       return convertJsonSchemaToZod(inputSchema as JSONSchema);
-    } catch (error: unknown) {
-      let errorDetails: string | undefined;
-      if (error instanceof Error) {
-        errorDetails = error.stack;
-      } else {
-        // Attempt to stringify, fallback to String()
+    } catch (originalError: unknown) {
+      this.log('debug', 'Schema conversion failed, trying repair strategies...', {
+        originalError: originalError instanceof Error ? originalError.message : String(originalError),
+      });
+
+      // Strategy 2: Try to fix known problematic patterns
+      const repairedSchema = this.repairCommonSchemaIssues(inputSchema);
+      if (JSON.stringify(repairedSchema) !== JSON.stringify(inputSchema)) {
         try {
-          errorDetails = JSON.stringify(error);
-        } catch {
-          errorDetails = String(error);
+          const result = convertJsonSchemaToZod(repairedSchema as JSONSchema);
+          this.log('info', 'Schema repaired and converted successfully');
+          return result;
+        } catch (repairError) {
+          this.log('debug', 'Schema repair attempt failed');
         }
       }
 
-      // Log as warning instead of error, since we have a fallback
-      this.log('warn', 'Schema conversion failed, using permissive fallback', {
-        error: errorDetails,
-        originalJsonSchema: inputSchema,
+      // Strategy 3: Try simplified version
+      const simplifiedSchema = this.simplifyComplexSchema(inputSchema);
+      try {
+        const result = convertJsonSchemaToZod(simplifiedSchema as JSONSchema);
+        this.log('info', 'Simplified schema converted successfully');
+        return result;
+      } catch (simplifyError) {
+        this.log('debug', 'Simplified schema conversion failed');
+      }
+
+      // Strategy 4: Manual conversion for known patterns
+      const manualSchema = this.manualSchemaConversion(inputSchema);
+      if (manualSchema) {
+        this.log('info', 'Manual schema conversion successful');
+        return manualSchema;
+      }
+
+      // Strategy 5: Last resort - permissive fallback (with strong warnings)
+      let errorDetails: string | undefined;
+      if (originalError instanceof Error) {
+        errorDetails = originalError.stack;
+      } else {
+        try {
+          errorDetails = JSON.stringify(originalError);
+        } catch {
+          errorDetails = String(originalError);
+        }
+      }
+
+      this.log('error', 'ALL SCHEMA CONVERSION STRATEGIES FAILED - Using unsafe permissive fallback', {
+        originalError: errorDetails,
+        originalSchema: inputSchema,
         fallbackUsed: true,
+        requiresInvestigation: true,
+        warning: 'VALIDATION REDUCED - Parameters will not be type-checked'
       });
 
-      // Return a permissive schema that accepts any object instead of throwing
+      // Return a permissive schema that accepts any object as absolute last resort
       return z.object({}).passthrough();
     }
+  }
+
+  // Repair common schema issues that break zod-from-json-schema
+  private repairCommonSchemaIssues(schema: any): any {
+    const repaired = JSON.parse(JSON.stringify(schema)); // Deep clone
+
+    // Fix 1: Handle missing 'items' in array schemas
+    const fixArrayItems = (obj: any): any => {
+      if (typeof obj !== 'object' || obj === null) return obj;
+
+      if (obj.type === 'array' && !obj.items) {
+        this.log('debug', 'Fixing missing array items');
+        obj.items = { type: 'string' }; // Safe default
+      }
+
+      // Recursively fix nested objects
+      for (const key in obj) {
+        if (typeof obj[key] === 'object') {
+          obj[key] = fixArrayItems(obj[key]);
+        }
+      }
+
+      return obj;
+    };
+
+    // Fix 2: Simplify complex anyOf structures
+    const simplifyAnyOf = (obj: any): any => {
+      if (typeof obj !== 'object' || obj === null) return obj;
+
+      if (obj.anyOf && Array.isArray(obj.anyOf)) {
+        this.log('debug', 'Simplifying anyOf structure');
+        // Take the first option or create a generic object
+        const firstOption = obj.anyOf[0];
+        if (firstOption && firstOption.type === 'object') {
+          return { ...firstOption, anyOf: undefined };
+        } else {
+          return { type: 'object', additionalProperties: true };
+        }
+      }
+
+      // Recursively fix nested objects
+      for (const key in obj) {
+        if (typeof obj[key] === 'object') {
+          obj[key] = simplifyAnyOf(obj[key]);
+        }
+      }
+
+      return obj;
+    };
+
+    let result = fixArrayItems(repaired);
+    result = simplifyAnyOf(result);
+
+    return result;
+  }
+
+  // Create a simplified but still type-safe version of complex schemas
+  private simplifyComplexSchema(schema: any): any {
+    // Extract just the basic structure for validation
+    const simplified: any = {
+      type: 'object',
+      properties: {},
+      additionalProperties: true
+    };
+
+    if (schema.properties) {
+      for (const [key, value] of Object.entries(schema.properties)) {
+        const prop = value as any;
+
+        // Simplify each property to basic types
+        if (prop.type === 'string') {
+          simplified.properties[key] = { type: 'string' };
+        } else if (prop.type === 'number' || prop.type === 'integer') {
+          simplified.properties[key] = { type: 'number' };
+        } else if (prop.type === 'boolean') {
+          simplified.properties[key] = { type: 'boolean' };
+        } else if (prop.type === 'array') {
+          simplified.properties[key] = {
+            type: 'array',
+            items: { type: 'string' } // Safe default
+          };
+        } else {
+          simplified.properties[key] = { type: 'object', additionalProperties: true };
+        }
+      }
+    }
+
+    return simplified;
+  }
+
+  // Manual conversion for known DataForSEO patterns
+  private manualSchemaConversion(schema: any): z.ZodType | null {
+    // Check if this looks like a DataForSEO schema
+    const schemaStr = JSON.stringify(schema);
+
+    if (schemaStr.includes('keywords') && schemaStr.includes('location_name')) {
+      this.log('debug', 'Applying DataForSEO manual schema conversion');
+
+      return z.object({
+        keywords: z.array(z.string()).optional(),
+        location_name: z.string().optional(),
+        language_name: z.string().optional(),
+        filters: z.array(z.any()).optional(),
+        // Add other common DataForSEO fields
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+        target: z.string().optional(),
+        url: z.string().optional(),
+        device: z.string().optional(),
+        os: z.string().optional(),
+      }).passthrough(); // Allow additional properties
+    }
+
+    // Add more manual conversions for other known problematic schemas
+    return null;
   }
 
   async tools() {
