@@ -268,13 +268,13 @@ export class MastraLLM extends MastraBase {
     try {
       const processedSchema = this._applySchemaCompat(structuredOutput!);
 
-      const result = await generateObject<any, any, any>({
+      const result = await generateObject({
         ...rest,
         temperature,
         model,
         messages,
         output,
-        schema: processedSchema as Schema<T>,
+        schema: processedSchema,
         experimental_telemetry: {
           ...this.experimental_telemetry,
           ...telemetry,
@@ -511,11 +511,11 @@ export class MastraLLM extends MastraBase {
     try {
       const processedSchema = this._applySchemaCompat(structuredOutput!);
 
-      return streamObject<any, any, any>({
+      return streamObject({
         ...rest,
         messages,
         output,
-        schema: processedSchema as Schema<T>,
+        schema: processedSchema,
         experimental_telemetry: {
           ...this.experimental_telemetry,
           ...telemetry,
