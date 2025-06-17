@@ -1,5 +1,62 @@
 # @mastra/deployer
 
+## 0.10.6-alpha.5
+
+### Patch Changes
+
+- 8e6f677: Dynamic default llm options
+- Updated dependencies [12a95fc]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+  - @mastra/core@0.10.6-alpha.5
+
+## 0.10.6-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [9589624]
+  - @mastra/core@0.10.6-alpha.4
+
+## 0.10.6-alpha.3
+
+### Patch Changes
+
+- 2002c59: fix(voice): compatibility with dynamic agent instructions
+- Updated dependencies [d70c420]
+- Updated dependencies [2a16996]
+  - @mastra/core@0.10.6-alpha.3
+
+## 0.10.6-alpha.2
+
+### Patch Changes
+
+- 5f67b6f: Transfer-Encoding chunked header for agent stream hono route
+- Updated dependencies [4b0f8a6]
+  - @mastra/core@0.10.6-alpha.2
+
+## 0.10.6-alpha.1
+
+### Patch Changes
+
+- ee9af57: Add api for polling run execution result and get run by id
+- 3270d9d: Fix runtime context being undefined
+- Updated dependencies [ee9af57]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6-alpha.1
+
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- 53d3c37: Get workflows from an agent if not found from Mastra instance #5083
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+
 ## 0.10.5
 
 ### Patch Changes

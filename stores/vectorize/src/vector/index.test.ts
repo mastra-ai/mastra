@@ -261,7 +261,7 @@ describe('CloudflareVector', () => {
 
   describe('Index Operations', () => {
     const tempIndexName = 'test_temp_index';
-    const tempIndexNameCreateDescribeDelete = `create-describe-delete`;
+    const tempIndexNameCreateDescribeDelete = `create-describe-delete-${randomUUID().slice(0, 8)}`;
 
     beforeEach(async () => {
       // Cleanup any existing index before each test

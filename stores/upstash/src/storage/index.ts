@@ -1,3 +1,4 @@
+import { MessageList } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
@@ -21,7 +22,6 @@ import type {
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
-import { MessageList } from '../../../../packages/core/dist/agent/index.cjs';
 
 export interface UpstashConfig {
   url: string;
@@ -628,10 +628,15 @@ export class UpstashStore extends MastraStorage {
       _index: index,
     }));
 
+    // Get current thread data once (all messages belong to same thread)
+    const threadKey = this.getKey(TABLE_THREADS, { id: threadId });
+    const existingThread = await this.redis.get<StorageThreadType>(threadKey);
+
     const batchSize = 1000;
     for (let i = 0; i < messagesWithIndex.length; i += batchSize) {
       const batch = messagesWithIndex.slice(i, i + batchSize);
       const pipeline = this.redis.pipeline();
+
       for (const message of batch) {
         const key = this.getMessageKey(message.threadId!, message.id);
         const createdAtScore = new Date(message.createdAt).getTime();
@@ -645,6 +650,15 @@ export class UpstashStore extends MastraStorage {
           score,
           member: message.id,
         });
+      }
+
+      // Update the thread's updatedAt field (only in the first batch)
+      if (i === 0 && existingThread) {
+        const updatedThread = {
+          ...existingThread,
+          updatedAt: new Date(),
+        };
+        pipeline.set(threadKey, this.processRecord(TABLE_THREADS, updatedThread).processedRecord);
       }
 
       await pipeline.exec();

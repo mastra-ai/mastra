@@ -1,107 +1,18 @@
-import { readFileSync, writeFileSync, readdirSync } from 'fs';
+import { writeFileSync } from 'fs';
 import { join } from 'path';
 import process from 'process';
 import { Deployer } from '@mastra/deployer';
 
-interface EnvVar {
-  key: string;
-  value: string;
-  target: ('production' | 'preview' | 'development')[];
-  type: 'plain' | 'secret';
-}
-
-interface VercelError {
-  message: string;
-  code: string;
-}
-
 export class VercelDeployer extends Deployer {
-  private teamSlug: string;
-  private projectName: string;
-  private token: string;
-
-  constructor({ teamSlug, projectName, token }: { teamSlug: string; projectName: string; token: string }) {
+  constructor() {
     super({ name: 'VERCEL' });
-
-    this.teamSlug = teamSlug;
-    this.projectName = projectName;
-    this.token = token;
-  }
-
-  private getProjectId({ dir }: { dir: string }): string {
-    const projectJsonPath = join(dir, 'output', '.vercel', 'project.json');
-
-    try {
-      const projectJson = JSON.parse(readFileSync(projectJsonPath, 'utf-8'));
-      return projectJson.projectId;
-    } catch {
-      throw new Error('Could not find project ID. Make sure the project has been deployed first.');
-    }
-  }
-
-  private async getTeamId(): Promise<string> {
-    const response = await fetch(`https://api.vercel.com/v2/teams`, {
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-      },
-    });
-
-    const res = (await response.json()) as any;
-    const teams = res.teams;
-    return teams.find((team: any) => team.slug === this.teamSlug)?.id;
-  }
-
-  private async syncEnv(envVars: Map<string, string>, { outputDirectory }: { outputDirectory: string }) {
-    console.log('Syncing environment variables...');
-
-    // Transform env vars into the format expected by Vercel API
-    const vercelEnvVars: EnvVar[] = Array.from(envVars.entries()).map(([key, value]) => {
-      if (!key || !value) {
-        throw new Error(`Invalid environment variable format: ${key || value}`);
-      }
-
-      return {
-        key,
-        value,
-        target: ['production', 'preview', 'development'],
-        type: 'plain',
-      };
-    });
-
-    try {
-      const projectId = this.getProjectId({ dir: outputDirectory });
-      const teamId = await this.getTeamId();
-
-      const response = await fetch(
-        `https://api.vercel.com/v10/projects/${projectId}/env?teamId=${teamId}&upsert=true`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${this.token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(vercelEnvVars),
-        },
-      );
-
-      if (!response.ok) {
-        const error = (await response.json()) as VercelError;
-        throw new Error(`Failed to sync environment variables: ${error.message}`);
-      }
-
-      console.log('✓ Successfully synced environment variables');
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error('Failed to sync environment variables:', error.message);
-      } else {
-        console.error('Failed to sync environment variables:', error);
-      }
-      throw error;
-    }
+    this.outputDir = join(this.outputDir, '.vercel', 'output', 'functions', 'index.func');
   }
 
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
+
+    this.writeVercelJSON(join(outputDirectory, this.outputDir, '..', '..'));
   }
 
   private getEntry(): string {
@@ -163,57 +74,53 @@ export const HEAD = handle(app);
 `;
   }
 
-  private writeVercelJSON(outputDirectory: string, files: string[] = ['./*']) {
+  private writeVercelJSON(outputDirectory: string) {
     writeFileSync(
-      join(outputDirectory, this.outputDir, 'vercel.json'),
+      join(outputDirectory, 'config.json'),
+      JSON.stringify({
+        version: 3,
+        routes: [
+          {
+            src: '/(.*)',
+            dest: '/',
+          },
+        ],
+      }),
+    );
+  }
+
+  async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+    const result = await this._bundle(
+      this.getEntry(),
+      entryFile,
+      outputDirectory,
+      toolsPaths,
+      join(outputDirectory, this.outputDir),
+    );
+
+    const nodeVersion = process.version?.split('.')?.[0]?.replace('v', '') ?? '22';
+    writeFileSync(
+      join(outputDirectory, this.outputDir, '.vc-config.json'),
       JSON.stringify(
         {
-          version: 2,
-          installCommand: 'npm install --omit=dev',
-          builds: [
-            {
-              src: 'index.mjs',
-              use: '@vercel/node',
-              config: { includeFiles: files },
-            },
-          ],
-          routes: [
-            {
-              src: '/(.*)',
-              dest: 'index.mjs',
-            },
-          ],
+          handler: 'index.mjs',
+          launcherType: 'Nodejs',
+          runtime: `nodejs${nodeVersion}.x`,
+          shouldAddHelpers: true,
         },
         null,
         2,
       ),
     );
-  }
-
-  async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
-    const result = await this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
-
-    // read dist files one level deep in the output directory
-    const files = readdirSync(join(outputDirectory, this.outputDir), {
-      recursive: true,
-    });
-
-    const filesWithoutNodeModules = files.filter(
-      file => typeof file === 'string' && !file.startsWith('node_modules'),
-    ) as string[];
-
-    this.writeVercelJSON(outputDirectory, filesWithoutNodeModules);
 
     return result;
   }
 
   async deploy(): Promise<void> {
-    this.logger?.info('Deploying to Vercel failed. Please use the Vercel dashboard to deploy.');
+    this.logger?.info('Deploying to Vercel is deprecated. Please use the Vercel dashboard to deploy.');
   }
 
   async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
-    await super.lint(entryFile, outputDirectory, toolsPaths);
-
     await super.lint(entryFile, outputDirectory, toolsPaths);
 
     const hasLibsql = (await this.deps.checkDependencies(['@mastra/libsql'])) === `ok`;

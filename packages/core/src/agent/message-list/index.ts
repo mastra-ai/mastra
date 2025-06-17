@@ -27,7 +27,7 @@ export type MastraMessageV2 = {
   type?: string;
 };
 
-type MessageInput = UIMessage | Message | MastraMessageV1 | CoreMessage | MastraMessageV2;
+export type MessageInput = UIMessage | Message | MastraMessageV1 | CoreMessage | MastraMessageV2;
 type MessageSource = 'memory' | 'response' | 'user' | 'system' | 'context';
 type MemoryInfo = { threadId: string; resourceId?: string };
 

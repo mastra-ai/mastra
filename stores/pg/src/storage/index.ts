@@ -96,9 +96,14 @@ export class PostgresStore extends MastraStorage {
   }
 
   private getTableName(indexName: string) {
-    const parsedIndexName = parseSqlIdentifier(indexName, 'table name');
-    const parsedSchemaName = this.schema ? parseSqlIdentifier(this.schema, 'schema name') : undefined;
-    return parsedSchemaName ? `${parsedSchemaName}."${parsedIndexName}"` : `"${parsedIndexName}"`;
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    const quotedIndexName = `"${parsedIndexName}"`;
+    const quotedSchemaName = this.getSchemaName();
+    return quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName;
+  }
+
+  private getSchemaName() {
+    return this.schema ? `"${parseSqlIdentifier(this.schema, 'schema name')}"` : undefined;
   }
 
   /** @deprecated use getEvals instead */
@@ -311,7 +316,7 @@ export class PostgresStore extends MastraStorage {
 
           if (!schemaExists?.exists) {
             try {
-              await this.db.none(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);
+              await this.db.none(`CREATE SCHEMA IF NOT EXISTS ${this.getSchemaName()}`);
               this.logger.info(`Schema "${this.schema}" created successfully`);
             } catch (error) {
               this.logger.error(`Failed to create schema "${this.schema}"`, { error });
@@ -753,7 +758,7 @@ export class PostgresStore extends MastraStorage {
                   (m.row_num >= target.row_num - $${paramIdx + 3} AND m.row_num < target.row_num)
                 )
               )
-            ) 
+            ) AS query_${paramIdx}
             `, // Keep ASC for final sorting after fetching context
           );
           params.push(searchId, id, withPreviousMessages, withNextMessages);
@@ -904,7 +909,8 @@ export class PostgresStore extends MastraStorage {
       }
 
       await this.db.tx(async t => {
-        for (const message of messages) {
+        // Execute message inserts and thread update in parallel for better performance
+        const messageInserts = messages.map(message => {
           if (!message.threadId) {
             throw new Error(
               `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
@@ -915,7 +921,7 @@ export class PostgresStore extends MastraStorage {
               `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
             );
           }
-          await t.none(
+          return t.none(
             `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type, "resourceId") 
              VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [
@@ -928,7 +934,16 @@ export class PostgresStore extends MastraStorage {
               message.resourceId,
             ],
           );
-        }
+        });
+
+        const threadUpdate = t.none(
+          `UPDATE ${this.getTableName(TABLE_THREADS)} 
+           SET "updatedAt" = $1 
+           WHERE id = $2`,
+          [new Date().toISOString(), threadId],
+        );
+
+        await Promise.all([...messageInserts, threadUpdate]);
       });
 
       const list = new MessageList().add(messages, 'memory');

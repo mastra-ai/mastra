@@ -173,6 +173,28 @@ describe('PostgresStore', () => {
       const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(0);
     });
+
+    it('should update thread updatedAt when a message is saved to it', async () => {
+      const thread = createSampleThread();
+      await store.saveThread({ thread });
+
+      // Get the initial thread to capture the original updatedAt
+      const initialThread = await store.getThreadById({ threadId: thread.id });
+      expect(initialThread).toBeDefined();
+      const originalUpdatedAt = initialThread!.updatedAt;
+
+      // Wait a small amount to ensure different timestamp
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Create and save a message to the thread
+      const message = createSampleMessageV1({ threadId: thread.id });
+      await store.saveMessages({ messages: [message] });
+
+      // Retrieve the thread again and check that updatedAt was updated
+      const updatedThread = await store.getThreadById({ threadId: thread.id });
+      expect(updatedThread).toBeDefined();
+      expect(updatedThread!.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
+    });
   });
 
   describe('Message Operations', () => {
@@ -994,7 +1016,7 @@ describe('PostgresStore', () => {
   });
 
   describe('Schema Support', () => {
-    const customSchema = 'mastra_test';
+    const customSchema = 'mastraTest';
     let customSchemaStore: PostgresStore;
 
     beforeAll(async () => {
@@ -1472,10 +1494,83 @@ describe('PostgresStore', () => {
     });
   });
 
+  describe('PgStorage Table Name Quoting', () => {
+    const camelCaseTable = 'TestCamelCaseTable';
+    const snakeCaseTable = 'test_snake_case_table';
+    const BASE_SCHEMA = {
+      id: { type: 'integer', primaryKey: true, nullable: false },
+      name: { type: 'text', nullable: true },
+    } as Record<string, StorageColumn>;
+
+    beforeEach(async () => {
+      // Only clear tables if store is initialized
+      try {
+        // Clear tables before each test
+        await store.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
+        await store.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
+      } catch (error) {
+        // Ignore errors during table clearing
+        console.warn('Error clearing tables:', error);
+      }
+    });
+
+    afterEach(async () => {
+      // Only clear tables if store is initialized
+      try {
+        // Clear tables before each test
+        await store.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
+        await store.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
+      } catch (error) {
+        // Ignore errors during table clearing
+        console.warn('Error clearing tables:', error);
+      }
+    });
+
+    it('should create and upsert to a camelCase table without quoting errors', async () => {
+      await expect(
+        store.createTable({
+          tableName: camelCaseTable as TABLE_NAMES,
+          schema: BASE_SCHEMA,
+        }),
+      ).resolves.not.toThrow();
+
+      await store.insert({
+        tableName: camelCaseTable as TABLE_NAMES,
+        record: { id: '1', name: 'Alice' },
+      });
+
+      const row = await store.load({
+        tableName: camelCaseTable as TABLE_NAMES,
+        keys: { id: '1' },
+      });
+      expect(row?.name).toBe('Alice');
+    });
+
+    it('should create and upsert to a snake_case table without quoting errors', async () => {
+      await expect(
+        store.createTable({
+          tableName: snakeCaseTable as TABLE_NAMES,
+          schema: BASE_SCHEMA,
+        }),
+      ).resolves.not.toThrow();
+
+      await store.insert({
+        tableName: snakeCaseTable as TABLE_NAMES,
+        record: { id: '2', name: 'Bob' },
+      });
+
+      const row = await store.load({
+        tableName: snakeCaseTable as TABLE_NAMES,
+        keys: { id: '2' },
+      });
+      expect(row?.name).toBe('Bob');
+    });
+  });
+
   describe('Permission Handling', () => {
     const schemaRestrictedUser = 'mastra_schema_restricted_storage';
     const restrictedPassword = 'test123';
-    const testSchema = 'test_schema';
+    const testSchema = 'testSchema';
     let adminDb: pgPromise.IDatabase<{}>;
     let pgpAdmin: pgPromise.IMain;
 

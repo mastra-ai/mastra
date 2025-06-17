@@ -66,7 +66,9 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
     hitsPerPage: 20,
     attributesToRetrieve: ["title", "content", "url", "hierarchy"],
     attributesToHighlight: ["title", "content"],
+    attributesToSnippet: ["content:15"],
     filters: `locale:${locale}`,
+    snippetEllipsisText: "…",
   };
 
   return (
