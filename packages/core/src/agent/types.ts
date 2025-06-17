@@ -20,7 +20,7 @@ import type {
 } from '../llm';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig } from '../memory/types';
+import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { RuntimeContext } from '../runtime-context';
 import type { ToolAction, VercelTool } from '../tools';
 import type { CompositeVoice } from '../voice';
@@ -58,6 +58,12 @@ export interface AgentConfig<
   metrics?: TMetrics;
 }
 
+export type AgentMemoryOption = {
+  thread: string | (Partial<StorageThreadType> & { id: string });
+  resource: string;
+  options?: MemoryConfig;
+};
+
 /**
  * Options for generating responses with an agent
  * @template OUTPUT - The schema type for structured output (Zod schema or JSON schema)
@@ -74,8 +80,12 @@ export type AgentGenerateOptions<
   clientTools?: ToolsInput;
   /** Additional context messages to include */
   context?: CoreMessage[];
-  /** Memory configuration options */
+  /**
+   * @deprecated Use the `memory` property instead for all memory-related options.
+   */
   memoryOptions?: MemoryConfig;
+  /** New memory options (preferred) */
+  memory?: AgentMemoryOption;
   /** Unique ID for this generation run */
   runId?: string;
   /** Callback fired after each generation step completes */
@@ -96,7 +106,28 @@ export type AgentGenerateOptions<
   telemetry?: TelemetrySettings;
   /** RuntimeContext for dependency injection */
   runtimeContext?: RuntimeContext;
-} & ({ resourceId?: undefined; threadId?: undefined } | { resourceId: string; threadId: string }) &
+} & (
+  | {
+      /**
+       * @deprecated Use the `memory` property instead for all memory-related options.
+       */
+      resourceId?: undefined;
+      /**
+       * @deprecated Use the `memory` property instead for all memory-related options.
+       */
+      threadId?: undefined;
+    }
+  | {
+      /**
+       * @deprecated Use the `memory` property instead for all memory-related options.
+       */
+      resourceId: string;
+      /**
+       * @deprecated Use the `memory` property instead for all memory-related options.
+       */
+      threadId: string;
+    }
+) &
   (OUTPUT extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
 
 /**
@@ -115,8 +146,12 @@ export type AgentStreamOptions<
   clientTools?: ToolsInput;
   /** Additional context messages to include */
   context?: CoreMessage[];
-  /** Memory configuration options */
+  /**
+   * @deprecated Use the `memory` property instead for all memory-related options.
+   */
   memoryOptions?: MemoryConfig;
+  /** New memory options (preferred) */
+  memory?: AgentMemoryOption;
   /** Unique ID for this generation run */
   runId?: string;
   /** Callback fired when streaming completes */
@@ -145,5 +180,26 @@ export type AgentStreamOptions<
   telemetry?: TelemetrySettings;
   /** RuntimeContext for dependency injection */
   runtimeContext?: RuntimeContext;
-} & ({ resourceId?: undefined; threadId?: undefined } | { resourceId: string; threadId: string }) &
+} & (
+  | {
+      /**
+       * @deprecated Use the `memory` property instead for all memory-related options.
+       */
+      resourceId?: undefined;
+      /**
+       * @deprecated Use the `memory` property instead for all memory-related options.
+       */
+      threadId?: undefined;
+    }
+  | {
+      /**
+       * @deprecated Use the `memory` property instead for all memory-related options.
+       */
+      resourceId: string;
+      /**
+       * @deprecated Use the `memory` property instead for all memory-related options.
+       */
+      threadId: string;
+    }
+) &
   (OUTPUT extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
