@@ -657,18 +657,14 @@ export class Agent<
         memorySystemMessage: memorySystemMessage || undefined,
       });
 
+      const returnList = new MessageList()
+        .addSystem(systemMessages)
+        .add(processedMemoryMessages, 'memory')
+        .add(newMessages, 'user');
+
       return {
         threadId: thread.id,
-        messages: [
-          memorySystemMessage
-            ? {
-                role: 'system' as const,
-                content: memorySystemMessage,
-              }
-            : null,
-          ...processedMemoryMessages,
-          ...newMessages,
-        ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
+        messages: returnList.get.all.prompt(),
       };
     }
 
