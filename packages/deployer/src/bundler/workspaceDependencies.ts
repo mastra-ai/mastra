@@ -133,11 +133,7 @@ export const packWorkspaceDependencies = async ({
           const dep = workspaceMap.get(pkgName);
           if (!dep) return;
 
-          try {
-            await depsService.pack({ dir: dep.location, destination: workspaceDirPath });
-          } catch (error) {
-            logger.error(`Failed to package ${pkgName}: ${error}`);
-          }
+          await depsService.pack({ dir: dep.location, destination: workspaceDirPath });
         }),
       );
     }
