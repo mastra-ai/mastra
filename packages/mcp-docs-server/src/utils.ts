@@ -2,6 +2,8 @@ import fs from 'fs/promises';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 
+const mdxFileCache = new Map<string, string[]>();
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export function fromRepoRoot(relative: string) {
@@ -15,6 +17,10 @@ export function fromPackageRoot(relative: string) {
 export const log = console.error;
 
 async function* walkMdxFiles(dir: string): AsyncGenerator<string> {
+  if (mdxFileCache.has(dir)) {
+    for (const file of mdxFileCache.get(dir)!) yield file;
+    return;
+  }
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);

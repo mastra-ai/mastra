@@ -35,7 +35,7 @@ async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files
 }
 
 // Helper function to read MDX files from a path
-async function readMdxContent(docPath: string): Promise<ReadMdxResult> {
+async function readMdxContent(docPath: string, queryKeywords: string[]): Promise<ReadMdxResult> {
   const fullPath = path.join(docsBaseDir, docPath);
   void logger.debug(`Reading MDX content from: ${fullPath}`);
 
@@ -68,7 +68,12 @@ async function readMdxContent(docPath: string): Promise<ReadMdxResult> {
         fileContents += `\n\n# ${file}\n\n${content}`;
       }
 
-      return { found: true, content: dirListing + fileContents };
+      // Add content-based suggestions when query keywords are provided and path is a directory
+      const contentBasedSuggestions = await getMatchingPaths(docPath, queryKeywords, docsBaseDir);
+
+      const suggestions = ['---', '', contentBasedSuggestions, ''].join('\n');
+
+      return { found: true, content: dirListing + fileContents + suggestions };
     }
 
     // If it's a file, just read it
@@ -187,10 +192,11 @@ export const docsTool = {
   execute: async (args: DocsInput) => {
     void logger.debug('Executing mastraDocs tool', { args });
     try {
+      const queryKeywords = args.queryKeywords ?? [];
       const results = await Promise.all(
         args.paths.map(async (path: string) => {
           try {
-            const result = await readMdxContent(path);
+            const result = await readMdxContent(path, queryKeywords);
             if (result.found) {
               return {
                 path,
@@ -199,7 +205,7 @@ export const docsTool = {
               };
             }
             const directorySuggestions = await findNearestDirectory(path, availablePaths);
-            const contentBasedSuggestions = await getMatchingPaths(path, args.queryKeywords ?? [], docsBaseDir);
+            const contentBasedSuggestions = await getMatchingPaths(path, queryKeywords, docsBaseDir);
             return {
               path,
               content: null,
