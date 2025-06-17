@@ -187,7 +187,7 @@ export class MCPServer extends MCPServerBase {
 
     for (const agentKey in agentsConfig) {
       const agent = agentsConfig[agentKey];
-      if (!agent || !(agent instanceof Agent)) {
+      if (!agent || !('generate' in agent)) {
         this.logger.warn(`Agent instance for '${agentKey}' is invalid or missing a generate function. Skipping.`);
         continue;
       }
