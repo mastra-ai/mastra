@@ -45,7 +45,7 @@ export async function speakHandler(c: Context) {
       body: { text: input, speakerId, ...providerOptions },
     });
 
-    c.header('Content-Type', `audio/${options.responseFormat ?? 'mp3'}`);
+    c.header('Content-Type', `audio/${options?.responseFormat ?? 'mp3'}`);
     c.header('Transfer-Encoding', 'chunked');
 
     return c.body(audioStream as any);
