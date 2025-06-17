@@ -7,8 +7,8 @@
     "dev": "mastra dev"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^1.3.21",
-    "@ai-sdk/react": "^1.2.11",
+    "@ai-sdk/openai": "^1.3.22",
+    "@ai-sdk/react": "^1.2.12",
     "@mastra/client-js": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "dotenv": "^16.5.0",
@@ -21,7 +21,7 @@
     "get-port": "^7.1.0",
     "mastra": "workspace:*",
     "typescript": "^5.8.2",
-    "vitest": "^3.2.2"
+    "vitest": "^3.2.3"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.0-alpha.0"

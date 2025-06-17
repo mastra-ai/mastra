@@ -1,3 +1,4 @@
+import { MessageList } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
@@ -21,7 +22,6 @@ import type {
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
-import { MessageList } from '../../../../packages/core/dist/agent/index.cjs';
 
 export interface UpstashConfig {
   url: string;

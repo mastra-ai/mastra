@@ -1,6 +1,6 @@
-# Agentic Workflows
+# Workflow as tools
 
-A simple example showing how to create an agentic workflow.
+A simple example showing how to create an agent that uses workflows as tools.
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ A simple example showing how to create an agentic workflow.
 
    ```bash
    git clone https://github.com/mastra-ai/mastra
-   cd examples/basics/agents/agentic-workflows
+   cd examples/basics/agents/workflow-as-tools
    ```
 
 2. Copy the environment variables file and add your OpenAI API key:
