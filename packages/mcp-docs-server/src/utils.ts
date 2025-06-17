@@ -21,15 +21,23 @@ async function* walkMdxFiles(dir: string): AsyncGenerator<string> {
     for (const file of mdxFileCache.get(dir)!) yield file;
     return;
   }
+  const filesInDir: string[] = [];
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      yield* walkMdxFiles(fullPath);
+      // For directories, recurse and collect all files
+      for await (const file of walkMdxFiles(fullPath)) {
+        filesInDir.push(file);
+        yield file;
+      }
     } else if (entry.isFile() && entry.name.endsWith('.mdx')) {
+      // For MDX files, add to collection and yield
+      filesInDir.push(fullPath);
       yield fullPath;
     }
   }
+  mdxFileCache.set(dir, filesInDir);
 }
 
 async function searchDocumentContent(keywords: string[], baseDir: string): Promise<string[]> {
