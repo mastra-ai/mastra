@@ -1,5 +1,18 @@
 # @mastra/core
 
+## 0.10.6-alpha.3
+
+### Patch Changes
+
+- d70c420: fix(core, memory): fix fetchMemory regression
+- 2a16996: Working Memory Schema and Template
+
+## 0.10.6-alpha.2
+
+### Patch Changes
+
+- 4b0f8a6: Allow passing a string, ui message, core message, or mastra message to agent.genTitle and agent.generateTitleFromUserMessage to restore previously changed public behaviour
+
 ## 0.10.6-alpha.1
 
 ### Patch Changes
