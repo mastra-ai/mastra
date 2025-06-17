@@ -12,12 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
-import {
-  useExecuteWorkflow,
-  useWatchWorkflow,
-  useResumeWorkflow,
-  ExtendedWorkflowWatchResult,
-} from '@/hooks/use-workflows';
+import { ExtendedWorkflowWatchResult } from '@/hooks/use-workflows';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { toast } from 'sonner';
 import { usePlaygroundStore } from '@/store/playground-store';
@@ -37,23 +32,62 @@ interface SuspendedStep {
   isLoading: boolean;
 }
 
+interface WorkflowTriggerProps {
+  workflowId: string;
+  setRunId?: (runId: string) => void;
+  workflow?: GetWorkflowResponse;
+  isLoading?: boolean;
+  createWorkflowRun: ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => Promise<{
+    runId: string;
+  }>;
+  startWorkflowRun: ({
+    workflowId,
+    runId,
+    input,
+    runtimeContext,
+  }: {
+    workflowId: string;
+    runId: string;
+    input: Record<string, unknown>;
+    runtimeContext: Record<string, unknown>;
+  }) => Promise<void>;
+  resumeWorkflow: ({
+    workflowId,
+    step,
+    runId,
+    resumeData,
+    runtimeContext,
+  }: {
+    workflowId: string;
+    step: string | string[];
+    runId: string;
+    resumeData: Record<string, unknown>;
+    runtimeContext: Record<string, unknown>;
+  }) => Promise<{
+    message: string;
+  }>;
+  watchWorkflow: ({ workflowId, runId }: { workflowId: string; runId: string }) => Promise<void>;
+  watchResult: ExtendedWorkflowWatchResult | null;
+  isWatchingWorkflow: boolean;
+  isResumingWorkflow: boolean;
+}
+
 export function WorkflowTrigger({
   workflowId,
   setRunId,
   workflow,
   isLoading,
-}: {
-  workflowId: string;
-  setRunId?: (runId: string) => void;
-  workflow?: GetWorkflowResponse;
-  isLoading?: boolean;
-}) {
+  createWorkflowRun,
+  startWorkflowRun,
+  resumeWorkflow,
+  watchWorkflow,
+  watchResult,
+  isWatchingWorkflow,
+  isResumingWorkflow,
+}: WorkflowTriggerProps) {
   const { runtimeContext } = usePlaygroundStore();
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
 
-  const { createWorkflowRun, startWorkflowRun } = useExecuteWorkflow();
-  const { watchWorkflow, watchResult, isWatchingWorkflow } = useWatchWorkflow();
-  const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow();
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const triggerSchema = workflow?.inputSchema;

@@ -8,6 +8,7 @@ import type {
   TextPart,
   UIMessage,
 } from 'ai';
+import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
@@ -41,6 +42,7 @@ import type {
   ToolsetsInput,
   ToolsInput,
   DynamicArgument,
+  AgentMemoryOption,
 } from './types';
 
 export { MessageList };
@@ -53,6 +55,19 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) 
   }
 
   return cb(value);
+}
+
+// Helper to resolve threadId from args (supports both new and old API)
+function resolveThreadIdFromArgs(args: {
+  memory?: AgentMemoryOption;
+  threadId?: string;
+}): (Partial<StorageThreadType> & { id: string }) | undefined {
+  if (args?.memory?.thread) {
+    if (typeof args.memory.thread === 'string') return { id: args.memory.thread };
+    if (typeof args.memory.thread === 'object' && args.memory.thread.id) return args.memory.thread;
+  }
+  if (args?.threadId) return { id: args.threadId };
+  return undefined;
 }
 
 @InstrumentClass({
@@ -90,8 +105,8 @@ export class Agent<
   #mastra?: Mastra;
   #memory?: MastraMemory;
   #workflows?: DynamicArgument<Record<string, Workflow>>;
-  #defaultGenerateOptions: AgentGenerateOptions;
-  #defaultStreamOptions: AgentStreamOptions;
+  #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
+  #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
   #tools: DynamicArgument<TTools>;
   /** @deprecated This property is deprecated. Use evals instead. */
   metrics: TMetrics;
@@ -291,12 +306,60 @@ export class Agent<
     return this.#description ?? '';
   }
 
-  public getDefaultGenerateOptions(): AgentGenerateOptions {
-    return this.#defaultGenerateOptions;
+  public getDefaultGenerateOptions({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): AgentGenerateOptions | Promise<AgentGenerateOptions> {
+    if (typeof this.#defaultGenerateOptions !== 'function') {
+      return this.#defaultGenerateOptions;
+    }
+
+    const result = this.#defaultGenerateOptions({ runtimeContext });
+    return resolveMaybePromise(result, options => {
+      if (!options) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_DEFAULT_GENERATE_OPTIONS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based default generate options returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      return options;
+    });
   }
 
-  public getDefaultStreamOptions(): AgentStreamOptions {
-    return this.#defaultStreamOptions;
+  public getDefaultStreamOptions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+    | AgentStreamOptions
+    | Promise<AgentStreamOptions> {
+    if (typeof this.#defaultStreamOptions !== 'function') {
+      return this.#defaultStreamOptions;
+    }
+
+    const result = this.#defaultStreamOptions({ runtimeContext });
+    return resolveMaybePromise(result, options => {
+      if (!options) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_DEFAULT_STREAM_OPTIONS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based default stream options returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      return options;
+    });
   }
 
   get tools() {
@@ -577,7 +640,7 @@ export class Agent<
     userMessages?: CoreMessage[];
     systemMessage?: CoreMessage;
     runId?: string;
-    messageList: MessageList;
+    messageList?: MessageList;
   }) {
     const memory = this.getMemory();
     if (memory) {
@@ -586,14 +649,14 @@ export class Agent<
       if (!thread) {
         // If no thread, nothing to fetch from memory.
         // The messageList already contains the current user messages and system message.
-        return { threadId: threadId || '' };
+        return { threadId: threadId || '', messages: userMessages || [] };
       }
 
-      if (userMessages) {
+      if (userMessages && userMessages.length > 0) {
         messageList.add(userMessages, 'memory');
       }
 
-      if (systemMessage && systemMessage.role === 'system') {
+      if (systemMessage?.role === 'system') {
         messageList.addSystem(systemMessage, 'memory');
       }
 
@@ -642,15 +705,18 @@ export class Agent<
         memorySystemMessage: memorySystemMessage || undefined,
       });
 
+      const returnList = new MessageList()
+        .addSystem(systemMessages)
+        .add(processedMemoryMessages, 'memory')
+        .add(newMessages, 'user');
+
       return {
         threadId: thread.id,
-        messages: [...systemMessages, ...processedMemoryMessages, ...newMessages].filter(
-          (message): message is NonNullable<typeof message> => Boolean(message),
-        ),
+        messages: returnList.get.all.prompt(),
       };
     }
 
-    return { threadId: threadId || '' };
+    return { threadId: threadId || '', messages: userMessages || [] };
   }
 
   private async getMemoryTools({
@@ -1037,7 +1103,7 @@ export class Agent<
     instructions,
     messages,
     context,
-    threadId,
+    thread,
     memoryConfig,
     resourceId,
     runId,
@@ -1050,7 +1116,7 @@ export class Agent<
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
-    threadId?: string;
+    thread?: (Partial<StorageThreadType> & { id: string }) | undefined;
     memoryConfig?: MemoryConfig;
     context?: CoreMessage[];
     runId?: string;
@@ -1084,6 +1150,8 @@ export class Agent<
           hasMemory: !!this.getMemory(),
           hasResourceId: !!resourceId,
         });
+
+        const threadId = thread?.id;
 
         const convertedTools = await this.convertTools({
           toolsets,
@@ -1136,33 +1204,49 @@ export class Agent<
           },
         );
 
-        const thread =
-          (await memory.getThreadById({ threadId })) ??
-          (await memory.createThread({
+        let threadObject: StorageThreadType | undefined = undefined;
+        const existingThread = await memory.getThreadById({ threadId });
+        if (existingThread) {
+          if (
+            (!existingThread.metadata && thread.metadata) ||
+            (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
+          ) {
+            threadObject = await memory.saveThread({
+              thread: { ...existingThread, metadata: thread.metadata },
+              memoryConfig,
+            });
+          } else {
+            threadObject = existingThread;
+          }
+        } else {
+          threadObject = await memory.createThread({
             threadId,
-            resourceId,
+            metadata: thread.metadata,
+            title: thread.title,
             memoryConfig,
-          }));
+            resourceId,
+          });
+        }
 
         let [memoryMessages, memorySystemMessage, userContextMessage] =
-          threadId && memory
+          thread.id && memory
             ? await Promise.all([
                 memory
                   .rememberMessages({
-                    threadId,
+                    threadId: threadObject.id,
                     resourceId,
                     config: memoryConfig,
                     // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
                     vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
                   })
                   .then(r => r.messagesV2),
-                memory.getSystemMessage({ threadId, memoryConfig }),
-                memory.getUserContextMessage({ threadId }),
+                memory.getSystemMessage({ threadId: threadObject.id, memoryConfig }),
+                memory.getUserContextMessage({ threadId: threadObject.id }),
               ])
             : [[], null, null];
 
         this.logger.debug('Fetched messages from memory', {
-          threadId,
+          threadId: threadObject.id,
           runId,
           fetchedCount: memoryMessages.length,
         });
@@ -1170,7 +1254,7 @@ export class Agent<
         // So the agent doesn't get confused and start replying directly to messages
         // that were added via semanticRecall from a different conversation,
         // we need to pull those out and add to the system message.
-        const resultsFromOtherThreads = memoryMessages.filter(m => m.threadId !== threadId);
+        const resultsFromOtherThreads = memoryMessages.filter(m => m.threadId !== threadObject.id);
         if (resultsFromOtherThreads.length && !memorySystemMessage) {
           memorySystemMessage = ``;
         }
@@ -1191,7 +1275,7 @@ export class Agent<
 
         messageList
           .add(
-            memoryMessages.filter(m => m.threadId === threadId), // filter out messages from other threads. those are added to system message above
+            memoryMessages.filter(m => m.threadId === threadObject.id), // filter out messages from other threads. those are added to system message above
             'memory',
           )
           // add new user messages to the list AFTER remembered messages to make ordering more reliable
@@ -1213,7 +1297,7 @@ export class Agent<
           memorySystemMessage: memorySystemMessage || undefined,
         });
 
-        const processedList = new MessageList({ threadId, resourceId })
+        const processedList = new MessageList({ threadId: threadObject.id, resourceId })
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
           .add(context || [], 'context')
@@ -1224,8 +1308,7 @@ export class Agent<
 
         return {
           convertedTools,
-          threadId,
-          thread,
+          thread: threadObject,
           messageList,
           // add old processed messages + new input messages
           messageObjects: processedList,
@@ -1410,10 +1493,13 @@ export class Agent<
     | GenerateTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | GenerateObjectResult<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
   > {
+    const defaultGenerateOptions = await this.getDefaultGenerateOptions({
+      runtimeContext: generateOptions.runtimeContext,
+    });
     const {
       context,
-      memoryOptions: memoryConfig,
-      resourceId,
+      memoryOptions: memoryConfigFromArgs,
+      resourceId: resourceIdFromArgs,
       maxSteps,
       onStepFinish,
       output,
@@ -1425,16 +1511,15 @@ export class Agent<
       telemetry,
       runtimeContext = new RuntimeContext(),
       ...args
-    }: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign(
-      {},
-      this.#defaultGenerateOptions,
-      generateOptions,
-    );
+    }: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, defaultGenerateOptions, generateOptions);
     const generateMessageId =
       `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
         ? (args.experimental_generateMessageId as IDGenerator)
         : undefined;
 
+    const threadFromArgs = resolveThreadIdFromArgs({ ...args, ...generateOptions });
+    const resourceId = args.memory?.resource || resourceIdFromArgs;
+    const memoryConfig = args.memory?.options || memoryConfigFromArgs;
     const runId = args.runId || randomUUID();
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
@@ -1443,7 +1528,7 @@ export class Agent<
       messages,
       instructions,
       context,
-      threadId: args.threadId,
+      thread: threadFromArgs,
       memoryConfig,
       resourceId,
       runId,
@@ -1453,7 +1538,9 @@ export class Agent<
       generateMessageId,
     });
 
-    const { threadId, thread, messageObjects, convertedTools, messageList } = await before();
+    const { thread, messageObjects, convertedTools, messageList } = await before();
+
+    const threadId = thread?.id;
 
     if (!output && experimental_output) {
       const result = await llm.__text({
@@ -1604,10 +1691,11 @@ export class Agent<
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
   > {
+    const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions.runtimeContext });
     const {
       context,
-      memoryOptions: memoryConfig,
-      resourceId,
+      memoryOptions: memoryConfigFromArgs,
+      resourceId: resourceIdFromArgs,
       maxSteps,
       onFinish,
       onStepFinish,
@@ -1620,11 +1708,16 @@ export class Agent<
       telemetry,
       runtimeContext = new RuntimeContext(),
       ...args
-    }: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, this.#defaultStreamOptions, streamOptions);
+    }: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, defaultStreamOptions, streamOptions);
     const generateMessageId =
       `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
         ? (args.experimental_generateMessageId as IDGenerator)
         : undefined;
+
+    const threadFromArgs = resolveThreadIdFromArgs({ ...args, ...streamOptions });
+    const resourceId = args.memory?.resource || resourceIdFromArgs;
+    const memoryConfig = args.memory?.options || memoryConfigFromArgs;
+
     const runId = args.runId || randomUUID();
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
@@ -1633,7 +1726,7 @@ export class Agent<
       instructions,
       messages,
       context,
-      threadId: args.threadId,
+      thread: threadFromArgs,
       memoryConfig,
       resourceId,
       runId,
@@ -1643,7 +1736,9 @@ export class Agent<
       generateMessageId,
     });
 
-    const { threadId, thread, messageObjects, convertedTools, messageList } = await before();
+    const { thread, messageObjects, convertedTools, messageList } = await before();
+
+    const threadId = thread?.id;
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
@@ -1684,7 +1779,7 @@ export class Agent<
         telemetry,
         memory: this.getMemory(),
         runtimeContext,
-        threadId,
+        threadId: thread?.id,
         resourceId,
         ...args,
       });
@@ -1729,7 +1824,7 @@ export class Agent<
         telemetry,
         memory: this.getMemory(),
         runtimeContext,
-        threadId,
+        threadId: thread?.id,
         resourceId,
         ...args,
       }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1772,7 +1867,7 @@ export class Agent<
       telemetry,
       memory: this.getMemory(),
       runtimeContext,
-      threadId,
+      threadId: thread?.id,
       resourceId,
       ...args,
     }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
