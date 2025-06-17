@@ -121,6 +121,21 @@ After building, you can deploy your Mastra application `.mastra/output` to Netli
 
 2. **Netlify Dashboard**: Connect your Git repository or drag-and-drop the build output through the Netlify dashboard
 
+  When connecting a Mastra project Git repository to Netlify, use these recommended build settings since Netlify resolves paths relative to the project root:
+
+   ```bash
+   # Build command
+   npm run build
+
+   # Publish directory 
+   .mastra/output
+
+   # Functions directory
+   .mastra/output/netlify/functions
+   ```
+
+
+
 3. **Netlify Dev**: Run your Mastra application locally with Netlify's development environment
 
 > You can also run `netlify dev` in your output directory `.mastra/output` to test your Mastra application locally.
