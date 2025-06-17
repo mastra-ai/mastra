@@ -601,14 +601,14 @@ export class Agent<
       if (!thread) {
         // If no thread, nothing to fetch from memory.
         // The messageList already contains the current user messages and system message.
-        return { threadId: threadId || '' };
+        return { threadId: threadId || '', messages: userMessages || [] };
       }
 
-      if (userMessages) {
+      if (userMessages && userMessages.length > 0) {
         messageList.add(userMessages, 'memory');
       }
 
-      if (systemMessage && systemMessage.role === 'system') {
+      if (systemMessage?.role === 'system') {
         messageList.addSystem(systemMessage, 'memory');
       }
 
@@ -659,13 +659,20 @@ export class Agent<
 
       return {
         threadId: thread.id,
-        messages: [...systemMessages, ...processedMemoryMessages, ...newMessages].filter(
-          (message): message is NonNullable<typeof message> => Boolean(message),
-        ),
+        messages: [
+          memorySystemMessage
+            ? {
+                role: 'system' as const,
+                content: memorySystemMessage,
+              }
+            : null,
+          ...processedMemoryMessages,
+          ...newMessages,
+        ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
       };
     }
 
-    return { threadId: threadId || '' };
+    return { threadId: threadId || '', messages: userMessages || [] };
   }
 
   private async getMemoryTools({
