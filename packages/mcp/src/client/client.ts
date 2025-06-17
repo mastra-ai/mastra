@@ -272,46 +272,52 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private isConnected: Promise<boolean> | null = null;
+  private isActuallyConnected = false;
 
   async connect() {
-    let res: (value: boolean) => void = () => {};
-    let rej: (reason?: any) => void = () => {};
-
-    if (this.isConnected === null) {
-      this.log('debug', `Creating new isConnected promise`);
-      this.isConnected = new Promise<boolean>((resolve, reject) => {
-        res = resolve;
-        rej = reject;
-      });
-    } else if (await this.isConnected) {
-      this.log('debug', `MCP server already connected`);
-      return;
+    // If a connection attempt is in progress, wait for it.
+    if (this.isConnected) {
+      return this.isConnected;
+    }
+    // If already connected, return immediately.
+    if (this.isActuallyConnected) {
+      return true;
     }
 
-    const { command, url } = this.serverConfig;
+    // Start new connection attempt.
+    this.isConnected = new Promise<boolean>(async (resolve, reject) => {
+      try {
+        const { command, url } = this.serverConfig;
 
-    if (command) {
-      await this.connectStdio(command).catch(e => {
-        rej(e);
-      });
-    } else if (url) {
-      await this.connectHttp(url).catch(e => {
-        rej(e);
-      });
-    } else {
-      rej(false);
-      throw new Error('Server configuration must include either a command or a url.');
-    }
+        if (command) {
+          await this.connectStdio(command);
+        } else if (url) {
+          await this.connectHttp(url);
+        } else {
+          throw new Error('Server configuration must include either a command or a url.');
+        }
 
-    res(true);
-    const originalOnClose = this.client.onclose;
-    this.client.onclose = () => {
-      this.log('debug', `MCP server connection closed`);
-      rej(false);
-      if (typeof originalOnClose === `function`) {
-        originalOnClose();
+        this.isActuallyConnected = true;
+        resolve(true);
+
+        // Set up disconnect handler to reset state.
+        const originalOnClose = this.client.onclose;
+        this.client.onclose = () => {
+          this.log('debug', `MCP server connection closed`);
+          this.isActuallyConnected = false;
+          this.isConnected = null;
+          if (typeof originalOnClose === 'function') {
+            originalOnClose();
+          }
+        };
+
+      } catch (e) {
+        this.isActuallyConnected = false;
+        this.isConnected = null;
+        reject(e);
       }
-    };
+    });
+
     asyncExitHook(
       async () => {
         this.log('debug', `Disconnecting MCP server during exit`);
@@ -322,6 +328,8 @@ export class InternalMastraMCPClient extends MastraBase {
 
     process.on('SIGTERM', () => gracefulExit());
     this.log('debug', `Successfully connected to MCP server`);
+    // Await the connection attempt for callers.
+    return this.isConnected;
   }
 
   /**
