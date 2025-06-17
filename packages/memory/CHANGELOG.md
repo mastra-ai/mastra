@@ -1,5 +1,39 @@
 # @mastra/memory
 
+## 0.10.4
+
+### Patch Changes
+
+- 4051477: dependencies updates:
+  - Added dependency [`zod-to-json-schema@^3.24.5` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.24.5) (to `dependencies`)
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`@upstash/redis@^1.35.0` ↗︎](https://www.npmjs.com/package/@upstash/redis/v/1.35.0) (from `^1.34.5`, in `dependencies`)
+  - Updated dependency [`ai@^4.3.16` ↗︎](https://www.npmjs.com/package/ai/v/4.3.16) (from `^4.2.2`, in `dependencies`)
+  - Updated dependency [`js-tiktoken@^1.0.20` ↗︎](https://www.npmjs.com/package/js-tiktoken/v/1.0.20) (from `^1.0.19`, in `dependencies`)
+  - Updated dependency [`pg@^8.16.0` ↗︎](https://www.npmjs.com/package/pg/v/8.16.0) (from `^8.13.3`, in `dependencies`)
+  - Updated dependency [`pg-pool@^3.10.0` ↗︎](https://www.npmjs.com/package/pg-pool/v/3.10.0) (from `^3.7.1`, in `dependencies`)
+  - Updated dependency [`postgres@^3.4.7` ↗︎](https://www.npmjs.com/package/postgres/v/3.4.7) (from `^3.4.5`, in `dependencies`)
+  - Updated dependency [`redis@^4.7.1` ↗︎](https://www.npmjs.com/package/redis/v/4.7.1) (from `^4.7.0`, in `dependencies`)
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+- d70c420: fix(core, memory): fix fetchMemory regression
+- 2a16996: Working Memory Schema and Template
+- Updated dependencies [63f6b7d]
+- Updated dependencies [12a95fc]
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+- Updated dependencies [d70c420]
+- Updated dependencies [ee9af57]
+- Updated dependencies [36f1c36]
+- Updated dependencies [2a16996]
+- Updated dependencies [10d352e]
+- Updated dependencies [9589624]
+- Updated dependencies [53d3c37]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6
+
 ## 0.10.4-alpha.1
 
 ### Patch Changes

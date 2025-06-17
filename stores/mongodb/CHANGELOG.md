@@ -1,5 +1,40 @@
 # @mastra/mongodb
 
+## 0.11.0
+
+### Minor Changes
+
+- 704d1ca: Thread Timestamp Auto-Update Enhancement
+  Added automatic thread updatedAt timestamp updates when messages are saved across all storage providers
+  Enhanced user experience: Threads now accurately reflect their latest activity with automatic timestamp updates when new messages are added
+  Universal implementation: Consistent behavior across all 7 storage backends (ClickHouse, Cloudflare D1, DynamoDB, MongoDB, PostgreSQL, Upstash, LibSQL)
+  Performance optimized: Updates execute in parallel with message saving operations for minimal performance impact
+  Backwards compatible: No breaking changes - existing code continues to work unchanged
+  Improved conversation ordering: Chat interfaces can now properly sort threads by actual last activity
+  This enhancement resolves the issue where active conversations appeared stale due to outdated thread timestamps, providing better conversation management and user experience in chat applications.
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`cloudflare@^4.3.0` ↗︎](https://www.npmjs.com/package/cloudflare/v/4.3.0) (from `^4.1.0`, in `dependencies`)
+  - Updated dependency [`mongodb@^6.17.0` ↗︎](https://www.npmjs.com/package/mongodb/v/6.17.0) (from `^6.15.0`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [12a95fc]
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+- Updated dependencies [d70c420]
+- Updated dependencies [ee9af57]
+- Updated dependencies [36f1c36]
+- Updated dependencies [2a16996]
+- Updated dependencies [10d352e]
+- Updated dependencies [9589624]
+- Updated dependencies [53d3c37]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6
+
 ## 0.11.0-alpha.1
 
 ### Minor Changes
