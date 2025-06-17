@@ -297,7 +297,7 @@ export abstract class Bundler extends MastraBundler {
             id: 'DEPLOYER_BUNDLER_WORKSPACE_DEPS_FAILED',
             text: `Failed to collect and pack workspace dependencies.`,
             domain: ErrorDomain.DEPLOYER,
-            category: ErrorCategory.UNKNOWN,
+            category: ErrorCategory.USER,
           },
           error,
         );
