@@ -328,7 +328,6 @@ export class InternalMastraMCPClient extends MastraBase {
 
     process.on('SIGTERM', () => gracefulExit());
     this.log('debug', `Successfully connected to MCP server`);
-    // Await the connection attempt for callers.
     return this.isConnected;
   }
 
