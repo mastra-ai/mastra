@@ -1,5 +1,12 @@
 # @mastra/mcp
 
+## 0.10.4-alpha.1
+
+### Patch Changes
+
+- bd1674f: Change how connection promise works for client connection
+- 69f76f7: Fix Agents as tools when building mastra mcp server
+
 ## 0.10.4-alpha.0
 
 ### Patch Changes

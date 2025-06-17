@@ -1,5 +1,11 @@
 # @mastra/dynamodb
 
+## 0.11.0-alpha.4
+
+### Patch Changes
+
+- 6c3e021: chore(deps): update mastra dynamodb to ^1.10.0
+
 ## 0.11.0-alpha.3
 
 ### Patch Changes
