@@ -272,15 +272,10 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private isConnected: Promise<boolean> | null = null;
-  private isActuallyConnected = false;
 
   async connect() {
     // If a connection attempt is in progress, wait for it.
-    if (this.isConnected) {
-      return this.isConnected;
-    }
-    // If already connected, return immediately.
-    if (this.isActuallyConnected) {
+    if (await this.isConnected) {
       return true;
     }
 
@@ -297,14 +292,12 @@ export class InternalMastraMCPClient extends MastraBase {
           throw new Error('Server configuration must include either a command or a url.');
         }
 
-        this.isActuallyConnected = true;
         resolve(true);
 
         // Set up disconnect handler to reset state.
         const originalOnClose = this.client.onclose;
         this.client.onclose = () => {
           this.log('debug', `MCP server connection closed`);
-          this.isActuallyConnected = false;
           this.isConnected = null;
           if (typeof originalOnClose === 'function') {
             originalOnClose();
@@ -312,7 +305,6 @@ export class InternalMastraMCPClient extends MastraBase {
         };
 
       } catch (e) {
-        this.isActuallyConnected = false;
         this.isConnected = null;
         reject(e);
       }
