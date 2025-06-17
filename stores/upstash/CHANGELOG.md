@@ -1,5 +1,17 @@
 # @mastra/upstash
 
+## 0.11.0-alpha.2
+
+### Patch Changes
+
+- e8fdbdd: Fix dynamic require of crypto using upstash.
+  caused by a bad import was used in the monorepo
+
+  Fixes #4801
+
+- Updated dependencies [9589624]
+  - @mastra/core@0.10.6-alpha.4
+
 ## 0.11.0-alpha.1
 
 ### Patch Changes

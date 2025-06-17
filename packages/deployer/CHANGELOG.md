@@ -1,5 +1,19 @@
 # @mastra/deployer
 
+## 0.10.6-alpha.4
+
+### Patch Changes
+
+- 79b9909: Optimize dependencies of tools even when unused.
+
+  Fixes #5149
+
+- 084f6aa: Add logs to circular dependency to warn people when starting server might break
+- 9589624: Throw Mastra Errors when building and bundling mastra application
+- Updated dependencies [9589624]
+  - @mastra/core@0.10.6-alpha.4
+  - @mastra/server@0.10.6-alpha.4
+
 ## 0.10.6-alpha.3
 
 ### Patch Changes

@@ -157,6 +157,7 @@ export async function dev({
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
   const bundler = new DevBundler(env);
+  bundler.__setLogger(logger);
   await bundler.prepare(dotMastraPath);
 
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);

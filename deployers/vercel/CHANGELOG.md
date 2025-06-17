@@ -1,5 +1,16 @@
 # @mastra/deployer-vercel
 
+## 0.10.6-alpha.4
+
+### Patch Changes
+
+- 5054889: Update vercel deployer to use build output. Fixes both cli and git deploys
+- Updated dependencies [79b9909]
+- Updated dependencies [084f6aa]
+- Updated dependencies [9589624]
+  - @mastra/deployer@0.10.6-alpha.4
+  - @mastra/core@0.10.6-alpha.4
+
 ## 0.10.6-alpha.3
 
 ### Patch Changes
