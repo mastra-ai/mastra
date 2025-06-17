@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.10.6-alpha.5
+
+### Patch Changes
+
+- 12a95fc: Allow passing thread metadata to agent.generate and agent.stream. This will update or create the thread with the metadata passed in. Also simplifies the arguments for those two functions into a new memory property.
+- 51264a5: Fix fetchMemory return type and value
+- 8e6f677: Dynamic default llm options
+
 ## 0.10.6-alpha.4
 
 ### Patch Changes
