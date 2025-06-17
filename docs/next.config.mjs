@@ -312,8 +312,9 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/docs/local-dev/creating-a-new-project",
-        destination: "/docs/local-dev/add-to-existing-project",
+        source: "/docs/local-dev/add-to-existing-project",
+        destination:
+          "/docs/getting-started/installation#add-to-an-existing-project",
         permanent: true,
       },
       {
