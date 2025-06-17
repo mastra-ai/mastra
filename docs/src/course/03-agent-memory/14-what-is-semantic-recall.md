@@ -1,6 +1,6 @@
 # Implementing Semantic Recall
 
-In this step, we'll explore semantic recall, a feature that helps agents maintain context across longer interactions when messages are no longer within recent conversation history.
+One of the quickest ways to take advantage of the configured vector store is to use semantic recall.
 
 ## What is Semantic Recall?
 
