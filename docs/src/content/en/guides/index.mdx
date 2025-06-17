@@ -3,26 +3,82 @@ title: "Overview"
 description: "Guides on building with Mastra"
 ---
 
+import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
+
 # Guides
 
 While examples show quick implementations and docs explain specific features, these guides are a bit longer and designed to demonstrate core Mastra concepts:
 
-## [AI Recruiter](/guides/guide/ai-recruiter)
+<div className='grid grid-cols-1 lg:grid-cols-2 content-stretch gap-4 py-4'>
+    <div className='relative isolate'>
+        <Card className='h-full'>
+            <a href='/en/guides/guide/ai-recruiter'>
+                <span className="absolute inset-0 z-10" />
+                <CardHeader>
+                    <CardTitle>
+                        AI Recruiter
+                    </CardTitle>
+                </CardHeader>
+            </a>
+            <CardContent>
+                Create a workflow that processes candidate resumes and conducts interviews, demonstrating branching logic and LLM integration in Mastra workflows.
+            </CardContent>
+        </Card>
+    </div>
 
-Create a workflow that processes candidate resumes and conducts interviews, demonstrating branching logic and LLM integration in Mastra workflows.
+    <div className='relative isolate'>
+        <Card className='h-full'>
+            <a href='/en/guides/guide/chef-michel'>
+                <span className="absolute inset-0 z-10" />
+                <CardHeader>
+                    <CardTitle>Chef Assistant</CardTitle>
+                </CardHeader>
+            </a>
+            <CardContent className='text-decoration-none'>
+                Build an AI chef agent that helps users cook meals with available ingredients, showing how to create interactive agents with custom tools.
+            </CardContent>
+        </Card>
+    </div>
 
-## [Chef Assistant](/guides/guide/chef-michel)
+    <div className='relative isolate'>
+        <Card className='h-full'>
+            <a href='/en/guides/guide/research-assistant'>
+                <span className="absolute inset-0 z-10" />
+                <CardHeader>
+                    <CardTitle>Research Assistant</CardTitle>
+                </CardHeader>
+            </a>
+            <CardContent className='text-decoration-none'>
+                Develop an AI research assistant that analyzes academic papers using Retrieval Augmented Generation (RAG), demonstrating document processing and question answering.
+            </CardContent>
+        </Card>
+    </div>
 
-Build an AI chef agent that helps users cook meals with available ingredients, showing how to create interactive agents with custom tools.
+    <div className='relative isolate'>
+        <Card className='h-full'>
+            <a href='/en/guides/guide/stock-agent'>
+                <span className="absolute inset-0 z-10" />
+                <CardHeader>
+                    <CardTitle>Stock Agent</CardTitle>
+                </CardHeader>
+            </a>
+            <CardContent className='text-decoration-none'>
+                Implement a simple agent that fetches stock prices, illustrating the basics of creating tools and integrating them with Mastra agents.
+            </CardContent>
+        </Card>
+    </div>
 
-## [Research Paper Assistant](/guides/guide/research-assistant)
-
-Develop an AI research assistant that analyzes academic papers using Retrieval Augmented Generation (RAG), demonstrating document processing and question answering.
-
-## [Stock Agent](/guides/guide/stock-agent)
-
-Implement a simple agent that fetches stock prices, illustrating the basics of creating tools and integrating them with Mastra agents.
-
-## [Notes MCP Server](/guides/guide/notes-mcp-server)
-
-Build an AI notes assistant that helps users manage their notes, showing how to create interactive agents with custom tools.
+    <div className='relative isolate'>
+        <Card className='h-full'>
+            <a href='/en/guides/guide/notes-mcp-server'>
+                <span className="absolute inset-0 z-10" />
+                <CardHeader>
+                    <CardTitle>Notes MCP Server</CardTitle>
+                </CardHeader>
+            </a>
+            <CardContent className='text-decoration-none'>
+                Build an AI notes assistant that helps users manage their notes, showing how to create interactive agents with custom tools.
+            </CardContent>
+        </Card>
+    </div>
+</div>
