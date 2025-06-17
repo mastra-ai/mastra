@@ -208,6 +208,7 @@ export abstract class Bundler extends MastraBundler {
 
     let analyzedBundleInfo;
     try {
+      const resolvedToolsPaths = await this.getToolsInputOptions(toolsPaths);
       analyzedBundleInfo = await analyzeBundle(
         [serverFile, ...Object.values(resolvedToolsPaths)],
         mastraEntryFile,
