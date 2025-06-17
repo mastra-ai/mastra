@@ -277,12 +277,28 @@ export abstract class Bundler extends MastraBundler {
       toolsPaths,
     );
 
-    const bundler = await this.createBundler(inputOptions, {
-      dir: bundleLocation,
-      manualChunks: {
-        mastra: ['#mastra'],
+    const bundler = await this.createBundler(
+      {
+        ...inputOptions,
+        logLevel: inputOptions.logLevel === 'silent' ? 'warn' : inputOptions.logLevel,
+        onwarn: warning => {
+          if (warning.code === 'CIRCULAR_DEPENDENCY') {
+            if (warning.ids?.[0]?.includes('node_modules')) {
+              return;
+            }
+
+            this.logger.warn(`Circular dependency found:
+\t${warning.message.replace('Circular dependency: ', '')}`);
+          }
+        },
       },
-    });
+      {
+        dir: bundleLocation,
+        manualChunks: {
+          mastra: ['#mastra'],
+        },
+      },
+    );
 
     await bundler.write();
     const toolsInputOptions = Array.from(Object.keys(inputOptions.input || {}))
