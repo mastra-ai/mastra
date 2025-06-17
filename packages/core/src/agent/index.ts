@@ -640,7 +640,7 @@ export class Agent<
     userMessages?: CoreMessage[];
     systemMessage?: CoreMessage;
     runId?: string;
-    messageList: MessageList;
+    messageList?: MessageList;
   }) {
     const memory = this.getMemory();
     if (memory) {
@@ -649,14 +649,14 @@ export class Agent<
       if (!thread) {
         // If no thread, nothing to fetch from memory.
         // The messageList already contains the current user messages and system message.
-        return { threadId: threadId || '' };
+        return { threadId: threadId || '', messages: userMessages || [] };
       }
 
-      if (userMessages) {
+      if (userMessages && userMessages.length > 0) {
         messageList.add(userMessages, 'memory');
       }
 
-      if (systemMessage && systemMessage.role === 'system') {
+      if (systemMessage?.role === 'system') {
         messageList.addSystem(systemMessage, 'memory');
       }
 
@@ -705,15 +705,18 @@ export class Agent<
         memorySystemMessage: memorySystemMessage || undefined,
       });
 
+      const returnList = new MessageList()
+        .addSystem(systemMessages)
+        .add(processedMemoryMessages, 'memory')
+        .add(newMessages, 'user');
+
       return {
         threadId: thread.id,
-        messages: [...systemMessages, ...processedMemoryMessages, ...newMessages].filter(
-          (message): message is NonNullable<typeof message> => Boolean(message),
-        ),
+        messages: returnList.get.all.prompt(),
       };
     }
 
-    return { threadId: threadId || '' };
+    return { threadId: threadId || '', messages: userMessages || [] };
   }
 
   private async getMemoryTools({
