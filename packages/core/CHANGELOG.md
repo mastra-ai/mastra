@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.10.6-alpha.4
+
+### Patch Changes
+
+- 9589624: Throw Mastra Errors when building and bundling mastra application
+
 ## 0.10.6-alpha.3
 
 ### Patch Changes
