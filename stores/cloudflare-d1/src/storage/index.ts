@@ -1,4 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
@@ -1509,5 +1510,16 @@ export class D1Store extends MastraStorage {
   async close(): Promise<void> {
     this.logger.debug('Closing D1 connection');
     // No explicit cleanup needed for D1
+  }
+
+  async updateMessages(_args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]> {
+    this.logger.error('updateMessages is not yet implemented in CloudflareD1Store');
+    throw new Error('Method not implemented');
   }
 }
