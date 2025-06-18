@@ -10,6 +10,7 @@ import {
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_TRACES,
+  TABLE_RESOURCES,
   TABLE_SCHEMAS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
@@ -19,6 +20,7 @@ import type {
   StorageColumn,
   StorageGetMessagesArg,
   StorageGetTracesArg,
+  StorageResourceType,
   WorkflowRun,
   WorkflowRuns,
 } from './types';
@@ -47,9 +49,11 @@ export abstract class MastraStorage extends MastraBase {
 
   public get supports(): {
     selectByIncludeResourceScope: boolean;
+    resourceWorkingMemory: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
+      resourceWorkingMemory: false,
     };
   }
 
@@ -162,6 +166,20 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
 
+  abstract getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null>;
+
+  abstract saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType>;
+
+  abstract updateResource({
+    resourceId,
+    workingMemory,
+    metadata,
+  }: {
+    resourceId: string;
+    workingMemory?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<StorageResourceType>;
+
   abstract getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
   abstract getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   abstract getMessages({
@@ -217,6 +235,11 @@ export abstract class MastraStorage extends MastraBase {
       this.createTable({
         tableName: TABLE_TRACES,
         schema: TABLE_SCHEMAS[TABLE_TRACES],
+      }),
+
+      this.createTable({
+        tableName: TABLE_RESOURCES,
+        schema: TABLE_SCHEMAS[TABLE_RESOURCES],
       }),
     ]).then(() => true);
 
