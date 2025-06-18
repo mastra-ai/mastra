@@ -898,7 +898,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     serializedStepGraph: SerializedStepFlowEntry[];
     executionContext: ExecutionContext;
-    workflowStatus: 'success' | 'failed' | 'suspended' | 'running' | 'paused';
+    workflowStatus: 'success' | 'failed' | 'suspended' | 'running' | 'waiting';
     result?: Record<string, any>;
     error?: string | Error;
   }) {
@@ -1050,16 +1050,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         payload: {
           currentStep: {
             id: entry.id,
-            status: 'paused',
+            status: 'waiting',
             payload: prevOutput,
             startedAt,
           },
           workflowState: {
-            status: 'paused',
+            status: 'waiting',
             steps: {
               ...stepResults,
               [entry.id]: {
-                status: 'paused',
+                status: 'waiting',
                 payload: prevOutput,
                 startedAt,
               },
@@ -1071,7 +1071,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventTimestamp: Date.now(),
       });
       await emitter.emit('watch-v2', {
-        type: 'step-paused',
+        type: 'step-waiting',
         payload: {
           id: entry.id,
           payload: prevOutput,
@@ -1083,7 +1083,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         serializedStepGraph,
         stepResults,
         executionContext,
-        workflowStatus: 'paused',
+        workflowStatus: 'waiting',
       });
 
       await this.executeSleep({ id: entry.id, duration: entry.duration });
@@ -1113,16 +1113,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         payload: {
           currentStep: {
             id: entry.id,
-            status: 'paused',
+            status: 'waiting',
             payload: prevOutput,
             startedAt,
           },
           workflowState: {
-            status: 'paused',
+            status: 'waiting',
             steps: {
               ...stepResults,
               [entry.id]: {
-                status: 'paused',
+                status: 'waiting',
                 payload: prevOutput,
                 startedAt,
               },
@@ -1134,7 +1134,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         eventTimestamp: Date.now(),
       });
       await emitter.emit('watch-v2', {
-        type: 'step-paused',
+        type: 'step-waiting',
         payload: {
           id: entry.id,
           payload: prevOutput,
@@ -1147,7 +1147,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         serializedStepGraph,
         stepResults,
         executionContext,
-        workflowStatus: 'paused',
+        workflowStatus: 'waiting',
       });
 
       await this.executeSleep({ id: entry.id, duration: entry.date.getTime() - Date.now() });
@@ -1179,16 +1179,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           payload: {
             currentStep: {
               id: entry.step.id,
-              status: 'paused',
+              status: 'waiting',
               payload: prevOutput,
               startedAt,
             },
             workflowState: {
-              status: 'paused',
+              status: 'waiting',
               steps: {
                 ...stepResults,
                 [entry.step.id]: {
-                  status: 'paused',
+                  status: 'waiting',
                   payload: prevOutput,
                   startedAt,
                 },
@@ -1200,7 +1200,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           eventTimestamp: Date.now(),
         });
         await emitter.emit('watch-v2', {
-          type: 'step-paused',
+          type: 'step-waiting',
           payload: {
             id: entry.step.id,
             payload: prevOutput,
@@ -1213,7 +1213,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           serializedStepGraph,
           stepResults,
           executionContext,
-          workflowStatus: 'paused',
+          workflowStatus: 'waiting',
         });
 
         eventData = await this.executeWaitForEvent({ event: entry.event, emitter, timeout: entry.timeout });
