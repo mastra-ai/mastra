@@ -249,7 +249,6 @@ do:
             text: `Agent with name ID:${key} already exists`,
             details: {
               agentId: key,
-              agents: Object.keys(config?.agents).join(', '),
             },
           });
           this.#logger?.trackException(error);
@@ -350,7 +349,7 @@ do:
         category: ErrorCategory.USER,
         text: `Agent with name ${String(name)} not found`,
         details: {
-          agentName: name,
+          agentName: String(name),
           agents: Object.keys(this.#agents ?? {}).join(', '),
         },
       });
@@ -373,7 +372,7 @@ do:
         category: ErrorCategory.USER,
         text: `Vector with name ${String(name)} not found`,
         details: {
-          vectorName: name,
+          vectorName: String(name),
           vectors: Object.keys(this.#vectors ?? {}).join(', '),
         },
       });
