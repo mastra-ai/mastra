@@ -4,11 +4,12 @@ import {
   createSampleTraceForDB,
   createSampleThread,
   createSampleMessageV1,
+  createSampleMessageV2,
   createSampleWorkflowSnapshot,
   resetRole,
   checkWorkflowSnapshot,
 } from '@internal/storage-test-utils';
-import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import {
@@ -36,37 +37,6 @@ const TEST_CONFIG: PostgresConfig = {
 const connectionString = `postgresql://${TEST_CONFIG.user}:${TEST_CONFIG.password}@${TEST_CONFIG.host}:${TEST_CONFIG.port}/${TEST_CONFIG.database}`;
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
-
-const createSampleMessageV2 = ({
-  threadId,
-  resourceId,
-  role = 'user',
-  content,
-  createdAt,
-  thread,
-}: {
-  threadId: string;
-  resourceId?: string;
-  role?: 'user' | 'assistant';
-  content?: Partial<MastraMessageContentV2>;
-  createdAt?: Date;
-  thread?: StorageThreadType;
-}): MastraMessageV2 => {
-  return {
-    id: randomUUID(),
-    threadId,
-    resourceId: resourceId || thread?.resourceId || 'test-resource',
-    role,
-    createdAt: createdAt || new Date(),
-    content: {
-      format: 2,
-      parts: content?.parts || [{ type: 'text', text: content?.content ?? '' }],
-      content: content?.content || `Sample content ${randomUUID()}`,
-      ...content,
-    },
-    type: 'v2',
-  };
-};
 
 describe('PostgresStore', () => {
   let store: PostgresStore;
@@ -425,6 +395,75 @@ describe('PostgresStore', () => {
       expect(crossThreadMessages3).toHaveLength(3);
       expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
       expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
+    });
+
+    it('should return messages using both last and include (cross-thread, deduped)', async () => {
+      const thread = createSampleThread({ id: 'thread-one' });
+      await store.saveThread({ thread });
+
+      const thread2 = createSampleThread({ id: 'thread-two' });
+      await store.saveThread({ thread: thread2 });
+
+      const now = new Date();
+
+      // Setup: create messages in two threads
+      const messages = [
+        createSampleMessageV2({
+          threadId: 'thread-one',
+          content: { content: 'A' },
+          createdAt: new Date(now.getTime()),
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-one',
+          content: { content: 'B' },
+          createdAt: new Date(now.getTime() + 1000),
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-one',
+          content: { content: 'C' },
+          createdAt: new Date(now.getTime() + 2000),
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-two',
+          content: { content: 'D' },
+          createdAt: new Date(now.getTime() + 3000),
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-two',
+          content: { content: 'E' },
+          createdAt: new Date(now.getTime() + 4000),
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-two',
+          content: { content: 'F' },
+          createdAt: new Date(now.getTime() + 5000),
+        }),
+      ];
+      await store.saveMessages({ messages, format: 'v2' });
+
+      // Use last: 2 and include a message from another thread with context
+      const result = await store.getMessages({
+        threadId: 'thread-one',
+        format: 'v2',
+        selectBy: {
+          last: 2,
+          include: [
+            {
+              id: messages[4].id, // 'E' from thread-bar
+              threadId: 'thread-two',
+              withPreviousMessages: 1,
+              withNextMessages: 1,
+            },
+          ],
+        },
+      });
+
+      // Should include last 2 from thread-one and 3 from thread-two (D, E, F)
+      expect(result.map(m => m.content.content).sort()).toEqual(['B', 'C', 'D', 'E', 'F']);
+      // Should include 2 from thread-one
+      expect(result.filter(m => m.threadId === 'thread-one').map(m => m.content.content)).toEqual(['B', 'C']);
+      // Should include 3 from thread-two
+      expect(result.filter(m => m.threadId === 'thread-two').map(m => m.content.content)).toEqual(['D', 'E', 'F']);
     });
   });
 
@@ -1730,7 +1769,7 @@ describe('PostgresStore', () => {
         record: { id: '1', name: 'Alice' },
       });
 
-      const row = await store.load({
+      const row: any = await store.load({
         tableName: camelCaseTable as TABLE_NAMES,
         keys: { id: '1' },
       });
@@ -1750,7 +1789,7 @@ describe('PostgresStore', () => {
         record: { id: '2', name: 'Bob' },
       });
 
-      const row = await store.load({
+      const row: any = await store.load({
         tableName: snakeCaseTable as TABLE_NAMES,
         keys: { id: '2' },
       });

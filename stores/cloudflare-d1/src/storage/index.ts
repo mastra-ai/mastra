@@ -815,7 +815,7 @@ export class D1Store extends MastraStorage {
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const fullTableName = this.getTableName(TABLE_MESSAGES);
-    const limit = typeof selectBy?.last === 'number' ? selectBy.last : 40;
+    const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
     const include = selectBy?.include || [];
     const messages: any[] = [];
 

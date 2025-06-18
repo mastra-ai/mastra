@@ -1106,14 +1106,7 @@ export class CloudflareStore extends MastraStorage {
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     if (!threadId) throw new Error('threadId is required');
 
-    // Handle selectBy.last type safely - it can be number or false
-    let limit = 40; // Default limit
-    if (typeof selectBy?.last === 'number') {
-      limit = Math.max(0, selectBy.last);
-    } else if (selectBy?.last === false) {
-      limit = 0;
-    }
-
+    const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
     const messageIds = new Set<string>();
     if (limit === 0 && !selectBy?.include?.length) return [];
 

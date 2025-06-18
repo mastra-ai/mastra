@@ -731,7 +731,7 @@ export class ClickhouseStore extends MastraStorage {
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
       const messages: any[] = [];
-      const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
+      const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
       const include = selectBy?.include || [];
 
       if (include.length) {

@@ -266,7 +266,7 @@ export class MongoDBStore extends MastraStorage {
     format?: 'v1' | 'v2';
   }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
-      const limit = typeof selectBy?.last === 'number' ? selectBy.last : 40;
+      const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
       const include = selectBy?.include || [];
       let messages: MastraMessageV2[] = [];
       let allMessages: MastraMessageV2[] = [];

@@ -1289,7 +1289,7 @@ describe.skip('D1Store REST API', () => {
 
     it('should sanitize and handle special characters', async () => {
       const thread = createSampleThread();
-      const message = createSampleMessageV2({ threadId: thread.id, content: '特殊字符 !@#$%^&*()' });
+      const message = createSampleMessageV2({ threadId: thread.id, content: { content: '特殊字符 !@#$%^&*()' } });
 
       await store.saveThread({ thread });
       await store.saveMessages({ messages: [message], format: 'v2' });

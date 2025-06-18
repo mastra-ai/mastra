@@ -580,12 +580,13 @@ export class DynamoDBStore extends MastraStorage {
       // Provide *all* composite key components for the 'byThread' index ('entity', 'threadId')
       const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
 
+      const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
       // Apply the 'last' limit if provided
-      if (selectBy?.last && typeof selectBy.last === 'number') {
+      if (limit !== Number.MAX_SAFE_INTEGER) {
         // Use ElectroDB's limit parameter
         // DDB GSIs are sorted in ascending order
         // Use ElectroDB's order parameter to sort in descending order to retrieve 'latest' messages
-        const results = await query.go({ limit: selectBy.last, order: 'desc' });
+        const results = await query.go({ limit, order: 'desc' });
         // Use arrow function in map to preserve 'this' context for parseMessageData
         const list = new MessageList({ threadId, resourceId }).add(
           results.data.map((data: any) => this.parseMessageData(data)),

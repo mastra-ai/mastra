@@ -735,16 +735,7 @@ export class UpstashStore extends MastraStorage {
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
     const allMessageIds = await this.redis.zrange(threadMessagesKey, 0, -1);
-    // When selectBy is undefined or selectBy.last is undefined, get ALL messages (not just 40)
-    let limit: number;
-    if (typeof selectBy?.last === 'number') {
-      limit = Math.max(0, selectBy.last);
-    } else if (selectBy?.last === false) {
-      limit = 0;
-    } else {
-      // No limit specified - get all messages
-      limit = Number.MAX_SAFE_INTEGER;
-    }
+    const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
 
     const messageIds = new Set<string>();
     const messageIdToThreadIds: Record<string, string> = {};
