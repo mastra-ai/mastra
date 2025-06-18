@@ -331,7 +331,7 @@ describe('Tool Schema Compatibility', () => {
     });
 
     // Skipping these tests for now as LLM's seem to be flakier with output schemas than tool input schemas
-    // The compability layer still fixes things in the same way, output schemas and input schemas fail in a similar way for a model
+    // The compatibility layer still fixes things in the same way, output schemas and input schemas fail in a similar way for a model
     // but the LLM sometimes makes silly mistakes with output schemas, like returning a json string instead of an object or not returning anything.
     // Skipping this also saves us a lot of cost in CI for running tests. I'll keep the tests here for now if we ever want to test it manually.
     describe(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
