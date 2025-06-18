@@ -1,5 +1,15 @@
 # @mastra/clickhouse
 
+## 0.11.1-alpha.0
+
+### Patch Changes
+
+- d8f2d19: Add updateMessages API to storage classes (only support for PG and LibSQL for now) and to memory class. Additionally allow for metadata to be saved in the content field of a message.
+- Updated dependencies [d8f2d19]
+- Updated dependencies [9d52b17]
+- Updated dependencies [8ba1b51]
+  - @mastra/core@0.10.7-alpha.0
+
 ## 0.11.0
 
 ### Minor Changes
