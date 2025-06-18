@@ -1,5 +1,15 @@
 # @mastra/inngest
 
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- 9d52b17: Fix inngest workflows streaming and add step metadata
+- Updated dependencies [d8f2d19]
+- Updated dependencies [9d52b17]
+- Updated dependencies [8ba1b51]
+  - @mastra/core@0.10.7-alpha.0
+
 ## 0.10.5
 
 ### Patch Changes

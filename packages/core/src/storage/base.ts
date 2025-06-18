@@ -1,4 +1,4 @@
-import type { MastraMessageV2 } from '../agent';
+import type { MastraMessageContentV2, MastraMessageV2 } from '../agent';
 import { MastraBase } from '../base';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { Trace } from '../telemetry';
@@ -156,6 +156,14 @@ export abstract class MastraStorage extends MastraBase {
   abstract saveMessages(
     args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
   ): Promise<MastraMessageV2[] | MastraMessageV1[]>;
+
+  abstract updateMessages(args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]>;
 
   abstract getTraces(args: StorageGetTracesArg): Promise<any[]>;
 

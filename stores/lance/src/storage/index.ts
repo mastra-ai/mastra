@@ -1,5 +1,6 @@
 import { connect } from '@lancedb/lancedb';
 import type { Connection, ConnectionOptions, SchemaLike, FieldLike } from '@lancedb/lancedb';
+import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType, TraceType } from '@mastra/core/memory';
 import {
@@ -1013,5 +1014,16 @@ export class LanceStorage extends MastraStorage {
     _args: StorageGetMessagesArg,
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
     throw new Error('Method not implemented.');
+  }
+
+  async updateMessages(_args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]> {
+    this.logger.error('updateMessages is not yet implemented in LanceStore');
+    throw new Error('Method not implemented');
   }
 }

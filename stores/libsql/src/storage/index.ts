@@ -1,7 +1,7 @@
 import { createClient } from '@libsql/client';
 import type { Client, InValue } from '@libsql/client';
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
@@ -753,6 +753,112 @@ export class LibSQLStore extends MastraStorage {
       this.logger.error('Failed to save messages in database: ' + (error as { message: string })?.message);
       throw error;
     }
+  }
+
+  async updateMessages({
+    messages,
+  }: {
+    messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
+      id: string;
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+    })[];
+  }): Promise<MastraMessageV2[]> {
+    if (messages.length === 0) {
+      return [];
+    }
+
+    const messageIds = messages.map(m => m.id);
+    const placeholders = messageIds.map(() => '?').join(',');
+
+    const selectSql = `SELECT * FROM ${TABLE_MESSAGES} WHERE id IN (${placeholders})`;
+    const existingResult = await this.client.execute({ sql: selectSql, args: messageIds });
+    const existingMessages: MastraMessageV2[] = existingResult.rows.map(row => this.parseRow(row));
+
+    if (existingMessages.length === 0) {
+      return [];
+    }
+
+    const batchStatements = [];
+    const threadIdsToUpdate = new Set<string>();
+    const columnMapping: Record<string, string> = {
+      threadId: 'thread_id',
+    };
+
+    for (const existingMessage of existingMessages) {
+      const updatePayload = messages.find(m => m.id === existingMessage.id);
+      if (!updatePayload) continue;
+
+      const { id, ...fieldsToUpdate } = updatePayload;
+      if (Object.keys(fieldsToUpdate).length === 0) continue;
+
+      threadIdsToUpdate.add(existingMessage.threadId!);
+      if (updatePayload.threadId && updatePayload.threadId !== existingMessage.threadId) {
+        threadIdsToUpdate.add(updatePayload.threadId);
+      }
+
+      const setClauses = [];
+      const args: InValue[] = [];
+      const updatableFields = { ...fieldsToUpdate };
+
+      // Special handling for the 'content' field to merge instead of overwrite
+      if (updatableFields.content) {
+        const newContent = {
+          ...existingMessage.content,
+          ...updatableFields.content,
+          // Deep merge metadata if it exists on both
+          ...(existingMessage.content?.metadata && updatableFields.content.metadata
+            ? {
+                metadata: {
+                  ...existingMessage.content.metadata,
+                  ...updatableFields.content.metadata,
+                },
+              }
+            : {}),
+        };
+        setClauses.push(`${parseSqlIdentifier('content', 'column name')} = ?`);
+        args.push(JSON.stringify(newContent));
+        delete updatableFields.content;
+      }
+
+      for (const key in updatableFields) {
+        if (Object.prototype.hasOwnProperty.call(updatableFields, key)) {
+          const dbKey = columnMapping[key] || key;
+          setClauses.push(`${parseSqlIdentifier(dbKey, 'column name')} = ?`);
+          let value = updatableFields[key as keyof typeof updatableFields];
+
+          if (typeof value === 'object' && value !== null) {
+            value = JSON.stringify(value);
+          }
+          args.push(value as InValue);
+        }
+      }
+
+      if (setClauses.length === 0) continue;
+
+      args.push(id);
+
+      const sql = `UPDATE ${TABLE_MESSAGES} SET ${setClauses.join(', ')} WHERE id = ?`;
+      batchStatements.push({ sql, args });
+    }
+
+    if (batchStatements.length === 0) {
+      return existingMessages;
+    }
+
+    const now = new Date().toISOString();
+    for (const threadId of threadIdsToUpdate) {
+      if (threadId) {
+        batchStatements.push({
+          sql: `UPDATE ${TABLE_THREADS} SET updatedAt = ? WHERE id = ?`,
+          args: [now, threadId],
+        });
+      }
+    }
+
+    await this.client.batch(batchStatements, 'write');
+
+    const updatedResult = await this.client.execute({ sql: selectSql, args: messageIds });
+    return updatedResult.rows.map(row => this.parseRow(row));
   }
 
   private transformEvalRow(row: Record<string, any>): EvalRow {

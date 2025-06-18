@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.10.7-alpha.0
+
+### Patch Changes
+
+- d8f2d19: Add updateMessages API to storage classes (only support for PG and LibSQL for now) and to memory class. Additionally allow for metadata to be saved in the content field of a message.
+- 9d52b17: Fix inngest workflows streaming and add step metadata
+- 8ba1b51: Add custom routes by default to jsonapi
+
 ## 0.10.6
 
 ### Patch Changes
