@@ -85,24 +85,24 @@ The current version of the integration leverages `MastraClient` to format Mastra
 {/*
 LLM CONTEXT: This Tabs component shows installation commands for the Mastra AGUI package.
 Each tab displays the installation command for that specific package manager.
-This installs the alpha version of @mastra/agui which provides CopilotKit integration capabilities.
-All commands install the same @mastra/agui@alpha package but use different package manager syntax.
+This installs the alpha version of @ag-ui/mastra which provides CopilotKit integration capabilities.
+All commands install the same @ag-ui/mastra package but use different package manager syntax.
 */}
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
     ```bash copy
-    npm install @mastra/agui@alpha
+    npm install @ag-ui/mastra
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash copy
-    yarn add @mastra/agui@alpha
+    yarn add @ag-ui/mastra
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash copy
-    pnpm add @mastra/agui@alpha
+    pnpm add @ag-ui/mastra
     ```
   </Tabs.Tab>
 </Tabs>
@@ -114,7 +114,7 @@ import { Mastra } from "@mastra/core/mastra";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
 import { CopilotRuntime, copilotRuntimeNodeHttpEndpoint, ExperimentalEmptyAdapter } from "@copilotkit/runtime";
-import { registerCopilotKit } from "@mastra/agui";
+import { registerCopilotKit } from "@ag-ui/mastra";
 import { weatherAgent } from "./agents/weather-agent";
 
 const serviceAdapter = new ExperimentalEmptyAdapter();
@@ -231,6 +231,7 @@ import {
   copilotRuntimeNextJSAppRouterEndpoint,
 } from "@copilotkit/runtime";
 import { NextRequest } from "next/server";
+import { MastraAgent } from "@ag-ui/mastra";
 
 export const POST = async (req: NextRequest) => {
   // Clone the request before reading the body
@@ -238,9 +239,10 @@ export const POST = async (req: NextRequest) => {
   const body = await clonedReq.json();
   const resourceId = body.resourceId || "TEST";
 
-  const mastraAgents = getAGUI({
-    mastra,
+  const mastraAgents = MastraAgent.getLocalAgents({
     resourceId,
+    mastra,
+    runtimeContext,
   });
 
   const runtime = new CopilotRuntime({
@@ -258,7 +260,48 @@ export const POST = async (req: NextRequest) => {
 };
 ```
 
-### Using Typed Runtime Context
+## Using with Mastra Client SDK
+
+```typescript copy
+import { MastraClient } from "@mastra/client-js";
+import {
+  CopilotRuntime,
+  ExperimentalEmptyAdapter,
+  copilotRuntimeNextJSAppRouterEndpoint,
+} from "@copilotkit/runtime";
+import { NextRequest } from "next/server";
+import { MastraAgent } from "@ag-ui/mastra";
+
+export const POST = async (req: NextRequest) => {
+  // Clone the request before reading the body
+  const clonedReq = req.clone();
+  const body = await clonedReq.json();
+  const resourceId = body.resourceId || "TEST";
+
+  const baseUrl = process.env.MASTRA_BASE_URL || "http://localhost:4111";
+  const mastraClient = new MastraClient({
+    baseUrl,
+  });
+
+  const mastraAgents = await MastraAgent.getRemoteAgents({ mastraClient });
+
+  const runtime = new CopilotRuntime({
+    agents: mastraAgents,
+  });
+
+  const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
+    runtime,
+    serviceAdapter: new ExperimentalEmptyAdapter(),
+    endpoint: "/api/copilotkit",
+  });
+
+  // Use the original request for handleRequest
+  return handleRequest(req);
+};
+```
+
+
+## Using Typed Runtime Context
 
 For better type safety, you can specify the type of your runtime context:
 
@@ -266,7 +309,7 @@ For better type safety, you can specify the type of your runtime context:
 import { Mastra } from "@mastra/core/mastra";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
-import { registerCopilotKit } from "@mastra/agui";
+import { registerCopilotKit } from "@ag-ui/mastra";
 import { weatherAgent } from "./agents";
 
 // Define your runtime context type
