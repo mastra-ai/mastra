@@ -217,6 +217,7 @@ export class InngestRun<
   }
 
   watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
+    let active = true;
     const streamPromise = subscribe(
       {
         channel: `workflow:${this.workflowId}:${this.runId}`,
@@ -224,11 +225,14 @@ export class InngestRun<
         app: this.inngest,
       },
       (message: any) => {
-        cb(message.data);
+        if (active) {
+          cb(message.data);
+        }
       },
     );
 
     return () => {
+      active = false;
       streamPromise
         .then(async (stream: Awaited<typeof streamPromise>) => {
           return stream.cancel();
@@ -937,9 +941,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter: Emitter;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
-    await this.inngestStep.run(
+    const startedAt = await this.inngestStep.run(
       `workflow.${executionContext.workflowId}.run.${executionContext.runId}.step.${step.id}.running_ev`,
       async () => {
+        const startedAt = Date.now();
         await emitter.emit('watch', {
           type: 'watch',
           payload: {
@@ -968,6 +973,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             id: step.id,
           },
         });
+
+        return startedAt;
       },
     );
 
@@ -1156,7 +1163,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       let suspended: { payload: any } | undefined;
 
       try {
-        const startedAt = Date.now();
         const result = await step.execute({
           runId: executionContext.runId,
           mastra: this.mastra!,
@@ -1195,19 +1201,30 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           startedAt,
           endedAt,
           payload: prevOutput,
-          resumedAt: resume?.steps[0] === step.id ? Date.now() : undefined,
+          resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
           resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
         };
       } catch (e) {
-        execResults = { status: 'failed', error: e instanceof Error ? e.message : String(e) };
+        execResults = {
+          status: 'failed',
+          payload: prevOutput,
+          error: e instanceof Error ? e.message : String(e),
+          endedAt: Date.now(),
+          startedAt,
+          resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
+          resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
+        };
       }
 
       if (suspended) {
         execResults = {
           status: 'suspended',
-          payload: suspended.payload,
-          output: prevOutput,
+          suspendedPayload: suspended.payload,
+          payload: prevOutput,
           suspendedAt: Date.now(),
+          startedAt,
+          resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
+          resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
         };
       }
 
@@ -1222,12 +1239,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         payload: {
           currentStep: {
             id: step.id,
-            status: execResults.status,
-            output: execResults.output,
+            ...execResults,
           },
           workflowState: {
             status: 'running',
-            steps: stepResults,
+            steps: { ...stepResults, [step.id]: execResults },
             result: null,
             error: null,
           },
@@ -1425,7 +1441,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.result.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', payload: hasSuspended.result.payload, suspendedAt: Date.now() };
+      execResults = { status: 'suspended', payload: hasSuspended.result.suspendPayload };
     } else {
       execResults = {
         status: 'success',
