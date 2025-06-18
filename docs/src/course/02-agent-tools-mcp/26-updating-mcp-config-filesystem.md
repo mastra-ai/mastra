@@ -5,7 +5,7 @@ Now, let's update your MCP configuration in `src/mastra/agents/index.ts` to incl
 ```typescript
 import path from "path";
 
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     zapier: {
       url: new URL(process.env.ZAPIER_MCP_URL || ""),
@@ -21,7 +21,7 @@ const mcp = new MCPConfiguration({
       command: "pnpx",
       args: [
         `@modelcontextprotocol/server-filesystem`,
-        path.join(process.cwd(), "notes"),
+        path.join(process.cwd(), "..", "..", "notes"), // relative to output directory
       ],
     },
   },

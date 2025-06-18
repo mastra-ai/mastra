@@ -24,7 +24,7 @@ import {
   setAgentInstructionsHandler,
   streamGenerateHandler,
 } from './handlers/agents';
-import { authorizationMiddleware, authenticationMiddleware } from './handlers/auth';
+import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import {
@@ -40,13 +40,13 @@ import {
 } from './handlers/legacyWorkflows.js';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
 import {
+  executeMcpServerToolHandler,
+  getMcpRegistryServerDetailHandler,
   getMcpServerMessageHandler,
   getMcpServerSseHandler,
-  listMcpRegistryServersHandler,
-  getMcpRegistryServerDetailHandler,
-  listMcpServerToolsHandler,
   getMcpServerToolDetailHandler,
-  executeMcpServerToolHandler,
+  listMcpRegistryServersHandler,
+  listMcpServerToolsHandler,
 } from './handlers/mcp';
 import {
   createThreadHandler,
@@ -69,17 +69,19 @@ import { rootHandler } from './handlers/root';
 import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
 import { createIndex, deleteIndex, describeIndex, listIndexes, queryVectors, upsertVectors } from './handlers/vector';
-import { getSpeakersHandler, getListenerHandler, listenHandler, speakHandler } from './handlers/voice';
+import { getListenerHandler, getSpeakersHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
   createWorkflowRunHandler,
   getWorkflowByIdHandler,
+  getWorkflowRunByIdHandler,
+  getWorkflowRunExecutionResultHandler,
   getWorkflowRunsHandler,
   getWorkflowsHandler,
-  streamWorkflowHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
   startAsyncWorkflowHandler,
   startWorkflowRunHandler,
+  streamWorkflowHandler,
   watchWorkflowHandler,
 } from './handlers/workflows.js';
 import type { ServerBundleOptions } from './types';
@@ -162,7 +164,9 @@ ${err.stack.split('\n').slice(1).join('\n')}
       const contentType = c.req.header('content-type');
       if (contentType?.includes('application/json')) {
         try {
-          const body = await c.req.json();
+          const clonedReq = c.req.raw.clone();
+          const body = (await clonedReq.json()) as { runtimeContext?: Record<string, any> };
+
           if (body.runtimeContext) {
             runtimeContext = new RuntimeContext(Object.entries(body.runtimeContext));
           }
@@ -1366,6 +1370,31 @@ ${err.stack.split('\n').slice(1).join('\n')}
     getMcpServerMessageHandler,
   );
 
+  app.get(
+    '/api/mcp/:serverId/mcp',
+    describeRoute({
+      description: 'Send a message to an MCP server using Streamable HTTP',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Streamable HTTP connection processed',
+        },
+        404: {
+          description: 'MCP server not found',
+        },
+      },
+    }),
+    getMcpServerMessageHandler,
+  );
+
   // New MCP server routes for SSE
   const mcpSseBasePath = '/api/mcp/:serverId/sse';
   const mcpSseMessagePath = '/api/mcp/:serverId/messages';
@@ -2308,54 +2337,6 @@ ${err.stack.split('\n').slice(1).join('\n')}
     watchLegacyWorkflowHandler,
   );
 
-  app.post(
-    '/api/workflows/:workflowId/stream',
-    describeRoute({
-      description: 'Stream workflow in real-time',
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: false,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                inputData: { type: 'object' },
-                runtimeContext: {
-                  type: 'object',
-                  description: 'Runtime context for the workflow execution',
-                },
-              },
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'vNext workflow run started',
-        },
-        404: {
-          description: 'vNext workflow not found',
-        },
-      },
-      tags: ['vNextWorkflows'],
-    }),
-    streamWorkflowHandler,
-  );
-
   // Workflow routes
   app.get(
     '/api/workflows',
@@ -2421,6 +2402,68 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     getWorkflowRunsHandler,
+  );
+
+  app.get(
+    '/api/workflows/:workflowId/runs/:runId/execution-result',
+    describeRoute({
+      description: 'Get execution result for a workflow run',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Workflow run execution result',
+        },
+        404: {
+          description: 'Workflow run execution result not found',
+        },
+      },
+    }),
+    getWorkflowRunExecutionResultHandler,
+  );
+
+  app.get(
+    '/api/workflows/:workflowId/runs/:runId',
+    describeRoute({
+      description: 'Get workflow run by ID',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Workflow run by ID',
+        },
+        404: {
+          description: 'Workflow run not found',
+        },
+      },
+    }),
+    getWorkflowRunByIdHandler,
   );
 
   app.post(
@@ -2510,6 +2553,54 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     resumeAsyncWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/stream',
+    describeRoute({
+      description: 'Stream workflow in real-time',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                inputData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'workflow run started',
+        },
+        404: {
+          description: 'workflow not found',
+        },
+      },
+      tags: ['workflows'],
+    }),
+    streamWorkflowHandler,
   );
 
   app.post(
@@ -3110,6 +3201,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
     app.get(
       '/openapi.json',
       openAPISpecs(app, {
+        includeEmptyPaths: true,
         documentation: {
           info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
         },
@@ -3118,15 +3210,33 @@ ${err.stack.split('\n').slice(1).join('\n')}
   }
 
   if (options?.isDev || server?.build?.swaggerUI) {
-    app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
+    app.get(
+      '/swagger-ui',
+      describeRoute({
+        hide: true,
+      }),
+      swaggerUI({ url: '/openapi.json' }),
+    );
   }
 
   if (options?.playground) {
     // SSE endpoint for refresh notifications
-    app.get('/refresh-events', handleClientsRefresh);
+    app.get(
+      '/refresh-events',
+      describeRoute({
+        hide: true,
+      }),
+      handleClientsRefresh,
+    );
 
     // Trigger refresh for all clients
-    app.post('/__refresh', handleTriggerClientsRefresh);
+    app.post(
+      '/__refresh',
+      describeRoute({
+        hide: true,
+      }),
+      handleTriggerClientsRefresh,
+    );
     // Playground routes - these should come after API routes
     // Serve assets with specific MIME types
     app.use('/assets/*', async (c, next) => {
@@ -3199,14 +3309,9 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       const logger = mastra.getLogger();
       const host = serverOptions?.host ?? 'localhost';
       logger.info(` Mastra API running on port http://${host}:${port}/api`);
-      if (options?.isDev) {
-        logger.info(`🔗 Open API documentation available at http://${host}:${port}/openapi.json`);
-      }
-      if (options?.isDev) {
-        logger.info(`🧪 Swagger UI available at http://${host}:${port}/swagger-ui`);
-      }
       if (options?.playground) {
-        logger.info(`👨‍💻 Playground available at http://${host}:${port}/`);
+        const playgroundUrl = `http://${host}:${port}`;
+        logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
       }
 
       if (process.send) {

@@ -16,6 +16,7 @@ interface DynamicFormProps<T extends z.ZodSchema> {
   isSubmitLoading?: boolean;
   submitButtonLabel?: string;
   className?: string;
+  readOnly?: boolean;
 }
 
 function isEmptyZodObject(schema: unknown): boolean {
@@ -32,6 +33,7 @@ export function DynamicForm<T extends z.ZodSchema>({
   isSubmitLoading,
   submitButtonLabel,
   className,
+  readOnly,
 }: DynamicFormProps<T>) {
   if (!schema) {
     console.error('no form schema found');
@@ -79,5 +81,5 @@ export function DynamicForm<T extends z.ZodSchema>({
     withSubmit: true,
   };
 
-  return <AutoForm {...formProps} />;
+  return <AutoForm {...formProps} readOnly={readOnly} />;
 }

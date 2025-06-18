@@ -125,6 +125,7 @@ class Test {
       suspendedPaths: {},
       runId,
       timestamp: timestamp.getTime(),
+      status: options.status,
     } as WorkflowRunState;
     return { snapshot, runId, stepId };
   }
@@ -270,6 +271,27 @@ describe('MongoDBStore', () => {
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
       expect(retrievedThread?.title).toBe('Updated Title');
       expect(retrievedThread?.metadata).toEqual({ key: 'newValue' });
+    });
+
+    it('should update thread updatedAt when a message is saved to it', async () => {
+      const test = new Test(store).build();
+      await test.clearTables();
+
+      const thread = test.generateSampleThread();
+      await store.saveThread({ thread });
+
+      const initialThread = await store.getThreadById({ threadId: thread.id });
+      expect(initialThread).toBeDefined();
+      const originalUpdatedAt = initialThread!.updatedAt;
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      const message = test.generateSampleMessageV1({ threadId: thread.id });
+      await store.saveMessages({ messages: [message] });
+
+      const updatedThread = await store.getThreadById({ threadId: thread.id });
+      expect(updatedThread).toBeDefined();
+      expect(updatedThread!.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
     });
   });
 
@@ -620,6 +642,7 @@ describe('MongoDBStore', () => {
         ],
         serializedStepGraph: [],
         runId: runId,
+        status: 'running',
         timestamp: Date.now(),
       };
 

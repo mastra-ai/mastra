@@ -46,11 +46,6 @@ https://github.com/mastra-ai/mastra
 
 This helps the project grow and reach more developers like you!
 
-## Introduction Video
-
-You can watch the 1-minute introduction video here:
-https://www.youtube.com/watch?v=1234567890
-
 ## How This Course Works
 
 - Each lesson is broken into multiple steps

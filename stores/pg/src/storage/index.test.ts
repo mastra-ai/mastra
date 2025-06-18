@@ -9,7 +9,8 @@ import {
   resetRole,
   checkWorkflowSnapshot,
 } from '@internal/storage-test-utils';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_WORKFLOW_SNAPSHOT,
@@ -173,6 +174,28 @@ describe('PostgresStore', () => {
       const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(0);
     });
+
+    it('should update thread updatedAt when a message is saved to it', async () => {
+      const thread = createSampleThread();
+      await store.saveThread({ thread });
+
+      // Get the initial thread to capture the original updatedAt
+      const initialThread = await store.getThreadById({ threadId: thread.id });
+      expect(initialThread).toBeDefined();
+      const originalUpdatedAt = initialThread!.updatedAt;
+
+      // Wait a small amount to ensure different timestamp
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Create and save a message to the thread
+      const message = createSampleMessageV1({ threadId: thread.id });
+      await store.saveMessages({ messages: [message] });
+
+      // Retrieve the thread again and check that updatedAt was updated
+      const updatedThread = await store.getThreadById({ threadId: thread.id });
+      expect(updatedThread).toBeDefined();
+      expect(updatedThread!.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
+    });
   });
 
   describe('Message Operations', () => {
@@ -207,7 +230,9 @@ describe('PostgresStore', () => {
 
       const messageContent = ['First', 'Second', 'Third'];
 
-      const messages = messageContent.map(content => createSampleMessageV2({ threadId: thread.id, content }));
+      const messages = messageContent.map(content =>
+        createSampleMessageV2({ threadId: thread.id, content: { content, parts: [{ type: 'text', text: content }] } }),
+      );
 
       await store.saveMessages({ messages, format: 'v2' });
 
@@ -247,16 +272,48 @@ describe('PostgresStore', () => {
       await store.saveThread({ thread: thread3 });
 
       const messages: MastraMessageV2[] = [
-        createSampleMessageV2({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
-        createSampleMessageV2({ threadId: 'thread-one', content: 'Second', resourceId: 'cross-thread-resource' }),
-        createSampleMessageV2({ threadId: 'thread-one', content: 'Third', resourceId: 'cross-thread-resource' }),
+        createSampleMessageV2({
+          threadId: 'thread-one',
+          content: { content: 'First' },
+          resourceId: 'cross-thread-resource',
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-one',
+          content: { content: 'Second' },
+          resourceId: 'cross-thread-resource',
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-one',
+          content: { content: 'Third' },
+          resourceId: 'cross-thread-resource',
+        }),
 
-        createSampleMessageV2({ threadId: 'thread-two', content: 'Fourth', resourceId: 'cross-thread-resource' }),
-        createSampleMessageV2({ threadId: 'thread-two', content: 'Fifth', resourceId: 'cross-thread-resource' }),
-        createSampleMessageV2({ threadId: 'thread-two', content: 'Sixth', resourceId: 'cross-thread-resource' }),
+        createSampleMessageV2({
+          threadId: 'thread-two',
+          content: { content: 'Fourth' },
+          resourceId: 'cross-thread-resource',
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-two',
+          content: { content: 'Fifth' },
+          resourceId: 'cross-thread-resource',
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-two',
+          content: { content: 'Sixth' },
+          resourceId: 'cross-thread-resource',
+        }),
 
-        createSampleMessageV2({ threadId: 'thread-three', content: 'Seventh', resourceId: 'other-resource' }),
-        createSampleMessageV2({ threadId: 'thread-three', content: 'Eighth', resourceId: 'other-resource' }),
+        createSampleMessageV2({
+          threadId: 'thread-three',
+          content: { content: 'Seventh' },
+          resourceId: 'other-resource',
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-three',
+          content: { content: 'Eighth' },
+          resourceId: 'other-resource',
+        }),
       ];
 
       await store.saveMessages({ messages: messages, format: 'v2' });
@@ -339,6 +396,201 @@ describe('PostgresStore', () => {
       expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
       expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
     });
+
+    it('should return messages using both last and include (cross-thread, deduped)', async () => {
+      const thread = createSampleThread({ id: 'thread-one' });
+      await store.saveThread({ thread });
+
+      const thread2 = createSampleThread({ id: 'thread-two' });
+      await store.saveThread({ thread: thread2 });
+
+      const now = new Date();
+
+      // Setup: create messages in two threads
+      const messages = [
+        createSampleMessageV2({
+          threadId: 'thread-one',
+          content: { content: 'A' },
+          createdAt: new Date(now.getTime()),
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-one',
+          content: { content: 'B' },
+          createdAt: new Date(now.getTime() + 1000),
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-one',
+          content: { content: 'C' },
+          createdAt: new Date(now.getTime() + 2000),
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-two',
+          content: { content: 'D' },
+          createdAt: new Date(now.getTime() + 3000),
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-two',
+          content: { content: 'E' },
+          createdAt: new Date(now.getTime() + 4000),
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-two',
+          content: { content: 'F' },
+          createdAt: new Date(now.getTime() + 5000),
+        }),
+      ];
+      await store.saveMessages({ messages, format: 'v2' });
+
+      // Use last: 2 and include a message from another thread with context
+      const result = await store.getMessages({
+        threadId: 'thread-one',
+        format: 'v2',
+        selectBy: {
+          last: 2,
+          include: [
+            {
+              id: messages[4].id, // 'E' from thread-bar
+              threadId: 'thread-two',
+              withPreviousMessages: 1,
+              withNextMessages: 1,
+            },
+          ],
+        },
+      });
+
+      // Should include last 2 from thread-one and 3 from thread-two (D, E, F)
+      expect(result.map(m => m.content.content).sort()).toEqual(['B', 'C', 'D', 'E', 'F']);
+      // Should include 2 from thread-one
+      expect(result.filter(m => m.threadId === 'thread-one').map(m => m.content.content)).toEqual(['B', 'C']);
+      // Should include 3 from thread-two
+      expect(result.filter(m => m.threadId === 'thread-two').map(m => m.content.content)).toEqual(['D', 'E', 'F']);
+    });
+  });
+
+  describe('updateMessages', () => {
+    let thread: StorageThreadType;
+
+    beforeEach(async () => {
+      const threadData = createSampleThread();
+      thread = await store.saveThread({ thread: threadData as StorageThreadType });
+    });
+
+    it('should update a single field of a message (e.g., role)', async () => {
+      const originalMessage = createSampleMessageV2({ threadId: thread.id, role: 'user', thread });
+      await store.saveMessages({ messages: [originalMessage], format: 'v2' });
+
+      const updatedMessages = await store.updateMessages({
+        messages: [{ id: originalMessage.id, role: 'assistant' }],
+      });
+
+      expect(updatedMessages).toHaveLength(1);
+      expect(updatedMessages[0].role).toBe('assistant');
+      expect(updatedMessages[0].content).toEqual(originalMessage.content); // Ensure content is unchanged
+    });
+
+    it('should update only the metadata within the content field, preserving other content', async () => {
+      const originalMessage = createSampleMessageV2({
+        threadId: thread.id,
+        content: { content: 'hello world', parts: [{ type: 'text', text: 'hello world' }] },
+        thread,
+      });
+      await store.saveMessages({ messages: [originalMessage], format: 'v2' });
+
+      const newMetadata = { someKey: 'someValue' };
+      await store.updateMessages({
+        messages: [{ id: originalMessage.id, content: { metadata: newMetadata } as any }],
+      });
+
+      const fromDb = await store.getMessages({ threadId: thread.id, format: 'v2' });
+      expect(fromDb[0].content.metadata).toEqual(newMetadata);
+      expect(fromDb[0].content.content).toBe('hello world');
+      expect(fromDb[0].content.parts).toEqual([{ type: 'text', text: 'hello world' }]);
+    });
+
+    it('should deep merge metadata, not overwrite it', async () => {
+      const originalMessage = createSampleMessageV2({
+        threadId: thread.id,
+        content: { metadata: { initial: true }, content: 'old content' },
+        thread,
+      });
+      await store.saveMessages({ messages: [originalMessage], format: 'v2' });
+
+      const newMetadata = { updated: true };
+      await store.updateMessages({
+        messages: [{ id: originalMessage.id, content: { metadata: newMetadata } as any }],
+      });
+
+      const fromDb = await store.getMessages({ threadId: thread.id, format: 'v2' });
+      expect(fromDb[0].content.metadata).toEqual({ initial: true, updated: true });
+    });
+
+    it('should update multiple messages at once', async () => {
+      const msg1 = createSampleMessageV2({ threadId: thread.id, role: 'user', thread });
+      const msg2 = createSampleMessageV2({ threadId: thread.id, content: { content: 'original' }, thread });
+      await store.saveMessages({ messages: [msg1, msg2], format: 'v2' });
+
+      await store.updateMessages({
+        messages: [
+          { id: msg1.id, role: 'assistant' },
+          { id: msg2.id, content: { content: 'updated' } as any },
+        ],
+      });
+
+      const fromDb = await store.getMessages({ threadId: thread.id, format: 'v2' });
+      const updatedMsg1 = fromDb.find(m => m.id === msg1.id)!;
+      const updatedMsg2 = fromDb.find(m => m.id === msg2.id)!;
+
+      expect(updatedMsg1.role).toBe('assistant');
+      expect(updatedMsg2.content.content).toBe('updated');
+    });
+
+    it('should update the parent thread updatedAt timestamp', async () => {
+      const originalMessage = createSampleMessageV2({ threadId: thread.id, thread });
+      await store.saveMessages({ messages: [originalMessage], format: 'v2' });
+      const initialThread = await store.getThreadById({ threadId: thread.id });
+
+      await new Promise(r => setTimeout(r, 10));
+
+      await store.updateMessages({ messages: [{ id: originalMessage.id, role: 'assistant' }] });
+
+      const updatedThread = await store.getThreadById({ threadId: thread.id });
+
+      expect(new Date(updatedThread!.updatedAt).getTime()).toBeGreaterThan(
+        new Date(initialThread!.updatedAt).getTime(),
+      );
+    });
+
+    it('should update timestamps on both threads when moving a message', async () => {
+      const thread2 = await store.saveThread({ thread: createSampleThread() });
+      const message = createSampleMessageV2({ threadId: thread.id, thread });
+      await store.saveMessages({ messages: [message], format: 'v2' });
+
+      const initialThread1 = await store.getThreadById({ threadId: thread.id });
+      const initialThread2 = await store.getThreadById({ threadId: thread2.id });
+
+      await new Promise(r => setTimeout(r, 10));
+
+      await store.updateMessages({
+        messages: [{ id: message.id, threadId: thread2.id }],
+      });
+
+      const updatedThread1 = await store.getThreadById({ threadId: thread.id });
+      const updatedThread2 = await store.getThreadById({ threadId: thread2.id });
+
+      expect(new Date(updatedThread1!.updatedAt).getTime()).toBeGreaterThan(
+        new Date(initialThread1!.updatedAt).getTime(),
+      );
+      expect(new Date(updatedThread2!.updatedAt).getTime()).toBeGreaterThan(
+        new Date(initialThread2!.updatedAt).getTime(),
+      );
+
+      // Verify the message was moved
+      const thread1Messages = await store.getMessages({ threadId: thread.id, format: 'v2' });
+      const thread2Messages = await store.getMessages({ threadId: thread2.id, format: 'v2' });
+      expect(thread1Messages).toHaveLength(0);
+      expect(thread2Messages).toHaveLength(1);
+      expect(thread2Messages[0].id).toBe(message.id);
+    });
   });
 
   describe('Edge Cases and Error Handling', () => {
@@ -408,6 +660,7 @@ describe('PostgresStore', () => {
         suspendedPaths: {},
         runId,
         timestamp: new Date().getTime(),
+        serializedStepGraph: [],
       } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
@@ -446,6 +699,7 @@ describe('PostgresStore', () => {
         suspendedPaths: {},
         runId,
         timestamp: new Date().getTime(),
+        serializedStepGraph: [],
       };
 
       await store.persistWorkflowSnapshot({
@@ -524,6 +778,8 @@ describe('PostgresStore', () => {
         suspendedPaths: {},
         runId: runId,
         timestamp: Date.now(),
+        serializedStepGraph: [],
+        status: 'running',
       };
 
       await store.persistWorkflowSnapshot({
@@ -990,7 +1246,7 @@ describe('PostgresStore', () => {
   });
 
   describe('Schema Support', () => {
-    const customSchema = 'mastra_test';
+    const customSchema = 'mastraTest';
     let customSchemaStore: PostgresStore;
 
     beforeAll(async () => {
@@ -1468,10 +1724,83 @@ describe('PostgresStore', () => {
     });
   });
 
+  describe('PgStorage Table Name Quoting', () => {
+    const camelCaseTable = 'TestCamelCaseTable';
+    const snakeCaseTable = 'test_snake_case_table';
+    const BASE_SCHEMA = {
+      id: { type: 'integer', primaryKey: true, nullable: false },
+      name: { type: 'text', nullable: true },
+    } as Record<string, StorageColumn>;
+
+    beforeEach(async () => {
+      // Only clear tables if store is initialized
+      try {
+        // Clear tables before each test
+        await store.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
+        await store.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
+      } catch (error) {
+        // Ignore errors during table clearing
+        console.warn('Error clearing tables:', error);
+      }
+    });
+
+    afterEach(async () => {
+      // Only clear tables if store is initialized
+      try {
+        // Clear tables before each test
+        await store.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
+        await store.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
+      } catch (error) {
+        // Ignore errors during table clearing
+        console.warn('Error clearing tables:', error);
+      }
+    });
+
+    it('should create and upsert to a camelCase table without quoting errors', async () => {
+      await expect(
+        store.createTable({
+          tableName: camelCaseTable as TABLE_NAMES,
+          schema: BASE_SCHEMA,
+        }),
+      ).resolves.not.toThrow();
+
+      await store.insert({
+        tableName: camelCaseTable as TABLE_NAMES,
+        record: { id: '1', name: 'Alice' },
+      });
+
+      const row: any = await store.load({
+        tableName: camelCaseTable as TABLE_NAMES,
+        keys: { id: '1' },
+      });
+      expect(row?.name).toBe('Alice');
+    });
+
+    it('should create and upsert to a snake_case table without quoting errors', async () => {
+      await expect(
+        store.createTable({
+          tableName: snakeCaseTable as TABLE_NAMES,
+          schema: BASE_SCHEMA,
+        }),
+      ).resolves.not.toThrow();
+
+      await store.insert({
+        tableName: snakeCaseTable as TABLE_NAMES,
+        record: { id: '2', name: 'Bob' },
+      });
+
+      const row: any = await store.load({
+        tableName: snakeCaseTable as TABLE_NAMES,
+        keys: { id: '2' },
+      });
+      expect(row?.name).toBe('Bob');
+    });
+  });
+
   describe('Permission Handling', () => {
     const schemaRestrictedUser = 'mastra_schema_restricted_storage';
     const restrictedPassword = 'test123';
-    const testSchema = 'test_schema';
+    const testSchema = 'testSchema';
     let adminDb: pgPromise.IDatabase<{}>;
     let pgpAdmin: pgPromise.IMain;
 

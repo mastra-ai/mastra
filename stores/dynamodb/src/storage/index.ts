@@ -1,5 +1,6 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import type { StorageThreadType, MastraMessageV2, MastraMessageV1 } from '@mastra/core/memory';
 
@@ -422,6 +423,9 @@ export class DynamoDBStore extends MastraStorage {
       const data = result.data;
       return {
         ...data,
+        // Convert date strings back to Date objects for consistency
+        createdAt: typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt,
+        updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
         // metadata: data.metadata ? JSON.parse(data.metadata) : undefined, // REMOVED by AI
         // metadata is already transformed by the entity's getter
       } as StorageThreadType;
@@ -443,6 +447,9 @@ export class DynamoDBStore extends MastraStorage {
       // ElectroDB handles the transformation with attribute getters
       return result.data.map((data: any) => ({
         ...data,
+        // Convert date strings back to Date objects for consistency
+        createdAt: typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt,
+        updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
         // metadata: data.metadata ? JSON.parse(data.metadata) : undefined, // REMOVED by AI
         // metadata is already transformed by the entity's getter
       })) as StorageThreadType[];
@@ -573,12 +580,13 @@ export class DynamoDBStore extends MastraStorage {
       // Provide *all* composite key components for the 'byThread' index ('entity', 'threadId')
       const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
 
+      const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
       // Apply the 'last' limit if provided
-      if (selectBy?.last && typeof selectBy.last === 'number') {
+      if (limit !== Number.MAX_SAFE_INTEGER) {
         // Use ElectroDB's limit parameter
         // DDB GSIs are sorted in ascending order
         // Use ElectroDB's order parameter to sort in descending order to retrieve 'latest' messages
-        const results = await query.go({ limit: selectBy.last, order: 'desc' });
+        const results = await query.go({ limit, order: 'desc' });
         // Use arrow function in map to preserve 'this' context for parseMessageData
         const list = new MessageList({ threadId, resourceId }).add(
           results.data.map((data: any) => this.parseMessageData(data)),
@@ -614,6 +622,11 @@ export class DynamoDBStore extends MastraStorage {
       return [];
     }
 
+    const threadId = messages[0]?.threadId;
+    if (!threadId) {
+      throw new Error('Thread ID is required');
+    }
+
     // Ensure 'entity' is added and complex fields are handled
     const messagesToSave = messages.map(msg => {
       const now = new Date().toISOString();
@@ -644,19 +657,27 @@ export class DynamoDBStore extends MastraStorage {
         batches.push(batch);
       }
 
-      // Process each batch
-      for (const batch of batches) {
-        // Try creating each item individually instead of passing the whole batch
-        for (const messageData of batch) {
-          // Ensure each item has the entity property before sending
-          if (!messageData.entity) {
-            this.logger.error('Missing entity property in message data for create', { messageData });
-            throw new Error('Internal error: Missing entity property during saveMessages');
+      // Process each batch and update thread's updatedAt in parallel for better performance
+      await Promise.all([
+        // Process message batches
+        ...batches.map(async batch => {
+          for (const messageData of batch) {
+            // Ensure each item has the entity property before sending
+            if (!messageData.entity) {
+              this.logger.error('Missing entity property in message data for create', { messageData });
+              throw new Error('Internal error: Missing entity property during saveMessages');
+            }
+            await this.service.entities.message.create(messageData).go();
           }
-          await this.service.entities.message.create(messageData).go();
-        }
-        // Original batch call: await this.service.entities.message.create(batch).go();
-      }
+        }),
+        // Update thread's updatedAt timestamp
+        this.service.entities.thread
+          .update({ entity: 'thread', id: threadId })
+          .set({
+            updatedAt: new Date().toISOString(),
+          })
+          .go(),
+      ]);
 
       const list = new MessageList().add(messages, 'memory');
       if (format === `v1`) return list.get.all.v1();
@@ -1115,5 +1136,16 @@ export class DynamoDBStore extends MastraStorage {
       // Optionally re-throw or handle as appropriate for your application's error handling strategy
       throw error;
     }
+  }
+
+  async updateMessages(_args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]> {
+    this.logger.error('updateMessages is not yet implemented in DynamoDBStore');
+    throw new Error('Method not implemented');
   }
 }

@@ -4,14 +4,14 @@
   "type": "module",
   "devDependencies": {
     "@changesets/cli": "^2.29.4",
-    "@types/node": "^20.17.57",
+    "@types/node": "^20.19.0",
     "husky": "^9.1.7",
     "lint-staged": "^15.5.2",
     "npm-run-all2": "^7.0.2",
     "prettier": "^3.5.3",
     "turbo": "^2.5.4",
-    "typescript": "^5.8.2",
-    "vitest": "^3.2.2"
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.3"
   },
   "scripts": {
     "ci:publish": "pnpm publish -r",
@@ -40,6 +40,8 @@
     "test:watch:combined-stores": "pnpm --filter \"./stores/*\" test:watch",
     "test:auth": "pnpm --filter \"./auth/*\" test",
     "test:cli": "pnpm --filter ./packages/cli test",
+    "test:deployer": "pnpm --filter ./packages/deployer test",
+    "test:server": "pnpm --filter ./packages/server test",
     "test:core": "pnpm --filter ./packages/core test --exclude \"./src/tools/tool-builder/**\"",
     "test:mcp": "pnpm --filter ./packages/mcp test",
     "test:rag": "pnpm --filter ./packages/rag test",

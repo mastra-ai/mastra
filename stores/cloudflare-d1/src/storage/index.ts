@@ -1,4 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
@@ -704,6 +705,7 @@ export class D1Store extends MastraStorage {
 
     try {
       const now = new Date();
+      const threadId = messages[0]?.threadId;
 
       // Validate all messages before insert
       for (const [i, message] of messages.entries()) {
@@ -731,10 +733,18 @@ export class D1Store extends MastraStorage {
         };
       });
 
-      await this.batchInsert({
-        tableName: TABLE_MESSAGES,
-        records: messagesToInsert,
-      });
+      // Insert messages and update thread's updatedAt in parallel
+      await Promise.all([
+        this.batchInsert({
+          tableName: TABLE_MESSAGES,
+          records: messagesToInsert,
+        }),
+        // Update thread's updatedAt timestamp
+        this.executeQuery({
+          sql: `UPDATE ${this.getTableName(TABLE_THREADS)} SET updatedAt = ? WHERE id = ?`,
+          params: [now.toISOString(), threadId],
+        }),
+      ]);
 
       this.logger.debug(`Saved ${messages.length} messages`);
       const list = new MessageList().add(messages, 'memory');
@@ -805,7 +815,7 @@ export class D1Store extends MastraStorage {
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const fullTableName = this.getTableName(TABLE_MESSAGES);
-    const limit = typeof selectBy?.last === 'number' ? selectBy.last : 40;
+    const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
     const include = selectBy?.include || [];
     const messages: any[] = [];
 
@@ -1500,5 +1510,16 @@ export class D1Store extends MastraStorage {
   async close(): Promise<void> {
     this.logger.debug('Closing D1 connection');
     // No explicit cleanup needed for D1
+  }
+
+  async updateMessages(_args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]> {
+    this.logger.error('updateMessages is not yet implemented in CloudflareD1Store');
+    throw new Error('Method not implemented');
   }
 }

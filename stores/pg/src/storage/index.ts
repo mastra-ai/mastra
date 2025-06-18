@@ -1,5 +1,5 @@
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
 import type { MetricResult } from '@mastra/core/eval';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
@@ -96,9 +96,14 @@ export class PostgresStore extends MastraStorage {
   }
 
   private getTableName(indexName: string) {
-    const parsedIndexName = parseSqlIdentifier(indexName, 'table name');
-    const parsedSchemaName = this.schema ? parseSqlIdentifier(this.schema, 'schema name') : undefined;
-    return parsedSchemaName ? `${parsedSchemaName}."${parsedIndexName}"` : `"${parsedIndexName}"`;
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    const quotedIndexName = `"${parsedIndexName}"`;
+    const quotedSchemaName = this.getSchemaName();
+    return quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName;
+  }
+
+  private getSchemaName() {
+    return this.schema ? `"${parseSqlIdentifier(this.schema, 'schema name')}"` : undefined;
   }
 
   /** @deprecated use getEvals instead */
@@ -311,7 +316,7 @@ export class PostgresStore extends MastraStorage {
 
           if (!schemaExists?.exists) {
             try {
-              await this.db.none(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);
+              await this.db.none(`CREATE SCHEMA IF NOT EXISTS ${this.getSchemaName()}`);
               this.logger.info(`Schema "${this.schema}" created successfully`);
             } catch (error) {
               this.logger.error(`Failed to create schema "${this.schema}"`, { error });
@@ -694,36 +699,28 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  /**
-   * @deprecated use getMessagesPaginated instead
-   */
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages(
-    args: StorageGetMessagesArg & {
-      format?: 'v1' | 'v2';
-    },
-  ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    const { threadId, format, selectBy } = args;
+  private async _getIncludedMessages({
+    threadId,
+    selectBy,
+    orderByStatement,
+  }: {
+    threadId: string;
+    selectBy: StorageGetMessagesArg['selectBy'];
+    orderByStatement: string;
+  }) {
+    const include = selectBy?.include;
+    if (!include) return null;
 
-    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId"`;
-    const orderByStatement = `ORDER BY "createdAt" DESC`;
+    const unionQueries: string[] = [];
+    const params: any[] = [];
+    let paramIdx = 1;
 
-    try {
-      let rows: any[] = [];
-      const include = selectBy?.include || [];
-
-      if (include.length) {
-        const unionQueries: string[] = [];
-        const params: any[] = [];
-        let paramIdx = 1;
-
-        for (const inc of include) {
-          const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-          // if threadId is provided, use it, otherwise use threadId from args
-          const searchId = inc.threadId || threadId;
-          unionQueries.push(
-            `
+    for (const inc of include) {
+      const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      // if threadId is provided, use it, otherwise use threadId from args
+      const searchId = inc.threadId || threadId;
+      unionQueries.push(
+        `
             SELECT * FROM (
               WITH ordered_messages AS (
                 SELECT 
@@ -753,38 +750,60 @@ export class PostgresStore extends MastraStorage {
                   (m.row_num >= target.row_num - $${paramIdx + 3} AND m.row_num < target.row_num)
                 )
               )
-            ) 
+            ) AS query_${paramIdx}
             `, // Keep ASC for final sorting after fetching context
-          );
-          params.push(searchId, id, withPreviousMessages, withNextMessages);
-          paramIdx += 4;
-        }
-        const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
-        const includedRows = await this.db.manyOrNone(finalQuery, params);
-        const seen = new Set<string>();
-        const dedupedRows = includedRows.filter(row => {
-          if (seen.has(row.id)) return false;
-          seen.add(row.id);
-          return true;
-        });
-        rows = dedupedRows;
-      } else {
-        const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
-        if (limit === 0 && selectBy?.last !== false) {
-          // if last is explicitly false, we fetch all
-          // Do nothing, rows will be empty, and we return empty array later.
-        } else {
-          let query = `${selectStatement} FROM ${this.getTableName(
-            TABLE_MESSAGES,
-          )} WHERE thread_id = $1 ${orderByStatement}`;
-          const queryParams: any[] = [threadId];
-          if (limit !== undefined && selectBy?.last !== false) {
-            query += ` LIMIT $2`;
-            queryParams.push(limit);
-          }
-          rows = await this.db.manyOrNone(query, queryParams);
+      );
+      params.push(searchId, id, withPreviousMessages, withNextMessages);
+      paramIdx += 4;
+    }
+    const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
+    const includedRows = await this.db.manyOrNone(finalQuery, params);
+    const seen = new Set<string>();
+    const dedupedRows = includedRows.filter(row => {
+      if (seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    });
+    return dedupedRows;
+  }
+
+  /**
+   * @deprecated use getMessagesPaginated instead
+   */
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages(
+    args: StorageGetMessagesArg & {
+      format?: 'v1' | 'v2';
+    },
+  ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    const { threadId, format, selectBy } = args;
+
+    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId"`;
+    const orderByStatement = `ORDER BY "createdAt" DESC`;
+    const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
+
+    try {
+      let rows: any[] = [];
+      const include = selectBy?.include || [];
+
+      if (include?.length) {
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+        if (includeMessages) {
+          rows.push(...includeMessages);
         }
       }
+
+      const excludeIds = rows.map(m => m.id);
+      const excludeIdsParam = excludeIds.map((_, idx) => `$${idx + 2}`).join(', ');
+      let query = `${selectStatement} FROM ${this.getTableName(TABLE_MESSAGES)} WHERE thread_id = $1 
+        ${excludeIds.length ? `AND id NOT IN (${excludeIdsParam})` : ''}
+        ${orderByStatement}
+        LIMIT $${excludeIds.length + 2}
+        `;
+      const queryParams: any[] = [threadId, ...excludeIds, limit];
+      const remainingRows = await this.db.manyOrNone(query, queryParams);
+      rows.push(...remainingRows);
 
       const fetchedMessages = (rows || []).map(message => {
         if (typeof message.content === 'string') {
@@ -828,6 +847,15 @@ export class PostgresStore extends MastraStorage {
     const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId"`;
     const orderByStatement = `ORDER BY "createdAt" DESC`;
 
+    const messages: MastraMessageV2[] = [];
+
+    if (selectBy?.include?.length) {
+      const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+      if (includeMessages) {
+        messages.push(...includeMessages);
+      }
+    }
+
     try {
       const perPage = perPageInput !== undefined ? perPageInput : 40;
       const currentOffset = page * perPage;
@@ -864,8 +892,9 @@ export class PostgresStore extends MastraStorage {
         TABLE_MESSAGES,
       )} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
       const rows = await this.db.manyOrNone(dataQuery, [...queryParams, perPage, currentOffset]);
+      messages.push(...(rows || []));
 
-      const list = new MessageList().add(rows || [], 'memory');
+      const list = new MessageList().add(messages, 'memory');
       const messagesToReturn = format === `v2` ? list.get.all.v2() : list.get.all.v1();
 
       return {
@@ -904,7 +933,8 @@ export class PostgresStore extends MastraStorage {
       }
 
       await this.db.tx(async t => {
-        for (const message of messages) {
+        // Execute message inserts and thread update in parallel for better performance
+        const messageInserts = messages.map(message => {
           if (!message.threadId) {
             throw new Error(
               `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
@@ -915,7 +945,7 @@ export class PostgresStore extends MastraStorage {
               `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
             );
           }
-          await t.none(
+          return t.none(
             `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type, "resourceId") 
              VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [
@@ -928,7 +958,16 @@ export class PostgresStore extends MastraStorage {
               message.resourceId,
             ],
           );
-        }
+        });
+
+        const threadUpdate = t.none(
+          `UPDATE ${this.getTableName(TABLE_THREADS)} 
+           SET "updatedAt" = $1 
+           WHERE id = $2`,
+          [new Date().toISOString(), threadId],
+        );
+
+        await Promise.all([...messageInserts, threadUpdate]);
       });
 
       const list = new MessageList().add(messages, 'memory');
@@ -1227,5 +1266,135 @@ export class PostgresStore extends MastraStorage {
       perPage,
       hasMore: currentOffset + (rows?.length ?? 0) < total,
     };
+  }
+
+  async updateMessages({
+    messages,
+  }: {
+    messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
+      id: string;
+      content?: {
+        metadata?: MastraMessageContentV2['metadata'];
+        content?: MastraMessageContentV2['content'];
+      };
+    })[];
+  }): Promise<MastraMessageV2[]> {
+    if (messages.length === 0) {
+      return [];
+    }
+
+    const messageIds = messages.map(m => m.id);
+
+    const selectQuery = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId" FROM ${this.getTableName(
+      TABLE_MESSAGES,
+    )} WHERE id IN ($1:list)`;
+
+    const existingMessagesDb = await this.db.manyOrNone(selectQuery, [messageIds]);
+
+    if (existingMessagesDb.length === 0) {
+      return [];
+    }
+
+    // Parse content from string to object for merging
+    const existingMessages: MastraMessageV2[] = existingMessagesDb.map(msg => {
+      if (typeof msg.content === 'string') {
+        try {
+          msg.content = JSON.parse(msg.content);
+        } catch {
+          // ignore if not valid json
+        }
+      }
+      return msg as MastraMessageV2;
+    });
+
+    const threadIdsToUpdate = new Set<string>();
+
+    await this.db.tx(async t => {
+      const queries = [];
+      const columnMapping: Record<string, string> = {
+        threadId: 'thread_id',
+      };
+
+      for (const existingMessage of existingMessages) {
+        const updatePayload = messages.find(m => m.id === existingMessage.id);
+        if (!updatePayload) continue;
+
+        const { id, ...fieldsToUpdate } = updatePayload;
+        if (Object.keys(fieldsToUpdate).length === 0) continue;
+
+        threadIdsToUpdate.add(existingMessage.threadId!);
+        if (updatePayload.threadId && updatePayload.threadId !== existingMessage.threadId) {
+          threadIdsToUpdate.add(updatePayload.threadId);
+        }
+
+        const setClauses: string[] = [];
+        const values: any[] = [];
+        let paramIndex = 1;
+
+        const updatableFields = { ...fieldsToUpdate };
+
+        // Special handling for content: merge in code, then update the whole field
+        if (updatableFields.content) {
+          const newContent = {
+            ...existingMessage.content,
+            ...updatableFields.content,
+            // Deep merge metadata if it exists on both
+            ...(existingMessage.content?.metadata && updatableFields.content.metadata
+              ? {
+                  metadata: {
+                    ...existingMessage.content.metadata,
+                    ...updatableFields.content.metadata,
+                  },
+                }
+              : {}),
+          };
+          setClauses.push(`content = $${paramIndex++}`);
+          values.push(newContent);
+          delete updatableFields.content;
+        }
+
+        for (const key in updatableFields) {
+          if (Object.prototype.hasOwnProperty.call(updatableFields, key)) {
+            const dbColumn = columnMapping[key] || key;
+            setClauses.push(`"${dbColumn}" = $${paramIndex++}`);
+            values.push(updatableFields[key as keyof typeof updatableFields]);
+          }
+        }
+
+        if (setClauses.length > 0) {
+          values.push(id);
+          const sql = `UPDATE ${this.getTableName(
+            TABLE_MESSAGES,
+          )} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`;
+          queries.push(t.none(sql, values));
+        }
+      }
+
+      if (threadIdsToUpdate.size > 0) {
+        queries.push(
+          t.none(`UPDATE ${this.getTableName(TABLE_THREADS)} SET "updatedAt" = NOW() WHERE id IN ($1:list)`, [
+            Array.from(threadIdsToUpdate),
+          ]),
+        );
+      }
+
+      if (queries.length > 0) {
+        await t.batch(queries);
+      }
+    });
+
+    // Re-fetch to return the fully updated messages
+    const updatedMessages = await this.db.manyOrNone<MastraMessageV2>(selectQuery, [messageIds]);
+
+    return (updatedMessages || []).map(message => {
+      if (typeof message.content === 'string') {
+        try {
+          message.content = JSON.parse(message.content);
+        } catch {
+          /* ignore */
+        }
+      }
+      return message;
+    });
   }
 }

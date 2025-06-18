@@ -1,4 +1,5 @@
 import { MessageList } from '@mastra/core/agent';
+import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type {
@@ -265,7 +266,7 @@ export class MongoDBStore extends MastraStorage {
     format?: 'v1' | 'v2';
   }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
-      const limit = typeof selectBy?.last === 'number' ? selectBy.last : 40;
+      const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
       const include = selectBy?.include || [];
       let messages: MastraMessageV2[] = [];
       let allMessages: MastraMessageV2[] = [];
@@ -344,6 +345,7 @@ export class MongoDBStore extends MastraStorage {
       this.logger.error('Thread ID is required to save messages');
       throw new Error('Thread ID is required');
     }
+
     try {
       // Prepare batch statements for all messages
       const messagesToInsert = messages.map(message => {
@@ -359,9 +361,15 @@ export class MongoDBStore extends MastraStorage {
         };
       });
 
-      // Execute all inserts in a single batch
+      // Execute message inserts and thread update in parallel for better performance
       const collection = await this.getCollection(TABLE_MESSAGES);
-      await collection.insertMany(messagesToInsert);
+      const threadsCollection = await this.getCollection(TABLE_THREADS);
+
+      await Promise.all([
+        collection.insertMany(messagesToInsert),
+        threadsCollection.updateOne({ id: threadId }, { $set: { updatedAt: new Date() } }),
+      ]);
+
       const list = new MessageList().add(messages, 'memory');
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
@@ -733,5 +741,16 @@ export class MongoDBStore extends MastraStorage {
 
   async close(): Promise<void> {
     await this.#client.close();
+  }
+
+  async updateMessages(_args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]> {
+    this.logger.error('updateMessages is not yet implemented in MongoDBStore');
+    throw new Error('Method not implemented');
   }
 }
