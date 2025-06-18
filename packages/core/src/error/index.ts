@@ -10,6 +10,8 @@ export enum ErrorDomain {
   MASTRA_VECTOR = 'MASTRA_VECTOR',
   LLM = 'LLM',
   UNKNOWN = 'UNKNOWN',
+  EVAL = 'EVAL',
+  MASTRA = 'MASTRA',
   DEPLOYER = 'DEPLOYER',
 }
 
