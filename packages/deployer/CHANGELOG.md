@@ -1,5 +1,52 @@
 # @mastra/deployer
 
+## 0.10.6
+
+### Patch Changes
+
+- 4051477: dependencies updates:
+  - Updated dependency [`@rollup/plugin-commonjs@^28.0.5` ↗︎](https://www.npmjs.com/package/@rollup/plugin-commonjs/v/28.0.5) (from `^28.0.3`, in `dependencies`)
+- 2d12edd: dependencies updates:
+  - Updated dependency [`rollup@^4.43.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.43.0) (from `^4.42.0`, in `dependencies`)
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`detect-libc@^2.0.4` ↗︎](https://www.npmjs.com/package/detect-libc/v/2.0.4) (from `^2.0.3`, in `dependencies`)
+  - Updated dependency [`esbuild@^0.25.5` ↗︎](https://www.npmjs.com/package/esbuild/v/0.25.5) (from `^0.25.1`, in `dependencies`)
+  - Updated dependency [`rollup@^4.42.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.42.0) (from `^4.41.1`, in `dependencies`)
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+- c28ed65: dependencies updates:
+  - Updated dependency [`@rollup/plugin-commonjs@^28.0.5` ↗︎](https://www.npmjs.com/package/@rollup/plugin-commonjs/v/28.0.5) (from `^28.0.3`, in `dependencies`)
+- 79b9909: Optimize dependencies of tools even when unused.
+
+  Fixes #5149
+
+- ee9af57: Add api for polling run execution result and get run by id
+- ec7f824: Add support to improve lodash imports
+- 36f1c36: MCP Client and Server streamable http fixes
+- 084f6aa: Add logs to circular dependency to warn people when starting server might break
+- 9589624: Throw Mastra Errors when building and bundling mastra application
+- 3270d9d: Fix runtime context being undefined
+- 53d3c37: Get workflows from an agent if not found from Mastra instance #5083
+- Updated dependencies [63f6b7d]
+- Updated dependencies [5f67b6f]
+- Updated dependencies [12a95fc]
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+- Updated dependencies [d70c420]
+- Updated dependencies [ee9af57]
+- Updated dependencies [36f1c36]
+- Updated dependencies [2a16996]
+- Updated dependencies [10d352e]
+- Updated dependencies [9589624]
+- Updated dependencies [2002c59]
+- Updated dependencies [3270d9d]
+- Updated dependencies [53d3c37]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6
+  - @mastra/server@0.10.6
+
 ## 0.10.6-alpha.5
 
 ### Patch Changes
