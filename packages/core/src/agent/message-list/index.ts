@@ -15,6 +15,7 @@ export type MastraMessageContentV2 = {
   toolInvocations?: UIMessage['toolInvocations'];
   reasoning?: UIMessage['reasoning'];
   annotations?: UIMessage['annotations'];
+  metadata?: Record<string, unknown>;
 };
 
 export type MastraMessageV2 = {
