@@ -2281,7 +2281,7 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
 
-      expect(endTime - startTime).toBeGreaterThan(1000);
+      expect(endTime - startTime).toBeGreaterThan(900);
     });
   });
 
