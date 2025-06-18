@@ -67,6 +67,38 @@ An optional object that can include configuration for output structure, memory m
         "Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.",
     },
     {
+      name: "memory",
+      type: "object",
+      isOptional: true,
+      description: "Configuration for memory. This is the preferred way to manage memory.",
+      properties: [
+        {
+          parameters: [{
+              name: "thread",
+              type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
+              isOptional: false,
+              description: "The conversation thread, as a string ID or an object with an `id` and optional `metadata`."
+          }]
+        },
+        {
+          parameters: [{
+              name: "resource",
+              type: "string",
+              isOptional: false,
+              description: "Identifier for the user or resource associated with the thread."
+          }]
+        },
+        {
+          parameters: [{
+              name: "options",
+              type: "MemoryConfig",
+              isOptional: true,
+              description: "Configuration for memory behavior, like message history and semantic recall. See `MemoryConfig` below."
+          }]
+        }
+      ]
+    },
+    {
       name: "maxSteps",
       type: "number",
       isOptional: true,
@@ -85,7 +117,7 @@ An optional object that can include configuration for output structure, memory m
       type: "MemoryConfig",
       isOptional: true,
       description:
-        "Configuration options for memory management. See MemoryConfig section below for details.",
+        "**Deprecated.** Use `memory.options` instead. Configuration options for memory management. See MemoryConfig section below for details.",
     },
     {
       name: "onStepFinish",
@@ -99,7 +131,7 @@ An optional object that can include configuration for output structure, memory m
       type: "string",
       isOptional: true,
       description:
-        "Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
+        "**Deprecated.** Use `memory.resource` instead. Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
     },
     {
       name: "telemetry",
@@ -120,7 +152,7 @@ An optional object that can include configuration for output structure, memory m
       type: "string",
       isOptional: true,
       description:
-        "Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
+        "**Deprecated.** Use `memory.thread` instead. Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
     },
     {
       name: "toolChoice",

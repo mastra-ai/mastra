@@ -332,7 +332,6 @@ describe('Agent.fetchMemory', () => {
       resourceId,
     });
 
-    // @ts-expect-error fetchMemory is deprecated and for internal use.
     const { messages } = await weatherAgent.fetchMemory({ threadId, resourceId });
 
     expect(messages).toBeDefined();
@@ -343,7 +342,7 @@ describe('Agent.fetchMemory', () => {
     const userMessage = messages.find(m => m.role === 'user');
     expect(userMessage).toBeDefined();
     if (!userMessage) return;
-    expect(userMessage.content).toEqual('Just a simple greeting to populate memory.');
+    expect(userMessage.content[0]).toEqual({ type: 'text', text: 'Just a simple greeting to populate memory.' });
 
     const assistantMessage = messages.find(m => m.role === 'assistant');
     expect(assistantMessage).toBeDefined();
@@ -357,7 +356,6 @@ describe('Agent.fetchMemory', () => {
 
     await memoryProcessorAgent.generate('What is the weather in London?', { threadId, resourceId });
 
-    // @ts-expect-error fetchMemory is deprecated and for internal use.
     const { messages } = await memoryProcessorAgent.fetchMemory({ threadId, resourceId });
 
     expect(messages).toBeDefined();
@@ -371,17 +369,16 @@ describe('Agent.fetchMemory', () => {
     const userMessage = messages.find(m => m.role === 'user');
     expect(userMessage).toBeDefined();
     if (!userMessage) return;
-    expect(userMessage.content).toEqual('What is the weather in London?');
+    expect(userMessage.content[0]).toEqual({ type: 'text', text: 'What is the weather in London?' });
   }, 30_000);
 
   it('should return nothing if thread does not exist', async () => {
     const threadId = randomUUID();
     const resourceId = 'fetch-memory-no-thread';
 
-    // @ts-expect-error fetchMemory is deprecated and for internal use.
     const result = await weatherAgent.fetchMemory({ threadId, resourceId });
 
-    expect(result.messages).toBeUndefined();
+    expect(result.messages).toEqual([]);
     expect(result.threadId).toBe(threadId);
   });
 });

@@ -1,5 +1,29 @@
 # @mastra/voice-murf
 
+## 0.10.3
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`ky@^1.8.1` ↗︎](https://www.npmjs.com/package/ky/v/1.8.1) (from `^1.7.5`, in `dependencies`)
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [12a95fc]
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+- Updated dependencies [d70c420]
+- Updated dependencies [ee9af57]
+- Updated dependencies [36f1c36]
+- Updated dependencies [2a16996]
+- Updated dependencies [10d352e]
+- Updated dependencies [9589624]
+- Updated dependencies [53d3c37]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6
+
 ## 0.10.3-alpha.0
 
 ### Patch Changes
