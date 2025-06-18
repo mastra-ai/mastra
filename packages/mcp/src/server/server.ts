@@ -2,8 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type * as http from 'node:http';
 import type { InternalCoreTool } from '@mastra/core';
 import { createTool, makeCoreTool } from '@mastra/core';
-import type { ToolsInput } from '@mastra/core/agent';
-import { Agent } from '@mastra/core/agent';
+import type { ToolsInput, Agent } from '@mastra/core/agent';
 import { MCPServerBase } from '@mastra/core/mcp';
 import type {
   MCPServerConfig,
@@ -187,7 +186,7 @@ export class MCPServer extends MCPServerBase {
 
     for (const agentKey in agentsConfig) {
       const agent = agentsConfig[agentKey];
-      if (!agent || !(agent instanceof Agent)) {
+      if (!agent || !('generate' in agent)) {
         this.logger.warn(`Agent instance for '${agentKey}' is invalid or missing a generate function. Skipping.`);
         continue;
       }
