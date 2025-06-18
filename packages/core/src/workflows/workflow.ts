@@ -111,6 +111,30 @@ export type SerializedStepFlowEntry =
       };
     };
 
+export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
+  step,
+  path,
+}: {
+  step: TStep;
+  path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '.';
+}): {
+  step: TStep;
+  path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '.';
+};
+export function mapVariable<TWorkflow extends Workflow<any, any, any, any, any, any>>({
+  initData: TWorkflow,
+  path,
+}: {
+  initData: TWorkflow;
+  path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TWorkflow, 'inputSchema'>>> | '.';
+}): {
+  initData: TWorkflow;
+  path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TWorkflow, 'inputSchema'>>> | '.';
+};
+export function mapVariable(config: any): any {
+  return config;
+}
+
 /**
  * Creates a new workflow step
  * @param params Configuration parameters for the step
@@ -606,26 +630,27 @@ export class Workflow<
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
-  map<
-    TSteps extends Step<string, any, any, any, any, TEngineType>[],
-    TMapping extends {
-      [K in keyof TMapping]:
-        | {
-            step: TSteps[number] | TSteps[number][];
-            path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'outputSchema'>>> | '.';
-          }
-        | { value: any; schema: z.ZodTypeAny }
-        | {
-            initData: TSteps[number];
-            path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'inputSchema'>>> | '.';
-          }
-        | {
-            runtimeContextPath: string;
-            schema: z.ZodTypeAny;
-          }
-        | DynamicMapping<TPrevSchema, z.ZodTypeAny>;
-    },
-  >(mappingConfig: TMapping | ExecuteFunction<z.infer<TPrevSchema>, any, any, any, TEngineType>) {
+  map(
+    mappingConfig:
+      | {
+          [k: string]:
+            | {
+                step: Step<string, any, any, any, any, TEngineType> | Step<string, any, any, any, any, TEngineType>[];
+                path: string;
+              }
+            | { value: any; schema: z.ZodTypeAny }
+            | {
+                initData: Workflow<TEngineType, any, any, any, any, any>;
+                path: string;
+              }
+            | {
+                runtimeContextPath: string;
+                schema: z.ZodTypeAny;
+              }
+            | DynamicMapping<TPrevSchema, z.ZodTypeAny>;
+        }
+      | ExecuteFunction<z.infer<TPrevSchema>, any, any, any, TEngineType>,
+  ) {
     // Create an implicit step that handles the mapping
     if (typeof mappingConfig === 'function') {
       // @ts-ignore
@@ -721,31 +746,7 @@ export class Workflow<
       },
     });
 
-    type MappedOutputSchema = z.ZodObject<
-      {
-        [K in keyof TMapping]: TMapping[K] extends {
-          step: TSteps[number];
-          path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'outputSchema'>>>;
-        }
-          ? TMapping[K]['path'] extends '.'
-            ? TMapping[K]['step']['outputSchema']
-            : ZodPathType<TMapping[K]['step']['outputSchema'], TMapping[K]['path']>
-          : TMapping[K] extends {
-                initData: TSteps[number];
-                path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'inputSchema'>>>;
-              }
-            ? TMapping[K]['path'] extends '.'
-              ? TMapping[K]['initData']['inputSchema']
-              : ZodPathType<TMapping[K]['initData']['inputSchema'], TMapping[K]['path']>
-            : TMapping[K] extends { schema: z.ZodTypeAny }
-              ? TMapping[K]['schema']
-              : TMapping[K] extends { runtimeContextPath: string; schema: z.ZodTypeAny }
-                ? TMapping[K]['schema']
-                : never;
-      },
-      any,
-      z.ZodTypeAny
-    >;
+    type MappedOutputSchema = z.ZodObject<any, any, z.ZodTypeAny>;
 
     this.stepFlow.push({ type: 'step', step: mappingStep as any });
     this.serializedStepFlow.push({
