@@ -361,6 +361,55 @@ describe('PostgresStore', () => {
       expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
       expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
     });
+
+    it('should return messages using both last and include (cross-thread, deduped)', async () => {
+      const thread = createSampleThread({ id: 'thread-one' });
+      await store.saveThread({ thread });
+
+      const thread2 = createSampleThread({ id: 'thread-two' });
+      await store.saveThread({ thread: thread2 });
+
+      const now = new Date();
+
+      // Setup: create messages in two threads
+      const messages = [
+        createSampleMessageV2({ threadId: 'thread-one', content: 'A', createdAt: new Date(now.getTime()) }),
+        createSampleMessageV2({ threadId: 'thread-one', content: 'B', createdAt: new Date(now.getTime() + 1000) }),
+        createSampleMessageV2({ threadId: 'thread-one', content: 'C', createdAt: new Date(now.getTime() + 2000) }),
+        createSampleMessageV2({ threadId: 'thread-two', content: 'D', createdAt: new Date(now.getTime() + 3000) }),
+        createSampleMessageV2({ threadId: 'thread-two', content: 'E', createdAt: new Date(now.getTime() + 4000) }),
+        createSampleMessageV2({ threadId: 'thread-two', content: 'F', createdAt: new Date(now.getTime() + 5000) }),
+      ];
+      await store.saveMessages({ messages, format: 'v2' });
+
+      // Use last: 2 and include a message from another thread with context
+      const result = await store.getMessages({
+        threadId: 'thread-one',
+        format: 'v2',
+        selectBy: {
+          last: 2,
+          include: [
+            {
+              id: messages[4].id, // 'E' from thread-bar
+              threadId: 'thread-two',
+              withPreviousMessages: 1,
+              withNextMessages: 1,
+            },
+          ],
+        },
+      });
+
+      // Should include last 2 from thread-foo and 3 from thread-bar (D, E, F)
+      expect(result.map(m => m.content.parts[0].text).sort()).toEqual(['B', 'C', 'D', 'E', 'F']);
+      // Should include 2 from thread-foo
+      expect(result.filter(m => m.threadId === 'thread-one').map(m => m.content.parts[0].text)).toEqual(['B', 'C']);
+      // Should include 3 from thread-bar
+      expect(result.filter(m => m.threadId === 'thread-two').map(m => m.content.parts[0].text)).toEqual([
+        'D',
+        'E',
+        'F',
+      ]);
+    });
   });
 
   describe('Edge Cases and Error Handling', () => {
