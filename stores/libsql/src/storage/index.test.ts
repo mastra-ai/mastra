@@ -6,9 +6,9 @@ import {
   createTestSuite,
   createSampleMessageV1,
   resetRole,
+  createSampleMessageV2,
 } from '@internal/storage-test-utils';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core';
-import type { MastraMessageV2, MastraMessageContentV2 } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { TABLE_EVALS, TABLE_TRACES, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
@@ -367,35 +367,6 @@ describe('LibSQLStore Pagination Features', () => {
 describe('LibSQLStore updateMessages', () => {
   let store: LibSQLStore;
   let thread: StorageThreadType;
-
-  const createSampleMessageV2 = ({
-    threadId,
-    resourceId,
-    role = 'user',
-    content,
-    createdAt,
-  }: {
-    threadId: string;
-    resourceId?: string;
-    role?: 'user' | 'assistant';
-    content?: Partial<MastraMessageContentV2>;
-    createdAt?: Date;
-  }): MastraMessageV2 => {
-    return {
-      id: randomUUID(),
-      threadId,
-      resourceId: resourceId || thread.resourceId,
-      role,
-      createdAt: createdAt || new Date(),
-      content: {
-        format: 2,
-        parts: content?.parts || [],
-        content: content?.content || `Sample content ${randomUUID()}`,
-        ...content,
-      },
-      type: 'v2',
-    };
-  };
 
   beforeAll(async () => {
     store = libsql;
