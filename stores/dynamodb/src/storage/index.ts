@@ -579,7 +579,7 @@ export class DynamoDBStore extends MastraStorage {
       // Provide *all* composite key components for the 'byThread' index ('entity', 'threadId')
       const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
 
-      const limit = this.resolveMessageLimit({ last: selectBy?.last });
+      const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
       // Apply the 'last' limit if provided
       if (limit !== Number.MAX_SAFE_INTEGER) {
         // Use ElectroDB's limit parameter

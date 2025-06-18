@@ -734,7 +734,7 @@ export class UpstashStore extends MastraStorage {
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
     const allMessageIds = await this.redis.zrange(threadMessagesKey, 0, -1);
-    const limit = this.resolveMessageLimit({ last: selectBy?.last });
+    const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
 
     const messageIds = new Set<string>();
     const messageIdToThreadIds: Record<string, string> = {};

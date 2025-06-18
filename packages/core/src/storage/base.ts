@@ -73,11 +73,11 @@ export abstract class MastraStorage extends MastraBase {
    */
   protected resolveMessageLimit({
     last,
-    defaultLimit = Number.MAX_SAFE_INTEGER,
+    defaultLimit,
   }: {
     last: number | false | undefined;
-    defaultLimit?: number;
-  }) {
+    defaultLimit: number;
+  }): number {
     // TODO: Figure out consistent default limit for all stores as some stores use 40 and some use no limit (Number.MAX_SAFE_INTEGER)
     if (typeof last === 'number') return Math.max(0, last);
     if (last === false) return 0;

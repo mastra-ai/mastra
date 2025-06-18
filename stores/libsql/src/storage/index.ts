@@ -577,7 +577,7 @@ export class LibSQLStore extends MastraStorage {
   }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
       const messages: MastraMessageV2[] = [];
-      const limit = this.resolveMessageLimit({ last: selectBy?.last });
+      const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
       if (selectBy?.include?.length) {
         const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
         if (includeMessages) {

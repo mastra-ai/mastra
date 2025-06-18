@@ -617,7 +617,7 @@ export class LanceStorage extends MastraStorage {
       if (threadConfig) {
         throw new Error('ThreadConfig is not supported by LanceDB storage');
       }
-      const limit = this.resolveMessageLimit({ last: selectBy?.last });
+      const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
       const table = await this.lanceClient.openTable(TABLE_MESSAGES);
       let query = table.query().where(`\`threadId\` = '${threadId}'`);
 

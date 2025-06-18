@@ -789,7 +789,6 @@ export class PostgresStore extends MastraStorage {
 
       if (include?.length) {
         const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
-        console.log('includeMessages', includeMessages);
         if (includeMessages) {
           rows.push(...includeMessages);
         }
@@ -802,10 +801,8 @@ export class PostgresStore extends MastraStorage {
         ${orderByStatement}
         LIMIT $${excludeIds.length + 2}
         `;
-      console.log('query', query);
       const queryParams: any[] = [threadId, ...excludeIds, limit];
       const remainingRows = await this.db.manyOrNone(query, queryParams);
-      console.log('remainingRows', remainingRows);
       rows.push(...remainingRows);
 
       const fetchedMessages = (rows || []).map(message => {
