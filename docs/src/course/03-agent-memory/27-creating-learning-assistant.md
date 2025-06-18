@@ -7,9 +7,17 @@ Let's create a practical example of a memory-enhanced agent: a Personal Learning
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 // Create a specialized memory configuration for the learning assistant
 const learningMemory = new Memory({
+  storage: new LibSQLStore({
+    url: "file:../../memory.db", // relative path from the `.mastra/output` directory
+  }),
+  vector: new LibSQLVector({
+    connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
+  }),
+  embedder: openai.embedding("text-embedding-3-small"),
   options: {
     lastMessages: 20,
     semanticRecall: {
@@ -21,7 +29,6 @@ const learningMemory = new Memory({
     },
     workingMemory: {
       enabled: true,
-      use: "tool-call",
       template: `
 # Learner Profile
 
