@@ -1074,7 +1074,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         type: 'step-waiting',
         payload: {
           id: entry.id,
-          payload: prevOutput,
         },
       });
       await this.persistStepUpdate({
@@ -1137,7 +1136,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         type: 'step-waiting',
         payload: {
           id: entry.id,
-          payload: prevOutput,
         },
       });
 
@@ -1173,49 +1171,48 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } else if (entry.type === 'waitForEvent') {
       const startedAt = Date.now();
       let eventData: any;
-      try {
-        await emitter.emit('watch', {
-          type: 'watch',
-          payload: {
-            currentStep: {
-              id: entry.step.id,
-              status: 'waiting',
-              payload: prevOutput,
-              startedAt,
-            },
-            workflowState: {
-              status: 'waiting',
-              steps: {
-                ...stepResults,
-                [entry.step.id]: {
-                  status: 'waiting',
-                  payload: prevOutput,
-                  startedAt,
-                },
-              },
-              result: null,
-              error: null,
-            },
-          },
-          eventTimestamp: Date.now(),
-        });
-        await emitter.emit('watch-v2', {
-          type: 'step-waiting',
-          payload: {
+      await emitter.emit('watch', {
+        type: 'watch',
+        payload: {
+          currentStep: {
             id: entry.step.id,
+            status: 'waiting',
             payload: prevOutput,
+            startedAt,
           },
-        });
+          workflowState: {
+            status: 'waiting',
+            steps: {
+              ...stepResults,
+              [entry.step.id]: {
+                status: 'waiting',
+                payload: prevOutput,
+                startedAt,
+              },
+            },
+            result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: Date.now(),
+      });
+      await emitter.emit('watch-v2', {
+        type: 'step-waiting',
+        payload: {
+          id: entry.step.id,
+        },
+      });
 
-        await this.persistStepUpdate({
-          workflowId,
-          runId,
-          serializedStepGraph,
-          stepResults,
-          executionContext,
-          workflowStatus: 'waiting',
-        });
+      await this.persistStepUpdate({
+        workflowId,
+        runId,
+        serializedStepGraph,
+        stepResults,
+        executionContext,
+        workflowStatus: 'waiting',
+      });
 
+      try {
         eventData = await this.executeWaitForEvent({ event: entry.event, emitter, timeout: entry.timeout });
 
         await this.persistStepUpdate({
