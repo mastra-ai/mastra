@@ -64,6 +64,26 @@ export abstract class MastraStorage extends MastraBase {
     return dateObj?.toISOString();
   }
 
+  /**
+   * Resolves limit for how many messages to fetch
+   *
+   * @param last The number of messages to fetch
+   * @param defaultLimit The default limit to use if last is not provided
+   * @returns The resolved limit
+   */
+  protected resolveMessageLimit({
+    last,
+    defaultLimit,
+  }: {
+    last: number | false | undefined;
+    defaultLimit: number;
+  }): number {
+    // TODO: Figure out consistent default limit for all stores as some stores use 40 and some use no limit (Number.MAX_SAFE_INTEGER)
+    if (typeof last === 'number') return Math.max(0, last);
+    if (last === false) return 0;
+    return defaultLimit;
+  }
+
   protected getSqlType(type: StorageColumn['type']): string {
     switch (type) {
       case 'text':
