@@ -6272,7 +6272,11 @@ describe('MastraInngestWorkflow', () => {
         payload: {
           result: 'success1',
         },
+        resumePayload: {
+          value: 'eventdata',
+        },
         startedAt: expect.any(Number),
+        resumedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
     });
