@@ -573,11 +573,6 @@ aside > div:nth-child(1) button {
   gap: var(--button-gap);
 }
 
-/*** Docs images ***/
-main > img {
-  margin: 16px 0px;
-}
-
 /*** Table of Contents ***/
 
 .nextra-toc > * {
