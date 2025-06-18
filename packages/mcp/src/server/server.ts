@@ -1342,7 +1342,6 @@ export class MCPServer extends MCPServerBase {
 
       this.logger.debug(`ExecuteTool: Invoking '${toolId}' with arguments:`, args);
 
-      let validatedArgs = args;
       if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse === 'function') {
         const validation = tool.parameters.safeParse(args ?? {});
         if (!validation.success) {
