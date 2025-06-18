@@ -3293,7 +3293,8 @@ ${err.stack.split('\n').slice(1).join('\n')}
   return app;
 }
 
-export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = {}) {
+export async function createNodeServer(mastraInstance: Mastra | Promise<Mastra>, options: ServerBundleOptions = {}) {
+  const mastra:Mastra = await mastraInstance;
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
 
