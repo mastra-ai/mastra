@@ -70,7 +70,9 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
       }),
     );
 
-    const serializedAgents = serializedAgentsMap.reduce<any>((acc, { id, ...rest }) => {
+    const serializedAgents = serializedAgentsMap.reduce<
+      Record<string, Omit<(typeof serializedAgentsMap)[number], 'id'>>
+    >((acc, { id, ...rest }) => {
       acc[id] = rest;
       return acc;
     }, {});
