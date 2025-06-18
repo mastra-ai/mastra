@@ -59,7 +59,7 @@ export function registerApiRoute<P extends string>(
     method: options.method,
     handler: options.handler,
     createHandler: options.createHandler,
-    openapi: options.openapi,
+    openapi: options.openapi ?? {},
     middleware: options.middleware,
   } as ApiRoute;
 }
