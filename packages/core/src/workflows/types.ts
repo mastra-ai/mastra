@@ -53,7 +53,7 @@ export type StepRunning<P, R, S> = {
 };
 
 export type StepWaiting<P, R, S> = {
-  status: 'waiting';
+  status: 'paused';
   payload: P;
   suspendPayload?: S;
   resumePayload?: R;
@@ -116,7 +116,7 @@ export type StreamEvent =
       id: string;
     }
   | {
-      type: 'step-waiting';
+      type: 'step-paused';
       payload: any;
       id: string;
     };
@@ -126,18 +126,18 @@ export type WatchEvent = {
   payload: {
     currentStep?: {
       id: string;
-      status: 'running' | 'success' | 'failed' | 'suspended';
+      status: 'running' | 'success' | 'failed' | 'suspended' | 'paused';
       output?: Record<string, any>;
       resumePayload?: Record<string, any>;
       payload?: Record<string, any>;
       error?: string | Error;
     };
     workflowState: {
-      status: 'running' | 'success' | 'failed' | 'suspended';
+      status: 'running' | 'success' | 'failed' | 'suspended' | 'paused';
       steps: Record<
         string,
         {
-          status: 'running' | 'success' | 'failed' | 'suspended';
+          status: 'running' | 'success' | 'failed' | 'suspended' | 'paused';
           output?: Record<string, any>;
           payload?: Record<string, any>;
           resumePayload?: Record<string, any>;
@@ -173,7 +173,7 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
 export interface WorkflowRunState {
   // Core state info
   runId: string;
-  status: 'success' | 'failed' | 'suspended' | 'running';
+  status: 'success' | 'failed' | 'suspended' | 'running' | 'paused';
   result?: Record<string, any>;
   error?: string | Error;
   value: Record<string, string>;
