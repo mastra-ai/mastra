@@ -5,6 +5,7 @@ import { Mastra } from '@mastra/core';
 import type { CoreMessage } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -12,7 +13,6 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { memoryProcessorAgent, weatherAgent } from './mastra/agents/weather';
 import { weatherTool, weatherToolCity } from './mastra/tools/weather';
-import { MockStore } from '@mastra/core/storage';
 
 describe('Agent Memory Tests', () => {
   const dbFile = 'file:mastra-agent.db';
