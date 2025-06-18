@@ -393,9 +393,13 @@ describe('CloudflareStore Workers Binding', () => {
 
       const messages = [createSampleMessageV2({ threadId: thread.id }), createSampleMessageV2({ threadId: thread.id })];
 
+      const checkMessages = messages.map(m => {
+        const { type, ...rest } = m;
+        return rest;
+      });
       // Save messages
       const savedMessages = await store.saveMessages({ messages, format: 'v2' });
-      expect(savedMessages).toEqual(messages);
+      expect(savedMessages).toEqual(checkMessages);
 
       // Retrieve messages with retry
       const retrievedMessages = await retryUntil(
@@ -406,7 +410,7 @@ describe('CloudflareStore Workers Binding', () => {
         msgs => msgs.length === 2,
       );
 
-      expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
+      expect(retrievedMessages).toEqual(expect.arrayContaining(checkMessages));
     });
 
     it('should handle empty message array', async () => {

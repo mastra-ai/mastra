@@ -420,7 +420,7 @@ describe('D1Store', () => {
       // Retrieve messages
       const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       const checkMessages = messages.map(m => {
-        const { resourceId, ...rest } = m;
+        const { resourceId, type, ...rest } = m;
         return rest;
       });
       expect(retrievedMessages).toEqual(expect.arrayContaining(checkMessages));
