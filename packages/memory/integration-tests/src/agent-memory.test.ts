@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { memoryProcessorAgent, weatherAgent } from './mastra/agents/weather';
 import { weatherTool, weatherToolCity } from './mastra/tools/weather';
+import { MockStore } from '@mastra/core/storage';
 
 describe('Agent Memory Tests', () => {
   const dbFile = 'file:mastra-agent.db';
@@ -386,10 +387,7 @@ describe('Agent.fetchMemory', () => {
 
 describe('Agent memory test gemini', () => {
   const memory = new Memory({
-    storage: new LibSQLStore({
-      // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
-      url: 'file:../../memory.db',
-    }),
+    storage: new MockStore(),
     options: {
       threads: {
         generateTitle: false,
@@ -425,7 +423,5 @@ describe('Agent memory test gemini', () => {
         memory: { resource, thread },
       }),
     ).resolves.not.toThrow();
-
-    // console.log(`request body: ${JSON.stringify(JSON.parse(response.request.body || '{}' as string).contents, null, 2)}`);
   });
 });
