@@ -1,4 +1,5 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
+import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
@@ -1105,14 +1106,7 @@ export class CloudflareStore extends MastraStorage {
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     if (!threadId) throw new Error('threadId is required');
 
-    // Handle selectBy.last type safely - it can be number or false
-    let limit = 40; // Default limit
-    if (typeof selectBy?.last === 'number') {
-      limit = Math.max(0, selectBy.last);
-    } else if (selectBy?.last === false) {
-      limit = 0;
-    }
-
+    const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
     const messageIds = new Set<string>();
     if (limit === 0 && !selectBy?.include?.length) return [];
 
@@ -1598,5 +1592,16 @@ export class CloudflareStore extends MastraStorage {
 
   async close(): Promise<void> {
     // No explicit cleanup needed
+  }
+
+  async updateMessages(_args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]> {
+    this.logger.error('updateMessages is not yet implemented in CloudflareStore');
+    throw new Error('Method not implemented');
   }
 }

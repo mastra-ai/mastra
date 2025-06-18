@@ -1,5 +1,6 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import type { StorageThreadType, MastraMessageV2, MastraMessageV1 } from '@mastra/core/memory';
 
@@ -579,12 +580,13 @@ export class DynamoDBStore extends MastraStorage {
       // Provide *all* composite key components for the 'byThread' index ('entity', 'threadId')
       const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
 
+      const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
       // Apply the 'last' limit if provided
-      if (selectBy?.last && typeof selectBy.last === 'number') {
+      if (limit !== Number.MAX_SAFE_INTEGER) {
         // Use ElectroDB's limit parameter
         // DDB GSIs are sorted in ascending order
         // Use ElectroDB's order parameter to sort in descending order to retrieve 'latest' messages
-        const results = await query.go({ limit: selectBy.last, order: 'desc' });
+        const results = await query.go({ limit, order: 'desc' });
         // Use arrow function in map to preserve 'this' context for parseMessageData
         const list = new MessageList({ threadId, resourceId }).add(
           results.data.map((data: any) => this.parseMessageData(data)),
@@ -1134,5 +1136,16 @@ export class DynamoDBStore extends MastraStorage {
       // Optionally re-throw or handle as appropriate for your application's error handling strategy
       throw error;
     }
+  }
+
+  async updateMessages(_args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]> {
+    this.logger.error('updateMessages is not yet implemented in DynamoDBStore');
+    throw new Error('Method not implemented');
   }
 }

@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { Mastra } from '..';
+import type { Emitter, Mastra } from '..';
 import type { RuntimeContext } from '../di';
 import type { EMITTER_SYMBOL } from './constants';
 import type { Workflow } from './workflow';
@@ -24,7 +24,7 @@ export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSche
     steps: string[];
     resumePayload: any;
   };
-  [EMITTER_SYMBOL]: { emit: (event: string, data: any) => Promise<void> };
+  [EMITTER_SYMBOL]: Emitter;
   engine: EngineType;
 }) => Promise<TStepOutput>;
 

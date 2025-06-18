@@ -1,5 +1,7 @@
+import { MessageList } from '@mastra/core/agent';
+import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
-import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
+import type { StorageThreadType, MastraMessageV1 } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -21,7 +23,6 @@ import type {
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
-import { MessageList } from '../../../../packages/core/dist/agent/index.cjs';
 
 export interface UpstashConfig {
   url: string;
@@ -734,16 +735,7 @@ export class UpstashStore extends MastraStorage {
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
     const allMessageIds = await this.redis.zrange(threadMessagesKey, 0, -1);
-    // When selectBy is undefined or selectBy.last is undefined, get ALL messages (not just 40)
-    let limit: number;
-    if (typeof selectBy?.last === 'number') {
-      limit = Math.max(0, selectBy.last);
-    } else if (selectBy?.last === false) {
-      limit = 0;
-    } else {
-      // No limit specified - get all messages
-      limit = Number.MAX_SAFE_INTEGER;
-    }
+    const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
 
     const messageIds = new Set<string>();
     const messageIdToThreadIds: Record<string, string> = {};
@@ -1186,5 +1178,16 @@ export class UpstashStore extends MastraStorage {
 
   async close(): Promise<void> {
     // No explicit cleanup needed for Upstash Redis
+  }
+
+  async updateMessages(_args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]> {
+    this.logger.error('updateMessages is not yet implemented in UpstashStore');
+    throw new Error('Method not implemented');
   }
 }

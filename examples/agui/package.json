@@ -19,16 +19,19 @@
     "@mastra/agui": "latest",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "mastra": "latest",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "zod": "^3.25.57"
   },
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
       "@mastra/agui": "link:../../packages/agui",
       "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/loggers": "link:../../packages/loggers",
       "@mastra/memory": "link:../../packages/memory",
       "mastra": "link:../../packages/cli"
     }

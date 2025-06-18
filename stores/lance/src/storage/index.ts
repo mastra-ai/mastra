@@ -1,5 +1,6 @@
 import { connect } from '@lancedb/lancedb';
 import type { Connection, ConnectionOptions, SchemaLike, FieldLike } from '@lancedb/lancedb';
+import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType, TraceType } from '@mastra/core/memory';
 import {
@@ -617,7 +618,7 @@ export class LanceStorage extends MastraStorage {
       if (threadConfig) {
         throw new Error('ThreadConfig is not supported by LanceDB storage');
       }
-
+      const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
       const table = await this.lanceClient.openTable(TABLE_MESSAGES);
       let query = table.query().where(`\`threadId\` = '${threadId}'`);
 
@@ -652,8 +653,8 @@ export class LanceStorage extends MastraStorage {
       }
 
       // If we're fetching the last N messages, take only the last N after sorting
-      if (selectBy?.last !== undefined && selectBy.last !== false) {
-        records = records.slice(-selectBy.last);
+      if (limit !== Number.MAX_SAFE_INTEGER) {
+        records = records.slice(-limit);
       }
 
       const messages = this.processResultWithTypeConversion(records, await this.getTableSchema(TABLE_MESSAGES));
@@ -1013,5 +1014,16 @@ export class LanceStorage extends MastraStorage {
     _args: StorageGetMessagesArg,
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
     throw new Error('Method not implemented.');
+  }
+
+  async updateMessages(_args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]> {
+    this.logger.error('updateMessages is not yet implemented in LanceStore');
+    throw new Error('Method not implemented');
   }
 }

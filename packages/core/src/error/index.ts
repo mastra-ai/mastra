@@ -15,6 +15,7 @@ export enum ErrorDomain {
   MASTRA_INSTANCE = 'MASTRA_INSTANCE',
   STORAGE = 'STORAGE',
   UNKNOWN = 'UNKNOWN',
+  DEPLOYER = 'DEPLOYER',
 }
 
 export enum ErrorCategory {

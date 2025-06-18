@@ -11,7 +11,7 @@ npm install @mastra/client-js
 ## Quick Start
 
 ```typescript
-import { MastraClient } from '@mastra/client';
+import { MastraClient } from '@mastra/client-js';
 
 // Initialize the client
 const client = new MastraClient({
