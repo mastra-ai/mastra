@@ -3201,6 +3201,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
     app.get(
       '/openapi.json',
       openAPISpecs(app, {
+        includeEmptyPaths: true,
         documentation: {
           info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
         },
@@ -3209,15 +3210,33 @@ ${err.stack.split('\n').slice(1).join('\n')}
   }
 
   if (options?.isDev || server?.build?.swaggerUI) {
-    app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
+    app.get(
+      '/swagger-ui',
+      describeRoute({
+        hide: true,
+      }),
+      swaggerUI({ url: '/openapi.json' }),
+    );
   }
 
   if (options?.playground) {
     // SSE endpoint for refresh notifications
-    app.get('/refresh-events', handleClientsRefresh);
+    app.get(
+      '/refresh-events',
+      describeRoute({
+        hide: true,
+      }),
+      handleClientsRefresh,
+    );
 
     // Trigger refresh for all clients
-    app.post('/__refresh', handleTriggerClientsRefresh);
+    app.post(
+      '/__refresh',
+      describeRoute({
+        hide: true,
+      }),
+      handleTriggerClientsRefresh,
+    );
     // Playground routes - these should come after API routes
     // Serve assets with specific MIME types
     app.use('/assets/*', async (c, next) => {

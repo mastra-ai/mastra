@@ -248,7 +248,7 @@ export class Workflow extends BaseResource {
       searchParams.set('runId', params.runId);
     }
 
-    const runtimeContext = params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined;
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
     const response: Response = await this.request(
       `/api/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
       {

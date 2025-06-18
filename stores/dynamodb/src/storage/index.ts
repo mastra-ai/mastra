@@ -1,5 +1,6 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV2, MastraMessageV1 } from '@mastra/core/memory';
@@ -1345,5 +1346,16 @@ export class DynamoDBStore extends MastraStorage {
         error,
       );
     }
+  }
+
+  async updateMessages(_args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]> {
+    this.logger.error('updateMessages is not yet implemented in DynamoDBStore');
+    throw new Error('Method not implemented');
   }
 }

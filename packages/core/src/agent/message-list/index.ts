@@ -15,6 +15,7 @@ export type MastraMessageContentV2 = {
   toolInvocations?: UIMessage['toolInvocations'];
   reasoning?: UIMessage['reasoning'];
   annotations?: UIMessage['annotations'];
+  metadata?: Record<string, unknown>;
 };
 
 export type MastraMessageV2 = {
@@ -27,7 +28,7 @@ export type MastraMessageV2 = {
   type?: string;
 };
 
-type MessageInput = UIMessage | Message | MastraMessageV1 | CoreMessage | MastraMessageV2;
+export type MessageInput = UIMessage | Message | MastraMessageV1 | CoreMessage | MastraMessageV2;
 type MessageSource = 'memory' | 'response' | 'user' | 'system' | 'context';
 type MemoryInfo = { threadId: string; resourceId?: string };
 

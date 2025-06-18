@@ -1,5 +1,5 @@
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult } from '@mastra/core/eval';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
@@ -108,9 +108,14 @@ export class PostgresStore extends MastraStorage {
   }
 
   private getTableName(indexName: string) {
-    const parsedIndexName = parseSqlIdentifier(indexName, 'table name');
-    const parsedSchemaName = this.schema ? parseSqlIdentifier(this.schema, 'schema name') : undefined;
-    return parsedSchemaName ? `${parsedSchemaName}."${parsedIndexName}"` : `"${parsedIndexName}"`;
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    const quotedIndexName = `"${parsedIndexName}"`;
+    const quotedSchemaName = this.getSchemaName();
+    return quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName;
+  }
+
+  private getSchemaName() {
+    return this.schema ? `"${parseSqlIdentifier(this.schema, 'schema name')}"` : undefined;
   }
 
   /** @deprecated use getEvals instead */
@@ -364,7 +369,7 @@ export class PostgresStore extends MastraStorage {
 
           if (!schemaExists?.exists) {
             try {
-              await this.db.none(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);
+              await this.db.none(`CREATE SCHEMA IF NOT EXISTS ${this.getSchemaName()}`);
               this.logger.info(`Schema "${this.schema}" created successfully`);
             } catch (error) {
               this.logger.error(`Failed to create schema "${this.schema}"`, { error });
@@ -908,7 +913,7 @@ export class PostgresStore extends MastraStorage {
                   (m.row_num >= target.row_num - $${paramIdx + 3} AND m.row_num < target.row_num)
                 )
               )
-            ) 
+            ) AS query_${paramIdx}
             `, // Keep ASC for final sorting after fetching context
           );
           params.push(searchId, id, withPreviousMessages, withNextMessages);
@@ -1498,5 +1503,135 @@ export class PostgresStore extends MastraStorage {
       this.logger?.trackException(mastraError);
       throw mastraError;
     }
+  }
+
+  async updateMessages({
+    messages,
+  }: {
+    messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
+      id: string;
+      content?: {
+        metadata?: MastraMessageContentV2['metadata'];
+        content?: MastraMessageContentV2['content'];
+      };
+    })[];
+  }): Promise<MastraMessageV2[]> {
+    if (messages.length === 0) {
+      return [];
+    }
+
+    const messageIds = messages.map(m => m.id);
+
+    const selectQuery = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId" FROM ${this.getTableName(
+      TABLE_MESSAGES,
+    )} WHERE id IN ($1:list)`;
+
+    const existingMessagesDb = await this.db.manyOrNone(selectQuery, [messageIds]);
+
+    if (existingMessagesDb.length === 0) {
+      return [];
+    }
+
+    // Parse content from string to object for merging
+    const existingMessages: MastraMessageV2[] = existingMessagesDb.map(msg => {
+      if (typeof msg.content === 'string') {
+        try {
+          msg.content = JSON.parse(msg.content);
+        } catch {
+          // ignore if not valid json
+        }
+      }
+      return msg as MastraMessageV2;
+    });
+
+    const threadIdsToUpdate = new Set<string>();
+
+    await this.db.tx(async t => {
+      const queries = [];
+      const columnMapping: Record<string, string> = {
+        threadId: 'thread_id',
+      };
+
+      for (const existingMessage of existingMessages) {
+        const updatePayload = messages.find(m => m.id === existingMessage.id);
+        if (!updatePayload) continue;
+
+        const { id, ...fieldsToUpdate } = updatePayload;
+        if (Object.keys(fieldsToUpdate).length === 0) continue;
+
+        threadIdsToUpdate.add(existingMessage.threadId!);
+        if (updatePayload.threadId && updatePayload.threadId !== existingMessage.threadId) {
+          threadIdsToUpdate.add(updatePayload.threadId);
+        }
+
+        const setClauses: string[] = [];
+        const values: any[] = [];
+        let paramIndex = 1;
+
+        const updatableFields = { ...fieldsToUpdate };
+
+        // Special handling for content: merge in code, then update the whole field
+        if (updatableFields.content) {
+          const newContent = {
+            ...existingMessage.content,
+            ...updatableFields.content,
+            // Deep merge metadata if it exists on both
+            ...(existingMessage.content?.metadata && updatableFields.content.metadata
+              ? {
+                  metadata: {
+                    ...existingMessage.content.metadata,
+                    ...updatableFields.content.metadata,
+                  },
+                }
+              : {}),
+          };
+          setClauses.push(`content = $${paramIndex++}`);
+          values.push(newContent);
+          delete updatableFields.content;
+        }
+
+        for (const key in updatableFields) {
+          if (Object.prototype.hasOwnProperty.call(updatableFields, key)) {
+            const dbColumn = columnMapping[key] || key;
+            setClauses.push(`"${dbColumn}" = $${paramIndex++}`);
+            values.push(updatableFields[key as keyof typeof updatableFields]);
+          }
+        }
+
+        if (setClauses.length > 0) {
+          values.push(id);
+          const sql = `UPDATE ${this.getTableName(
+            TABLE_MESSAGES,
+          )} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`;
+          queries.push(t.none(sql, values));
+        }
+      }
+
+      if (threadIdsToUpdate.size > 0) {
+        queries.push(
+          t.none(`UPDATE ${this.getTableName(TABLE_THREADS)} SET "updatedAt" = NOW() WHERE id IN ($1:list)`, [
+            Array.from(threadIdsToUpdate),
+          ]),
+        );
+      }
+
+      if (queries.length > 0) {
+        await t.batch(queries);
+      }
+    });
+
+    // Re-fetch to return the fully updated messages
+    const updatedMessages = await this.db.manyOrNone<MastraMessageV2>(selectQuery, [messageIds]);
+
+    return (updatedMessages || []).map(message => {
+      if (typeof message.content === 'string') {
+        try {
+          message.content = JSON.parse(message.content);
+        } catch {
+          /* ignore */
+        }
+      }
+      return message;
+    });
   }
 }
