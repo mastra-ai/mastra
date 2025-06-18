@@ -399,11 +399,11 @@ describe('PostgresStore', () => {
         },
       });
 
-      // Should include last 2 from thread-foo and 3 from thread-bar (D, E, F)
+      // Should include last 2 from thread-one and 3 from thread-two (D, E, F)
       expect(result.map(m => m.content.parts[0].text).sort()).toEqual(['B', 'C', 'D', 'E', 'F']);
-      // Should include 2 from thread-foo
+      // Should include 2 from thread-one
       expect(result.filter(m => m.threadId === 'thread-one').map(m => m.content.parts[0].text)).toEqual(['B', 'C']);
-      // Should include 3 from thread-bar
+      // Should include 3 from thread-two
       expect(result.filter(m => m.threadId === 'thread-two').map(m => m.content.parts[0].text)).toEqual([
         'D',
         'E',
