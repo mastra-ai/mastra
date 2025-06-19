@@ -39,6 +39,12 @@ const createTestMessage = (threadId: string, content: string, role: 'user' | 'as
   };
 };
 
+function extractUserData(obj: any) {
+  // Remove common schema keys
+  const { type, properties, required, additionalProperties, $schema, ...data } = obj;
+  return data;
+}
+
 dotenv.config({ path: '.env.test' });
 
 describe('Working Memory Tests', () => {
@@ -499,7 +505,7 @@ describe('Working Memory Tests', () => {
       const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
       const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
       const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
-      expect(wmObj).toMatchObject(validMemory);
+      expect(extractUserData(wmObj)).toMatchObject(validMemory);
     });
 
     it('should recall the most recent valid schema-based working memory', async () => {
@@ -516,7 +522,7 @@ describe('Working Memory Tests', () => {
       const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
       const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
       const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
-      expect(wmObj).toMatchObject(second);
+      expect(extractUserData(wmObj)).toMatchObject(second);
     });
   });
 });
