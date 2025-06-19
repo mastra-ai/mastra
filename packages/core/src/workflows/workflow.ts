@@ -20,7 +20,6 @@ import type {
   ExtractSchemaType,
   ExtractSchemaFromStep,
   PathsToStringProps,
-  ZodPathType,
   DynamicMapping,
   StreamEvent,
   WorkflowRunState,
@@ -367,11 +366,12 @@ export function cloneWorkflow<
     any,
     DefaultEngineType
   >[],
+  TPrevSchema extends z.ZodType<any> = TInput,
 >(
-  workflow: Workflow<DefaultEngineType, TSteps, string, TInput, TOutput, TInput>,
+  workflow: Workflow<DefaultEngineType, TSteps, string, TInput, TOutput, TPrevSchema>,
   opts: { id: TWorkflowId },
-): Workflow<DefaultEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput> {
-  const wf = new Workflow({
+): Workflow<DefaultEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
+  const wf: Workflow<DefaultEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> = new Workflow({
     id: opts.id,
     inputSchema: workflow.inputSchema,
     outputSchema: workflow.outputSchema,
@@ -638,16 +638,16 @@ export class Workflow<
                 step: Step<string, any, any, any, any, TEngineType> | Step<string, any, any, any, any, TEngineType>[];
                 path: string;
               }
-            | { value: any; schema: z.ZodTypeAny }
+            | { value: any; schema: z.ZodType<any> }
             | {
                 initData: Workflow<TEngineType, any, any, any, any, any>;
                 path: string;
               }
             | {
                 runtimeContextPath: string;
-                schema: z.ZodTypeAny;
+                schema: z.ZodType<any>;
               }
-            | DynamicMapping<TPrevSchema, z.ZodTypeAny>;
+            | DynamicMapping<TPrevSchema, z.ZodType<any>>;
         }
       | ExecuteFunction<z.infer<TPrevSchema>, any, any, any, TEngineType>,
   ) {
@@ -746,7 +746,7 @@ export class Workflow<
       },
     });
 
-    type MappedOutputSchema = z.ZodObject<any, any, z.ZodTypeAny>;
+    type MappedOutputSchema = z.ZodType<any>;
 
     this.stepFlow.push({ type: 'step', step: mappingStep as any });
     this.serializedStepFlow.push({
