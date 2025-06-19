@@ -120,6 +120,8 @@ export function watchWorkflowHandler(c: Context) {
       throw new HTTPException(400, { message: 'runId required to watch workflow' });
     }
 
+    c.header('Transfer-Encoding', 'chunked');
+
     return stream(
       c,
       async stream => {
@@ -160,6 +162,8 @@ export async function streamWorkflowHandler(c: Context) {
     const workflowId = c.req.param('workflowId');
     const { inputData, runtimeContext } = await c.req.json();
     const runId = c.req.query('runId');
+
+    c.header('Transfer-Encoding', 'chunked');
 
     return stream(
       c,
