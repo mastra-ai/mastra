@@ -1,6 +1,7 @@
 ---
 '@mastra/deployer': patch
 '@mastra/server': patch
+'@mastra/client-js: patch
 ---
 
-Fix runtimeContext in mastra server for text/plain req bodies
+Fix runtimeContext in mastra server, client SDK
