@@ -479,6 +479,37 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
+  private convertOutputSchema(
+    outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'] | JSONSchema,
+  ): z.ZodType | undefined {
+    if (!outputSchema) return
+    if (isZodType(outputSchema)) {
+      return outputSchema;
+    }
+
+    try {
+      return convertJsonSchemaToZod(outputSchema as JSONSchema);
+    } catch (error: unknown) {
+      let errorDetails: string | undefined;
+      if (error instanceof Error) {
+        errorDetails = error.stack;
+      } else {
+        // Attempt to stringify, fallback to String()
+        try {
+          errorDetails = JSON.stringify(error);
+        } catch {
+          errorDetails = String(error);
+        }
+      }
+      this.log('error', 'Failed to convert JSON schema to Zod schema using zodFromJsonSchema', {
+        error: errorDetails,
+        originalJsonSchema: outputSchema,
+      });
+
+      throw new Error(errorDetails);
+    }
+  }
+
   async tools() {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({ timeout: this.timeout });
@@ -490,6 +521,7 @@ export class InternalMastraMCPClient extends MastraBase {
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
           inputSchema: this.convertInputSchema(tool.inputSchema),
+          outputSchema: this.convertOutputSchema(tool.outputSchema),
           execute: async ({ context, runtimeContext }: { context: any; runtimeContext?: RuntimeContext | null }) => {
             const previousContext = this.currentOperationContext;
             this.currentOperationContext = runtimeContext || null; // Set current context
@@ -505,6 +537,27 @@ export class InternalMastraMCPClient extends MastraBase {
                   timeout: this.timeout,
                 },
               );
+
+              // if (tool.outputSchema && res.structuredContent) {
+              //   try {
+              //     const outputZodSchema = this.convertInputSchema(tool.outputSchema);
+              //     const validation = outputZodSchema.safeParse(res.structuredContent);
+              //     if (!validation.success) {
+              //       const validationError = new z.ZodError(validation.error.issues);
+              //       this.log('error', `Client-side validation of tool output failed for '${tool.name}'`, {
+              //         error: validationError.format(),
+              //         receivedContent: res.structuredContent,
+              //       });
+              //       throw validationError;
+              //     }
+              //   } catch (validationError) {
+              //     this.log('error', `Error during client-side validation of tool output for '${tool.name}'`, {
+              //       error: validationError,
+              //     });
+              //     throw validationError; // rethrow
+              //   }
+              // }
+
               this.log('debug', `Tool executed successfully: ${tool.name}`);
               return res;
             } catch (e) {
