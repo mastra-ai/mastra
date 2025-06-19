@@ -162,11 +162,14 @@ ${err.stack.split('\n').slice(1).join('\n')}
     let runtimeContext = new RuntimeContext();
     if (c.req.method === 'POST' || c.req.method === 'PUT') {
       const contentType = c.req.header('content-type');
-      if (contentType?.includes('application/json')) {
+      console.log('route', c.req.path);
+      console.log('contentType', contentType);
+      if (contentType?.includes('application/json') || contentType?.includes('text/plain')) {
         try {
           const clonedReq = c.req.raw.clone();
+          console.log('clonedReq', clonedReq);
           const body = (await clonedReq.json()) as { runtimeContext?: Record<string, any> };
-
+          console.log('body', body);
           if (body.runtimeContext) {
             runtimeContext = new RuntimeContext(Object.entries(body.runtimeContext));
           }
