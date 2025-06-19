@@ -35,7 +35,7 @@ export function DynamicForm<T extends z.ZodSchema>({
   className,
   readOnly,
 }: DynamicFormProps<T>) {
-  const isNotZodObject = (schema._def as { typeName: string }).typeName !== 'ZodObject';
+  const isNotZodObject = !(schema instanceof ZodObject);
   if (!schema) {
     console.error('no form schema found');
     return null;
