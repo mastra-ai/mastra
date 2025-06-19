@@ -2,6 +2,7 @@ import { createClient } from '@libsql/client';
 import type { Client, InValue } from '@libsql/client';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
@@ -128,8 +129,19 @@ export class LibSQLStore extends MastraStorage {
       const sql = this.getCreateTableSQL(tableName, schema);
       await this.client.execute(sql);
     } catch (error) {
-      this.logger.error(`Error creating table ${tableName}: ${error}`);
-      throw error;
+      // this.logger.error(`Error creating table ${tableName}: ${error}`);
+      // throw error;
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_CREATE_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -183,10 +195,17 @@ export class LibSQLStore extends MastraStorage {
         }
       }
     } catch (error) {
-      this.logger?.error?.(
-        `Error altering table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_ALTER_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
       );
-      throw new Error(`Failed to alter table ${tableName}: ${error}`);
     }
   }
 
@@ -195,9 +214,19 @@ export class LibSQLStore extends MastraStorage {
     try {
       await this.client.execute(`DELETE FROM ${parsedTableName}`);
     } catch (e) {
-      if (e instanceof Error) {
-        this.logger.error(e.message);
-      }
+      const mastraError = new MastraError(
+        {
+          id: 'LIBSQL_STORE_CLEAR_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        e,
+      );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
     }
   }
 
@@ -277,7 +306,19 @@ export class LibSQLStore extends MastraStorage {
     return this.executeWriteOperationWithRetry(
       () => this.doBatchInsert(args),
       `batch insert into table ${args.tableName}`,
-    );
+    ).catch(error => {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_BATCH_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName: args.tableName,
+          },
+        },
+        error,
+      );
+    });
   }
 
   private async doBatchInsert({
@@ -327,19 +368,31 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    const result = await this.load<StorageThreadType>({
-      tableName: TABLE_THREADS,
-      keys: { id: threadId },
-    });
+    try {
+      const result = await this.load<StorageThreadType>({
+        tableName: TABLE_THREADS,
+        keys: { id: threadId },
+      });
 
-    if (!result) {
-      return null;
+      if (!result) {
+        return null;
+      }
+
+      return {
+        ...result,
+        metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_THREAD_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
     }
-
-    return {
-      ...result,
-      metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
-    };
   }
 
   /**
@@ -372,7 +425,17 @@ export class LibSQLStore extends MastraStorage {
       }
       return result.rows.map(mapRowToStorageThreadType);
     } catch (error) {
-      this.logger.error(`Error getting threads for resource ${resourceId}:`, error);
+      const mastraError = new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
+        },
+        error,
+      );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
       return [];
     }
   }
@@ -430,21 +493,46 @@ export class LibSQLStore extends MastraStorage {
         hasMore: currentOffset + threads.length < total,
       };
     } catch (error) {
-      this.logger.error(`Error getting threads for resource ${resourceId}:`, error);
+      const mastraError = new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
+        },
+        error,
+      );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
       return { threads: [], total: 0, page, perPage, hasMore: false };
     }
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    await this.insert({
-      tableName: TABLE_THREADS,
-      record: {
-        ...thread,
-        metadata: JSON.stringify(thread.metadata),
-      },
-    });
+    try {
+      await this.insert({
+        tableName: TABLE_THREADS,
+        record: {
+          ...thread,
+          metadata: JSON.stringify(thread.metadata),
+        },
+      });
 
-    return thread;
+      return thread;
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'LIBSQL_STORE_SAVE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: thread.id },
+        },
+        error,
+      );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
+      throw mastraError;
+    }
   }
 
   async updateThread({
@@ -458,7 +546,13 @@ export class LibSQLStore extends MastraStorage {
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
-      throw new Error(`Thread ${id} not found`);
+      throw new MastraError({
+        id: 'LIBSQL_STORE_UPDATE_THREAD_FAILED_THREAD_NOT_FOUND',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread ${id} not found`,
+        details: { threadId: id },
+      });
     }
 
     const updatedThread = {
@@ -470,24 +564,49 @@ export class LibSQLStore extends MastraStorage {
       },
     };
 
-    await this.client.execute({
-      sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = ? WHERE id = ?`,
-      args: [title, JSON.stringify(updatedThread.metadata), id],
-    });
+    try {
+      await this.client.execute({
+        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = ? WHERE id = ?`,
+        args: [title, JSON.stringify(updatedThread.metadata), id],
+      });
 
-    return updatedThread;
+      return updatedThread;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_UPDATE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to update thread ${id}`,
+          details: { threadId: id },
+        },
+        error,
+      );
+    }
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     // Delete messages for this thread (manual step)
-    await this.client.execute({
-      sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
-      args: [threadId],
-    });
-    await this.client.execute({
-      sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
-      args: [threadId],
-    });
+    try {
+      await this.client.execute({
+        sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
+        args: [threadId],
+      });
+      await this.client.execute({
+        sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
+        args: [threadId],
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_DELETE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
+    }
     // TODO: Need to check if CASCADE is enabled so that messages will be automatically deleted due to CASCADE constraint
   }
 
@@ -611,8 +730,15 @@ export class LibSQLStore extends MastraStorage {
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
-      this.logger.error('Error getting messages:', error as Error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
     }
   }
 
@@ -629,9 +755,21 @@ export class LibSQLStore extends MastraStorage {
     const messages: MastraMessageV2[] = [];
 
     if (selectBy?.include?.length) {
-      const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
-      if (includeMessages) {
-        messages.push(...includeMessages);
+      try {
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
+        if (includeMessages) {
+          messages.push(...includeMessages);
+        }
+      } catch (error) {
+        throw new MastraError(
+          {
+            id: 'LIBSQL_STORE_GET_MESSAGES_PAGINATED_GET_INCLUDE_MESSAGES_FAILED',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { threadId },
+          },
+          error,
+        );
       }
     }
 
@@ -687,7 +825,17 @@ export class LibSQLStore extends MastraStorage {
         hasMore: currentOffset + messages.length < total,
       };
     } catch (error) {
-      this.logger.error('Error getting paginated messages:', error as Error);
+      const mastraError = new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_MESSAGES_PAGINATED_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
       return { messages: [], total: 0, page, perPage, hasMore: false };
     }
   }
@@ -749,8 +897,14 @@ export class LibSQLStore extends MastraStorage {
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
-      this.logger.error('Failed to save messages in database: ' + (error as { message: string })?.message);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_SAVE_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -904,8 +1058,15 @@ export class LibSQLStore extends MastraStorage {
       if (error instanceof Error && error.message.includes('no such table')) {
         return [];
       }
-      this.logger.error('Failed to get evals for the specified agent: ' + (error as any)?.message);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_EVALS_BY_AGENT_NAME_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentName },
+        },
+        error,
+      );
     }
   }
 
@@ -945,37 +1106,48 @@ export class LibSQLStore extends MastraStorage {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const countResult = await this.client.execute({
-      sql: `SELECT COUNT(*) as count FROM ${TABLE_EVALS} ${whereClause}`,
-      args: queryParams,
-    });
-    const total = Number(countResult.rows?.[0]?.count ?? 0);
+    try {
+      const countResult = await this.client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_EVALS} ${whereClause}`,
+        args: queryParams,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
 
-    const currentOffset = page * perPage;
-    const hasMore = currentOffset + perPage < total;
+      const currentOffset = page * perPage;
+      const hasMore = currentOffset + perPage < total;
 
-    if (total === 0) {
+      if (total === 0) {
+        return {
+          evals: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      const dataResult = await this.client.execute({
+        sql: `SELECT * FROM ${TABLE_EVALS} ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+        args: [...queryParams, perPage, currentOffset],
+      });
+
       return {
-        evals: [],
-        total: 0,
+        evals: dataResult.rows?.map(row => this.transformEvalRow(row)) ?? [],
+        total,
         page,
         perPage,
-        hasMore: false,
+        hasMore,
       };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_EVALS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
-
-    const dataResult = await this.client.execute({
-      sql: `SELECT * FROM ${TABLE_EVALS} ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-      args: [...queryParams, perPage, currentOffset],
-    });
-
-    return {
-      evals: dataResult.rows?.map(row => this.transformEvalRow(row)) ?? [],
-      total,
-      page,
-      perPage,
-      hasMore,
-    };
   }
 
   /**
@@ -997,8 +1169,19 @@ export class LibSQLStore extends MastraStorage {
         end: args.toDate,
       };
     }
-    const result = await this.getTracesPaginated(args);
-    return result.traces;
+    try {
+      const result = await this.getTracesPaginated(args);
+      return result.traces;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_TRACES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   public async getTracesPaginated(
@@ -1048,55 +1231,66 @@ export class LibSQLStore extends MastraStorage {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const countResult = await this.client.execute({
-      sql: `SELECT COUNT(*) as count FROM ${TABLE_TRACES} ${whereClause}`,
-      args: queryArgs,
-    });
-    const total = Number(countResult.rows?.[0]?.count ?? 0);
+    try {
+      const countResult = await this.client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_TRACES} ${whereClause}`,
+        args: queryArgs,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
 
-    if (total === 0) {
+      if (total === 0) {
+        return {
+          traces: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      const dataResult = await this.client.execute({
+        sql: `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "startTime" DESC LIMIT ? OFFSET ?`,
+        args: [...queryArgs, perPage, currentOffset],
+      });
+
+      const traces =
+        dataResult.rows?.map(
+          row =>
+            ({
+              id: row.id,
+              parentSpanId: row.parentSpanId,
+              traceId: row.traceId,
+              name: row.name,
+              scope: row.scope,
+              kind: row.kind,
+              status: safelyParseJSON(row.status as string),
+              events: safelyParseJSON(row.events as string),
+              links: safelyParseJSON(row.links as string),
+              attributes: safelyParseJSON(row.attributes as string),
+              startTime: row.startTime,
+              endTime: row.endTime,
+              other: safelyParseJSON(row.other as string),
+              createdAt: row.createdAt,
+            }) as Trace,
+        ) ?? [];
+
       return {
-        traces: [],
-        total: 0,
+        traces,
+        total,
         page,
         perPage,
-        hasMore: false,
+        hasMore: currentOffset + traces.length < total,
       };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_TRACES_PAGINATED_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
-
-    const dataResult = await this.client.execute({
-      sql: `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "startTime" DESC LIMIT ? OFFSET ?`,
-      args: [...queryArgs, perPage, currentOffset],
-    });
-
-    const traces =
-      dataResult.rows?.map(
-        row =>
-          ({
-            id: row.id,
-            parentSpanId: row.parentSpanId,
-            traceId: row.traceId,
-            name: row.name,
-            scope: row.scope,
-            kind: row.kind,
-            status: safelyParseJSON(row.status as string),
-            events: safelyParseJSON(row.events as string),
-            links: safelyParseJSON(row.links as string),
-            attributes: safelyParseJSON(row.attributes as string),
-            startTime: row.startTime,
-            endTime: row.endTime,
-            other: safelyParseJSON(row.other as string),
-            createdAt: row.createdAt,
-          }) as Trace,
-      ) ?? [];
-
-    return {
-      traces,
-      total,
-      page,
-      perPage,
-      hasMore: currentOffset + traces.length < total,
-    };
   }
 
   async getWorkflowRuns({
@@ -1166,8 +1360,14 @@ export class LibSQLStore extends MastraStorage {
       // Use runs.length as total when not paginating
       return { runs, total: total || runs.length };
     } catch (error) {
-      console.error('Error getting workflow runs:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_WORKFLOW_RUNS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -1193,16 +1393,27 @@ export class LibSQLStore extends MastraStorage {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const result = await this.client.execute({
-      sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
-      args,
-    });
+    try {
+      const result = await this.client.execute({
+        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
+        args,
+      });
 
-    if (!result.rows?.[0]) {
-      return null;
+      if (!result.rows?.[0]) {
+        return null;
+      }
+
+      return this.parseWorkflowRun(result.rows[0]);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
-
-    return this.parseWorkflowRun(result.rows[0]);
   }
 
   private async hasColumn(table: string, column: string): Promise<boolean> {
