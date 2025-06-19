@@ -797,7 +797,7 @@ export class DynamoDBStore extends MastraStorage {
               this.logger.error('Missing entity property in message data for create', { messageData });
               throw new Error('Internal error: Missing entity property during saveMessages');
             }
-            await this.service.entities.message.create(messageData).go();
+            await this.service.entities.message.put(messageData).go();
           }
         }),
         // Update thread's updatedAt timestamp
