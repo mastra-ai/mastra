@@ -48,7 +48,7 @@
     "pnpm": "^10.7.1",
     "posthog-js": "^1.234.6",
     "prism-react-renderer": "^2.4.1",
-    "react": "^19.0.0",
+    "react": "^19.1.0",
     "react-code-block": "1.1.1",
     "react-day-picker": "^9.6.1",
     "react-dom": "^19.0.0",
