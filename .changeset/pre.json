@@ -71,9 +71,16 @@
     "@mastra/inngest": "0.10.5"
   },
   "changesets": [
+    "calm-peaches-open",
     "cuddly-ducks-cover",
+    "fair-roses-throw",
     "fruity-tools-train",
+    "giant-horses-fail",
     "icy-maps-drop",
-    "soft-wombats-enter"
+    "mighty-bats-lay",
+    "neat-nails-clean",
+    "rare-parrots-make",
+    "soft-wombats-enter",
+    "sweet-jars-grow"
   ]
 }
