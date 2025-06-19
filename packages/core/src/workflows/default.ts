@@ -418,7 +418,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
             return null;
           },
-          suspend: async (suspendPayload: any) => {
+          suspend: async (suspendPayload: any): Promise<any> => {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             suspended = { payload: suspendPayload };
           },
@@ -653,7 +653,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               },
 
               // TODO: this function shouldn't have suspend probably?
-              suspend: async (_suspendPayload: any) => {},
+              suspend: async (_suspendPayload: any): Promise<any> => {},
               [EMITTER_SYMBOL]: emitter,
               engine: {},
             });
@@ -795,7 +795,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           const result = stepResults[step.id];
           return result?.status === 'success' ? result.output : null;
         },
-        suspend: async (_suspendPayload: any) => {},
+        suspend: async (_suspendPayload: any): Promise<any> => {},
         [EMITTER_SYMBOL]: emitter,
         engine: {},
       });

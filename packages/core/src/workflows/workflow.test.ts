@@ -4443,8 +4443,7 @@ describe('Workflow', () => {
       const promptAgentAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend }) => {
-          await suspend({ testPayload: 'hello' });
-          return undefined;
+          return await suspend({ testPayload: 'hello' });
         })
         .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
       const evaluateToneAction = vi.fn().mockResolvedValue({
@@ -4677,8 +4676,7 @@ describe('Workflow', () => {
       const promptAgentAction = vi.fn().mockImplementation(async ({ suspend, runtimeContext, resumeData }) => {
         if (!resumeData) {
           runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'first message']);
-          await suspend({ testPayload: 'hello' });
-          return;
+          return await suspend({ testPayload: 'hello' });
         }
 
         runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'promptAgentAction']);
@@ -4746,8 +4744,7 @@ describe('Workflow', () => {
       const promptAgentAction = vi.fn().mockImplementation(async ({ suspend, runtimeContext, resumeData }) => {
         if (!resumeData) {
           runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'first message']);
-          await suspend({ testPayload: 'hello' });
-          return;
+          return await suspend({ testPayload: 'hello' });
         }
 
         runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'promptAgentAction']);
@@ -4826,8 +4823,7 @@ describe('Workflow', () => {
           const finalValue = (resumeData?.value ?? 0) + inputData.value;
 
           if (!resumeData?.value || finalValue < 10) {
-            await suspend({ message: `Please provide additional information. now value is ${inputData.value}` });
-            return { value: 0 };
+            return await suspend({ message: `Please provide additional information. now value is ${inputData.value}` });
           }
 
           return { value: finalValue };
@@ -6402,7 +6398,7 @@ describe('Workflow', () => {
 
         const other = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
           if (!resumeData) {
-            await suspend();
+            return await suspend();
           }
           return { other: 26 };
         });
@@ -6641,7 +6637,7 @@ describe('Workflow', () => {
 
       const other = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
         if (!resumeData) {
-          await suspend();
+          return await suspend();
         }
         return { other: 26 };
       });
@@ -6823,7 +6819,7 @@ describe('Workflow', () => {
 
       const execute = vi.fn(async ({ runtimeContext, suspend, resumeData }) => {
         if (!resumeData?.human) {
-          await suspend();
+          return await suspend();
         }
 
         const value = runtimeContext.get('testKey');
