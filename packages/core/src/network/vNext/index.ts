@@ -451,7 +451,7 @@ export class NewAgentNetwork extends MastraBase {
                         }
                     `;
 
-          completionResult = await routingAgent.generate(completionPrompt, {
+          completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
             output: z.object({
               isComplete: z.boolean(),
               finalResult: z.string(),
@@ -476,7 +476,10 @@ export class NewAgentNetwork extends MastraBase {
         }
 
         const result = await routingAgent.generate(
-          `
+          [
+            {
+              role: 'assistant',
+              content: `
                     The user has given you the following task: 
                     ${inputData.task}
                     ${completionResult ? `\n\n${completionResult.object.finalResult}` : ''}
@@ -491,6 +494,8 @@ export class NewAgentNetwork extends MastraBase {
                         "selectionReason": string
                     }
                     `,
+            },
+          ],
           {
             output: z.object({
               resourceId: z.string(),
