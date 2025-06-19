@@ -1,6 +1,7 @@
 import { MastraBase } from '@mastra/core/base';
 
 import type { RuntimeContext } from '@mastra/core/di';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import { isZodType } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -475,7 +476,12 @@ export class InternalMastraMCPClient extends MastraBase {
         originalJsonSchema: inputSchema,
       });
 
-      throw new Error(errorDetails);
+      throw new MastraError({
+        id: 'MCP_TOOL_INPUT_SCHEMA_CONVERSION_FAILED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        details: { error: errorDetails ?? 'Unknown error' },
+      });
     }
   }
 
@@ -506,7 +512,12 @@ export class InternalMastraMCPClient extends MastraBase {
         originalJsonSchema: outputSchema,
       });
 
-      throw new Error(errorDetails);
+      throw new MastraError({
+        id: 'MCP_TOOL_OUTPUT_SCHEMA_CONVERSION_FAILED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        details: { error: errorDetails ?? 'Unknown error' },
+      });
     }
   }
 
