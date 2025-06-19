@@ -1,0 +1,59 @@
+---
+title: "Cloud Providers"
+description: "Deploy your Mastra applications to popular cloud providers."
+---
+
+import { Callout, Steps, Tabs } from "nextra/components";
+
+# Cloud Providers
+
+Deploy your Mastra applications to popular cloud providers.
+
+## Digital Ocean
+
+<Tabs items={["App Platform", "Droplets"]}>
+   <Tabs.Tab>
+      Deploy your Mastra application to Digital Ocean's App Platform using your preferred Git repository provider.
+
+      #### Prerequisites
+
+      - A Git repository containing your Mastra application. This can be a GitHub repository, GitLab repository, or any other compatible source provider.
+      - A Digital Ocean account
+
+      #### Deployment Steps
+
+      <Steps>
+      ##### Create a new App
+      - Log in to your Digital Ocean dashboard.
+      - Navigate to the App Platform service.
+      - Select your source provider and create a new app.
+
+      ##### Configure Deployment Source
+      - Connect and select your repository. You may also choose a container image or a sample app.
+      - Select the branch you want to deploy from.
+      - Configure the source directory if necessary. If your Mastra application uses the default directory structure, no action is required here.
+      - Head to the next step.
+
+      ##### Configure Resource Settings and Environment Variables
+      - A Node.js build should be detected automatically.
+      - Add any required environment variables for your Mastra application. This includes API keys, database URLs, and other configuration values.
+      - You may choose to configure the size of your resource here.
+      - Other things you may optionally configure include, the region of your resource, the unique app name, and what project the resource belongs to.
+      - Once you're done, you may create the app after reviewing your configuration and pricing estimates.
+
+      ##### Deployment
+      - Your app will be built and deployed automatically.
+      - Digital Ocean will provide you with a URL to access your deployed application.
+      </Steps>
+
+      You can now access your deployed application at the URL provided by Digital Ocean.
+
+      <Callout>
+         The Digital Ocean App Platform uses an ephemeral file system, meaning that any files written to the file system are short-lived and may be lost.
+         Avoid using a Mastra storage provider that uses the file system, such as `LibSQLStore` with a file URL.
+      </Callout>
+   </Tabs.Tab>
+   <Tabs.Tab>
+      Deploy your Mastra application to Digital Ocean's Droplets.
+   </Tabs.Tab>
+</Tabs>
