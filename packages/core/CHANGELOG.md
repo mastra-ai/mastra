@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 0.10.7-alpha.1
+
+### Patch Changes
+
+- d1baedb: fix bad merge with mastra error
+- 4d21bf2: throw mastra errors for MCP
+- 2097952: [MASTRA-4021] Fix PG getMessages and update messageLimit for all storage adapters
+- 4fb0cc2: Type safe variable mapping
+- d2a7a31: Fix memory message context for when LLM providers throw an error if the first message is a tool call.
+- 0e17048: Throw mastra errors in storage packages
+
 ## 0.10.7-alpha.0
 
 ### Patch Changes
