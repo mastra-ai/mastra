@@ -114,7 +114,7 @@
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.201.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.201.1",
     "@opentelemetry/otlp-exporter-base": "^0.201.1",
-    "@opentelemetry/otlp-transformer": "^0.201.1",
+    "@opentelemetry/otlp-transformer": "^0.202.0",
     "@opentelemetry/resources": "^2.0.1",
     "@opentelemetry/sdk-metrics": "^2.0.1",
     "@opentelemetry/sdk-node": "^0.201.1",
