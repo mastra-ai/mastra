@@ -1,3 +1,4 @@
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -73,12 +74,25 @@ export class PineconeVector extends MastraVector {
   }
 
   async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
-    if (!Number.isInteger(dimension) || dimension <= 0) {
-      throw new Error('Dimension must be a positive integer');
+    try {
+      if (!Number.isInteger(dimension) || dimension <= 0) {
+        throw new Error('Dimension must be a positive integer');
+      }
+      if (metric && !['cosine', 'euclidean', 'dotproduct'].includes(metric)) {
+        throw new Error('Metric must be one of: cosine, euclidean, dotproduct');
+      }
+    } catch (validationError) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_PINECONE_VECTOR_CREATE_INDEX_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName, dimension, metric },
+        },
+        validationError,
+      );
     }
-    if (metric && !['cosine', 'euclidean', 'dotproduct'].includes(metric)) {
-      throw new Error('Metric must be one of: cosine, euclidean, dotproduct');
-    }
+
     try {
       await this.client.createIndex({
         name: indexName,
@@ -103,8 +117,16 @@ export class PineconeVector extends MastraVector {
         await this.validateExistingIndex(indexName, dimension, metric);
         return;
       }
-      // For any other errors, propagate
-      throw error;
+      // For any other errors, wrap in MastraError
+      throw new MastraError(
+        {
+          id: 'STORAGE_PINECONE_VECTOR_CREATE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, dimension, metric },
+        },
+        error,
+      );
     }
   }
 
@@ -130,12 +152,24 @@ export class PineconeVector extends MastraVector {
 
     // Pinecone has a limit of 100 vectors per upsert request
     const batchSize = 100;
-    for (let i = 0; i < records.length; i += batchSize) {
-      const batch = records.slice(i, i + batchSize);
-      await index.upsert(batch);
-    }
+    try {
+      for (let i = 0; i < records.length; i += batchSize) {
+        const batch = records.slice(i, i + batchSize);
+        await index.upsert(batch);
+      }
 
-    return vectorIds;
+      return vectorIds;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_PINECONE_VECTOR_UPSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, vectorCount: vectors.length },
+        },
+        error,
+      );
+    }
   }
 
   transformFilter(filter?: VectorFilter) {
@@ -169,19 +203,42 @@ export class PineconeVector extends MastraVector {
       queryParams.sparseVector = sparseVector;
     }
 
-    const results = await index.query(queryParams);
+    try {
+      const results = await index.query(queryParams);
 
-    return results.matches.map(match => ({
-      id: match.id,
-      score: match.score || 0,
-      metadata: match.metadata as Record<string, any>,
-      ...(includeVector && { vector: match.values || [] }),
-    }));
+      return results.matches.map(match => ({
+        id: match.id,
+        score: match.score || 0,
+        metadata: match.metadata as Record<string, any>,
+        ...(includeVector && { vector: match.values || [] }),
+      }));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_PINECONE_VECTOR_QUERY_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, topK },
+        },
+        error,
+      );
+    }
   }
 
   async listIndexes(): Promise<string[]> {
-    const indexesResult = await this.client.listIndexes();
-    return indexesResult?.indexes?.map(index => index.name) || [];
+    try {
+      const indexesResult = await this.client.listIndexes();
+      return indexesResult?.indexes?.map(index => index.name) || [];
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_PINECONE_VECTOR_LIST_INDEXES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -191,23 +248,43 @@ export class PineconeVector extends MastraVector {
    * @returns A promise that resolves to the index statistics including dimension, count and metric
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<PineconeIndexStats> {
-    const index = this.client.Index(indexName);
-    const stats = await index.describeIndexStats();
-    const description = await this.client.describeIndex(indexName);
+    try {
+      const index = this.client.Index(indexName);
+      const stats = await index.describeIndexStats();
+      const description = await this.client.describeIndex(indexName);
 
-    return {
-      dimension: description.dimension,
-      count: stats.totalRecordCount || 0,
-      metric: description.metric as 'cosine' | 'euclidean' | 'dotproduct',
-      namespaces: stats.namespaces,
-    };
+      return {
+        dimension: description.dimension,
+        count: stats.totalRecordCount || 0,
+        metric: description.metric as 'cosine' | 'euclidean' | 'dotproduct',
+        namespaces: stats.namespaces,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_PINECONE_VECTOR_DESCRIBE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
   }
 
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     try {
       await this.client.deleteIndex(indexName);
-    } catch (error: any) {
-      throw new Error(`Failed to delete Pinecone index: ${error.message}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_PINECONE_VECTOR_DELETE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
     }
   }
 
@@ -223,11 +300,17 @@ export class PineconeVector extends MastraVector {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update, namespace }: PineconeUpdateVectorParams): Promise<void> {
-    try {
-      if (!update.vector && !update.metadata) {
-        throw new Error('No updates provided');
-      }
+    if (!update.vector && !update.metadata) {
+      throw new MastraError({
+        id: 'STORAGE_PINECONE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'No updates provided',
+        details: { indexName, id },
+      });
+    }
 
+    try {
       const index = this.client.Index(indexName).namespace(namespace || '');
 
       const updateObj: UpdateOptions = { id };
@@ -241,8 +324,16 @@ export class PineconeVector extends MastraVector {
       }
 
       await index.update(updateObj);
-    } catch (error: any) {
-      throw new Error(`Failed to update vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_PINECONE_VECTOR_UPDATE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, id },
+        },
+        error,
+      );
     }
   }
 
@@ -258,8 +349,16 @@ export class PineconeVector extends MastraVector {
     try {
       const index = this.client.Index(indexName).namespace(namespace || '');
       await index.deleteOne(id);
-    } catch (error: any) {
-      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, id },
+        },
+        error,
+      );
     }
   }
 }

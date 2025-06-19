@@ -13,6 +13,7 @@ export enum ErrorDomain {
   EVAL = 'EVAL',
   MASTRA = 'MASTRA',
   DEPLOYER = 'DEPLOYER',
+  STORAGE = 'STORAGE',
 }
 
 export enum ErrorCategory {

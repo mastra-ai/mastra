@@ -12,6 +12,7 @@ import type {
   UpdateVectorParams,
   UpsertVectorParams,
 } from '@mastra/core';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 import { MastraVector } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
@@ -69,7 +70,15 @@ export class LanceVectorStore extends MastraVector {
       instance.lanceClient = await connect(uri, options);
       return instance;
     } catch (e) {
-      throw new Error(`Failed to connect to LanceDB: ${e}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_CONNECT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { uri },
+        },
+        e,
+      );
     }
   }
 
@@ -96,16 +105,29 @@ export class LanceVectorStore extends MastraVector {
     columns = [],
     includeAllColumns = false,
   }: LanceQueryVectorParams): Promise<QueryResult[]> {
-    if (!this.lanceClient) {
-      throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
-    }
+    try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
+      }
 
-    if (!tableName) {
-      throw new Error('tableName is required');
-    }
+      if (!tableName) {
+        throw new Error('tableName is required');
+      }
 
-    if (!queryVector) {
-      throw new Error('queryVector is required');
+      if (!queryVector) {
+        throw new Error('queryVector is required');
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_QUERY_FAILED_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'LanceDB client not initialized. Use LanceVectorStore.create() to create an instance',
+          details: { tableName },
+        },
+        error,
+      );
     }
 
     try {
@@ -170,7 +192,15 @@ export class LanceVectorStore extends MastraVector {
         };
       });
     } catch (error: any) {
-      throw new Error(`Failed to query vectors: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_QUERY_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName, includeVector, columnsCount: columns?.length, includeAllColumns },
+        },
+        error,
+      );
     }
   }
 
@@ -217,16 +247,29 @@ export class LanceVectorStore extends MastraVector {
   }
 
   async upsert({ tableName, vectors, metadata = [], ids = [] }: LanceUpsertVectorParams): Promise<string[]> {
-    if (!this.lanceClient) {
-      throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
-    }
+    try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
+      }
 
-    if (!tableName) {
-      throw new Error('tableName is required');
-    }
+      if (!tableName) {
+        throw new Error('tableName is required');
+      }
 
-    if (!vectors || !Array.isArray(vectors) || vectors.length === 0) {
-      throw new Error('vectors array is required and must not be empty');
+      if (!vectors || !Array.isArray(vectors) || vectors.length === 0) {
+        throw new Error('vectors array is required and must not be empty');
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_UPSERT_FAILED_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'LanceDB client not initialized. Use LanceVectorStore.create() to create an instance',
+          details: { tableName },
+        },
+        error,
+      );
     }
 
     try {
@@ -267,7 +310,15 @@ export class LanceVectorStore extends MastraVector {
 
       return vectorIds;
     } catch (error: any) {
-      throw new Error(`Failed to upsert vectors: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_UPSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName, vectorCount: vectors.length, metadataCount: metadata.length, idsCount: ids.length },
+        },
+        error,
+      );
     }
   }
 
@@ -293,34 +344,84 @@ export class LanceVectorStore extends MastraVector {
     options?: Partial<CreateTableOptions>,
   ): Promise<Table> {
     if (!this.lanceClient) {
-      throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
+      throw new MastraError({
+        id: 'STORAGE_LANCE_VECTOR_CREATE_TABLE_FAILED_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'LanceDB client not initialized. Use LanceVectorStore.create() to create an instance',
+        details: { tableName },
+      });
+    }
+
+    // Flatten nested objects if data is an array of records
+    if (Array.isArray(data)) {
+      data = data.map(record => this.flattenObject(record));
     }
 
     try {
-      // Flatten nested objects if data is an array of records
-      if (Array.isArray(data)) {
-        data = data.map(record => this.flattenObject(record));
-      }
-
       return await this.lanceClient.createTable(tableName, data, options);
     } catch (error: any) {
-      throw new Error(`Failed to create table: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_CREATE_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
   async listTables(): Promise<string[]> {
     if (!this.lanceClient) {
-      throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
+      throw new MastraError({
+        id: 'STORAGE_LANCE_VECTOR_LIST_TABLES_FAILED_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'LanceDB client not initialized. Use LanceVectorStore.create() to create an instance',
+        details: { methodName: 'listTables' },
+      });
     }
-    return await this.lanceClient.tableNames();
+    try {
+      return await this.lanceClient.tableNames();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_LIST_TABLES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   async getTableSchema(tableName: string): Promise<any> {
     if (!this.lanceClient) {
-      throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
+      throw new MastraError({
+        id: 'STORAGE_LANCE_VECTOR_GET_TABLE_SCHEMA_FAILED_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'LanceDB client not initialized. Use LanceVectorStore.create() to create an instance',
+        details: { tableName },
+      });
     }
-    const table = await this.lanceClient.openTable(tableName);
-    return await table.schema();
+
+    try {
+      const table = await this.lanceClient.openTable(tableName);
+      return await table.schema();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_GET_TABLE_SCHEMA_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -333,11 +434,11 @@ export class LanceVectorStore extends MastraVector {
     metric = 'cosine',
     indexConfig = {},
   }: LanceCreateIndexParams): Promise<void> {
-    if (!this.lanceClient) {
-      throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
-    }
-
     try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
+      }
+
       if (!tableName) {
         throw new Error('tableName is required');
       }
@@ -349,7 +450,19 @@ export class LanceVectorStore extends MastraVector {
       if (typeof dimension !== 'number' || dimension <= 0) {
         throw new Error('dimension must be a positive number');
       }
+    } catch (err) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_CREATE_INDEX_FAILED_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { tableName: tableName || '', indexName, dimension, metric },
+        },
+        err,
+      );
+    }
 
+    try {
       const tables = await this.lanceClient.tableNames();
       if (!tables.includes(tableName)) {
         throw new Error(
@@ -390,13 +503,27 @@ export class LanceVectorStore extends MastraVector {
         });
       }
     } catch (error: any) {
-      throw new Error(`Failed to create index: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_CREATE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName: tableName || '', indexName, dimension },
+        },
+        error,
+      );
     }
   }
 
   async listIndexes(): Promise<string[]> {
     if (!this.lanceClient) {
-      throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
+      throw new MastraError({
+        id: 'STORAGE_LANCE_VECTOR_LIST_INDEXES_FAILED_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'LanceDB client not initialized. Use LanceVectorStore.create() to create an instance',
+        details: { methodName: 'listIndexes' },
+      });
     }
 
     try {
@@ -411,17 +538,36 @@ export class LanceVectorStore extends MastraVector {
 
       return allIndices;
     } catch (error: any) {
-      throw new Error(`Failed to list indexes: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_LIST_INDEXES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
-    if (!this.lanceClient) {
-      throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
-    }
+    try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
+      }
 
-    if (!indexName) {
-      throw new Error('indexName is required');
+      if (!indexName) {
+        throw new Error('indexName is required');
+      }
+    } catch (err) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_DESCRIBE_INDEX_FAILED_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+        },
+        err,
+      );
     }
 
     try {
@@ -457,19 +603,38 @@ export class LanceVectorStore extends MastraVector {
 
       throw new Error(`IndexName: ${indexName} not found`);
     } catch (error: any) {
-      throw new Error(`Failed to describe index: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_DESCRIBE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
     }
   }
 
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    if (!this.lanceClient) {
-      throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
-    }
+    try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
+      }
 
-    if (!indexName) {
-      throw new Error('indexName is required');
+      if (!indexName) {
+        throw new Error('indexName is required');
+      }
+    } catch (err) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_DELETE_INDEX_FAILED_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+        },
+        err,
+      );
     }
-
     try {
       const tables = await this.lanceClient.tableNames();
 
@@ -486,7 +651,15 @@ export class LanceVectorStore extends MastraVector {
 
       throw new Error(`Index ${indexName} not found`);
     } catch (error: any) {
-      throw new Error(`Failed to delete index: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_DELETE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
     }
   }
 
@@ -495,39 +668,79 @@ export class LanceVectorStore extends MastraVector {
    */
   async deleteAllTables(): Promise<void> {
     if (!this.lanceClient) {
-      throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
+      throw new MastraError({
+        id: 'STORAGE_LANCE_VECTOR_DELETE_ALL_TABLES_FAILED_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { methodName: 'deleteAllTables' },
+        text: 'LanceDB client not initialized. Use LanceVectorStore.create() to create an instance',
+      });
     }
-
     try {
       await this.lanceClient.dropAllTables();
-    } catch (error: any) {
-      throw new Error(`Failed to delete tables: ${error.message}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_DELETE_ALL_TABLES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { methodName: 'deleteAllTables' },
+        },
+        error,
+      );
     }
   }
 
   async deleteTable(tableName: string): Promise<void> {
     if (!this.lanceClient) {
-      throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
+      throw new MastraError({
+        id: 'STORAGE_LANCE_VECTOR_DELETE_TABLE_FAILED_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { tableName },
+        text: 'LanceDB client not initialized. Use LanceVectorStore.create() to create an instance',
+      });
     }
 
     try {
       await this.lanceClient.dropTable(tableName);
     } catch (error: any) {
-      throw new Error(`Failed to delete tables: ${error.message}`);
+      // throw new Error(`Failed to delete tables: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_DELETE_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
-    if (!this.lanceClient) {
-      throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
-    }
+    try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
+      }
 
-    if (!indexName) {
-      throw new Error('indexName is required');
-    }
+      if (!indexName) {
+        throw new Error('indexName is required');
+      }
 
-    if (!id) {
-      throw new Error('id is required');
+      if (!id) {
+        throw new Error('id is required');
+      }
+    } catch (err) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_UPDATE_VECTOR_FAILED_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName, id },
+        },
+        err,
+      );
     }
 
     try {
@@ -612,21 +825,41 @@ export class LanceVectorStore extends MastraVector {
 
       throw new Error(`No table found with column/index '${indexName}'`);
     } catch (error: any) {
-      throw new Error(`Failed to update index: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_UPDATE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, id, hasVector: !!update.vector, hasMetadata: !!update.metadata },
+        },
+        error,
+      );
     }
   }
 
   async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
-    if (!this.lanceClient) {
-      throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
-    }
+    try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
+      }
 
-    if (!indexName) {
-      throw new Error('indexName is required');
-    }
+      if (!indexName) {
+        throw new Error('indexName is required');
+      }
 
-    if (!id) {
-      throw new Error('id is required');
+      if (!id) {
+        throw new Error('id is required');
+      }
+    } catch (err) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_DELETE_VECTOR_FAILED_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName, id },
+        },
+        err,
+      );
     }
 
     try {
@@ -657,7 +890,15 @@ export class LanceVectorStore extends MastraVector {
 
       throw new Error(`No table found with column/index '${indexName}'`);
     } catch (error: any) {
-      throw new Error(`Failed to delete index: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_VECTOR_DELETE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, id },
+        },
+        error,
+      );
     }
   }
 

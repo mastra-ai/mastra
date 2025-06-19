@@ -232,7 +232,7 @@ describe('LanceStorage tests', async () => {
 
     it('should throw error when invalid key type is provided', async () => {
       await expect(storage.load({ tableName: TABLE_MESSAGES, keys: { id: '1' } })).rejects.toThrowError(
-        "Failed to load record: Error: Expected numeric value for field 'id', got string",
+        /Expected numeric value for field 'id', got string/,
       );
     });
 
