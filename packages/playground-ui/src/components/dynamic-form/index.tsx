@@ -36,7 +36,6 @@ export function DynamicForm<T extends z.ZodSchema>({
   readOnly,
 }: DynamicFormProps<T>) {
   const isNotZodObject = (schema._def as { typeName: string }).typeName !== 'ZodObject';
-  console.log('schema==', schema);
   if (!schema) {
     console.error('no form schema found');
     return null;
@@ -44,7 +43,6 @@ export function DynamicForm<T extends z.ZodSchema>({
 
   const normalizedSchema = (schema: z.ZodSchema) => {
     if (isEmptyZodObject(schema)) {
-      console.log('schema is empty');
       return z.object({});
     }
     if (isNotZodObject) {
@@ -57,8 +55,6 @@ export function DynamicForm<T extends z.ZodSchema>({
   };
 
   const schemaProvider = new CustomZodProvider(normalizedSchema(schema) as any);
-
-  console.log('schemaProvider==', schemaProvider);
 
   const formProps: ExtendableAutoFormProps<z.infer<T>> = {
     schema: schemaProvider,
