@@ -343,12 +343,10 @@ export class MCPServer extends MCPServerBase {
     agentsConfig?: Record<string, Agent>,
     workflowsConfig?: Record<string, Workflow>,
   ): Record<string, ConvertedTool> {
-    this.logger.debug(`Converting tools:`, { tools });
     const definedConvertedTools: Record<string, ConvertedTool> = {};
 
     for (const toolName of Object.keys(tools)) {
       const toolInstance = tools[toolName];
-      this.logger.debug(`Converting tool: '${toolName}'`, { toolInstance });
       if (!toolInstance) {
         this.logger.warn(`Tool instance for '${toolName}' is undefined. Skipping.`);
         continue;
@@ -368,13 +366,6 @@ export class MCPServer extends MCPServerBase {
       };
 
       const coreTool = makeCoreTool(toolInstance, options) as InternalCoreTool;
-
-      // if ((toolInstance as any).outputSchema && !coreTool.outputSchema) {
-      //   (coreTool as any).outputSchema = makeCoreTool(
-      //     { parameters: (toolInstance as any).outputSchema },
-      //     { name: 'temp', runtimeContext: new RuntimeContext() },
-      //   ).parameters;
-      // }
 
       definedConvertedTools[toolName] = {
         name: toolName,
@@ -466,8 +457,6 @@ export class MCPServer extends MCPServerBase {
             isError: true,
           };
         }
-
-        this.logger.debug(`CallTool: Invoking '${request.params.name}' with arguments:`, request.params.arguments);
 
         const validation = tool.parameters.validate?.(request.params.arguments ?? {});
         if (validation && !validation.success) {

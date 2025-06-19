@@ -999,7 +999,6 @@ describe('MCPServer', () => {
 
       const toolOutput = result.content[0];
       expect(toolOutput.type).toBe('text');
-      console.log(`toolOutput.text: ${toolOutput.text}`);
       const toolResult = JSON.parse(toolOutput.text);
       expect(toolResult.location).toEqual('Austin');
       expect(toolResult).toHaveProperty('temperature');
