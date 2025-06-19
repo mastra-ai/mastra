@@ -24,6 +24,7 @@ export class BaseResource {
         const response = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
           ...options,
           headers: {
+            ...(options.method === 'POST' || options.method === 'PUT' ? { 'content-type': 'application/json' } : {}),
             ...headers,
             ...options.headers,
             // TODO: Bring this back once we figure out what we/users need to do to make this work with cross-origin requests
