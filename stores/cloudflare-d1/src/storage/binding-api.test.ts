@@ -420,7 +420,7 @@ describe('D1Store', () => {
       // Retrieve messages
       const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       const checkMessages = messages.map(m => {
-        const { resourceId, ...rest } = m;
+        const { resourceId, type, ...rest } = m;
         return rest;
       });
       expect(retrievedMessages).toEqual(expect.arrayContaining(checkMessages));
@@ -436,9 +436,9 @@ describe('D1Store', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        createSampleMessageV2({ threadId: thread.id, content: 'First' }),
-        createSampleMessageV2({ threadId: thread.id, content: 'Second' }),
-        createSampleMessageV2({ threadId: thread.id, content: 'Third' }),
+        createSampleMessageV2({ threadId: thread.id, content: { content: 'First' } }),
+        createSampleMessageV2({ threadId: thread.id, content: { content: 'Second' } }),
+        createSampleMessageV2({ threadId: thread.id, content: { content: 'Third' } }),
       ];
 
       await store.saveMessages({ messages, format: 'v2' });
@@ -724,9 +724,17 @@ describe('D1Store', () => {
       // Create messages with explicit timestamps to test chronological ordering
       const baseTime = new Date('2025-03-14T23:30:20.930Z').getTime();
       const messages = [
-        createSampleMessageV2({ threadId: thread.id, content: 'First', createdAt: new Date(baseTime) }),
-        createSampleMessageV2({ threadId: thread.id, content: 'Second', createdAt: new Date(baseTime + 1000) }),
-        createSampleMessageV2({ threadId: thread.id, content: 'Third', createdAt: new Date(baseTime + 2000) }),
+        createSampleMessageV2({ threadId: thread.id, content: { content: 'First' }, createdAt: new Date(baseTime) }),
+        createSampleMessageV2({
+          threadId: thread.id,
+          content: { content: 'Second' },
+          createdAt: new Date(baseTime + 1000),
+        }),
+        createSampleMessageV2({
+          threadId: thread.id,
+          content: { content: 'Third' },
+          createdAt: new Date(baseTime + 2000),
+        }),
       ];
 
       await store.saveMessages({ messages, format: 'v2' });
@@ -1149,7 +1157,7 @@ describe('D1Store', () => {
       const thread = createSampleThread();
       const message = createSampleMessageV2({
         threadId: thread.id,
-        content: '特殊字符 !@#$%^&*()',
+        content: { content: '特殊字符 !@#$%^&*()' },
         createdAt: new Date(),
       });
 
@@ -1289,7 +1297,10 @@ describe('D1Store', () => {
       await store.saveThread({ thread });
 
       // Test with various malformed data
-      const malformedMessage = createSampleMessageV2({ threadId: thread.id, content: ''.padStart(1024 * 1024, 'x') });
+      const malformedMessage = createSampleMessageV2({
+        threadId: thread.id,
+        content: { content: ''.padStart(1024 * 1024, 'x') },
+      });
 
       await store.saveMessages({ messages: [malformedMessage], format: 'v2' });
 
@@ -1708,40 +1719,48 @@ describe('D1Store Pagination Features', () => {
       // Ensure timestamps are distinct for reliable sorting by creating them with a slight delay for testing clarity
       const messagesToSave: MastraMessageV2[] = [];
       messagesToSave.push({
-        ...createSampleMessageV2({ threadId: thread.id, content: 'dayBefore1', createdAt: dayBeforeYesterday }),
+        ...createSampleMessageV2({
+          threadId: thread.id,
+          content: { content: 'dayBefore1' },
+          createdAt: dayBeforeYesterday,
+        }),
         role: 'user',
       });
       await new Promise(r => setTimeout(r, 5));
       messagesToSave.push({
         ...createSampleMessageV2({
           threadId: thread.id,
-          content: 'dayBefore2',
+          content: { content: 'dayBefore2' },
           createdAt: new Date(dayBeforeYesterday.getTime() + 1),
         }),
         role: 'user',
       });
       await new Promise(r => setTimeout(r, 5));
       messagesToSave.push({
-        ...createSampleMessageV2({ threadId: thread.id, content: 'yesterday1', createdAt: yesterday }),
+        ...createSampleMessageV2({ threadId: thread.id, content: { content: 'yesterday1' }, createdAt: yesterday }),
         role: 'user',
       });
       await new Promise(r => setTimeout(r, 5));
       messagesToSave.push({
         ...createSampleMessageV2({
           threadId: thread.id,
-          content: 'yesterday2',
+          content: { content: 'yesterday2' },
           createdAt: new Date(yesterday.getTime() + 1),
         }),
         role: 'user',
       });
       await new Promise(r => setTimeout(r, 5));
       messagesToSave.push({
-        ...createSampleMessageV2({ threadId: thread.id, content: 'now1', createdAt: now }),
+        ...createSampleMessageV2({ threadId: thread.id, content: { content: 'now1' }, createdAt: now }),
         role: 'user',
       });
       await new Promise(r => setTimeout(r, 5));
       messagesToSave.push({
-        ...createSampleMessageV2({ threadId: thread.id, content: 'now2', createdAt: new Date(now.getTime() + 1) }),
+        ...createSampleMessageV2({
+          threadId: thread.id,
+          content: { content: 'now2' },
+          createdAt: new Date(now.getTime() + 1),
+        }),
         role: 'user',
       });
 
