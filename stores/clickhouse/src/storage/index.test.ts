@@ -236,6 +236,74 @@ describe('ClickhouseStore', () => {
       });
     }, 10e3);
 
+    it('should upsert messages: duplicate id+threadId results in update, not duplicate row', async () => {
+      const thread = await createSampleThread({ resourceId: 'clickhouse-test' });
+      await store.saveThread({ thread });
+      const baseMessage = createSampleMessageV1({
+        threadId: thread.id,
+        createdAt: new Date(),
+        content: 'Original',
+        resourceId: 'clickhouse-test',
+      });
+
+      // Insert the message for the first time
+      await store.saveMessages({ messages: [baseMessage] });
+
+      // Insert again with the same id and threadId but different content
+      const updatedMessage = {
+        ...baseMessage,
+        content: [{ type: 'text', text: 'Updated' }],
+      } as MastraMessageV1;
+      await store.saveMessages({ messages: [updatedMessage] });
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Retrieve messages for the thread
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+
+      // Only one message should exist for that id+threadId
+      expect(retrievedMessages.filter(m => m.id === baseMessage.id)).toHaveLength(1);
+
+      // The content should be the updated one
+      expect(retrievedMessages.find(m => m.id === baseMessage.id)?.content[0].text).toBe('Updated');
+    }, 10e3);
+
+    it('should not insert or update a message if id matches but threadId differs', async () => {
+      const thread1 = await createSampleThread({ resourceId: 'clickhouse-test' });
+      const thread2 = await createSampleThread({ resourceId: 'clickhouse-test' });
+      await store.saveThread({ thread: thread1 });
+      await store.saveThread({ thread: thread2 });
+
+      const messageThread1 = createSampleMessageV1({
+        threadId: thread1.id,
+        createdAt: new Date(),
+        content: 'Thread1 Content',
+        resourceId: 'clickhouse-test',
+      });
+
+      // Insert message into thread1
+      await store.saveMessages({ messages: [messageThread1] });
+
+      // Attempt to insert a message with the same id but different threadId
+      const conflictingMessage = {
+        ...messageThread1,
+        threadId: thread2.id, // different thread
+        content: 'Thread2 Content',
+      };
+
+      // Save should ignore the conflicting message
+      await store.saveMessages({ messages: [conflictingMessage] });
+
+      // Retrieve messages for both threads
+      const thread1Messages = await store.getMessages({ threadId: thread1.id });
+      const thread2Messages = await store.getMessages({ threadId: thread2.id });
+
+      // Thread 1 should have the message
+      expect(thread1Messages.find(m => m.id === messageThread1.id)?.content[0].text).toBe('Thread1 Content');
+
+      // Thread 2 should NOT have the message with that id
+      expect(thread2Messages.find(m => m.id === messageThread1.id)).toBeUndefined();
+    }, 10e3);
+
     // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
     //   const messages: MastraMessageV2[] = [
     //     createSampleMessageV2({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
