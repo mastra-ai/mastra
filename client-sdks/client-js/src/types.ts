@@ -183,6 +183,11 @@ export interface SaveMessageToMemoryParams {
   agentId: string;
 }
 
+export interface SaveNetworkMessageToMemoryParams {
+  messages: MastraMessageV1[];
+  networkId: string;
+}
+
 export type SaveMessageToMemoryResponse = MastraMessageV1[];
 
 export interface CreateMemoryThreadParams {
@@ -193,11 +198,24 @@ export interface CreateMemoryThreadParams {
   agentId: string;
 }
 
+export interface CreateNetworkMemoryThreadParams {
+  title?: string;
+  metadata?: Record<string, any>;
+  resourceId: string;
+  threadId?: string;
+  networkId: string;
+}
+
 export type CreateMemoryThreadResponse = StorageThreadType;
 
 export interface GetMemoryThreadParams {
   resourceId: string;
   agentId: string;
+}
+
+export interface GetNetworkMemoryThreadParams {
+  resourceId: string;
+  networkId: string;
 }
 
 export type GetMemoryThreadResponse = StorageThreadType[];
@@ -347,6 +365,12 @@ export interface GenerateVNextNetworkResponse {
   result: string;
   resourceId: string;
   resourceType: 'none' | 'tool' | 'agent' | 'workflow';
+}
+
+export interface GenerateOrStreamVNextNetworkParams {
+  message: string;
+  threadId?: string;
+  resourceId?: string;
 }
 
 export interface LoopVNextNetworkResponse {

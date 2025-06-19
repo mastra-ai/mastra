@@ -20,7 +20,9 @@ const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
 };
 
-type VNextMastraNetworkRuntimeProviderProps = Omit<ChatProps, 'agentId'> & { networkId: string };
+type VNextMastraNetworkRuntimeProviderProps = Omit<ChatProps, 'agentId' | 'agentName'> & {
+  networkId: string;
+};
 
 export function VNextMastraNetworkRuntimeProvider({
   children,
@@ -29,6 +31,7 @@ export function VNextMastraNetworkRuntimeProvider({
   threadId,
   refreshThreadList,
   modelSettings = {},
+  initialMessages,
 }: Readonly<{
   children: ReactNode;
 }> &
@@ -71,14 +74,13 @@ export function VNextMastraNetworkRuntimeProvider({
   // const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
   //   modelSettings;
 
-  // useEffect(() => {
-  //   if (messages.length === 0 || currentThreadId !== threadId) {
-  //     if (initialMessages && threadId && memory) {
-  //       setMessages(initialMessages);
-  //       setCurrentThreadId(threadId);
-  //     }
-  //   }
-  // }, [initialMessages, threadId, memory, messages]);
+  useEffect(() => {
+    if (messages.length === 0 || currentThreadId !== threadId) {
+      if (initialMessages && threadId && memory) {
+        setCurrentThreadId(threadId);
+      }
+    }
+  }, [initialMessages, threadId, memory, messages]);
 
   const mastra = useMastraClient();
 
@@ -94,29 +96,11 @@ export function VNextMastraNetworkRuntimeProvider({
     setIsRunning(true);
 
     try {
-      let content = '';
-      let currentTextPart: { type: 'text'; text: string } | null = null;
-
-      let assistantMessageAdded = false;
-
-      function updater() {
-        setMessages(currentConversation => {
-          const message: ThreadMessageLike = {
-            role: 'assistant',
-            content: [{ type: 'text', text: content }],
-          };
-
-          if (!assistantMessageAdded) {
-            assistantMessageAdded = true;
-            return [...currentConversation, message];
-          }
-          return [...currentConversation.slice(0, -1), message];
-        });
-      }
-
       const response = await network.stream(
         {
           message: input,
+          threadId,
+          resourceId: networkId,
         },
         record => {
           // if (record.type === 'tool-call') {
@@ -147,7 +131,11 @@ export function VNextMastraNetworkRuntimeProvider({
             if ((record as any).type === 'tool-call-delta') {
               appendToLastMessage((record as any).argsTextDelta);
             } else if ((record as any).type === 'tool-call-streaming-start') {
-              return setMessages(msgs => [...msgs, { role: 'assistant', content: [{ type: 'text', text: '' }] }]);
+              setMessages(msgs => [...msgs, { role: 'assistant', content: [{ type: 'text', text: '' }] }]);
+              setTimeout(() => {
+                refreshThreadList?.();
+              }, 500);
+              return;
             } else {
               handleStep(runIdRef.current, record);
             }
@@ -175,6 +163,10 @@ export function VNextMastraNetworkRuntimeProvider({
               ];
             });
           }
+
+          setTimeout(() => {
+            refreshThreadList?.();
+          }, 500);
         },
       );
 

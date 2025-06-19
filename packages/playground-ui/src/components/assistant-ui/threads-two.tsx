@@ -26,12 +26,12 @@ import clsx from 'clsx';
 
 export interface ThreadProps {
   ToolFallback?: ToolCallContentPartComponent;
-  agentName?: string;
+  networkName?: string;
   hasMemory?: boolean;
   showFileSupport?: boolean;
 }
 
-export const VNextThread = ({ ToolFallback, agentName, hasMemory, showFileSupport }: ThreadProps) => {
+export const VNextThread = ({ ToolFallback, networkName, hasMemory, showFileSupport }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
@@ -43,7 +43,7 @@ export const VNextThread = ({ ToolFallback, agentName, hasMemory, showFileSuppor
     <ThreadWrapper>
       <ThreadPrimitive.Viewport className="py-10 overflow-y-auto scroll-smooth h-full" ref={areaRef} autoScroll={false}>
         <div>
-          <ThreadWelcome agentName={agentName} />
+          <ThreadWelcome networkName={networkName} />
           <ThreadPrimitive.Messages
             components={{
               UserMessage: UserMessage,
@@ -79,19 +79,19 @@ const ThreadWrapper = ({ children }: { children: React.ReactNode }) => {
 };
 
 export interface ThreadWelcomeProps {
-  agentName?: string;
+  networkName?: string;
 }
 
-const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
-  const safeAgentName = agentName ?? '';
-  const words = safeAgentName.split(' ') ?? [];
+const ThreadWelcome = ({ networkName }: ThreadWelcomeProps) => {
+  const safeNetworkName = networkName ?? '';
+  const words = safeNetworkName.split(' ') ?? [];
 
   let initials = 'A';
 
   if (words.length === 2) {
     initials = `${words[0][0]}${words[1][0]}`;
-  } else if (safeAgentName.length > 0) {
-    initials = `${safeAgentName[0]}`;
+  } else if (safeNetworkName.length > 0) {
+    initials = `${safeNetworkName[0]}`;
   } else {
     initials = 'A';
   }

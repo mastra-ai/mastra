@@ -123,7 +123,7 @@ export async function generateVNextNetworkHandler({
   body,
 }: NetworkContext & {
   runtimeContext: RuntimeContext;
-  body: { message: string };
+  body: { message: string; threadId?: string; resourceId?: string };
 }) {
   try {
     const network = mastra.vnext_getNetwork(networkId!);
@@ -134,8 +134,8 @@ export async function generateVNextNetworkHandler({
 
     validateBody({ message: body.message });
 
-    const { message } = body;
-    const result = await network.generate(message, { runtimeContext });
+    const { message, threadId, resourceId } = body;
+    const result = await network.generate(message, { runtimeContext, threadId, resourceId });
 
     return result;
   } catch (error) {
@@ -150,7 +150,7 @@ export async function streamGenerateVNextNetworkHandler({
   runtimeContext,
 }: NetworkContext & {
   runtimeContext: RuntimeContext;
-  body: { message: string };
+  body: { message: string; threadId?: string; resourceId?: string };
 }) {
   try {
     const network = mastra.vnext_getNetwork(networkId!);
@@ -161,9 +161,11 @@ export async function streamGenerateVNextNetworkHandler({
 
     validateBody({ message: body.message });
 
-    const { message } = body;
+    const { message, threadId, resourceId } = body;
     const streamResult = await network.stream(message, {
       runtimeContext,
+      threadId,
+      resourceId,
     });
 
     return streamResult;

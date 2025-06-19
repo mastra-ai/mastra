@@ -5,6 +5,7 @@ import type {
   GetVNextNetworkResponse,
   GenerateVNextNetworkResponse,
   LoopVNextNetworkResponse,
+  GenerateOrStreamVNextNetworkParams,
 } from '../types';
 
 import { BaseResource } from './base';
@@ -32,7 +33,7 @@ export class VNextNetwork extends BaseResource {
    * @param params - Generation parameters including message
    * @returns Promise containing the generated response
    */
-  generate(params: { message: string }): Promise<GenerateVNextNetworkResponse> {
+  generate(params: GenerateOrStreamVNextNetworkParams): Promise<GenerateVNextNetworkResponse> {
     return this.request(`/api/networks/${this.networkId}/generate`, {
       method: 'POST',
       body: params,
@@ -120,15 +121,12 @@ export class VNextNetwork extends BaseResource {
    * @param params - Stream parameters including message
    * @returns Promise containing the results
    */
-  async stream(params: { message: string }, onRecord: (record: WatchEvent) => void) {
-    console.log('stream called');
+  async stream(params: GenerateOrStreamVNextNetworkParams, onRecord: (record: WatchEvent) => void) {
     const response: Response = await this.request(`/api/networks/v-next/${this.networkId}/stream`, {
       method: 'POST',
-      body: { message: params.message },
+      body: params,
       stream: true,
     });
-
-    console.log('after request');
 
     if (!response.ok) {
       throw new Error(`Failed to stream vNext network: ${response.statusText}`);
@@ -137,50 +135,6 @@ export class VNextNetwork extends BaseResource {
     if (!response.body) {
       throw new Error('Response body is null');
     }
-
-    console.log('request body gotten');
-
-    // // Create a transform stream that processes the response body
-    // const transformStream = new TransformStream({
-    //   start() {
-    //     console.log('starts stream');
-    //   },
-    //   async transform(chunk, controller) {
-    //     console.log('beginning transform');
-    //     try {
-    //       console.log('transform starts===', chunk);
-    //       // Decode binary data to text
-    //       const decoded = new TextDecoder().decode(chunk);
-    //       console.log('decoded===', decoded);
-
-    //       // Split by record separator
-    //       const chunks = decoded.split(RECORD_SEPARATOR);
-    //       console.log('chunks===', chunk);
-
-    //       // Process each chunk
-    //       for (const chunk of chunks) {
-    //         if (chunk) {
-    //           try {
-    //             const parsedChunk = JSON.parse(chunk);
-    //             console.log('parsedchunk==', parsedChunk);
-    //             controller.enqueue(parsedChunk);
-    //           } catch (err) {
-    //             console.log('error in chunk', err);
-    //             // Silently ignore parsing errors
-    //           }
-    //         }
-    //       }
-    //     } catch (err) {
-    //       console.log('transform error', err);
-    //       // Silently ignore processing errors
-    //     }
-    //   },
-    // });
-
-    // console.log('transform stream created');
-
-    // // Pipe the response body through the transform stream
-    // return response.body.pipeThrough(transformStream);
 
     for await (const record of this.streamProcessor(response.body)) {
       if (typeof record === 'string') {

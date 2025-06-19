@@ -44,10 +44,10 @@ export function NetworkInformation({ networkId, isVNext }: { networkId: string; 
       </TabsList>
       <div className="overflow-y-auto">
         <TabsContent value="details">
-          <NetworkDetails network={network} />
+          <NetworkDetails network={networkToUse} />
         </TabsContent>
         <TabsContent value="agents">
-          <NetworkAgents network={network} />
+          <NetworkAgents network={networkToUse} />
         </TabsContent>
         {isVNext ? (
           <TabsContent value="workflows">

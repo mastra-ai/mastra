@@ -63,6 +63,7 @@ function App() {
                   }
                 >
                   <Route path="chat" element={<VNextNetwork />} />
+                  <Route path="chat/:threadId" element={<VNextNetwork />} />
                 </Route>
                 <Route path="/networks/:networkId" element={<Navigate to="/networks/:networkId/chat" />} />
                 <Route

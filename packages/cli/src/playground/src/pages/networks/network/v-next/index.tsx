@@ -1,43 +1,65 @@
-import { NetworkInformation } from '@/domains/networks/network-information';
+import { v4 as uuid } from '@lukeed/uuid';
 
-import { cn } from '@/lib/utils';
-import { VNextNetworkChat } from '@mastra/playground-ui';
-import { useParams } from 'react-router';
+// import { NetworkInformation } from '@/domains/networks/network-information';
+import { useNetworkMemory, useNetworkMessages, useNetworkThreads } from '@/hooks/use-network-memory';
+
+import { MainContentContent, VNextNetworkChat } from '@mastra/playground-ui';
+import { useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router';
+import { NetworkSidebar } from '@/domains/networks/network-sidebar';
+import { useVNextNetwork } from '@/hooks/use-networks';
 
 export default function VNextNetwork() {
-  const { networkId } = useParams();
+  const { networkId, threadId } = useParams();
+  const navigate = useNavigate();
 
-  // const { vNextNetwork: network, isLoading: isNetworkLoading } = useVNextNetwork(networkId!);
+  const { memory } = useNetworkMemory(networkId!);
+  const { vNextNetwork, isLoading: isNetworkLoading } = useVNextNetwork(networkId!);
 
-  // // const { messages, isLoading: isMessagesLoading } = useMessages({
-  // //   agentId: networkId!,
-  // //   threadId: threadId!,
-  // //   memory: false,
-  // // });
+  const { messages, isLoading: isMessagesLoading } = useNetworkMessages({
+    networkId: networkId!,
+    threadId: threadId!,
+    memory: !!memory?.result,
+  });
+  const {
+    threads,
+    isLoading: isThreadsLoading,
+    mutate: refreshThreads,
+  } = useNetworkThreads({ resourceid: networkId!, networkId: networkId!, isMemoryEnabled: !!memory?.result });
 
-  // if (isNetworkLoading) {
-  //   return (
-  //     <section className="flex-1 relative grid grid-cols-[1fr_400px] divide-x">
-  //       <div className="flex flex-col">
-  //         <NetworkInformation networkId={networkId!} isVNext />
-  //       </div>
-  //     </section>
-  //   );
-  // }
+  useEffect(() => {
+    if (memory?.result && !threadId) {
+      navigate(`/networks/v-next/${networkId}/chat/${uuid()}`);
+    }
+  }, [memory?.result, threadId]);
+
+  useEffect(() => {
+    console.log('messages====', messages);
+  }, [messages]);
+
+  if (isNetworkLoading) {
+    return null;
+  }
+
+  const withSidebar = Boolean(memory?.result);
+
   return (
-    <section className={cn('relative grid h-[calc(100%-40px)] divide-x', 'grid-cols-[1fr_400px]')}>
-      <div className="relative overflow-y-hidden grow h-full min-w-[325px]">
+    <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
+      {withSidebar && (
+        <NetworkSidebar networkId={networkId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
+      )}
+      <div className="grid overflow-y-auto relative bg-surface1 py-4 col-span-2">
         <VNextNetworkChat
           networkId={networkId!}
-          // agentName={network?.name}
-          // // agents={network?.agents?.map(a => a.name.replace(/[^a-zA-Z0-9_-]/g, '_')) || []}
-          // threadId={threadId!}
+          threadId={threadId!}
+          initialMessages={[]}
+          refreshThreadList={refreshThreads}
+          memory={memory?.result}
+          networkName={vNextNetwork?.name!}
           // initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
         />
       </div>
-      <div>
-        <NetworkInformation networkId={networkId!} isVNext />
-      </div>
-    </section>
+      {/* <NetworkInformation networkId={networkId!} isVNext /> */}
+    </MainContentContent>
   );
 }

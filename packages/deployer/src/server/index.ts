@@ -515,6 +515,14 @@ ${err.stack.split('\n').slice(1).join('\n')}
                   type: 'string',
                   description: 'Message for the v-next network',
                 },
+                threadId: {
+                  type: 'string',
+                  description: 'Thread Id of the conversation',
+                },
+                resourceId: {
+                  type: 'string',
+                  description: 'Resource Id of the conversation',
+                },
               },
               required: ['message'],
             },
@@ -600,6 +608,14 @@ ${err.stack.split('\n').slice(1).join('\n')}
                 message: {
                   type: 'string',
                   description: 'Message for the v-next network',
+                },
+                threadId: {
+                  type: 'string',
+                  description: 'Thread Id of the conversation',
+                },
+                resourceId: {
+                  type: 'string',
+                  description: 'Resource Id of the conversation',
                 },
               },
               required: ['message'],
@@ -1929,6 +1945,272 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     executeMcpServerToolHandler,
+  );
+
+  // Network Memory routes
+  app.get(
+    '/api/memory/network/status',
+    describeRoute({
+      description: 'Get netwrok memory status',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Memory status',
+        },
+      },
+    }),
+    getMemoryStatusHandler,
+  );
+
+  app.get(
+    '/api/memory/network/threads',
+    describeRoute({
+      description: 'Get all threads',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'resourceid',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of all threads',
+        },
+      },
+    }),
+    getThreadsHandler,
+  );
+
+  app.get(
+    '/api/memory/network/threads/:threadId',
+    describeRoute({
+      description: 'Get thread by ID',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Thread details',
+        },
+        404: {
+          description: 'Thread not found',
+        },
+      },
+    }),
+    getThreadByIdHandler,
+  );
+
+  app.get(
+    '/api/memory/network/threads/:threadId/messages',
+    describeRoute({
+      description: 'Get messages for a thread',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+          description: 'Limit the number of messages to retrieve (default: 40)',
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of messages',
+        },
+      },
+    }),
+    getMessagesHandler,
+  );
+
+  app.post(
+    '/api/memory/network/threads',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Create a new thread',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                metadata: { type: 'object' },
+                resourceId: { type: 'string' },
+                threadId: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Created thread',
+        },
+      },
+    }),
+    createThreadHandler,
+  );
+
+  app.patch(
+    '/api/memory/network/threads/:threadId',
+    describeRoute({
+      description: 'Update a thread',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { type: 'object' },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Updated thread',
+        },
+        404: {
+          description: 'Thread not found',
+        },
+      },
+    }),
+    updateThreadHandler,
+  );
+
+  app.delete(
+    '/api/memory/network/threads/:threadId',
+    describeRoute({
+      description: 'Delete a thread',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Thread deleted',
+        },
+        404: {
+          description: 'Thread not found',
+        },
+      },
+    }),
+    deleteThreadHandler,
+  );
+
+  app.post(
+    '/api/memory/network/save-messages',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Save messages',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messages: {
+                  type: 'array',
+                  items: { type: 'object' },
+                },
+              },
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Messages saved',
+        },
+      },
+    }),
+    saveMessagesHandler,
   );
 
   // Memory routes

@@ -34,8 +34,12 @@ import type {
   McpServerToolListResponse,
   GetLegacyWorkflowResponse,
   GetVNextNetworkResponse,
+  GetNetworkMemoryThreadParams,
+  CreateNetworkMemoryThreadParams,
+  SaveNetworkMessageToMemoryParams,
 } from './types';
 import { VNextNetwork } from './resources/vNextNetwork';
+import { NetworkMemoryThread } from './resources/network-memory-thread';
 
 export class MastraClient extends BaseResource {
   constructor(options: ClientOptions) {
@@ -123,6 +127,53 @@ export class MastraClient extends BaseResource {
    */
   public getMemoryStatus(agentId: string): Promise<{ result: boolean }> {
     return this.request(`/api/memory/status?agentId=${agentId}`);
+  }
+
+  /**
+   * Retrieves memory threads for a resource
+   * @param params - Parameters containing the resource ID
+   * @returns Promise containing array of memory threads
+   */
+  public getNetworkMemoryThreads(params: GetNetworkMemoryThreadParams): Promise<GetMemoryThreadResponse> {
+    return this.request(`/api/memory/network/threads?resourceid=${params.resourceId}&networkId=${params.networkId}`);
+  }
+
+  /**
+   * Creates a new memory thread
+   * @param params - Parameters for creating the memory thread
+   * @returns Promise containing the created memory thread
+   */
+  public createNetworkMemoryThread(params: CreateNetworkMemoryThreadParams): Promise<CreateMemoryThreadResponse> {
+    return this.request(`/api/memory/network/threads?networId=${params.networkId}`, { method: 'POST', body: params });
+  }
+
+  /**
+   * Gets a memory thread instance by ID
+   * @param threadId - ID of the memory thread to retrieve
+   * @returns MemoryThread instance
+   */
+  public getNetworkMemoryThread(threadId: string, networkId: string) {
+    return new NetworkMemoryThread(this.options, threadId, networkId);
+  }
+
+  /**
+   * Saves messages to memory
+   * @param params - Parameters containing messages to save
+   * @returns Promise containing the saved messages
+   */
+  public saveNetworkMessageToMemory(params: SaveNetworkMessageToMemoryParams): Promise<SaveMessageToMemoryResponse> {
+    return this.request(`/api/memory/network/save-messages?networkId=${params.networkId}`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets the status of the memory system
+   * @returns Promise containing memory system status
+   */
+  public getNetowrkMemoryStatus(networkId: string): Promise<{ result: boolean }> {
+    return this.request(`/api/memory/network/status?networkId=${networkId}`);
   }
 
   /**
