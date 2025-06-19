@@ -334,7 +334,6 @@ export class NewAgentNetwork extends MastraBase {
         iteration: 0,
       },
     });
-    console.log('RESULT', result);
 
     if (result.status === 'failed') {
       throw result.error;
@@ -435,7 +434,6 @@ export class NewAgentNetwork extends MastraBase {
 
         const routingAgent = await this.getRoutingAgent({ runtimeContext: runtimeContextToUse });
 
-        console.dir({ inputData }, { depth: null });
         let completionResult;
         if (inputData.resourceType !== 'none' && inputData?.result) {
           // Check if the task is complete
@@ -463,8 +461,6 @@ export class NewAgentNetwork extends MastraBase {
             resourceId: initData?.threadResourceId ?? this.name,
           });
 
-          console.log('COMPLETION RESULT', completionResult.object);
-
           if (completionResult.object.isComplete) {
             return {
               task: inputData.task,
@@ -478,25 +474,6 @@ export class NewAgentNetwork extends MastraBase {
             };
           }
         }
-
-        console.log(
-          'PROMPT',
-          `
-                    The user has given you the following task: 
-                    ${inputData.task}
-                    ${completionResult ? `\n\n${completionResult.object.finalResult}` : ''}
-
-                    Please select the most appropriate agent to handle this task and the prompt to be sent to the agent.
-                    If you are calling the same agent again, make sure to adjust the prompt to be more specific.
-
-                    {
-                        "resourceId": string,
-                        "resourceType": "agent" | "workflow",
-                        "prompt": string,
-                        "selectionReason": string
-                    }
-                    `,
-        );
 
         const result = await routingAgent.generate(
           `
@@ -562,7 +539,6 @@ export class NewAgentNetwork extends MastraBase {
       execute: async ({ inputData, [EMITTER_SYMBOL]: emitter }) => {
         const agentsMap = await this.getAgents({ runtimeContext: runtimeContextToUse });
         const agentId = inputData.resourceId;
-        console.log('calling agent', agentId);
 
         const agent = agentsMap[inputData.resourceId];
 
@@ -655,7 +631,6 @@ export class NewAgentNetwork extends MastraBase {
         iteration: z.number(),
       }),
       execute: async ({ inputData, [EMITTER_SYMBOL]: emitter }) => {
-        console.log('calling workflow', inputData.resourceId, inputData.prompt);
         const workflowsMap = await this.getWorkflows({ runtimeContext: runtimeContextToUse });
         const wf = workflowsMap[inputData.resourceId];
 
@@ -739,7 +714,6 @@ export class NewAgentNetwork extends MastraBase {
         }
 
         const resp = await streamPromise.promise;
-        console.log('RESP', resp);
 
         return {
           result: JSON.stringify(resp) || '',
@@ -773,7 +747,6 @@ export class NewAgentNetwork extends MastraBase {
         iteration: z.number(),
       }),
       execute: async ({ inputData }) => {
-        console.log('calling tool', inputData.resourceId, inputData);
         const toolsMap = await this.getTools({ runtimeContext: runtimeContextToUse });
         const tool = toolsMap[inputData.resourceId];
 
