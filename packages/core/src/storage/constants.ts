@@ -84,6 +84,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     role: { type: 'text', nullable: false },
     type: { type: 'text', nullable: false },
     createdAt: { type: 'timestamp', nullable: false },
+    resourceId: { type: 'text', nullable: true },
   },
   [TABLE_TRACES]: {
     id: { type: 'text', nullable: false, primaryKey: true },

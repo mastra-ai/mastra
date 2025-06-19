@@ -1,16 +1,20 @@
 # Configuring Conversation History
 
-By default, the `Memory` instance includes the last 40 messages from the current memory thread in each new request. You can customize this by configuring the `lastMessages` option:
+By default, the `Memory` instance includes the last 10 messages from the current memory thread in each new request. You can customize this by configuring the `lastMessages` option:
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
 
 // Create a memory instance with custom conversation history settings
 const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "file:../../memory.db",
+  }),
   options: {
-    lastMessages: 20, // Include the last 20 messages in the context
+    lastMessages: 20, // Include the last 20 messages in the context instead of the default 10
   },
 });
 

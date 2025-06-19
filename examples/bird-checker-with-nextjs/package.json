@@ -23,7 +23,7 @@
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.24.3"
+    "zod": "^3.25.56"
   },
   "pnpm": {
     "overrides": {
@@ -33,11 +33,11 @@
   },
   "devDependencies": {
     "@libsql/client": "^0.15.4",
-    "@types/node": "^20.17.24",
+    "@types/node": "^20.17.57",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "eslint": "^8.57.1",
-    "eslint-config-next": "15.0.2",
+    "eslint-config-next": "15.3.3",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.2"

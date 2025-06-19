@@ -4,11 +4,13 @@ on:
     paths:
       - '.github/workflows/sync_renovate-changesets.yml'
       - '**/pnpm-lock.yaml'
+      - 'examples/**/package.json'
+      - 'e2e-tests/**/package.json'
 
 jobs:
   changeset:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref_name, 'renovate/') && github.repository == 'mastra-ai/mastra'
+    if: startsWith(github.head_ref, 'renovate/') && github.repository == 'mastra-ai/mastra'
     steps:
       - uses: actions/create-github-app-token@v1
         id: app-token
@@ -45,6 +47,9 @@ jobs:
         name: Install pnpm
         with:
           run_install: false
+
+      - name: Create pnpm store
+        run: pnpm store path
 
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4

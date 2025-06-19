@@ -1,5 +1,76 @@
 # @mastra/voice-azure
 
+## 0.10.3
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`microsoft-cognitiveservices-speech-sdk@^1.44.1` ↗︎](https://www.npmjs.com/package/microsoft-cognitiveservices-speech-sdk/v/1.44.1) (from `^1.44.0`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [12a95fc]
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+- Updated dependencies [d70c420]
+- Updated dependencies [ee9af57]
+- Updated dependencies [36f1c36]
+- Updated dependencies [2a16996]
+- Updated dependencies [10d352e]
+- Updated dependencies [9589624]
+- Updated dependencies [53d3c37]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6
+
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`microsoft-cognitiveservices-speech-sdk@^1.44.1` ↗︎](https://www.npmjs.com/package/microsoft-cognitiveservices-speech-sdk/v/1.44.1) (from `^1.44.0`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+
+## 0.10.2
+
+### Patch Changes
+
+- 8ce087f: dependencies updates:
+  - Updated dependency [`microsoft-cognitiveservices-speech-sdk@^1.44.0` ↗︎](https://www.npmjs.com/package/microsoft-cognitiveservices-speech-sdk/v/1.44.0) (from `^1.43.0`, in `dependencies`)
+- Updated dependencies [d1ed912]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [f1309d3]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 8ce087f: dependencies updates:
+  - Updated dependency [`microsoft-cognitiveservices-speech-sdk@^1.44.0` ↗︎](https://www.npmjs.com/package/microsoft-cognitiveservices-speech-sdk/v/1.44.0) (from `^1.43.0`, in `dependencies`)
+- Updated dependencies [d1ed912]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [14a2566]
+  - @mastra/core@0.10.4-alpha.0
+
 ## 0.10.1
 
 ### Patch Changes

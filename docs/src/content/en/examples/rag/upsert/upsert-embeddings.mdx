@@ -18,7 +18,7 @@ Each tab includes document chunking, embedding generation, index creation, and d
 The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upstash, Cloudflare, MongoDB, OpenSearch, and Couchbase.
 */}
 
-<Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch', 'Couchbase']}>
+<Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch', 'Couchbase', 'LanceDB']}>
   <Tabs.Tab>
   The `PgVector` class provides methods to create indexes and insert embeddings into PostgreSQL with the pgvector extension.
     ```tsx copy
@@ -282,13 +282,10 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
       token: process.env.UPSTASH_TOKEN,
     });
 
-    await upstash.createIndex({
-      indexName: 'test_collection',
-      dimension: 1536,
-    });
-
+    // There is no store.createIndex call here, Upstash creates indexes (known as namespaces in Upstash) automatically
+    // when you upsert if that namespace does not exist yet.
     await upstash.upsert({
-      indexName: 'test_collection',
+      indexName: 'test_collection', // the namespace name in Upstash
       vectors: embeddings,
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
@@ -434,6 +431,40 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
 
     await couchbase.upsert({
       indexName: 'test_collection',
+      vectors: embeddings,
+      metadata: chunks?.map(chunk => ({ text: chunk.text })),
+    });
+    ```
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+  The `LanceVectorStore` class provides methods to create tables, indexes and insert embeddings into LanceDB, an embedded vector database built on the Lance columnar format.
+    ```tsx copy
+    import { openai } from '@ai-sdk/openai';
+    import { LanceVectorStore } from '@mastra/lance';
+    import { MDocument } from '@mastra/rag';
+    import { embedMany } from 'ai';
+
+    const doc = MDocument.fromText('Your text content...');
+
+    const chunks = await doc.chunk();
+
+    const { embeddings } = await embedMany({
+      values: chunks.map(chunk => chunk.text),
+      model: openai.embedding('text-embedding-3-small'),
+    });
+
+    const lance = await LanceVectorStore.create('/path/to/db');
+
+    // In LanceDB you need to create a table first
+    await lance.createIndex({
+      tableName: 'myVectors',
+      indexName: 'vector',
+      dimension: 1536,
+    });
+
+    await lance.upsert({
+      tableName: 'myVectors',
       vectors: embeddings,
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });

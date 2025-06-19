@@ -8,13 +8,13 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "execa": "^9.5.2",
+    "execa": "^9.6.0",
     "get-port": "^7.1.0",
     "globby": "^14.1.0",
     "npm-cli-login": "^1.0.0",
     "verdaccio": "^6.1.2",
     "verdaccio-auth-memory": "^10.2.2",
-    "vitest": "^3.1.2"
+    "vitest": "^3.2.3"
   },
   "dependencies": {}
 }

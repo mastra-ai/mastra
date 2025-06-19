@@ -17,7 +17,7 @@ export function NetworkInformation({ networkId, isVNext }: { networkId: string; 
   }
 
   return (
-    <Tabs defaultValue="details">
+    <Tabs defaultValue="details" className="overflow-y-auto grid grid-rows-[auto_1fr] h-full">
       <TabsList className="flex shrink-0 border-b">
         <TabsTrigger value="details" className="group">
           <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
@@ -42,20 +42,22 @@ export function NetworkInformation({ networkId, isVNext }: { networkId: string; 
           </p>
         </TabsTrigger>
       </TabsList>
-      <TabsContent value="details">
-        <NetworkDetails network={networkToUse} />
-      </TabsContent>
-      <TabsContent value="agents">
-        <NetworkAgents network={networkToUse} />
-      </TabsContent>
-      {isVNext ? (
-        <TabsContent value="workflows">
-          <NetworkWorkflows network={networkToUse as GetVNextNetworkResponse} />
+      <div className="overflow-y-auto">
+        <TabsContent value="details">
+          <NetworkDetails network={network} />
         </TabsContent>
-      ) : null}
-      <TabsContent value="endpoints">
-        <NetworkEndpoints networkId={networkId} />
-      </TabsContent>
+        <TabsContent value="agents">
+          <NetworkAgents network={network} />
+        </TabsContent>
+        {isVNext ? (
+          <TabsContent value="workflows">
+            <NetworkWorkflows network={networkToUse as GetVNextNetworkResponse} />
+          </TabsContent>
+        ) : null}
+        <TabsContent value="endpoints">
+          <NetworkEndpoints networkId={networkId} />
+        </TabsContent>
+      </div>
     </Tabs>
   );
 }

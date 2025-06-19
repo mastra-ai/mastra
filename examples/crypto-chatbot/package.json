@@ -68,7 +68,7 @@
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "usehooks-ts": "^3.1.1",
-    "zod": "^3.24.3"
+    "zod": "^3.25.56"
   },
   "pnpm": {
     "overrides": {
@@ -82,15 +82,15 @@
     "@libsql/client": "^0.15.4",
     "@tailwindcss/typography": "^0.5.16",
     "@types/d3-scale": "^4.0.9",
-    "@types/node": "^22",
+    "@types/node": "^22.15.29",
     "@types/pdf-parse": "^1.1.4",
     "@types/react": "^19.1",
     "@types/react-dom": "^19.1",
     "drizzle-kit": "^0.31.0",
-    "eslint": "^9.25.1",
-    "eslint-config-next": "15.3.1",
+    "eslint": "^9.28.0",
+    "eslint-config-next": "15.3.3",
     "eslint-config-prettier": "^9.1.0",
-    "eslint-import-resolver-typescript": "^3.8.4",
+    "eslint-import-resolver-typescript": "^3.10.1",
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-tailwindcss": "^3.18.0",
     "postcss": "^8.5.3",

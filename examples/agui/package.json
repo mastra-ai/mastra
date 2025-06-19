@@ -19,16 +19,19 @@
     "@mastra/agui": "latest",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "mastra": "latest",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "zod": "^3.25.57"
   },
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
       "@mastra/agui": "link:../../packages/agui",
       "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/loggers": "link:../../packages/loggers",
       "@mastra/memory": "link:../../packages/memory",
       "mastra": "link:../../packages/cli"
     }
@@ -40,9 +43,9 @@
     "@typescript-eslint/eslint-plugin": "^8.32.0",
     "@typescript-eslint/parser": "^8.32.0",
     "@vitejs/plugin-react": "^4.4.1",
-    "eslint": "^9.25.0",
+    "eslint": "^9.28.0",
     "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.19",
+    "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.0.0",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"

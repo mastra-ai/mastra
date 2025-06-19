@@ -15,7 +15,7 @@ export function NetworkDetails({ network }: { network: GetNetworkResponse }) {
   const { modelSettings, setModelSettings } = useContext(NetworkContext);
 
   return (
-    <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs">
+    <ScrollArea className="pt-2 px-4 pb-4 text-xs">
       <div className="p-4 space-y-4">
         <div>
           <h3 className="text-sm font-medium text-mastra-el-5 mb-1">Network Name</h3>

@@ -1,5 +1,109 @@
 # @mastra/inngest
 
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- 9d52b17: Fix inngest workflows streaming and add step metadata
+- Updated dependencies [d8f2d19]
+- Updated dependencies [9d52b17]
+- Updated dependencies [8ba1b51]
+  - @mastra/core@0.10.7-alpha.0
+
+## 0.10.5
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`inngest@^3.39.1` ↗︎](https://www.npmjs.com/package/inngest/v/3.39.1) (from `^3.35.1`, in `dependencies`)
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+- ee9af57: Add api for polling run execution result and get run by id
+- Updated dependencies [63f6b7d]
+- Updated dependencies [12a95fc]
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+- Updated dependencies [d70c420]
+- Updated dependencies [ee9af57]
+- Updated dependencies [36f1c36]
+- Updated dependencies [2a16996]
+- Updated dependencies [10d352e]
+- Updated dependencies [9589624]
+- Updated dependencies [53d3c37]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6
+
+## 0.10.5-alpha.1
+
+### Patch Changes
+
+- ee9af57: Add api for polling run execution result and get run by id
+- Updated dependencies [ee9af57]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6-alpha.1
+
+## 0.10.5-alpha.0
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`inngest@^3.39.1` ↗︎](https://www.npmjs.com/package/inngest/v/3.39.1) (from `^3.35.1`, in `dependencies`)
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+
+## 0.10.4
+
+### Patch Changes
+
+- 13c97f9: Save run status, result and error in storage snapshot
+- Updated dependencies [13c97f9]
+  - @mastra/core@0.10.5
+
+## 0.10.3
+
+### Patch Changes
+
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.2`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.2`, in `dependencies`)
+- Updated dependencies [d1ed912]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [f1309d3]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.2`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.2`, in `dependencies`)
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1309d3]
+- Updated dependencies [f7f8293]
+  - @mastra/core@0.10.4-alpha.1
+
 ## 0.10.2
 
 ### Patch Changes

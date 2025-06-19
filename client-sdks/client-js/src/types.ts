@@ -5,10 +5,11 @@ import type {
   QueryResult,
   StorageThreadType,
   WorkflowRuns,
+  WorkflowRun,
   LegacyWorkflowRuns,
 } from '@mastra/core';
 import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput } from '@mastra/core/agent';
-import type { BaseLogMessage } from '@mastra/core/logger';
+import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
@@ -115,6 +116,10 @@ export type GetLegacyWorkflowRunsResponse = LegacyWorkflowRuns;
 
 export type GetWorkflowRunsResponse = WorkflowRuns;
 
+export type GetWorkflowRunByIdResponse = WorkflowRun;
+
+export type GetWorkflowRunExecutionResultResponse = WatchEvent['payload']['workflowState'];
+
 export type LegacyWorkflowRunResult = {
   activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
   results: CoreLegacyWorkflowRunResult<any, any, any>['results'];
@@ -217,14 +222,32 @@ export interface GetMemoryThreadMessagesResponse {
 
 export interface GetLogsParams {
   transportId: string;
+  fromDate?: Date;
+  toDate?: Date;
+  logLevel?: LogLevel;
+  filters?: Record<string, string>;
+  page?: number;
+  perPage?: number;
 }
 
 export interface GetLogParams {
   runId: string;
   transportId: string;
+  fromDate?: Date;
+  toDate?: Date;
+  logLevel?: LogLevel;
+  filters?: Record<string, string>;
+  page?: number;
+  perPage?: number;
 }
 
-export type GetLogsResponse = BaseLogMessage[];
+export type GetLogsResponse = {
+  logs: BaseLogMessage[];
+  total: number;
+  page: number;
+  perPage: number;
+  hasMore: boolean;
+};
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
 

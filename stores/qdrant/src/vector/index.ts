@@ -1,3 +1,4 @@
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -58,25 +59,50 @@ export class QdrantVector extends MastraVector {
       payload: metadata?.[i] || {},
     }));
 
-    for (let i = 0; i < records.length; i += BATCH_SIZE) {
-      const batch = records.slice(i, i + BATCH_SIZE);
-      await this.client.upsert(indexName, {
-        // @ts-expect-error
-        points: batch,
-        wait: true,
-      });
-    }
+    try {
+      for (let i = 0; i < records.length; i += BATCH_SIZE) {
+        const batch = records.slice(i, i + BATCH_SIZE);
+        await this.client.upsert(indexName, {
+          // @ts-expect-error
+          points: batch,
+          wait: true,
+        });
+      }
 
-    return pointIds;
+      return pointIds;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_QDRANT_VECTOR_UPSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, vectorCount: vectors.length },
+        },
+        error,
+      );
+    }
   }
 
   async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
-    if (!Number.isInteger(dimension) || dimension <= 0) {
-      throw new Error('Dimension must be a positive integer');
+    try {
+      if (!Number.isInteger(dimension) || dimension <= 0) {
+        throw new Error('Dimension must be a positive integer');
+      }
+      if (!DISTANCE_MAPPING[metric]) {
+        throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
+      }
+    } catch (validationError) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_QDRANT_VECTOR_CREATE_INDEX_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName, dimension, metric },
+        },
+        validationError,
+      );
     }
-    if (!DISTANCE_MAPPING[metric]) {
-      throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
-    }
+
     try {
       await this.client.createCollection(indexName, {
         vectors: {
@@ -92,6 +118,16 @@ export class QdrantVector extends MastraVector {
         await this.validateExistingIndex(indexName, dimension, metric);
         return;
       }
+
+      throw new MastraError(
+        {
+          id: 'STORAGE_QDRANT_VECTOR_CREATE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, dimension, metric },
+        },
+        error,
+      );
     }
   }
 
@@ -109,40 +145,63 @@ export class QdrantVector extends MastraVector {
   }: QueryVectorParams): Promise<QueryResult[]> {
     const translatedFilter = this.transformFilter(filter) ?? {};
 
-    const results = (
-      await this.client.query(indexName, {
-        query: queryVector,
-        limit: topK,
-        filter: translatedFilter,
-        with_payload: true,
-        with_vector: includeVector,
-      })
-    ).points;
+    try {
+      const results = (
+        await this.client.query(indexName, {
+          query: queryVector,
+          limit: topK,
+          filter: translatedFilter,
+          with_payload: true,
+          with_vector: includeVector,
+        })
+      ).points;
 
-    return results.map(match => {
-      let vector: number[] = [];
-      if (includeVector) {
-        if (Array.isArray(match.vector)) {
-          // If it's already an array of numbers
-          vector = match.vector as number[];
-        } else if (typeof match.vector === 'object' && match.vector !== null) {
-          // If it's an object with vector data
-          vector = Object.values(match.vector).filter(v => typeof v === 'number');
+      return results.map(match => {
+        let vector: number[] = [];
+        if (includeVector) {
+          if (Array.isArray(match.vector)) {
+            // If it's already an array of numbers
+            vector = match.vector as number[];
+          } else if (typeof match.vector === 'object' && match.vector !== null) {
+            // If it's an object with vector data
+            vector = Object.values(match.vector).filter(v => typeof v === 'number');
+          }
         }
-      }
 
-      return {
-        id: match.id as string,
-        score: match.score || 0,
-        metadata: match.payload as Record<string, any>,
-        ...(includeVector && { vector }),
-      };
-    });
+        return {
+          id: match.id as string,
+          score: match.score || 0,
+          metadata: match.payload as Record<string, any>,
+          ...(includeVector && { vector }),
+        };
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_QDRANT_VECTOR_QUERY_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, topK },
+        },
+        error,
+      );
+    }
   }
 
   async listIndexes(): Promise<string[]> {
-    const response = await this.client.getCollections();
-    return response.collections.map(collection => collection.name) || [];
+    try {
+      const response = await this.client.getCollections();
+      return response.collections.map(collection => collection.name) || [];
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_QDRANT_VECTOR_LIST_INDEXES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -152,19 +211,43 @@ export class QdrantVector extends MastraVector {
    * @returns A promise that resolves to the index statistics including dimension, count and metric
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
-    const { config, points_count } = await this.client.getCollection(indexName);
+    try {
+      const { config, points_count } = await this.client.getCollection(indexName);
 
-    const distance = config.params.vectors?.distance as Schemas['Distance'];
-    return {
-      dimension: config.params.vectors?.size as number,
-      count: points_count || 0,
-      // @ts-expect-error
-      metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance),
-    };
+      const distance = config.params.vectors?.distance as Schemas['Distance'];
+      return {
+        dimension: config.params.vectors?.size as number,
+        count: points_count || 0,
+        // @ts-expect-error
+        metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_QDRANT_VECTOR_DESCRIBE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
   }
 
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    await this.client.deleteCollection(indexName);
+    try {
+      await this.client.deleteCollection(indexName);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_QDRANT_VECTOR_DELETE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -178,8 +261,20 @@ export class QdrantVector extends MastraVector {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
-    if (!update.vector && !update.metadata) {
-      throw new Error('No updates provided');
+    try {
+      if (!update.vector && !update.metadata) {
+        throw new Error('No updates provided');
+      }
+    } catch (validationError) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_QDRANT_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName, id },
+        },
+        validationError,
+      );
     }
 
     const pointId = this.parsePointId(id);
@@ -219,8 +314,15 @@ export class QdrantVector extends MastraVector {
         return;
       }
     } catch (error) {
-      console.error(`Failed to update vector by id: ${id} for index name: ${indexName}:`, error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_QDRANT_VECTOR_UPDATE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, id },
+        },
+        error,
+      );
     }
   }
 
@@ -240,8 +342,16 @@ export class QdrantVector extends MastraVector {
       await this.client.delete(indexName, {
         points: [pointId],
       });
-    } catch (error: any) {
-      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_QDRANT_VECTOR_DELETE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, id },
+        },
+        error,
+      );
     }
   }
 

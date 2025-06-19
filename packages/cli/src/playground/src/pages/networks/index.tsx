@@ -1,6 +1,16 @@
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { AgentNetworkCoinIcon, Button, DataTable, EmptyState, Header, HeaderTitle, Icon } from '@mastra/playground-ui';
+import {
+  AgentNetworkCoinIcon,
+  Button,
+  DataTable,
+  EmptyState,
+  Header,
+  HeaderTitle,
+  Icon,
+  MainContentLayout,
+  MainContentContent,
+} from '@mastra/playground-ui';
 import { useNetworks, useVNextNetworks } from '@/hooks/use-networks';
+
 import { networksTableColumns } from '@/domains/networks/table.columns';
 import { NetworkIcon } from 'lucide-react';
 
@@ -27,13 +37,13 @@ function Networks() {
   ];
 
   return (
-    <>
+    <MainContentLayout>
       <Header>
         <HeaderTitle>Networks</HeaderTitle>
       </Header>
 
       {allNetworks.length === 0 ? (
-        <div className="flex h-full items-center justify-center">
+        <MainContentContent isCentered={true}>
           <EmptyState
             iconSlot={<AgentNetworkCoinIcon />}
             titleSlot="Configure Agent Networks"
@@ -54,13 +64,13 @@ function Networks() {
               </Button>
             }
           />
-        </div>
+        </MainContentContent>
       ) : (
-        <ScrollArea className="h-full">
+        <MainContentContent>
           <DataTable isLoading={isLoading} data={allNetworks} columns={networksTableColumns} />
-        </ScrollArea>
+        </MainContentContent>
       )}
-    </>
+    </MainContentLayout>
   );
 }
 
