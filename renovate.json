@@ -54,6 +54,12 @@
       "matchSourceUrls": ["https://github.com/vercel/ai"]
     },
     {
+      "matchSourceUrls": ["https://github.com/assistant-ui/assistant-ui"]
+    },
+    {
+      "matchSourceUrls": ["https://github.com/radix-ui/primitives"]
+    },
+    {
       "groupName": "E2E tests",
       "commitMessageTopic": "e2e-tests",
       "matchFileNames": ["e2e-tests/**/package.json"],
