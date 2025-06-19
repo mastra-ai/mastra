@@ -999,6 +999,7 @@ describe('MCPServer', () => {
 
       const toolOutput = result.content[0];
       expect(toolOutput.type).toBe('text');
+      console.log(`toolOutput.text: ${toolOutput.text}`);
       const toolResult = JSON.parse(toolOutput.text);
       expect(toolResult.location).toEqual('Austin');
       expect(toolResult).toHaveProperty('temperature');
@@ -1345,5 +1346,89 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
       workflows: { unique_workflow_key_789: uniqueKeyWorkflow },
     });
     expect(server.tools()['run_unique_workflow_key_789']).toBeDefined();
+  });
+});
+
+describe('MCPServer with Tool Output Schema', () => {
+  let serverWithOutputSchema: MCPServer;
+  let clientWithOutputSchema: MCPClient;
+  const PORT = 9600 + Math.floor(Math.random() * 1000);
+  let httpServerWithOutputSchema: http.Server;
+
+  const structuredTool: ToolsInput = {
+    structuredTool: {
+      description: 'A test tool with structured output',
+      parameters: z.object({ input: z.string() }),
+      outputSchema: z.object({
+        processedInput: z.string(),
+        timestamp: z.string(),
+      }),
+      execute: async ({ input }: { input: string }) => ({
+        structuredContent: {
+          processedInput: `processed: ${input}`,
+          timestamp: mockDateISO,
+        },
+      }),
+    },
+  };
+
+  beforeAll(async () => {
+    serverWithOutputSchema = new MCPServer({
+      name: 'Test MCP Server with OutputSchema',
+      version: '0.1.0',
+      tools: structuredTool,
+    });
+
+    httpServerWithOutputSchema = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+      const url = new URL(req.url || '', `http://localhost:${PORT}`);
+      await serverWithOutputSchema.startHTTP({
+        url,
+        httpPath: '/http',
+        req,
+        res,
+      });
+    });
+
+    await new Promise<void>(resolve => httpServerWithOutputSchema.listen(PORT, () => resolve()));
+
+    clientWithOutputSchema = new MCPClient({
+      servers: {
+        local: {
+          url: new URL(`http://localhost:${PORT}/http`),
+        },
+      },
+    });
+  });
+
+  afterAll(async () => {
+    httpServerWithOutputSchema.closeAllConnections?.();
+    await new Promise<void>(resolve =>
+      httpServerWithOutputSchema.close(() => {
+        resolve();
+      }),
+    );
+    await serverWithOutputSchema.close();
+  });
+
+  it('should list tool with outputSchema', async () => {
+    const tools = await clientWithOutputSchema.getTools();
+    const tool = tools['local_structuredTool'];
+    expect(tool).toBeDefined();
+    expect(tool.outputSchema).toBeDefined();
+  });
+
+  it('should call tool and receive structuredContent', async () => {
+    const tools = await clientWithOutputSchema.getTools();
+    const tool = tools['local_structuredTool'];
+    const result = await tool.execute({ context: { input: 'hello' } });
+
+    expect(result).toBeDefined();
+    expect(result.structuredContent).toBeDefined();
+    expect(result.structuredContent.processedInput).toBe('processed: hello');
+    expect(result.structuredContent.timestamp).toBe(mockDateISO);
+
+    expect(result.content).toBeDefined();
+    expect(result.content[0].type).toBe('text');
+    expect(JSON.parse(result.content[0].text)).toEqual(result.structuredContent);
   });
 });

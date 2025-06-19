@@ -1,0 +1,230 @@
+  /***
+   * Test: Tool with Output Schema and Structured Content
+   */
+  test("should support tool with outputSchema and structuredContent", async () => {
+    const mcpServer = new McpServer({
+      name: "test server",
+      version: "1.0",
+    });
+
+    const client = new Client({
+      name: "test client",
+      version: "1.0",
+    });
+
+    // Register a tool with outputSchema
+    mcpServer.registerTool(
+      "test",
+      {
+        description: "Test tool with structured output",
+        inputSchema: {
+          input: z.string(),
+        },
+        outputSchema: {
+          processedInput: z.string(),
+          resultType: z.string(),
+          timestamp: z.string()
+        },
+      },
+      async ({ input }) => ({
+        structuredContent: {
+          processedInput: input,
+          resultType: "structured",
+          timestamp: "2023-01-01T00:00:00Z"
+        },
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              processedInput: input,
+              resultType: "structured",
+              timestamp: "2023-01-01T00:00:00Z"
+            }),
+          },
+        ]
+      })
+    );
+
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+
+    await Promise.all([
+      client.connect(clientTransport),
+      mcpServer.server.connect(serverTransport),
+    ]);
+
+    // Verify the tool registration includes outputSchema
+    const listResult = await client.request(
+      {
+        method: "tools/list",
+      },
+      ListToolsResultSchema,
+    );
+
+    expect(listResult.tools).toHaveLength(1);
+    expect(listResult.tools[0].outputSchema).toMatchObject({
+      type: "object",
+      properties: {
+        processedInput: { type: "string" },
+        resultType: { type: "string" },
+        timestamp: { type: "string" }
+      },
+      required: ["processedInput", "resultType", "timestamp"]
+    });
+
+    // Call the tool and verify it returns valid structuredContent
+    const result = await client.request(
+      {
+        method: "tools/call",
+        params: {
+          name: "test",
+          arguments: {
+            input: "hello",
+          },
+        },
+      },
+      CallToolResultSchema,
+    );
+
+    expect(result.structuredContent).toBeDefined();
+    const structuredContent = result.structuredContent as {
+      processedInput: string;
+      resultType: string;
+      timestamp: string;
+    };
+    expect(structuredContent.processedInput).toBe("hello");
+    expect(structuredContent.resultType).toBe("structured");
+    expect(structuredContent.timestamp).toBe("2023-01-01T00:00:00Z");
+
+    // For backward compatibility, content is auto-generated from structuredContent
+    expect(result.content).toBeDefined();
+    expect(result.content!).toHaveLength(1);
+    expect(result.content![0]).toMatchObject({ type: "text" });
+    const textContent = result.content![0] as TextContent;
+    expect(JSON.parse(textContent.text)).toEqual(result.structuredContent);
+  });
+
+  /***
+   * Test: Tool with Output Schema Must Provide Structured Content
+   */
+  test("should throw error when tool with outputSchema returns no structuredContent", async () => {
+    const mcpServer = new McpServer({
+      name: "test server",
+      version: "1.0",
+    });
+
+    const client = new Client({
+      name: "test client",
+      version: "1.0",
+    });
+
+    // Register a tool with outputSchema that returns only content without structuredContent
+    mcpServer.registerTool(
+      "test",
+      {
+        description: "Test tool with output schema but missing structured content",
+        inputSchema: {
+          input: z.string(),
+        },
+        outputSchema: {
+          processedInput: z.string(),
+          resultType: z.string(),
+        },
+      },
+      async ({ input }) => ({
+        // Only return content without structuredContent
+        content: [
+          {
+            type: "text",
+            text: `Processed: ${input}`,
+          },
+        ],
+      })
+    );
+
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+
+    await Promise.all([
+      client.connect(clientTransport),
+      mcpServer.server.connect(serverTransport),
+    ]);
+
+    // Call the tool and expect it to throw an error
+    await expect(
+      client.callTool({
+        name: "test",
+        arguments: {
+          input: "hello",
+        },
+      }),
+    ).rejects.toThrow(/Tool test has an output schema but no structured content was provided/);
+  });
+
+  /***
+   * Test: Schema Validation Failure for Invalid Structured Content
+   */
+  test("should fail schema validation when tool returns invalid structuredContent", async () => {
+    const mcpServer = new McpServer({
+      name: "test server",
+      version: "1.0",
+    });
+
+    const client = new Client({
+      name: "test client",
+      version: "1.0",
+    });
+
+    // Register a tool with outputSchema that returns invalid data
+    mcpServer.registerTool(
+      "test",
+      {
+        description: "Test tool with invalid structured output",
+        inputSchema: {
+          input: z.string(),
+        },
+        outputSchema: {
+          processedInput: z.string(),
+          resultType: z.string(),
+          timestamp: z.string()
+        },
+      },
+      async ({ input }) => ({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              processedInput: input,
+              resultType: "structured",
+              // Missing required 'timestamp' field
+              someExtraField: "unexpected" // Extra field not in schema
+            }),
+          },
+        ],
+        structuredContent: {
+          processedInput: input,
+          resultType: "structured",
+          // Missing required 'timestamp' field
+          someExtraField: "unexpected" // Extra field not in schema
+        },
+      })
+    );
+
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+
+    await Promise.all([
+      client.connect(clientTransport),
+      mcpServer.server.connect(serverTransport),
+    ]);
+
+    // Call the tool and expect it to throw a server-side validation error
+    await expect(
+      client.callTool({
+        name: "test",
+        arguments: {
+          input: "hello",
+        },
+      }),
+    ).rejects.toThrow(/Invalid structured content for tool test/);
+  });
