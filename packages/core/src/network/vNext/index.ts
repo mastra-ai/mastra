@@ -417,6 +417,8 @@ export class NewAgentNetwork extends MastraBase {
         resourceType: RESOURCE_TYPES,
         result: z.string().optional(),
         iteration: z.number(),
+        threadId: z.string().optional(),
+        threadResourceId: z.string().optional(),
       }),
       outputSchema: z.object({
         task: z.string(),
@@ -428,7 +430,9 @@ export class NewAgentNetwork extends MastraBase {
         selectionReason: z.string(),
         iteration: z.number(),
       }),
-      execute: async ({ inputData }) => {
+      execute: async ({ inputData, getInitData }) => {
+        const initData = await getInitData();
+
         const routingAgent = await this.getRoutingAgent({ runtimeContext: runtimeContextToUse });
 
         console.dir({ inputData }, { depth: null });
@@ -455,8 +459,8 @@ export class NewAgentNetwork extends MastraBase {
               finalResult: z.string(),
               completionReason: z.string(),
             }),
-            threadId: runId,
-            resourceId: this.name,
+            threadId: initData?.threadId ?? runId,
+            resourceId: initData?.threadResourceId ?? this.name,
           });
 
           console.log('COMPLETION RESULT', completionResult.object);
@@ -517,8 +521,8 @@ export class NewAgentNetwork extends MastraBase {
               prompt: z.string(),
               selectionReason: z.string(),
             }),
-            threadId: runId,
-            resourceId: this.name,
+            threadId: initData?.threadId ?? runId,
+            resourceId: initData?.threadResourceId ?? this.name,
           },
         );
 
@@ -845,6 +849,8 @@ export class NewAgentNetwork extends MastraBase {
         resourceType: RESOURCE_TYPES,
         result: z.string().optional(),
         iteration: z.number(),
+        threadId: z.string().optional(),
+        threadResourceId: z.string().optional(),
       }),
       outputSchema: z.object({
         task: z.string(),
@@ -928,7 +934,14 @@ export class NewAgentNetwork extends MastraBase {
     };
   }
 
-  async stream(message: string, { runtimeContext }: { runtimeContext?: RuntimeContext }) {
+  async stream(
+    message: string,
+    {
+      runtimeContext,
+      threadId,
+      resourceId,
+    }: { runtimeContext?: RuntimeContext; resourceId?: string; threadId?: string },
+  ) {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
     const run = networkWorkflow.createRun();
 
@@ -938,6 +951,8 @@ export class NewAgentNetwork extends MastraBase {
         resourceId: '',
         resourceType: 'none',
         iteration: 0,
+        threadResourceId: resourceId,
+        threadId,
       },
     });
   }
