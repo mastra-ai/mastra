@@ -488,7 +488,7 @@ importers:
         version: 7.52.8(@types/node@20.19.0)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@4.43.0)
+        version: 3.0.3(rollup@3.29.5)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -552,7 +552,7 @@ importers:
         version: 7.52.8(@types/node@20.19.0)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@3.29.5)
+        version: 3.0.3(rollup@4.43.0)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -2046,11 +2046,11 @@ importers:
         specifier: ^0.7.91
         version: 0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0))
       '@assistant-ui/react-markdown':
-        specifier: ^0.7.21
-        version: 0.7.21(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        specifier: ^0.10.4
+        version: 0.10.5(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@assistant-ui/react-syntax-highlighter':
         specifier: ^0.7.10
-        version: 0.7.10(@assistant-ui/react-markdown@0.7.21(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-syntax-highlighter@15.5.13)(@types/react@19.1.7)(react-syntax-highlighter@15.6.1(react@19.1.0))(react@19.1.0)
+        version: 0.7.10(@assistant-ui/react-markdown@0.10.5(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-syntax-highlighter@15.5.13)(@types/react@19.1.7)(react-syntax-highlighter@15.6.1(react@19.1.0))(react@19.1.0)
       '@autoform/core':
         specifier: ^2.2.0
         version: 2.2.0
@@ -3721,10 +3721,10 @@ packages:
   '@asamuzakjp/css-color@3.2.0':
     resolution: {integrity: sha512-K1A6z8tS3XsmCMM86xoWdn7Fkdn9m6RSVtocUrJYIwZnFVkng/PvkEoWtOWmP+Scc6saYWHWZYbndEEXxl24jw==}
 
-  '@assistant-ui/react-markdown@0.7.21':
-    resolution: {integrity: sha512-zvv8RUQLiRc7wbcYhEP+J528a8tMF2h2PfKMCE8uAM2TfGWbbjlUPYsiaTkZ8P6DRHdunX0uXSy99GJeLYqLLw==}
+  '@assistant-ui/react-markdown@0.10.5':
+    resolution: {integrity: sha512-1TSP9k1Dv7qirGHWDIshVmk+ZQEYykbKTVa+JJqTg16BxJVP3hgYQcnxKdH4c/3YrDfyr6MBOMSov0C1FG/QAg==}
     peerDependencies:
-      '@assistant-ui/react': ^0.7.88
+      '@assistant-ui/react': ^0.10.24
       '@types/react': '*'
       react: ^18 || ^19 || ^19.0.0-rc
     peerDependenciesMeta:
@@ -15970,6 +15970,12 @@ packages:
   react-is@18.3.1:
     resolution: {integrity: sha512-/LLMVyas0ljjAtoYiPqYiL8VWXzUUdThrmU5+n20DZv+a+ClRoevUzw5JxU+Ieh5/c87ytoTBV9G1FiKfNJdmg==}
 
+  react-markdown@10.1.0:
+    resolution: {integrity: sha512-qKxVopLT/TyA6BX3Ue5NwabOsAzm0Q7kAPwq6L+wWDwisYs7R8vZ0nRXqq6rkueboxpkjvLGU9fWifiX/ZZFxQ==}
+    peerDependencies:
+      '@types/react': '>=18'
+      react: '>=18'
+
   react-markdown@9.1.0:
     resolution: {integrity: sha512-xaijuJB0kzGiUdG7nc2MOMDUDBWPyGAjZtUrow9XxUeua8IqeP+VlIfAZ3bphpcLTnSZXz6z9jcVC/TCwbfgdw==}
     peerDependencies:
@@ -18422,16 +18428,15 @@ snapshots:
       '@csstools/css-tokenizer': 3.0.4
       lru-cache: 10.4.3
 
-  '@assistant-ui/react-markdown@0.7.21(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@assistant-ui/react-markdown@0.10.5(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
     dependencies:
       '@assistant-ui/react': 0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0))
       '@radix-ui/react-primitive': 2.1.3(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@radix-ui/react-use-callback-ref': 1.1.1(@types/react@19.1.7)(react@19.1.0)
       '@types/hast': 3.0.4
       classnames: 2.5.1
-      lucide-react: 0.475.0(react@19.1.0)
       react: 19.1.0
-      react-markdown: 9.1.0(@types/react@19.1.7)(react@19.1.0)
+      react-markdown: 10.1.0(@types/react@19.1.7)(react@19.1.0)
     optionalDependencies:
       '@types/react': 19.1.7
     transitivePeerDependencies:
@@ -18439,10 +18444,10 @@ snapshots:
       - react-dom
       - supports-color
 
-  '@assistant-ui/react-syntax-highlighter@0.7.10(@assistant-ui/react-markdown@0.7.21(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-syntax-highlighter@15.5.13)(@types/react@19.1.7)(react-syntax-highlighter@15.6.1(react@19.1.0))(react@19.1.0)':
+  '@assistant-ui/react-syntax-highlighter@0.7.10(@assistant-ui/react-markdown@0.10.5(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-syntax-highlighter@15.5.13)(@types/react@19.1.7)(react-syntax-highlighter@15.6.1(react@19.1.0))(react@19.1.0)':
     dependencies:
       '@assistant-ui/react': 0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0))
-      '@assistant-ui/react-markdown': 0.7.21(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@assistant-ui/react-markdown': 0.10.5(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       react: 19.1.0
       react-syntax-highlighter: 15.6.1(react@19.1.0)
     optionalDependencies:
@@ -30106,7 +30111,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.10.0)
+      retry-axios: 2.6.0(axios@1.10.0(debug@4.4.1))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -33280,6 +33285,24 @@ snapshots:
 
   react-is@18.3.1: {}
 
+  react-markdown@10.1.0(@types/react@19.1.7)(react@19.1.0):
+    dependencies:
+      '@types/hast': 3.0.4
+      '@types/mdast': 4.0.4
+      '@types/react': 19.1.7
+      devlop: 1.1.0
+      hast-util-to-jsx-runtime: 2.3.6
+      html-url-attributes: 3.0.1
+      mdast-util-to-hast: 13.2.0
+      react: 19.1.0
+      remark-parse: 11.0.0
+      remark-rehype: 11.1.2
+      unified: 11.0.5
+      unist-util-visit: 5.0.0
+      vfile: 6.0.3
+    transitivePeerDependencies:
+      - supports-color
+
   react-markdown@9.1.0(@types/react@19.1.7)(react@19.1.0):
     dependencies:
       '@types/hast': 3.0.4
@@ -33626,7 +33649,7 @@ snapshots:
   ret@0.4.3:
     optional: true
 
-  retry-axios@2.6.0(axios@1.10.0):
+  retry-axios@2.6.0(axios@1.10.0(debug@4.4.1)):
     dependencies:
       axios: 1.10.0(debug@4.4.1)
 
