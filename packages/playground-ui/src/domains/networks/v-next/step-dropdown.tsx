@@ -12,6 +12,7 @@ import { WorkflowGraph } from '@/domains/workflows/workflow/workflow-graph';
 import { Dialog, DialogContent, DialogPortal, DialogTitle } from '@/components/ui/dialog';
 import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-context';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
+import { useWorkflow } from '@/hooks/use-workflows';
 import { useMessage } from '@assistant-ui/react';
 
 const LabelMappings = {
@@ -156,6 +157,7 @@ interface WorkflowStepResultDialogProps {
 
 const WorkflowStepResultDialog = ({ open, onOpenChange, workflowId, runId }: WorkflowStepResultDialogProps) => {
   const { runs } = useWorkflowRuns(workflowId);
+  const { workflow, isLoading } = useWorkflow(workflowId);
   const run = runs?.runs.find((run: any) => run.runId === runId);
 
   console.log('runId', runId);
@@ -167,7 +169,12 @@ const WorkflowStepResultDialog = ({ open, onOpenChange, workflowId, runId }: Wor
           <div className="flex-1 h-full">
             <DialogTitle>Workflow details</DialogTitle>
             <WorkflowRunProvider snapshot={typeof run?.snapshot === 'object' ? run.snapshot : undefined}>
-              <WorkflowGraph workflowId={workflowId} onShowTrace={() => {}} />
+              <WorkflowGraph
+                workflowId={workflowId}
+                workflow={workflow!}
+                isLoading={isLoading}
+                onShowTrace={() => {}}
+              />
             </WorkflowRunProvider>
           </div>
         </DialogContent>
