@@ -630,16 +630,19 @@ export class Memory extends MastraMemory {
     threadId,
     resourceId,
     format,
+    memoryConfig,
   }: {
     threadId: string;
     resourceId?: string;
     format?: WorkingMemoryFormat;
+    memoryConfig?: MemoryConfig;
   }): Promise<string | null> {
-    if (!this.threadConfig.workingMemory?.enabled) {
+    const config = this.getMergedThreadConfig(memoryConfig || {});
+    if (!config.workingMemory?.enabled) {
       return null;
     }
 
-    const scope = this.threadConfig.workingMemory.scope || 'thread';
+    const scope = config.workingMemory.scope || 'thread';
     let workingMemoryData: string | null = null;
 
     if (scope === 'resource' && resourceId) {
@@ -705,7 +708,7 @@ export class Memory extends MastraMemory {
     }
 
     const workingMemoryTemplate = await this.getWorkingMemoryTemplate();
-    const workingMemoryData = await this.getWorkingMemory({ threadId, resourceId });
+    const workingMemoryData = await this.getWorkingMemory({ threadId, resourceId, memoryConfig: config });
 
     if (!workingMemoryTemplate) {
       return null;
@@ -720,11 +723,13 @@ export class Memory extends MastraMemory {
   public async getUserContextMessage({ 
     threadId,
     resourceId,
+    memoryConfig,
   }: { 
     threadId: string;
     resourceId?: string;
+    memoryConfig?: MemoryConfig;
   }) {
-    const workingMemory = await this.getWorkingMemory({ threadId, resourceId });
+    const workingMemory = await this.getWorkingMemory({ threadId, resourceId, memoryConfig });
     if (!workingMemory) {
       return null;
     }

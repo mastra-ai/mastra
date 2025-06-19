@@ -5,6 +5,7 @@ import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastr
 import {
   MastraStorage,
   TABLE_MESSAGES,
+  TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
@@ -43,7 +44,7 @@ export class CloudflareStore extends MastraStorage {
     }
 
     // Validate all required table bindings exist
-    const requiredTables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES] as const;
+    const requiredTables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES, TABLE_RESOURCES] as const;
 
     for (const table of requiredTables) {
       if (!(table in config.bindings)) {

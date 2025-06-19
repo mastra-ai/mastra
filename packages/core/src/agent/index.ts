@@ -1240,8 +1240,8 @@ export class Agent<
                     vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
                   })
                   .then(r => r.messagesV2),
-                memory.getSystemMessage({ threadId: threadObject.id, memoryConfig }),
-                memory.getUserContextMessage({ threadId: threadObject.id }),
+                memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
+                memory.getUserContextMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
               ])
             : [[], null, null];
 
@@ -1281,11 +1281,12 @@ export class Agent<
           // add new user messages to the list AFTER remembered messages to make ordering more reliable
           .add(messages, 'user');
 
-        const systemMessage =
-          messageList
-            .getSystemMessages()
-            ?.map(m => m.content)
-            ?.join(`\n`) ?? undefined;
+        const systemMessage = [
+          ...messageList.getSystemMessages(),
+          ...messageList.getSystemMessages('memory')
+        ]
+          ?.map(m => m.content)
+          ?.join(`\n`) ?? undefined;
 
         const processedMemoryMessages = memory.processMessages({
           // these will be processed

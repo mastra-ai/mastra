@@ -166,11 +166,23 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
 
-  abstract getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null>;
+  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
+    throw new Error(
+      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
+      `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
+      `To use per-resource working memory, switch to one of these supported storage adapters.`
+    );
+  }
 
-  abstract saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType>;
+  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    throw new Error(
+      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
+      `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
+      `To use per-resource working memory, switch to one of these supported storage adapters.`
+    );
+  }
 
-  abstract updateResource({
+  async updateResource({
     resourceId,
     workingMemory,
     metadata,
@@ -178,7 +190,13 @@ export abstract class MastraStorage extends MastraBase {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
-  }): Promise<StorageResourceType>;
+  }): Promise<StorageResourceType> {
+    throw new Error(
+      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
+      `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
+      `To use per-resource working memory, switch to one of these supported storage adapters.`
+    );
+  }
 
   abstract getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
   abstract getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
@@ -211,7 +229,7 @@ export abstract class MastraStorage extends MastraBase {
       return;
     }
 
-    this.hasInitialized = Promise.all([
+    const tableCreationTasks = [
       this.createTable({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
@@ -236,12 +254,19 @@ export abstract class MastraStorage extends MastraBase {
         tableName: TABLE_TRACES,
         schema: TABLE_SCHEMAS[TABLE_TRACES],
       }),
+    ];
 
-      this.createTable({
-        tableName: TABLE_RESOURCES,
-        schema: TABLE_SCHEMAS[TABLE_RESOURCES],
-      }),
-    ]).then(() => true);
+    // Only create resources table for storage adapters that support it
+    if (this.supports.resourceWorkingMemory) {
+      tableCreationTasks.push(
+        this.createTable({
+          tableName: TABLE_RESOURCES,
+          schema: TABLE_SCHEMAS[TABLE_RESOURCES],
+        })
+      );
+    }
+
+    this.hasInitialized = Promise.all(tableCreationTasks).then(() => true);
 
     await this.hasInitialized;
 

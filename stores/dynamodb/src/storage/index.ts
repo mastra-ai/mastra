@@ -11,6 +11,7 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
   TABLE_TRACES,
+  TABLE_RESOURCES,
 } from '@mastra/core/storage';
 import type {
   EvalRow,
@@ -1021,6 +1022,7 @@ export class DynamoDBStore extends MastraStorage {
       [TABLE_WORKFLOW_SNAPSHOT]: 'workflowSnapshot',
       [TABLE_EVALS]: 'eval',
       [TABLE_TRACES]: 'trace',
+      [TABLE_RESOURCES]: 'resource',
     };
     return mapping[tableName] || null;
   }

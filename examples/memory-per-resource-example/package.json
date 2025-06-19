@@ -1,0 +1,23 @@
+{
+  "name": "memory-per-resource-example",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/example.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^0.0.68",
+    "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*", 
+    "@mastra/libsql": "workspace:*",
+    "chalk": "^5.3.0",
+    "dotenv": "^16.4.7",
+    "ora": "^8.1.1",
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "typescript": "^5.8.3"
+  }
+}

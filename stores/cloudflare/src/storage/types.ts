@@ -6,8 +6,10 @@ import type {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
   TABLE_TRACES,
+  TABLE_RESOURCES,
   TABLE_NAMES,
   EvalRow,
+  StorageResourceType,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
@@ -71,6 +73,7 @@ export type RecordTypes = {
   [TABLE_WORKFLOW_SNAPSHOT]: WorkflowRunState;
   [TABLE_EVALS]: EvalRow;
   [TABLE_TRACES]: any;
+  [TABLE_RESOURCES]: StorageResourceType;
 };
 
 export type ListOptions = {
