@@ -1,3 +1,4 @@
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -64,36 +65,76 @@ export class MongoDBVector extends MastraVector {
 
   // Public methods
   async connect(): Promise<void> {
-    await this.client.connect();
+    try {
+      await this.client.connect();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_VECTOR_CONNECT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   async disconnect(): Promise<void> {
-    await this.client.close();
+    try {
+      await this.client.close();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_VECTOR_DISCONNECT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
-    if (!Number.isInteger(dimension) || dimension <= 0) {
-      throw new Error('Dimension must be a positive integer');
-    }
-
-    const mongoMetric = this.mongoMetricMap[metric];
-    if (!mongoMetric) {
-      throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
-    }
-
-    // Check if collection exists
-    const collectionExists = await this.db.listCollections({ name: indexName }).hasNext();
-    if (!collectionExists) {
-      await this.db.createCollection(indexName);
-    }
-    const collection = await this.getCollection(indexName);
-
-    const indexNameInternal = `${indexName}_vector_index`;
-
-    const embeddingField = this.embeddingFieldName;
-    const numDimensions = dimension;
-
+    let mongoMetric;
     try {
+      if (!Number.isInteger(dimension) || dimension <= 0) {
+        throw new Error('Dimension must be a positive integer');
+      }
+
+      mongoMetric = this.mongoMetricMap[metric];
+      if (!mongoMetric) {
+        throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_VECTOR_CREATE_INDEX_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            indexName,
+            dimension,
+            metric,
+          },
+        },
+        error,
+      );
+    }
+
+    let collection;
+    try {
+      // Check if collection exists
+      const collectionExists = await this.db.listCollections({ name: indexName }).hasNext();
+      if (!collectionExists) {
+        await this.db.createCollection(indexName);
+      }
+      collection = await this.getCollection(indexName);
+
+      const indexNameInternal = `${indexName}_vector_index`;
+
+      const embeddingField = this.embeddingFieldName;
+      const numDimensions = dimension;
+
       // Create the search index
       await (collection as any).createSearchIndex({
         definition: {
@@ -111,12 +152,33 @@ export class MongoDBVector extends MastraVector {
       });
     } catch (error: any) {
       if (error.codeName !== 'IndexAlreadyExists') {
-        throw error;
+        throw new MastraError(
+          {
+            id: 'STORAGE_MONGODB_VECTOR_CREATE_INDEX_FAILED',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+          },
+          error,
+        );
       }
     }
 
-    // Store the dimension and metric in a special metadata document
-    await collection.updateOne({ _id: '__index_metadata__' }, { $set: { dimension, metric } }, { upsert: true });
+    try {
+      // Store the dimension and metric in a special metadata document
+      await collection?.updateOne({ _id: '__index_metadata__' }, { $set: { dimension, metric } }, { upsert: true });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_VECTOR_CREATE_INDEX_FAILED_STORE_METADATA',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -149,55 +211,68 @@ export class MongoDBVector extends MastraVector {
   }
 
   async upsert({ indexName, vectors, metadata, ids, documents }: MongoDBUpsertVectorParams): Promise<string[]> {
-    const collection = await this.getCollection(indexName);
+    try {
+      const collection = await this.getCollection(indexName);
 
-    this.collectionForValidation = collection;
+      this.collectionForValidation = collection;
 
-    // Get index stats to check dimension
-    const stats = await this.describeIndex({ indexName });
+      // Get index stats to check dimension
+      const stats = await this.describeIndex({ indexName });
 
-    // Validate vector dimensions
-    await this.validateVectorDimensions(vectors, stats.dimension);
+      // Validate vector dimensions
+      await this.validateVectorDimensions(vectors, stats.dimension);
 
-    // Generate IDs if not provided
-    const generatedIds = ids || vectors.map(() => uuidv4());
+      // Generate IDs if not provided
+      const generatedIds = ids || vectors.map(() => uuidv4());
 
-    const operations = vectors.map((vector, idx) => {
-      const id = generatedIds[idx];
-      const meta = metadata?.[idx] || {};
-      const doc = documents?.[idx];
+      const operations = vectors.map((vector, idx) => {
+        const id = generatedIds[idx];
+        const meta = metadata?.[idx] || {};
+        const doc = documents?.[idx];
 
-      // Normalize metadata - convert Date objects to ISO strings
-      const normalizedMeta = Object.keys(meta).reduce(
-        (acc, key) => {
-          acc[key] = meta[key] instanceof Date ? meta[key].toISOString() : meta[key];
-          return acc;
+        // Normalize metadata - convert Date objects to ISO strings
+        const normalizedMeta = Object.keys(meta).reduce(
+          (acc, key) => {
+            acc[key] = meta[key] instanceof Date ? meta[key].toISOString() : meta[key];
+            return acc;
+          },
+          {} as Record<string, any>,
+        );
+
+        const updateDoc: Partial<MongoDBDocument> = {
+          [this.embeddingFieldName]: vector,
+          [this.metadataFieldName]: normalizedMeta,
+        };
+        if (doc !== undefined) {
+          updateDoc[this.documentFieldName] = doc;
+        }
+
+        return {
+          updateOne: {
+            filter: { _id: id }, // '_id' is a string as per MongoDBDocument interface
+            update: { $set: updateDoc },
+            upsert: true,
+          },
+        };
+      });
+
+      await collection.bulkWrite(operations);
+
+      return generatedIds;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_VECTOR_UPSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
         },
-        {} as Record<string, any>,
+        error,
       );
-
-      const updateDoc: Partial<MongoDBDocument> = {
-        [this.embeddingFieldName]: vector,
-        [this.metadataFieldName]: normalizedMeta,
-      };
-      if (doc !== undefined) {
-        updateDoc[this.documentFieldName] = doc;
-      }
-
-      return {
-        updateOne: {
-          filter: { _id: id }, // '_id' is a string as per MongoDBDocument interface
-          update: { $set: updateDoc },
-          upsert: true,
-        },
-      };
-    });
-
-    await collection.bulkWrite(operations);
-
-    return generatedIds;
+    }
   }
-
   async query({
     indexName,
     queryVector,
@@ -206,51 +281,51 @@ export class MongoDBVector extends MastraVector {
     includeVector = false,
     documentFilter,
   }: MongoDBQueryVectorParams): Promise<QueryResult[]> {
-    const collection = await this.getCollection(indexName, true);
-    const indexNameInternal = `${indexName}_vector_index`;
-
-    // Transform the filters using MongoDBFilterTranslator
-    const mongoFilter = this.transformFilter(filter);
-    const documentMongoFilter = documentFilter ? { [this.documentFieldName]: documentFilter } : {};
-
-    // Combine the filters
-    let combinedFilter: any = {};
-    if (Object.keys(mongoFilter).length > 0 && Object.keys(documentMongoFilter).length > 0) {
-      combinedFilter = { $and: [mongoFilter, documentMongoFilter] };
-    } else if (Object.keys(mongoFilter).length > 0) {
-      combinedFilter = mongoFilter;
-    } else if (Object.keys(documentMongoFilter).length > 0) {
-      combinedFilter = documentMongoFilter;
-    }
-
-    // Build the aggregation pipeline
-    const pipeline = [
-      {
-        $vectorSearch: {
-          index: indexNameInternal,
-          queryVector: queryVector,
-          path: this.embeddingFieldName,
-          numCandidates: 100,
-          limit: topK,
-        },
-      },
-      // Apply the filter using $match stage
-      ...(Object.keys(combinedFilter).length > 0 ? [{ $match: combinedFilter }] : []),
-      {
-        $set: { score: { $meta: 'vectorSearchScore' } },
-      },
-      {
-        $project: {
-          _id: 1,
-          score: 1,
-          metadata: `$${this.metadataFieldName}`,
-          document: `$${this.documentFieldName}`,
-          ...(includeVector && { vector: `$${this.embeddingFieldName}` }),
-        },
-      },
-    ];
-
     try {
+      const collection = await this.getCollection(indexName, true);
+      const indexNameInternal = `${indexName}_vector_index`;
+
+      // Transform the filters using MongoDBFilterTranslator
+      const mongoFilter = this.transformFilter(filter);
+      const documentMongoFilter = documentFilter ? { [this.documentFieldName]: documentFilter } : {};
+
+      // Combine the filters
+      let combinedFilter: any = {};
+      if (Object.keys(mongoFilter).length > 0 && Object.keys(documentMongoFilter).length > 0) {
+        combinedFilter = { $and: [mongoFilter, documentMongoFilter] };
+      } else if (Object.keys(mongoFilter).length > 0) {
+        combinedFilter = mongoFilter;
+      } else if (Object.keys(documentMongoFilter).length > 0) {
+        combinedFilter = documentMongoFilter;
+      }
+
+      // Build the aggregation pipeline
+      const pipeline = [
+        {
+          $vectorSearch: {
+            index: indexNameInternal,
+            queryVector: queryVector,
+            path: this.embeddingFieldName,
+            numCandidates: 100,
+            limit: topK,
+          },
+        },
+        // Apply the filter using $match stage
+        ...(Object.keys(combinedFilter).length > 0 ? [{ $match: combinedFilter }] : []),
+        {
+          $set: { score: { $meta: 'vectorSearchScore' } },
+        },
+        {
+          $project: {
+            _id: 1,
+            score: 1,
+            metadata: `$${this.metadataFieldName}`,
+            document: `$${this.documentFieldName}`,
+            ...(includeVector && { vector: `$${this.embeddingFieldName}` }),
+          },
+        },
+      ];
+
       const results = await collection.aggregate(pipeline).toArray();
 
       return results.map((result: any) => ({
@@ -261,14 +336,34 @@ export class MongoDBVector extends MastraVector {
         document: result.document,
       }));
     } catch (error) {
-      console.error('Error during vector search:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_VECTOR_QUERY_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
+        },
+        error,
+      );
     }
   }
 
   async listIndexes(): Promise<string[]> {
-    const collections = await this.db.listCollections().toArray();
-    return collections.map(col => col.name);
+    try {
+      const collections = await this.db.listCollections().toArray();
+      return collections.map(col => col.name);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_VECTOR_LIST_INDEXES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -278,31 +373,59 @@ export class MongoDBVector extends MastraVector {
    * @returns A promise that resolves to the index statistics including dimension, count and metric
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
-    const collection = await this.getCollection(indexName, true);
+    try {
+      const collection = await this.getCollection(indexName, true);
 
-    // Get the count of documents, excluding the metadata document
-    const count = await collection.countDocuments({ _id: { $ne: '__index_metadata__' } });
+      // Get the count of documents, excluding the metadata document
+      const count = await collection.countDocuments({ _id: { $ne: '__index_metadata__' } });
 
-    // Retrieve the dimension and metric from the metadata document
-    const metadataDoc = await collection.findOne({ _id: '__index_metadata__' });
-    const dimension = metadataDoc?.dimension || 0;
-    const metric = metadataDoc?.metric || 'cosine';
+      // Retrieve the dimension and metric from the metadata document
+      const metadataDoc = await collection.findOne({ _id: '__index_metadata__' });
+      const dimension = metadataDoc?.dimension || 0;
+      const metric = metadataDoc?.metric || 'cosine';
 
-    return {
-      dimension,
-      count,
-      metric: metric as 'cosine' | 'euclidean' | 'dotproduct',
-    };
+      return {
+        dimension,
+        count,
+        metric: metric as 'cosine' | 'euclidean' | 'dotproduct',
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_VECTOR_DESCRIBE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
+        },
+        error,
+      );
+    }
   }
 
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     const collection = await this.getCollection(indexName, false); // Do not throw error if collection doesn't exist
-    if (collection) {
-      await collection.drop();
-      this.collections.delete(indexName);
-    } else {
-      // Optionally, you can log or handle the case where the collection doesn't exist
-      throw new Error(`Index (Collection) "${indexName}" does not exist`);
+    try {
+      if (collection) {
+        await collection.drop();
+        this.collections.delete(indexName);
+      } else {
+        // Optionally, you can log or handle the case where the collection doesn't exist
+        throw new Error(`Index (Collection) "${indexName}" does not exist`);
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_VECTOR_DELETE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -347,7 +470,18 @@ export class MongoDBVector extends MastraVector {
 
       await collection.findOneAndUpdate({ _id: id }, { $set: updateDoc });
     } catch (error: any) {
-      throw new Error(`Failed to update vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_VECTOR_UPDATE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            id,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -363,7 +497,18 @@ export class MongoDBVector extends MastraVector {
       const collection = await this.getCollection(indexName, true);
       await collection.deleteOne({ _id: id });
     } catch (error: any) {
-      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_VECTOR_DELETE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            id,
+          },
+        },
+        error,
+      );
     }
   }
 

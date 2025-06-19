@@ -1,6 +1,7 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
   MastraStorage,
@@ -85,8 +86,15 @@ export class CloudflareStore extends MastraStorage {
         this.logger.info('Using Cloudflare KV REST API');
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error('Failed to initialize CloudflareStore:', { message });
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_INIT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+
       throw error;
     }
   }
@@ -230,8 +238,19 @@ export class CloudflareStore extends MastraStorage {
         return response.result;
       }
     } catch (error: any) {
-      this.logger.error(`Failed to list keys for ${tableName}:`, error);
-      throw new Error(`Failed to list keys: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_LIST_NAMESPACE_KEYS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+
+      throw error;
     }
   }
 
@@ -780,8 +799,19 @@ export class CloudflareStore extends MastraStorage {
       };
       await this.putKV({ tableName, key: schemaKey, value: schema, metadata });
     } catch (error: any) {
-      this.logger.error(`Failed to store schema for ${tableName}:`, error);
-      throw new Error(`Failed to store schema: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_CREATE_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+
+      throw error;
     }
   }
 
@@ -800,9 +830,25 @@ export class CloudflareStore extends MastraStorage {
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    const keys = await this.listKV(tableName);
-    if (keys.length > 0) {
-      await Promise.all(keys.map(keyObj => this.deleteKV(tableName, keyObj.name)));
+    try {
+      const keys = await this.listKV(tableName);
+      if (keys.length > 0) {
+        await Promise.all(keys.map(keyObj => this.deleteKV(tableName, keyObj.name)));
+      }
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_CLEAR_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+
+      throw error;
     }
   }
 
@@ -827,9 +873,19 @@ export class CloudflareStore extends MastraStorage {
       // Validate record type
       await this.validateRecord(processedRecord, tableName);
       await this.putKV({ tableName, key, value: processedRecord });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to insert record for ${tableName}:`, { message });
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+
       throw error;
     }
   }
@@ -852,10 +908,20 @@ export class CloudflareStore extends MastraStorage {
       };
 
       return processed as R;
-    } catch (error) {
-      this.logger.error(`Failed to load data for ${tableName}:`, {
-        error: error instanceof Error ? error.message : String(error),
-      });
+    } catch (error: any) {
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_LOAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return null;
     }
   }
@@ -871,10 +937,20 @@ export class CloudflareStore extends MastraStorage {
         updatedAt: this.ensureDate(thread.updatedAt)!,
         metadata: this.ensureMetadata(thread.metadata),
       };
-    } catch (error) {
-      this.logger.error(`Error processing thread ${threadId}:`, {
-        error: error instanceof Error ? error.message : String(error),
-      });
+    } catch (error: any) {
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_GET_THREAD_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+          },
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return null;
     }
   }
@@ -897,17 +973,39 @@ export class CloudflareStore extends MastraStorage {
               updatedAt: this.ensureDate(thread.updatedAt)!,
               metadata: this.ensureMetadata(thread.metadata),
             };
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.logger.error(`Error processing thread from key ${keyObj.name}:`, { message });
+          } catch (error: any) {
+            const mastraError = new MastraError(
+              {
+                id: 'CLOUDFLARE_STORAGE_GET_THREADS_BY_RESOURCE_ID_FAILED',
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.THIRD_PARTY,
+                details: {
+                  resourceId,
+                },
+              },
+              error,
+            );
+            this.logger?.trackException(mastraError);
+            this.logger?.error(mastraError.toString());
             return null;
           }
         }),
       );
       return threads.filter((thread): thread is StorageThreadType => thread !== null);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error getting threads for resourceId ${resourceId}:`, { message });
+    } catch (error: any) {
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_GET_THREADS_BY_RESOURCE_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            resourceId,
+          },
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return [];
     }
   }
@@ -916,10 +1014,18 @@ export class CloudflareStore extends MastraStorage {
     try {
       await this.insert({ tableName: TABLE_THREADS, record: thread });
       return thread;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error('Error saving thread:', { message });
-      throw error;
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_SAVE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId: thread.id,
+          },
+        },
+        error,
+      );
     }
   }
   async updateThread({
@@ -950,10 +1056,19 @@ export class CloudflareStore extends MastraStorage {
       // Insert with proper metadata handling
       await this.insert({ tableName: TABLE_THREADS, record: updatedThread });
       return updatedThread;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error updating thread ${id}:`, { message });
-      throw error;
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_UPDATE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId: id,
+            title,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -978,10 +1093,18 @@ export class CloudflareStore extends MastraStorage {
         // Delete thread
         this.deleteKV(TABLE_THREADS, this.getKey(TABLE_THREADS, { id: threadId })),
       ]);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error deleting thread ${threadId}:`, { message });
-      throw error;
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_DELETE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -1074,9 +1197,17 @@ export class CloudflareStore extends MastraStorage {
             const entries = await this.updateSorting(threadMessages);
             await this.updateSortedMessages(orderKey, entries);
           } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.error(`Error processing messages for thread ${threadId}: ${errorMessage}`);
-            throw error;
+            throw new MastraError(
+              {
+                id: 'CLOUDFLARE_STORAGE_SAVE_MESSAGES_FAILED',
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.THIRD_PARTY,
+                details: {
+                  threadId,
+                },
+              },
+              error,
+            );
           }
         }),
       );
@@ -1090,9 +1221,14 @@ export class CloudflareStore extends MastraStorage {
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error saving messages: ${errorMessage}`);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_SAVE_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -1139,8 +1275,20 @@ export class CloudflareStore extends MastraStorage {
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
         });
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        this.logger.warn(`Error sorting messages, falling back to creation time: ${errorMessage}`);
+        const mastraError = new MastraError(
+          {
+            id: 'CLOUDFLARE_STORAGE_SORT_MESSAGES_FAILED',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            text: `Error sorting messages for thread ${threadId} falling back to creation time`,
+            details: {
+              threadId,
+            },
+          },
+          error,
+        );
+        this.logger?.trackException(mastraError);
+        this.logger?.error(mastraError.toString());
         messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       }
 
@@ -1155,8 +1303,20 @@ export class CloudflareStore extends MastraStorage {
       if (format === `v1`) return list.get.all.v1();
       return list.get.all.v2();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error retrieving messages for thread ${threadId}: ${errorMessage}`);
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_GET_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Error retrieving messages for thread ${threadId}`,
+          details: {
+            threadId,
+          },
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return [];
     }
   }
@@ -1242,9 +1402,20 @@ export class CloudflareStore extends MastraStorage {
         },
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error('Error persisting workflow snapshot:', { message });
-      throw error;
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Error persisting workflow snapshot for namespace ${params.namespace}, workflow ${params.workflowName}, run ${params.runId}`,
+          details: {
+            namespace: params.namespace,
+            workflowName: params.workflowName,
+            runId: params.runId,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -1265,9 +1436,22 @@ export class CloudflareStore extends MastraStorage {
       this.validateWorkflowState(state);
       return state;
     } catch (error) {
-      this.logger.error('Error loading workflow snapshot:', {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Error loading workflow snapshot for namespace ${params.namespace}, workflow ${params.workflowName}, run ${params.runId}`,
+          details: {
+            namespace: params.namespace,
+            workflowName: params.workflowName,
+            runId: params.runId,
+          },
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return null;
     }
   }
@@ -1293,9 +1477,18 @@ export class CloudflareStore extends MastraStorage {
         }),
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error('Error in batch insert:', { message });
-      throw error;
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_BATCH_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Error in batch insert for table ${input.tableName}`,
+          details: {
+            tableName: input.tableName,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -1405,8 +1598,17 @@ export class CloudflareStore extends MastraStorage {
         createdAt: record.createdAt,
       }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error('Failed to get traces:', { message });
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_GET_TRACES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to get traces`,
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return [];
     }
   }
@@ -1423,7 +1625,12 @@ export class CloudflareStore extends MastraStorage {
   }
 
   getEvalsByAgentName(_agentName: string, _type?: 'test' | 'live'): Promise<EvalRow[]> {
-    throw new Error('Method not implemented.');
+    throw new MastraError({
+      id: 'CLOUDFLARE_STORAGE_GET_EVALS_BY_AGENT_NAME_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      text: `Failed to get evals by agent name`,
+    });
   }
 
   private parseWorkflowRun(row: any): WorkflowRun {
@@ -1535,8 +1742,16 @@ export class CloudflareStore extends MastraStorage {
         total: runs.length,
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error('Error in getWorkflowRuns:', { message });
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_GET_WORKFLOW_RUNS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return { runs: [], total: 0 };
     }
   }
@@ -1566,14 +1781,32 @@ export class CloudflareStore extends MastraStorage {
       this.validateWorkflowState(state);
       return this.parseWorkflowRun({ ...data, snapshot: state });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error('Error in getWorkflowRunById:', { message });
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            namespace,
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return null;
     }
   }
 
   async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
-    throw new Error('Method not implemented.');
+    throw new MastraError({
+      id: 'CLOUDFLARE_STORAGE_GET_TRACES_PAGINATED_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      text: 'Method not implemented.',
+    });
   }
 
   async getThreadsByResourceIdPaginated(_args: {
@@ -1581,13 +1814,23 @@ export class CloudflareStore extends MastraStorage {
     page?: number;
     perPage?: number;
   }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    throw new Error('Method not implemented.');
+    throw new MastraError({
+      id: 'CLOUDFLARE_STORAGE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      text: 'Method not implemented.',
+    });
   }
 
   async getMessagesPaginated(
     _args: StorageGetMessagesArg,
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    throw new Error('Method not implemented.');
+    throw new MastraError({
+      id: 'CLOUDFLARE_STORAGE_GET_MESSAGES_PAGINATED_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      text: 'Method not implemented.',
+    });
   }
 
   async close(): Promise<void> {
