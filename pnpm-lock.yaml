@@ -488,7 +488,7 @@ importers:
         version: 7.52.8(@types/node@20.19.0)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@4.43.0)
+        version: 3.0.3(rollup@3.29.5)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -552,7 +552,7 @@ importers:
         version: 7.52.8(@types/node@20.19.0)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@3.29.5)
+        version: 3.0.3(rollup@4.43.0)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -725,7 +725,7 @@ importers:
         version: 1.8.14(353fd4704f542b317a65b062825fef8c)
       hono:
         specifier: ^4.7.11
-        version: 4.7.11
+        version: 4.8.0
       rxjs:
         specifier: 7.8.1
         version: 7.8.1
@@ -1236,11 +1236,11 @@ importers:
         specifier: ^16.5.0
         version: 16.5.0
       hono:
-        specifier: ^4.7.11
-        version: 4.7.11
+        specifier: ^4.8.0
+        version: 4.8.0
       hono-openapi:
         specifier: ^0.4.8
-        version: 0.4.8(hono@4.7.11)(openapi-types@12.1.3)(zod@3.25.57)
+        version: 0.4.8(hono@4.8.0)(openapi-types@12.1.3)(zod@3.25.57)
       json-schema:
         specifier: ^0.4.0
         version: 0.4.0
@@ -1254,8 +1254,8 @@ importers:
         specifier: ^13.0.0
         version: 13.0.0
       radash:
-        specifier: ^12.1.0
-        version: 12.1.0
+        specifier: ^12.1.1
+        version: 12.1.1
       sift:
         specifier: ^17.1.3
         version: 17.1.3
@@ -1449,7 +1449,7 @@ importers:
         version: 14.1.0
       hono:
         specifier: ^4.7.11
-        version: 4.7.11
+        version: 4.8.0
       resolve-from:
         specifier: ^5.0.0
         version: 5.0.0
@@ -1471,10 +1471,10 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.14.4
-        version: 1.14.4(hono@4.7.11)
+        version: 1.14.4(hono@4.8.0)
       '@hono/swagger-ui':
         specifier: ^0.5.2
-        version: 0.5.2(hono@4.7.11)
+        version: 0.5.2(hono@4.8.0)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1507,7 +1507,7 @@ importers:
         version: 2.1.0
       hono-openapi:
         specifier: ^0.4.8
-        version: 0.4.8(hono@4.7.11)(openapi-types@12.1.3)(zod@3.25.57)
+        version: 0.4.8(hono@4.8.0)(openapi-types@12.1.3)(zod@3.25.57)
       rollup-plugin-visualizer:
         specifier: ^5.14.0
         version: 5.14.0(rollup@4.43.0)
@@ -1669,7 +1669,7 @@ importers:
         version: 3.1.3
       hono:
         specifier: ^4.7.11
-        version: 4.7.11
+        version: 4.8.0
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
@@ -1685,7 +1685,7 @@ importers:
         version: 1.3.22(zod@3.25.57)
       '@hono/node-server':
         specifier: ^1.14.4
-        version: 1.14.4(hono@4.7.11)
+        version: 1.14.4(hono@4.8.0)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1709,7 +1709,7 @@ importers:
         version: 9.28.0(jiti@2.4.2)
       hono-mcp-server-sse-transport:
         specifier: 0.0.6
-        version: 0.0.6(@modelcontextprotocol/sdk@1.12.3)(hono@4.7.11)
+        version: 0.0.6(@modelcontextprotocol/sdk@1.12.3)(hono@4.8.0)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.17))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
@@ -1761,7 +1761,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.14.4
-        version: 1.14.4(hono@4.7.11)
+        version: 1.14.4(hono@4.8.0)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1788,7 +1788,7 @@ importers:
         version: 9.28.0(jiti@2.4.2)
       hono:
         specifier: ^4.7.11
-        version: 4.7.11
+        version: 4.8.0
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.17))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
@@ -1819,7 +1819,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.14.4
-        version: 1.14.4(hono@4.7.11)
+        version: 1.14.4(hono@4.8.0)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1843,7 +1843,7 @@ importers:
         version: 9.28.0(jiti@2.4.2)
       hono:
         specifier: ^4.7.11
-        version: 4.7.11
+        version: 4.8.0
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.17))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
@@ -3469,13 +3469,13 @@ importers:
     dependencies:
       '@inngest/realtime':
         specifier: ^0.3.1
-        version: 0.3.1(@vercel/node@5.0.4(@swc/core@1.11.10(@swc/helpers@0.5.17))(encoding@0.1.13)(rollup@4.43.0))(encoding@0.1.13)(express@5.1.0)(fastify@4.29.0)(h3@1.15.3)(hono@4.7.11)(next@15.3.3(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)(typescript@5.8.3)
+        version: 0.3.1(@vercel/node@5.0.4(@swc/core@1.11.10(@swc/helpers@0.5.17))(encoding@0.1.13)(rollup@4.43.0))(encoding@0.1.13)(express@5.1.0)(fastify@4.29.0)(h3@1.15.3)(hono@4.8.0)(next@15.3.3(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)(typescript@5.8.3)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
       inngest:
         specifier: ^3.39.1
-        version: 3.39.1(@vercel/node@5.0.4(@swc/core@1.11.10(@swc/helpers@0.5.17))(encoding@0.1.13)(rollup@4.43.0))(encoding@0.1.13)(express@5.1.0)(fastify@4.29.0)(h3@1.15.3)(hono@4.7.11)(next@15.3.3(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
+        version: 3.39.1(@vercel/node@5.0.4(@swc/core@1.11.10(@swc/helpers@0.5.17))(encoding@0.1.13)(rollup@4.43.0))(encoding@0.1.13)(express@5.1.0)(fastify@4.29.0)(h3@1.15.3)(hono@4.8.0)(next@15.3.3(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
       zod:
         specifier: ^3.25.57
         version: 3.25.57
@@ -3485,7 +3485,7 @@ importers:
         version: 1.3.22(zod@3.25.57)
       '@hono/node-server':
         specifier: ^1.14.4
-        version: 1.14.4(hono@4.7.11)
+        version: 1.14.4(hono@4.8.0)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3518,7 +3518,7 @@ importers:
         version: 7.1.0
       hono:
         specifier: ^4.7.11
-        version: 4.7.11
+        version: 4.8.0
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.17))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
@@ -13135,8 +13135,8 @@ packages:
       zod-openapi:
         optional: true
 
-  hono@4.7.11:
-    resolution: {integrity: sha512-rv0JMwC0KALbbmwJDEnxvQCeJh+xbS3KEWW5PC9cMJ08Ur9xgatI0HmtgYZfOdOSOeYsp5LO2cOhdI8cLEbDEQ==}
+  hono@4.8.0:
+    resolution: {integrity: sha512-NoiHrqJxoe1MYXqW+/0/Q4NCizKj2Ivm4KmX8mOSBtw9UJ7KYaOGKkO7csIwO5UlZpfvVRdcgiMb0GGyjEjtcw==}
     engines: {node: '>=16.9.0'}
 
   hpagent@1.2.0:
@@ -15905,8 +15905,8 @@ packages:
   quick-format-unescaped@4.0.4:
     resolution: {integrity: sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg==}
 
-  radash@12.1.0:
-    resolution: {integrity: sha512-b0Zcf09AhqKS83btmUeYBS8tFK7XL2e3RvLmZcm0sTdF1/UUlHSsjXdCcWNxe7yfmAlPve5ym0DmKGtTzP6kVQ==}
+  radash@12.1.1:
+    resolution: {integrity: sha512-h36JMxKRqrAxVD8201FrCpyeNuUY9Y5zZwujr20fFO77tpUtGa6EZzfKw/3WaiBX95fq7+MpsuMLNdSnORAwSA==}
     engines: {node: '>=14.18.0'}
 
   radix3@1.1.2:
@@ -21261,13 +21261,13 @@ snapshots:
 
   '@hey-api/client-fetch@0.3.4': {}
 
-  '@hono/node-server@1.14.4(hono@4.7.11)':
+  '@hono/node-server@1.14.4(hono@4.8.0)':
     dependencies:
-      hono: 4.7.11
+      hono: 4.8.0
 
-  '@hono/swagger-ui@0.5.2(hono@4.7.11)':
+  '@hono/swagger-ui@0.5.2(hono@4.8.0)':
     dependencies:
-      hono: 4.7.11
+      hono: 4.8.0
 
   '@hookform/resolvers@3.10.0(react-hook-form@7.57.0(react@19.1.0))':
     dependencies:
@@ -21469,11 +21469,11 @@ snapshots:
       '@types/node': 20.19.0
       typescript: 5.8.3
 
-  '@inngest/realtime@0.3.1(@vercel/node@5.0.4(@swc/core@1.11.10(@swc/helpers@0.5.17))(encoding@0.1.13)(rollup@4.43.0))(encoding@0.1.13)(express@5.1.0)(fastify@4.29.0)(h3@1.15.3)(hono@4.7.11)(next@15.3.3(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)(typescript@5.8.3)':
+  '@inngest/realtime@0.3.1(@vercel/node@5.0.4(@swc/core@1.11.10(@swc/helpers@0.5.17))(encoding@0.1.13)(rollup@4.43.0))(encoding@0.1.13)(express@5.1.0)(fastify@4.29.0)(h3@1.15.3)(hono@4.8.0)(next@15.3.3(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)(typescript@5.8.3)':
     dependencies:
       '@standard-schema/spec': 1.0.0
       debug: 4.4.1(supports-color@8.1.1)
-      inngest: 3.39.1(@vercel/node@5.0.4(@swc/core@1.11.10(@swc/helpers@0.5.17))(encoding@0.1.13)(rollup@4.43.0))(encoding@0.1.13)(express@5.1.0)(fastify@4.29.0)(h3@1.15.3)(hono@4.7.11)(next@15.3.3(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
+      inngest: 3.39.1(@vercel/node@5.0.4(@swc/core@1.11.10(@swc/helpers@0.5.17))(encoding@0.1.13)(rollup@4.43.0))(encoding@0.1.13)(express@5.1.0)(fastify@4.29.0)(h3@1.15.3)(hono@4.8.0)(next@15.3.3(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
       react: 19.1.0
       zod: 3.25.57
     transitivePeerDependencies:
@@ -29980,20 +29980,20 @@ snapshots:
 
   highlightjs-vue@1.0.0: {}
 
-  hono-mcp-server-sse-transport@0.0.6(@modelcontextprotocol/sdk@1.12.3)(hono@4.7.11):
+  hono-mcp-server-sse-transport@0.0.6(@modelcontextprotocol/sdk@1.12.3)(hono@4.8.0):
     dependencies:
       '@modelcontextprotocol/sdk': 1.12.3
-      hono: 4.7.11
+      hono: 4.8.0
 
-  hono-openapi@0.4.8(hono@4.7.11)(openapi-types@12.1.3)(zod@3.25.57):
+  hono-openapi@0.4.8(hono@4.8.0)(openapi-types@12.1.3)(zod@3.25.57):
     dependencies:
       json-schema-walker: 2.0.0
       openapi-types: 12.1.3
     optionalDependencies:
-      hono: 4.7.11
+      hono: 4.8.0
       zod: 3.25.57
 
-  hono@4.7.11: {}
+  hono@4.8.0: {}
 
   hpagent@1.2.0: {}
 
@@ -30164,7 +30164,7 @@ snapshots:
 
   inline-style-parser@0.2.4: {}
 
-  inngest@3.39.1(@vercel/node@5.0.4(@swc/core@1.11.10(@swc/helpers@0.5.17))(encoding@0.1.13)(rollup@4.43.0))(encoding@0.1.13)(express@5.1.0)(fastify@4.29.0)(h3@1.15.3)(hono@4.7.11)(next@15.3.3(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3):
+  inngest@3.39.1(@vercel/node@5.0.4(@swc/core@1.11.10(@swc/helpers@0.5.17))(encoding@0.1.13)(rollup@4.43.0))(encoding@0.1.13)(express@5.1.0)(fastify@4.29.0)(h3@1.15.3)(hono@4.8.0)(next@15.3.3(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3):
     dependencies:
       '@bufbuild/protobuf': 2.5.2
       '@inngest/ai': 0.1.3
@@ -30193,7 +30193,7 @@ snapshots:
       express: 5.1.0
       fastify: 4.29.0
       h3: 1.15.3
-      hono: 4.7.11
+      hono: 4.8.0
       next: 15.3.3(@opentelemetry/api@1.9.0)(@playwright/test@1.52.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       typescript: 5.8.3
     transitivePeerDependencies:
@@ -33215,7 +33215,7 @@ snapshots:
 
   quick-format-unescaped@4.0.4: {}
 
-  radash@12.1.0: {}
+  radash@12.1.1: {}
 
   radix3@1.1.2:
     optional: true
