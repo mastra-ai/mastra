@@ -538,26 +538,6 @@ export class InternalMastraMCPClient extends MastraBase {
                 },
               );
 
-              // if (tool.outputSchema && res.structuredContent) {
-              //   try {
-              //     const outputZodSchema = this.convertInputSchema(tool.outputSchema);
-              //     const validation = outputZodSchema.safeParse(res.structuredContent);
-              //     if (!validation.success) {
-              //       const validationError = new z.ZodError(validation.error.issues);
-              //       this.log('error', `Client-side validation of tool output failed for '${tool.name}'`, {
-              //         error: validationError.format(),
-              //         receivedContent: res.structuredContent,
-              //       });
-              //       throw validationError;
-              //     }
-              //   } catch (validationError) {
-              //     this.log('error', `Error during client-side validation of tool output for '${tool.name}'`, {
-              //       error: validationError,
-              //     });
-              //     throw validationError; // rethrow
-              //   }
-              // }
-
               this.log('debug', `Tool executed successfully: ${tool.name}`);
               return res;
             } catch (e) {
