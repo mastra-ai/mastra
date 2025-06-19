@@ -111,7 +111,7 @@
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.59.0",
     "@opentelemetry/core": "^2.0.1",
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.201.1",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.202.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.201.1",
     "@opentelemetry/otlp-exporter-base": "^0.201.1",
     "@opentelemetry/otlp-transformer": "^0.201.1",
