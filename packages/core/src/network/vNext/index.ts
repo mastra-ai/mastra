@@ -905,7 +905,14 @@ export class NewAgentNetwork extends MastraBase {
     return networkWorkflow;
   }
 
-  async generate(message: string, { runtimeContext }: { runtimeContext?: RuntimeContext }) {
+  async generate(
+    message: string,
+    {
+      runtimeContext,
+      threadId,
+      resourceId,
+    }: { runtimeContext?: RuntimeContext; threadId?: string; resourceId?: string },
+  ) {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
     const run = networkWorkflow.createRun();
 
@@ -915,6 +922,8 @@ export class NewAgentNetwork extends MastraBase {
         resourceId: '',
         resourceType: 'none',
         iteration: 0,
+        threadId,
+        threadResourceId: resourceId,
       },
     });
 
