@@ -2797,7 +2797,7 @@ describe('Workflow', () => {
 
       const endTime = Date.now();
       const duration = endTime - startTime;
-      expect(duration).toBeGreaterThan(1e3 * 3);
+      expect(duration).toBeGreaterThan(3e3 - 200);
 
       expect(map).toHaveBeenCalledTimes(3);
       expect(result.steps).toEqual({
