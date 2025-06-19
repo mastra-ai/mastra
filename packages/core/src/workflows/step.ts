@@ -20,6 +20,7 @@ export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSche
   ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
   // TODO: should this be a schema you can define on the step?
   suspend(suspendPayload: TSuspendSchema): Promise<any>;
+  bail(result: any): any;
   resume?: {
     steps: string[];
     resumePayload: any;

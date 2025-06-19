@@ -399,6 +399,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     for (let i = 0; i < retries + 1; i++) {
       try {
         let suspended: { payload: any } | undefined;
+        let bailed: { payload: any } | undefined;
         const result = await runStep({
           runId,
           mastra: this.mastra!,
@@ -422,6 +423,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             suspended = { payload: suspendPayload };
           },
+          bail: (result: any) => {
+            bailed = { payload: result };
+          },
           resume: {
             steps: resume?.steps?.slice(1) || [],
             resumePayload: resume?.resumePayload,
@@ -434,6 +438,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         if (suspended) {
           execResults = { status: 'suspended', suspendPayload: suspended.payload, suspendedAt: Date.now() };
+        } else if (bailed) {
+          execResults = { status: 'bailed', output: bailed.payload, endedAt: Date.now() };
         } else {
           execResults = { status: 'success', output: result, endedAt: Date.now() };
         }
@@ -654,6 +660,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
               // TODO: this function shouldn't have suspend probably?
               suspend: async (_suspendPayload: any): Promise<any> => {},
+              bail: () => {},
               [EMITTER_SYMBOL]: emitter,
               engine: {},
             });
@@ -796,6 +803,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           return result?.status === 'success' ? result.output : null;
         },
         suspend: async (_suspendPayload: any): Promise<any> => {},
+        bail: () => {},
         [EMITTER_SYMBOL]: emitter,
         engine: {},
       });
