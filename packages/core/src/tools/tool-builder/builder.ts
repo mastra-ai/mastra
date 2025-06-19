@@ -53,12 +53,8 @@ export class CoreToolBuilder extends MastraBase {
   };
 
   private getOutputSchema = () => {
-    // Vercel tools don't support output schemas yet, this is a placeholder for when they do.
-    if (isVercelTool(this.originalTool)) {
-      return (this.originalTool as any).outputSchema;
-    }
-
-    return this.originalTool.outputSchema;
+    if ('outputSchema' in this.originalTool) return this.originalTool.outputSchema;
+    return null;
   };
 
   // For provider-defined tools, we need to include all required properties

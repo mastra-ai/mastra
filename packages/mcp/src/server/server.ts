@@ -488,7 +488,7 @@ export class MCPServer extends MCPServerBase {
           if (!result.structuredContent) {
             throw new Error(`Tool ${request.params.name} has an output schema but no structured content was provided.`);
           }
-          const outputValidation = (tool.outputSchema as any).validate?.(result.structuredContent ?? {});
+          const outputValidation = tool.outputSchema.validate?.(result.structuredContent ?? {});
           if (outputValidation && !outputValidation.success) {
             this.logger.warn(`CallTool: Invalid structured content for '${request.params.name}'`, {
               errors: outputValidation.error,
@@ -697,7 +697,7 @@ export class MCPServer extends MCPServerBase {
       return;
     }
     this.subscribeResourceHandlerIsRegistered = true;
-    this.server.setRequestHandler(SubscribeRequestSchema as any, async (request: { params: { uri: string } }) => {
+    this.server.setRequestHandler(SubscribeRequestSchema, async (request: { params: { uri: string } }) => {
       const uri = request.params.uri;
       this.logger.info(`Received resources/subscribe request for URI: ${uri}`);
       this.subscriptions.add(uri);
@@ -714,7 +714,7 @@ export class MCPServer extends MCPServerBase {
     }
     this.unsubscribeResourceHandlerIsRegistered = true;
 
-    this.server.setRequestHandler(UnsubscribeRequestSchema as any, async (request: { params: { uri: string } }) => {
+    this.server.setRequestHandler(UnsubscribeRequestSchema, async (request: { params: { uri: string } }) => {
       const uri = request.params.uri;
       this.logger.info(`Received resources/unsubscribe request for URI: ${uri}`);
       this.subscriptions.delete(uri);
