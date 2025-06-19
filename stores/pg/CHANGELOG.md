@@ -1,5 +1,19 @@
 # @mastra/pg
 
+## 0.11.1-alpha.1
+
+### Patch Changes
+
+- 2097952: [MASTRA-4021] Fix PG getMessages and update messageLimit for all storage adapters
+- 0e17048: Throw mastra errors in storage packages
+- Updated dependencies [d1baedb]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [2097952]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [0e17048]
+  - @mastra/core@0.10.7-alpha.1
+
 ## 0.11.1-alpha.0
 
 ### Patch Changes

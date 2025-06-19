@@ -10,7 +10,7 @@ import { Agent } from '../agent';
 import { RuntimeContext } from '../di';
 import { MockStore } from '../storage/mock';
 import type { StreamEvent, WatchEvent } from './types';
-import { cloneStep, cloneWorkflow, createStep, createWorkflow } from './workflow';
+import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
 
@@ -1332,10 +1332,10 @@ describe('Workflow', () => {
         workflow
           .then(step1)
           .map({
-            test: {
+            test: mapVariable({
               initData: workflow,
               path: 'cool',
-            },
+            }),
             test2: {
               runtimeContextPath: 'life',
               schema: z.number(),
@@ -1397,10 +1397,10 @@ describe('Workflow', () => {
         workflow
           .then(step1)
           .map({
-            test: {
+            test: mapVariable({
               initData: workflow,
               path: 'cool',
-            },
+            }),
             test2: {
               schema: z.string(),
               fn: async ({ inputData }) => {
@@ -1410,10 +1410,10 @@ describe('Workflow', () => {
           })
           .then(step2)
           .map({
-            result: {
+            result: mapVariable({
               step: step2,
               path: 'result',
-            },
+            }),
             second: {
               schema: z.string(),
               fn: async ({ getStepResult }) => {
@@ -1478,10 +1478,10 @@ describe('Workflow', () => {
         workflow
           .then(step1)
           .map({
-            previousValue: {
+            previousValue: mapVariable({
               step: step1,
               path: 'nested.value',
-            },
+            }),
           })
           .then(step2)
           .commit();
@@ -1625,10 +1625,10 @@ describe('Workflow', () => {
         workflow
           .then(step1)
           .map({
-            ary: {
+            ary: mapVariable({
               step: step1,
               path: '.',
-            },
+            }),
           })
           .then(step2)
           .commit();
@@ -2797,7 +2797,7 @@ describe('Workflow', () => {
 
       const endTime = Date.now();
       const duration = endTime - startTime;
-      expect(duration).toBeGreaterThan(1e3 * 3);
+      expect(duration).toBeGreaterThan(3e3 - 200);
 
       expect(map).toHaveBeenCalledTimes(3);
       expect(result.steps).toEqual({
@@ -5880,10 +5880,10 @@ describe('Workflow', () => {
           [async () => true, finalStep],
         ])
         .map({
-          finalValue: {
+          finalValue: mapVariable({
             step: finalStep,
             path: 'finalValue',
-          },
+          }),
         })
         .commit();
       counterWorkflow

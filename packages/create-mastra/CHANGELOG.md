@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.6-alpha.1
+
+### Patch Changes
+
+- 21ffb97: Make dynamic form handle schema better
+
 ## 0.10.6-alpha.0
 
 ### Patch Changes
