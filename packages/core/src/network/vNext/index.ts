@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import type { Mastra, Tool } from '../..';
+import type { Mastra, MastraMessageV2, Tool } from '../..';
 import { Agent } from '../../agent';
 import type { DynamicArgument, MastraLanguageModel } from '../../agent';
 import { MastraBase } from '../../base';
@@ -536,7 +536,7 @@ export class NewAgentNetwork extends MastraBase {
         isComplete: z.boolean().optional(),
         iteration: z.number(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter }) => {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, getInitData }) => {
         const agentsMap = await this.getAgents({ runtimeContext: runtimeContextToUse });
         const agentId = inputData.resourceId;
 
@@ -599,11 +599,30 @@ export class NewAgentNetwork extends MastraBase {
           }
         }
 
+        const finalResult = await streamPromise.promise;
+
+        const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
+        const initData = await getInitData();
+        await memory?.saveMessages({
+          messages: [
+            {
+              id: randomUUID() as string,
+              type: 'text',
+              role: 'user',
+              content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
+              createdAt: new Date(),
+              threadId: initData.threadId || runId,
+              resourceId: initData.resourceId || this.name,
+            },
+          ] as MastraMessageV2[],
+          format: 'v2',
+        });
+
         return {
           task: inputData.task,
           resourceId: inputData.resourceId,
           resourceType: inputData.resourceType,
-          result: await streamPromise.promise,
+          result: finalResult,
           isComplete: false,
           iteration: inputData.iteration,
         };
@@ -630,7 +649,7 @@ export class NewAgentNetwork extends MastraBase {
         isComplete: z.boolean().optional(),
         iteration: z.number(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter }) => {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, getInitData }) => {
         const workflowsMap = await this.getWorkflows({ runtimeContext: runtimeContextToUse });
         const wf = workflowsMap[inputData.resourceId];
 
@@ -713,10 +732,27 @@ export class NewAgentNetwork extends MastraBase {
           }
         }
 
-        const resp = await streamPromise.promise;
+        const finalResult = await streamPromise.promise;
+
+        const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
+        const initData = await getInitData();
+        await memory?.saveMessages({
+          messages: [
+            {
+              id: randomUUID() as string,
+              type: 'text',
+              role: 'user',
+              content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
+              createdAt: new Date(),
+              threadId: initData.threadId || runId,
+              resourceId: initData.resourceId || this.name,
+            },
+          ] as MastraMessageV2[],
+          format: 'v2',
+        });
 
         return {
-          result: JSON.stringify(resp) || '',
+          result: JSON.stringify(finalResult) || '',
           task: inputData.task,
           resourceId: inputData.resourceId,
           resourceType: inputData.resourceType,
@@ -746,7 +782,7 @@ export class NewAgentNetwork extends MastraBase {
         isComplete: z.boolean().optional(),
         iteration: z.number(),
       }),
-      execute: async ({ inputData }) => {
+      execute: async ({ inputData, getInitData }) => {
         const toolsMap = await this.getTools({ runtimeContext: runtimeContextToUse });
         const tool = toolsMap[inputData.resourceId];
 
@@ -766,7 +802,7 @@ export class NewAgentNetwork extends MastraBase {
           throw new Error(`Invalid task input: ${inputData.task}`);
         }
 
-        const result: any = await tool.execute({
+        const finalResult: any = await tool.execute({
           runtimeContext: runtimeContextToUse,
           mastra: this.#mastra,
           resourceId: inputData.resourceId,
@@ -775,11 +811,28 @@ export class NewAgentNetwork extends MastraBase {
           context: inputDataToUse,
         });
 
+        const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
+        const initData = await getInitData();
+        await memory?.saveMessages({
+          messages: [
+            {
+              id: randomUUID() as string,
+              type: 'text',
+              role: 'user',
+              content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
+              createdAt: new Date(),
+              threadId: initData.threadId || runId,
+              resourceId: initData.resourceId || this.name,
+            },
+          ] as MastraMessageV2[],
+          format: 'v2',
+        });
+
         return {
           task: inputData.task,
           resourceId: inputData.resourceId,
           resourceType: inputData.resourceType,
-          result: result,
+          result: finalResult,
           isComplete: false,
           iteration: inputData.iteration,
         };
@@ -889,6 +942,22 @@ export class NewAgentNetwork extends MastraBase {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
     const run = networkWorkflow.createRun();
 
+    const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
+    await memory?.saveMessages({
+      messages: [
+        {
+          id: randomUUID() as string,
+          type: 'text',
+          role: 'user',
+          content: { parts: [{ type: 'text', text: message }], format: 2 },
+          createdAt: new Date(),
+          threadId: threadId || run.runId,
+          resourceId: resourceId || this.name,
+        },
+      ] as MastraMessageV2[],
+      format: 'v2',
+    });
+
     const result = await run.start({
       inputData: {
         task: `You are executing just one primitive based on the following: ${message}`,
@@ -926,6 +995,22 @@ export class NewAgentNetwork extends MastraBase {
   ) {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
     const run = networkWorkflow.createRun();
+
+    const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
+    await memory?.saveMessages({
+      messages: [
+        {
+          id: randomUUID() as string,
+          type: 'text',
+          role: 'user',
+          content: { parts: [{ type: 'text', text: message }], format: 2 },
+          createdAt: new Date(),
+          threadId: threadId || run.runId,
+          resourceId: resourceId || this.name,
+        },
+      ] as MastraMessageV2[],
+      format: 'v2',
+    });
 
     return run.stream({
       inputData: {
