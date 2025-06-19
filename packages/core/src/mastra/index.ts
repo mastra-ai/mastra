@@ -1,6 +1,7 @@
 import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
@@ -201,7 +202,11 @@ export class Mastra<
     }
 
     if (config && `memory` in config) {
-      throw new Error(`
+      const error = new MastraError({
+        id: 'MASTRA_CONSTRUCTOR_INVALID_MEMORY_CONFIG',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `
   Memory should be added to Agents, not to Mastra.
 
 Instead of:
@@ -209,7 +214,10 @@ Instead of:
 
 do:
   new Agent({ memory: new Memory() })
-`);
+`,
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
     if (config?.tts) {
@@ -234,7 +242,17 @@ do:
     if (config?.agents) {
       Object.entries(config.agents).forEach(([key, agent]) => {
         if (agents[key]) {
-          throw new Error(`Agent with name ID:${key} already exists`);
+          const error = new MastraError({
+            id: 'MASTRA_AGENT_REGISTRATION_DUPLICATE_ID',
+            domain: ErrorDomain.MASTRA,
+            category: ErrorCategory.USER,
+            text: `Agent with name ID:${key} already exists`,
+            details: {
+              agentId: key,
+            },
+          });
+          this.#logger?.trackException(error);
+          throw error;
         }
         agent.__registerMastra(this);
 
@@ -325,7 +343,18 @@ do:
   public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {
     const agent = this.#agents?.[name];
     if (!agent) {
-      throw new Error(`Agent with name ${String(name)} not found`);
+      const error = new MastraError({
+        id: 'MASTRA_GET_AGENT_BY_NAME_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Agent with name ${String(name)} not found`,
+        details: {
+          agentName: String(name),
+          agents: Object.keys(this.#agents ?? {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
     return this.#agents[name];
   }
@@ -337,7 +366,18 @@ do:
   public getVector<TVectorName extends keyof TVectors>(name: TVectorName): TVectors[TVectorName] {
     const vector = this.#vectors?.[name];
     if (!vector) {
-      throw new Error(`Vector with name ${String(name)} not found`);
+      const error = new MastraError({
+        id: 'MASTRA_GET_VECTOR_BY_NAME_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Vector with name ${String(name)} not found`,
+        details: {
+          vectorName: String(name),
+          vectors: Object.keys(this.#vectors ?? {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
     return vector;
   }
@@ -356,7 +396,18 @@ do:
   ): TLegacyWorkflows[TWorkflowId] {
     const workflow = this.#legacy_workflows?.[id];
     if (!workflow) {
-      throw new Error(`Workflow with ID ${String(id)} not found`);
+      const error = new MastraError({
+        id: 'MASTRA_GET_LEGACY_WORKFLOW_BY_ID_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Workflow with ID ${String(id)} not found`,
+        details: {
+          workflowId: String(id),
+          workflows: Object.keys(this.#legacy_workflows ?? {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
     if (serialized) {
@@ -372,7 +423,18 @@ do:
   ): TWorkflows[TWorkflowId] {
     const workflow = this.#workflows?.[id];
     if (!workflow) {
-      throw new Error(`Workflow with ID ${String(id)} not found`);
+      const error = new MastraError({
+        id: 'MASTRA_GET_WORKFLOW_BY_ID_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Workflow with ID ${String(id)} not found`,
+        details: {
+          workflowId: String(id),
+          workflows: Object.keys(this.#workflows ?? {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
     if (serialized) {
@@ -545,7 +607,14 @@ do:
     }
 
     if (!Array.isArray(serverMiddleware)) {
-      throw new Error(`Invalid middleware: expected a function or array, received ${typeof serverMiddleware}`);
+      const error = new MastraError({
+        id: 'MASTRA_SET_SERVER_MIDDLEWARE_INVALID_TYPE',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Invalid middleware: expected a function or array, received ${typeof serverMiddleware}`,
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
     this.#serverMiddleware = serverMiddleware.map(m => {
@@ -607,11 +676,33 @@ do:
     perPage?: number;
   }) {
     if (!transportId) {
-      throw new Error('Transport ID is required');
+      const error = new MastraError({
+        id: 'MASTRA_GET_LOGS_BY_RUN_ID_MISSING_TRANSPORT',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Transport ID is required',
+        details: {
+          runId,
+          transportId,
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
     if (!this.#logger?.getLogsByRunId) {
-      throw new Error('Logger is not set');
+      const error = new MastraError({
+        id: 'MASTRA_GET_LOGS_BY_RUN_ID_LOGGER_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.SYSTEM,
+        text: 'Logger is not configured or does not support getLogsByRunId operation',
+        details: {
+          runId,
+          transportId,
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
     return await this.#logger.getLogsByRunId({
@@ -638,11 +729,30 @@ do:
     },
   ) {
     if (!transportId) {
-      throw new Error('Transport ID is required');
+      const error = new MastraError({
+        id: 'MASTRA_GET_LOGS_MISSING_TRANSPORT',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Transport ID is required',
+        details: {
+          transportId,
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
-    if (!this.#logger?.getLogs) {
-      throw new Error('Logger is not set');
+    if (!this.#logger) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_LOGS_LOGGER_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.SYSTEM,
+        text: 'Logger is not set',
+        details: {
+          transportId,
+        },
+      });
+      throw error;
     }
 
     return await this.#logger.getLogs(transportId, params);

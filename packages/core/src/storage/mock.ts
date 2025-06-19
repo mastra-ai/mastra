@@ -141,6 +141,12 @@ export class MockStore extends MastraStorage {
     return list.get.all.v1();
   }
 
+  async updateMessages(args: { messages: Partial<MastraMessageV2> & { id: string }[] }): Promise<MastraMessageV2[]> {
+    this.logger.debug(`MockStore: updateMessages called with ${args.messages.length} messages`);
+    const messages = args.messages.map(m => this.data.mastra_messages[m.id]);
+    return messages;
+  }
+
   async getTraces({
     name,
     scope,

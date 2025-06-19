@@ -1,3 +1,4 @@
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -46,19 +47,31 @@ export class CloudflareVector extends MastraVector {
       )
       .join('\n');
 
-    // Note: __binaryRequest is required for proper NDJSON handling
-    await this.client.vectorize.indexes.upsert(
-      indexName,
-      {
-        account_id: this.accountId,
-        body: ndjson,
-      },
-      {
-        __binaryRequest: true,
-      },
-    );
+    try {
+      // Note: __binaryRequest is required for proper NDJSON handling
+      await this.client.vectorize.indexes.upsert(
+        indexName,
+        {
+          account_id: this.accountId,
+          body: ndjson,
+        },
+        {
+          __binaryRequest: true,
+        },
+      );
 
-    return generatedIds;
+      return generatedIds;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_VECTORIZE_VECTOR_UPSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, vectorCount: vectors?.length },
+        },
+        error,
+      );
+    }
   }
 
   transformFilter(filter?: VectorFilter) {
@@ -89,7 +102,15 @@ export class CloudflareVector extends MastraVector {
         return;
       }
       // For any other errors, propagate
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_VECTORIZE_VECTOR_CREATE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, dimension, metric },
+        },
+        error,
+      );
     }
   }
 
@@ -100,34 +121,57 @@ export class CloudflareVector extends MastraVector {
     filter,
     includeVector = false,
   }: QueryVectorParams): Promise<QueryResult[]> {
-    const translatedFilter = this.transformFilter(filter) ?? {};
-    const response = await this.client.vectorize.indexes.query(indexName, {
-      account_id: this.accountId,
-      vector: queryVector,
-      returnValues: includeVector,
-      returnMetadata: 'all',
-      topK,
-      filter: translatedFilter,
-    });
+    try {
+      const translatedFilter = this.transformFilter(filter) ?? {};
+      const response = await this.client.vectorize.indexes.query(indexName, {
+        account_id: this.accountId,
+        vector: queryVector,
+        returnValues: includeVector,
+        returnMetadata: 'all',
+        topK,
+        filter: translatedFilter,
+      });
 
-    return (
-      response?.matches?.map((match: any) => {
-        return {
-          id: match.id,
-          metadata: match.metadata,
-          score: match.score,
-          vector: match.values,
-        };
-      }) || []
-    );
+      return (
+        response?.matches?.map((match: any) => {
+          return {
+            id: match.id,
+            metadata: match.metadata,
+            score: match.score,
+            vector: match.values,
+          };
+        }) || []
+      );
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_VECTORIZE_VECTOR_QUERY_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, topK },
+        },
+        error,
+      );
+    }
   }
 
   async listIndexes(): Promise<string[]> {
-    const res = await this.client.vectorize.indexes.list({
-      account_id: this.accountId,
-    });
+    try {
+      const res = await this.client.vectorize.indexes.list({
+        account_id: this.accountId,
+      });
 
-    return res?.result?.map(index => index.name!) || [];
+      return res?.result?.map(index => index.name!) || [];
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_VECTORIZE_VECTOR_LIST_INDEXES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -137,50 +181,110 @@ export class CloudflareVector extends MastraVector {
    * @returns A promise that resolves to the index statistics including dimension, count and metric
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
-    const index = await this.client.vectorize.indexes.get(indexName, {
-      account_id: this.accountId,
-    });
+    try {
+      const index = await this.client.vectorize.indexes.get(indexName, {
+        account_id: this.accountId,
+      });
 
-    const described = await this.client.vectorize.indexes.info(indexName, {
-      account_id: this.accountId,
-    });
+      const described = await this.client.vectorize.indexes.info(indexName, {
+        account_id: this.accountId,
+      });
 
-    return {
-      dimension: described?.dimensions!,
-      // Since vector_count is not available in the response,
-      // we might need a separate API call to get the count if needed
-      count: described?.vectorCount || 0,
-      metric: index?.config?.metric as 'cosine' | 'euclidean' | 'dotproduct',
-    };
+      return {
+        dimension: described?.dimensions!,
+        // Since vector_count is not available in the response,
+        // we might need a separate API call to get the count if needed
+        count: described?.vectorCount || 0,
+        metric: index?.config?.metric as 'cosine' | 'euclidean' | 'dotproduct',
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_VECTORIZE_VECTOR_DESCRIBE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
   }
 
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    await this.client.vectorize.indexes.delete(indexName, {
-      account_id: this.accountId,
-    });
+    try {
+      await this.client.vectorize.indexes.delete(indexName, {
+        account_id: this.accountId,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_VECTORIZE_VECTOR_DELETE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
   }
 
   async createMetadataIndex(indexName: string, propertyName: string, indexType: 'string' | 'number' | 'boolean') {
-    await this.client.vectorize.indexes.metadataIndex.create(indexName, {
-      account_id: this.accountId,
-      propertyName,
-      indexType,
-    });
+    try {
+      await this.client.vectorize.indexes.metadataIndex.create(indexName, {
+        account_id: this.accountId,
+        propertyName,
+        indexType,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_VECTORIZE_VECTOR_CREATE_METADATA_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, propertyName, indexType },
+        },
+        error,
+      );
+    }
   }
 
   async deleteMetadataIndex(indexName: string, propertyName: string) {
-    await this.client.vectorize.indexes.metadataIndex.delete(indexName, {
-      account_id: this.accountId,
-      propertyName,
-    });
+    try {
+      await this.client.vectorize.indexes.metadataIndex.delete(indexName, {
+        account_id: this.accountId,
+        propertyName,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_VECTORIZE_VECTOR_DELETE_METADATA_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, propertyName },
+        },
+        error,
+      );
+    }
   }
 
   async listMetadataIndexes(indexName: string) {
-    const res = await this.client.vectorize.indexes.metadataIndex.list(indexName, {
-      account_id: this.accountId,
-    });
+    try {
+      const res = await this.client.vectorize.indexes.metadataIndex.list(indexName, {
+        account_id: this.accountId,
+      });
 
-    return res?.metadataIndexes ?? [];
+      return res?.metadataIndexes ?? [];
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_VECTORIZE_VECTOR_LIST_METADATA_INDEXES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -194,11 +298,17 @@ export class CloudflareVector extends MastraVector {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
-    try {
-      if (!update.vector && !update.metadata) {
-        throw new Error('No update data provided');
-      }
+    if (!update.vector && !update.metadata) {
+      throw new MastraError({
+        id: 'STORAGE_VECTORIZE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'No update data provided',
+        details: { indexName, id },
+      });
+    }
 
+    try {
       const updatePayload: any = {
         ids: [id],
         account_id: this.accountId,
@@ -212,8 +322,16 @@ export class CloudflareVector extends MastraVector {
       }
 
       await this.upsert({ indexName: indexName, vectors: updatePayload.vectors, metadata: updatePayload.metadata });
-    } catch (error: any) {
-      throw new Error(`Failed to update vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_VECTORIZE_VECTOR_UPDATE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, id },
+        },
+        error,
+      );
     }
   }
 
@@ -230,8 +348,16 @@ export class CloudflareVector extends MastraVector {
         ids: [id],
         account_id: this.accountId,
       });
-    } catch (error: any) {
-      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_VECTORIZE_VECTOR_DELETE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, id },
+        },
+        error,
+      );
     }
   }
 }

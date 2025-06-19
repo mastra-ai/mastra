@@ -3,6 +3,7 @@ import type * as http from 'node:http';
 import type { InternalCoreTool } from '@mastra/core';
 import { createTool, makeCoreTool } from '@mastra/core';
 import type { ToolsInput, Agent } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MCPServerBase } from '@mastra/core/mcp';
 import type {
   MCPServerConfig,
@@ -374,8 +375,26 @@ export class MCPServer extends MCPServerBase {
     }
     this.logger.info(`Total defined tools registered: ${Object.keys(definedConvertedTools).length}`);
 
-    const agentDerivedTools = this.convertAgentsToTools(agentsConfig, definedConvertedTools);
-    const workflowDerivedTools = this.convertWorkflowsToTools(workflowsConfig, definedConvertedTools);
+    let agentDerivedTools: Record<string, ConvertedTool> = {};
+    let workflowDerivedTools: Record<string, ConvertedTool> = {};
+    try {
+      agentDerivedTools = this.convertAgentsToTools(agentsConfig, definedConvertedTools);
+      workflowDerivedTools = this.convertWorkflowsToTools(workflowsConfig, definedConvertedTools);
+    } catch (e) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_AGENT_OR_WORKFLOW_TOOL_CONVERSION_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to convert tools:', {
+        error: mastraError.toString(),
+      });
+      throw mastraError;
+    }
 
     const allConvertedTools = { ...definedConvertedTools, ...agentDerivedTools, ...workflowDerivedTools };
 
@@ -776,7 +795,23 @@ export class MCPServer extends MCPServerBase {
    */
   public async startStdio(): Promise<void> {
     this.stdioTransport = new StdioServerTransport();
-    await this.server.connect(this.stdioTransport);
+    try {
+      await this.server.connect(this.stdioTransport);
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_STDIO_CONNECTION_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to connect MCP server using stdio transport:', {
+        error: mastraError.toString(),
+      });
+      throw mastraError;
+    }
     this.logger.info('Started MCP Server (stdio)');
   }
 
@@ -791,23 +826,42 @@ export class MCPServer extends MCPServerBase {
    * @param res HTTP response (must support .write/.end)
    */
   public async startSSE({ url, ssePath, messagePath, req, res }: MCPServerSSEOptions): Promise<void> {
-    if (url.pathname === ssePath) {
-      await this.connectSSE({
-        messagePath,
-        res,
-      });
-    } else if (url.pathname === messagePath) {
-      this.logger.debug('Received message');
-      if (!this.sseTransport) {
-        res.writeHead(503);
-        res.end('SSE connection not established');
-        return;
+    try {
+      if (url.pathname === ssePath) {
+        await this.connectSSE({
+          messagePath,
+          res,
+        });
+      } else if (url.pathname === messagePath) {
+        this.logger.debug('Received message');
+        if (!this.sseTransport) {
+          res.writeHead(503);
+          res.end('SSE connection not established');
+          return;
+        }
+        await this.sseTransport.handlePostMessage(req, res);
+      } else {
+        this.logger.debug('Unknown path:', { path: url.pathname });
+        res.writeHead(404);
+        res.end();
       }
-      await this.sseTransport.handlePostMessage(req, res);
-    } else {
-      this.logger.debug('Unknown path:', { path: url.pathname });
-      res.writeHead(404);
-      res.end();
+    } catch (e) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_SSE_START_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          details: {
+            url: url.toString(),
+            ssePath,
+            messagePath,
+          },
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to start MCP Server (SSE):', { error: mastraError.toString() });
+      throw mastraError;
     }
   }
 
@@ -821,31 +875,50 @@ export class MCPServer extends MCPServerBase {
    * @param context Incoming Hono context
    */
   public async startHonoSSE({ url, ssePath, messagePath, context }: MCPServerHonoSSEOptions) {
-    if (url.pathname === ssePath) {
-      return streamSSE(context, async stream => {
-        await this.connectHonoSSE({
-          messagePath,
-          stream,
+    try {
+      if (url.pathname === ssePath) {
+        return streamSSE(context, async stream => {
+          await this.connectHonoSSE({
+            messagePath,
+            stream,
+          });
         });
-      });
-    } else if (url.pathname === messagePath) {
-      this.logger.debug('Received message');
-      const sessionId = context.req.query('sessionId');
-      this.logger.debug('Received message for sessionId', { sessionId });
-      if (!sessionId) {
-        return context.text('No sessionId provided', 400);
+      } else if (url.pathname === messagePath) {
+        this.logger.debug('Received message');
+        const sessionId = context.req.query('sessionId');
+        this.logger.debug('Received message for sessionId', { sessionId });
+        if (!sessionId) {
+          return context.text('No sessionId provided', 400);
+        }
+        if (!this.sseHonoTransports.has(sessionId)) {
+          return context.text(`No transport found for sessionId ${sessionId}`, 400);
+        }
+        const message = await this.sseHonoTransports.get(sessionId)?.handlePostMessage(context);
+        if (!message) {
+          return context.text('Transport not found', 400);
+        }
+        return message;
+      } else {
+        this.logger.debug('Unknown path:', { path: url.pathname });
+        return context.text('Unknown path', 404);
       }
-      if (!this.sseHonoTransports.has(sessionId)) {
-        return context.text(`No transport found for sessionId ${sessionId}`, 400);
-      }
-      const message = await this.sseHonoTransports.get(sessionId)?.handlePostMessage(context);
-      if (!message) {
-        return context.text('Transport not found', 400);
-      }
-      return message;
-    } else {
-      this.logger.debug('Unknown path:', { path: url.pathname });
-      return context.text('Unknown path', 404);
+    } catch (e) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_HONO_SSE_START_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          details: {
+            url: url.toString(),
+            ssePath,
+            messagePath,
+          },
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to start MCP Server (Hono SSE):', { error: mastraError.toString() });
+      throw mastraError;
     }
   }
 
@@ -1011,7 +1084,17 @@ export class MCPServer extends MCPServerBase {
         }
       }
     } catch (error) {
-      this.logger.error('startHTTP: Error handling Streamable HTTP request:', { error });
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_HTTP_CONNECTION_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          text: 'Failed to connect MCP server using HTTP transport',
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('startHTTP: Error handling Streamable HTTP request:', { error: mastraError });
       // If headers haven't been sent, send an error response
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -1025,9 +1108,6 @@ export class MCPServer extends MCPServerBase {
             id: null, // Cannot determine original request ID in catch
           }),
         );
-      } else {
-        // If headers were already sent (e.g., during SSE stream), just log the error
-        this.logger.error('startHTTP: Error after headers sent:', error);
       }
     }
   }
@@ -1039,18 +1119,35 @@ export class MCPServer extends MCPServerBase {
     messagePath: string;
     res: http.ServerResponse<http.IncomingMessage>;
   }) {
-    this.logger.debug('Received SSE connection');
-    this.sseTransport = new SSEServerTransport(messagePath, res);
-    await this.server.connect(this.sseTransport);
+    try {
+      this.logger.debug('Received SSE connection');
+      this.sseTransport = new SSEServerTransport(messagePath, res);
+      await this.server.connect(this.sseTransport);
 
-    this.server.onclose = async () => {
-      this.sseTransport = undefined;
-      await this.server.close();
-    };
+      this.server.onclose = async () => {
+        this.sseTransport = undefined;
+        await this.server.close();
+      };
 
-    res.on('close', () => {
-      this.sseTransport = undefined;
-    });
+      res.on('close', () => {
+        this.sseTransport = undefined;
+      });
+    } catch (e) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_SSE_CONNECT_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          details: {
+            messagePath,
+          },
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to connect to MCP Server (SSE):', { error: mastraError });
+      throw mastraError;
+    }
   }
 
   public async connectHonoSSE({ messagePath, stream }: { messagePath: string; stream: SSEStreamingApi }) {
@@ -1064,21 +1161,37 @@ export class MCPServer extends MCPServerBase {
       this.logger.debug('SSE Transport aborted with sessionId:', { sessionId });
       this.sseHonoTransports.delete(sessionId);
     });
+    try {
+      await this.server.connect(sseTransport);
+      this.server.onclose = async () => {
+        this.logger.debug('SSE Transport closed with sessionId:', { sessionId });
+        this.sseHonoTransports.delete(sessionId);
+        await this.server.close();
+      };
 
-    await this.server.connect(sseTransport);
-    this.server.onclose = async () => {
-      this.logger.debug('SSE Transport closed with sessionId:', { sessionId });
-      this.sseHonoTransports.delete(sessionId);
-      await this.server.close();
-    };
-
-    while (true) {
-      // This will keep the connection alive
-      // You can also await for a promise that never resolves
-      const sessionIds = Array.from(this.sseHonoTransports.keys() || []);
-      this.logger.debug('Active Hono SSE sessions:', { sessionIds });
-      await stream.write(':keep-alive\n\n');
-      await stream.sleep(60_000);
+      while (true) {
+        // This will keep the connection alive
+        // You can also await for a promise that never resolves
+        const sessionIds = Array.from(this.sseHonoTransports.keys() || []);
+        this.logger.debug('Active Hono SSE sessions:', { sessionIds });
+        await stream.write(':keep-alive\n\n');
+        await stream.sleep(60_000);
+      }
+    } catch (e) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_HONO_SSE_CONNECT_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          details: {
+            messagePath,
+          },
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to connect to MCP Server (Hono SSE):', { error: mastraError });
+      throw mastraError;
     }
   }
 
@@ -1119,7 +1232,17 @@ export class MCPServer extends MCPServerBase {
       await this.server.close();
       this.logger.info('MCP server closed.');
     } catch (error) {
-      this.logger.error('Error closing MCP server:', { error });
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_CLOSE_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Error closing MCP server:', { error: mastraError });
+      throw mastraError;
     }
   }
 
@@ -1210,35 +1333,52 @@ export class MCPServer extends MCPServerBase {
     executionContext?: { messages?: any[]; toolCallId?: string },
   ): Promise<any> {
     const tool = this.convertedTools[toolId];
-    if (!tool) {
-      this.logger.warn(`ExecuteTool: Unknown tool '${toolId}' requested on MCPServer '${this.name}'.`);
-      throw new Error(`Unknown tool: ${toolId}`);
-    }
-
-    this.logger.debug(`ExecuteTool: Invoking '${toolId}' with arguments:`, args);
-
-    let validatedArgs = args;
-    if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse === 'function') {
-      const validation = tool.parameters.safeParse(args ?? {});
-      if (!validation.success) {
-        const errorMessages = validation.error.errors
-          .map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`)
-          .join(', ');
-        this.logger.warn(`ExecuteTool: Invalid tool arguments for '${toolId}': ${errorMessages}`, {
-          errors: validation.error.format(),
-        });
-        throw new z.ZodError(validation.error.issues);
+    let validatedArgs: any;
+    try {
+      if (!tool) {
+        this.logger.warn(`ExecuteTool: Unknown tool '${toolId}' requested on MCPServer '${this.name}'.`);
+        throw new Error(`Unknown tool: ${toolId}`);
       }
-      validatedArgs = validation.data;
-    } else {
-      this.logger.debug(
-        `ExecuteTool: Tool '${toolId}' parameters is not a Zod schema with safeParse or is undefined. Skipping validation.`,
-      );
-    }
 
-    if (!tool.execute) {
-      this.logger.error(`ExecuteTool: Tool '${toolId}' does not have an execute function.`);
-      throw new Error(`Tool '${toolId}' cannot be executed.`);
+      this.logger.debug(`ExecuteTool: Invoking '${toolId}' with arguments:`, args);
+
+      if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse === 'function') {
+        const validation = tool.parameters.safeParse(args ?? {});
+        if (!validation.success) {
+          const errorMessages = validation.error.errors
+            .map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`)
+            .join(', ');
+          this.logger.warn(`ExecuteTool: Invalid tool arguments for '${toolId}': ${errorMessages}`, {
+            errors: validation.error.format(),
+          });
+          throw new z.ZodError(validation.error.issues);
+        }
+        validatedArgs = validation.data;
+      } else {
+        this.logger.debug(
+          `ExecuteTool: Tool '${toolId}' parameters is not a Zod schema with safeParse or is undefined. Skipping validation.`,
+        );
+      }
+
+      if (!tool.execute) {
+        this.logger.error(`ExecuteTool: Tool '${toolId}' does not have an execute function.`);
+        throw new Error(`Tool '${toolId}' cannot be executed.`);
+      }
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_TOOL_EXECUTE_PREPARATION_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          details: {
+            toolId,
+            args,
+          },
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
     }
 
     try {
@@ -1250,8 +1390,21 @@ export class MCPServer extends MCPServerBase {
       this.logger.info(`ExecuteTool: Tool '${toolId}' executed successfully.`);
       return result;
     } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_TOOL_EXECUTE_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          details: {
+            toolId,
+            validatedArgs: validatedArgs,
+          },
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
       this.logger.error(`ExecuteTool: Tool execution failed for '${toolId}':`, { error });
-      throw error instanceof Error ? error : new Error(`Execution of tool '${toolId}' failed: ${String(error)}`);
+      throw mastraError;
     }
   }
 }

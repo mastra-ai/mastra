@@ -76,17 +76,20 @@ export type DynamicMapping<TPrevSchema extends z.ZodTypeAny, TSchemaOut extends 
   schema: TSchemaOut;
 };
 
-export type PathsToStringProps<T> = T extends object
-  ? {
-      [K in keyof T]: T[K] extends object
-        ? K extends string
-          ? K | `${K}.${PathsToStringProps<T[K]>}`
-          : never
-        : K extends string
-          ? K
-          : never;
-    }[keyof T]
-  : never;
+export type PathsToStringProps<T> =
+  T extends z.ZodObject<infer V>
+    ? PathsToStringProps<V>
+    : T extends object
+      ? {
+          [K in keyof T]: T[K] extends object
+            ? K extends string
+              ? K | `${K}.${PathsToStringProps<T[K]>}`
+              : never
+            : K extends string
+              ? K
+              : never;
+        }[keyof T]
+      : never;
 
 export type ExtractSchemaType<T extends z.ZodType<any>> = T extends z.ZodObject<infer V> ? V : never;
 

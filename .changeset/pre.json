@@ -70,5 +70,10 @@
     "@mastra/voice-speechify": "0.10.3",
     "@mastra/inngest": "0.10.5"
   },
-  "changesets": []
+  "changesets": [
+    "cuddly-ducks-cover",
+    "fruity-tools-train",
+    "icy-maps-drop",
+    "soft-wombats-enter"
+  ]
 }
