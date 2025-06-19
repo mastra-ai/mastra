@@ -8,7 +8,7 @@ import {
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
-import type { ToolExecutionOptions } from 'ai';
+import type { ToolCallOptions } from 'ai';
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
@@ -45,28 +45,24 @@ export class CoreToolBuilder extends MastraBase {
 
   // Helper to get parameters based on tool type
   private getParameters = () => {
-    if (isVercelTool(this.originalTool)) {
-      return this.originalTool.parameters ?? z.object({});
-    }
-
     return this.originalTool.inputSchema ?? z.object({});
   };
 
   // For provider-defined tools, we need to include all required properties
-  private buildProviderTool(tool: ToolToConvert): (CoreTool & { id: `${string}.${string}` }) | undefined {
+  private buildProviderTool<T>(tool: ToolToConvert): (CoreTool<T> & { id: `${string}.${string}` }) | undefined {
     if (
       'type' in tool &&
-      tool.type === 'provider-defined' &&
+      tool.type === 'provider-defined-server' &&
       'id' in tool &&
       typeof tool.id === 'string' &&
       tool.id.includes('.')
     ) {
       return {
-        type: 'provider-defined' as const,
+        type: 'provider-defined-server' as const,
         id: tool.id,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters: convertZodSchemaToAISDKSchema(this.getParameters()),
+        inputSchema: convertZodSchemaToAISDKSchema(this.getParameters()),
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
@@ -108,7 +104,7 @@ export class CoreToolBuilder extends MastraBase {
       type: logType,
     });
 
-    const execFunction = async (args: any, execOptions: ToolExecutionOptions) => {
+    const execFunction = async (args: any, execOptions: ToolCallOptions) => {
       if (isVercelTool(tool)) {
         return tool?.execute?.(args, execOptions) ?? undefined;
       }
@@ -155,8 +151,8 @@ export class CoreToolBuilder extends MastraBase {
     };
   }
 
-  build(): CoreTool {
-    const providerTool = this.buildProviderTool(this.originalTool);
+  build<T>(): CoreTool<T> {
+    const providerTool = this.buildProviderTool<T>(this.originalTool);
     if (providerTool) {
       return providerTool;
     }
@@ -164,7 +160,7 @@ export class CoreToolBuilder extends MastraBase {
     const definition = {
       type: 'function' as const,
       description: this.originalTool.description,
-      parameters: this.getParameters(),
+      inputSchema: this.getParameters(),
       execute: this.originalTool.execute
         ? this.createExecute(
             this.originalTool,
@@ -197,7 +193,7 @@ export class CoreToolBuilder extends MastraBase {
 
     return {
       ...definition,
-      parameters: processedSchema,
+      inputSchema: processedSchema,
     };
   }
 }

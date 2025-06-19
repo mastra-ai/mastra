@@ -546,7 +546,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           type: 'text',
         });
         // Accept both string and object as content, but if object, check shape
-        const content = result.messages[0].content[0];
+        const content = result.messages[0].content;
         if (typeof content === 'object' && content !== null && 'type' in content && content.type === 'text') {
           expect(content).toEqual(userPart);
         } else {
@@ -556,7 +556,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           role: 'assistant',
           type: 'text',
         });
-        const content2 = result.messages[1].content[0];
+        const content2 = result.messages[1].content;
         if (typeof content2 === 'object' && content2 !== null && 'type' in content2 && content2.type === 'text') {
           expect(content2).toEqual(assistantPart);
         } else {

@@ -113,7 +113,7 @@ describe('isVercelTool', () => {
   it('should return true for a Vercel Tool', () => {
     const tool = {
       name: 'test',
-      parameters: z.object({
+      inputSchema: z.object({
         name: z.string(),
       }),
     };
@@ -163,7 +163,7 @@ describe('makeCoreTool', () => {
     const vercelTool = {
       name: 'test',
       description: 'Test description',
-      parameters: {
+      inputSchema: {
         type: 'object',
         properties: {
           name: { type: 'string' },
@@ -175,7 +175,7 @@ describe('makeCoreTool', () => {
     const coreTool = makeCoreTool(vercelTool, mockOptions);
 
     expect(coreTool.description).toBe('Test description');
-    expect(coreTool.parameters).toBeDefined();
+    expect(coreTool.inputSchema).toBeDefined();
     expect(typeof coreTool.execute).toBe('function');
     const result = await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
     expect(result).toEqual({ result: 'success' });
@@ -185,14 +185,14 @@ describe('makeCoreTool', () => {
     const vercelTool = {
       name: 'test',
       description: 'Test description',
-      parameters: z.object({ name: z.string() }),
+      inputSchema: z.object({ name: z.string() }),
       execute: async () => ({ result: 'success' }),
     };
 
     const coreTool = makeCoreTool(vercelTool, mockOptions);
 
     expect(coreTool.description).toBe('Test description');
-    expect(coreTool.parameters).toBeDefined();
+    expect(coreTool.inputSchema).toBeDefined();
     expect(typeof coreTool.execute).toBe('function');
     const result = await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
     expect(result).toEqual({ result: 'success' });
@@ -209,7 +209,7 @@ describe('makeCoreTool', () => {
     const coreTool = makeCoreTool(mastraTool, mockOptions);
 
     expect(coreTool.description).toBe('Test description');
-    expect(coreTool.parameters).toBeDefined();
+    expect(coreTool.inputSchema).toBeDefined();
     expect(typeof coreTool.execute).toBe('function');
     const result = await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
     expect(result).toEqual({ result: 'success' });
@@ -243,7 +243,7 @@ describe('makeCoreTool', () => {
     const vercelTool = {
       name: 'test',
       description: 'Test description',
-      parameters: {
+      inputSchema: {
         type: 'object',
         properties: {
           name: { type: 'string' },
@@ -259,15 +259,15 @@ describe('makeCoreTool', () => {
     const coreTool = makeCoreTool(
       {
         description: 'test',
-        parameters: undefined,
+        inputSchema: undefined,
         execute: async () => ({}),
       },
       mockOptions,
     );
 
     // Test the schema behavior instead of structure
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({})).not.toThrow();
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({ extra: 'field' })).not.toThrow();
+    expect(() => (coreTool as InternalCoreTool).inputSchema?.validate?.({})).not.toThrow();
+    expect(() => (coreTool as InternalCoreTool).inputSchema?.validate?.({ extra: 'field' })).not.toThrow();
   });
 
   it('should have default parameters if no parameters are provided for Mastra tool', () => {
@@ -282,8 +282,8 @@ describe('makeCoreTool', () => {
     );
 
     // Test the schema behavior instead of structure
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({})).not.toThrow();
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({ extra: 'field' })).not.toThrow();
+    expect(() => (coreTool as InternalCoreTool).inputSchema.validate?.({})).not.toThrow();
+    expect(() => (coreTool as InternalCoreTool).inputSchema.validate?.({ extra: 'field' })).not.toThrow();
   });
 });
 
@@ -292,7 +292,7 @@ it('should log correctly for Vercel tool execution', async () => {
 
   const vercelTool = {
     description: 'test',
-    parameters: { type: 'object', properties: {} },
+    inputSchema: { type: 'object', properties: {} },
     execute: async () => ({}),
   };
 

@@ -394,8 +394,14 @@ describe('CloudflareStore Workers Binding', () => {
       const messages = [createSampleMessageV2({ threadId: thread.id }), createSampleMessageV2({ threadId: thread.id })];
 
       const checkMessages = messages.map(m => {
-        const { type, ...rest } = m;
-        return rest;
+        const { type, content, ...rest } = m;
+        return {
+          ...rest,
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: content.content }],
+          },
+        };
       });
       // Save messages
       const savedMessages = await store.saveMessages({ messages, format: 'v2' });
@@ -438,7 +444,13 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        expect(msg.content).toEqual(messages[idx].content);
+        const match = messages[idx].content;
+        expect(msg.content).toEqual(
+          expect.objectContaining({
+            format: 2,
+            parts: [{ type: 'text', text: match.content }],
+          }),
+        );
       });
     });
 
@@ -1372,7 +1384,12 @@ describe('CloudflareStore Workers Binding', () => {
         messages => messages.length > 0,
       );
       expect(messages).toHaveLength(1);
-      expect(messages[0].content).toEqual(message.content);
+      expect(messages[0].content).toEqual(
+        expect.objectContaining({
+          format: message.content.format,
+          parts: message.content.parts,
+        }),
+      );
     });
 
     it('should validate thread structure', async () => {

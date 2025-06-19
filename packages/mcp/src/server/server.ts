@@ -240,7 +240,7 @@ export class MCPServer extends MCPServerBase {
       agentTools[agentToolName] = {
         name: agentToolName,
         description: coreTool.description,
-        parameters: coreTool.parameters,
+        inputSchema: coreTool.inputSchema,
         execute: coreTool.execute!,
         toolType: 'agent',
       };
@@ -319,7 +319,7 @@ export class MCPServer extends MCPServerBase {
       workflowTools[workflowToolName] = {
         name: workflowToolName,
         description: coreTool.description,
-        parameters: coreTool.parameters,
+        inputSchema: coreTool.inputSchema,
         execute: coreTool.execute!,
         toolType: 'workflow',
       };
@@ -368,7 +368,7 @@ export class MCPServer extends MCPServerBase {
       definedConvertedTools[toolName] = {
         name: toolName,
         description: coreTool.description,
-        parameters: coreTool.parameters,
+        inputSchema: coreTool.inputSchema,
         execute: coreTool.execute!,
       };
       this.logger.info(`Registered explicit tool: '${toolName}'`);
@@ -423,7 +423,7 @@ export class MCPServer extends MCPServerBase {
         tools: Object.values(this.convertedTools).map(tool => ({
           name: tool.name,
           description: tool.description,
-          inputSchema: tool.parameters.jsonSchema,
+          inputSchema: tool.inputSchema.jsonSchema,
         })),
       };
     });
@@ -451,7 +451,7 @@ export class MCPServer extends MCPServerBase {
 
         this.logger.debug(`CallTool: Invoking '${request.params.name}' with arguments:`, request.params.arguments);
 
-        const validation = tool.parameters.validate?.(request.params.arguments ?? {});
+        const validation = await tool.inputSchema.validate?.(request.params.arguments ?? {});
         if (validation && !validation.success) {
           this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
             errors: validation.error,
@@ -1291,7 +1291,7 @@ export class MCPServer extends MCPServerBase {
         id: toolId,
         name: tool.name,
         description: tool.description,
-        inputSchema: tool.parameters?.jsonSchema || tool.parameters,
+        inputSchema: tool.inputSchema?.jsonSchema || tool.inputSchema,
         toolType: tool.toolType,
       })),
     };
@@ -1314,7 +1314,7 @@ export class MCPServer extends MCPServerBase {
     return {
       name: tool.name,
       description: tool.description,
-      inputSchema: tool.parameters?.jsonSchema || tool.parameters,
+      inputSchema: tool.inputSchema?.jsonSchema || tool.inputSchema,
       toolType: tool.toolType,
     };
   }
@@ -1333,6 +1333,7 @@ export class MCPServer extends MCPServerBase {
     executionContext?: { messages?: any[]; toolCallId?: string },
   ): Promise<any> {
     const tool = this.convertedTools[toolId];
+
     let validatedArgs: any;
     try {
       if (!tool) {
@@ -1342,8 +1343,8 @@ export class MCPServer extends MCPServerBase {
 
       this.logger.debug(`ExecuteTool: Invoking '${toolId}' with arguments:`, args);
 
-      if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse === 'function') {
-        const validation = tool.parameters.safeParse(args ?? {});
+      if (tool.inputSchema instanceof z.ZodType && typeof tool.inputSchema.safeParse === 'function') {
+        const validation = tool.inputSchema.safeParse(args ?? {});
         if (!validation.success) {
           const errorMessages = validation.error.errors
             .map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`)

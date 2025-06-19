@@ -270,7 +270,7 @@ describe('Agent Handlers', () => {
     it('should stream response from agent', async () => {
       const mockStreamResult = {
         toTextStreamResponse: vi.fn().mockReturnValue(new Response()),
-        toDataStreamResponse: vi.fn().mockReturnValue(new Response()),
+        toUIMessageStreamResponse: vi.fn().mockReturnValue(new Response()),
       };
       (mockAgent.stream as any).mockResolvedValue(mockStreamResult);
 

@@ -409,7 +409,6 @@ describe('LibSQLStore updateMessages', () => {
     const fromDb = await store.getMessages({ threadId: thread.id, format: 'v2' });
     expect(fromDb).toHaveLength(1);
     expect(fromDb[0].content.metadata).toEqual(newMetadata);
-    expect(fromDb[0].content.content).toBe('hello world');
     expect(fromDb[0].content.parts).toEqual([{ type: 'text', text: 'hello world' }]);
   });
 
@@ -426,7 +425,7 @@ describe('LibSQLStore updateMessages', () => {
     });
 
     const fromDb = await store.getMessages({ threadId: thread.id, format: 'v2' });
-    expect(fromDb[0].content.content).toBe(newContentString);
+    expect(fromDb[0].content.parts).toEqual([{ type: 'text', text: newContentString }]);
     expect(fromDb[0].content.metadata).toEqual({ initial: true });
   });
 
@@ -443,7 +442,7 @@ describe('LibSQLStore updateMessages', () => {
     });
 
     const fromDb = await store.getMessages({ threadId: thread.id, format: 'v2' });
-    expect(fromDb[0].content.content).toBe('old content');
+    expect(fromDb[0].content.parts).toEqual(expect.arrayContaining([{ type: 'text', text: 'old content' }]));
     expect(fromDb[0].content.metadata).toEqual({ initial: true, updated: true });
   });
 
@@ -464,7 +463,7 @@ describe('LibSQLStore updateMessages', () => {
     const updatedMsg2 = fromDb.find(m => m.id === msg2.id)!;
 
     expect(updatedMsg1.role).toBe('assistant');
-    expect(updatedMsg2.content.content).toBe('updated');
+    expect(updatedMsg2.content.parts).toEqual(expect.arrayContaining([{ type: 'text', text: 'updated' }]));
   });
 
   it('should update the parent thread updatedAt timestamp', async () => {
