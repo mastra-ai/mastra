@@ -477,9 +477,9 @@ describe('CloudflareStore Workers Binding', () => {
 
       // The content should be the updated one
       expect(retrievedMessages.find(m => m.id === baseMessage.id)?.content.content).toBe('Updated');
-    }, 10e3);
+    });
 
-    it('should not insert or update a message if id matches but threadId differs', async () => {
+    it('should upsert messages: duplicate id and different threadid', async () => {
       const thread1 = await createSampleThread({ resourceId: 'clickhouse-test' });
       const thread2 = await createSampleThread({ resourceId: 'clickhouse-test' });
       await store.saveThread({ thread: thread1 });
@@ -505,19 +505,19 @@ describe('CloudflareStore Workers Binding', () => {
         id: message.id,
       };
 
-      // Save should ignore the conflicting message
+      // Save should also save the message to the new thread
       await store.saveMessages({ messages: [conflictingMessage], format: 'v2' });
 
       // Retrieve messages for both threads
       const thread1Messages = await store.getMessages({ threadId: thread1.id, format: 'v2' });
       const thread2Messages = await store.getMessages({ threadId: thread2.id, format: 'v2' });
 
-      // Thread 1 should have the message
+      // Thread 1 should have the message with that id
       expect(thread1Messages.find(m => m.id === message.id)?.content.content).toBe('Thread1 Content');
 
-      // Thread 2 should NOT have the message with that id
-      expect(thread2Messages.find(m => m.id === message.id)).toBeUndefined();
-    }, 10e3);
+      // Thread 2 should also have the message with that id
+      expect(thread2Messages.find(m => m.id === message.id)?.content.content).toBe('Thread2 Content');
+    });
 
     // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
     //   const messages: MastraMessageV2[] = [

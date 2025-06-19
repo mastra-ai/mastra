@@ -1136,13 +1136,9 @@ export class CloudflareStore extends MastraStorage {
     if (!Array.isArray(messages) || messages.length === 0) return [];
 
     try {
-      const messageKeys = await this.listKV(TABLE_MESSAGES);
-      const threadIdLocation = this.namespacePrefix ? 2 : 1;
       // Validate message structure and ensure dates
       const validatedMessages = messages
         .map((message, index) => {
-          const keysWithMessageId = messageKeys.filter(key => key.name.endsWith(`:${message.id}`));
-
           const errors: string[] = [];
           if (!message.id) errors.push('id is required');
           if (!message.threadId) errors.push('threadId is required');
@@ -1152,17 +1148,6 @@ export class CloudflareStore extends MastraStorage {
 
           if (errors.length > 0) {
             throw new Error(`Invalid message at index ${index}: ${errors.join(', ')}`);
-          }
-
-          const foundThreadId = keysWithMessageId
-            .map(key => key.name.split(':')[threadIdLocation])
-            .find(existingThreadId => existingThreadId !== message.threadId);
-
-          if (foundThreadId) {
-            this.logger.warn(
-              `Message with id "${message.id}" has a mismatched threadId (expected: ${message.threadId}, found: ${foundThreadId}). This message will be ignored.`,
-            );
-            return null;
           }
 
           return {

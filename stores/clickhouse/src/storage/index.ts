@@ -1041,27 +1041,11 @@ export class ClickhouseStore extends MastraStorage {
       const existingRows: Array<{ id: string; thread_id: string }> = await existingResult.json();
 
       const existingSet = new Set(existingRows.map(row => `${row.id}::${row.thread_id}`));
-      // Find messages with duplicate id but mismatched threadId
-      const mismatchedThreadIdMessages = messages.filter(m =>
-        existingRows.some(row => row.id === m.id && row.thread_id !== m.threadId),
-      );
-
-      if (mismatchedThreadIdMessages.length > 0) {
-        mismatchedThreadIdMessages.forEach(m =>
-          this.logger.warn(
-            `Message with id "${m.id}" has a mismatched threadId (expected: ${threadId}, found: ${m.threadId}). This message will be ignored.`,
-          ),
-        );
-      }
-
-      // Filter out these problematic messages from both toInsert and toUpdate
-      const filteredMessages = messages.filter(m => !mismatchedThreadIdMessages.some(mm => mm.id === m.id));
-
       // Partition the batch into new inserts and updates:
       // New messages are inserted in bulk.
-      const toInsert = filteredMessages.filter(m => !existingSet.has(`${m.id}::${threadId}`));
+      const toInsert = messages.filter(m => !existingSet.has(`${m.id}::${threadId}`));
       // Existing messages are updated via ALTER TABLE ... UPDATE.
-      const toUpdate = filteredMessages.filter(m => existingSet.has(`${m.id}::${threadId}`));
+      const toUpdate = messages.filter(m => existingSet.has(`${m.id}::${threadId}`));
       const updatePromises = toUpdate.map(message =>
         this.db.command({
           query: `
