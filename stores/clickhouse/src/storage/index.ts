@@ -1049,7 +1049,7 @@ export class ClickhouseStore extends MastraStorage {
       if (mismatchedThreadIdMessages.length > 0) {
         mismatchedThreadIdMessages.forEach(m =>
           this.logger.warn(
-            `[ClickhouseStore.saveMessages] Message with id "${m.id}" has a mismatched threadId (expected: ${threadId}, found: ${m.threadId}). This message will be ignored.`,
+            `Message with id "${m.id}" has a mismatched threadId (expected: ${threadId}, found: ${m.threadId}). This message will be ignored.`,
           ),
         );
       }

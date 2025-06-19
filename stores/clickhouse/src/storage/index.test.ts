@@ -251,9 +251,14 @@ describe('ClickhouseStore', () => {
 
       // Insert again with the same id and threadId but different content
       const updatedMessage = {
-        ...baseMessage,
-        content: [{ type: 'text', text: 'Updated' }],
-      } as MastraMessageV1;
+        ...createSampleMessageV1({
+          threadId: thread.id,
+          createdAt: new Date(),
+          content: 'Updated',
+          resourceId: 'clickhouse-test',
+        }),
+        id: baseMessage.id,
+      };
       await store.saveMessages({ messages: [updatedMessage] });
       await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -273,7 +278,7 @@ describe('ClickhouseStore', () => {
       await store.saveThread({ thread: thread1 });
       await store.saveThread({ thread: thread2 });
 
-      const messageThread1 = createSampleMessageV1({
+      const message = createSampleMessageV1({
         threadId: thread1.id,
         createdAt: new Date(),
         content: 'Thread1 Content',
@@ -281,13 +286,17 @@ describe('ClickhouseStore', () => {
       });
 
       // Insert message into thread1
-      await store.saveMessages({ messages: [messageThread1] });
+      await store.saveMessages({ messages: [message] });
 
       // Attempt to insert a message with the same id but different threadId
       const conflictingMessage = {
-        ...messageThread1,
-        threadId: thread2.id, // different thread
-        content: 'Thread2 Content',
+        ...createSampleMessageV1({
+          threadId: thread2.id,
+          createdAt: new Date(),
+          content: 'Thread2 Content',
+          resourceId: 'clickhouse-test',
+        }),
+        id: message.id,
       };
 
       // Save should ignore the conflicting message
@@ -298,10 +307,10 @@ describe('ClickhouseStore', () => {
       const thread2Messages = await store.getMessages({ threadId: thread2.id });
 
       // Thread 1 should have the message
-      expect(thread1Messages.find(m => m.id === messageThread1.id)?.content[0].text).toBe('Thread1 Content');
+      expect(thread1Messages.find(m => m.id === message.id)?.content[0].text).toBe('Thread1 Content');
 
       // Thread 2 should NOT have the message with that id
-      expect(thread2Messages.find(m => m.id === messageThread1.id)).toBeUndefined();
+      expect(thread2Messages.find(m => m.id === message.id)).toBeUndefined();
     }, 10e3);
 
     // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
