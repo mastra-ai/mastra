@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "@opentelemetry/core": "^2.0.1",
-    "@opentelemetry/otlp-exporter-base": "^0.201.1",
+    "@opentelemetry/otlp-exporter-base": "^0.202.0",
     "@opentelemetry/otlp-transformer": "^0.201.1",
     "@opentelemetry/sdk-trace-base": "^2.0.1"
   },
