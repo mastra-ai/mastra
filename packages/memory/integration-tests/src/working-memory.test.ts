@@ -480,6 +480,10 @@ describe('Working Memory Tests', () => {
       thread = await memory.saveThread({
         thread: createTestThread('Working Memory Test Thread'),
       });
+      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
+      const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
+      expect(extractUserData(wmObj)).toMatchObject({});
       agent = new Agent({
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
