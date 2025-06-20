@@ -24,7 +24,7 @@ export interface WorkflowGraphInnerProps {
   workflow: {
     stepGraph: GetWorkflowResponse['stepGraph'];
   };
-  onShowTrace: ({ runId, stepName }: { runId: string; stepName: string }) => void;
+  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
 }
 
 export function WorkflowGraphInner({ workflow, onShowTrace }: WorkflowGraphInnerProps) {
