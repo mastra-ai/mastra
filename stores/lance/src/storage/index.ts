@@ -1022,9 +1022,6 @@ export class LanceStorage extends MastraStorage {
       const table = await this.lanceClient.openTable(TABLE_MESSAGES);
       await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(transformedMessages);
 
-      const rowCount = await table.countRows();
-      console.log('rowCount', rowCount);
-
       const list = new MessageList().add(messages, 'memory');
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();

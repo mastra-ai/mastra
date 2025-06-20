@@ -724,7 +724,6 @@ describe('LanceStorage tests', async () => {
       };
 
       await storage.saveMessages({ messages: [updatedMessage], format: 'v2' });
-      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Retrieve messages for the thread
       const retrievedMessages = await storage.getMessages({ threadId: thread, format: 'v2' });

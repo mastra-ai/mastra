@@ -616,7 +616,6 @@ describe('PostgresStore', () => {
       };
 
       await store.saveMessages({ messages: [updatedMessage], format: 'v2' });
-      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Retrieve messages for the thread
       const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
