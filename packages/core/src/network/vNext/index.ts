@@ -8,9 +8,9 @@ import { MastraBase } from '../../base';
 import { RegisteredLogger } from '../../logger';
 import type { MastraMemory } from '../../memory';
 import { RuntimeContext } from '../../runtime-context';
-import { createWorkflow, createStep } from '../../workflows';
 import type { Workflow } from '../../workflows';
 import { EMITTER_SYMBOL } from '../../workflows/constants';
+import { createWorkflow, createStep } from '../../workflows/workflow';
 
 interface NewAgentNetworkConfig {
   id: string;
@@ -692,16 +692,14 @@ export class NewAgentNetwork extends MastraBase {
           ...toolData,
         });
         const run = wf.createRun();
-        const stream = run.stream({
+        const { stream } = run.stream({
           inputData: input,
           runtimeContext: runtimeContextToUse,
         });
 
         let result: any;
         let stepResults: Record<string, any> = {};
-        // TODO: streaming types are broken
-        // @ts-ignore
-        for await (const chunk of stream.stream) {
+        for await (const chunk of stream) {
           const c: any = chunk;
           // const c = chunk;
           switch (c.type) {
