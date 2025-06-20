@@ -937,8 +937,9 @@ describe('MongoDBStore', () => {
       const now = Date.now();
       const trace1 = sampleTrace('trace-filter-attribute-A', 'scope-X', now, { componentName: 'component-TARGET' });
       const trace2 = sampleTrace('trace-filter-attribute-B', 'scope-Y', now + 10, { componentName: 'component-OTHER' });
-      const trace3 = sampleTrace('trace-filter-attribute-C', 'scope-X', now + 20, {
+      const trace3 = sampleTrace('trace-filter-attribute-C', 'scope-Z', now + 20, {
         componentName: 'component-TARGET',
+        andFilterTest: 'TARGET',
       });
       await store.batchInsert({ tableName: TABLE_TRACES, records: [trace1, trace2, trace3] });
 
@@ -950,6 +951,14 @@ describe('MongoDBStore', () => {
       expect(filteredTraces.length).toBe(2);
       expect(filteredTraces[0].name).toBe('trace-filter-attribute-C');
       expect(filteredTraces[1].name).toBe('trace-filter-attribute-A');
+
+      const filteredTraces2 = await store.getTraces({
+        attributes: { componentName: 'component-TARGET', andFilterTest: 'TARGET' },
+        page: 0,
+        perPage: 10,
+      });
+      expect(filteredTraces2.length).toBe(1);
+      expect(filteredTraces2[0].name).toBe('trace-filter-attribute-C');
     });
 
     it('should retrieve traces filtered by scope', async () => {

@@ -508,9 +508,13 @@ export class MongoDBStore extends MastraStorage {
     }
 
     if (attributes) {
-      Object.keys(attributes).forEach(key => {
-        query[`attributes`] = new RegExp(`\"${key}\":\"${attributes[key]}\"`);
-      });
+      const attributeConditions = Object.keys(attributes).map(key => ({
+        attributes: new RegExp(`\"${key}\":\"${attributes[key]}\"`),
+      }));
+
+      if (attributeConditions.length > 0) {
+        query['$and'] = attributeConditions;
+      }
     }
 
     if (filters) {
