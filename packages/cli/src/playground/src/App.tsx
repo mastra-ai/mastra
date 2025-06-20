@@ -31,6 +31,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import { WorkflowGraphLayout } from './pages/workflows/layouts/workflow-graph-layout';
 import { MastraClientProvider } from '@mastra/playground-ui';
+import VNextNetwork from './pages/networks/network/v-next';
 
 function App() {
   const [queryClient] = useState(() => new QueryClient());
@@ -49,6 +50,21 @@ function App() {
                 }
               >
                 <Route path="/networks" element={<Networks />} />
+                <Route
+                  path="/networks/v-next/:networkId"
+                  element={<Navigate to="/networks/v-next/:networkId/chat" />}
+                />
+                <Route
+                  path="/networks/v-next/:networkId"
+                  element={
+                    <NetworkLayout isVNext>
+                      <Outlet />
+                    </NetworkLayout>
+                  }
+                >
+                  <Route path="chat" element={<VNextNetwork />} />
+                  <Route path="chat/:threadId" element={<VNextNetwork />} />
+                </Route>
                 <Route path="/networks/:networkId" element={<Navigate to="/networks/:networkId/chat" />} />
                 <Route
                   path="/networks/:networkId"

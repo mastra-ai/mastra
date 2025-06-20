@@ -7,6 +7,7 @@ import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
+import type { NewAgentNetwork } from '../network/vNext';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -25,10 +26,12 @@ export interface Config<
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
+  TVNextNetworks extends Record<string, NewAgentNetwork> = Record<string, NewAgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
 > {
   agents?: TAgents;
   networks?: TNetworks;
+  vnext_networks?: TVNextNetworks;
   storage?: MastraStorage;
   vectors?: TVectors;
   logger?: TLogger | false;
@@ -67,6 +70,7 @@ export class Mastra<
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
+  TVNextNetworks extends Record<string, NewAgentNetwork> = Record<string, NewAgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
 > {
   #vectors?: TVectors;
@@ -84,6 +88,7 @@ export class Mastra<
   #storage?: MastraStorage;
   #memory?: MastraMemory;
   #networks?: TNetworks;
+  #vnext_networks?: TVNextNetworks;
   #server?: ServerConfig;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
@@ -109,7 +114,19 @@ export class Mastra<
     return this.#memory;
   }
 
-  constructor(config?: Config<TAgents, TLegacyWorkflows, TWorkflows, TVectors, TTTS, TLogger, TNetworks, TMCPServers>) {
+  constructor(
+    config?: Config<
+      TAgents,
+      TLegacyWorkflows,
+      TWorkflows,
+      TVectors,
+      TTTS,
+      TLogger,
+      TNetworks,
+      TVNextNetworks,
+      TMCPServers
+    >,
+  ) {
     // Store server middleware with default path
     if (config?.serverMiddleware) {
       this.#serverMiddleware = config.serverMiddleware.map(m => ({
@@ -184,6 +201,10 @@ export class Mastra<
 
     if (config?.networks) {
       this.#networks = config.networks;
+    }
+
+    if (config?.vnext_networks) {
+      this.#vnext_networks = config.vnext_networks;
     }
 
     if (config?.mcpServers) {
@@ -276,12 +297,21 @@ do:
     Networks
     */
     this.#networks = {} as TNetworks;
+    this.#vnext_networks = {} as TVNextNetworks;
 
     if (config?.networks) {
       Object.entries(config.networks).forEach(([key, network]) => {
         network.__registerMastra(this);
         // @ts-ignore
         this.#networks[key] = network;
+      });
+    }
+
+    if (config?.vnext_networks) {
+      Object.entries(config.vnext_networks).forEach(([key, network]) => {
+        network.__registerMastra(this);
+        // @ts-ignore
+        this.#vnext_networks[key] = network;
       });
     }
 
@@ -635,6 +665,10 @@ do:
     return Object.values(this.#networks || {});
   }
 
+  public vnext_getNetworks() {
+    return Object.values(this.#vnext_networks || {});
+  }
+
   public getServer() {
     return this.#server;
   }
@@ -654,6 +688,11 @@ do:
       const routingAgent = network.getRoutingAgent();
       return network.formatAgentId(routingAgent.name) === networkId;
     });
+  }
+
+  public vnext_getNetwork(networkId: string): NewAgentNetwork | undefined {
+    const networks = this.vnext_getNetworks();
+    return networks.find(network => network.id === networkId);
   }
 
   public async getLogsByRunId({

@@ -183,6 +183,11 @@ export interface SaveMessageToMemoryParams {
   agentId: string;
 }
 
+export interface SaveNetworkMessageToMemoryParams {
+  messages: MastraMessageV1[];
+  networkId: string;
+}
+
 export type SaveMessageToMemoryResponse = MastraMessageV1[];
 
 export interface CreateMemoryThreadParams {
@@ -193,11 +198,24 @@ export interface CreateMemoryThreadParams {
   agentId: string;
 }
 
+export interface CreateNetworkMemoryThreadParams {
+  title?: string;
+  metadata?: Record<string, any>;
+  resourceId: string;
+  threadId?: string;
+  networkId: string;
+}
+
 export type CreateMemoryThreadResponse = StorageThreadType;
 
 export interface GetMemoryThreadParams {
   resourceId: string;
   agentId: string;
+}
+
+export interface GetNetworkMemoryThreadParams {
+  resourceId: string;
+  networkId: string;
 }
 
 export type GetMemoryThreadResponse = StorageThreadType[];
@@ -306,6 +324,7 @@ export interface GetTelemetryParams {
 }
 
 export interface GetNetworkResponse {
+  id: string;
   name: string;
   instructions: string;
   agents: Array<{
@@ -318,6 +337,48 @@ export interface GetNetworkResponse {
     modelId: string;
   };
   state?: Record<string, any>;
+}
+
+export interface GetVNextNetworkResponse {
+  id: string;
+  name: string;
+  instructions: string;
+  agents: Array<{
+    name: string;
+    provider: string;
+    modelId: string;
+  }>;
+  routingModel: {
+    provider: string;
+    modelId: string;
+  };
+  workflows: Array<{
+    name: string;
+    description: string;
+    inputSchema: string | undefined;
+    outputSchema: string | undefined;
+  }>;
+}
+
+export interface GenerateVNextNetworkResponse {
+  task: string;
+  result: string;
+  resourceId: string;
+  resourceType: 'none' | 'tool' | 'agent' | 'workflow';
+}
+
+export interface GenerateOrStreamVNextNetworkParams {
+  message: string;
+  threadId?: string;
+  resourceId?: string;
+}
+
+export interface LoopVNextNetworkResponse {
+  status: 'success';
+  result: {
+    text: string;
+  };
+  steps: WorkflowResult<any, any>['steps'];
 }
 
 export interface McpServerListResponse {

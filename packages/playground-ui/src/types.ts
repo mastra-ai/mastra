@@ -3,6 +3,10 @@ export interface Message {
   role: 'user' | 'assistant';
   content: any;
   isError?: boolean;
+  parts?: Array<{
+    type: 'text' | 'step-start';
+    text?: string;
+  }>;
 }
 
 export interface ModelSettings {
