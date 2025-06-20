@@ -735,7 +735,7 @@ describe('LanceStorage tests', async () => {
       expect(retrievedMessages.find(m => m.id.toString() === baseMessage.id)?.content.parts[0].text).toBe('Updated');
     });
 
-    it.only('should upsert messages: duplicate id and different threadid', async () => {
+    it('should upsert messages: duplicate id and different threadid', async () => {
       const thread1 = 'thread-1';
       const thread2 = 'thread-2';
       const thread3 = 'thread-3';
