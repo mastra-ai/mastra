@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 import EventEmitter from 'events';
+import type { ReadableStream } from 'node:stream/web';
+import { TransformStream } from 'node:stream/web';
 import { z } from 'zod';
 import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
