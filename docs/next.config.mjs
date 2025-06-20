@@ -307,6 +307,11 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/mastra-cloud/deploying",
+        destination: "/docs/mastra-cloud/setting-up",
+        permanent: true,
+      },
+      {
         source: "/docs/deployment/client",
         destination: "/docs/client-js/overview",
         permanent: true,

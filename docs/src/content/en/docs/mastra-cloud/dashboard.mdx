@@ -1,0 +1,149 @@
+---
+title: Understanding the Mastra Cloud Dashboard
+description: Details of each feature available in Mastra Cloud
+---
+
+import { MastraCloudCallout } from '@/components/mastra-cloud-callout'
+
+# Navigating the Dashboard
+
+This page explains how to navigate the Mastra Cloud dashboard, where you can configure your project, view deployment details, and interact with agents and workflows using the built-in [Playground](/docs/mastra-cloud/dashboard#playground).
+
+<MastraCloudCallout />
+
+## Overview
+
+The **Overview** page provides details about your application, including its domain URL, status, latest deployment, and connected agents and workflows.
+
+![Project dashboard](/image/mastra-cloud/mastra-cloud-project-dashboard.jpg)
+
+Key features:
+
+- **Created Date**: Timestamp for when the project was first created
+- **Domains**: URLs you can use to access the deployed application
+- **Status**: Current deployment state, e.g. success, failed or deploying
+- **Branch**: Git branch used for deployment, usually `main`
+- **Environment Variables**: Keys and secrets used by your application
+- **Workflows**: Detected workflows included in the application
+- **Agents**: Detected agents included in the application
+- **Storage Usage**: Current usage of built-in storage
+
+## Deployments
+
+The **Deployments** page shows recent builds, their status, and gives you quick access to detailed build logs. Click any row to view more information about a specific deployment.
+
+![Dashboard deployment](/image/mastra-cloud/mastra-cloud-dashboard-deployments.jpg)
+
+Key features:
+
+- **Title**: Auto-generated from the commit hash
+- **Status**: Current deployment state, e.g. success, failed or deploying
+- **Branch**: Git branch used for this deployment
+- **Commit**: Full Git commit hash
+- **Updated At**: When the deployment was created
+
+## Logs
+
+The **Logs** page is where you'll find detailed information to help debug and monitor your application's behavior in the production environment.
+
+![Dashboard logs](/image/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
+
+Key features:
+
+- **Time**: When the log entry was recorded
+- **Level**: Log severity, such as info or debug
+- **Hostname**: Identifies which server handled the request
+- **Message**: API startup, storage activity, and agent or workflow call details
+
+
+## Settings
+
+On the **Settings** page you can modify the configuration of your application.
+
+![Dashboard settings](/image/mastra-cloud/mastra-cloud-dashboard-settings.jpg)
+
+Key features:
+
+- **Environment Variables**: Add or modify environment variables
+- **Edit Project**:
+    - **Project name**: Customize the project name
+    - **Branch**: Branch to deploy from
+    - **Project port**: Network port the server will use
+    - **Project root**: Root directory of your project
+    - **Mastra directory**: Where Mastra files are located
+    - **Install command**: Runs pre-build to install project dependencies
+    - **Project setup command**: Runs pre-build to prepare any external dependencies
+    - **Store settings**: Use Mastra's built-in [LibSQLStore](/docs/storage/overview) storage
+- **Delete Project**: Delete a project
+- **Stable URL**: Create a stable URL for your application endpoints
+
+> Changes to configuration require a new deployment before taking effect.
+
+## Playground
+
+### Agents
+
+On the **Agents** page you'll see all agents used in your application. Click any agent to interact using the chat interface.
+
+![Dashboard playground agents](/image/mastra-cloud/mastra-cloud-dashboard-playground-agents.jpg)
+
+Key features:
+
+- **Chat**: History of past interactions with the agent
+- **Traces**: Execution history for each chat. Click any trace to view detailed steps
+- **Evaluation**: Scored results from each chat interaction
+- **Chat Interface**: Talk to your agent and see how it responds in real time
+- **Model**:  The language model used by the agent
+- **Memory**: Indicates whether memory is enabled
+- **Tools**: Tools configured for the agent
+- **System Prompt**: The base prompt used to configure the agent’s behavior
+
+### Workflows
+
+On the **Workflows** page you'll see all workflows used in your application. Click any workflow to interact using the runner interface.
+
+![Dashboard playground workflows](/image/mastra-cloud/mastra-cloud-dashboard-playground-workflows.jpg)
+
+Key features:
+
+- **Graph**: Visual map of your workflow steps and their connections
+- **Traces**: Execution history for each run. Click a trace to see detailed steps
+- **Run**:
+  - **Runner**: Input fields to start a workflow run
+  - **Status**: Success or failure status for each workflow step
+  - **Results**: JSON details for each workflow step
+- **Runs**: History of previous workflow executions
+- **Information**: JSON details of input and output schemas for each workflow step
+
+
+### Tools
+
+On the **Tools** page you'll see all tools used by your agents. Click any tool to interact using the input interface.
+
+![Dashboard playground tools](/image/mastra-cloud/mastra-cloud-dashboard-playground-tools.jpg)
+
+Key features:
+
+- **Input Interface**: Enter values that match the tool’s input schema to run it
+- **Output**: View the structured output returned by the tool
+
+## MCP Servers
+
+The **MCP Servers** page lists all MCP Servers included in your application. Click any MCP Server for more information.
+
+![Dashboard playground mcp servers](/image/mastra-cloud/mastra-cloud-dashboard-playground-mcpservers.jpg)
+
+Key features:
+
+- **Endpoints**:
+   - **SSE**: The server-sent events (SSE) endpoint URL
+   - **HTTP**: The standard HTTP endpoint URL
+   - **Version**: The current MCP Server version
+- **IDE Config**:
+   - **Cursor**: Configuration snippet for setting up MCP Server with Cursor
+   - **Windsurf**: Configuration snippet for Windsurf integration
+- **Available Tools**: List of tools currently registered with the MCP Server
+
+## Next steps
+
+- [Understanding Tracing and Logs](/docs/mastra-cloud/observability)
