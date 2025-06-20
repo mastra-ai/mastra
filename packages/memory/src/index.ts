@@ -3,13 +3,7 @@ import type { CoreTool, MastraMessageV1 } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
-import type {
-  MemoryConfig,
-  SharedMemoryConfig,
-  StorageThreadType,
-  WorkingMemoryFormat,
-  WorkingMemoryTemplate,
-} from '@mastra/core/memory';
+import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
 import type { CoreMessage, TextPart, UIMessage } from 'ai';
@@ -629,12 +623,10 @@ export class Memory extends MastraMemory {
   public async getWorkingMemory({
     threadId,
     resourceId,
-    format,
     memoryConfig,
   }: {
     threadId: string;
     resourceId?: string;
-    format?: WorkingMemoryFormat;
     memoryConfig?: MemoryConfig;
   }): Promise<string | null> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
