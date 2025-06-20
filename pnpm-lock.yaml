@@ -780,8 +780,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@types/jsonwebtoken':
-        specifier: ^9.0.9
-        version: 9.0.9
+        specifier: ^9.0.10
+        version: 9.0.10
       '@types/node':
         specifier: ^20.17.57
         version: 20.19.0
@@ -817,7 +817,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.60.1
-        version: 0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -9937,8 +9937,8 @@ packages:
   '@types/jsonfile@6.1.4':
     resolution: {integrity: sha512-D5qGUYwjvnNNextdU59/+fI+spnwtTFmyQP0h+PfIOSkNfpU6AOICUOkm4i0OnSk+NyjdPJrxCDro0sJsWlRpQ==}
 
-  '@types/jsonwebtoken@9.0.9':
-    resolution: {integrity: sha512-uoe+GxEuHbvy12OUQct2X9JenKM3qAscquYymuQN4fMWG9DBQtykrQEFcAbVACF7qaLw9BePSodUL0kquqBJpQ==}
+  '@types/jsonwebtoken@9.0.10':
+    resolution: {integrity: sha512-asx5hIG9Qmf/1oStypjanR7iKTv0gXQ1Ov/jfrX6kS/EO0OFni8orbmGCn0672NHR3kXHwpAwR+B368ZGN/2rA==}
 
   '@types/keygrip@1.0.6':
     resolution: {integrity: sha512-lZuNAY9xeJt7Bx4t4dx0rYCDqGPW8RXhQZK1td7d4H6E9zYbLoOtjBvfwdTKpsyxQI/2jv+armjX/RW+ZNpXOQ==}
@@ -22930,7 +22930,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
+  '@opentelemetry/auto-instrumentations-node@0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -22980,7 +22980,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.9.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.2(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.36.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resource-detector-gcp': 0.36.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.202.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -24571,7 +24571,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.36.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/resource-detector-gcp@0.36.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -26479,7 +26479,7 @@ snapshots:
     dependencies:
       '@types/node': 20.19.0
 
-  '@types/jsonwebtoken@9.0.9':
+  '@types/jsonwebtoken@9.0.10':
     dependencies:
       '@types/ms': 2.1.0
       '@types/node': 20.19.0
@@ -32146,7 +32146,7 @@ snapshots:
   jwks-rsa@3.2.0:
     dependencies:
       '@types/express': 4.17.23
-      '@types/jsonwebtoken': 9.0.9
+      '@types/jsonwebtoken': 9.0.10
       debug: 4.4.1(supports-color@8.1.1)
       jose: 4.15.9
       limiter: 1.1.5
