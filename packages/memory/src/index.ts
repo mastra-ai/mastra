@@ -264,11 +264,11 @@ export class Memory extends MastraMemory {
 
     if (config.workingMemory?.enabled) {
       const scope = config.workingMemory.scope || 'thread';
-      
+
       if (scope === 'resource' && thread.resourceId) {
         // For resource scope, initialize working memory in resource table
         const existingResource = await this.storage.getResourceById({ resourceId: thread.resourceId });
-        
+
         if (!existingResource?.workingMemory) {
           let workingMemory = config.workingMemory.template || this.defaultWorkingMemoryTemplate;
 
@@ -334,7 +334,7 @@ export class Memory extends MastraMemory {
     memoryConfig?: MemoryConfig;
   }): Promise<void> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
-    
+
     if (!config.workingMemory?.enabled) {
       throw new Error('Working memory is not enabled for this memory instance');
     }
@@ -659,11 +659,6 @@ export class Memory extends MastraMemory {
       return null;
     }
 
-    if (format === 'json') {
-      // For JSON format, return the raw working memory data as-is
-      return workingMemoryData;
-    }
-
     return workingMemoryData;
   }
 
@@ -720,11 +715,11 @@ export class Memory extends MastraMemory {
     });
   }
 
-  public async getUserContextMessage({ 
+  public async getUserContextMessage({
     threadId,
     resourceId,
     memoryConfig,
-  }: { 
+  }: {
     threadId: string;
     resourceId?: string;
     memoryConfig?: MemoryConfig;
