@@ -91,8 +91,14 @@ export type AgentGenerateOptions<
   /** Callback fired after each generation step completes */
   onStepFinish?: OUTPUT extends undefined
     ? EXPERIMENTAL_OUTPUT extends undefined
-      ? GenerateTextOnStepFinishCallback<any>
-      : GenerateTextOnStepFinishCallback<any>
+      ? (
+          stepResult: Parameters<GenerateTextOnStepFinishCallback<any>>[0],
+          args?: { runId: string },
+        ) => ReturnType<GenerateTextOnStepFinishCallback<any>>
+      : (
+          stepResult: Parameters<GenerateTextOnStepFinishCallback<any>>[0],
+          args?: { runId: string },
+        ) => ReturnType<GenerateTextOnStepFinishCallback<any>>
     : never;
   /** Maximum number of steps allowed for generation */
   maxSteps?: number;
@@ -156,15 +162,30 @@ export type AgentStreamOptions<
   runId?: string;
   /** Callback fired when streaming completes */
   onFinish?: OUTPUT extends undefined
-    ? StreamTextOnFinishCallback<any>
+    ? (
+        event: Parameters<StreamTextOnFinishCallback<any>>[0],
+        args?: { runId: string },
+      ) => ReturnType<StreamTextOnFinishCallback<any>>
     : OUTPUT extends ZodSchema
-      ? StreamObjectOnFinishCallback<z.infer<OUTPUT>>
-      : StreamObjectOnFinishCallback<any>;
+      ? (
+          event: Parameters<StreamObjectOnFinishCallback<z.infer<OUTPUT>>>[0],
+          args?: { runId: string },
+        ) => ReturnType<StreamObjectOnFinishCallback<z.infer<OUTPUT>>>
+      : (
+          event: Parameters<StreamObjectOnFinishCallback<any>>[0],
+          args?: { runId: string },
+        ) => ReturnType<StreamObjectOnFinishCallback<any>>;
   /** Callback fired after each generation step completes */
   onStepFinish?: OUTPUT extends undefined
     ? EXPERIMENTAL_OUTPUT extends undefined
-      ? StreamTextOnStepFinishCallback<any>
-      : StreamTextOnStepFinishCallback<any>
+      ? (
+          stepResult: Parameters<StreamTextOnStepFinishCallback<any>>[0],
+          args?: { runId: string },
+        ) => ReturnType<StreamTextOnStepFinishCallback<any>>
+      : (
+          stepResult: Parameters<StreamTextOnStepFinishCallback<any>>[0],
+          args?: { runId: string },
+        ) => ReturnType<StreamTextOnStepFinishCallback<any>>
     : never;
   /** Maximum number of steps allowed for generation */
   maxSteps?: number;

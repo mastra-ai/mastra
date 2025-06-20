@@ -1547,7 +1547,7 @@ export class Agent<
         messages: messageObjects,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.(result, { runId });
         },
         maxSteps: maxSteps,
         runId,
@@ -1586,7 +1586,7 @@ export class Agent<
         messages: messageObjects,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.(result, { runId });
         },
         maxSteps,
         runId,
@@ -1620,7 +1620,7 @@ export class Agent<
       tools: convertedTools,
       structuredOutput: output,
       onStepFinish: (result: any) => {
-        return onStepFinish?.(result);
+        return onStepFinish?.(result, { runId });
       },
       maxSteps,
       runId,
@@ -1751,7 +1751,7 @@ export class Agent<
         temperature,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.(result, { runId });
         },
         onFinish: async (result: any) => {
           try {
@@ -1771,7 +1771,7 @@ export class Agent<
               runId,
             });
           }
-          await onFinish?.(result);
+          await onFinish?.(result, { runId });
         },
         maxSteps,
         runId,
@@ -1797,7 +1797,7 @@ export class Agent<
         temperature,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.(result, { runId });
         },
         onFinish: async (result: any) => {
           try {
@@ -1817,7 +1817,7 @@ export class Agent<
               runId,
             });
           }
-          await onFinish?.(result);
+          await onFinish?.(result, { runId });
         },
         maxSteps,
         runId,
@@ -1841,7 +1841,7 @@ export class Agent<
       temperature,
       structuredOutput: output,
       onStepFinish: (result: any) => {
-        return onStepFinish?.(result);
+        return onStepFinish?.(result, { runId });
       },
       onFinish: async (result: any) => {
         try {
@@ -1861,7 +1861,7 @@ export class Agent<
             runId,
           });
         }
-        await onFinish?.(result);
+        await onFinish?.(result, { runId });
       },
       runId,
       toolChoice,
