@@ -479,8 +479,8 @@ describe('CloudflareStore Workers Binding', () => {
     });
 
     it('should upsert messages: duplicate id and different threadid', async () => {
-      const thread1 = await createSampleThread({ resourceId: 'clickhouse-test' });
-      const thread2 = await createSampleThread({ resourceId: 'clickhouse-test' });
+      const thread1 = await createSampleThread();
+      const thread2 = await createSampleThread();
       await store.saveThread({ thread: thread1 });
       await store.saveThread({ thread: thread2 });
 
@@ -488,7 +488,7 @@ describe('CloudflareStore Workers Binding', () => {
         threadId: thread1.id,
         createdAt: new Date(),
         content: { content: 'Thread1 Content' },
-        resourceId: 'clickhouse-test',
+        resourceId: thread1.resourceId,
       });
 
       // Insert message into thread1
@@ -499,7 +499,7 @@ describe('CloudflareStore Workers Binding', () => {
         ...createSampleMessageV2({
           threadId: thread2.id, // different thread
           content: { content: 'Thread2 Content' },
-          resourceId: 'clickhouse-test',
+          resourceId: thread2.resourceId,
         }),
         id: message.id,
       };
