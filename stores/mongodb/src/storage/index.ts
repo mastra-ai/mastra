@@ -500,7 +500,7 @@ export class MongoDBStore extends MastraStorage {
 
     const query: any = {};
     if (name) {
-      query['name'] = `%${name}%`;
+      query['name'] = new RegExp(name);
     }
 
     if (scope) {
@@ -508,9 +508,9 @@ export class MongoDBStore extends MastraStorage {
     }
 
     if (attributes) {
-      Object.keys(attributes).forEach(key => {
-        query[`attributes.${key}`] = attributes[key];
-      });
+      query['$and'] = Object.entries(attributes).map(([key, value]) => ({
+        attributes: new RegExp(`\"${key}\":\"${value}\"`),
+      }));
     }
 
     if (filters) {
