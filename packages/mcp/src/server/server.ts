@@ -39,6 +39,7 @@ import type {
   ResourceTemplate,
   ServerCapabilities,
   Prompt,
+  CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
@@ -320,6 +321,7 @@ export class MCPServer extends MCPServerBase {
         name: workflowToolName,
         description: coreTool.description,
         parameters: coreTool.parameters,
+        outputSchema: coreTool.outputSchema,
         execute: coreTool.execute!,
         toolType: 'workflow',
       };
@@ -369,6 +371,7 @@ export class MCPServer extends MCPServerBase {
         name: toolName,
         description: coreTool.description,
         parameters: coreTool.parameters,
+        outputSchema: coreTool.outputSchema,
         execute: coreTool.execute!,
       };
       this.logger.info(`Registered explicit tool: '${toolName}'`);
@@ -420,11 +423,17 @@ export class MCPServer extends MCPServerBase {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       this.logger.debug('Handling ListTools request');
       return {
-        tools: Object.values(this.convertedTools).map(tool => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.parameters.jsonSchema,
-        })),
+        tools: Object.values(this.convertedTools).map(tool => {
+          const toolSpec: any = {
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.parameters.jsonSchema,
+          };
+          if (tool.outputSchema) {
+            toolSpec.outputSchema = tool.outputSchema.jsonSchema;
+          }
+          return toolSpec;
+        }),
       };
     });
   }
@@ -449,8 +458,6 @@ export class MCPServer extends MCPServerBase {
           };
         }
 
-        this.logger.debug(`CallTool: Invoking '${request.params.name}' with arguments:`, request.params.arguments);
-
         const validation = tool.parameters.validate?.(request.params.arguments ?? {});
         if (validation && !validation.success) {
           this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
@@ -470,17 +477,43 @@ export class MCPServer extends MCPServerBase {
         }
 
         const result = await tool.execute(validation?.value, { messages: [], toolCallId: '' });
+
+        this.logger.debug(`CallTool: Tool '${request.params.name}' executed successfully with result:`, result);
         const duration = Date.now() - startTime;
         this.logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
-        return {
-          content: [
+
+        const response: CallToolResult = { isError: false, content: [] };
+
+        if (tool.outputSchema) {
+          if (!result.structuredContent) {
+            throw new Error(`Tool ${request.params.name} has an output schema but no structured content was provided.`);
+          }
+          const outputValidation = tool.outputSchema.validate?.(result.structuredContent ?? {});
+          if (outputValidation && !outputValidation.success) {
+            this.logger.warn(`CallTool: Invalid structured content for '${request.params.name}'`, {
+              errors: outputValidation.error,
+            });
+            throw new Error(
+              `Invalid structured content for tool ${request.params.name}: ${JSON.stringify(outputValidation.error)}`,
+            );
+          }
+          response.structuredContent = result.structuredContent;
+        }
+
+        if (result.content) {
+          response.content = result.content;
+        } else if (response.structuredContent) {
+          response.content = [{ type: 'text', text: JSON.stringify(response.structuredContent) }];
+        } else {
+          response.content = [
             {
               type: 'text',
               text: typeof result === 'string' ? result : JSON.stringify(result),
             },
-          ],
-          isError: false,
-        };
+          ];
+        }
+
+        return response;
       } catch (error) {
         const duration = Date.now() - startTime;
         if (error instanceof z.ZodError) {
@@ -664,7 +697,7 @@ export class MCPServer extends MCPServerBase {
       return;
     }
     this.subscribeResourceHandlerIsRegistered = true;
-    this.server.setRequestHandler(SubscribeRequestSchema as any, async (request: { params: { uri: string } }) => {
+    this.server.setRequestHandler(SubscribeRequestSchema, async (request: { params: { uri: string } }) => {
       const uri = request.params.uri;
       this.logger.info(`Received resources/subscribe request for URI: ${uri}`);
       this.subscriptions.add(uri);
@@ -681,7 +714,7 @@ export class MCPServer extends MCPServerBase {
     }
     this.unsubscribeResourceHandlerIsRegistered = true;
 
-    this.server.setRequestHandler(UnsubscribeRequestSchema as any, async (request: { params: { uri: string } }) => {
+    this.server.setRequestHandler(UnsubscribeRequestSchema, async (request: { params: { uri: string } }) => {
       const uri = request.params.uri;
       this.logger.info(`Received resources/unsubscribe request for URI: ${uri}`);
       this.subscriptions.delete(uri);
@@ -1283,7 +1316,7 @@ export class MCPServer extends MCPServerBase {
    * @returns An object containing an array of tool information.
    */
   public getToolListInfo(): {
-    tools: Array<{ name: string; description?: string; inputSchema: any; toolType?: MCPToolType }>;
+    tools: Array<{ name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType }>;
   } {
     this.logger.debug(`Getting tool list information for MCPServer '${this.name}'`);
     return {
@@ -1292,6 +1325,7 @@ export class MCPServer extends MCPServerBase {
         name: tool.name,
         description: tool.description,
         inputSchema: tool.parameters?.jsonSchema || tool.parameters,
+        outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
         toolType: tool.toolType,
       })),
     };
@@ -1304,7 +1338,7 @@ export class MCPServer extends MCPServerBase {
    */
   public getToolInfo(
     toolId: string,
-  ): { name: string; description?: string; inputSchema: any; toolType?: MCPToolType } | undefined {
+  ): { name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType } | undefined {
     const tool = this.convertedTools[toolId];
     if (!tool) {
       this.logger.debug(`Tool '${toolId}' not found on MCPServer '${this.name}'`);
@@ -1315,6 +1349,7 @@ export class MCPServer extends MCPServerBase {
       name: tool.name,
       description: tool.description,
       inputSchema: tool.parameters?.jsonSchema || tool.parameters,
+      outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
       toolType: tool.toolType,
     };
   }

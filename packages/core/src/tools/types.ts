@@ -13,6 +13,7 @@ export type CoreTool = {
   id?: string;
   description?: string;
   parameters: ZodSchema | JSONSchema7Type | Schema;
+  outputSchema?: ZodSchema | JSONSchema7Type | Schema;
   execute?: (params: any, options: ToolExecutionOptions) => Promise<any>;
 } & (
   | {
@@ -31,6 +32,7 @@ export type InternalCoreTool = {
   id?: string;
   description?: string;
   parameters: Schema;
+  outputSchema?: Schema;
   execute?: (params: any, options: ToolExecutionOptions) => Promise<any>;
 } & (
   | {

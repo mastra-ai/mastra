@@ -1,6 +1,7 @@
 import { MastraBase } from '@mastra/core/base';
 
 import type { RuntimeContext } from '@mastra/core/di';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import { isZodType } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -475,7 +476,48 @@ export class InternalMastraMCPClient extends MastraBase {
         originalJsonSchema: inputSchema,
       });
 
-      throw new Error(errorDetails);
+      throw new MastraError({
+        id: 'MCP_TOOL_INPUT_SCHEMA_CONVERSION_FAILED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        details: { error: errorDetails ?? 'Unknown error' },
+      });
+    }
+  }
+
+  private convertOutputSchema(
+    outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'] | JSONSchema,
+  ): z.ZodType | undefined {
+    if (!outputSchema) return
+    if (isZodType(outputSchema)) {
+      return outputSchema;
+    }
+
+    try {
+      return convertJsonSchemaToZod(outputSchema as JSONSchema);
+    } catch (error: unknown) {
+      let errorDetails: string | undefined;
+      if (error instanceof Error) {
+        errorDetails = error.stack;
+      } else {
+        // Attempt to stringify, fallback to String()
+        try {
+          errorDetails = JSON.stringify(error);
+        } catch {
+          errorDetails = String(error);
+        }
+      }
+      this.log('error', 'Failed to convert JSON schema to Zod schema using zodFromJsonSchema', {
+        error: errorDetails,
+        originalJsonSchema: outputSchema,
+      });
+
+      throw new MastraError({
+        id: 'MCP_TOOL_OUTPUT_SCHEMA_CONVERSION_FAILED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        details: { error: errorDetails ?? 'Unknown error' },
+      });
     }
   }
 
@@ -490,6 +532,7 @@ export class InternalMastraMCPClient extends MastraBase {
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
           inputSchema: this.convertInputSchema(tool.inputSchema),
+          outputSchema: this.convertOutputSchema(tool.outputSchema),
           execute: async ({ context, runtimeContext }: { context: any; runtimeContext?: RuntimeContext | null }) => {
             const previousContext = this.currentOperationContext;
             this.currentOperationContext = runtimeContext || null; // Set current context
@@ -505,6 +548,7 @@ export class InternalMastraMCPClient extends MastraBase {
                   timeout: this.timeout,
                 },
               );
+
               this.log('debug', `Tool executed successfully: ${tool.name}`);
               return res;
             } catch (e) {
