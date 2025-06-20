@@ -98,7 +98,7 @@
     "tailwindcss-animate": "^1.0.7",
     "unified": "^11.0.5",
     "use-debounce": "^10.0.5",
-    "zod": "^3.25.57",
+    "zod": "^3.25.67",
     "zustand": "^5.0.5"
   },
   "peerDependencies": {

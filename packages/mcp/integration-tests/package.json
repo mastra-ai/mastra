@@ -12,7 +12,7 @@
     "@mastra/client-js": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "dotenv": "^16.5.0",
-    "zod": "^3.25.56"
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",

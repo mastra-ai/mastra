@@ -208,7 +208,7 @@ importers:
         specifier: 7.8.1
         version: 7.8.1
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
       zod-to-json-schema:
         specifier: ^3.24.5
@@ -260,7 +260,7 @@ importers:
         specifier: ^4.43.0
         version: 4.44.0
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@internal/lint':
@@ -303,7 +303,7 @@ importers:
         specifier: ^9.6.0
         version: 9.6.0
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@internal/lint':
@@ -443,7 +443,7 @@ importers:
         specifier: ^5.8.3
         version: 5.8.3
       zod:
-        specifier: ^3.25.56
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@types/node':
@@ -471,7 +471,7 @@ importers:
         specifier: ^3.15.0
         version: 3.15.0
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@internal/lint':
@@ -535,7 +535,7 @@ importers:
         specifier: ^3.15.0
         version: 3.15.0
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@internal/lint':
@@ -627,7 +627,7 @@ importers:
         specifier: ^3.2.3
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.1)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0)(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
 
   integrations/ragie:
@@ -639,7 +639,7 @@ importers:
         specifier: ^3.15.0
         version: 3.15.0
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@jest/globals':
@@ -900,7 +900,7 @@ importers:
         specifier: ^0.2.3
         version: 0.2.3
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
       zod-to-json-schema:
         specifier: ^3.24.5
@@ -1348,7 +1348,7 @@ importers:
         specifier: ^3.2.3
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.1)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0)(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
 
   packages/create-mastra:
@@ -1490,7 +1490,7 @@ importers:
         specifier: ^1.5.1
         version: 1.5.1(typescript@5.8.3)
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@hono/node-server':
@@ -1572,7 +1572,7 @@ importers:
         specifier: ^4.0.4
         version: 4.0.4
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@ai-sdk/openai':
@@ -1747,7 +1747,7 @@ importers:
         specifier: ^3.2.3
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.1)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0)(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
       zod-to-json-schema:
         specifier: ^3.24.5
@@ -1777,7 +1777,7 @@ importers:
         specifier: ^11.1.0
         version: 11.1.0
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
       zod-to-json-schema:
         specifier: ^3.24.5
@@ -1835,7 +1835,7 @@ importers:
         specifier: ^11.1.0
         version: 11.1.0
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
       zod-to-json-schema:
         specifier: ^3.24.5
@@ -1899,7 +1899,7 @@ importers:
         specifier: ^16.5.0
         version: 16.5.0
       zod:
-        specifier: ^3.25.56
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@mastra/core':
@@ -1951,7 +1951,7 @@ importers:
         specifier: ^1.1.0
         version: 1.1.0
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
       zod-to-json-schema:
         specifier: ^3.24.5
@@ -2238,7 +2238,7 @@ importers:
         specifier: ^10.0.5
         version: 10.0.5(react@19.1.0)
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
       zustand:
         specifier: ^5.0.5
@@ -2311,7 +2311,7 @@ importers:
         specifier: ^2.0.3
         version: 2.0.3
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@ai-sdk/cohere':
@@ -2391,7 +2391,7 @@ importers:
         specifier: ^3.2.3
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.1)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0)(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
 
   packages/server:
@@ -2427,7 +2427,7 @@ importers:
         specifier: ^2.1.9
         version: 2.1.9(@types/node@20.19.1)(jsdom@26.1.0)(terser@5.43.1)
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
       zod-to-json-schema:
         specifier: ^3.24.5
@@ -3115,7 +3115,7 @@ importers:
         specifier: ^4.3.0
         version: 4.4.1(encoding@0.1.13)
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@cloudflare/workers-types':
@@ -3152,7 +3152,7 @@ importers:
         specifier: ^3.13.0
         version: 3.13.0(encoding@0.1.13)
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@internal/lint':
@@ -3186,7 +3186,7 @@ importers:
         specifier: ^1.59.0
         version: 1.59.0(encoding@0.1.13)
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@internal/lint':
@@ -3217,7 +3217,7 @@ importers:
   voice/gladia:
     dependencies:
       zod:
-        specifier: ^3.24.3
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@internal/lint':
@@ -3257,7 +3257,7 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@internal/lint':
@@ -3288,7 +3288,7 @@ importers:
         specifier: ^1.8.1
         version: 1.8.1
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@internal/lint':
@@ -3322,7 +3322,7 @@ importers:
         specifier: ^4.104.0
         version: 4.104.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.67)
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@internal/lint':
@@ -3390,13 +3390,13 @@ importers:
         specifier: ^2.1.9
         version: 2.1.9(@types/node@20.19.1)(jsdom@26.1.0)(terser@5.43.1)
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
 
   voice/playai:
     dependencies:
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@internal/lint':
@@ -3427,7 +3427,7 @@ importers:
   voice/sarvam:
     dependencies:
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@internal/lint':
@@ -3461,7 +3461,7 @@ importers:
         specifier: ^2.5.4
         version: 2.5.4
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@internal/lint':
@@ -3501,7 +3501,7 @@ importers:
         specifier: ^3.39.1
         version: 3.39.2(encoding@0.1.13)(express@5.1.0)(hono@4.8.1)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
       zod:
-        specifier: ^3.25.57
+        specifier: ^3.25.67
         version: 3.25.67
     devDependencies:
       '@ai-sdk/openai':
