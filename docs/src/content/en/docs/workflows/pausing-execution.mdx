@@ -1,0 +1,60 @@
+---
+title: "Pausing Execution | Mastra Docs"
+description: "Pausing execution in Mastra workflows allows you to pause execution while waiting for external input or resources via .sleep(), .sleepUntil() and .waitForEvent()."
+---
+
+# Sleep & Events
+
+Pausing execution in Mastra workflows allows you to pause execution while waiting for external input or resources via `sleep()`, `sleepUntil()` and `waitForEvent()`.
+
+This sets the workflow status to `waiting`.
+
+## sleep()
+
+`sleep()` pauses execution for a specified number of milliseconds.
+
+```typescript
+workflow
+    .then(step1)
+    .sleep(1000)
+    .then(step2)
+    .commit();
+```
+
+## sleepUntil()
+
+`sleepUntil()` pauses execution until a specified date.
+
+```typescript
+workflow
+    .then(step1)
+    .sleepUntil(new Date(Date.now() + 1000))
+    .then(step2)
+    .commit();
+```
+
+## waitForEvent()
+
+`waitForEvent()` pauses execution until an event is received. Events can be sent to the workflow using `run.sendEvent()`. The event name and the step to resume after the event is received are provided as arguments to `waitForEvent()`.
+
+`.sendEvent()` takes as arguments the event name and the event data. The event data is optional and can be any JSON-serializable value.
+
+```typescript
+workflow
+    .then(step1)
+    .waitForEvent('my-event-name', step2)
+    .then(step3)
+    .commit();
+
+const run = await workflow.createRun()
+run.start({})
+
+setTimeout(() => {
+    run.sendEvent('my-event-name', {
+        data1: 'hello',
+        data2: {
+            anyData: 12
+        }
+    })
+}, 2e3)
+```
