@@ -3,7 +3,6 @@
   "rangeStrategy": "bump",
   "extends": [
     ":dependencyDashboard",
-    ":disableRateLimiting",
     ":maintainLockFilesWeekly",
     ":semanticCommits",
     ":automergeDisabled",
@@ -11,7 +10,8 @@
     ":ignoreModulesAndTests",
     "replacements:all",
     "workarounds:typesNodeVersioning",
-    "group:recommended"
+    "group:recommended",
+    ":prConcurrentLimit20"
   ],
   "postUpdateOptions": ["pnpmDedupe"],
   "rebaseWhen": "conflicted",
