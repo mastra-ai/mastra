@@ -2,6 +2,7 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import {
@@ -128,7 +129,12 @@ export class ClickhouseStore extends MastraStorage {
     const testInfoValue = row.test_info ? JSON.parse(row.test_info as string) : undefined;
 
     if (!resultValue || typeof resultValue !== 'object' || !('score' in resultValue)) {
-      throw new Error(`Invalid MetricResult format: ${JSON.stringify(resultValue)}`);
+      throw new MastraError({
+        id: 'CLICKHOUSE_STORAGE_INVALID_METRIC_FORMAT',
+        text: `Invalid MetricResult format: ${JSON.stringify(resultValue)}`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+      });
     }
 
     return {
@@ -172,13 +178,19 @@ export class ClickhouseStore extends MastraStorage {
 
       const rows = await result.json();
       return rows.data.map((row: any) => this.transformEvalRow(row));
-    } catch (error) {
-      // Handle case where table doesn't exist yet
-      if (error instanceof Error && error.message.includes('no such table')) {
+    } catch (error: any) {
+      if (error?.message?.includes('no such table') || error?.message?.includes('does not exist')) {
         return [];
       }
-      this.logger.error('Failed to get evals for the specified agent: ' + (error as any)?.message);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_GET_EVALS_BY_AGENT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentName, type: type ?? null },
+        },
+        error,
+      );
     }
   }
 
@@ -204,9 +216,16 @@ export class ClickhouseStore extends MastraStorage {
           output_format_json_quote_64bit_integers: 0,
         },
       });
-    } catch (error) {
-      console.error(`Error inserting into ${tableName}:`, error);
-      throw error;
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_BATCH_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
@@ -271,52 +290,100 @@ export class ClickhouseStore extends MastraStorage {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const result = await this.db.query({
-      query: `SELECT *, toDateTime64(createdAt, 3) as createdAt FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`,
-      query_params: args,
-      clickhouse_settings: {
-        // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-        date_time_input_format: 'best_effort',
-        date_time_output_format: 'iso',
-        use_client_time_zone: 1,
-        output_format_json_quote_64bit_integers: 0,
-      },
-    });
+    try {
+      const result = await this.db.query({
+        query: `SELECT *, toDateTime64(createdAt, 3) as createdAt FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`,
+        query_params: args,
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
 
-    if (!result) {
-      return [];
+      if (!result) {
+        return [];
+      }
+
+      const resp = await result.json();
+      const rows: any[] = resp.data;
+      return rows.map(row => ({
+        id: row.id,
+        parentSpanId: row.parentSpanId,
+        traceId: row.traceId,
+        name: row.name,
+        scope: row.scope,
+        kind: row.kind,
+        status: safelyParseJSON(row.status as string),
+        events: safelyParseJSON(row.events as string),
+        links: safelyParseJSON(row.links as string),
+        attributes: safelyParseJSON(row.attributes as string),
+        startTime: row.startTime,
+        endTime: row.endTime,
+        other: safelyParseJSON(row.other as string),
+        createdAt: row.createdAt,
+      }));
+    } catch (error: any) {
+      if (error?.message?.includes('no such table') || error?.message?.includes('does not exist')) {
+        return [];
+      }
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_GET_TRACES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            name: name ?? null,
+            scope: scope ?? null,
+            page,
+            perPage,
+            attributes: attributes ? JSON.stringify(attributes) : null,
+            filters: filters ? JSON.stringify(filters) : null,
+            fromDate: fromDate?.toISOString() ?? null,
+            toDate: toDate?.toISOString() ?? null,
+          },
+        },
+        error,
+      );
     }
-
-    const resp = await result.json();
-    const rows: any[] = resp.data;
-    return rows.map(row => ({
-      id: row.id,
-      parentSpanId: row.parentSpanId,
-      traceId: row.traceId,
-      name: row.name,
-      scope: row.scope,
-      kind: row.kind,
-      status: safelyParseJSON(row.status as string),
-      events: safelyParseJSON(row.events as string),
-      links: safelyParseJSON(row.links as string),
-      attributes: safelyParseJSON(row.attributes as string),
-      startTime: row.startTime,
-      endTime: row.endTime,
-      other: safelyParseJSON(row.other as string),
-      createdAt: row.createdAt,
-    }));
   }
 
   async optimizeTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.db.command({
-      query: `OPTIMIZE TABLE ${tableName} FINAL`,
-    });
+    try {
+      await this.db.command({
+        query: `OPTIMIZE TABLE ${tableName} FINAL`,
+      });
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_OPTIMIZE_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
   }
 
   async materializeTtl({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.db.command({
-      query: `ALTER TABLE ${tableName} MATERIALIZE TTL;`,
-    });
+    try {
+      await this.db.command({
+        query: `ALTER TABLE ${tableName} MATERIALIZE TTL;`,
+      });
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_MATERIALIZE_TTL_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
   }
 
   async createTable({
@@ -370,9 +437,16 @@ export class ClickhouseStore extends MastraStorage {
           output_format_json_quote_64bit_integers: 0,
         },
       });
-    } catch (error) {
-      console.error(`Error creating table ${tableName}:`, error);
-      throw error;
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_CREATE_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
@@ -435,11 +509,16 @@ export class ClickhouseStore extends MastraStorage {
           this.logger?.debug?.(`Added column ${columnName} to table ${tableName}`);
         }
       }
-    } catch (error) {
-      this.logger?.error?.(
-        `Error altering table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_ALTER_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
       );
-      throw new Error(`Failed to alter table ${tableName}: ${error}`);
     }
   }
 
@@ -455,9 +534,16 @@ export class ClickhouseStore extends MastraStorage {
           output_format_json_quote_64bit_integers: 0,
         },
       });
-    } catch (error) {
-      console.error(`Error clearing table ${tableName}:`, error);
-      throw error;
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_CLEAR_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
@@ -480,9 +566,16 @@ export class ClickhouseStore extends MastraStorage {
           use_client_time_zone: 1,
         },
       });
-    } catch (error) {
-      console.error(`Error inserting into ${tableName}:`, error);
-      throw error;
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
@@ -531,8 +624,15 @@ export class ClickhouseStore extends MastraStorage {
       const data: R = transformRow(rows.data[0]);
       return data;
     } catch (error) {
-      console.error(`Error loading from ${tableName}:`, error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_LOAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
@@ -572,9 +672,16 @@ export class ClickhouseStore extends MastraStorage {
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
       };
-    } catch (error) {
-      console.error(`Error getting thread ${threadId}:`, error);
-      throw error;
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_GET_THREAD_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
     }
   }
 
@@ -610,8 +717,15 @@ export class ClickhouseStore extends MastraStorage {
         updatedAt: thread.updatedAt,
       }));
     } catch (error) {
-      console.error(`Error getting threads for resource ${resourceId}:`, error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_GET_THREADS_BY_RESOURCE_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
+        },
+        error,
+      );
     }
   }
 
@@ -637,8 +751,15 @@ export class ClickhouseStore extends MastraStorage {
 
       return thread;
     } catch (error) {
-      console.error('Error saving thread:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_SAVE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: thread.id },
+        },
+        error,
+      );
     }
   }
 
@@ -693,8 +814,15 @@ export class ClickhouseStore extends MastraStorage {
 
       return updatedThread;
     } catch (error) {
-      console.error('Error updating thread:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_UPDATE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: id, title },
+        },
+        error,
+      );
     }
   }
 
@@ -718,8 +846,15 @@ export class ClickhouseStore extends MastraStorage {
         },
       });
     } catch (error) {
-      console.error('Error deleting thread:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_DELETE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
     }
   }
 
@@ -841,8 +976,15 @@ export class ClickhouseStore extends MastraStorage {
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
-      console.error('Error getting messages:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_GET_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId: resourceId ?? '' },
+        },
+        error,
+      );
     }
   }
 
@@ -913,9 +1055,15 @@ export class ClickhouseStore extends MastraStorage {
       const list = new MessageList({ threadId, resourceId }).add(messages, 'memory');
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
-    } catch (error) {
-      console.error('Error saving messages:', error);
-      throw error;
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_SAVE_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -960,9 +1108,16 @@ export class ClickhouseStore extends MastraStorage {
           output_format_json_quote_64bit_integers: 0,
         },
       });
-    } catch (error) {
-      console.error('Error persisting workflow snapshot:', error);
-      throw error;
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
+        },
+        error,
+      );
     }
   }
 
@@ -987,9 +1142,16 @@ export class ClickhouseStore extends MastraStorage {
       }
 
       return (result as any).snapshot;
-    } catch (error) {
-      console.error('Error loading workflow snapshot:', error);
-      throw error;
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
+        },
+        error,
+      );
     }
   }
 
@@ -1102,9 +1264,16 @@ export class ClickhouseStore extends MastraStorage {
 
       // Use runs.length as total when not paginating
       return { runs, total: total || runs.length };
-    } catch (error) {
-      console.error('Error getting workflow runs:', error);
-      throw error;
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_GET_WORKFLOW_RUNS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName: workflowName ?? '', resourceId: resourceId ?? '' },
+        },
+        error,
+      );
     }
   }
 
@@ -1153,9 +1322,16 @@ export class ClickhouseStore extends MastraStorage {
         return null;
       }
       return this.parseWorkflowRun(resultJson[0]);
-    } catch (error) {
-      console.error('Error getting workflow run by ID:', error);
-      throw error;
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'CLICKHOUSE_STORAGE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: runId ?? '', workflowName: workflowName ?? '' },
+        },
+        error,
+      );
     }
   }
 
@@ -1169,7 +1345,12 @@ export class ClickhouseStore extends MastraStorage {
   }
 
   async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
-    throw new Error('Method not implemented.');
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_GET_TRACES_PAGINATED_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'Method not implemented.',
+    });
   }
 
   async getThreadsByResourceIdPaginated(_args: {
@@ -1177,13 +1358,23 @@ export class ClickhouseStore extends MastraStorage {
     page?: number;
     perPage?: number;
   }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    throw new Error('Method not implemented.');
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'Method not implemented.',
+    });
   }
 
   async getMessagesPaginated(
     _args: StorageGetMessagesArg,
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    throw new Error('Method not implemented.');
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_GET_MESSAGES_PAGINATED_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'Method not implemented.',
+    });
   }
 
   async close(): Promise<void> {

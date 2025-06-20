@@ -539,6 +539,7 @@ runtimeContext.set("filter", { category: "docs" });
 runtimeContext.set("databaseConfig", {
   pinecone: { namespace: "runtime-namespace" }
 });
+runtimeContext.set("model", openai.embedding("text-embedding-3-small"));
 
 const response = await agent.generate(
   "Find documentation from the knowledge base.",

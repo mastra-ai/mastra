@@ -17,5 +17,10 @@ if [[ "$VERCEL_ENV" == "production" ]]; then
   fi
 fi
 
+if git diff --quiet HEAD^ HEAD -- ./docs; then
+  echo "🛑 - No changes in docs folder, build cancelled"
+  exit 0;
+fi
+
 echo "✅ - Build can proceed"
 exit 1;
