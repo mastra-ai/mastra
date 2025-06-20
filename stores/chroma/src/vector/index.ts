@@ -13,7 +13,7 @@ import type {
 } from '@mastra/core/vector';
 import { ChromaClient } from 'chromadb';
 import type { UpdateRecordsParams, Collection } from 'chromadb';
-import type { ChromaVectorFilter } from './filter';
+import type { ChromaVectorDocumentFilter, ChromaVectorFilter } from './filter';
 import { ChromaFilterTranslator } from './filter';
 
 interface ChromaUpsertVectorParams extends UpsertVectorParams {
@@ -21,7 +21,7 @@ interface ChromaUpsertVectorParams extends UpsertVectorParams {
 }
 
 interface ChromaQueryVectorParams extends QueryVectorParams {
-  documentFilter?: ChromaVectorFilter;
+  documentFilter?: ChromaVectorDocumentFilter;
   filter?: ChromaVectorFilter;
 }
 

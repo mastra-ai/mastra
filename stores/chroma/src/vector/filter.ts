@@ -14,13 +14,22 @@ type ChromaLogicalOperatorValueMap = Omit<LogicalOperatorValueMap, '$nor' | '$no
 
 type ChromaBlacklisted = BlacklistedRootOperators | '$nor' | '$not';
 
-type ChromaOperator = keyof ChromaOperatorValueMap;
-
 export type ChromaVectorFilter = VectorFilter<
-  ChromaOperator,
+  keyof ChromaOperatorValueMap,
   ChromaOperatorValueMap,
   ChromaLogicalOperatorValueMap,
   ChromaBlacklisted
+>;
+
+type ChromaDocumentOperatorValueMap = ChromaOperatorValueMap;
+
+type ChromaDocumentBlacklisted = Exclude<ChromaBlacklisted, '$contains'>;
+
+export type ChromaVectorDocumentFilter = VectorFilter<
+  keyof ChromaDocumentOperatorValueMap,
+  ChromaDocumentOperatorValueMap,
+  ChromaLogicalOperatorValueMap,
+  ChromaDocumentBlacklisted
 >;
 
 /**

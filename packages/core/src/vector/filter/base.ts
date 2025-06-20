@@ -49,7 +49,7 @@ type OperatorValueMap<Op extends string = string, ValueMap extends Record<string
   $all: FilterValue[];
   $in: FilterValue[];
   $nin: FilterValue[];
-  $elemMatch: { [field: string]: any };
+  $elemMatch: Record<string, unknown>;
   $exists: boolean;
   $regex: string | RegExp;
   $options: string;
@@ -111,7 +111,7 @@ type FieldCondition<
   Op extends keyof ValueMap = keyof OperatorValueMap,
   ValueMap extends Record<string, any> = OperatorValueMap,
 > = {
-  [field: string]: OperatorCondition<Op, ValueMap> | FilterValue | FilterValue[];
+  [field: string]: OperatorCondition<Op, ValueMap> | FilterValue;
 };
 
 type ForbiddenRootOperators<Blacklisted extends string> = {
@@ -419,6 +419,7 @@ export {
   type RegexOperator,
   type ElementOperator,
   type VectorFilter,
+  type FilterValue,
   type FieldCondition,
   type OperatorCondition,
   type OperatorSupport,

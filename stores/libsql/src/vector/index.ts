@@ -15,12 +15,13 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
+import type { LibSQLVectorFilter } from './filter';
 import { LibSQLFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
 
 interface LibSQLQueryVectorParams extends QueryVectorParams {
   minScore?: number;
+  filter?: LibSQLVectorFilter;
 }
 
 export interface LibSQLVectorConfig {
@@ -109,7 +110,7 @@ export class LibSQLVector extends MastraVector {
     throw new Error('LibSQLVector: Max retries reached, but no error was re-thrown from the loop.');
   }
 
-  transformFilter(filter?: VectorFilter) {
+  transformFilter(filter?: LibSQLVectorFilter) {
     const translator = new LibSQLFilterTranslator();
     return translator.translate(filter);
   }

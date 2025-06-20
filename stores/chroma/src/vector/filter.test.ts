@@ -68,10 +68,12 @@ describe('ChromaFilterTranslator', () => {
 
     it('handles arrays as direct values', () => {
       // Direct array value should be converted to $in
-      expect(translator.translate({ field: ['value1', 'value2'] })).toEqual({ field: { $in: ['value1', 'value2'] } });
+      expect(translator.translate({ field: ['value1', 'value2'] } as any)).toEqual({
+        field: { $in: ['value1', 'value2'] },
+      });
 
       // Empty direct array
-      expect(translator.translate({ field: [] })).toEqual({ field: { $in: [] } });
+      expect(translator.translate({ field: [] } as any)).toEqual({ field: { $in: [] } });
     });
 
     describe('$in operator variations', () => {

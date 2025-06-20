@@ -16,10 +16,8 @@ type AstraLogicalOperatorValueMap = Omit<LogicalOperatorValueMap, '$nor'>;
 
 type AstraBlacklisted = BlacklistedRootOperators | '$nor';
 
-type AstraOperator = keyof AstraOperatorValueMap;
-
 export type AstraVectorFilter = VectorFilter<
-  AstraOperator,
+  keyof AstraOperatorValueMap,
   AstraOperatorValueMap,
   AstraLogicalOperatorValueMap,
   AstraBlacklisted

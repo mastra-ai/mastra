@@ -17,12 +17,6 @@ describe('LibSQLFilterTranslator', () => {
       });
     });
 
-    it('translates array to $in', () => {
-      expect(translator.translate({ field: ['a', 'b'] })).toEqual({
-        field: { $in: ['a', 'b'] },
-      });
-    });
-
     it('preserves comparison operators', () => {
       const filter = {
         field1: { $eq: 'value' },
@@ -55,7 +49,7 @@ describe('LibSQLFilterTranslator', () => {
           nested: {
             field: 'value',
           },
-        }),
+        } as any),
       ).toEqual({
         'nested.field': { $eq: 'value' },
       });
@@ -65,16 +59,16 @@ describe('LibSQLFilterTranslator', () => {
   // Array Operations
   describe('array operations', () => {
     it('translates array to $in', () => {
-      expect(translator.translate({ field: ['a', 'b'] })).toEqual({
+      expect(translator.translate({ field: ['a', 'b'] } as any)).toEqual({
         field: { $in: ['a', 'b'] },
       });
     });
 
     it('translates arrays to JSON for basic operators', () => {
-      expect(translator.translate({ field: { $eq: ['a', 'b'] } })).toEqual({
+      expect(translator.translate({ field: { $eq: ['a', 'b'] } } as any)).toEqual({
         field: { $eq: JSON.stringify(['a', 'b']) },
       });
-      expect(translator.translate({ field: { $ne: ['a', 'b'] } })).toEqual({
+      expect(translator.translate({ field: { $ne: ['a', 'b'] } } as any)).toEqual({
         field: { $ne: JSON.stringify(['a', 'b']) },
       });
     });
@@ -82,7 +76,7 @@ describe('LibSQLFilterTranslator', () => {
     it('handles empty arrays', () => {
       expect(
         translator.translate({
-          field: [],
+          field: [] as any,
         }),
       ).toEqual({
         field: { $in: [] },
@@ -128,11 +122,11 @@ describe('LibSQLFilterTranslator', () => {
   });
 
   // Array Operator Normalization
-  describe('array operator normalization', () => {
+  describe('Array operator normalization', () => {
     it('normalizes single values for $all', () => {
       expect(
         translator.translate({
-          field: { $all: 'value' },
+          field: { $all: 'value' } as any,
         }),
       ).toEqual({
         field: { $all: ['value'] },
@@ -142,7 +136,7 @@ describe('LibSQLFilterTranslator', () => {
     it('normalizes single values for $in', () => {
       expect(
         translator.translate({
-          field: { $in: 'value' },
+          field: { $in: 'value' } as any,
         }),
       ).toEqual({
         field: { $in: ['value'] },
@@ -152,7 +146,7 @@ describe('LibSQLFilterTranslator', () => {
     it('normalizes single values for $nin', () => {
       expect(
         translator.translate({
-          field: { $nin: 'value' },
+          field: { $nin: 'value' } as any,
         }),
       ).toEqual({
         field: { $nin: ['value'] },
@@ -457,16 +451,6 @@ describe('LibSQLFilterTranslator', () => {
         field: { $eq: '' },
       });
     });
-
-    it('handles empty arrays', () => {
-      expect(
-        translator.translate({
-          field: [],
-        }),
-      ).toEqual({
-        field: { $in: [] },
-      });
-    });
   });
 
   // Complex Filter Structures
@@ -540,49 +524,6 @@ describe('LibSQLFilterTranslator', () => {
     });
   });
 
-  // Array Operator Normalization
-  describe('Array Operator Normalization', () => {
-    it('normalizes single values for $all', () => {
-      expect(
-        translator.translate({
-          field: { $all: 'value' },
-        }),
-      ).toEqual({
-        field: { $all: ['value'] },
-      });
-    });
-
-    it('normalizes single values for $in', () => {
-      expect(
-        translator.translate({
-          field: { $in: 'value' },
-        }),
-      ).toEqual({
-        field: { $in: ['value'] },
-      });
-    });
-
-    it('normalizes single values for $nin', () => {
-      expect(
-        translator.translate({
-          field: { $nin: 'value' },
-        }),
-      ).toEqual({
-        field: { $nin: ['value'] },
-      });
-    });
-
-    it('preserves arrays for array operators', () => {
-      expect(
-        translator.translate({
-          field: { $all: ['value1', 'value2'] },
-        }),
-      ).toEqual({
-        field: { $all: ['value1', 'value2'] },
-      });
-    });
-  });
-
   // Operator Support Validation
   describe('Operator Support Validation', () => {
     it('ensure all operator filters are supported', () => {
@@ -634,7 +575,7 @@ describe('LibSQLFilterTranslator', () => {
 
     it('throws error for $not if not an object', () => {
       expect(() => translator.translate({ $not: 'value' })).toThrow();
-      expect(() => translator.translate({ $not: [{ field: 'value' }] })).toThrow();
+      expect(() => translator.translate({ $not: [{ field: 'value' }] } as any)).toThrow();
     });
     it('throws error for $not if empty', () => {
       expect(() => translator.translate({ $not: {} })).toThrow();
@@ -646,21 +587,21 @@ describe('LibSQLFilterTranslator', () => {
       expect(() =>
         translator.translate({
           field: { $and: [{ $eq: 'value1' }, { $eq: 'value2' }] },
-        }),
+        } as any),
       ).toThrow();
 
       // $or cannot be used in field conditions
       expect(() =>
         translator.translate({
           field: { $or: [{ $eq: 'value1' }, { $eq: 'value2' }] },
-        }),
+        } as any),
       ).toThrow();
 
       // $nor cannot be used in field conditions
       expect(() =>
         translator.translate({
           field: { $nor: [{ $eq: 'value1' }, { $eq: 'value2' }] },
-        }),
+        } as any),
       ).toThrow();
     });
 
@@ -709,7 +650,7 @@ describe('LibSQLFilterTranslator', () => {
           field: {
             $gt: {
               $or: [{ subfield: 'value1' }, { subfield: 'value2' }],
-            },
+            } as any,
           },
         }),
       ).toThrow();
@@ -723,17 +664,17 @@ describe('LibSQLFilterTranslator', () => {
                 $and: [{ subfield: 'value1' }, { subfield: 'value2' }],
               },
             ],
-          },
+          } as any,
         }),
       ).toThrow();
     });
 
     it('validates $not operator structure', () => {
       // $not must be an object
-      expect(() => translator.translate({ field: { $not: 'value' } })).toThrow();
+      expect(() => translator.translate({ field: { $not: 'value' } } as any)).toThrow();
       expect(() => translator.translate({ field: { $not: ['value'] } })).toThrow();
       expect(() => translator.translate({ $not: 'value' })).toThrow();
-      expect(() => translator.translate({ $not: ['value'] })).toThrow();
+      expect(() => translator.translate({ $not: ['value'] } as any)).toThrow();
     });
 
     it('validates $not operator nesting', () => {
@@ -793,7 +734,7 @@ describe('LibSQLFilterTranslator', () => {
       const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
 
       invalidFilters.forEach(filter => {
-        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
+        expect(() => translator.translate(filter as any)).toThrow(/Invalid top-level operator/);
       });
     });
     it('allows logical operators at top level', () => {
@@ -815,7 +756,7 @@ describe('LibSQLFilterTranslator', () => {
       // Should throw for non-object values
       expect(() =>
         translator.translate({
-          field: { $elemMatch: 'value' },
+          field: { $elemMatch: 'value' } as any,
         }),
       ).toThrow('$elemMatch requires an object with conditions');
 
@@ -962,7 +903,7 @@ describe('LibSQLFilterTranslator', () => {
   // Unsupported Operations
   describe('unsupported operators', () => {
     it('throws on unsupported operators', () => {
-      expect(() => translator.translate({ field: { $regex: 'value' } })).toThrow();
+      expect(() => translator.translate({ field: { $regex: 'value' } } as any)).toThrow();
     });
   });
 });
