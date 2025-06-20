@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
+import type { AstraVectorFilter } from './filter';
 import { AstraFilterTranslator } from './filter';
 
 describe('AstraFilterTranslator', () => {
@@ -12,12 +13,12 @@ describe('AstraFilterTranslator', () => {
   // Basic Filter Operations
   describe('basic operations', () => {
     it('handles simple equality', () => {
-      const filter = { field: 'value' };
+      const filter: AstraVectorFilter = { field: 'value' };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
     it('handles comparison operators', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         age: { $gt: 25 },
         score: { $lte: 100 },
       };
@@ -25,7 +26,7 @@ describe('AstraFilterTranslator', () => {
     });
 
     it('handles valid multiple operators on same field', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         price: { $gt: 100, $lt: 200 },
         quantity: { $gte: 10, $lte: 20 },
       };
@@ -33,7 +34,7 @@ describe('AstraFilterTranslator', () => {
     });
 
     it('handles null values correctly', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         field: null,
         other: { $eq: null },
       };
@@ -41,7 +42,7 @@ describe('AstraFilterTranslator', () => {
     });
 
     it('throws on unsupported combinations', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         field: { $gt: 100, $lt: 200 },
       };
       expect(translator.translate(filter)).toEqual(filter);
@@ -51,14 +52,14 @@ describe('AstraFilterTranslator', () => {
   // Array Operations
   describe('array operations', () => {
     it('handles array operators', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         tags: { $all: ['tag1', 'tag2'] },
         categories: { $in: ['A', 'B'] },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
     it('handles empty array values', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         tags: { $in: [] },
         categories: { $all: [] },
       };
@@ -66,7 +67,7 @@ describe('AstraFilterTranslator', () => {
     });
 
     it('handles nested array operators', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         $and: [{ tags: { $all: ['tag1', 'tag2'] } }, { 'nested.array': { $in: [1, 2, 3] } }],
       };
       expect(translator.translate(filter)).toEqual(filter);
@@ -76,14 +77,14 @@ describe('AstraFilterTranslator', () => {
   // Logical Operators
   describe('logical operators', () => {
     it('handles logical operators', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         $or: [{ status: 'active' }, { age: { $gt: 25 } }],
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
     it('handles nested logical operators', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         $and: [
           { status: 'active' },
           { $or: [{ category: { $in: ['A', 'B'] } }, { $and: [{ price: { $gt: 100 } }, { stock: { $lt: 50 } }] }] },
@@ -93,7 +94,7 @@ describe('AstraFilterTranslator', () => {
     });
 
     it('handles empty conditions in logical operators', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         $and: [],
         $or: [{}],
         field: 'value',
@@ -211,7 +212,7 @@ describe('AstraFilterTranslator', () => {
   // Nested Objects and Fields
   describe('nested objects and fields', () => {
     it('handles nested objects', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         'user.profile.age': { $gt: 25 },
         'user.status': 'active',
       };
@@ -219,7 +220,7 @@ describe('AstraFilterTranslator', () => {
     });
 
     it('handles deeply nested field paths', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         'user.profile.address.city': { $eq: 'New York' },
         'deep.nested.field': { $gt: 100 },
       };
@@ -227,7 +228,7 @@ describe('AstraFilterTranslator', () => {
     });
 
     it('preserves nested empty objects', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         status: 'active',
         metadata: {},
         'user.profile': {},
@@ -237,7 +238,7 @@ describe('AstraFilterTranslator', () => {
     });
 
     it('handles mix of operators and empty objects', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         tags: { $in: ['a', 'b'] },
         metadata: {},
         'nested.field': { $eq: 'value' },
@@ -264,7 +265,7 @@ describe('AstraFilterTranslator', () => {
 
     it('normalizes dates', () => {
       const date = new Date('2024-01-01');
-      const filter = { timestamp: { $gt: date } };
+      const filter: AstraVectorFilter = { timestamp: { $gt: date } };
       expect(translator.translate(filter)).toEqual({
         timestamp: { $gt: date.toISOString() },
       });
@@ -283,7 +284,7 @@ describe('AstraFilterTranslator', () => {
 
   describe('operator validation', () => {
     it('ensure all operator filters are supported', () => {
-      const supportedFilters = [
+      const supportedFilters: AstraVectorFilter[] = [
         // Basic comparison operators
         { field: { $eq: 'value' } },
         { field: { $ne: 'value' } },
@@ -338,7 +339,7 @@ describe('AstraFilterTranslator', () => {
     });
 
     it('allows logical operators at top level', () => {
-      const validFilters = [
+      const validFilters: AstraVectorFilter[] = [
         { $and: [{ field: 'value' }] },
         { $or: [{ field: 'value' }] },
         { $not: { field: 'value' } },

@@ -96,22 +96,25 @@ type VectorFilter<
   ValueMap extends Record<string, any> = OperatorValueMap,
   LogicalValueMap extends Record<string, any> = LogicalOperatorValueMap,
   Blacklisted extends string = BlacklistedRootOperators,
-> = FilterCondition<Op, ValueMap, LogicalValueMap, Blacklisted> | null | undefined;
+  FieldValue = FilterValue,
+> = FilterCondition<Op, ValueMap, LogicalValueMap, Blacklisted, FieldValue> | null | undefined;
 
 type FilterCondition<
   Op extends keyof ValueMap = keyof OperatorValueMap,
   ValueMap extends Record<string, any> = OperatorValueMap,
   LogicalValueMap extends Record<string, any> = LogicalOperatorValueMap,
   Blacklisted extends string = BlacklistedRootOperators,
-> = (FieldCondition<Op, ValueMap> | LogicalCondition<Op, ValueMap, LogicalValueMap>) &
+  FieldValue = FilterValue,
+> = (FieldCondition<Op, ValueMap, FieldValue> | LogicalCondition<Op, ValueMap, LogicalValueMap>) &
   ForbiddenRootOperators<Blacklisted>;
 
 // Field condition can be a value or an operator condition
 type FieldCondition<
   Op extends keyof ValueMap = keyof OperatorValueMap,
   ValueMap extends Record<string, any> = OperatorValueMap,
+  FieldValue = FilterValue,
 > = {
-  [field: string]: OperatorCondition<Op, ValueMap> | FilterValue;
+  [field: string]: OperatorCondition<Op, ValueMap> | FieldValue;
 };
 
 type ForbiddenRootOperators<Blacklisted extends string> = {

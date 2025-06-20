@@ -247,7 +247,7 @@ describe('LanceFilterTranslator', () => {
       const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $like: '%pattern%' }];
 
       invalidFilters.forEach(filter => {
-        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
+        expect(() => translator.translate(filter as any)).toThrow(/Invalid top-level operator/);
       });
     });
 

@@ -1,5 +1,24 @@
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
-import type { FieldCondition, VectorFilter, OperatorSupport, QueryOperator } from '@mastra/core/vector/filter';
+import type {
+  VectorFilter,
+  OperatorSupport,
+  QueryOperator,
+  OperatorValueMap,
+  LogicalOperatorValueMap,
+  BlacklistedRootOperators,
+  FilterValue,
+} from '@mastra/core/vector/filter';
+
+type MongoDBOperatorValueMap = Omit<OperatorValueMap, '$options'> & {
+  $size: number;
+};
+export type MongoDBVectorFilter = VectorFilter<
+  keyof MongoDBOperatorValueMap,
+  MongoDBOperatorValueMap,
+  LogicalOperatorValueMap,
+  BlacklistedRootOperators,
+  FilterValue | RegExp
+>;
 
 /**
  * Translator for MongoDB filter queries.
@@ -15,14 +34,14 @@ export class MongoDBFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter?: VectorFilter): any {
+  translate(filter?: MongoDBVectorFilter): any {
     if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter);
 
     return this.translateNode(filter);
   }
 
-  private translateNode(node: VectorFilter | FieldCondition): any {
+  private translateNode(node: MongoDBVectorFilter): any {
     // Handle primitive values and arrays
     if (this.isRegex(node)) {
       return node; // Return regex values as-is

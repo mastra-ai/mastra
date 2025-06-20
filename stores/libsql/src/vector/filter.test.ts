@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { LibSQLVectorFilter } from './filter';
 import { LibSQLFilterTranslator } from './filter';
 
 describe('LibSQLFilterTranslator', () => {
@@ -18,7 +19,7 @@ describe('LibSQLFilterTranslator', () => {
     });
 
     it('preserves comparison operators', () => {
-      const filter = {
+      const filter: LibSQLVectorFilter = {
         field1: { $eq: 'value' },
         field2: { $ne: 'value' },
         field3: { $gt: 5 },
@@ -59,7 +60,8 @@ describe('LibSQLFilterTranslator', () => {
   // Array Operations
   describe('array operations', () => {
     it('translates array to $in', () => {
-      expect(translator.translate({ field: ['a', 'b'] } as any)).toEqual({
+      const filter = { field: ['a', 'b'] };
+      expect(translator.translate(filter)).toEqual({
         field: { $in: ['a', 'b'] },
       });
     });
@@ -167,7 +169,7 @@ describe('LibSQLFilterTranslator', () => {
   // Logical Operators
   describe('Logical Operators', () => {
     it('handles logical operators', () => {
-      const filter = {
+      const filter: LibSQLVectorFilter = {
         $and: [{ field1: { $eq: 'value1' } }, { field2: { $eq: 'value2' } }],
         $or: [{ field3: { $eq: 'value3' } }, { field4: { $eq: 'value4' } }],
       };

@@ -17,6 +17,7 @@ import type { MongoClientOptions, Document, Db, Collection } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
 
 import { MongoDBFilterTranslator } from './filter';
+import type { MongoDBVectorFilter } from './filter';
 
 // Define necessary types and interfaces
 export interface MongoDBUpsertVectorParams extends UpsertVectorParams {
@@ -24,7 +25,8 @@ export interface MongoDBUpsertVectorParams extends UpsertVectorParams {
 }
 
 export interface MongoDBQueryVectorParams extends QueryVectorParams {
-  documentFilter?: VectorFilter;
+  documentFilter?: MongoDBVectorFilter;
+  filter?: MongoDBVectorFilter;
 }
 
 export interface MongoDBIndexReadyParams {
