@@ -33,6 +33,9 @@
     "jsonwebtoken": "^9.0.2",
     "jwks-rsa": "^3.2.0"
   },
+  "peerDependencies": {
+    "@mastra/core": ">=0.10.0-0 <0.11.0-0"
+  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",

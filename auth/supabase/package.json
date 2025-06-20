@@ -28,6 +28,9 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.50.0"
   },
+  "peerDependencies": {
+    "@mastra/core": ">=0.10.1-0 <0.11.0-0"
+  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",

@@ -28,6 +28,9 @@
   "dependencies": {
     "jose": "^6.0.11"
   },
+  "peerDependencies": {
+    "@mastra/core": ">=0.10.1-0 <0.11.0-0"
+  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
