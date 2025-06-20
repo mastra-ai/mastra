@@ -968,6 +968,13 @@ export default withGT(
         destination: "/:locale/examples/rag/query/hybrid-vector-search",
         permanent: true,
       },
+
+      // redirect overview pages
+      {
+        source: "/:locale/docs/frameworks/agentic-uis",
+        destination: "/:locale/docs/frameworks/agentic-uis/ai-sdk",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),
