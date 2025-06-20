@@ -1270,7 +1270,7 @@ export class Agent<
         }
 
         if (userContextMessage) {
-          messageList.add(userContextMessage, 'context');
+          messageList.addSystem(userContextMessage, 'context');
         }
 
         messageList
@@ -1300,7 +1300,7 @@ export class Agent<
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
           .add(context || [], 'context')
-          .add(userContextMessage || [], 'context')
+          .addSystem(userContextMessage || [], 'context')
           .add(processedMemoryMessages, 'memory')
           .add(messageList.get.input.v2(), 'user')
           .get.all.prompt();
@@ -1373,7 +1373,13 @@ export class Agent<
               ];
             }
             if (responseMessages) {
-              messageList.add(responseMessages, 'response');
+              messageList.add(
+                responseMessages.filter((m: CoreMessage) => {
+                  if (m.role === 'tool' && Array.isArray(m.content) && m.content.length === 0) return false;
+                  return true;
+                }),
+                'response',
+              );
             }
 
             // renaming the thread doesn't need to block finishing the req

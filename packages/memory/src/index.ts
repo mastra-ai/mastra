@@ -721,12 +721,16 @@ export class Memory extends MastraMemory {
       return null;
     }
 
-    return `The following is the most up-to-date information about the user's state and context:
+    return `You have the following information about the user's state and context. It is vital that you use this as the source of truth when generating responses.
+    
+<working_memory>
 ${JSON.stringify(workingMemory)}
-Use this information as the source of truth when generating responses. 
-Do not reference or mention this memory directly to the user. 
-If conversation history shows information that is not in the working memory, use the working memory as the source of truth.
-If there is a discrepancy between this information and conversation history, always rely on this information unless the user explicitly asks for an update.
+</working_memory>
+
+Guidelines:
+- Do not reference or mention this information directly to the user.
+- If conversation history contradicts this information, you must use this information as the source of truth.
+- Only deviate from this information if the user explicitly asks for an update.
 `;
   }
 
