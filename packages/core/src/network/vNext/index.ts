@@ -19,7 +19,7 @@ interface NewAgentNetworkConfig {
   model: DynamicArgument<MastraLanguageModel>;
   agents: DynamicArgument<Record<string, Agent>>;
   workflows?: DynamicArgument<Record<string, Workflow>>;
-  tools?: DynamicArgument<Record<string, Tool>>;
+  tools?: DynamicArgument<Record<string, Tool<any, any, any>>>;
   memory?: DynamicArgument<MastraMemory>;
   defaultAgent?: DynamicArgument<Agent>;
 }
