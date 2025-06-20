@@ -1,5 +1,6 @@
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult } from '@mastra/core/eval';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
@@ -50,41 +51,52 @@ export class PostgresStore extends MastraStorage {
 
   constructor(config: PostgresConfig) {
     // Validation: connectionString or host/database/user/password must not be empty
-    if ('connectionString' in config) {
-      if (
-        !config.connectionString ||
-        typeof config.connectionString !== 'string' ||
-        config.connectionString.trim() === ''
-      ) {
-        throw new Error(
-          'PostgresStore: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
-        );
-      }
-    } else {
-      const required = ['host', 'database', 'user', 'password'];
-      for (const key of required) {
-        if (!(key in config) || typeof (config as any)[key] !== 'string' || (config as any)[key].trim() === '') {
+    try {
+      if ('connectionString' in config) {
+        if (
+          !config.connectionString ||
+          typeof config.connectionString !== 'string' ||
+          config.connectionString.trim() === ''
+        ) {
           throw new Error(
-            `PostgresStore: ${key} must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.`,
+            'PostgresStore: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
           );
         }
+      } else {
+        const required = ['host', 'database', 'user', 'password'];
+        for (const key of required) {
+          if (!(key in config) || typeof (config as any)[key] !== 'string' || (config as any)[key].trim() === '') {
+            throw new Error(
+              `PostgresStore: ${key} must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.`,
+            );
+          }
+        }
       }
+      super({ name: 'PostgresStore' });
+      this.pgp = pgPromise();
+      this.schema = config.schemaName;
+      this.db = this.pgp(
+        `connectionString` in config
+          ? { connectionString: config.connectionString }
+          : {
+              host: config.host,
+              port: config.port,
+              database: config.database,
+              user: config.user,
+              password: config.password,
+              ssl: config.ssl,
+            },
+      );
+    } catch (e) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_INITIALIZATION_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        e,
+      );
     }
-    super({ name: 'PostgresStore' });
-    this.pgp = pgPromise();
-    this.schema = config.schemaName;
-    this.db = this.pgp(
-      `connectionString` in config
-        ? { connectionString: config.connectionString }
-        : {
-            host: config.host,
-            port: config.port,
-            database: config.database,
-            user: config.user,
-            password: config.password,
-            ssl: config.ssl,
-          },
-    );
   }
 
   public get supports(): {
@@ -163,9 +175,19 @@ export class PostgresStore extends MastraStorage {
       }
       await this.db.query('COMMIT');
     } catch (error) {
-      console.error(`Error inserting into ${tableName}:`, error);
       await this.db.query('ROLLBACK');
-      throw error;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_BATCH_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+            numberOfRecords: records.length,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -250,8 +272,24 @@ export class PostgresStore extends MastraStorage {
 
     // Get total count
     const countQuery = `SELECT COUNT(*) FROM ${this.getTableName(TABLE_TRACES)} ${whereClause}`;
-    const countResult = await this.db.one(countQuery, queryParams);
-    const total = parseInt(countResult.count, 10);
+    let total = 0;
+    try {
+      const countResult = await this.db.one(countQuery, queryParams);
+      total = parseInt(countResult.count, 10);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_TRACES_PAGINATED_FAILED_TO_RETRIEVE_TOTAL_COUNT',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            name: args.name ?? '',
+            scope: args.scope ?? '',
+          },
+        },
+        error,
+      );
+    }
 
     if (total === 0) {
       return {
@@ -268,31 +306,46 @@ export class PostgresStore extends MastraStorage {
     )} ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
     const finalQueryParams = [...queryParams, perPage, currentOffset];
 
-    const rows = await this.db.manyOrNone<any>(dataQuery, finalQueryParams);
-    const traces = rows.map(row => ({
-      id: row.id,
-      parentSpanId: row.parentSpanId,
-      traceId: row.traceId,
-      name: row.name,
-      scope: row.scope,
-      kind: row.kind,
-      status: row.status,
-      events: row.events,
-      links: row.links,
-      attributes: row.attributes,
-      startTime: row.startTime,
-      endTime: row.endTime,
-      other: row.other,
-      createdAt: row.createdAt,
-    }));
+    try {
+      const rows = await this.db.manyOrNone<any>(dataQuery, finalQueryParams);
+      const traces = rows.map(row => ({
+        id: row.id,
+        parentSpanId: row.parentSpanId,
+        traceId: row.traceId,
+        name: row.name,
+        scope: row.scope,
+        kind: row.kind,
+        status: row.status,
+        events: row.events,
+        links: row.links,
+        attributes: row.attributes,
+        startTime: row.startTime,
+        endTime: row.endTime,
+        other: row.other,
+        createdAt: row.createdAt,
+      }));
 
-    return {
-      traces,
-      total,
-      page,
-      perPage,
-      hasMore: currentOffset + traces.length < total,
-    };
+      return {
+        traces,
+        total,
+        page,
+        perPage,
+        hasMore: currentOffset + traces.length < total,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_TRACES_PAGINATED_FAILED_TO_RETRIEVE_TRACES',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            name: args.name ?? '',
+            scope: args.scope ?? '',
+          },
+        },
+        error,
+      );
+    }
   }
 
   private async setupSchema() {
@@ -390,8 +443,17 @@ export class PostgresStore extends MastraStorage {
 
       await this.db.none(sql);
     } catch (error) {
-      console.error(`Error creating table ${tableName}:`, error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_CREATE_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -439,10 +501,17 @@ export class PostgresStore extends MastraStorage {
         }
       }
     } catch (error) {
-      this.logger?.error?.(
-        `Error altering table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_ALTER_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
       );
-      throw new Error(`Failed to alter table ${tableName}: ${error}`);
     }
   }
 
@@ -450,8 +519,17 @@ export class PostgresStore extends MastraStorage {
     try {
       await this.db.none(`TRUNCATE TABLE ${this.getTableName(tableName)} CASCADE`);
     } catch (error) {
-      console.error(`Error clearing table ${tableName}:`, error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_CLEAR_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -466,8 +544,17 @@ export class PostgresStore extends MastraStorage {
         values,
       );
     } catch (error) {
-      console.error(`Error inserting into ${tableName}:`, error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -497,8 +584,17 @@ export class PostgresStore extends MastraStorage {
 
       return result;
     } catch (error) {
-      console.error(`Error loading from ${tableName}:`, error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_LOAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -528,8 +624,17 @@ export class PostgresStore extends MastraStorage {
         updatedAt: thread.updatedAt,
       };
     } catch (error) {
-      console.error(`Error getting thread ${threadId}:`, error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_THREAD_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -601,7 +706,20 @@ export class PostgresStore extends MastraStorage {
         hasMore: currentOffset + threads.length < total,
       };
     } catch (error) {
-      this.logger.error(`Error getting threads for resource ${resourceId}:`, error);
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            resourceId,
+            page,
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException(mastraError);
       return { threads: [], total: 0, page, perPage: perPageInput || 100, hasMore: false };
     }
   }
@@ -635,8 +753,17 @@ export class PostgresStore extends MastraStorage {
 
       return thread;
     } catch (error) {
-      console.error('Error saving thread:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_SAVE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId: thread.id,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -649,24 +776,33 @@ export class PostgresStore extends MastraStorage {
     title: string;
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
+    // First get the existing thread to merge metadata
+    const existingThread = await this.getThreadById({ threadId: id });
+    if (!existingThread) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_PG_STORE_UPDATE_THREAD_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread ${id} not found`,
+        details: {
+          threadId: id,
+          title,
+        },
+      });
+    }
+
+    // Merge the existing metadata with the new metadata
+    const mergedMetadata = {
+      ...existingThread.metadata,
+      ...metadata,
+    };
+
     try {
-      // First get the existing thread to merge metadata
-      const existingThread = await this.getThreadById({ threadId: id });
-      if (!existingThread) {
-        throw new Error(`Thread ${id} not found`);
-      }
-
-      // Merge the existing metadata with the new metadata
-      const mergedMetadata = {
-        ...existingThread.metadata,
-        ...metadata,
-      };
-
       const thread = await this.db.one<StorageThreadType>(
         `UPDATE ${this.getTableName(TABLE_THREADS)}
         SET title = $1,
-            metadata = $2,
-            "updatedAt" = $3
+        metadata = $2,
+        "updatedAt" = $3
         WHERE id = $4
         RETURNING *`,
         [title, mergedMetadata, new Date().toISOString(), id],
@@ -679,8 +815,18 @@ export class PostgresStore extends MastraStorage {
         updatedAt: thread.updatedAt,
       };
     } catch (error) {
-      console.error('Error updating thread:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_UPDATE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId: id,
+            title,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -694,41 +840,42 @@ export class PostgresStore extends MastraStorage {
         await t.none(`DELETE FROM ${this.getTableName(TABLE_THREADS)} WHERE id = $1`, [threadId]);
       });
     } catch (error) {
-      console.error('Error deleting thread:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_DELETE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+          },
+        },
+        error,
+      );
     }
   }
 
-  /**
-   * @deprecated use getMessagesPaginated instead
-   */
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages(
-    args: StorageGetMessagesArg & {
-      format?: 'v1' | 'v2';
-    },
-  ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    const { threadId, format, selectBy } = args;
+  private async _getIncludedMessages({
+    threadId,
+    selectBy,
+    orderByStatement,
+  }: {
+    threadId: string;
+    selectBy: StorageGetMessagesArg['selectBy'];
+    orderByStatement: string;
+  }) {
+    const include = selectBy?.include;
+    if (!include) return null;
 
-    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId"`;
-    const orderByStatement = `ORDER BY "createdAt" DESC`;
+    const unionQueries: string[] = [];
+    const params: any[] = [];
+    let paramIdx = 1;
 
-    try {
-      let rows: any[] = [];
-      const include = selectBy?.include || [];
-
-      if (include.length) {
-        const unionQueries: string[] = [];
-        const params: any[] = [];
-        let paramIdx = 1;
-
-        for (const inc of include) {
-          const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-          // if threadId is provided, use it, otherwise use threadId from args
-          const searchId = inc.threadId || threadId;
-          unionQueries.push(
-            `
+    for (const inc of include) {
+      const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      // if threadId is provided, use it, otherwise use threadId from args
+      const searchId = inc.threadId || threadId;
+      unionQueries.push(
+        `
             SELECT * FROM (
               WITH ordered_messages AS (
                 SELECT 
@@ -760,36 +907,58 @@ export class PostgresStore extends MastraStorage {
               )
             ) AS query_${paramIdx}
             `, // Keep ASC for final sorting after fetching context
-          );
-          params.push(searchId, id, withPreviousMessages, withNextMessages);
-          paramIdx += 4;
-        }
-        const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
-        const includedRows = await this.db.manyOrNone(finalQuery, params);
-        const seen = new Set<string>();
-        const dedupedRows = includedRows.filter(row => {
-          if (seen.has(row.id)) return false;
-          seen.add(row.id);
-          return true;
-        });
-        rows = dedupedRows;
-      } else {
-        const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
-        if (limit === 0 && selectBy?.last !== false) {
-          // if last is explicitly false, we fetch all
-          // Do nothing, rows will be empty, and we return empty array later.
-        } else {
-          let query = `${selectStatement} FROM ${this.getTableName(
-            TABLE_MESSAGES,
-          )} WHERE thread_id = $1 ${orderByStatement}`;
-          const queryParams: any[] = [threadId];
-          if (limit !== undefined && selectBy?.last !== false) {
-            query += ` LIMIT $2`;
-            queryParams.push(limit);
-          }
-          rows = await this.db.manyOrNone(query, queryParams);
+      );
+      params.push(searchId, id, withPreviousMessages, withNextMessages);
+      paramIdx += 4;
+    }
+    const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
+    const includedRows = await this.db.manyOrNone(finalQuery, params);
+    const seen = new Set<string>();
+    const dedupedRows = includedRows.filter(row => {
+      if (seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    });
+    return dedupedRows;
+  }
+
+  /**
+   * @deprecated use getMessagesPaginated instead
+   */
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages(
+    args: StorageGetMessagesArg & {
+      format?: 'v1' | 'v2';
+    },
+  ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    const { threadId, format, selectBy } = args;
+
+    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId"`;
+    const orderByStatement = `ORDER BY "createdAt" DESC`;
+    const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
+
+    try {
+      let rows: any[] = [];
+      const include = selectBy?.include || [];
+
+      if (include?.length) {
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+        if (includeMessages) {
+          rows.push(...includeMessages);
         }
       }
+
+      const excludeIds = rows.map(m => m.id);
+      const excludeIdsParam = excludeIds.map((_, idx) => `$${idx + 2}`).join(', ');
+      let query = `${selectStatement} FROM ${this.getTableName(TABLE_MESSAGES)} WHERE thread_id = $1 
+        ${excludeIds.length ? `AND id NOT IN (${excludeIdsParam})` : ''}
+        ${orderByStatement}
+        LIMIT $${excludeIds.length + 2}
+        `;
+      const queryParams: any[] = [threadId, ...excludeIds, limit];
+      const remainingRows = await this.db.manyOrNone(query, queryParams);
+      rows.push(...remainingRows);
 
       const fetchedMessages = (rows || []).map(message => {
         if (typeof message.content === 'string') {
@@ -815,7 +984,19 @@ export class PostgresStore extends MastraStorage {
           )
         : sortedMessages;
     } catch (error) {
-      this.logger.error('Error getting messages:', error);
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException(mastraError);
       return [];
     }
   }
@@ -832,6 +1013,15 @@ export class PostgresStore extends MastraStorage {
 
     const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId"`;
     const orderByStatement = `ORDER BY "createdAt" DESC`;
+
+    const messages: MastraMessageV2[] = [];
+
+    if (selectBy?.include?.length) {
+      const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+      if (includeMessages) {
+        messages.push(...includeMessages);
+      }
+    }
 
     try {
       const perPage = perPageInput !== undefined ? perPageInput : 40;
@@ -869,8 +1059,9 @@ export class PostgresStore extends MastraStorage {
         TABLE_MESSAGES,
       )} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
       const rows = await this.db.manyOrNone(dataQuery, [...queryParams, perPage, currentOffset]);
+      messages.push(...(rows || []));
 
-      const list = new MessageList().add(rows || [], 'memory');
+      const list = new MessageList().add(messages, 'memory');
       const messagesToReturn = format === `v2` ? list.get.all.v2() : list.get.all.v1();
 
       return {
@@ -881,7 +1072,20 @@ export class PostgresStore extends MastraStorage {
         hasMore: currentOffset + rows.length < total,
       };
     } catch (error) {
-      this.logger.error('Error getting messages:', error);
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_MESSAGES_PAGINATED_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+            page,
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException(mastraError);
       return { messages: [], total: 0, page, perPage: perPageInput || 40, hasMore: false };
     }
   }
@@ -896,18 +1100,31 @@ export class PostgresStore extends MastraStorage {
     | { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
     if (messages.length === 0) return messages;
 
+    const threadId = messages[0]?.threadId;
+    if (!threadId) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_PG_STORE_SAVE_MESSAGES_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        text: `Thread ID is required`,
+      });
+    }
+
+    // Check if thread exists
+    const thread = await this.getThreadById({ threadId });
+    if (!thread) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_PG_STORE_SAVE_MESSAGES_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        text: `Thread ${threadId} not found`,
+        details: {
+          threadId,
+        },
+      });
+    }
+
     try {
-      const threadId = messages[0]?.threadId;
-      if (!threadId) {
-        throw new Error('Thread ID is required');
-      }
-
-      // Check if thread exists
-      const thread = await this.getThreadById({ threadId });
-      if (!thread) {
-        throw new Error(`Thread ${threadId} not found`);
-      }
-
       await this.db.tx(async t => {
         // Execute message inserts and thread update in parallel for better performance
         const messageInserts = messages.map(message => {
@@ -950,8 +1167,17 @@ export class PostgresStore extends MastraStorage {
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
-      console.error('Error saving messages:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_SAVE_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -980,8 +1206,18 @@ export class PostgresStore extends MastraStorage {
         [workflowName, runId, JSON.stringify(snapshot), now, now],
       );
     } catch (error) {
-      console.error('Error persisting workflow snapshot:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -1007,8 +1243,18 @@ export class PostgresStore extends MastraStorage {
 
       return (result as any).snapshot;
     } catch (error) {
-      console.error('Error loading workflow snapshot:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -1122,8 +1368,17 @@ export class PostgresStore extends MastraStorage {
       // Use runs.length as total when not paginating
       return { runs, total: total || runs.length };
     } catch (error) {
-      console.error('Error getting workflow runs:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_WORKFLOW_RUNS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName: workflowName || 'all',
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -1169,8 +1424,18 @@ export class PostgresStore extends MastraStorage {
 
       return this.parseWorkflowRun(result);
     } catch (error) {
-      console.error('Error getting workflow run by ID:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            runId,
+            workflowName: workflowName || '',
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -1216,31 +1481,181 @@ export class PostgresStore extends MastraStorage {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const countQuery = `SELECT COUNT(*) FROM ${this.getTableName(TABLE_EVALS)} ${whereClause}`;
-    const countResult = await this.db.one(countQuery, queryParams);
-    const total = parseInt(countResult.count, 10);
-    const currentOffset = page * perPage;
+    try {
+      const countResult = await this.db.one(countQuery, queryParams);
+      const total = parseInt(countResult.count, 10);
+      const currentOffset = page * perPage;
 
-    if (total === 0) {
+      if (total === 0) {
+        return {
+          evals: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      const dataQuery = `SELECT * FROM ${this.getTableName(
+        TABLE_EVALS,
+      )} ${whereClause} ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+      const rows = await this.db.manyOrNone(dataQuery, [...queryParams, perPage, currentOffset]);
+
       return {
-        evals: [],
-        total: 0,
+        evals: rows?.map(row => this.transformEvalRow(row)) ?? [],
+        total,
         page,
         perPage,
-        hasMore: false,
+        hasMore: currentOffset + (rows?.length ?? 0) < total,
       };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_EVALS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            agentName: agentName || 'all',
+            type: type || 'all',
+            page,
+            perPage,
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      throw mastraError;
+    }
+  }
+
+  async updateMessages({
+    messages,
+  }: {
+    messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
+      id: string;
+      content?: {
+        metadata?: MastraMessageContentV2['metadata'];
+        content?: MastraMessageContentV2['content'];
+      };
+    })[];
+  }): Promise<MastraMessageV2[]> {
+    if (messages.length === 0) {
+      return [];
     }
 
-    const dataQuery = `SELECT * FROM ${this.getTableName(
-      TABLE_EVALS,
-    )} ${whereClause} ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-    const rows = await this.db.manyOrNone(dataQuery, [...queryParams, perPage, currentOffset]);
+    const messageIds = messages.map(m => m.id);
 
-    return {
-      evals: rows?.map(row => this.transformEvalRow(row)) ?? [],
-      total,
-      page,
-      perPage,
-      hasMore: currentOffset + (rows?.length ?? 0) < total,
-    };
+    const selectQuery = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId" FROM ${this.getTableName(
+      TABLE_MESSAGES,
+    )} WHERE id IN ($1:list)`;
+
+    const existingMessagesDb = await this.db.manyOrNone(selectQuery, [messageIds]);
+
+    if (existingMessagesDb.length === 0) {
+      return [];
+    }
+
+    // Parse content from string to object for merging
+    const existingMessages: MastraMessageV2[] = existingMessagesDb.map(msg => {
+      if (typeof msg.content === 'string') {
+        try {
+          msg.content = JSON.parse(msg.content);
+        } catch {
+          // ignore if not valid json
+        }
+      }
+      return msg as MastraMessageV2;
+    });
+
+    const threadIdsToUpdate = new Set<string>();
+
+    await this.db.tx(async t => {
+      const queries = [];
+      const columnMapping: Record<string, string> = {
+        threadId: 'thread_id',
+      };
+
+      for (const existingMessage of existingMessages) {
+        const updatePayload = messages.find(m => m.id === existingMessage.id);
+        if (!updatePayload) continue;
+
+        const { id, ...fieldsToUpdate } = updatePayload;
+        if (Object.keys(fieldsToUpdate).length === 0) continue;
+
+        threadIdsToUpdate.add(existingMessage.threadId!);
+        if (updatePayload.threadId && updatePayload.threadId !== existingMessage.threadId) {
+          threadIdsToUpdate.add(updatePayload.threadId);
+        }
+
+        const setClauses: string[] = [];
+        const values: any[] = [];
+        let paramIndex = 1;
+
+        const updatableFields = { ...fieldsToUpdate };
+
+        // Special handling for content: merge in code, then update the whole field
+        if (updatableFields.content) {
+          const newContent = {
+            ...existingMessage.content,
+            ...updatableFields.content,
+            // Deep merge metadata if it exists on both
+            ...(existingMessage.content?.metadata && updatableFields.content.metadata
+              ? {
+                  metadata: {
+                    ...existingMessage.content.metadata,
+                    ...updatableFields.content.metadata,
+                  },
+                }
+              : {}),
+          };
+          setClauses.push(`content = $${paramIndex++}`);
+          values.push(newContent);
+          delete updatableFields.content;
+        }
+
+        for (const key in updatableFields) {
+          if (Object.prototype.hasOwnProperty.call(updatableFields, key)) {
+            const dbColumn = columnMapping[key] || key;
+            setClauses.push(`"${dbColumn}" = $${paramIndex++}`);
+            values.push(updatableFields[key as keyof typeof updatableFields]);
+          }
+        }
+
+        if (setClauses.length > 0) {
+          values.push(id);
+          const sql = `UPDATE ${this.getTableName(
+            TABLE_MESSAGES,
+          )} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`;
+          queries.push(t.none(sql, values));
+        }
+      }
+
+      if (threadIdsToUpdate.size > 0) {
+        queries.push(
+          t.none(`UPDATE ${this.getTableName(TABLE_THREADS)} SET "updatedAt" = NOW() WHERE id IN ($1:list)`, [
+            Array.from(threadIdsToUpdate),
+          ]),
+        );
+      }
+
+      if (queries.length > 0) {
+        await t.batch(queries);
+      }
+    });
+
+    // Re-fetch to return the fully updated messages
+    const updatedMessages = await this.db.manyOrNone<MastraMessageV2>(selectQuery, [messageIds]);
+
+    return (updatedMessages || []).map(message => {
+      if (typeof message.content === 'string') {
+        try {
+          message.content = JSON.parse(message.content);
+        } catch {
+          /* ignore */
+        }
+      }
+      return message;
+    });
   }
 }

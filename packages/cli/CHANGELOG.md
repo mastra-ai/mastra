@@ -1,5 +1,31 @@
 # mastra
 
+## 0.10.7-alpha.1
+
+### Patch Changes
+
+- 21ffb97: Make dynamic form handle schema better
+- Updated dependencies [d1baedb]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [2097952]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [0e17048]
+  - @mastra/core@0.10.7-alpha.1
+  - @mastra/mcp@0.10.5-alpha.0
+  - @mastra/deployer@0.10.7-alpha.1
+
+## 0.10.7-alpha.0
+
+### Patch Changes
+
+- 9102d89: Fix final output not showing on playground for previously suspended steps
+- Updated dependencies [d8f2d19]
+- Updated dependencies [9d52b17]
+- Updated dependencies [8ba1b51]
+  - @mastra/core@0.10.7-alpha.0
+  - @mastra/deployer@0.10.7-alpha.0
+
 ## 0.10.6
 
 ### Patch Changes

@@ -4,7 +4,8 @@ import type { MetricResult } from '@mastra/core/eval';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { MastraStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
-import { MastraMessageV1, MastraMessageV2 } from '@mastra/core';
+import { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core';
+import { MastraMessageContentV2 } from '@mastra/core/agent';
 
 // Sample test data factory functions to ensure unique records
 export const createSampleThread = ({
@@ -112,25 +113,34 @@ export const createSampleMessageV1 = ({
 
 export const createSampleMessageV2 = ({
   threadId,
-  content = 'Hello',
-  resourceId = `resource-${randomUUID()}`,
-  createdAt = new Date(),
+  resourceId,
+  role = 'user',
+  content,
+  createdAt,
+  thread,
 }: {
   threadId: string;
-  content?: string;
   resourceId?: string;
+  role?: 'user' | 'assistant';
+  content?: Partial<MastraMessageContentV2>;
   createdAt?: Date;
-}): MastraMessageV2 => ({
-  id: `msg-${randomUUID()}`,
-  resourceId,
-  role: getRole(),
-  threadId,
-  content: {
-    format: 2,
-    parts: [{ type: 'text', text: content }],
-  },
-  createdAt,
-});
+  thread?: StorageThreadType;
+}): MastraMessageV2 => {
+  return {
+    id: randomUUID(),
+    threadId,
+    resourceId: resourceId || thread?.resourceId || 'test-resource',
+    role,
+    createdAt: createdAt || new Date(),
+    content: {
+      format: 2,
+      parts: content?.parts || [{ type: 'text', text: content?.content ?? '' }],
+      content: content?.content || `Sample content ${randomUUID()}`,
+      ...content,
+    },
+    type: 'v2',
+  };
+};
 
 export const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
@@ -362,16 +372,48 @@ export function createTestSuite(storage: MastraStorage) {
 
       it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
         const messages: MastraMessageV2[] = [
-          createSampleMessageV2({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
-          createSampleMessageV2({ threadId: 'thread-one', content: 'Second', resourceId: 'cross-thread-resource' }),
-          createSampleMessageV2({ threadId: 'thread-one', content: 'Third', resourceId: 'cross-thread-resource' }),
+          createSampleMessageV2({
+            threadId: 'thread-one',
+            content: { content: 'First', parts: [{ type: 'text', text: 'First' }] },
+            resourceId: 'cross-thread-resource',
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-one',
+            content: { content: 'Second', parts: [{ type: 'text', text: 'Second' }] },
+            resourceId: 'cross-thread-resource',
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-one',
+            content: { content: 'Third', parts: [{ type: 'text', text: 'Third' }] },
+            resourceId: 'cross-thread-resource',
+          }),
 
-          createSampleMessageV2({ threadId: 'thread-two', content: 'Fourth', resourceId: 'cross-thread-resource' }),
-          createSampleMessageV2({ threadId: 'thread-two', content: 'Fifth', resourceId: 'cross-thread-resource' }),
-          createSampleMessageV2({ threadId: 'thread-two', content: 'Sixth', resourceId: 'cross-thread-resource' }),
+          createSampleMessageV2({
+            threadId: 'thread-two',
+            content: { content: 'Fourth', parts: [{ type: 'text', text: 'Fourth' }] },
+            resourceId: 'cross-thread-resource',
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-two',
+            content: { content: 'Fifth', parts: [{ type: 'text', text: 'Fifth' }] },
+            resourceId: 'cross-thread-resource',
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-two',
+            content: { content: 'Sixth', parts: [{ type: 'text', text: 'Sixth' }] },
+            resourceId: 'cross-thread-resource',
+          }),
 
-          createSampleMessageV2({ threadId: 'thread-three', content: 'Seventh', resourceId: 'other-resource' }),
-          createSampleMessageV2({ threadId: 'thread-three', content: 'Eighth', resourceId: 'other-resource' }),
+          createSampleMessageV2({
+            threadId: 'thread-three',
+            content: { content: 'Seventh', parts: [{ type: 'text', text: 'Seventh' }] },
+            resourceId: 'other-resource',
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-three',
+            content: { content: 'Eighth', parts: [{ type: 'text', text: 'Eighth' }] },
+            resourceId: 'other-resource',
+          }),
         ];
 
         await storage.saveMessages({ messages: messages, format: 'v2' });
