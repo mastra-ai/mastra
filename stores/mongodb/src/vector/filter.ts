@@ -12,11 +12,13 @@ import type {
 type MongoDBOperatorValueMap = Omit<OperatorValueMap, '$options'> & {
   $size: number;
 };
+type MongoDBBlacklisted = BlacklistedRootOperators | '$size';
+
 export type MongoDBVectorFilter = VectorFilter<
   keyof MongoDBOperatorValueMap,
   MongoDBOperatorValueMap,
   LogicalOperatorValueMap,
-  BlacklistedRootOperators,
+  MongoDBBlacklisted,
   VectorFieldValue | RegExp
 >;
 

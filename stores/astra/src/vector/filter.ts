@@ -14,7 +14,7 @@ type AstraOperatorValueMap = Omit<OperatorValueMap, '$elemMatch' | '$regex' | '$
 
 type AstraLogicalOperatorValueMap = Omit<LogicalOperatorValueMap, '$nor'>;
 
-type AstraBlacklisted = BlacklistedRootOperators | '$nor';
+type AstraBlacklisted = BlacklistedRootOperators | '$nor' | '$size';
 
 export type AstraVectorFilter = VectorFilter<
   keyof AstraOperatorValueMap,

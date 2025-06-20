@@ -74,19 +74,9 @@ type BlacklistedRootOperators =
   | '$nin'
   | '$all'
   | '$exists'
-  | '$size'
   | '$regex'
   | '$options'
-  | '$elemMatch'
-  | '$like'
-  | '$notLike'
-  | '$contains'
-  | '$count'
-  | '$geo'
-  | '$nested'
-  | '$datetime'
-  | '$null'
-  | '$empty';
+  | '$elemMatch';
 
 type VectorFieldValue = FilterValue | FilterValue[];
 
