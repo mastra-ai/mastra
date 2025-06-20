@@ -418,6 +418,7 @@ export class NewAgentNetwork extends MastraBase {
         iteration: z.number(),
         threadId: z.string().optional(),
         threadResourceId: z.string().optional(),
+        isOneOff: z.boolean(),
       }),
       outputSchema: z.object({
         task: z.string(),
@@ -480,6 +481,8 @@ export class NewAgentNetwork extends MastraBase {
             {
               role: 'assistant',
               content: `
+                    ${inputData.isOneOff ? 'You are executing just one primitive based on the user task' : ''}
+
                     The user has given you the following task: 
                     ${inputData.task}
                     ${completionResult ? `\n\n${completionResult.object.finalResult}` : ''}
@@ -882,6 +885,7 @@ export class NewAgentNetwork extends MastraBase {
         iteration: z.number(),
         threadId: z.string().optional(),
         threadResourceId: z.string().optional(),
+        isOneOff: z.boolean(),
       }),
       outputSchema: z.object({
         task: z.string(),
@@ -965,12 +969,13 @@ export class NewAgentNetwork extends MastraBase {
 
     const result = await run.start({
       inputData: {
-        task: `You are executing just one primitive based on the following: ${message}`,
+        task: message,
         resourceId: '',
         resourceType: 'none',
         iteration: 0,
         threadId,
         threadResourceId: resourceId,
+        isOneOff: true,
       },
     });
 
@@ -1025,6 +1030,7 @@ export class NewAgentNetwork extends MastraBase {
         iteration: 0,
         threadResourceId: resourceId,
         threadId,
+        isOneOff: true,
       },
     });
   }
