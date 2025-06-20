@@ -12,7 +12,7 @@
   "license": "MIT",
   "dependencies": {
     "@mastra/core": "monorepo-test",
-    "bcrypt": "^5.1.1",
+    "bcrypt": "^6.0.0",
     "@inner/native-binding-package": "workspace:*"
   }
 }
