@@ -64,6 +64,28 @@ To fix this you have three different options:
     this.addToInstanceCache();
     return this;
   }
+  public get elicitation() {
+    this.addToInstanceCache();
+    return {
+      onRequest: async (handler: (request: ElicitRequest['params']) => Promise<ElicitResult>) => {
+        for (const serverName of Object.keys(this.serverConfigs)) {
+          try {
+            const internalClient = await this.getConnectedClientForServer(serverName);
+            return internalClient.elicitation.onRequest(handler);
+          } catch (err) {
+            throw new MastraError({
+              id: 'MCP_CLIENT_ON_REQUEST_ELICITATION_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+              }
+            }, err);
+          }
+        }
+      }
+    }
+  }
 
   public get resources() {
     this.addToInstanceCache();

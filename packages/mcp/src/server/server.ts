@@ -40,6 +40,8 @@ import type {
   ServerCapabilities,
   Prompt,
   CallToolResult,
+  ElicitResult,
+  ElicitRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
@@ -52,6 +54,7 @@ import type {
   MCPServerPrompts,
   MCPServerResourceContentCallback,
   MCPServerResources,
+  ElicitationActions,
 } from './types';
 
 export class MCPServer extends MCPServerBase {
@@ -79,6 +82,7 @@ export class MCPServer extends MCPServerBase {
   private subscriptions: Set<string> = new Set();
   public readonly resources: ServerResourceActions;
   public readonly prompts: ServerPromptActions;
+  public readonly elicitation: ElicitationActions;
 
   /**
    * Get the current stdio transport.
@@ -120,6 +124,7 @@ export class MCPServer extends MCPServerBase {
     const capabilities: ServerCapabilities = {
       tools: {},
       logging: { enabled: true },
+      elicitation: {},
     };
 
     if (opts.resources) {
@@ -175,6 +180,35 @@ export class MCPServer extends MCPServerBase {
         this.definedPrompts = undefined;
       },
     });
+
+    this.elicitation = {
+      sendRequest: async request => {
+        return this.handleElicitationRequest(request);
+      },
+    };
+  }
+
+  /**
+   * Handle an elicitation request by sending it to the connected client.
+   * This method sends an elicitation/create request to the client and waits for the response.
+   *
+   * @param request - The elicitation request containing message and schema
+   * @returns Promise that resolves to the client's response
+   */
+  private async handleElicitationRequest(request: ElicitRequest['params']): Promise<ElicitResult> {
+    this.logger.debug(`Sending elicitation request: ${request.message}`);
+
+    try {
+      const response = await this.server.elicitInput(request);
+
+      this.logger.debug(`Received elicitation response: ${JSON.stringify(response)}`);
+
+      return response;
+    } catch (error) {
+      this.logger.error('Error during elicitation request:', error);
+      // Return rejection on error
+      return { action: 'reject' };
+    }
   }
 
   private convertAgentsToTools(
