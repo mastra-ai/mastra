@@ -42,7 +42,7 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.34.0",
     "vitest": "^3.2.3",
-    "zod": "^3.25.57"
+    "zod": "^3.25.67"
   },
   "dependencies": {
     "mem0ai": "^2.1.31"
