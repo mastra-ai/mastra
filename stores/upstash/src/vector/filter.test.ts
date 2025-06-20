@@ -540,10 +540,10 @@ describe('UpstashFilterTranslator', () => {
       expect(() => translator.translate(filter)).toThrow();
     });
     it('throws error for non-logical operators at top level', () => {
-      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
+      const invalidFilters: any = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
 
       invalidFilters.forEach(filter => {
-        expect(() => translator.translate(filter as any)).toThrow(/Invalid top-level operator/);
+        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
       });
     });
 

@@ -8,7 +8,7 @@ import type {
   BlacklistedRootOperators,
 } from '@mastra/core/vector/filter';
 
-type ChromaOperatorValueMap = Omit<OperatorValueMap, '$exists' | '$all' | '$elemMatch' | '$regex' | '$options'>;
+type ChromaOperatorValueMap = Omit<OperatorValueMap, '$exists' | '$elemMatch' | '$regex' | '$options'>;
 
 type ChromaLogicalOperatorValueMap = Omit<LogicalOperatorValueMap, '$nor' | '$not'>;
 

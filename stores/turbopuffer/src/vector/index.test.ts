@@ -869,7 +869,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
         indexName: testIndexName,
         queryVector: [1, 0, 0],
         topK: 10,
-        filter: null as any,
+        filter: null,
       });
       const results2 = await vectorDB.query({ indexName: testIndexName, queryVector: [1, 0, 0], topK: 10 });
       expect(results).toEqual(results2);

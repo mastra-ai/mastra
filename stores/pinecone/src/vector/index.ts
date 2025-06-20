@@ -11,7 +11,6 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Pinecone } from '@pinecone-database/pinecone';
 import type {
   IndexStatsDescription,
@@ -21,14 +20,16 @@ import type {
 } from '@pinecone-database/pinecone';
 
 import { PineconeFilterTranslator } from './filter';
+import type { PineconeVectorFilter } from './filter';
 
 interface PineconeIndexStats extends IndexStats {
   namespaces?: IndexStatsDescription['namespaces'];
 }
 
-interface PineconeQueryVectorParams extends QueryVectorParams {
+interface PineconeQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
   namespace?: string;
   sparseVector?: RecordSparseValues;
+  filter?: PineconeVectorFilter;
 }
 
 interface PineconeUpsertVectorParams extends UpsertVectorParams {
@@ -172,7 +173,7 @@ export class PineconeVector extends MastraVector {
     }
   }
 
-  transformFilter(filter?: VectorFilter) {
+  transformFilter(filter?: PineconeVectorFilter) {
     const translator = new PineconeFilterTranslator();
     return translator.translate(filter);
   }

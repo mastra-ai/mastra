@@ -296,8 +296,8 @@ describe('MongoDBFilterTranslator', () => {
   describe('special cases', () => {
     it('handles empty filters', () => {
       expect(translator.translate({})).toEqual({});
-      expect(translator.translate(null as any)).toEqual(null);
-      expect(translator.translate(undefined as any)).toEqual(undefined);
+      expect(translator.translate(null)).toEqual(null);
+      expect(translator.translate(undefined)).toEqual(undefined);
     });
 
     it('normalizes dates', () => {
@@ -392,10 +392,15 @@ describe('MongoDBFilterTranslator', () => {
     });
 
     it('throws error for non-logical operators at top level', () => {
-      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $exists: true }, { $regex: 'pattern' }];
+      const invalidFilters: any = [
+        { $gt: 100 },
+        { $in: ['value1', 'value2'] },
+        { $exists: true },
+        { $regex: 'pattern' },
+      ];
 
       invalidFilters.forEach(filter => {
-        expect(() => translator.translate(filter as any)).toThrow(/Invalid top-level operator/);
+        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
       });
     });
 

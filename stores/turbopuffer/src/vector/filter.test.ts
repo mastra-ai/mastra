@@ -16,7 +16,7 @@ describe('TurbopufferFilterTranslator', () => {
     it('handles empty filters', () => {
       expect(translate({})).toEqual(undefined);
       expect(translate(undefined)).toEqual(undefined);
-      expect(translate(null as any)).toEqual(undefined);
+      expect(translate(null)).toEqual(undefined);
     });
 
     it('allows implicit equality', () => {

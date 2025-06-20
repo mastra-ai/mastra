@@ -259,8 +259,8 @@ describe('AstraFilterTranslator', () => {
   describe('special cases', () => {
     it('handles empty filters', () => {
       expect(translator.translate({})).toEqual({});
-      expect(translator.translate(null as any)).toEqual(null);
-      expect(translator.translate(undefined as any)).toEqual(undefined);
+      expect(translator.translate(null)).toEqual(null);
+      expect(translator.translate(undefined)).toEqual(undefined);
     });
 
     it('normalizes dates', () => {
@@ -323,7 +323,7 @@ describe('AstraFilterTranslator', () => {
 
     it('throws on unsupported operators', () => {
       expect(() => translator.translate({ field: { $regex: 'value' } as any })).toThrow('Unsupported operator: $regex');
-      const filter = { field: /pattern/i } as any;
+      const filter: any = { field: /pattern/i };
       expect(() => translator.translate(filter)).toThrow();
       expect(() => translator.translate({ $nor: [{ field: 'value' }] } as any)).toThrow('Unsupported operator: $nor');
       expect(() => translator.translate({ field: { $elemMatch: { $gt: 5 } } } as any)).toThrow(
@@ -331,10 +331,10 @@ describe('AstraFilterTranslator', () => {
       );
     });
     it('throws error for non-logical operators at top level', () => {
-      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $exists: true }];
+      const invalidFilters: any = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $exists: true }];
 
       invalidFilters.forEach(filter => {
-        expect(() => translator.translate(filter as any)).toThrow(/Invalid top-level operator/);
+        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
       });
     });
 

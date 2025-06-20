@@ -1,5 +1,3 @@
-import type { VectorFilter } from './filter';
-
 export interface QueryResult {
   id: string;
   score: number;
@@ -36,7 +34,7 @@ export interface QueryVectorParams {
   indexName: string;
   queryVector: number[];
   topK?: number;
-  filter?: VectorFilter;
+  filter?: unknown;
   includeVector?: boolean;
 }
 

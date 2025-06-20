@@ -14,8 +14,8 @@ describe('ChromaFilterTranslator', () => {
   describe('basic operations', () => {
     it('handles empty filters', () => {
       expect(translator.translate({})).toEqual({});
-      expect(translator.translate(null as any)).toEqual(null);
-      expect(translator.translate(undefined as any)).toEqual(undefined);
+      expect(translator.translate(null)).toEqual(null);
+      expect(translator.translate(undefined)).toEqual(undefined);
     });
 
     it('retains implicit equality', () => {
@@ -340,7 +340,7 @@ describe('ChromaFilterTranslator', () => {
       });
 
       it('throws error for unsupported logical operators', () => {
-        const invalidFilters = [
+        const invalidFilters: any = [
           {
             $not: { field: 'value' },
           },
@@ -356,7 +356,7 @@ describe('ChromaFilterTranslator', () => {
         ];
 
         invalidFilters.forEach(filter => {
-          expect(() => translator.translate(filter as any)).toThrow(/Unsupported operator/);
+          expect(() => translator.translate(filter)).toThrow(/Unsupported operator/);
         });
       });
     });
@@ -379,7 +379,7 @@ describe('ChromaFilterTranslator', () => {
     });
 
     it('throws error for unsupported operators', () => {
-      const unsupportedFilters = [
+      const unsupportedFilters: any = [
         { field: { $regex: 'pattern' } },
         { field: { $contains: 'value' } },
         { field: { $exists: true } },
@@ -400,10 +400,10 @@ describe('ChromaFilterTranslator', () => {
       expect(() => translator.translate(filter)).toThrow();
     });
     it('throws error for non-logical operators at top level', () => {
-      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
+      const invalidFilters: any = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
 
       invalidFilters.forEach(filter => {
-        expect(() => translator.translate(filter as any)).toThrow(/Invalid top-level operator/);
+        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
       });
     });
 

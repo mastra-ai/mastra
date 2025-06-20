@@ -2,7 +2,6 @@
 import type { QueryResult } from '@mastra/core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { OpenSearchVectorParams } from './index';
 import { OpenSearchVector } from './index';
 
 /**
@@ -216,12 +215,11 @@ describe('OpenSearchVector', () => {
 
         await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors, metadata: testMetadata });
 
-        const queryParams: OpenSearchVectorParams = {
+        const results = await vectorDB.query({
           indexName: testIndexName,
           queryVector: [1.0, 0.1, 0.1],
           topK: 3,
-        };
-        const results = await vectorDB.query(queryParams);
+        });
 
         expect(results).toHaveLength(3);
         expect(results[0]?.score).toBeGreaterThan(0);

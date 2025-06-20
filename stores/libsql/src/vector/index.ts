@@ -19,7 +19,7 @@ import type { LibSQLVectorFilter } from './filter';
 import { LibSQLFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
 
-interface LibSQLQueryVectorParams extends QueryVectorParams {
+interface LibSQLQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
   minScore?: number;
   filter?: LibSQLVectorFilter;
 }

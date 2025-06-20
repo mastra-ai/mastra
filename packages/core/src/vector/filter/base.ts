@@ -162,7 +162,7 @@ type OperatorSupport = {
 
 // Base abstract class for filter translators
 abstract class BaseFilterTranslator {
-  abstract translate(filter: VectorFilter): unknown;
+  abstract translate(filter: unknown): unknown;
 
   /**
    * Operator type checks
@@ -297,7 +297,7 @@ abstract class BaseFilterTranslator {
     return values.map(value => this.normalizeComparisonValue(value));
   }
 
-  protected validateFilter(filter: VectorFilter<keyof OperatorValueMap, OperatorValueMap>): void {
+  protected validateFilter(filter: unknown): void {
     const validation = this.validateFilterSupport(filter);
     if (!validation.supported) {
       throw new Error(validation.messages.join(', '));
@@ -309,7 +309,7 @@ abstract class BaseFilterTranslator {
    * and returns detailed validation information.
    */
   private validateFilterSupport(
-    node: VectorFilter,
+    node: unknown,
     path: string = '',
   ): {
     supported: boolean;

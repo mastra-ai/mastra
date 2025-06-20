@@ -67,10 +67,10 @@ describe('LibSQLFilterTranslator', () => {
     });
 
     it('translates arrays to JSON for basic operators', () => {
-      expect(translator.translate({ field: { $eq: ['a', 'b'] } } as any)).toEqual({
+      expect(translator.translate({ field: { $eq: ['a', 'b'] } })).toEqual({
         field: { $eq: JSON.stringify(['a', 'b']) },
       });
-      expect(translator.translate({ field: { $ne: ['a', 'b'] } } as any)).toEqual({
+      expect(translator.translate({ field: { $ne: ['a', 'b'] } })).toEqual({
         field: { $ne: JSON.stringify(['a', 'b']) },
       });
     });
@@ -128,7 +128,7 @@ describe('LibSQLFilterTranslator', () => {
     it('normalizes single values for $all', () => {
       expect(
         translator.translate({
-          field: { $all: 'value' } as any,
+          field: { $all: 'value' },
         }),
       ).toEqual({
         field: { $all: ['value'] },
@@ -138,7 +138,7 @@ describe('LibSQLFilterTranslator', () => {
     it('normalizes single values for $in', () => {
       expect(
         translator.translate({
-          field: { $in: 'value' } as any,
+          field: { $in: 'value' },
         }),
       ).toEqual({
         field: { $in: ['value'] },
@@ -148,7 +148,7 @@ describe('LibSQLFilterTranslator', () => {
     it('normalizes single values for $nin', () => {
       expect(
         translator.translate({
-          field: { $nin: 'value' } as any,
+          field: { $nin: 'value' },
         }),
       ).toEqual({
         field: { $nin: ['value'] },
@@ -529,7 +529,7 @@ describe('LibSQLFilterTranslator', () => {
   // Operator Support Validation
   describe('Operator Support Validation', () => {
     it('ensure all operator filters are supported', () => {
-      const supportedFilters = [
+      const supportedFilters: LibSQLVectorFilter[] = [
         // Basic comparison operators
         { field: { $eq: 'value' } },
         { field: { $ne: 'value' } },
@@ -555,12 +555,7 @@ describe('LibSQLFilterTranslator', () => {
         { $or: [{ field1: 'value1' }, { field2: 'value2' }] },
         { $nor: [{ field1: 'value1' }, { field2: 'value2' }] },
 
-        { $and: { field: 'value' } },
-        { $or: { field: 'value' } },
-        { $nor: { field: 'value' } },
-        { $not: { field: 'value' } },
-
-        { $or: [{ $and: { field1: 'value1' } }, { $not: { field2: 'value2' } }] },
+        { $or: [{ $and: [{ field1: 'value1' }] }, { $not: { field2: 'value2' } }] },
 
         { field: { $not: { $eq: 'value' } } },
         { field: { $not: { $in: ['value1', 'value2'] } } },

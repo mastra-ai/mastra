@@ -14,8 +14,8 @@ describe('OpenSearchFilterTranslator', () => {
   describe('basic operations', () => {
     it('handles empty filters', () => {
       expect(translator.translate({})).toEqual(undefined);
-      expect(translator.translate(null as any)).toEqual(undefined);
-      expect(translator.translate(undefined as any)).toEqual(undefined);
+      expect(translator.translate(null)).toEqual(undefined);
+      expect(translator.translate(undefined)).toEqual(undefined);
     });
 
     it('translates simple field equality to term query', () => {
