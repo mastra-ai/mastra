@@ -24,7 +24,6 @@ import type {
   StreamEvent,
   WorkflowRunState,
 } from './types';
-import type { TextStreamPart } from 'ai';
 
 export type DefaultEngineType = {};
 
