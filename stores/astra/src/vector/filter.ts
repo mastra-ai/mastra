@@ -5,6 +5,7 @@ import type {
   QueryOperator,
   OperatorValueMap,
   LogicalOperatorValueMap,
+  BlacklistedRootOperators,
 } from '@mastra/core/vector/filter';
 
 type AstraOperatorValueMap = Omit<OperatorValueMap, '$elemMatch' | '$regex' | '$options'> & {
@@ -13,9 +14,16 @@ type AstraOperatorValueMap = Omit<OperatorValueMap, '$elemMatch' | '$regex' | '$
 
 type AstraLogicalOperatorValueMap = Omit<LogicalOperatorValueMap, '$nor'>;
 
+type AstraBlacklisted = BlacklistedRootOperators | '$nor';
+
 type AstraOperator = keyof AstraOperatorValueMap;
 
-export type AstraVectorFilter = VectorFilter<AstraOperator, AstraOperatorValueMap, AstraLogicalOperatorValueMap>;
+export type AstraVectorFilter = VectorFilter<
+  AstraOperator,
+  AstraOperatorValueMap,
+  AstraLogicalOperatorValueMap,
+  AstraBlacklisted
+>;
 
 /**
  * Translator for Astra DB filter queries.

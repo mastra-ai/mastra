@@ -33,20 +33,22 @@ type QueryOperator =
   | ElementOperator
   | RegexOperator;
 
-type Primitive = string | number | boolean | Date | null | undefined;
+type EmptyObject = Record<string, never>;
+
+type FilterValue = string | number | boolean | Date | null | undefined | EmptyObject;
 
 // Logical operators are handled at the top level as objects, not as values here
 // $and, $or, $nor, $not are handled in LogicalCondition
 type OperatorValueMap<Op extends string = string, ValueMap extends Record<string, any> = any> = {
-  $eq: Primitive;
-  $ne: Primitive;
+  $eq: FilterValue;
+  $ne: FilterValue;
   $gt: number | string | Date;
   $gte: number | string | Date;
   $lt: number | string | Date;
   $lte: number | string | Date;
-  $all: Primitive[];
-  $in: Primitive[];
-  $nin: Primitive[];
+  $all: FilterValue[];
+  $in: FilterValue[];
+  $nin: FilterValue[];
   $elemMatch: { [field: string]: any };
   $exists: boolean;
   $regex: string | RegExp;
@@ -61,27 +63,64 @@ type LogicalOperatorValueMap = {
   $not: 'object';
 };
 
+type BlacklistedRootOperators =
+  | '$eq'
+  | '$ne'
+  | '$gt'
+  | '$gte'
+  | '$lt'
+  | '$lte'
+  | '$in'
+  | '$nin'
+  | '$all'
+  | '$exists'
+  | '$size'
+  | '$regex'
+  | '$options'
+  | '$elemMatch'
+  | '$like'
+  | '$notLike'
+  | '$contains'
+  | '$count'
+  | '$geo'
+  | '$nested'
+  | '$datetime'
+  | '$null'
+  | '$empty'
+  | '$hasId'
+  | '$hasVector';
+
 // Vector filter parameterized by operator set
 type VectorFilter<
-  Op extends keyof ValueMap,
+  Op extends keyof ValueMap = keyof OperatorValueMap,
   ValueMap extends Record<string, any> = OperatorValueMap,
   LogicalValueMap extends Record<string, any> = LogicalOperatorValueMap,
-> = FilterCondition<Op, ValueMap, LogicalValueMap> | null | undefined;
+  Blacklisted extends string = BlacklistedRootOperators,
+> = FilterCondition<Op, ValueMap, LogicalValueMap, Blacklisted> | null | undefined;
 
 type FilterCondition<
-  Op extends keyof ValueMap,
+  Op extends keyof ValueMap = keyof OperatorValueMap,
   ValueMap extends Record<string, any> = OperatorValueMap,
   LogicalValueMap extends Record<string, any> = LogicalOperatorValueMap,
-> = FieldCondition<Op, ValueMap> | LogicalCondition<Op, ValueMap, LogicalValueMap>;
+  Blacklisted extends string = BlacklistedRootOperators,
+> = (FieldCondition<Op, ValueMap> | LogicalCondition<Op, ValueMap, LogicalValueMap>) &
+  ForbiddenRootOperators<Blacklisted>;
 
 // Field condition can be a value or an operator condition
-type FieldCondition<Op extends keyof ValueMap, ValueMap extends Record<string, any>> = {
-  [field: string]: OperatorCondition<Op, ValueMap> | Primitive;
+type FieldCondition<
+  Op extends keyof ValueMap = keyof OperatorValueMap,
+  ValueMap extends Record<string, any> = OperatorValueMap,
+> = {
+  [field: string]: OperatorCondition<Op, ValueMap> | FilterValue | FilterValue[];
+};
+
+type ForbiddenRootOperators<Blacklisted extends string> = {
+  [K in Blacklisted]?: never;
 };
 
 // Logical conditions
 type LogicalCondition<
-  Op extends keyof ValueMap,
+  Op extends keyof ValueMap = keyof OperatorValueMap,
   ValueMap extends Record<string, any> = OperatorValueMap,
   LogicalValueMap extends Record<string, any> = LogicalOperatorValueMap,
 > = {
@@ -95,13 +134,16 @@ type LogicalCondition<
 }[keyof LogicalValueMap];
 
 type LogicalBranch<
-  Op extends keyof ValueMap,
-  ValueMap extends Record<string, any>,
-  LogicalValueMap extends Record<string, any>,
+  Op extends keyof ValueMap = keyof OperatorValueMap,
+  ValueMap extends Record<string, any> = OperatorValueMap,
+  LogicalValueMap extends Record<string, any> = LogicalOperatorValueMap,
 > = FieldCondition<Op, ValueMap> | LogicalCondition<Op, ValueMap, LogicalValueMap>;
 
 // Base operator condition, parameterized by operator set
-type OperatorCondition<Op extends keyof ValueMap, ValueMap extends Record<string, any> = OperatorValueMap> = {
+type OperatorCondition<
+  Op extends keyof ValueMap = keyof OperatorValueMap,
+  ValueMap extends Record<string, any> = OperatorValueMap,
+> = {
   [K in Exclude<Op, '$and' | '$or' | '$nor'>]?: ValueMap[K];
 };
 
@@ -117,7 +159,7 @@ type OperatorSupport = {
 
 // Base abstract class for filter translators
 abstract class BaseFilterTranslator {
-  abstract translate(filter: VectorFilter<keyof OperatorValueMap, OperatorValueMap>): unknown;
+  abstract translate(filter: VectorFilter): unknown;
 
   /**
    * Operator type checks
@@ -264,9 +306,7 @@ abstract class BaseFilterTranslator {
    * and returns detailed validation information.
    */
   private validateFilterSupport(
-    node:
-      | VectorFilter<keyof OperatorValueMap, OperatorValueMap>
-      | FieldCondition<keyof OperatorValueMap, OperatorValueMap>,
+    node: VectorFilter,
     path: string = '',
   ): {
     supported: boolean;
@@ -384,5 +424,6 @@ export {
   type OperatorSupport,
   type OperatorValueMap,
   type LogicalOperatorValueMap,
+  type BlacklistedRootOperators,
   BaseFilterTranslator,
 };

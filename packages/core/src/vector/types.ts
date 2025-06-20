@@ -1,4 +1,4 @@
-import type { LogicalOperatorValueMap, OperatorValueMap, VectorFilter } from './filter';
+import type { VectorFilter } from './filter';
 
 export interface QueryResult {
   id: string;
@@ -36,7 +36,7 @@ export interface QueryVectorParams {
   indexName: string;
   queryVector: number[];
   topK?: number;
-  filter?: VectorFilter<keyof OperatorValueMap, OperatorValueMap, LogicalOperatorValueMap>;
+  filter?: VectorFilter;
   includeVector?: boolean;
 }
 

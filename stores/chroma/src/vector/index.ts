@@ -11,9 +11,9 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
 import { ChromaClient } from 'chromadb';
 import type { UpdateRecordsParams, Collection } from 'chromadb';
+import type { ChromaVectorFilter } from './filter';
 import { ChromaFilterTranslator } from './filter';
 
 interface ChromaUpsertVectorParams extends UpsertVectorParams {
@@ -21,7 +21,8 @@ interface ChromaUpsertVectorParams extends UpsertVectorParams {
 }
 
 interface ChromaQueryVectorParams extends QueryVectorParams {
-  documentFilter?: VectorFilter;
+  documentFilter?: ChromaVectorFilter;
+  filter?: ChromaVectorFilter;
 }
 
 export class ChromaVector extends MastraVector {
@@ -156,7 +157,7 @@ export class ChromaVector extends MastraVector {
     }
   }
 
-  transformFilter(filter?: VectorFilter) {
+  transformFilter(filter?: ChromaVectorFilter) {
     const translator = new ChromaFilterTranslator();
     return translator.translate(filter);
   }
