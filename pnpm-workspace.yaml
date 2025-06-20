@@ -8,7 +8,6 @@ packages:
   - "!packages/cli/admin"
   - "integrations/*"
   - "examples/dane"
-  - "examples/memory-per-resource-example"
   - "packages/cli/src/playground"
   - "packages/*/integration-tests"
   - "packages/cloud"
