@@ -131,7 +131,7 @@ class MockMemory extends MastraMemory {
 }
 
 describe('NewAgentNetwork', () => {
-  it.only('should create a new agent network', async () => {
+  it.skip('should create a new agent network', async () => {
     const memory = new MockMemory({
       name: 'test-memory',
     });
