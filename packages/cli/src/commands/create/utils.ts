@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import child_process from 'node:child_process';
-import { chdir, exit } from 'node:process';
+import process from 'node:process';
 import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
@@ -91,7 +91,7 @@ export const createMastraProject = async ({
 
   if (p.isCancel(projectName)) {
     p.cancel('Operation cancelled');
-    exit(0);
+    process.exit(0);
   }
 
   const s = p.spinner();
@@ -110,7 +110,7 @@ export const createMastraProject = async ({
       );
     }
 
-    chdir(projectName);
+    process.chdir(projectName);
     const pm = getPackageManager();
     const installCommand = getPackageManagerInstallCommand(pm);
 

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import fsPromises from 'fs/promises';
-import { env, cwd } from 'node:process';
+import process from 'node:process';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { MastraBase } from '@mastra/core/base';
@@ -19,7 +19,7 @@ export class Deps extends MastraBase {
   private packageManager: string;
   private rootDir: string;
 
-  constructor(rootDir = cwd()) {
+  constructor(rootDir = process.cwd()) {
     super({ component: 'DEPLOYER', name: 'DEPS' });
 
     this.rootDir = rootDir;
@@ -165,9 +165,7 @@ export class Deps extends MastraBase {
     return cpLogger({
       cmd: runCommand,
       args,
-      env: {
-        PATH: env.PATH!,
-      },
+      env,
     });
   }
 
@@ -195,9 +193,7 @@ export class Deps extends MastraBase {
     return cpLogger({
       cmd: `${runCommand}`,
       args: packages,
-      env: {
-        PATH: env.PATH!,
-      },
+      env,
     });
   }
 
