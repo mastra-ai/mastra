@@ -17,6 +17,7 @@ import type {
 import { BaseResource } from './base';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { parseClientRuntimeContext } from '../utils';
+import { MessageList } from '@mastra/core/agent';
 
 export class AgentVoice extends BaseResource {
   constructor(
@@ -213,6 +214,112 @@ export class Agent extends BaseResource {
     if (!response.body) {
       throw new Error('No response body');
     }
+
+    const userMessage = new MessageList().add(params.messages, 'user').get.all.core();
+    let assistantMessages: CoreMessage[] = [];
+    let toolCalls: { toolCallId: string; toolName: string; args: any }[] = [];
+    let finishReasonToolCalls = false;
+
+    const NEWLINE = '\n'.charCodeAt(0);
+
+    // concatenates all the chunks into a single Uint8Array
+    function concatChunks(chunks: Uint8Array[], totalLength: number) {
+      const concatenatedChunks = new Uint8Array(totalLength);
+
+      let offset = 0;
+      for (const chunk of chunks) {
+        concatenatedChunks.set(chunk, offset);
+        offset += chunk.length;
+      }
+      chunks.length = 0;
+
+      return concatenatedChunks;
+    }
+
+    const reader = response.clone().body?.getReader();
+    const decoder = new TextDecoder();
+    const chunks: Uint8Array[] = [];
+    let totalLength = 0;
+
+    while (true && reader) {
+      const { value } = await reader.read();
+
+      if (value) {
+        chunks.push(value);
+        totalLength += value.length;
+        if (value[value.length - 1] !== NEWLINE) {
+          // if the last character is not a newline, we have not read the whole JSON value
+          continue;
+        }
+      }
+
+      if (chunks.length === 0) {
+        break; // we have reached the end of the stream
+      }
+
+      const concatenatedChunks = concatChunks(chunks, totalLength);
+      totalLength = 0;
+
+      const streamParts = decoder
+        .decode(concatenatedChunks, { stream: true })
+        .split('\n')
+        .filter(line => line !== '') // splitting leaves an empty string at the end
+        .map(parseDataStreamPart);
+
+      for (const { type, value } of streamParts) {
+        if (type === 'tool_call') {
+          toolCalls.push(value);
+        }
+        if (type === 'text') {
+          console.log('text', value);
+          assistantMessages.push({
+            role: 'assistant',
+            content: value,
+          });
+        }
+        if (type === 'finish_step') {
+          if (value.finishReason === 'tool-calls') {
+            finishReasonToolCalls = true;
+          }
+        }
+      }
+    }
+
+    if (finishReasonToolCalls) {
+      for (const toolCall of toolCalls) {
+        const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
+        if (clientTool && clientTool.execute) {
+          const result = await clientTool.execute(
+            { context: toolCall?.args, runId, resourceId, threadId, runtimeContext: runtimeContext as RuntimeContext },
+            {
+              messages: (response as unknown as { messages: CoreMessage[] }).messages,
+              toolCallId: toolCall?.toolCallId,
+            },
+          );
+          const updatedMessages = [
+            ...userMessage,
+            ...assistantMessages,
+            {
+              role: 'tool',
+              content: [
+                {
+                  type: 'tool-result',
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  result,
+                },
+              ],
+            },
+          ];
+          console.log('updated messages', updatedMessages);
+          return this.stream({
+            ...params,
+            messages: updatedMessages,
+          });
+        }
+      }
+    }
+
     response.processDataStream = async (options = {}) => {
       await processDataStream({
         stream: response.body as ReadableStream<Uint8Array>,
