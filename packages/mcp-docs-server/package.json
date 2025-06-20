@@ -38,7 +38,7 @@
     "jsdom": "^26.1.0",
     "turndown": "^7.2.0",
     "uuid": "^11.1.0",
-    "zod": "^3.25.57",
+    "zod": "^3.25.67",
     "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {

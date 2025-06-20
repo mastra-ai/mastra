@@ -32,7 +32,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.3",
     "uuid": "^11.1.0",
-    "zod": "^3.25.57",
+    "zod": "^3.25.67",
     "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
