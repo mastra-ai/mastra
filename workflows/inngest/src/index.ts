@@ -1379,6 +1379,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 runId,
                 mastra: this.mastra!,
                 runtimeContext,
+                runCount: -1,
                 inputData: prevOutput,
                 getInitData: () => stepResults?.input as any,
                 getStepResult: (step: any) => {
