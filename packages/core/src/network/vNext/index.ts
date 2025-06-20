@@ -481,7 +481,7 @@ export class NewAgentNetwork extends MastraBase {
             {
               role: 'assistant',
               content: `
-                    ${inputData.isOneOff ? 'You are executing just one primitive based on the user task' : ''}
+                    ${inputData.isOneOff ? 'You are executing just one primitive based on the user task' : 'You will be calling just *one* primitive at a time to accomplish the user task'}
 
                     The user has given you the following task: 
                     ${inputData.task}
