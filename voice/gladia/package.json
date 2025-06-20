@@ -37,7 +37,7 @@
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.5",
     "@types/node": "^20.17.32",
-    "eslint": "^9.25.1",
+    "eslint": "^9.29.0",
     "pnpm": "10.10.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.3",
