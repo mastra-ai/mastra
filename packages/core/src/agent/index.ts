@@ -1281,12 +1281,10 @@ export class Agent<
           // add new user messages to the list AFTER remembered messages to make ordering more reliable
           .add(messages, 'user');
 
-        const systemMessage = [
-          ...messageList.getSystemMessages(),
-          ...messageList.getSystemMessages('memory')
-        ]
-          ?.map(m => m.content)
-          ?.join(`\n`) ?? undefined;
+        const systemMessage =
+          [...messageList.getSystemMessages(), ...messageList.getSystemMessages('memory')]
+            ?.map(m => m.content)
+            ?.join(`\n`) ?? undefined;
 
         const processedMemoryMessages = memory.processMessages({
           // these will be processed

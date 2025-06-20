@@ -1517,7 +1517,7 @@ export class UpstashStore extends MastraStorage {
     try {
       const key = `${TABLE_RESOURCES}:${resourceId}`;
       const data = await this.redis.get<StorageResourceType>(key);
-      
+
       if (!data) {
         return null;
       }
@@ -1545,9 +1545,9 @@ export class UpstashStore extends MastraStorage {
         createdAt: resource.createdAt.toISOString(),
         updatedAt: resource.updatedAt.toISOString(),
       };
-      
+
       await this.redis.set(key, serializedResource);
-      
+
       return resource;
     } catch (error) {
       this.logger.error('Error saving resource:', error);
@@ -1566,7 +1566,7 @@ export class UpstashStore extends MastraStorage {
   }): Promise<StorageResourceType> {
     try {
       const existingResource = await this.getResourceById({ resourceId });
-      
+
       if (!existingResource) {
         // Create new resource if it doesn't exist
         const newResource: StorageResourceType = {

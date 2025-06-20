@@ -79,9 +79,9 @@ describe('Resource-Scoped Working Memory Tests', () => {
     });
 
     // Get working memory and verify it's stored at resource level
-    const retrievedWorkingMemory = await memory.getWorkingMemory({ 
-      threadId: thread.id, 
-      resourceId 
+    const retrievedWorkingMemory = await memory.getWorkingMemory({
+      threadId: thread.id,
+      resourceId,
     });
 
     expect(retrievedWorkingMemory).toBe(workingMemoryData);
@@ -112,9 +112,9 @@ describe('Resource-Scoped Working Memory Tests', () => {
     });
 
     // Retrieve working memory from second thread
-    const retrievedFromThread2 = await memory.getWorkingMemory({ 
-      threadId: thread2.id, 
-      resourceId 
+    const retrievedFromThread2 = await memory.getWorkingMemory({
+      threadId: thread2.id,
+      resourceId,
     });
 
     expect(retrievedFromThread2).toBe(workingMemoryData);
@@ -188,9 +188,9 @@ describe('Resource-Scoped Working Memory Tests', () => {
     });
 
     // Test default format retrieval
-    const retrievedDefault = await memory.getWorkingMemory({ 
-      threadId: thread.id, 
-      resourceId 
+    const retrievedDefault = await memory.getWorkingMemory({
+      threadId: thread.id,
+      resourceId,
     });
 
     expect(retrievedDefault).toBe(workingMemoryData);

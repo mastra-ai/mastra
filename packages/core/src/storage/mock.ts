@@ -4,7 +4,15 @@ import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { Trace } from '../telemetry';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
-import type { EvalRow, PaginationInfo, StorageColumn, StorageGetMessagesArg, StorageResourceType, WorkflowRun, WorkflowRuns } from './types';
+import type {
+  EvalRow,
+  PaginationInfo,
+  StorageColumn,
+  StorageGetMessagesArg,
+  StorageResourceType,
+  WorkflowRun,
+  WorkflowRuns,
+} from './types';
 
 export class MockStore extends MastraStorage {
   private data: Record<TABLE_NAMES, Record<string, any>> = {
@@ -132,7 +140,7 @@ export class MockStore extends MastraStorage {
   }): Promise<StorageResourceType> {
     this.logger.debug(`MockStore: updateResource called for ${resourceId}`);
     let resource = this.data.mastra_resources[resourceId];
-    
+
     if (!resource) {
       // Create new resource if it doesn't exist
       resource = {

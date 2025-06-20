@@ -22,13 +22,13 @@ console.log(chalk.gray('for the same user, but stays separate for different user
 const USERS = {
   alice: 'user-alice-123',
   bob: 'user-bob-456',
-  demo: 'demo-user-789'
+  demo: 'demo-user-789',
 };
 
 // Let user choose which user to simulate
 console.log(chalk.yellow('Choose a user to simulate:'));
 console.log(chalk.cyan('1. Alice (user-alice-123)'));
-console.log(chalk.cyan('2. Bob (user-bob-456)'));  
+console.log(chalk.cyan('2. Bob (user-bob-456)'));
 console.log(chalk.cyan('3. Demo User (demo-user-789)'));
 console.log(chalk.gray('4. Or just press Enter to use a random user\n'));
 
@@ -75,9 +75,9 @@ console.log(chalk.bold.yellow('   to see how working memory persists across conv
 
 async function logResponse(res: Awaited<ReturnType<typeof agent.stream>>) {
   console.log(chalk.blue('\n🤖 Assistant:'));
-  
+
   const memorySpinner = ora('💾 Updating memory...');
-  
+
   // Mask working memory updates with a spinner
   const maskedStream = maskStreamTags(res.textStream, 'working_memory', {
     onStart: () => memorySpinner.start(),
@@ -98,15 +98,17 @@ async function main() {
   // Start the conversation
   await logResponse(
     await agent.stream(
-      [{
-        role: 'system',
-        content: `New conversation thread started at ${new Date().toISOString()}. 
+      [
+        {
+          role: 'system',
+          content: `New conversation thread started at ${new Date().toISOString()}. 
         This may be a returning user - check your working memory to see if you know them already.
         If this is a new user, introduce yourself and learn about them.
-        If this is a returning user, greet them warmly and reference what you remember!`
-      }],
-      { threadId, resourceId }
-    )
+        If this is a returning user, greet them warmly and reference what you remember!`,
+        },
+      ],
+      { threadId, resourceId },
+    ),
   );
 
   // Interactive chat loop
@@ -122,9 +124,7 @@ async function main() {
       break;
     }
 
-    await logResponse(
-      await agent.stream(userInput, { threadId, resourceId })
-    );
+    await logResponse(await agent.stream(userInput, { threadId, resourceId }));
   }
 
   rl.close();

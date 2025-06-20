@@ -1665,10 +1665,9 @@ export class PostgresStore extends MastraStorage {
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     const tableName = this.getTableName(TABLE_RESOURCES);
-    const result = await this.db.oneOrNone<StorageResourceType>(
-      `SELECT * FROM ${tableName} WHERE id = $1`,
-      [resourceId],
-    );
+    const result = await this.db.oneOrNone<StorageResourceType>(`SELECT * FROM ${tableName} WHERE id = $1`, [
+      resourceId,
+    ]);
 
     if (!result) {
       return null;
@@ -1677,7 +1676,8 @@ export class PostgresStore extends MastraStorage {
     return {
       ...result,
       // Ensure workingMemory is always returned as a string, regardless of automatic parsing
-      workingMemory: typeof result.workingMemory === 'object' ? JSON.stringify(result.workingMemory) : result.workingMemory,
+      workingMemory:
+        typeof result.workingMemory === 'object' ? JSON.stringify(result.workingMemory) : result.workingMemory,
       metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
     };
   }
@@ -1709,7 +1709,7 @@ export class PostgresStore extends MastraStorage {
     metadata?: Record<string, unknown>;
   }): Promise<StorageResourceType> {
     const existingResource = await this.getResourceById({ resourceId });
-    
+
     if (!existingResource) {
       // Create new resource if it doesn't exist
       const newResource: StorageResourceType = {
@@ -1755,10 +1755,7 @@ export class PostgresStore extends MastraStorage {
 
     values.push(resourceId);
 
-    await this.db.none(
-      `UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
-      values,
-    );
+    await this.db.none(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
 
     return updatedResource;
   }
