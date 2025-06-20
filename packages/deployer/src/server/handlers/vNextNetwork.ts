@@ -74,6 +74,8 @@ export async function streamGenerateVNextNetworkHandler(c: Context) {
     const networkId = c.req.param('networkId');
     const body = await c.req.json();
 
+    c.header('Transfer-Encoding', 'chunked');
+
     return stream(
       c,
       async stream => {

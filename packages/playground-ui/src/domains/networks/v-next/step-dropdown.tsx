@@ -82,10 +82,6 @@ const StepEntry = ({ stepId, step, runId }: { stepId: any; step: any; runId?: st
   const [expanded, setExpanded] = useState(false);
   const stepResult = step['step-result'];
 
-  if (stepId === 'workflow-step') {
-    console.log('workflow-step', step);
-  }
-
   if (stepId === 'finish') {
     return (
       <div className="bg-surface4 py-2 px-3 text-icon6 flex items-center gap-4 justify-between">
@@ -126,7 +122,7 @@ const StepEntry = ({ stepId, step, runId }: { stepId: any; step: any; runId?: st
 
           <div>
             <Txt variant="ui-sm" className="text-icon3 font-medium">
-              Agent ID
+              Resource ID
             </Txt>
 
             <Txt variant="ui-sm" className="text-icon6">
@@ -159,8 +155,6 @@ const WorkflowStepResultDialog = ({ open, onOpenChange, workflowId, runId }: Wor
   const { runs } = useWorkflowRuns(workflowId);
   const { workflow, isLoading } = useWorkflow(workflowId);
   const run = runs?.runs.find((run: any) => run.runId === runId);
-
-  console.log('runId', runId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

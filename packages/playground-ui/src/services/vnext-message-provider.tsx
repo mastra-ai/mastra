@@ -12,14 +12,8 @@ const MessagesContext = createContext<{
   appendToLastMessage: () => {},
 });
 
-export const MessagesProvider = ({
-  children,
-  initialMessages,
-}: {
-  children: ReactNode;
-  initialMessages: ThreadMessageLike[];
-}) => {
-  const [messages, setMessages] = useState<ThreadMessageLike[]>(initialMessages);
+export const MessagesProvider = ({ children }: { children: ReactNode }) => {
+  const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
 
   const appendToLastMessage = (partial: string) =>
     setMessages(msgs => {

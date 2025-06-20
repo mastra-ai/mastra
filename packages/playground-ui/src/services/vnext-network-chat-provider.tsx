@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useState } from 'react';
+import React, { createContext, useContext, ReactNode, useState } from 'react';
 
 //the whole workflow execution state.
 
@@ -13,6 +13,7 @@ type State = Record<string, StateValue>;
 type VNextNetworkChatContextType = {
   state: State;
   handleStep: (uuid: string, record: Record<string, any>) => void;
+  setState: React.Dispatch<React.SetStateAction<State>>;
 };
 
 const VNextNetworkChatContext = createContext<VNextNetworkChatContextType | undefined>(undefined);
@@ -39,8 +40,6 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
         endTime = Date.now();
       }
 
-      console.log('REC', { prevState, current, id });
-
       return {
         ...prevState,
         [uuid]: {
@@ -63,9 +62,11 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
     });
   };
 
-  console.log('state==', state);
-
-  return <VNextNetworkChatContext.Provider value={{ state, handleStep }}>{children}</VNextNetworkChatContext.Provider>;
+  return (
+    <VNextNetworkChatContext.Provider value={{ state, handleStep, setState }}>
+      {children}
+    </VNextNetworkChatContext.Provider>
+  );
 };
 
 export const useVNextNetworkChat = () => {

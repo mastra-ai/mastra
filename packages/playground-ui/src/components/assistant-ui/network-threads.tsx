@@ -31,7 +31,7 @@ export interface ThreadProps {
   showFileSupport?: boolean;
 }
 
-export const VNextThread = ({ ToolFallback, networkName, hasMemory, showFileSupport }: ThreadProps) => {
+export const NetworkThread = ({ ToolFallback, networkName, hasMemory, showFileSupport }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 

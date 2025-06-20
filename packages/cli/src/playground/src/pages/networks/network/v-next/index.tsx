@@ -1,9 +1,8 @@
 import { v4 as uuid } from '@lukeed/uuid';
 
-// import { NetworkInformation } from '@/domains/networks/network-information';
 import { useNetworkMemory, useNetworkMessages, useNetworkThreads } from '@/hooks/use-network-memory';
 
-import { MainContentContent, VNextNetworkChat } from '@mastra/playground-ui';
+import { MainContentContent, Message, VNextNetworkChat } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { NetworkSidebar } from '@/domains/networks/network-sidebar';
@@ -52,11 +51,10 @@ export default function VNextNetwork() {
         <VNextNetworkChat
           networkId={networkId!}
           threadId={threadId!}
-          initialMessages={[]}
           refreshThreadList={refreshThreads}
           memory={memory?.result}
           networkName={vNextNetwork?.name!}
-          // initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
+          initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
         />
       </div>
       {/* <NetworkInformation networkId={networkId!} isVNext /> */}
