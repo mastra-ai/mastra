@@ -57,13 +57,18 @@ Deploy your Mastra applications to popular cloud providers.
       </Callout>
    </Tabs.Tab>
    <Tabs.Tab>
-      Deploy your Mastra application to Digital Ocean's Droplets. This guide will cover setting up a droplet, a reverse proxy using Nginx, and running your Mastra application.
+      Deploy your Mastra application to Digital Ocean's Droplets.
+      This guide will cover setting up a droplet, a reverse proxy using Nginx, and running your Mastra application.
+
+      <Callout>
+        The guide assumes your droplet runs Ubuntu 24+.
+      </Callout>
 
       #### Prerequisites
 
       - A Digital Ocean account
-      - A droplet running Ubuntu 24.04
-      - A domain name
+      - A droplet running Ubuntu 24+
+      - A domain name with an A record pointing to your droplet
 
       #### Setting up the droplet
 
@@ -92,8 +97,8 @@ Deploy your Mastra applications to popular cloud providers.
          Then we can remove the nginx files if they exist.
 
          ```bash copy
-         sudo rm -rf /etc/nginx/sites-available/$SITE_NAME
-         sudo rm -rf /etc/nginx/sites-enabled/$SITE_NAME
+         sudo rm -f /etc/nginx/sites-available/$SITE_NAME
+         sudo rm -f /etc/nginx/sites-enabled/$SITE_NAME
          ```
 
          ##### Set up certbot for SSL
@@ -266,8 +271,20 @@ Deploy your Mastra applications to popular cloud providers.
          ```
       </Steps>
 
-      You can now connect to your Mastra server from your client application using a `MastraClient` from the `@mastra/client-js` package.
    </Tabs.Tab>
    </Tabs>
+
    </Tabs.Tab>
+
+   ### Connect to your Mastra server
+
+   You can now connect to your Mastra server from your client application using a `MastraClient` from the `@mastra/client-js` package.
+
+   ```typescript copy showLineNumbers
+   import { MastraClient } from "@mastra/client-js";
+
+   const mastraClient = new MastraClient({
+      baseUrl: "https://<your-domain-name>",
+   });
+   ```
 </Tabs>
