@@ -21,10 +21,10 @@ importers:
         version: 1.3.22(zod@3.25.65)
       '@copilotkit/react-core':
         specifier: ^1.8.10
-        version: 1.8.11(@types/react@19.1.4)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 1.8.11(@types/react@19.1.8)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@copilotkit/react-ui':
         specifier: ^1.8.10
-        version: 1.8.11(@types/react@19.1.4)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 1.8.11(@types/react@19.1.8)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@copilotkit/runtime':
         specifier: ^1.8.10
         version: 1.8.11(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.65))(zod@3.25.65))(@ibm-cloud/watsonx-ai@1.6.5)(axios@1.9.0)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.52.0)(react@19.1.0)(ws@8.18.2)
@@ -60,11 +60,11 @@ importers:
         specifier: ^9.25.0
         version: 9.26.0
       '@types/react':
-        specifier: ^19.1.2
-        version: 19.1.4
+        specifier: ^19.1.8
+        version: 19.1.8
       '@types/react-dom':
-        specifier: ^19.1.2
-        version: 19.1.5(@types/react@19.1.4)
+        specifier: ^19.1.6
+        version: 19.1.6(@types/react@19.1.8)
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.32.0
         version: 8.32.1(@typescript-eslint/parser@8.32.1(eslint@9.29.0)(typescript@5.8.3))(eslint@9.29.0)(typescript@5.8.3)
@@ -1246,13 +1246,13 @@ packages:
   '@types/prop-types@15.7.14':
     resolution: {integrity: sha512-gNMvNH49DJ7OJYv+KAKn0Xp45p8PLl6zo2YnvDIbTd4J6MER2BmWN49TG7n9LvkyihINxeKW8+3bfS2yDC9dzQ==}
 
-  '@types/react-dom@19.1.5':
-    resolution: {integrity: sha512-CMCjrWucUBZvohgZxkjd6S9h0nZxXjzus6yDfUb+xLxYM7VvjKNH1tQrE9GWLql1XoOP4/Ds3bwFqShHUYraGg==}
+  '@types/react-dom@19.1.6':
+    resolution: {integrity: sha512-4hOiT/dwO8Ko0gV1m/TJZYk3y0KBnY9vzDh7W+DH17b2HFSOGgdj33dhihPeuy3l0q23+4e+hoXHV6hCC4dCXw==}
     peerDependencies:
       '@types/react': ^19.0.0
 
-  '@types/react@19.1.4':
-    resolution: {integrity: sha512-EB1yiiYdvySuIITtD5lhW4yPyJ31RkJkkDw794LaQYrxCSaQV/47y5o1FMC4zF9ZyjUjzJMZwbovEnT5yHTW6g==}
+  '@types/react@19.1.8':
+    resolution: {integrity: sha512-AwAfQ2Wa5bCx9WP8nZL2uMZWod7J7/JSplxbTmBQ5ms6QpqNYm672H0Vu9ZVKVngQ+ii4R/byguVEUZQyeg44g==}
 
   '@types/retry@0.12.0':
     resolution: {integrity: sha512-wWKOClTTiizcZhXnPY4wikVAwmdYHp8q6DmC+EJUzAMsycb7HB32Kh9RN4+0gExjmPmZSAQjgURXIGATPegAvA==}
@@ -3406,14 +3406,14 @@ snapshots:
 
   '@cfworker/json-schema@4.1.1': {}
 
-  '@copilotkit/react-core@1.8.11(@types/react@19.1.4)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@copilotkit/react-core@1.8.11(@types/react@19.1.8)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
     dependencies:
       '@copilotkit/runtime-client-gql': 1.8.11(graphql@16.11.0)(react@19.1.0)
       '@copilotkit/shared': 1.8.11
       '@scarf/scarf': 1.4.0
       react: 19.1.0
       react-dom: 19.1.0(react@19.1.0)
-      react-markdown: 8.0.7(@types/react@19.1.4)(react@19.1.0)
+      react-markdown: 8.0.7(@types/react@19.1.8)(react@19.1.0)
       untruncate-json: 0.0.1
     transitivePeerDependencies:
       - '@types/react'
@@ -3421,14 +3421,14 @@ snapshots:
       - graphql
       - supports-color
 
-  '@copilotkit/react-ui@1.8.11(@types/react@19.1.4)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@copilotkit/react-ui@1.8.11(@types/react@19.1.8)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
     dependencies:
-      '@copilotkit/react-core': 1.8.11(@types/react@19.1.4)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@copilotkit/react-core': 1.8.11(@types/react@19.1.8)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@copilotkit/runtime-client-gql': 1.8.11(graphql@16.11.0)(react@19.1.0)
       '@copilotkit/shared': 1.8.11
       '@headlessui/react': 2.2.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       react: 19.1.0
-      react-markdown: 8.0.7(@types/react@19.1.4)(react@19.1.0)
+      react-markdown: 8.0.7(@types/react@19.1.8)(react@19.1.0)
       react-syntax-highlighter: 15.6.1(react@19.1.0)
       remark-gfm: 3.0.1
       remark-math: 5.1.1
@@ -4240,11 +4240,11 @@ snapshots:
 
   '@types/prop-types@15.7.14': {}
 
-  '@types/react-dom@19.1.5(@types/react@19.1.4)':
+  '@types/react-dom@19.1.6(@types/react@19.1.8)':
     dependencies:
-      '@types/react': 19.1.4
+      '@types/react': 19.1.8
 
-  '@types/react@19.1.4':
+  '@types/react@19.1.8':
     dependencies:
       csstype: 3.1.3
 
@@ -5928,11 +5928,11 @@ snapshots:
 
   react-is@18.3.1: {}
 
-  react-markdown@8.0.7(@types/react@19.1.4)(react@19.1.0):
+  react-markdown@8.0.7(@types/react@19.1.8)(react@19.1.0):
     dependencies:
       '@types/hast': 2.3.10
       '@types/prop-types': 15.7.14
-      '@types/react': 19.1.4
+      '@types/react': 19.1.8
       '@types/unist': 2.0.11
       comma-separated-tokens: 2.0.3
       hast-util-whitespace: 2.0.1
