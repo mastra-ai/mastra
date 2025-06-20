@@ -12,7 +12,11 @@
   "exports": {
     ".": "./dist/index.js",
     "./package.json": "./package.json",
-    "./telemetry-loader": "./dist/commands/dev/telemetry-loader.js"
+    "./telemetry-loader": "./dist/commands/dev/telemetry-loader.js",
+    "./dist/*": [
+      "./dist/*",
+      "./dist/*.js"
+    ]
   },
   "files": [
     "dist",
