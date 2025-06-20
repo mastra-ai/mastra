@@ -1382,19 +1382,19 @@ export class UpstashStore extends MastraStorage {
   ): Promise<WorkflowRuns> {
     try {
       // Get all workflow keys
-      let pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: namespace }) + ':*';
+      let pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace }) + ':*';
       if (workflowName && resourceId) {
         pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, {
-          namespace: namespace,
+          namespace,
           workflow_name: workflowName,
           run_id: '*',
           resourceId,
         });
       } else if (workflowName) {
-        pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: namespace, workflow_name: workflowName }) + ':*';
+        pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName }) + ':*';
       } else if (resourceId) {
         pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, {
-          namespace: namespace,
+          namespace,
           workflow_name: '*',
           run_id: '*',
           resourceId,
