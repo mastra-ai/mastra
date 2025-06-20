@@ -1,5 +1,5 @@
-import { processDataStream } from '@ai-sdk/ui-utils';
-import { type GenerateReturn } from '@mastra/core';
+import { parseDataStreamPart, processDataStream } from '@ai-sdk/ui-utils';
+import { Tool, type CoreMessage, type GenerateReturn } from '@mastra/core';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
@@ -105,16 +105,16 @@ export class Agent extends BaseResource {
    * @param params - Generation parameters including prompt
    * @returns Promise containing the generated response
    */
-  generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+  async generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
     params: GenerateParams<T> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<T>>;
-  generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+  async generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
     params: GenerateParams<T> & { output: T; experimental_output?: never },
   ): Promise<GenerateReturn<T>>;
-  generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+  async generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
     params: GenerateParams<T> & { output?: never; experimental_output: T },
   ): Promise<GenerateReturn<T>>;
-  generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+  async generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
     params: GenerateParams<T>,
   ): Promise<GenerateReturn<T>> {
     const processedParams = {
@@ -125,10 +125,59 @@ export class Agent extends BaseResource {
       clientTools: processClientTools(params.clientTools),
     };
 
-    return this.request(`/api/agents/${this.agentId}/generate`, {
+    const { runId, resourceId, threadId, runtimeContext } = processedParams as GenerateParams;
+
+    const response: GenerateReturn<T> = await this.request(`/api/agents/${this.agentId}/generate`, {
       method: 'POST',
       body: processedParams,
     });
+
+    if (response.finishReason === 'tool-calls') {
+      for (const toolCall of (
+        response as unknown as {
+          toolCalls: { toolName: string; args: any; toolCallId: string }[];
+          messages: CoreMessage[];
+        }
+      ).toolCalls) {
+        const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
+
+        if (clientTool && clientTool.execute) {
+          const result = await clientTool.execute(
+            { context: toolCall?.args, runId, resourceId, threadId, runtimeContext: runtimeContext as RuntimeContext },
+            {
+              messages: (response as unknown as { messages: CoreMessage[] }).messages,
+              toolCallId: toolCall?.toolCallId,
+            },
+          );
+
+          const updatedMessages = [
+            {
+              role: 'user',
+              content: params.messages,
+            },
+            ...(response.response as unknown as { messages: CoreMessage[] }).messages,
+            {
+              role: 'tool',
+              content: [
+                {
+                  type: 'tool-result',
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  result,
+                },
+              ],
+            },
+          ];
+          // @ts-ignore
+          return this.generate({
+            ...params,
+            messages: updatedMessages,
+          });
+        }
+      }
+    }
+
+    return response;
   }
 
   /**
@@ -151,6 +200,8 @@ export class Agent extends BaseResource {
       clientTools: processClientTools(params.clientTools),
     };
 
+    const { runId, resourceId, threadId, runtimeContext } = processedParams as StreamParams;
+
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
     } = await this.request(`/api/agents/${this.agentId}/stream`, {
@@ -162,7 +213,6 @@ export class Agent extends BaseResource {
     if (!response.body) {
       throw new Error('No response body');
     }
-
     response.processDataStream = async (options = {}) => {
       await processDataStream({
         stream: response.body as ReadableStream<Uint8Array>,
