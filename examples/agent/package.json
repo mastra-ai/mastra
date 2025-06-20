@@ -17,7 +17,7 @@
     "ai": "^4.3.16",
     "fetch-to-node": "^2.1.0",
     "mastra": "latest",
-    "zod": "^3.25.56"
+    "zod": "^3.25.67"
   },
   "pnpm": {
     "overrides": {
