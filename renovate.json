@@ -3,7 +3,6 @@
   "rangeStrategy": "bump",
   "extends": [
     ":dependencyDashboard",
-    ":disableRateLimiting",
     ":maintainLockFilesWeekly",
     ":semanticCommits",
     ":automergeDisabled",
@@ -12,7 +11,7 @@
     "replacements:all",
     "workarounds:typesNodeVersioning",
     "group:recommended",
-    "monorepo:opentelemetry-js"
+    ":prConcurrentLimit20"
   ],
   "postUpdateOptions": ["pnpmDedupe"],
   "rebaseWhen": "conflicted",
@@ -48,16 +47,36 @@
       "automerge": true
     },
     {
+      "groupName": "Hono",
       "matchSourceUrls": ["https://github.com/honojs/hono"]
     },
     {
+      "groupName": "AI SDK",
       "matchSourceUrls": ["https://github.com/vercel/ai"]
     },
     {
+      "groupName": "Assistant UI",
       "matchSourceUrls": ["https://github.com/assistant-ui/assistant-ui"]
     },
     {
+      "groupName": "Radix UI",
       "matchSourceUrls": ["https://github.com/radix-ui/primitives"]
+    },
+    {
+      "groupName": "Opentelemetry",
+      "matchSourceUrls": [
+        "https://github.com/open-telemetry/opentelemetry-js-contrib",
+        "https://github.com/open-telemetry/opentelemetry-js"
+      ]
+    },
+    {
+      "groupName": "React",
+      "matchPackageNames": ["@types/react", "@types/react-dom", "react", "react-dom"]
+    },
+    {
+      "groupName": "CopilotKit",
+      "matchSourceUrls": ["https://github.com/CopilotKit/CopilotKit"],
+      "matchPackageNames": ["@ag-ui/client"]
     },
     {
       "groupName": "E2E tests",
@@ -70,16 +89,17 @@
     {
       "groupName": "typescript",
       "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
-      "matchPackageNames": ["typescript", "/^@typescript-eslint\//"],
+      "matchPackageNames": ["typescript", "/^@typescript-eslint\//", "typescript-eslint"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
-      "dependencyDashboardApproval": false
+      "dependencyDashboardApproval": false,
+      "automerge": true
     },
     {
       "groupName": "formatting & linting",
       "commitMessageTopic": "Formatting & linting",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["eslint", "prettier", "/^eslint-/"],
+      "matchPackageNames": ["eslint", "prettier", "/^eslint-/", "@vitest/eslint-plugin"],
       "excludePackageNames": ["@typescript-eslint/"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -99,7 +119,8 @@
         "@types/node",
         "dotenv",
         "vitest",
-        "@vitest/*"
+        "@vitest/*",
+        "tsx"
       ]
     },
     {
