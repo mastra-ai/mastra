@@ -596,8 +596,8 @@ importers:
   integrations/mem0:
     dependencies:
       mem0ai:
-        specifier: ^2.1.30
-        version: 2.1.30(@anthropic-ai/sdk@0.32.1(encoding@0.1.13))(@cloudflare/workers-types@4.20250612.0)(@google/genai@1.4.0(@modelcontextprotocol/sdk@1.12.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5))(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(@mistralai/mistralai@1.7.1(zod@3.25.57))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.3.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.8.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.0)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))
+        specifier: ^2.1.31
+        version: 2.1.31(@anthropic-ai/sdk@0.32.1(encoding@0.1.13))(@cloudflare/workers-types@4.20250612.0)(@google/genai@1.4.0(@modelcontextprotocol/sdk@1.12.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5))(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(@mistralai/mistralai@1.7.1(zod@3.25.57))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.3.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.8.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.0)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -722,7 +722,7 @@ importers:
         version: 1.2.11(zod@3.25.57)
       '@copilotkit/runtime':
         specifier: ^1.8.14
-        version: 1.8.14(353fd4704f542b317a65b062825fef8c)
+        version: 1.8.14(e2e2a5f9795e51ee63651174452f6ad9)
       hono:
         specifier: ^4.7.11
         version: 4.7.11
@@ -14476,8 +14476,8 @@ packages:
     resolution: {integrity: sha512-aisnrDP4GNe06UcKFnV5bfMNPBUw4jsLGaWwWfnH3v02GnBuXX2MCVn5RbrWo0j3pczUilYblq7fQ7Nw2t5XKw==}
     engines: {node: '>= 0.8'}
 
-  mem0ai@2.1.30:
-    resolution: {integrity: sha512-uOIPWlzXMPG+V67wKg9vDJRPLumOL95H8j+lqi35Zq7YVNe0fBD2hNMRaGpxYF7ZYJFDQwI9BX6ZvHx7uWKn+Q==}
+  mem0ai@2.1.31:
+    resolution: {integrity: sha512-YbSq5P70HsxAhMo9xrJlcT2EVpkzQZjGW9i/GMQk5Vo9Q01dwLZ97jNqwbfTBA6U6hK2kBvowQMYLLFHnfvukA==}
     engines: {node: '>=18'}
     peerDependencies:
       '@anthropic-ai/sdk': ^0.40.1
@@ -20334,7 +20334,7 @@ snapshots:
 
   '@colors/colors@1.5.0': {}
 
-  '@copilotkit/runtime@1.8.14(353fd4704f542b317a65b062825fef8c)':
+  '@copilotkit/runtime@1.8.14(e2e2a5f9795e51ee63651174452f6ad9)':
     dependencies:
       '@ag-ui/client': 0.0.28
       '@ag-ui/core': 0.0.28
@@ -20343,7 +20343,7 @@ snapshots:
       '@anthropic-ai/sdk': 0.27.3(encoding@0.1.13)
       '@copilotkit/shared': 1.8.14(encoding@0.1.13)
       '@graphql-yoga/plugin-defer-stream': 3.13.5(graphql-yoga@5.13.5(graphql@16.11.0))(graphql@16.11.0)
-      '@langchain/community': 0.3.45(39d1467f1230dbbd9affcd8698870dfe)
+      '@langchain/community': 0.3.45(2fc83be66f2cade950a95f4f51d2c3b0)
       '@langchain/core': 0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57))
       '@langchain/google-gauth': 0.1.8(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(encoding@0.1.13)(zod@3.25.57)
       '@langchain/langgraph-sdk': 0.0.70(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(react@19.1.0)
@@ -21876,7 +21876,7 @@ snapshots:
       '@lancedb/lancedb-win32-arm64-msvc': 0.18.2
       '@lancedb/lancedb-win32-x64-msvc': 0.18.2
 
-  '@langchain/community@0.3.45(39d1467f1230dbbd9affcd8698870dfe)':
+  '@langchain/community@0.3.45(2fc83be66f2cade950a95f4f51d2c3b0)':
     dependencies:
       '@browserbasehq/stagehand': 1.14.0(@playwright/test@1.52.0)(bufferutil@4.0.9)(deepmerge@4.3.1)(dotenv@16.5.0)(encoding@0.1.13)(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57))(utf-8-validate@6.0.5)(zod@3.25.57)
       '@ibm-cloud/watsonx-ai': 1.6.5
@@ -21919,7 +21919,7 @@ snapshots:
       jsdom: 26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       jsonwebtoken: 9.0.2
       lodash: 4.17.21
-      mem0ai: 2.1.30(@anthropic-ai/sdk@0.32.1(encoding@0.1.13))(@cloudflare/workers-types@4.20250612.0)(@google/genai@1.4.0(@modelcontextprotocol/sdk@1.12.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5))(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(@mistralai/mistralai@1.7.1(zod@3.25.57))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.3.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.8.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.0)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))
+      mem0ai: 2.1.31(@anthropic-ai/sdk@0.32.1(encoding@0.1.13))(@cloudflare/workers-types@4.20250612.0)(@google/genai@1.4.0(@modelcontextprotocol/sdk@1.12.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5))(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(@mistralai/mistralai@1.7.1(zod@3.25.57))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.3.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.8.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.0)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))
       mongodb: 6.17.0(@aws-sdk/credential-providers@3.826.0)(gcp-metadata@5.3.0(encoding@0.1.13))(socks@2.8.4)
       neo4j-driver: 5.28.1
       pdf-parse: 1.1.1
@@ -31676,7 +31676,7 @@ snapshots:
 
   media-typer@1.1.0: {}
 
-  mem0ai@2.1.30(@anthropic-ai/sdk@0.32.1(encoding@0.1.13))(@cloudflare/workers-types@4.20250612.0)(@google/genai@1.4.0(@modelcontextprotocol/sdk@1.12.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5))(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(@mistralai/mistralai@1.7.1(zod@3.25.57))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.3.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.8.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.0)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5)):
+  mem0ai@2.1.31(@anthropic-ai/sdk@0.32.1(encoding@0.1.13))(@cloudflare/workers-types@4.20250612.0)(@google/genai@1.4.0(@modelcontextprotocol/sdk@1.12.3)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5))(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(@mistralai/mistralai@1.7.1(zod@3.25.57))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.3.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.8.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.0)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5)):
     dependencies:
       '@anthropic-ai/sdk': 0.32.1(encoding@0.1.13)
       '@cloudflare/workers-types': 4.20250612.0
