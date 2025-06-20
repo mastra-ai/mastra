@@ -1,5 +1,19 @@
 # @mastra/playground-ui
 
+## 5.1.7-alpha.1
+
+### Patch Changes
+
+- 21ffb97: Make dynamic form handle schema better
+- Updated dependencies [d1baedb]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [2097952]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [0e17048]
+  - @mastra/core@0.10.7-alpha.1
+  - @mastra/client-js@0.10.6-alpha.1
+
 ## 5.1.7-alpha.0
 
 ### Patch Changes
