@@ -1680,7 +1680,7 @@ importers:
   packages/mcp:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.12.1
+        specifier: ^1.12.3
         version: 1.12.3
       date-fns:
         specifier: ^4.1.0
@@ -1759,7 +1759,7 @@ importers:
         specifier: workspace:^
         version: link:../mcp
       '@modelcontextprotocol/sdk':
-        specifier: ^1.12.1
+        specifier: ^1.12.3
         version: 1.12.3
       date-fns:
         specifier: ^4.1.0
