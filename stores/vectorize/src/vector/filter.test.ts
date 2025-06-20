@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
+import type { VectorizeVectorFilter } from './filter';
 import { VectorizeFilterTranslator } from './filter';
 
 describe('VectorizeFilterTranslator', () => {
@@ -18,14 +19,14 @@ describe('VectorizeFilterTranslator', () => {
 
     // Basic cases
     it('converts implicit equality to explicit $eq', () => {
-      const filter = { field: 'value' };
+      const filter: VectorizeVectorFilter = { field: 'value' };
       expect(translator.translate(filter)).toEqual({
         field: { $eq: 'value' },
       });
     });
 
     it('handles comparison operators', () => {
-      const filter = {
+      const filter: VectorizeVectorFilter = {
         age: { $gt: 25 },
         price: { $lte: 100 },
         status: { $ne: 'inactive' },
@@ -36,21 +37,21 @@ describe('VectorizeFilterTranslator', () => {
     });
 
     it('handles $in operator', () => {
-      const filter = {
+      const filter: VectorizeVectorFilter = {
         tags: { $in: ['important', 'urgent'] },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
     it('handles $nin operator', () => {
-      const filter = {
+      const filter: VectorizeVectorFilter = {
         status: { $nin: ['deleted', 'archived'] },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
     it('handles null values', () => {
-      const filter = {
+      const filter: VectorizeVectorFilter = {
         field: null,
         other: { $eq: null },
       };
@@ -61,7 +62,7 @@ describe('VectorizeFilterTranslator', () => {
     });
 
     it('handles empty objects', () => {
-      const filter = { field: {} };
+      const filter: VectorizeVectorFilter = { field: {} };
       expect(translator.translate(filter)).toEqual({ field: {} });
     });
 
@@ -80,14 +81,14 @@ describe('VectorizeFilterTranslator', () => {
 
     it('normalizes date values', () => {
       const date = new Date('2024-01-01');
-      const filter = { timestamp: { $gt: date } };
+      const filter: VectorizeVectorFilter = { timestamp: { $gt: date } };
       expect(translator.translate(filter)).toEqual({
         timestamp: { $gt: date.toISOString() },
       });
     });
 
     it('handles multiple operators on same field', () => {
-      const filter = {
+      const filter: VectorizeVectorFilter = {
         price: { $gt: 100, $lt: 200 },
         quantity: { $gte: 10, $lte: 20 },
       };
@@ -95,14 +96,14 @@ describe('VectorizeFilterTranslator', () => {
     });
 
     it('handles arrays of mixed types', () => {
-      const filter = {
+      const filter: VectorizeVectorFilter = {
         field: { $in: [123, 'string', true] },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
     it('handles empty arrays in $in and $nin', () => {
-      const filter = {
+      const filter: VectorizeVectorFilter = {
         field1: { $in: [] },
         field2: { $nin: [] },
       };
@@ -125,7 +126,7 @@ describe('VectorizeFilterTranslator', () => {
     });
 
     it('preserves order of multiple operators', () => {
-      const filter = {
+      const filter: VectorizeVectorFilter = {
         field: {
           $gt: 0,
           $lt: 10,
@@ -191,7 +192,7 @@ describe('VectorizeFilterTranslator', () => {
       const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
 
       invalidFilters.forEach(filter => {
-        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
+        expect(() => translator.translate(filter as any)).toThrow(/Invalid top-level operator/);
       });
     });
   });

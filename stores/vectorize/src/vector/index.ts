@@ -11,10 +11,14 @@ import type {
   UpdateVectorParams,
   IndexStats,
 } from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
 import Cloudflare from 'cloudflare';
 
 import { VectorizeFilterTranslator } from './filter';
+import type { VectorizeVectorFilter } from './filter';
+
+export type VectorizeQueryParams = QueryVectorParams & {
+  filter?: VectorizeVectorFilter;
+};
 
 export class CloudflareVector extends MastraVector {
   client: Cloudflare;
@@ -74,7 +78,7 @@ export class CloudflareVector extends MastraVector {
     }
   }
 
-  transformFilter(filter?: VectorFilter) {
+  transformFilter(filter?: VectorizeVectorFilter) {
     const translator = new VectorizeFilterTranslator();
     return translator.translate(filter);
   }
@@ -120,7 +124,7 @@ export class CloudflareVector extends MastraVector {
     topK = 10,
     filter,
     includeVector = false,
-  }: QueryVectorParams): Promise<QueryResult[]> {
+  }: VectorizeQueryParams): Promise<QueryResult[]> {
     try {
       const translatedFilter = this.transformFilter(filter) ?? {};
       const response = await this.client.vectorize.indexes.query(indexName, {
