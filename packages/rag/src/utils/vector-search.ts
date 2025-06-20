@@ -1,5 +1,5 @@
 import type { MastraVector, QueryResult, QueryVectorParams } from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
+import type { VectorFilter, OperatorValueMap, LogicalOperatorValueMap } from '@mastra/core/vector/filter';
 import { embed } from 'ai';
 import type { EmbeddingModel } from 'ai';
 import type { DatabaseConfig } from '../tools/types';
@@ -9,7 +9,7 @@ interface VectorQuerySearchParams {
   vectorStore: MastraVector;
   queryText: string;
   model: EmbeddingModel<string>;
-  queryFilter?: VectorFilter;
+  queryFilter?: VectorFilter<keyof OperatorValueMap, OperatorValueMap, LogicalOperatorValueMap>;
   topK: number;
   includeVectors?: boolean;
   maxRetries?: number;

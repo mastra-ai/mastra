@@ -13,8 +13,7 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
-
+import type { AstraVectorFilter } from './filter';
 import { AstraFilterTranslator } from './filter';
 
 // Mastra and Astra DB agree on cosine and euclidean, but Astra DB uses dot_product instead of dotproduct.
@@ -28,6 +27,10 @@ export interface AstraDbOptions {
   token: string;
   endpoint: string;
   keyspace?: string;
+}
+
+export interface AstraQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
+  filter?: AstraVectorFilter;
 }
 
 export class AstraVector extends MastraVector {
@@ -114,7 +117,7 @@ export class AstraVector extends MastraVector {
     return vectorIds;
   }
 
-  transformFilter(filter?: VectorFilter) {
+  transformFilter(filter?: AstraVectorFilter) {
     const translator = new AstraFilterTranslator();
     return translator.translate(filter);
   }
@@ -135,7 +138,7 @@ export class AstraVector extends MastraVector {
     topK = 10,
     filter,
     includeVector = false,
-  }: QueryVectorParams): Promise<QueryResult[]> {
+  }: AstraQueryVectorParams): Promise<QueryResult[]> {
     const collection = this.#db.collection(indexName);
 
     const translatedFilter = this.transformFilter(filter);

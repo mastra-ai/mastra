@@ -147,7 +147,7 @@ describe('AstraFilterTranslator', () => {
 
       expect(() =>
         translator.translate({
-          $or: [{ $in: ['value1', 'value2'] }],
+          $or: [{ $in: ['value1', 'value2'] as any }],
         }),
       ).toThrow(/Logical operators must contain field conditions/);
     });
@@ -158,7 +158,7 @@ describe('AstraFilterTranslator', () => {
           field: {
             $gt: {
               $or: [{ subfield: 'value1' }, { subfield: 'value2' }],
-            },
+            } as any,
           },
         }),
       ).toThrow();
@@ -169,7 +169,7 @@ describe('AstraFilterTranslator', () => {
             $in: [
               {
                 $and: [{ subfield: 'value1' }, { subfield: 'value2' }],
-              },
+              } as any,
             ],
           },
         }),
@@ -182,7 +182,7 @@ describe('AstraFilterTranslator', () => {
           field: {
             $gt: {
               $or: [{ subfield: 'value1' }, { subfield: 'value2' }],
-            },
+            } as any,
           },
         }),
       ).toThrow();
@@ -200,7 +200,7 @@ describe('AstraFilterTranslator', () => {
 
     it('throws error for $not if not an object', () => {
       expect(() => translator.translate({ $not: 'value' })).toThrow();
-      expect(() => translator.translate({ $not: [{ field: 'value' }] })).toThrow();
+      expect(() => translator.translate({ $not: [{ field: 'value' }] } as any)).toThrow();
     });
 
     it('throws error for $not if empty', () => {
@@ -230,10 +230,8 @@ describe('AstraFilterTranslator', () => {
       const filter = {
         status: 'active',
         metadata: {},
-        user: {
-          profile: {},
-          settings: { theme: null },
-        },
+        'user.profile': {},
+        'usersettings.theme': null,
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
@@ -242,23 +240,15 @@ describe('AstraFilterTranslator', () => {
       const filter = {
         tags: { $in: ['a', 'b'] },
         metadata: {},
-        nested: {
-          field: { $eq: 'value' },
-          empty: {},
-        },
+        'nested.field': { $eq: 'value' },
+        'nested.empty': {},
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
     it('handles deeply nested operators', () => {
       const filter = {
-        user: {
-          profile: {
-            preferences: {
-              theme: { $in: ['dark', 'light'] },
-            },
-          },
-        },
+        'user.profile.preferences.theme': { $in: ['dark', 'light'] },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
@@ -313,11 +303,9 @@ describe('AstraFilterTranslator', () => {
         { $and: [{ field1: 'value1' }, { field2: 'value2' }] },
         { $or: [{ field1: 'value1' }, { field2: 'value2' }] },
 
-        { $and: { field: 'value' } },
-        { $or: { field: 'value' } },
         { $not: { field: 'value' } },
 
-        { $or: [{ $and: { field1: 'value1' } }, { $not: { field2: 'value2' } }] },
+        { $or: [{ $and: [{ field1: 'value1' }] }, { $not: { field2: 'value2' } }] },
 
         { field: { $not: { $eq: 'value' } } },
         { field: { $not: { $in: ['value1', 'value2'] } } },
@@ -333,11 +321,11 @@ describe('AstraFilterTranslator', () => {
     });
 
     it('throws on unsupported operators', () => {
-      expect(() => translator.translate({ field: { $regex: 'value' } })).toThrow('Unsupported operator: $regex');
-      const filter = { field: /pattern/i };
+      expect(() => translator.translate({ field: { $regex: 'value' } as any })).toThrow('Unsupported operator: $regex');
+      const filter = { field: /pattern/i } as any;
       expect(() => translator.translate(filter)).toThrow();
-      expect(() => translator.translate({ $nor: [{ field: 'value' }] })).toThrow('Unsupported operator: $nor');
-      expect(() => translator.translate({ field: { $elemMatch: { $gt: 5 } } })).toThrow(
+      expect(() => translator.translate({ $nor: [{ field: 'value' }] } as any)).toThrow('Unsupported operator: $nor');
+      expect(() => translator.translate({ field: { $elemMatch: { $gt: 5 } } } as any)).toThrow(
         'Unsupported operator: $elemMatch',
       );
     });
@@ -345,7 +333,7 @@ describe('AstraFilterTranslator', () => {
       const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $exists: true }];
 
       invalidFilters.forEach(filter => {
-        expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
+        expect(() => translator.translate(filter as any)).toThrow(/Invalid top-level operator/);
       });
     });
 

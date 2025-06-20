@@ -33,21 +33,77 @@ type QueryOperator =
   | ElementOperator
   | RegexOperator;
 
-// Type for a field condition using an operator
-type OperatorCondition = {
-  [K in QueryOperator]?: any;
+type Primitive = string | number | boolean | Date | null | undefined;
+
+// Logical operators are handled at the top level as objects, not as values here
+// $and, $or, $nor, $not are handled in LogicalCondition
+type OperatorValueMap<Op extends string = string, ValueMap extends Record<string, any> = any> = {
+  $eq: Primitive;
+  $ne: Primitive;
+  $gt: number | string | Date;
+  $gte: number | string | Date;
+  $lt: number | string | Date;
+  $lte: number | string | Date;
+  $all: Primitive[];
+  $in: Primitive[];
+  $nin: Primitive[];
+  $elemMatch: { [field: string]: any };
+  $exists: boolean;
+  $regex: string | RegExp;
+  $options: string;
+  $not: OperatorCondition<Op, ValueMap> | RegExp;
 };
 
-// Type for a field condition that can be either a direct value or use operators
-type FieldCondition = OperatorCondition | any;
+type LogicalOperatorValueMap = {
+  $and: 'array';
+  $or: 'array';
+  $nor: 'array';
+  $not: 'object';
+};
 
-// Type for the overall filter structure
-type VectorFilter =
-  | {
-      [field: string]: FieldCondition | VectorFilter;
-    }
-  | null
-  | undefined;
+// Vector filter parameterized by operator set
+type VectorFilter<
+  Op extends keyof ValueMap,
+  ValueMap extends Record<string, any> = OperatorValueMap,
+  LogicalValueMap extends Record<string, any> = LogicalOperatorValueMap,
+> = FilterCondition<Op, ValueMap, LogicalValueMap> | null | undefined;
+
+type FilterCondition<
+  Op extends keyof ValueMap,
+  ValueMap extends Record<string, any> = OperatorValueMap,
+  LogicalValueMap extends Record<string, any> = LogicalOperatorValueMap,
+> = FieldCondition<Op, ValueMap> | LogicalCondition<Op, ValueMap, LogicalValueMap>;
+
+// Field condition can be a value or an operator condition
+type FieldCondition<Op extends keyof ValueMap, ValueMap extends Record<string, any>> = {
+  [field: string]: OperatorCondition<Op, ValueMap> | Primitive;
+};
+
+// Logical conditions
+type LogicalCondition<
+  Op extends keyof ValueMap,
+  ValueMap extends Record<string, any> = OperatorValueMap,
+  LogicalValueMap extends Record<string, any> = LogicalOperatorValueMap,
+> = {
+  [K in keyof LogicalValueMap]: LogicalValueMap[K] extends 'array'
+    ? {
+        [P in K]: Array<LogicalBranch<Op, ValueMap, LogicalValueMap>>;
+      }
+    : {
+        [P in K]: LogicalBranch<Op, ValueMap, LogicalValueMap>;
+      };
+}[keyof LogicalValueMap];
+
+type LogicalBranch<
+  Op extends keyof ValueMap,
+  ValueMap extends Record<string, any>,
+  LogicalValueMap extends Record<string, any>,
+> = FieldCondition<Op, ValueMap> | LogicalCondition<Op, ValueMap, LogicalValueMap>;
+
+// Base operator condition, parameterized by operator set
+type OperatorCondition<Op extends keyof ValueMap, ValueMap extends Record<string, any> = OperatorValueMap> = {
+  [K in Exclude<Op, '$and' | '$or' | '$nor'>]?: ValueMap[K];
+};
 
 type OperatorSupport = {
   logical?: LogicalOperator[];
@@ -61,7 +117,7 @@ type OperatorSupport = {
 
 // Base abstract class for filter translators
 abstract class BaseFilterTranslator {
-  abstract translate(filter: VectorFilter): unknown;
+  abstract translate(filter: VectorFilter<keyof OperatorValueMap, OperatorValueMap>): unknown;
 
   /**
    * Operator type checks
@@ -148,7 +204,7 @@ abstract class BaseFilterTranslator {
    * Helper method to simulate $all operator using $and + $eq when needed.
    * Some vector stores don't support $all natively.
    */
-  protected simulateAllOperator(field: string, values: any[]): VectorFilter {
+  protected simulateAllOperator(field: string, values: any[]): VectorFilter<keyof OperatorValueMap, OperatorValueMap> {
     return {
       $and: values.map(value => ({
         [field]: { $in: [this.normalizeComparisonValue(value)] },
@@ -196,7 +252,7 @@ abstract class BaseFilterTranslator {
     return values.map(value => this.normalizeComparisonValue(value));
   }
 
-  protected validateFilter(filter: VectorFilter): void {
+  protected validateFilter(filter: VectorFilter<keyof OperatorValueMap, OperatorValueMap>): void {
     const validation = this.validateFilterSupport(filter);
     if (!validation.supported) {
       throw new Error(validation.messages.join(', '));
@@ -208,7 +264,9 @@ abstract class BaseFilterTranslator {
    * and returns detailed validation information.
    */
   private validateFilterSupport(
-    node: VectorFilter | FieldCondition,
+    node:
+      | VectorFilter<keyof OperatorValueMap, OperatorValueMap>
+      | FieldCondition<keyof OperatorValueMap, OperatorValueMap>,
     path: string = '',
   ): {
     supported: boolean;
@@ -324,5 +382,7 @@ export {
   type FieldCondition,
   type OperatorCondition,
   type OperatorSupport,
+  type OperatorValueMap,
+  type LogicalOperatorValueMap,
   BaseFilterTranslator,
 };

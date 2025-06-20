@@ -1,5 +1,21 @@
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
-import type { FieldCondition, VectorFilter, OperatorSupport, QueryOperator } from '@mastra/core/vector/filter';
+import type {
+  VectorFilter,
+  OperatorSupport,
+  QueryOperator,
+  OperatorValueMap,
+  LogicalOperatorValueMap,
+} from '@mastra/core/vector/filter';
+
+type AstraOperatorValueMap = Omit<OperatorValueMap, '$elemMatch' | '$regex' | '$options'> & {
+  $size: number; // Astra-specific
+};
+
+type AstraLogicalOperatorValueMap = Omit<LogicalOperatorValueMap, '$nor'>;
+
+type AstraOperator = keyof AstraOperatorValueMap;
+
+export type AstraVectorFilter = VectorFilter<AstraOperator, AstraOperatorValueMap, AstraLogicalOperatorValueMap>;
 
 /**
  * Translator for Astra DB filter queries.
@@ -17,14 +33,14 @@ export class AstraFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter?: VectorFilter): VectorFilter {
+  translate(filter?: AstraVectorFilter): AstraVectorFilter {
     if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter);
 
     return this.translateNode(filter);
   }
 
-  private translateNode(node: VectorFilter | FieldCondition): any {
+  private translateNode(node: AstraVectorFilter): any {
     // Handle primitive values and arrays
     if (this.isRegex(node)) {
       throw new Error('Regex is not supported in Astra DB');
