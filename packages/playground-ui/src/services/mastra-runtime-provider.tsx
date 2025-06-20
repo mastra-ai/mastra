@@ -14,7 +14,7 @@ import { RuntimeContext } from '@mastra/core/di';
 
 import { ChatProps } from '@/types';
 
-import { CoreUserMessage } from '@mastra/core';
+import { CoreMessage, CoreUserMessage } from '@mastra/core';
 import { fileToBase64 } from '@/lib/file';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachment-adapters/pdfs-adapter';
@@ -35,7 +35,7 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
               {
                 type: 'file' as const,
                 // @ts-expect-error - TODO: fix this type issue somehow
-                data: attachment.content?.[0]?.text || '',
+                data: `data:${attachment.contentType};base64,${attachment.content?.[0]?.text || ''}`,
                 mimeType: attachment.contentType,
                 filename: attachment.name,
               },
@@ -70,7 +70,6 @@ export function MastraRuntimeProvider({
   children,
   agentId,
   initialMessages,
-  agentName,
   memory,
   threadId,
   refreshThreadList,
@@ -111,15 +110,20 @@ export function MastraRuntimeProvider({
               result: toolInvocation?.result,
             }));
 
-            const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
-              type: image.contentType.startsWith(`image/`)
+            const attachmentsAsContentParts = (message.experimental_attachments || []).map((attachment: any) => {
+              const type = attachment.contentType.startsWith(`image/`)
                 ? 'image'
-                : image.contentType.startsWith(`audio/`)
+                : attachment.contentType.startsWith(`audio/`)
                   ? 'audio'
-                  : 'file',
-              mimeType: image.contentType,
-              image: image.url,
-            }));
+                  : 'file';
+
+              return {
+                type,
+                mimeType: attachment.contentType,
+                image: type === 'image' ? attachment.url : undefined,
+                data: type !== 'image' ? attachment.url : undefined,
+              };
+            });
 
             return {
               ...message,
@@ -153,16 +157,23 @@ export function MastraRuntimeProvider({
     ]);
     setIsRunning(true);
 
+    const nextMessages: Array<CoreMessage> = [];
+
+    if (input) {
+      nextMessages.push({
+        role: 'user',
+        content: input,
+      });
+    }
+
+    if (attachments.length > 0) {
+      nextMessages.push(...attachments);
+    }
+
     try {
       if (chatWithGenerate) {
         const generateResponse = await agent.generate({
-          messages: [
-            {
-              role: 'user',
-              content: input,
-            },
-            ...attachments,
-          ],
+          messages: nextMessages,
           runId: agentId,
           frequencyPenalty,
           presencePenalty,
@@ -262,13 +273,7 @@ export function MastraRuntimeProvider({
         }
       } else {
         const response = await agent.stream({
-          messages: [
-            {
-              role: 'user',
-              content: input,
-            },
-            ...attachments,
-          ],
+          messages: nextMessages,
           runId: agentId,
           frequencyPenalty,
           presencePenalty,
