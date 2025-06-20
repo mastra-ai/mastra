@@ -39,7 +39,7 @@
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
     "dotenv": "^16.5.0",
-    "eslint": "^9.28.0",
+    "eslint": "^9.29.0",
     "miniflare": "^4.20250604.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",

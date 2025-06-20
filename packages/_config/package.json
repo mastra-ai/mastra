@@ -14,11 +14,11 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@vitest/eslint-plugin": "^1.2.2",
+    "@vitest/eslint-plugin": "^1.2.7",
     "eslint-plugin-import-x": "^4.15.2",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-testing-library": "^7.5.2",
+    "eslint-plugin-testing-library": "^7.5.3",
     "globals": "^15.15.0",
     "typescript-eslint": "^8.34.0"
   }
