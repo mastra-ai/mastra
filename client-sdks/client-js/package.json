@@ -47,7 +47,7 @@
     "@babel/preset-env": "^7.27.2",
     "@babel/preset-typescript": "^7.27.1",
     "@internal/lint": "workspace:*",
-    "@tsconfig/recommended": "^1.0.8",
+    "@tsconfig/recommended": "^1.0.9",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^20.19.0",
     "tsup": "^8.5.0",
