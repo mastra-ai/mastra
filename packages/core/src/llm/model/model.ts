@@ -1,4 +1,13 @@
-import type { CoreMessage, CoreToolMessage, LanguageModel, Schema, ToolInvocation, ToolResultPart } from 'ai';
+import {
+  AnthropicSchemaCompatLayer,
+  applyCompatLayer,
+  DeepSeekSchemaCompatLayer,
+  GoogleSchemaCompatLayer,
+  MetaSchemaCompatLayer,
+  OpenAIReasoningSchemaCompatLayer,
+  OpenAISchemaCompatLayer,
+} from '@mastra/schema-compat';
+import type { CoreMessage, LanguageModel, Schema } from 'ai';
 import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -14,9 +23,8 @@ import type {
   StreamReturn,
 } from '../';
 import type { MastraPrimitives } from '../../action';
-import type { AiMessageType } from '../../agent/types';
+import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
-import type { MessageType } from '../../memory';
 import type { MastraMemory } from '../../memory/memory';
 import { delay } from '../../utils';
 
@@ -34,7 +42,7 @@ export class MastraLLM extends MastraLLMBase {
     if (mastra) {
       this.#mastra = mastra;
       if (mastra.getLogger()) {
-        this.__setLogger(mastra.getLogger());
+        this.__setLogger(this.#mastra.getLogger());
       }
     }
   }
@@ -63,6 +71,29 @@ export class MastraLLM extends MastraLLMBase {
 
   getModel() {
     return this.#model;
+  }
+
+  private _applySchemaCompat(schema: ZodSchema | JSONSchema7): Schema {
+    const model = this.#model;
+
+    const schemaCompatLayers = [];
+
+    if (model) {
+      schemaCompatLayers.push(
+        new OpenAIReasoningSchemaCompatLayer(model),
+        new OpenAISchemaCompatLayer(model),
+        new GoogleSchemaCompatLayer(model),
+        new AnthropicSchemaCompatLayer(model),
+        new DeepSeekSchemaCompatLayer(model),
+        new MetaSchemaCompatLayer(model),
+      );
+    }
+
+    return applyCompatLayer({
+      schema: schema as any,
+      compatLayers: schemaCompatLayers,
+      mode: 'aiSdkSchema',
+    });
   }
 
   async __text<Z extends ZodSchema | JSONSchema7 | undefined>({
@@ -101,7 +132,31 @@ export class MastraLLM extends MastraLLMBase {
       toolChoice,
       maxSteps,
       onStepFinish: async (props: any) => {
-        await onStepFinish?.(props);
+        try {
+          await onStepFinish?.(props);
+        } catch (e: unknown) {
+          const mastraError = new MastraError(
+            {
+              id: 'LLM_TEXT_ON_STEP_FINISH_CALLBACK_EXECUTION_FAILED',
+              domain: ErrorDomain.LLM,
+              category: ErrorCategory.USER,
+              details: {
+                modelId: model.modelId,
+                modelProvider: model.provider,
+                runId: runId ?? 'unknown',
+                threadId: threadId ?? 'unknown',
+                resourceId: resourceId ?? 'unknown',
+                finishReason: props?.finishReason,
+                toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
+                toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
+                usage: props?.usage ? JSON.stringify(props.usage) : '',
+              },
+            },
+            e,
+          );
+          this.logger.trackException(mastraError);
+          throw mastraError;
+        }
 
         this.logger.debug('[LLM] - Step Change:', {
           text: props?.text,
@@ -139,19 +194,39 @@ export class MastraLLM extends MastraLLMBase {
       }
     }
 
-    return await generateText({
-      messages,
-      ...argsForExecute,
-      experimental_telemetry: {
-        ...this.experimental_telemetry,
-        ...telemetry,
-      },
-      experimental_output: schema
-        ? Output.object({
-            schema,
-          })
-        : undefined,
-    });
+    try {
+      return await generateText({
+        messages,
+        ...argsForExecute,
+        experimental_telemetry: {
+          ...this.experimental_telemetry,
+          ...telemetry,
+        },
+        experimental_output: schema
+          ? Output.object({
+              schema,
+            })
+          : undefined,
+      });
+    } catch (e: unknown) {
+      const mastraError = new MastraError(
+        {
+          id: 'LLM_GENERATE_TEXT_AI_SDK_EXECUTION_FAILED',
+          domain: ErrorDomain.LLM,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            modelId: model.modelId,
+            modelProvider: model.provider,
+            runId: runId ?? 'unknown',
+            threadId: threadId ?? 'unknown',
+            resourceId: resourceId ?? 'unknown',
+          },
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
+    }
   }
 
   async __textObject<T extends ZodSchema | JSONSchema7 | undefined>({
@@ -183,7 +258,29 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       toolChoice,
       onStepFinish: async (props: any) => {
-        await onStepFinish?.(props);
+        try {
+          await onStepFinish?.(props);
+        } catch (e: unknown) {
+          const mastraError = new MastraError(
+            {
+              id: 'LLM_TEXT_OBJECT_ON_STEP_FINISH_CALLBACK_EXECUTION_FAILED',
+              domain: ErrorDomain.LLM,
+              category: ErrorCategory.USER,
+              details: {
+                runId: runId ?? 'unknown',
+                threadId: threadId ?? 'unknown',
+                resourceId: resourceId ?? 'unknown',
+                finishReason: props?.finishReason,
+                toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
+                toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
+                usage: props?.usage ? JSON.stringify(props.usage) : '',
+              },
+            },
+            e,
+          );
+          this.logger.trackException(mastraError);
+          throw mastraError;
+        }
 
         this.logger.debug('[LLM] - Step Change:', {
           text: props?.text,
@@ -205,29 +302,44 @@ export class MastraLLM extends MastraLLMBase {
       ...rest,
     };
 
-    let schema: z.ZodType<T> | Schema<T>;
-    let output = 'object';
-
-    if (typeof (structuredOutput as any).parse === 'function') {
-      schema = structuredOutput as z.ZodType<T>;
-      if (schema instanceof z.ZodArray) {
-        output = 'array';
-        schema = schema._def.type as z.ZodType<T>;
-      }
-    } else {
-      schema = jsonSchema(structuredOutput as JSONSchema7) as Schema<T>;
+    let output: any = 'object';
+    if (structuredOutput instanceof z.ZodArray) {
+      output = 'array';
+      structuredOutput = structuredOutput._def.type;
     }
 
-    return await generateObject({
-      messages,
-      ...argsForExecute,
-      output: output as any,
-      schema,
-      experimental_telemetry: {
-        ...this.experimental_telemetry,
-        ...telemetry,
-      },
-    });
+    try {
+      const processedSchema = this._applySchemaCompat(structuredOutput!);
+
+      return await generateObject({
+        messages,
+        ...argsForExecute,
+        output,
+        schema: processedSchema as Schema<T>,
+        experimental_telemetry: {
+          ...this.experimental_telemetry,
+          ...telemetry,
+        },
+      });
+    } catch (e: unknown) {
+      const mastraError = new MastraError(
+        {
+          id: 'LLM_GENERATE_OBJECT_AI_SDK_EXECUTION_FAILED',
+          domain: ErrorDomain.LLM,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            modelId: model.modelId,
+            modelProvider: model.provider,
+            runId: runId ?? 'unknown',
+            threadId: threadId ?? 'unknown',
+            resourceId: resourceId ?? 'unknown',
+          },
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
+    }
   }
 
   async __stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>({
@@ -266,7 +378,31 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       toolChoice,
       onStepFinish: async (props: any) => {
-        await onStepFinish?.(props);
+        try {
+          await onStepFinish?.(props);
+        } catch (e: unknown) {
+          const mastraError = new MastraError(
+            {
+              id: 'LLM_STREAM_ON_STEP_FINISH_CALLBACK_EXECUTION_FAILED',
+              domain: ErrorDomain.LLM,
+              category: ErrorCategory.USER,
+              details: {
+                modelId: model.modelId,
+                modelProvider: model.provider,
+                runId: runId ?? 'unknown',
+                threadId: threadId ?? 'unknown',
+                resourceId: resourceId ?? 'unknown',
+                finishReason: props?.finishReason,
+                toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
+                toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
+                usage: props?.usage ? JSON.stringify(props.usage) : '',
+              },
+            },
+            e,
+          );
+          this.logger.trackException(mastraError);
+          throw mastraError;
+        }
 
         this.logger.debug('[LLM] - Stream Step Change:', {
           text: props?.text,
@@ -286,7 +422,31 @@ export class MastraLLM extends MastraLLMBase {
         }
       },
       onFinish: async (props: any) => {
-        await onFinish?.(props);
+        try {
+          await onFinish?.(props);
+        } catch (e: unknown) {
+          const mastraError = new MastraError(
+            {
+              id: 'LLM_STREAM_ON_FINISH_CALLBACK_EXECUTION_FAILED',
+              domain: ErrorDomain.LLM,
+              category: ErrorCategory.USER,
+              details: {
+                modelId: model.modelId,
+                modelProvider: model.provider,
+                runId: runId ?? 'unknown',
+                threadId: threadId ?? 'unknown',
+                resourceId: resourceId ?? 'unknown',
+                finishReason: props?.finishReason,
+                toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
+                toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
+                usage: props?.usage ? JSON.stringify(props.usage) : '',
+              },
+            },
+            e,
+          );
+          this.logger.trackException(mastraError);
+          throw mastraError;
+        }
 
         this.logger.debug('[LLM] - Stream Finished:', {
           text: props?.text,
@@ -318,19 +478,39 @@ export class MastraLLM extends MastraLLMBase {
       }
     }
 
-    return await streamText({
-      messages,
-      ...argsForExecute,
-      experimental_telemetry: {
-        ...this.experimental_telemetry,
-        ...telemetry,
-      },
-      experimental_output: schema
-        ? Output.object({
-            schema,
-          })
-        : undefined,
-    });
+    try {
+      return await streamText({
+        messages,
+        ...argsForExecute,
+        experimental_telemetry: {
+          ...this.experimental_telemetry,
+          ...telemetry,
+        },
+        experimental_output: schema
+          ? Output.object({
+              schema,
+            })
+          : undefined,
+      });
+    } catch (e: unknown) {
+      const mastraError = new MastraError(
+        {
+          id: 'LLM_STREAM_TEXT_AI_SDK_EXECUTION_FAILED',
+          domain: ErrorDomain.LLM,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            modelId: model.modelId,
+            modelProvider: model.provider,
+            runId: runId ?? 'unknown',
+            threadId: threadId ?? 'unknown',
+            resourceId: resourceId ?? 'unknown',
+          },
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
+    }
   }
 
   async __streamObject<T extends ZodSchema | JSONSchema7 | undefined>({
@@ -369,7 +549,31 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       toolChoice,
       onStepFinish: async (props: any) => {
-        await onStepFinish?.(props);
+        try {
+          await onStepFinish?.(props);
+        } catch (e: unknown) {
+          const mastraError = new MastraError(
+            {
+              id: 'LLM_STREAM_OBJECT_ON_STEP_FINISH_CALLBACK_EXECUTION_FAILED',
+              domain: ErrorDomain.LLM,
+              category: ErrorCategory.USER,
+              details: {
+                modelId: model.modelId,
+                modelProvider: model.provider,
+                runId: runId ?? 'unknown',
+                threadId: threadId ?? 'unknown',
+                resourceId: resourceId ?? 'unknown',
+                usage: props?.usage ? JSON.stringify(props.usage) : '',
+                toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
+                toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
+                finishReason: props?.finishReason,
+              },
+            },
+            e,
+          );
+          this.logger.trackException(mastraError);
+          throw mastraError;
+        }
 
         this.logger.debug('[LLM] - Stream Step Change:', {
           text: props?.text,
@@ -391,7 +595,31 @@ export class MastraLLM extends MastraLLMBase {
         }
       },
       onFinish: async (props: any) => {
-        await onFinish?.(props);
+        try {
+          await onFinish?.(props);
+        } catch (e: unknown) {
+          const mastraError = new MastraError(
+            {
+              id: 'LLM_STREAM_OBJECT_ON_FINISH_CALLBACK_EXECUTION_FAILED',
+              domain: ErrorDomain.LLM,
+              category: ErrorCategory.USER,
+              details: {
+                modelId: model.modelId,
+                modelProvider: model.provider,
+                runId: runId ?? 'unknown',
+                threadId: threadId ?? 'unknown',
+                resourceId: resourceId ?? 'unknown',
+                toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
+                toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
+                finishReason: props?.finishReason,
+                usage: props?.usage ? JSON.stringify(props.usage) : '',
+              },
+            },
+            e,
+          );
+          this.logger.trackException(mastraError);
+          throw mastraError;
+        }
 
         this.logger.debug('[LLM] - Stream Finished:', {
           text: props?.text,
@@ -407,29 +635,44 @@ export class MastraLLM extends MastraLLMBase {
       ...rest,
     };
 
-    let schema: z.ZodType<T> | Schema<T>;
-    let output = 'object';
-
-    if (typeof (structuredOutput as any).parse === 'function') {
-      schema = structuredOutput as z.ZodType<T>;
-      if (schema instanceof z.ZodArray) {
-        output = 'array';
-        schema = schema._def.type as z.ZodType<T>;
-      }
-    } else {
-      schema = jsonSchema(structuredOutput as JSONSchema7) as Schema<T>;
+    let output: any = 'object';
+    if (structuredOutput instanceof z.ZodArray) {
+      output = 'array';
+      structuredOutput = structuredOutput._def.type;
     }
 
-    return streamObject({
-      messages,
-      ...argsForExecute,
-      output: output as any,
-      schema,
-      experimental_telemetry: {
-        ...this.experimental_telemetry,
-        ...telemetry,
-      },
-    });
+    try {
+      const processedSchema = this._applySchemaCompat(structuredOutput!);
+
+      return streamObject({
+        messages,
+        ...argsForExecute,
+        output,
+        schema: processedSchema as Schema<T>,
+        experimental_telemetry: {
+          ...this.experimental_telemetry,
+          ...telemetry,
+        },
+      });
+    } catch (e: unknown) {
+      const mastraError = new MastraError(
+        {
+          id: 'LLM_STREAM_OBJECT_AI_SDK_EXECUTION_FAILED',
+          domain: ErrorDomain.LLM,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            modelId: model.modelId,
+            modelProvider: model.provider,
+            runId: runId ?? 'unknown',
+            threadId: threadId ?? 'unknown',
+            resourceId: resourceId ?? 'unknown',
+          },
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
+    }
   }
 
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
@@ -474,95 +717,5 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       ...rest,
     })) as unknown as StreamReturn<Z>;
-  }
-
-  protected convertToUIMessages(messages: CoreMessage[]): AiMessageType[] {
-    function addToolMessageToChat({
-      toolMessage,
-      messages,
-      toolResultContents,
-    }: {
-      toolMessage: CoreToolMessage;
-      messages: Array<AiMessageType>;
-      toolResultContents: Array<ToolResultPart>;
-    }): { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> } {
-      const chatMessages = messages.map(message => {
-        if (message.toolInvocations) {
-          return {
-            ...message,
-            toolInvocations: message.toolInvocations.map(toolInvocation => {
-              const toolResult = toolMessage.content.find(tool => tool.toolCallId === toolInvocation.toolCallId);
-
-              if (toolResult) {
-                return {
-                  ...toolInvocation,
-                  state: 'result',
-                  result: toolResult.result,
-                };
-              }
-
-              return toolInvocation;
-            }),
-          };
-        }
-
-        return message;
-      }) as Array<AiMessageType>;
-
-      const resultContents = [...toolResultContents, ...toolMessage.content];
-
-      return { chatMessages, toolResultContents: resultContents };
-    }
-
-    const { chatMessages } = messages.reduce(
-      (obj: { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> }, message) => {
-        if (message.role === 'tool') {
-          return addToolMessageToChat({
-            toolMessage: message as CoreToolMessage,
-            messages: obj.chatMessages,
-            toolResultContents: obj.toolResultContents,
-          });
-        }
-
-        let textContent = '';
-        let toolInvocations: Array<ToolInvocation> = [];
-
-        if (typeof message.content === 'string') {
-          textContent = message.content;
-        } else if (typeof message.content === 'number') {
-          textContent = String(message.content);
-        } else if (Array.isArray(message.content)) {
-          for (const content of message.content) {
-            if (content.type === 'text') {
-              textContent += content.text;
-            } else if (content.type === 'tool-call') {
-              const toolResult = obj.toolResultContents.find(tool => tool.toolCallId === content.toolCallId);
-              toolInvocations.push({
-                state: toolResult ? 'result' : 'call',
-                toolCallId: content.toolCallId,
-                toolName: content.toolName,
-                args: content.args,
-                result: toolResult?.result,
-              });
-            }
-          }
-        }
-
-        obj.chatMessages.push({
-          id: (message as MessageType).id,
-          role: message.role as AiMessageType['role'],
-          content: textContent,
-          toolInvocations,
-        });
-
-        return obj;
-      },
-      { chatMessages: [], toolResultContents: [] } as {
-        chatMessages: Array<AiMessageType>;
-        toolResultContents: Array<ToolResultPart>;
-      },
-    );
-
-    return chatMessages;
   }
 }

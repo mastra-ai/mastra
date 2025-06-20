@@ -5,15 +5,22 @@ description: "Documentation for the CloudflareDeployer class, which deploys Mast
 
 # CloudflareDeployer
 
-The CloudflareDeployer deploys Mastra applications to Cloudflare Workers, handling configuration, environment variables, and route management. It extends the abstract Deployer class to provide Cloudflare-specific deployment functionality.
+The CloudflareDeployer deploys standalone Mastra applications to Cloudflare Workers, handling configuration, environment variables, and route management. It extends the abstract Deployer class to provide Cloudflare-specific deployment functionality.
+
+## Installation
+
+```bash copy
+npm install @mastra/deployer-cloudflare@latest
+```
 
 ## Usage Example
 
-```typescript
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 const mastra = new Mastra({
+  // ...
   deployer: new CloudflareDeployer({
     scope: "your-account-id",
     projectName: "your-project-name",
@@ -34,16 +41,15 @@ const mastra = new Mastra({
         binding: "binding-name",
         database_name: "database-name",
         database_id: "database-id",
-      }
+      },
     ],
     kvNamespaces: [
       {
         binding: "binding-name",
-        id: "namespace-id"
-      }
+        id: "namespace-id",
+      },
     ],
   }),
-  // ... other Mastra configuration options
 });
 ```
 
@@ -232,7 +238,7 @@ The build process generates the following output structure in the `.mastra/outpu
 ├── wrangler.json # Cloudflare Worker configuration
 └── assets/ # Static assets and dependencies
 
-````
+```
 
 ### Wrangler Configuration
 
@@ -243,7 +249,10 @@ The CloudflareDeployer automatically generates a `wrangler.json` configuration f
   "name": "your-project-name",
   "main": "./output/index.mjs",
   "compatibility_date": "2024-12-02",
-  "compatibility_flags": ["nodejs_compat", "nodejs_compat_populate_process_env"],
+  "compatibility_flags": [
+    "nodejs_compat",
+    "nodejs_compat_populate_process_env"
+  ],
   "observability": {
     "logs": {
       "enabled": true
@@ -262,10 +271,12 @@ The CloudflareDeployer automatically generates a `wrangler.json` configuration f
     // KV namespace bindings if specified
   ]
 }
-````
+```
+
 Compatibility flags:
-  - `nodejs_compat`: Enables Node.js compatibility in Workers.
-  - `nodejs_compat_populate_process_env`: Populates `process.env` with variables from `vars`.
+
+- `nodejs_compat`: Enables Node.js compatibility in Workers.
+- `nodejs_compat_populate_process_env`: Populates `process.env` with variables from `vars`.
 
 ### Route Configuration
 

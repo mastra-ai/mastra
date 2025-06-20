@@ -193,7 +193,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    *
    * @example
    * ```typescript
-   * voice.addInstuctions('You are a helpful assistant.');
+   * voice.addInstructions('You are a helpful assistant.');
    * ```
    */
   addInstructions(instructions?: string) {
@@ -284,6 +284,15 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    */
   updateConfig(sessionConfig: unknown): void {
     this.sendEvent('session.update', { session: sessionConfig });
+  }
+
+  /**
+   * Checks if listening capabilities are enabled.
+   *
+   * @returns {Promise<{ enabled: boolean }>}
+   */
+  async getListener() {
+    return { enabled: true };
   }
 
   /**

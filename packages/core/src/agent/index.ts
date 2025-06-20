@@ -1,22 +1,19 @@
 import { randomUUID } from 'crypto';
 import type {
-  AssistantContent,
-  CoreAssistantMessage,
   CoreMessage,
-  CoreToolMessage,
-  CoreUserMessage,
   GenerateObjectResult,
   GenerateTextResult,
   StreamObjectResult,
   StreamTextResult,
   TextPart,
-  ToolCallPart,
-  UserContent,
+  UIMessage,
 } from 'ai';
+import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
@@ -29,11 +26,13 @@ import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { RuntimeContext } from '../runtime-context';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
-import { makeCoreTool, createMastraProxy, ensureToolProperties, ensureAllMessagesAreCoreMessages } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
+import { MessageList } from './message-list';
+import type { MessageInput } from './message-list';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -43,9 +42,12 @@ import type {
   ToolsetsInput,
   ToolsInput,
   DynamicArgument,
+  AgentMemoryOption,
 } from './types';
 
+export { MessageList };
 export * from './types';
+type IDGenerator = () => string;
 
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
   if (value instanceof Promise) {
@@ -53,6 +55,19 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) 
   }
 
   return cb(value);
+}
+
+// Helper to resolve threadId from args (supports both new and old API)
+function resolveThreadIdFromArgs(args: {
+  memory?: AgentMemoryOption;
+  threadId?: string;
+}): (Partial<StorageThreadType> & { id: string }) | undefined {
+  if (args?.memory?.thread) {
+    if (typeof args.memory.thread === 'string') return { id: args.memory.thread };
+    if (typeof args.memory.thread === 'object' && args.memory.thread.id) return args.memory.thread;
+  }
+  if (args?.threadId) return { id: args.threadId };
+  return undefined;
 }
 
 @InstrumentClass({
@@ -72,6 +87,9 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) 
     'getTools',
     'getLLM',
     'getWorkflows',
+    'getDefaultGenerateOptions',
+    'getDefaultStreamOptions',
+    'getDescription',
   ],
 })
 export class Agent<
@@ -87,8 +105,8 @@ export class Agent<
   #mastra?: Mastra;
   #memory?: MastraMemory;
   #workflows?: DynamicArgument<Record<string, Workflow>>;
-  #defaultGenerateOptions: AgentGenerateOptions;
-  #defaultStreamOptions: AgentStreamOptions;
+  #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
+  #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
   #tools: DynamicArgument<TTools>;
   /** @deprecated This property is deprecated. Use evals instead. */
   metrics: TMetrics;
@@ -105,7 +123,18 @@ export class Agent<
     this.#description = config.description;
 
     if (!config.model) {
-      throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
+      const mastraError = new MastraError({
+        id: 'AGENT_CONSTRUCTOR_MODEL_REQUIRED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: config.name,
+        },
+        text: `LanguageModel is required to create an Agent. Please provide the 'model'.`,
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     this.model = config.model;
@@ -177,7 +206,18 @@ export class Agent<
 
   get voice() {
     if (typeof this.#instructions === 'function') {
-      throw new Error('Voice is not compatible when instructions are a function. Please use getVoice() instead.');
+      const mastraError = new MastraError({
+        id: 'AGENT_VOICE_INCOMPATIBLE_WITH_FUNCTION_INSTRUCTIONS',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'Voice is not compatible when instructions are a function. Please use getVoice() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     return this.#voice;
@@ -217,9 +257,18 @@ export class Agent<
     this.logger.warn('The instructions property is deprecated. Please use getInstructions() instead.');
 
     if (typeof this.#instructions === 'function') {
-      throw new Error(
-        'Instructions are not compatible when instructions are a function. Please use getInstructions() instead.',
-      );
+      const mastraError = new MastraError({
+        id: 'AGENT_INSTRUCTIONS_INCOMPATIBLE_WITH_FUNCTION_INSTRUCTIONS',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'Instructions are not compatible when instructions are a function. Please use getInstructions() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     return this.#instructions;
@@ -235,10 +284,18 @@ export class Agent<
     const result = this.#instructions({ runtimeContext });
     return resolveMaybePromise(result, instructions => {
       if (!instructions) {
-        this.logger.error(`[Agent:${this.name}] - Function-based instructions returned empty value`);
-        throw new Error(
-          'Instructions are required to use an Agent. The function-based instructions returned an empty value.',
-        );
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_INSTRUCTIONS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: 'Instructions are required to use an Agent. The function-based instructions returned an empty value.',
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       return instructions;
@@ -249,11 +306,78 @@ export class Agent<
     return this.#description ?? '';
   }
 
+  public getDefaultGenerateOptions({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): AgentGenerateOptions | Promise<AgentGenerateOptions> {
+    if (typeof this.#defaultGenerateOptions !== 'function') {
+      return this.#defaultGenerateOptions;
+    }
+
+    const result = this.#defaultGenerateOptions({ runtimeContext });
+    return resolveMaybePromise(result, options => {
+      if (!options) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_DEFAULT_GENERATE_OPTIONS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based default generate options returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      return options;
+    });
+  }
+
+  public getDefaultStreamOptions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+    | AgentStreamOptions
+    | Promise<AgentStreamOptions> {
+    if (typeof this.#defaultStreamOptions !== 'function') {
+      return this.#defaultStreamOptions;
+    }
+
+    const result = this.#defaultStreamOptions({ runtimeContext });
+    return resolveMaybePromise(result, options => {
+      if (!options) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_DEFAULT_STREAM_OPTIONS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based default stream options returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      return options;
+    });
+  }
+
   get tools() {
     this.logger.warn('The tools property is deprecated. Please use getTools() instead.');
 
     if (typeof this.#tools === 'function') {
-      throw new Error('Tools are not compatible when tools are a function. Please use getTools() instead.');
+      const mastraError = new MastraError({
+        id: 'AGENT_GET_TOOLS_FUNCTION_INCOMPATIBLE_WITH_TOOL_FUNCTION_TYPE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'Tools are not compatible when tools are a function. Please use getTools() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     return ensureToolProperties(this.#tools) as TTools;
@@ -270,10 +394,18 @@ export class Agent<
 
     return resolveMaybePromise(result, tools => {
       if (!tools) {
-        this.logger.error(`[Agent:${this.name}] - Function-based tools returned empty value`);
-        throw new Error(
-          'Tools are required when using a function to provide them. The function returned an empty value.',
-        );
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_TOOLS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based tools returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       return ensureToolProperties(tools) as TTools;
@@ -284,7 +416,18 @@ export class Agent<
     this.logger.warn('The llm property is deprecated. Please use getLLM() instead.');
 
     if (typeof this.model === 'function') {
-      throw new Error('LLM is not compatible when model is a function. Please use getLLM() instead.');
+      const mastraError = new MastraError({
+        id: 'AGENT_LLM_GETTER_INCOMPATIBLE_WITH_FUNCTION_MODEL',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'LLM is not compatible when model is a function. Please use getLLM() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     return this.getLLM();
@@ -326,8 +469,18 @@ export class Agent<
     | Promise<MastraLanguageModel> {
     if (typeof this.model !== 'function') {
       if (!this.model) {
-        this.logger.error(`[Agent:${this.name}] - No model provided`);
-        throw new Error('Model is required to use an Agent.');
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - No model provided`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       return this.model;
@@ -336,8 +489,18 @@ export class Agent<
     const result = this.model({ runtimeContext });
     return resolveMaybePromise(result, model => {
       if (!model) {
-        this.logger.error(`[Agent:${this.name}] - Function-based model returned empty value`);
-        throw new Error('Model is required to use an Agent. The function-based model returned an empty value.');
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_MODEL_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based model returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       return model;
@@ -384,11 +547,33 @@ export class Agent<
     message,
     runtimeContext = new RuntimeContext(),
   }: {
-    message: CoreUserMessage;
+    message: string | MessageInput;
     runtimeContext?: RuntimeContext;
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ runtimeContext });
+
+    const normMessage = new MessageList().add(message, 'user').get.all.ui().at(-1);
+    if (!normMessage) {
+      throw new Error(`Could not generate title from input ${JSON.stringify(message)}`);
+    }
+
+    const partsToGen: TextPart[] = [];
+    for (const part of normMessage.parts) {
+      if (part.type === `text`) {
+        partsToGen.push(part);
+      } else if (part.type === `source`) {
+        partsToGen.push({
+          type: 'text',
+          text: `User added URL: ${part.source.url.substring(0, 100)}`,
+        });
+      } else if (part.type === `file`) {
+        partsToGen.push({
+          type: 'text',
+          text: `User added ${part.mimeType} file: ${part.data.substring(0, 100)}`,
+        });
+      }
+    }
 
     const { text } = await llm.__text<{ title: string }>({
       runtimeContext,
@@ -404,7 +589,7 @@ export class Agent<
         },
         {
           role: 'user',
-          content: JSON.stringify(message),
+          content: JSON.stringify(partsToGen),
         },
       ],
     });
@@ -414,66 +599,66 @@ export class Agent<
     return cleanedText;
   }
 
-  getMostRecentUserMessage(messages: Array<CoreMessage>) {
+  getMostRecentUserMessage(messages: Array<UIMessage>) {
     const userMessages = messages.filter(message => message.role === 'user');
     return userMessages.at(-1);
   }
 
-  async genTitle(userMessage: CoreUserMessage | undefined) {
+  async genTitle(userMessage: string | MessageInput | undefined, runtimeContext: RuntimeContext) {
     let title = `New Thread ${new Date().toISOString()}`;
     try {
       if (userMessage) {
-        title = await this.generateTitleFromUserMessage({
-          message: userMessage,
-        });
+        const normMessage = new MessageList().add(userMessage, 'user').get.all.ui().at(-1);
+        if (normMessage) {
+          title = await this.generateTitleFromUserMessage({
+            message: normMessage,
+            runtimeContext,
+          });
+        }
       }
     } catch (e) {
-      console.error('Error generating title:', e);
+      this.logger.error('Error generating title:', e);
     }
     return title;
   }
 
+  /* @deprecated use agent.getMemory() and query memory directly */
   async fetchMemory({
     threadId,
     thread: passedThread,
     memoryConfig,
     resourceId,
+    runId,
     userMessages,
     systemMessage,
-    runId,
+    messageList = new MessageList({ threadId, resourceId }),
   }: {
     resourceId: string;
     threadId: string;
     thread?: StorageThreadType;
     memoryConfig?: MemoryConfig;
-    userMessages: CoreMessage[];
-    systemMessage: CoreMessage;
-    time?: Date;
-    keyword?: string;
+    userMessages?: CoreMessage[];
+    systemMessage?: CoreMessage;
     runId?: string;
+    messageList?: MessageList;
   }) {
     const memory = this.getMemory();
     if (memory) {
       const thread = passedThread ?? (await memory.getThreadById({ threadId }));
 
       if (!thread) {
-        return { threadId: threadId || '', messages: userMessages };
+        // If no thread, nothing to fetch from memory.
+        // The messageList already contains the current user messages and system message.
+        return { threadId: threadId || '', messages: userMessages || [] };
       }
 
-      const newMessages = ensureAllMessagesAreCoreMessages(userMessages);
+      if (userMessages && userMessages.length > 0) {
+        messageList.add(userMessages, 'memory');
+      }
 
-      const now = Date.now();
-      const messages = newMessages.map((u, index) => {
-        return {
-          id: this.getMemory()?.generateId()!,
-          createdAt: new Date(now + index),
-          threadId: threadId,
-          ...u,
-          content: u.content as UserContent | AssistantContent,
-          role: u.role as 'user' | 'assistant',
-          type: 'text' as 'text' | 'tool-call' | 'tool-result',
-        };
-      });
+      if (systemMessage?.role === 'system') {
+        messageList.addSystem(systemMessage, 'memory');
+      }
 
       const [memoryMessages, memorySystemMessage] =
         threadId && memory
@@ -483,193 +668,55 @@ export class Agent<
                   threadId,
                   resourceId,
                   config: memoryConfig,
-                  systemMessage,
-                  vectorMessageSearch: messages
-                    .slice(-1)
-                    .map(m => {
-                      if (typeof m === `string`) {
-                        return m;
-                      }
-                      return m?.content || ``;
-                    })
-                    .join(`\n`),
+                  vectorMessageSearch: messageList.getLatestUserContent() || '',
                 })
-                .then(r => r.messages),
+                .then(r => r.messagesV2),
               memory.getSystemMessage({ threadId, memoryConfig }),
             ])
           : [[], null];
 
-      this.logger.debug('Saved messages to memory', {
+      this.logger.debug('Fetched messages from memory', {
         threadId,
         runId,
+        fetchedCount: memoryMessages.length,
       });
 
-      const processedMessages = memory.processMessages({
-        messages: this.sanitizeResponseMessages(memoryMessages),
+      if (memorySystemMessage) {
+        messageList.addSystem(memorySystemMessage, 'memory');
+      }
+
+      messageList.add(memoryMessages, 'memory');
+
+      const systemMessages =
+        messageList
+          .getSystemMessages()
+          ?.map(m => m.content)
+          ?.join(`\n`) ?? undefined;
+
+      const newMessages = messageList.get.input.v1() as CoreMessage[];
+
+      const processedMemoryMessages = memory.processMessages({
+        // these will be processed
+        messages: messageList.get.remembered.v1() as CoreMessage[],
+        // these are here for inspecting but shouldn't be returned by the processor
+        // - ex TokenLimiter needs to measure all tokens even though it's only processing remembered messages
         newMessages,
-        systemMessage: typeof systemMessage?.content === `string` ? systemMessage.content : undefined,
-        memorySystemMessage: memorySystemMessage ?? ``,
+        systemMessage: systemMessages,
+        memorySystemMessage: memorySystemMessage || undefined,
       });
+
+      const returnList = new MessageList()
+        .addSystem(systemMessages)
+        .add(processedMemoryMessages, 'memory')
+        .add(newMessages, 'user');
 
       return {
         threadId: thread.id,
-        messages: [
-          memorySystemMessage
-            ? {
-                role: 'system' as const,
-                content: memorySystemMessage,
-              }
-            : null,
-          ...processedMessages,
-          ...newMessages,
-        ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
+        messages: returnList.get.all.prompt(),
       };
     }
 
-    return { threadId: threadId || '', messages: userMessages };
-  }
-
-  private getResponseMessages({
-    messages,
-    threadId,
-    resourceId,
-    now,
-    experimental_generateMessageId,
-  }: {
-    messages: (CoreMessage | CoreAssistantMessage)[];
-    threadId: string;
-    resourceId: string;
-    now: number;
-    experimental_generateMessageId: any;
-  }) {
-    if (!messages) return [];
-    const messagesArray = Array.isArray(messages) ? messages : [messages];
-
-    return this.sanitizeResponseMessages(messagesArray).map((message: CoreMessage | CoreAssistantMessage, index) => {
-      const messageId = (`id` in message && message.id) || experimental_generateMessageId?.() || randomUUID();
-      let toolCallIds: string[] | undefined;
-      let toolCallArgs: Record<string, unknown>[] | undefined;
-      let toolNames: string[] | undefined;
-      let type: 'text' | 'tool-call' | 'tool-result' = 'text';
-
-      if (message.role === 'tool') {
-        toolCallIds = (message as CoreToolMessage).content.map(content => content.toolCallId);
-        type = 'tool-result';
-      }
-      if (message.role === 'assistant') {
-        const assistantContent = (message as CoreAssistantMessage).content as Array<TextPart | ToolCallPart>;
-
-        const assistantToolCalls = assistantContent
-          .map(content => {
-            if (content.type === 'tool-call') {
-              return {
-                toolCallId: content.toolCallId,
-                toolArgs: content.args,
-                toolName: content.toolName,
-              };
-            }
-            return undefined;
-          })
-          ?.filter(Boolean) as Array<{
-          toolCallId: string;
-          toolArgs: Record<string, unknown>;
-          toolName: string;
-        }>;
-
-        toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
-
-        toolCallArgs = assistantToolCalls?.map(toolCall => toolCall.toolArgs);
-        toolNames = assistantToolCalls?.map(toolCall => toolCall.toolName);
-        type = assistantContent?.[0]?.type as 'text' | 'tool-call' | 'tool-result';
-      }
-
-      return {
-        id: messageId,
-        threadId: threadId,
-        resourceId: resourceId,
-        role: message.role as any,
-        content: message.content as any,
-        createdAt: new Date(now + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
-        toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
-        toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
-        toolNames: toolNames?.length ? toolNames : undefined,
-        type,
-      };
-    });
-  }
-
-  sanitizeResponseMessages(messages: Array<CoreMessage>): Array<CoreMessage> {
-    let toolResultIds: Array<string> = [];
-    let toolCallIds: Array<string> = [];
-
-    for (const message of messages) {
-      if (!Array.isArray(message.content)) continue;
-
-      if (message.role === 'tool') {
-        for (const content of message.content) {
-          if (content.type === 'tool-result') {
-            toolResultIds.push(content.toolCallId);
-          }
-        }
-      } else if (message.role === 'assistant' || message.role === 'user') {
-        for (const content of message.content) {
-          if (typeof content !== `string`) {
-            if (content.type === `tool-call`) {
-              toolCallIds.push(content.toolCallId);
-            }
-          }
-        }
-      }
-    }
-
-    const messagesBySanitizedContent = messages.map(message => {
-      if (message.role !== 'assistant' && message.role !== `tool` && message.role !== `user`) return message;
-
-      if (!Array.isArray(message.content)) {
-        return message;
-      }
-
-      const sanitizedContent = message.content.filter(content => {
-        if (content.type === `tool-call`) {
-          return toolResultIds.includes(content.toolCallId);
-        }
-        if (content.type === `text`) {
-          return content.text.trim() !== ``;
-        }
-        if (content.type === `tool-result`) {
-          return toolCallIds.includes(content.toolCallId);
-        }
-        return true;
-      });
-
-      return {
-        ...message,
-        content: sanitizedContent,
-      };
-    });
-
-    return messagesBySanitizedContent.filter(message => {
-      if (typeof message.content === `string`) {
-        if (message.role === 'assistant') {
-          return true;
-        }
-        return message.content !== '';
-      }
-
-      if (Array.isArray(message.content)) {
-        return (
-          message.content.length &&
-          message.content.every(c => {
-            if (c.type === `text`) {
-              return c.text && c.text !== '';
-            }
-            return true;
-          })
-        );
-      }
-
-      return true;
-    }) as Array<CoreMessage>;
+    return { threadId: threadId || '', messages: userMessages || [] };
   }
 
   private async getMemoryTools({
@@ -727,13 +774,24 @@ export class Agent<
                           ) ?? undefined
                         );
                       } catch (err) {
-                        this.logger.error(`[Agent:${this.name}] - Failed memory tool execution`, {
-                          error: err,
-                          runId,
-                          threadId,
-                          resourceId,
-                        });
-                        throw err;
+                        const mastraError = new MastraError(
+                          {
+                            id: 'AGENT_MEMORY_TOOL_EXECUTION_FAILED',
+                            domain: ErrorDomain.AGENT,
+                            category: ErrorCategory.USER,
+                            details: {
+                              agentName: this.name,
+                              runId: runId || '',
+                              threadId: threadId || '',
+                              resourceId: resourceId || '',
+                            },
+                            text: `[Agent:${this.name}] - Failed memory tool execution`,
+                          },
+                          err,
+                        );
+                        this.logger.trackException(mastraError);
+                        this.logger.error(mastraError.toString());
+                        throw mastraError;
                       }
                     }
                   : undefined,
@@ -939,13 +997,24 @@ export class Agent<
                 });
                 return result;
               } catch (err) {
-                this.logger.error(`[Agent:${this.name}] - Failed workflow tool execution`, {
-                  error: err,
-                  runId,
-                  threadId,
-                  resourceId,
-                });
-                throw err;
+                const mastraError = new MastraError(
+                  {
+                    id: 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED',
+                    domain: ErrorDomain.AGENT,
+                    category: ErrorCategory.USER,
+                    details: {
+                      agentName: this.name,
+                      runId: runId || '',
+                      threadId: threadId || '',
+                      resourceId: resourceId || '',
+                    },
+                    text: `[Agent:${this.name}] - Failed workflow tool execution`,
+                  },
+                  err,
+                );
+                this.logger.trackException(mastraError);
+                this.logger.error(mastraError.toString());
+                throw mastraError;
               }
             },
           };
@@ -1030,63 +1099,30 @@ export class Agent<
     };
   }
 
-  async preExecute({
-    resourceId,
-    runId,
-    threadId,
-    thread,
-    memoryConfig,
-    messages,
-    systemMessage,
-  }: {
-    runId?: string;
-    threadId: string;
-    thread?: StorageThreadType;
-    memoryConfig?: MemoryConfig;
-    messages: CoreMessage[];
-    resourceId: string;
-    systemMessage: CoreMessage;
-  }) {
-    let coreMessages: CoreMessage[] = [];
-    let threadIdToUse = threadId;
-
-    this.logger.debug(`Saving user messages in memory for agent ${this.name}`, { runId });
-    const saveMessageResponse = await this.fetchMemory({
-      threadId,
-      thread,
-      resourceId,
-      userMessages: messages,
-      memoryConfig,
-      systemMessage,
-    });
-
-    coreMessages = saveMessageResponse.messages;
-    threadIdToUse = saveMessageResponse.threadId;
-    return { coreMessages, threadIdToUse };
-  }
-
   __primitive({
     instructions,
     messages,
     context,
-    threadId,
+    thread,
     memoryConfig,
     resourceId,
     runId,
     toolsets,
     clientTools,
     runtimeContext,
+    generateMessageId,
   }: {
     instructions?: string;
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
-    threadId?: string;
+    thread?: (Partial<StorageThreadType> & { id: string }) | undefined;
     memoryConfig?: MemoryConfig;
     context?: CoreMessage[];
     runId?: string;
-    messages: CoreMessage[];
+    messages: string | string[] | CoreMessage[] | AiMessageType[];
     runtimeContext: RuntimeContext;
+    generateMessageId: undefined | IDGenerator;
   }) {
     return {
       before: async () => {
@@ -1094,69 +1130,20 @@ export class Agent<
           this.logger.debug(`[Agents:${this.name}] - Starting generation`, { runId });
         }
 
-        const systemMessage: CoreMessage = {
-          role: 'system',
-          content: instructions || `${this.instructions}.`,
-        };
-
-        let coreMessages = messages;
-        let threadIdToUse = threadId;
-        let thread: StorageThreadType | null | undefined;
-
         const memory = this.getMemory();
 
-        if (threadId && memory && !resourceId) {
-          throw new Error(
-            `A resourceId must be provided when passing a threadId and using Memory. Saw threadId ${threadId} but resourceId is ${resourceId}`,
-          );
-        }
+        const toolEnhancements = [
+          // toolsets
+          toolsets && Object.keys(toolsets || {}).length > 0
+            ? `toolsets present (${Object.keys(toolsets || {}).length} tools)`
+            : undefined,
 
-        if (memory && resourceId) {
-          this.logger.debug(
-            `[Agent:${this.name}] - Memory persistence enabled: store=${this.getMemory()?.constructor.name}, resourceId=${resourceId}`,
-            {
-              runId,
-              resourceId,
-              threadId: threadIdToUse,
-              memoryStore: this.getMemory()?.constructor.name,
-            },
-          );
-
-          thread = threadIdToUse ? await memory.getThreadById({ threadId: threadIdToUse }) : undefined;
-
-          if (!thread) {
-            thread = await memory.createThread({
-              threadId: threadIdToUse,
-              resourceId,
-              memoryConfig,
-            });
-          }
-          threadIdToUse = thread.id;
-
-          const preExecuteResult = await this.preExecute({
-            resourceId,
-            runId,
-            threadId: threadIdToUse,
-            thread,
-            memoryConfig,
-            messages,
-            systemMessage,
-          });
-
-          coreMessages = preExecuteResult.coreMessages;
-          threadIdToUse = preExecuteResult.threadIdToUse;
-        }
-
-        let convertedTools: Record<string, CoreTool> | undefined;
-
-        const reasons = [];
-        if (toolsets && Object.keys(toolsets || {}).length > 0) {
-          reasons.push(`toolsets present (${Object.keys(toolsets || {}).length} tools)`);
-        }
-        if (this.getMemory() && resourceId) {
-          reasons.push('memory and resourceId available');
-        }
-        this.logger.debug(`[Agent:${this.name}] - Enhancing tools: ${reasons.join(', ')}`, {
+          // memory tools
+          memory && resourceId ? 'memory and resourceId available' : undefined,
+        ]
+          .filter(Boolean)
+          .join(', ');
+        this.logger.debug(`[Agent:${this.name}] - Enhancing tools: ${toolEnhancements}`, {
           runId,
           toolsets: toolsets ? Object.keys(toolsets) : undefined,
           clientTools: clientTools ? Object.keys(clientTools) : undefined,
@@ -1164,18 +1151,168 @@ export class Agent<
           hasResourceId: !!resourceId,
         });
 
-        convertedTools = await this.convertTools({
+        const threadId = thread?.id;
+
+        const convertedTools = await this.convertTools({
           toolsets,
           clientTools,
-          threadId: threadIdToUse,
+          threadId,
           resourceId,
           runId,
           runtimeContext,
         });
 
-        const messageObjects = [systemMessage, ...(context || []), ...coreMessages];
+        const messageList = new MessageList({ threadId, resourceId, generateMessageId })
+          .addSystem({
+            role: 'system',
+            content: instructions || `${this.instructions}.`,
+          })
+          .add(context || [], 'context');
 
-        return { messageObjects, convertedTools, threadId: threadIdToUse as string, thread };
+        if (!memory || (!threadId && !resourceId)) {
+          messageList.add(messages, 'user');
+          return {
+            messageObjects: messageList.get.all.prompt(),
+            convertedTools,
+            messageList,
+          };
+        }
+        if (!threadId || !resourceId) {
+          const mastraError = new MastraError({
+            id: 'AGENT_MEMORY_MISSING_RESOURCE_ID',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+              threadId: threadId || '',
+              resourceId: resourceId || '',
+            },
+            text: `A resourceId must be provided when passing a threadId and using Memory. Saw threadId ${threadId} but resourceId is ${resourceId}`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+        const store = memory.constructor.name;
+        this.logger.debug(
+          `[Agent:${this.name}] - Memory persistence enabled: store=${store}, resourceId=${resourceId}`,
+          {
+            runId,
+            resourceId,
+            threadId,
+            memoryStore: store,
+          },
+        );
+
+        let threadObject: StorageThreadType | undefined = undefined;
+        const existingThread = await memory.getThreadById({ threadId });
+        if (existingThread) {
+          if (
+            (!existingThread.metadata && thread.metadata) ||
+            (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
+          ) {
+            threadObject = await memory.saveThread({
+              thread: { ...existingThread, metadata: thread.metadata },
+              memoryConfig,
+            });
+          } else {
+            threadObject = existingThread;
+          }
+        } else {
+          threadObject = await memory.createThread({
+            threadId,
+            metadata: thread.metadata,
+            title: thread.title,
+            memoryConfig,
+            resourceId,
+          });
+        }
+
+        let [memoryMessages, memorySystemMessage, userContextMessage] =
+          thread.id && memory
+            ? await Promise.all([
+                memory
+                  .rememberMessages({
+                    threadId: threadObject.id,
+                    resourceId,
+                    config: memoryConfig,
+                    // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
+                    vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
+                  })
+                  .then(r => r.messagesV2),
+                memory.getSystemMessage({ threadId: threadObject.id, memoryConfig }),
+                memory.getUserContextMessage({ threadId: threadObject.id }),
+              ])
+            : [[], null, null];
+
+        this.logger.debug('Fetched messages from memory', {
+          threadId: threadObject.id,
+          runId,
+          fetchedCount: memoryMessages.length,
+        });
+
+        // So the agent doesn't get confused and start replying directly to messages
+        // that were added via semanticRecall from a different conversation,
+        // we need to pull those out and add to the system message.
+        const resultsFromOtherThreads = memoryMessages.filter(m => m.threadId !== threadObject.id);
+        if (resultsFromOtherThreads.length && !memorySystemMessage) {
+          memorySystemMessage = ``;
+        }
+        if (resultsFromOtherThreads.length) {
+          memorySystemMessage += `\nThe following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n${JSON.stringify(
+            // get v1 since they're closer to CoreMessages (which get sent to the LLM) but also include timestamps
+            new MessageList().add(resultsFromOtherThreads, 'memory').get.all.v1(),
+          )}\n<end_remembered_from_other_conversation>`;
+        }
+
+        if (memorySystemMessage) {
+          messageList.addSystem(memorySystemMessage, 'memory');
+        }
+
+        if (userContextMessage) {
+          messageList.add(userContextMessage, 'context');
+        }
+
+        messageList
+          .add(
+            memoryMessages.filter(m => m.threadId === threadObject.id), // filter out messages from other threads. those are added to system message above
+            'memory',
+          )
+          // add new user messages to the list AFTER remembered messages to make ordering more reliable
+          .add(messages, 'user');
+
+        const systemMessage =
+          messageList
+            .getSystemMessages()
+            ?.map(m => m.content)
+            ?.join(`\n`) ?? undefined;
+
+        const processedMemoryMessages = memory.processMessages({
+          // these will be processed
+          messages: messageList.get.remembered.v1() as CoreMessage[],
+          // these are here for inspecting but shouldn't be returned by the processor
+          // - ex TokenLimiter needs to measure all tokens even though it's only processing remembered messages
+          newMessages: messageList.get.input.v1() as CoreMessage[],
+          systemMessage,
+          memorySystemMessage: memorySystemMessage || undefined,
+        });
+
+        const processedList = new MessageList({ threadId: threadObject.id, resourceId })
+          .addSystem(instructions || `${this.instructions}.`)
+          .addSystem(memorySystemMessage)
+          .add(context || [], 'context')
+          .add(userContextMessage || [], 'context')
+          .add(processedMemoryMessages, 'memory')
+          .add(messageList.get.input.v2(), 'user')
+          .get.all.prompt();
+
+        return {
+          convertedTools,
+          thread: threadObject,
+          messageList,
+          // add old processed messages + new input messages
+          messageObjects: processedList,
+        };
       },
       after: async ({
         result,
@@ -1184,15 +1321,15 @@ export class Agent<
         memoryConfig,
         outputText,
         runId,
-        experimental_generateMessageId,
+        messageList,
       }: {
         runId: string;
         result: Record<string, any>;
         thread: StorageThreadType | null | undefined;
-        threadId: string;
+        threadId?: string;
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
-        experimental_generateMessageId: any;
+        messageList: MessageList;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -1221,26 +1358,24 @@ export class Agent<
 
         if (memory && resourceId && thread) {
           try {
-            const userMessage = this.getMostRecentUserMessage(messages);
-            const now = Date.now();
-            const threadMessages = this.sanitizeResponseMessages(ensureAllMessagesAreCoreMessages(messages)).map(
-              (u, index) => {
-                return {
-                  id:
-                    (`id` in u && u.id) || experimental_generateMessageId
-                      ? experimental_generateMessageId()
-                      : this.getMemory()?.generateId()!,
-                  createdAt: new Date(now + index),
-                  threadId: thread.id,
-                  resourceId: resourceId,
-                  ...u,
-                  content: u.content as UserContent | AssistantContent,
-                  role: u.role as 'user' | 'assistant',
-                  type: 'text' as 'text' | 'tool-call' | 'tool-result',
-                };
-              },
-            );
-            const dateResponseMessagesFrom = (threadMessages.at(-1)?.createdAt?.getTime?.() || Date.now()) + 1;
+            // Add LLM response messages to the list
+            let responseMessages = result.response.messages;
+            if (!responseMessages && result.object) {
+              responseMessages = [
+                {
+                  role: 'assistant',
+                  content: [
+                    {
+                      type: 'text',
+                      text: outputText, // outputText contains the stringified object
+                    },
+                  ],
+                },
+              ];
+            }
+            if (responseMessages) {
+              messageList.add(responseMessages, 'response');
+            }
 
             // renaming the thread doesn't need to block finishing the req
             void (async () => {
@@ -1249,7 +1384,11 @@ export class Agent<
               }
 
               const config = memory.getMergedThreadConfig(memoryConfig);
-              const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
+              const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
+              const title =
+                config?.threads?.generateTitle && userMessage
+                  ? await this.genTitle(userMessage, runtimeContext)
+                  : undefined;
               if (!title) {
                 return;
               }
@@ -1262,46 +1401,40 @@ export class Agent<
                 metadata: thread.metadata,
               });
             })();
-            let responseMessages = result.response.messages;
-            if (!responseMessages && result.object) {
-              responseMessages = [
-                {
-                  role: 'assistant',
-                  content: [
-                    {
-                      type: 'text',
-                      text: outputText,
-                    },
-                  ],
-                },
-              ];
-            }
+
             await memory.saveMessages({
-              messages: [
-                ...threadMessages,
-                ...this.getResponseMessages({
-                  threadId,
-                  resourceId,
-                  messages: responseMessages,
-                  now: dateResponseMessagesFrom,
-                  experimental_generateMessageId,
-                }),
-              ],
+              messages: messageList.drainUnsavedMessages(),
               memoryConfig,
             });
           } catch (e) {
-            const message = e instanceof Error ? e.message : JSON.stringify(e);
-            this.logger.error('Error saving response', {
-              error: message,
-              runId,
-              result: resToLog,
-              threadId,
-            });
+            if (e instanceof MastraError) {
+              throw e;
+            }
+            const mastraError = new MastraError(
+              {
+                id: 'AGENT_MEMORY_PERSIST_RESPONSE_MESSAGES_FAILED',
+                domain: ErrorDomain.AGENT,
+                category: ErrorCategory.SYSTEM,
+                details: {
+                  agentName: this.name,
+                  runId: runId || '',
+                  threadId: threadId || '',
+                  result: JSON.stringify(resToLog),
+                },
+              },
+              e,
+            );
+            this.logger.trackException(mastraError);
+            this.logger.error(mastraError.toString());
+            throw mastraError;
           }
         }
 
         if (Object.keys(this.evals || {}).length > 0) {
-          const input = messages.map(message => message.content).join('\n');
+          const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
+          const input = userInputMessages
+            .map(message => (typeof message.content === 'string' ? message.content : ''))
+            .join('\n');
           const runIdToUse = runId || crypto.randomUUID();
           for (const metric of Object.values(this.evals || {})) {
             executeHook(AvailableHooks.ON_GENERATION, {
@@ -1318,38 +1451,57 @@ export class Agent<
     };
   }
 
-  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+  async generate<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
-  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    args?: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
+  ): Promise<GenerateTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
+  async generate<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentGenerateOptions<Z> & { output?: Z; experimental_output?: never },
-  ): Promise<GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>>;
-  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    args?: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
+  ): Promise<GenerateObjectResult<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
+  async generate<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: Z },
+    args?: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+      output?: never;
+      experimental_output?: EXPERIMENTAL_OUTPUT;
+    },
   ): Promise<
-    GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown> & {
-      object: Z extends ZodSchema ? z.infer<Z> : unknown;
+    GenerateTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown> & {
+      object: OUTPUT extends ZodSchema
+        ? z.infer<OUTPUT>
+        : EXPERIMENTAL_OUTPUT extends ZodSchema
+          ? z.infer<EXPERIMENTAL_OUTPUT>
+          : unknown;
     }
   >;
-  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+  async generate<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    generateOptions: AgentGenerateOptions<Z> = {},
+    generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
-    | GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
-    | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>
+    | GenerateTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+    | GenerateObjectResult<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
   > {
+    const defaultGenerateOptions = await this.getDefaultGenerateOptions({
+      runtimeContext: generateOptions.runtimeContext,
+    });
     const {
-      instructions,
       context,
-      threadId: threadIdInFn,
-      memoryOptions,
-      resourceId,
+      memoryOptions: memoryConfigFromArgs,
+      resourceId: resourceIdFromArgs,
       maxSteps,
       onStepFinish,
-      runId,
       output,
       toolsets,
       clientTools,
@@ -1358,50 +1510,37 @@ export class Agent<
       experimental_output,
       telemetry,
       runtimeContext = new RuntimeContext(),
-      ...rest
-    }: AgentGenerateOptions<Z> = Object.assign({}, this.#defaultGenerateOptions, generateOptions);
+      ...args
+    }: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, defaultGenerateOptions, generateOptions);
+    const generateMessageId =
+      `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
+        ? (args.experimental_generateMessageId as IDGenerator)
+        : undefined;
 
-    let messagesToUse: CoreMessage[] = [];
-
-    if (typeof messages === `string`) {
-      messagesToUse = [
-        {
-          role: 'user',
-          content: messages,
-        },
-      ];
-    } else if (Array.isArray(messages)) {
-      messagesToUse = messages.map(message => {
-        if (typeof message === `string`) {
-          return {
-            role: 'user',
-            content: message,
-          };
-        }
-        return message as CoreMessage;
-      });
-    } else {
-      messagesToUse = [messages];
-    }
-
-    const runIdToUse = runId || randomUUID();
-    const instructionsToUse = instructions || (await this.getInstructions({ runtimeContext }));
+    const threadFromArgs = resolveThreadIdFromArgs({ ...args, ...generateOptions });
+    const resourceId = args.memory?.resource || resourceIdFromArgs;
+    const memoryConfig = args.memory?.options || memoryConfigFromArgs;
+    const runId = args.runId || randomUUID();
+    const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
 
     const { before, after } = this.__primitive({
-      instructions: instructionsToUse,
-      messages: messagesToUse,
+      messages,
+      instructions,
       context,
-      threadId: threadIdInFn,
-      memoryConfig: memoryOptions,
+      thread: threadFromArgs,
+      memoryConfig,
       resourceId,
-      runId: runIdToUse,
+      runId,
       toolsets,
       clientTools,
       runtimeContext,
+      generateMessageId,
     });
 
-    const { threadId, thread, messageObjects, convertedTools } = await before();
+    const { thread, messageObjects, convertedTools, messageList } = await before();
+
+    const threadId = thread?.id;
 
     if (!output && experimental_output) {
       const result = await llm.__text({
@@ -1411,7 +1550,7 @@ export class Agent<
           return onStepFinish?.(result);
         },
         maxSteps: maxSteps,
-        runId: runIdToUse,
+        runId,
         temperature,
         toolChoice: toolChoice || 'auto',
         experimental_output,
@@ -1419,7 +1558,8 @@ export class Agent<
         resourceId,
         memory: this.getMemory(),
         runtimeContext,
-        ...rest,
+        telemetry,
+        ...args,
       });
 
       const outputText = result.text;
@@ -1428,18 +1568,17 @@ export class Agent<
         result,
         threadId,
         thread,
-        memoryConfig: memoryOptions,
+        memoryConfig,
         outputText,
-        runId: runIdToUse,
-        experimental_generateMessageId:
-          `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+        runId,
+        messageList,
       });
 
       const newResult = result as any;
 
       newResult.object = result.experimental_output;
 
-      return newResult as unknown as GenerateReturn<Z>;
+      return newResult as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
     }
 
     if (!output) {
@@ -1450,7 +1589,7 @@ export class Agent<
           return onStepFinish?.(result);
         },
         maxSteps,
-        runId: runIdToUse,
+        runId,
         temperature,
         toolChoice,
         telemetry,
@@ -1458,7 +1597,7 @@ export class Agent<
         resourceId,
         memory: this.getMemory(),
         runtimeContext,
-        ...rest,
+        ...args,
       });
 
       const outputText = result.text;
@@ -1467,14 +1606,13 @@ export class Agent<
         result,
         thread,
         threadId,
-        memoryConfig: memoryOptions,
+        memoryConfig,
         outputText,
-        runId: runIdToUse,
-        experimental_generateMessageId:
-          `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+        runId,
+        messageList,
       });
 
-      return result as unknown as GenerateReturn<Z>;
+      return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
     }
 
     const result = await llm.__textObject({
@@ -1485,13 +1623,13 @@ export class Agent<
         return onStepFinish?.(result);
       },
       maxSteps,
-      runId: runIdToUse,
+      runId,
       temperature,
       toolChoice,
       telemetry,
       memory: this.getMemory(),
       runtimeContext,
-      ...rest,
+      ...args,
     });
 
     const outputText = JSON.stringify(result.object);
@@ -1500,52 +1638,68 @@ export class Agent<
       result,
       thread,
       threadId,
-      memoryConfig: memoryOptions,
+      memoryConfig,
       outputText,
-      runId: runIdToUse,
-      experimental_generateMessageId:
-        `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+      runId,
+      messageList,
     });
 
-    return result as unknown as GenerateReturn<Z>;
+    return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
   }
 
-  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+  async stream<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: never },
-  ): Promise<StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
-  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
+  ): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
+  async stream<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentStreamOptions<Z> & { output?: Z; experimental_output?: never },
-  ): Promise<StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>>;
-  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
+  ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>>;
+  async stream<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: Z },
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+      output?: never;
+      experimental_output?: EXPERIMENTAL_OUTPUT;
+    },
   ): Promise<
-    StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown> & {
+    StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown> & {
       partialObjectStream: StreamTextResult<
         any,
-        Z extends ZodSchema ? z.infer<Z> : unknown
+        OUTPUT extends ZodSchema
+          ? z.infer<OUTPUT>
+          : EXPERIMENTAL_OUTPUT extends ZodSchema
+            ? z.infer<EXPERIMENTAL_OUTPUT>
+            : unknown
       >['experimental_partialOutputStream'];
     }
   >;
-  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+  async stream<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    streamOptions: AgentStreamOptions<Z> = {},
+    streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
-    | StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
-    | StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>
+    | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+    | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
   > {
+    const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions.runtimeContext });
     const {
-      instructions,
       context,
-      threadId: threadIdInFn,
-      memoryOptions,
-      resourceId,
+      memoryOptions: memoryConfigFromArgs,
+      resourceId: resourceIdFromArgs,
       maxSteps,
       onFinish,
       onStepFinish,
-      runId,
       toolsets,
       clientTools,
       output,
@@ -1554,47 +1708,38 @@ export class Agent<
       experimental_output,
       telemetry,
       runtimeContext = new RuntimeContext(),
-      ...rest
-    }: AgentStreamOptions<Z> = Object.assign({}, this.#defaultStreamOptions, streamOptions);
-    const runIdToUse = runId || randomUUID();
-    const instructionsToUse = instructions || (await this.getInstructions({ runtimeContext }));
+      ...args
+    }: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, defaultStreamOptions, streamOptions);
+    const generateMessageId =
+      `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
+        ? (args.experimental_generateMessageId as IDGenerator)
+        : undefined;
+
+    const threadFromArgs = resolveThreadIdFromArgs({ ...args, ...streamOptions });
+    const resourceId = args.memory?.resource || resourceIdFromArgs;
+    const memoryConfig = args.memory?.options || memoryConfigFromArgs;
+
+    const runId = args.runId || randomUUID();
+    const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
 
-    let messagesToUse: CoreMessage[] = [];
-
-    if (typeof messages === `string`) {
-      messagesToUse = [
-        {
-          role: 'user',
-          content: messages,
-        },
-      ];
-    } else {
-      messagesToUse = messages.map(message => {
-        if (typeof message === `string`) {
-          return {
-            role: 'user',
-            content: message,
-          };
-        }
-        return message as CoreMessage;
-      });
-    }
-
     const { before, after } = this.__primitive({
-      instructions: instructionsToUse,
-      messages: messagesToUse,
+      instructions,
+      messages,
       context,
-      threadId: threadIdInFn,
-      memoryConfig: memoryOptions,
+      thread: threadFromArgs,
+      memoryConfig,
       resourceId,
-      runId: runIdToUse,
+      runId,
       toolsets,
       clientTools,
       runtimeContext,
+      generateMessageId,
     });
 
-    const { threadId, thread, messageObjects, convertedTools } = await before();
+    const { thread, messageObjects, convertedTools, messageList } = await before();
+
+    const threadId = thread?.id;
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
@@ -1615,11 +1760,10 @@ export class Agent<
               result,
               thread,
               threadId,
-              memoryConfig: memoryOptions,
+              memoryConfig,
               outputText,
-              runId: runIdToUse,
-              experimental_generateMessageId:
-                `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+              runId,
+              messageList,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1630,17 +1774,20 @@ export class Agent<
           await onFinish?.(result);
         },
         maxSteps,
-        runId: runIdToUse,
+        runId,
         toolChoice,
         experimental_output,
+        telemetry,
         memory: this.getMemory(),
         runtimeContext,
-        ...rest,
+        threadId: thread?.id,
+        resourceId,
+        ...args,
       });
 
       const newStreamResult = streamResult as any;
       newStreamResult.partialObjectStream = streamResult.experimental_partialOutputStream;
-      return newStreamResult as unknown as StreamReturn<Z>;
+      return newStreamResult as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
     } else if (!output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
@@ -1659,11 +1806,10 @@ export class Agent<
               result,
               thread,
               threadId,
-              memoryConfig: memoryOptions,
+              memoryConfig,
               outputText,
-              runId: runIdToUse,
-              experimental_generateMessageId:
-                `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+              runId,
+              messageList,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1674,13 +1820,15 @@ export class Agent<
           await onFinish?.(result);
         },
         maxSteps,
-        runId: runIdToUse,
+        runId,
         toolChoice,
         telemetry,
         memory: this.getMemory(),
         runtimeContext,
-        ...rest,
-      }) as unknown as StreamReturn<Z>;
+        threadId: thread?.id,
+        resourceId,
+        ...args,
+      }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
     }
 
     this.logger.debug(`Starting agent ${this.name} llm streamObject call`, {
@@ -1702,11 +1850,10 @@ export class Agent<
             result,
             thread,
             threadId,
-            memoryConfig: memoryOptions,
+            memoryConfig,
             outputText,
-            runId: runIdToUse,
-            experimental_generateMessageId:
-              `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+            runId,
+            messageList,
           });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
@@ -1716,13 +1863,15 @@ export class Agent<
         }
         await onFinish?.(result);
       },
-      runId: runIdToUse,
+      runId,
       toolChoice,
       telemetry,
       memory: this.getMemory(),
       runtimeContext,
-      ...rest,
-    }) as unknown as StreamReturn<Z>;
+      threadId: thread?.id,
+      resourceId,
+      ...args,
+    }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
   }
 
   /**
@@ -1740,18 +1889,45 @@ export class Agent<
     },
   ): Promise<NodeJS.ReadableStream | void> {
     if (!this.voice) {
-      throw new Error('No voice provider configured');
+      const mastraError = new MastraError({
+        id: 'AGENT_SPEAK_METHOD_VOICE_NOT_CONFIGURED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'No voice provider configured',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     this.logger.warn('Warning: agent.speak() is deprecated. Please use agent.voice.speak() instead.');
 
     try {
       return this.voice.speak(input, options);
-    } catch (e) {
-      this.logger.error('Error during agent speak', {
-        error: e,
-      });
-      throw e;
+    } catch (e: unknown) {
+      let err;
+      if (e instanceof MastraError) {
+        err = e;
+      } else {
+        err = new MastraError(
+          {
+            id: 'AGENT_SPEAK_METHOD_ERROR',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.UNKNOWN,
+            details: {
+              agentName: this.name,
+            },
+            text: 'Error during agent speak',
+          },
+          e,
+        );
+      }
+      this.logger.trackException(err);
+      this.logger.error(err.toString());
+      throw err;
     }
   }
 
@@ -1769,18 +1945,44 @@ export class Agent<
     },
   ): Promise<string | NodeJS.ReadableStream | void> {
     if (!this.voice) {
-      throw new Error('No voice provider configured');
+      const mastraError = new MastraError({
+        id: 'AGENT_LISTEN_METHOD_VOICE_NOT_CONFIGURED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'No voice provider configured',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
-
     this.logger.warn('Warning: agent.listen() is deprecated. Please use agent.voice.listen() instead');
 
     try {
       return this.voice.listen(audioStream, options);
-    } catch (e) {
-      this.logger.error('Error during agent listen', {
-        error: e,
-      });
-      throw e;
+    } catch (e: unknown) {
+      let err;
+      if (e instanceof MastraError) {
+        err = e;
+      } else {
+        err = new MastraError(
+          {
+            id: 'AGENT_LISTEN_METHOD_ERROR',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.UNKNOWN,
+            details: {
+              agentName: this.name,
+            },
+            text: 'Error during agent listen',
+          },
+          e,
+        );
+      }
+      this.logger.trackException(err);
+      this.logger.error(err.toString());
+      throw err;
     }
   }
 
@@ -1792,18 +1994,45 @@ export class Agent<
    */
   async getSpeakers() {
     if (!this.voice) {
-      throw new Error('No voice provider configured');
+      const mastraError = new MastraError({
+        id: 'AGENT_SPEAKERS_METHOD_VOICE_NOT_CONFIGURED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'No voice provider configured',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     this.logger.warn('Warning: agent.getSpeakers() is deprecated. Please use agent.voice.getSpeakers() instead.');
 
     try {
       return await this.voice.getSpeakers();
-    } catch (e) {
-      this.logger.error('Error during agent getSpeakers', {
-        error: e,
-      });
-      throw e;
+    } catch (e: unknown) {
+      let err;
+      if (e instanceof MastraError) {
+        err = e;
+      } else {
+        err = new MastraError(
+          {
+            id: 'AGENT_GET_SPEAKERS_METHOD_ERROR',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.UNKNOWN,
+            details: {
+              agentName: this.name,
+            },
+            text: 'Error during agent getSpeakers',
+          },
+          e,
+        );
+      }
+      this.logger.trackException(err);
+      this.logger.error(err.toString());
+      throw err;
     }
   }
 

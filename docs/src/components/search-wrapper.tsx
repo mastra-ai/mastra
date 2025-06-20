@@ -60,6 +60,17 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
     setSearchQuery(searchQuery);
   }
 
+  // Configure Algolia search options
+  const searchOptions = {
+    indexName: "crawler_mastra crawler",
+    hitsPerPage: 20,
+    attributesToRetrieve: ["title", "content", "url", "hierarchy"],
+    attributesToHighlight: ["title", "content"],
+    attributesToSnippet: ["content:15"],
+    filters: `locale:${locale}`,
+    snippetEllipsisText: "…",
+  };
+
   return (
     <>
       <div className="hidden md:block absolute inset-0 m-auto w-[460px] h-fit">
@@ -79,12 +90,12 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
         className="relative hidden md:block z-1000 focus:outline-none"
         onClose={close}
       >
-        <DialogBackdrop className="fixed inset-0 transition duration-250 data-closed:opacity-0 ease-out bg-black/20 backdrop-blur-md" />
+        <DialogBackdrop className="fixed inset-0 transition duration-150 ease-out data-closed:opacity-0 bg-black/70" />
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
           <div className="flex items-start pt-[200px] justify-center min-h-full p-4">
             <DialogPanel
               transition
-              className="w-full border-[0.5px] border-[var(--light-border-code)] dark:border-borders-2 h-fit max-w-[660px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 transition duration-250 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
+              className="w-full border-[0.5px] border-[var(--light-border-code)] dark:border-borders-2 h-fit max-w-[660px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 transition duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
             >
               <DialogTitle as="h3" className="sr-only">
                 Search
@@ -99,6 +110,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                   <div className="p-[10px]">
                     <CustomSearch
                       placeholder={getSearchPlaceholder(locale)}
+                      searchOptions={searchOptions}
                       onUseAgent={handleUseAgent}
                       closeModal={close}
                     />

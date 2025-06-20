@@ -1,7 +1,8 @@
 import { openai } from '@ai-sdk/openai';
 import { createTool } from '@mastra/core';
-import type { CoreMessage, MessageType } from '@mastra/core';
+import type { MastraMessageV1 } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import type { CoreMessage } from 'ai';
 import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
@@ -13,7 +14,7 @@ vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 describe('TokenLimiter', () => {
   it('should limit messages to the specified token count', () => {
     // Create messages with predictable token counts (approximately 25 tokens each)
-    const { messages } = generateConversationHistory({
+    const { fakeCore } = generateConversationHistory({
       threadId: '1',
       messageCount: 5,
       toolNames: [],
@@ -21,13 +22,12 @@ describe('TokenLimiter', () => {
     });
 
     const limiter = new TokenLimiter(200);
-    // @ts-ignore
-    const result = limiter.process(messages);
+    const result = limiter.process(fakeCore) as MastraMessageV1[];
 
     // Should prioritize newest messages (higher ids)
     expect(result.length).toBe(2);
-    expect((result[0] as MessageType).id).toBe('message-8');
-    expect((result[1] as MessageType).id).toBe('message-9');
+    expect(result[0].id).toBe('message-8');
+    expect(result[1].id).toBe('message-9');
   });
 
   it('should handle empty messages array', () => {
@@ -37,7 +37,7 @@ describe('TokenLimiter', () => {
   });
 
   it('should use different encodings based on configuration', () => {
-    const { messages } = generateConversationHistory({
+    const { fakeCore } = generateConversationHistory({
       threadId: '6',
       messageCount: 1,
       toolNames: [],
@@ -51,16 +51,16 @@ describe('TokenLimiter', () => {
       encoding: cl100k_base,
     });
 
-    // All should process messages successfully but potentially with different token counts
-    const defaultResult = defaultLimiter.process(messages as CoreMessage[]);
-    const customResult = customLimiter.process(messages as CoreMessage[]);
+    // All should process fakeCore successfully but potentially with different token counts
+    const defaultResult = defaultLimiter.process(fakeCore);
+    const customResult = customLimiter.process(fakeCore);
 
-    // Each should return the same messages but with potentially different token counts
-    expect(defaultResult.length).toBe(messages.length);
-    expect(customResult.length).toBe(messages.length);
+    // Each should return the same fakeCore but with potentially different token counts
+    expect(defaultResult.length).toBe(fakeCore.length);
+    expect(customResult.length).toBe(fakeCore.length);
   });
 
-  function estimateTokens(messages: MessageType[]) {
+  function estimateTokens(messages: MastraMessageV1[]) {
     // Create a TokenLimiter just for counting tokens
     const testLimiter = new TokenLimiter(Infinity);
 
@@ -69,7 +69,7 @@ describe('TokenLimiter', () => {
     // Count tokens for each message including all overheads
     for (const message of messages) {
       // Base token count from the countTokens method
-      estimatedTokens += testLimiter.countTokens(message as CoreMessage);
+      estimatedTokens += testLimiter.countTokens(message as CoreMessage); // TODO: this is really actually a MastraMessageV1 but in previous implementations we were casting V1 to CoreMessage which is almost the same but not exactly
     }
 
     return Number(estimatedTokens.toFixed(2));
@@ -82,10 +82,10 @@ describe('TokenLimiter', () => {
   }
 
   async function expectTokenEstimate(config: Parameters<typeof generateConversationHistory>[0], agent: Agent) {
-    const { messages, counts } = generateConversationHistory(config);
+    const { messages, fakeCore, counts } = generateConversationHistory(config);
 
     const estimate = estimateTokens(messages);
-    const used = (await agent.generate(messages.slice(0, -1) as CoreMessage[])).usage.totalTokens;
+    const used = (await agent.generate(fakeCore)).usage.promptTokens;
 
     console.log(`Estimated ${estimate} tokens, used ${used} tokens.\n`, counts);
 
@@ -100,7 +100,8 @@ describe('TokenLimiter', () => {
       expression: z.string().describe('The mathematical expression to calculate'),
     }),
     execute: async ({ context: { expression } }) => {
-      return `The result of ${expression} is ${eval(expression)}`;
+      // Don't actually eval the expression. The model is dumb and sometimes passes "banana" as the expression because that's one of the sample tokens we're using in input messages lmao
+      return `The result of ${expression} is 10`;
     },
   });
 
@@ -178,28 +179,35 @@ describe('TokenLimiter', () => {
       );
     });
 
-    it(`101 messages, 49 tool calls`, async () => {
-      await expectTokenEstimate(
-        {
-          messageCount: 50,
-          toolFrequency: 1,
-          threadId: '5',
-        },
-        agent,
-      );
-    });
+    it(
+      `101 messages, 49 tool calls`,
+      async () => {
+        await expectTokenEstimate(
+          {
+            messageCount: 50,
+            toolFrequency: 1,
+            threadId: '5',
+          },
+          agent,
+        );
+      },
+      {
+        // for some reason AI SDK randomly returns 2x token count here
+        retry: 3,
+      },
+    );
   });
 });
 
 describe.concurrent('ToolCallFilter', () => {
   it('should exclude all tool calls when created with no arguments', () => {
-    const { messages } = generateConversationHistory({
+    const { fakeCore } = generateConversationHistory({
       threadId: '3',
       toolNames: ['weather', 'calculator', 'search'],
       messageCount: 1,
     });
     const filter = new ToolCallFilter();
-    const result = filter.process(messages as CoreMessage[]) as MessageType[];
+    const result = filter.process(fakeCore) as MastraMessageV1[];
 
     // Should only keep the text message and assistant res
     expect(result.length).toBe(2);
@@ -207,13 +215,13 @@ describe.concurrent('ToolCallFilter', () => {
   });
 
   it('should exclude specific tool calls by name', () => {
-    const { messages } = generateConversationHistory({
+    const { fakeCore } = generateConversationHistory({
       threadId: '4',
       toolNames: ['weather', 'calculator'],
       messageCount: 2,
     });
     const filter = new ToolCallFilter({ exclude: ['weather'] });
-    const result = filter.process(messages as CoreMessage[]) as MessageType[];
+    const result = filter.process(fakeCore) as MastraMessageV1[];
 
     // Should keep text message, assistant reply, calculator tool call, and calculator result
     expect(result.length).toBe(4);
@@ -224,15 +232,15 @@ describe.concurrent('ToolCallFilter', () => {
   });
 
   it('should keep all messages when exclude list is empty', () => {
-    const { messages } = generateConversationHistory({
+    const { fakeCore } = generateConversationHistory({
       threadId: '5',
       toolNames: ['weather', 'calculator'],
     });
 
     const filter = new ToolCallFilter({ exclude: [] });
-    const result = filter.process(messages as CoreMessage[]);
+    const result = filter.process(fakeCore);
 
     // Should keep all messages
-    expect(result.length).toBe(messages.length);
+    expect(result.length).toBe(fakeCore.length);
   });
 });

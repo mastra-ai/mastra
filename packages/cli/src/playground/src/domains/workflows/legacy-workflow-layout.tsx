@@ -10,7 +10,7 @@ import { WorkflowHeader } from './workflow-header';
 
 export const LegacyWorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId } = useParams();
-  const { legacyWorkflow, isLoading: isWorkflowLoading } = useLegacyWorkflow(workflowId!);
+  const { data: legacyWorkflow, isLoading: isWorkflowLoading } = useLegacyWorkflow(workflowId!);
 
   return (
     <WorkflowRunProvider>

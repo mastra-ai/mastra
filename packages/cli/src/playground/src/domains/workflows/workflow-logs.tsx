@@ -2,7 +2,6 @@ import { formatDate } from 'date-fns';
 import { RefreshCcwIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { useLogsByRunId } from '@/hooks/use-logs';
 
@@ -10,13 +9,13 @@ export function WorkflowLogs({ runId }: { runId: string }) {
   const { logs, isLoading, refetchLogs } = useLogsByRunId(runId);
 
   return (
-    <ScrollArea className="h-[calc(100vh-126px)] px-4 pb-4 text-xs w-full">
-      <div className="flex justify-end sticky top-0 py-2">
+    <div className="h-full px-4 pb-4 text-xs w-full overflow-y-auto">
+      <div className="flex justify-end sticky top-0 py-2 overflow-y-auto">
         <Button variant="outline" onClick={() => refetchLogs(runId)}>
           {isLoading ? <RefreshCcwIcon className="w-4 h-4 animate-spin" /> : <RefreshCcwIcon className="w-4 h-4" />}
         </Button>
       </div>
-      <div className="space-y-4">
+      <div className="space-y-4 h-full overflow-y-auto">
         {logs.length === 0 ? (
           <p className="text-gray-300/60">
             No log drains. By default, logs are sent to the console. To configure log drains see{' '}
@@ -45,6 +44,6 @@ export function WorkflowLogs({ runId }: { runId: string }) {
           })
         )}
       </div>
-    </ScrollArea>
+    </div>
   );
 }

@@ -205,4 +205,14 @@ export abstract class MastraVoice<
     this.logger.warn('getSpeakers not implemented by this voice provider');
     return Promise.resolve([]);
   }
+
+  /**
+   * Get available speakers/voices
+   * @returns Array of available voice IDs and their metadata
+   */
+  getListener(): Promise<{ enabled: boolean }> {
+    // Default implementation - voice providers can override if they support this feature
+    this.logger.warn('getListener not implemented by this voice provider');
+    return Promise.resolve({ enabled: false });
+  }
 }

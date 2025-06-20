@@ -11,20 +11,6 @@ import { TraceContext } from './context/trace-context';
 import { Check, X } from 'lucide-react';
 import { toSigFigs } from '@/lib/number';
 
-const TracesTableSkeleton = ({ colsCount }: { colsCount: number }) => {
-  return (
-    <Tbody>
-      <Row>
-        {Array.from({ length: colsCount }).map((_, index) => (
-          <Cell key={index}>
-            <Skeleton className="w-1/2" />
-          </Cell>
-        ))}
-      </Row>
-    </Tbody>
-  );
-};
-
 const TracesTableEmpty = ({ colsCount }: { colsCount: number }) => {
   return (
     <Tbody>
@@ -51,7 +37,6 @@ const TracesTableError = ({ error, colsCount }: { error: { message: string }; co
 
 export interface TracesTableProps {
   traces: RefinedTrace[];
-  isLoading: boolean;
   error: { message: string } | null;
 }
 
@@ -84,7 +69,7 @@ const TraceRow = ({ trace, index, isActive }: { trace: RefinedTrace; index: numb
   );
 };
 
-export const TracesTable = ({ traces, isLoading, error }: TracesTableProps) => {
+export const TracesTable = ({ traces, error }: TracesTableProps) => {
   const hasNoTraces = !traces || traces.length === 0;
   const { currentTraceIndex } = useContext(TraceContext);
   const colsCount = 4;
@@ -98,9 +83,7 @@ export const TracesTable = ({ traces, isLoading, error }: TracesTableProps) => {
         <Th width={120}>Spans</Th>
         <Th width={120}>Status</Th>
       </Thead>
-      {isLoading ? (
-        <TracesTableSkeleton colsCount={colsCount} />
-      ) : error ? (
+      {error ? (
         <TracesTableError error={error} colsCount={colsCount} />
       ) : hasNoTraces ? (
         <TracesTableEmpty colsCount={colsCount} />

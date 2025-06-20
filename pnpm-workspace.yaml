@@ -2,7 +2,6 @@ packages:
   - "packages/*"
   - "deployers/*"
   - "stores/*"
-  - "speech/*"
   - "voice/*"
   - "workflows/*"
   - "client-sdks/*"
@@ -12,3 +11,4 @@ packages:
   - "packages/cli/src/playground"
   - "packages/*/integration-tests"
   - "packages/cloud"
+  - "auth/*"

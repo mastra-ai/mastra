@@ -41,6 +41,22 @@ export interface WorkflowRun {
   resourceId?: string;
 }
 
+export type PaginationArgs = {
+  dateRange?: {
+    start?: Date;
+    end?: Date;
+  };
+  page?: number;
+  perPage?: number;
+};
+
+export type PaginationInfo = {
+  total: number;
+  page: number;
+  perPage: number;
+  hasMore: boolean;
+};
+
 export type StorageGetMessagesArg = {
   threadId: string;
   resourceId?: string;
@@ -49,11 +65,14 @@ export type StorageGetMessagesArg = {
     last?: number | false;
     include?: {
       id: string;
+      threadId?: string;
       withPreviousMessages?: number;
       withNextMessages?: number;
     }[];
+    pagination?: PaginationArgs;
   };
   threadConfig?: MemoryConfig;
+  format?: 'v1' | 'v2';
 };
 
 export type EvalRow = {
@@ -67,4 +86,15 @@ export type EvalRow = {
   runId: string;
   globalRunId: string;
   testInfo?: TestInfo;
+};
+
+export type StorageGetTracesArg = {
+  name?: string;
+  scope?: string;
+  page: number;
+  perPage: number;
+  attributes?: Record<string, string>;
+  filters?: Record<string, any>;
+  fromDate?: Date;
+  toDate?: Date;
 };

@@ -24,6 +24,8 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
         const instructions = await agent.getInstructions({ runtimeContext });
         const tools = await agent.getTools({ runtimeContext });
         const llm = await agent.getLLM({ runtimeContext });
+        const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext });
+        const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext });
 
         const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
           const _tool = tool as any;
@@ -62,6 +64,8 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
           workflows: serializedAgentWorkflows,
           provider: llm?.getProvider(),
           modelId: llm?.getModelId(),
+          defaultGenerateOptions: defaultGenerateOptions as any,
+          defaultStreamOptions: defaultStreamOptions as any,
         };
       }),
     );
@@ -81,7 +85,8 @@ export async function getAgentByIdHandler({
   mastra,
   runtimeContext,
   agentId,
-}: Context & { runtimeContext: RuntimeContext; agentId: string }) {
+  isPlayground = false,
+}: Context & { isPlayground?: boolean; runtimeContext: RuntimeContext; agentId: string }) {
   try {
     const agent = mastra.getAgent(agentId);
 
@@ -113,6 +118,15 @@ export async function getAgentByIdHandler({
             ...acc,
             [key]: {
               name: workflow.name,
+              steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
+                return {
+                  ...acc,
+                  [key]: {
+                    id: step.id,
+                    description: step.description,
+                  },
+                };
+              }, {}),
             },
           };
         }, {});
@@ -121,8 +135,25 @@ export async function getAgentByIdHandler({
       }
     }
 
-    const instructions = await agent.getInstructions({ runtimeContext });
+    let proxyRuntimeContext = runtimeContext;
+    if (isPlayground) {
+      proxyRuntimeContext = new Proxy(runtimeContext, {
+        get(target, prop) {
+          if (prop === 'get') {
+            return function (key: string) {
+              const value = target.get(key);
+              return value ?? `<${key}>`;
+            };
+          }
+          return Reflect.get(target, prop);
+        },
+      });
+    }
+
+    const instructions = await agent.getInstructions({ runtimeContext: proxyRuntimeContext });
     const llm = await agent.getLLM({ runtimeContext });
+    const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext: proxyRuntimeContext });
+    const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext: proxyRuntimeContext });
 
     return {
       name: agent.name,
@@ -131,6 +162,8 @@ export async function getAgentByIdHandler({
       workflows: serializedAgentWorkflows,
       provider: llm?.getProvider(),
       modelId: llm?.getModelId(),
+      defaultGenerateOptions: defaultGenerateOptions as any,
+      defaultStreamOptions: defaultStreamOptions as any,
     };
   } catch (error) {
     return handleError(error, 'Error getting agent');
@@ -263,12 +296,19 @@ export async function streamGenerateHandler({
     });
 
     const streamResponse = rest.output
-      ? streamResult.toTextStreamResponse()
+      ? streamResult.toTextStreamResponse({
+          headers: {
+            'Transfer-Encoding': 'chunked',
+          },
+        })
       : streamResult.toDataStreamResponse({
           sendUsage: true,
           sendReasoning: true,
           getErrorMessage: (error: any) => {
             return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
+          },
+          headers: {
+            'Transfer-Encoding': 'chunked',
           },
         });
 

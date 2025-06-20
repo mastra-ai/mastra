@@ -29,6 +29,7 @@
     "src/**/*",
     "tailwind.config.ts",
     "postcss.config.js",
-    "../../../playground-ui/src/store/playground-store.ts"
+    "../../../playground-ui/src/store/playground-store.ts",
+    "../../../playground-ui/src/domains/workflows/utils.ts"
   ]
 }

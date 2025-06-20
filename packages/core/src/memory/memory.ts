@@ -1,13 +1,7 @@
-import type {
-  AssistantContent,
-  ToolResultPart,
-  UserContent,
-  CoreToolMessage,
-  ToolInvocation,
-  CoreMessage,
-  EmbeddingModel,
-} from 'ai';
+import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel, UIMessage } from 'ai';
 
+import { MessageList } from '../agent/message-list';
+import type { MastraMessageV2 } from '../agent/message-list';
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -15,7 +9,13 @@ import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 
-import type { MessageType, SharedMemoryConfig, StorageThreadType, MemoryConfig, AiMessageType } from './types';
+import type {
+  SharedMemoryConfig,
+  StorageThreadType,
+  MemoryConfig,
+  MastraMessageV1,
+  WorkingMemoryTemplate,
+} from './types';
 
 export type MemoryProcessorOpts = {
   systemMessage?: string;
@@ -67,7 +67,7 @@ export const memoryDefaultOptions = {
 export abstract class MastraMemory extends MastraBase {
   MAX_CONTEXT_TOKENS?: number;
 
-  _storage?: MastraStorage;
+  protected _storage?: MastraStorage;
   vector?: MastraVector;
   embedder?: EmbeddingModel<string>;
   private processors: MemoryProcessor[] = [];
@@ -115,7 +115,7 @@ export abstract class MastraMemory extends MastraBase {
   }
 
   public setStorage(storage: MastraStorage) {
-    this._storage = storage;
+    this._storage = augmentWithInit(storage);
   }
 
   public setVector(vector: MastraVector) {
@@ -132,6 +132,15 @@ export abstract class MastraMemory extends MastraBase {
    * Implementations can override this to inject custom system messages.
    */
   public async getSystemMessage(_input: { threadId: string; memoryConfig?: MemoryConfig }): Promise<string | null> {
+    return null;
+  }
+
+  /**
+   * Get a user context message to inject into the conversation.
+   * This will be called before each conversation turn.
+   * Implementations can override this to inject custom system messages.
+   */
+  public async getUserContextMessage(_input: { threadId: string }): Promise<string | null> {
     return null;
   }
 
@@ -167,7 +176,15 @@ export abstract class MastraMemory extends MastraBase {
     if (config?.workingMemory && 'use' in config.workingMemory) {
       throw new Error('The workingMemory.use option has been removed. Working memory always uses tool-call mode.');
     }
-    return deepMerge(this.threadConfig, config || {});
+    const mergedConfig = deepMerge(this.threadConfig, config || {});
+
+    if (config?.workingMemory?.schema) {
+      if (mergedConfig.workingMemory) {
+        mergedConfig.workingMemory.schema = config.workingMemory.schema;
+      }
+    }
+
+    return mergedConfig;
   }
 
   /**
@@ -214,132 +231,16 @@ export abstract class MastraMemory extends MastraBase {
     threadId,
     resourceId,
     vectorMessageSearch,
-    systemMessage,
     config,
   }: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
-    systemMessage?: CoreMessage;
     config?: MemoryConfig;
-  }): Promise<{
-    threadId: string;
-    messages: CoreMessage[];
-    uiMessages: AiMessageType[];
-  }>;
+  }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }>;
 
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);
-  }
-
-  protected parseMessages(messages: MessageType[]): CoreMessage[] {
-    return messages.map(msg => {
-      let content = msg.content;
-      if (typeof content === 'string' && (content.startsWith('[') || content.startsWith('{'))) {
-        try {
-          content = JSON.parse(content);
-        } catch {
-          // Keep the original string if it's not valid JSON
-        }
-      } else if (typeof content === 'number') {
-        content = String(content);
-      }
-      return {
-        ...msg,
-        content,
-      };
-    }) as CoreMessage[];
-  }
-
-  protected convertToUIMessages(messages: MessageType[]): AiMessageType[] {
-    function addToolMessageToChat({
-      toolMessage,
-      messages,
-      toolResultContents,
-    }: {
-      toolMessage: CoreToolMessage;
-      messages: Array<AiMessageType>;
-      toolResultContents: Array<ToolResultPart>;
-    }): { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> } {
-      const chatMessages = messages.map(message => {
-        if (message.toolInvocations) {
-          return {
-            ...message,
-            toolInvocations: message.toolInvocations.map(toolInvocation => {
-              const toolResult = toolMessage.content.find(tool => tool.toolCallId === toolInvocation.toolCallId);
-
-              if (toolResult) {
-                return {
-                  ...toolInvocation,
-                  state: 'result',
-                  result: toolResult.result,
-                };
-              }
-
-              return toolInvocation;
-            }),
-          };
-        }
-
-        return message;
-      }) as Array<AiMessageType>;
-
-      const resultContents = [...toolResultContents, ...toolMessage.content];
-
-      return { chatMessages, toolResultContents: resultContents };
-    }
-
-    const { chatMessages } = messages.reduce(
-      (obj: { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> }, message) => {
-        if (message.role === 'tool') {
-          return addToolMessageToChat({
-            toolMessage: message as CoreToolMessage,
-            messages: obj.chatMessages,
-            toolResultContents: obj.toolResultContents,
-          });
-        }
-
-        let textContent = '';
-        let toolInvocations: Array<ToolInvocation> = [];
-
-        if (typeof message.content === 'string') {
-          textContent = message.content;
-        } else if (typeof message.content === 'number') {
-          textContent = String(message.content);
-        } else if (Array.isArray(message.content)) {
-          for (const content of message.content) {
-            if (content.type === 'text') {
-              textContent += content.text;
-            } else if (content.type === 'tool-call') {
-              const toolResult = obj.toolResultContents.find(tool => tool.toolCallId === content.toolCallId);
-              toolInvocations.push({
-                state: toolResult ? 'result' : 'call',
-                toolCallId: content.toolCallId,
-                toolName: content.toolName,
-                args: content.args,
-                result: toolResult?.result,
-              });
-            }
-          }
-        }
-
-        obj.chatMessages.push({
-          id: (message as MessageType).id,
-          role: message.role as AiMessageType['role'],
-          content: textContent,
-          toolInvocations,
-          createdAt: message.createdAt,
-        });
-
-        return obj;
-      },
-      { chatMessages: [], toolResultContents: [] } as {
-        chatMessages: Array<AiMessageType>;
-        toolResultContents: Array<ToolResultPart>;
-      },
-    );
-
-    return chatMessages;
   }
 
   /**
@@ -369,13 +270,21 @@ export abstract class MastraMemory extends MastraBase {
    * @param messages - Array of messages to save
    * @returns Promise resolving to the saved messages
    */
-  abstract saveMessages({
-    messages,
-    memoryConfig,
-  }: {
-    messages: MessageType[];
-    memoryConfig: MemoryConfig | undefined;
-  }): Promise<MessageType[]>;
+  abstract saveMessages(args: {
+    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    memoryConfig?: MemoryConfig | undefined;
+    format?: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  abstract saveMessages(args: {
+    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    memoryConfig?: MemoryConfig | undefined;
+    format: 'v2';
+  }): Promise<MastraMessageV2[]>;
+  abstract saveMessages(args: {
+    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    memoryConfig?: MemoryConfig | undefined;
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV2[] | MastraMessageV1[]>;
 
   /**
    * Retrieves all messages for a specific thread
@@ -386,7 +295,7 @@ export abstract class MastraMemory extends MastraBase {
     threadId,
     resourceId,
     selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }>;
+  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: UIMessage[] }>;
 
   /**
    * Helper method to create a new thread
@@ -407,7 +316,6 @@ export abstract class MastraMemory extends MastraBase {
     metadata?: Record<string, unknown>;
     memoryConfig?: MemoryConfig;
   }): Promise<StorageThreadType> {
-    await this.storage.init();
     const thread: StorageThreadType = {
       id: threadId || this.generateId(),
       title: title || `New Thread ${new Date().toISOString()}`,
@@ -436,6 +344,7 @@ export abstract class MastraMemory extends MastraBase {
    * @param toolCallArgs - Optional array of tool call arguments
    * @param toolCallIds - Optional array of tool call ids
    * @returns Promise resolving to the saved message
+   * @deprecated use saveMessages instead
    */
   async addMessage({
     threadId,
@@ -457,8 +366,8 @@ export abstract class MastraMemory extends MastraBase {
     toolNames?: string[];
     toolCallArgs?: Record<string, unknown>[];
     toolCallIds?: string[];
-  }): Promise<MessageType> {
-    const message: MessageType = {
+  }): Promise<MastraMessageV1> {
+    const message: MastraMessageV1 = {
       id: this.generateId(),
       content,
       role,
@@ -472,7 +381,8 @@ export abstract class MastraMemory extends MastraBase {
     };
 
     const savedMessages = await this.saveMessages({ messages: [message], memoryConfig: config });
-    return savedMessages[0]!;
+    const list = new MessageList({ threadId, resourceId }).add(savedMessages[0]!, 'memory');
+    return list.get.all.v1()[0]!;
   }
 
   /**
@@ -482,4 +392,24 @@ export abstract class MastraMemory extends MastraBase {
   public generateId(): string {
     return crypto.randomUUID();
   }
+
+  /**
+   * Retrieves working memory for a specific thread
+   * @param threadId - The unique identifier of the thread
+   * @param format - Optional format for the returned data ('json' or 'markdown')
+   * @returns Promise resolving to working memory data or null if not found
+   */
+  abstract getWorkingMemory({
+    threadId,
+  }: {
+    threadId: string;
+    format?: 'json' | 'markdown';
+  }): Promise<Record<string, any> | string | null>;
+
+  /**
+   * Retrieves working memory template for a specific thread
+   * @param threadId - The unique identifier of the thread
+   * @returns Promise resolving to working memory template or null if not found
+   */
+  abstract getWorkingMemoryTemplate(): Promise<WorkingMemoryTemplate | null>;
 }

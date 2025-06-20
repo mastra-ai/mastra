@@ -50,7 +50,9 @@ const mastra = new Mastra({
   legacy_workflows: { newWorkflow },
 });
 
-const { runId, start } = await mastra.legacy_getWorkflow("newWorkflow").createRun();
+const { runId, start } = await mastra
+  .legacy_getWorkflow("newWorkflow")
+  .createRun();
 
 const runResult = await start({
   triggerData: { message: "Give me a run down of the mission to save private" },

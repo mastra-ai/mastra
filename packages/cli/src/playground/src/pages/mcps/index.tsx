@@ -11,6 +11,10 @@ import {
   McpCoinIcon,
   McpServerIcon,
   EmptyState,
+  AgentIcon,
+  WorkflowIcon,
+  MainContentLayout,
+  MainContentContent,
 } from '@mastra/playground-ui';
 
 import { useMCPServers } from '@/hooks/use-mcp-servers';
@@ -19,7 +23,7 @@ import { client } from '@/lib/client';
 
 import { ServerInfo } from '@mastra/core/mcp';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const McpServerRow = ({ server }: { server: ServerInfo }) => {
   const { tools, isLoading } = useMCPServerTools(server);
@@ -27,6 +31,11 @@ const McpServerRow = ({ server }: { server: ServerInfo }) => {
   const sseUrl = `${effectiveBaseUrl}/api/mcp/${server.id}/sse`;
 
   const toolsCount = Object.keys(tools || {}).length;
+  const agentToolsCount = Object.keys(tools || {}).filter(tool => tools?.[tool]?.toolType === 'agent').length;
+  const workflowToolsCount = Object.keys(tools || {}).filter(tool => tools?.[tool]?.toolType === 'workflow').length;
+
+  const toolsOnlyCount = toolsCount - agentToolsCount - workflowToolsCount;
+  const showBreakdown = agentToolsCount > 0 || workflowToolsCount > 0;
 
   return (
     <Link
@@ -51,9 +60,39 @@ const McpServerRow = ({ server }: { server: ServerInfo }) => {
       {isLoading ? (
         <Skeleton className="h-4 w-24" />
       ) : (
-        <Badge icon={<ToolsIcon className="group-hover/mcp-server:text-[#ECB047]" />}>
-          {toolsCount} tool{toolsCount === 1 ? '' : 's'}
-        </Badge>
+        <div className="flex gap-x-2 items-center">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge icon={<ToolsIcon className="group-hover/mcp-server:text-[#ECB047]" />}>
+                {toolsCount} tool{toolsCount === 1 ? '' : 's'}
+              </Badge>
+            </TooltipTrigger>
+            {showBreakdown && (
+              <TooltipContent>
+                <div className="flex flex-col gap-1">
+                  {toolsOnlyCount > 0 && (
+                    <span>
+                      <ToolsIcon className="inline mr-1" />
+                      {toolsOnlyCount} tool{toolsOnlyCount === 1 ? '' : 's'}
+                    </span>
+                  )}
+                  {agentToolsCount > 0 && (
+                    <span>
+                      <AgentIcon className="inline mr-1" />
+                      {agentToolsCount} agent{agentToolsCount === 1 ? '' : 's'}
+                    </span>
+                  )}
+                  {workflowToolsCount > 0 && (
+                    <span>
+                      <WorkflowIcon className="inline mr-1" />
+                      {workflowToolsCount} workflow{workflowToolsCount === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </div>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </div>
       )}
     </Link>
   );
@@ -67,13 +106,13 @@ const MCPs = () => {
   if (isLoading) return null;
 
   return (
-    <section className="overflow-hidden h-full">
+    <MainContentLayout>
       <Header>
         <HeaderTitle>MCP Servers</HeaderTitle>
       </Header>
 
       {mcpServers.length === 0 ? (
-        <div className="flex h-full items-center justify-center">
+        <MainContentContent isCentered={true}>
           <EmptyState
             iconSlot={<McpCoinIcon />}
             titleSlot="Configure MCP servers"
@@ -94,9 +133,9 @@ const MCPs = () => {
               </Button>
             }
           />
-        </div>
+        </MainContentContent>
       ) : (
-        <ScrollArea className="h-full">
+        <MainContentContent>
           <ul>
             {(mcpServers || []).map(server => (
               <li key={server.id}>
@@ -104,9 +143,9 @@ const MCPs = () => {
               </li>
             ))}
           </ul>
-        </ScrollArea>
+        </MainContentContent>
       )}
-    </section>
+    </MainContentLayout>
   );
 };
 

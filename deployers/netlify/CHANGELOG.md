@@ -1,5 +1,418 @@
 # @mastra/deployer-netlify
 
+## 0.10.7-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [d1baedb]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [2097952]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [0e17048]
+  - @mastra/core@0.10.7-alpha.1
+  - @mastra/deployer@0.10.7-alpha.1
+
+## 0.10.7-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [d8f2d19]
+- Updated dependencies [9d52b17]
+- Updated dependencies [8ba1b51]
+  - @mastra/core@0.10.7-alpha.0
+  - @mastra/deployer@0.10.7-alpha.0
+
+## 0.10.6
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+  - Removed dependency [`netlify-cli@^19.1.7` ↗︎](https://www.npmjs.com/package/netlify-cli/v/19.1.7) (from `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [4051477]
+- Updated dependencies [2d12edd]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [c28ed65]
+- Updated dependencies [12a95fc]
+- Updated dependencies [79b9909]
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+- Updated dependencies [d70c420]
+- Updated dependencies [ee9af57]
+- Updated dependencies [ec7f824]
+- Updated dependencies [36f1c36]
+- Updated dependencies [084f6aa]
+- Updated dependencies [2a16996]
+- Updated dependencies [10d352e]
+- Updated dependencies [9589624]
+- Updated dependencies [3270d9d]
+- Updated dependencies [53d3c37]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6
+  - @mastra/deployer@0.10.6
+
+## 0.10.6-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [12a95fc]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+  - @mastra/core@0.10.6-alpha.5
+  - @mastra/deployer@0.10.6-alpha.5
+
+## 0.10.6-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [79b9909]
+- Updated dependencies [084f6aa]
+- Updated dependencies [9589624]
+  - @mastra/deployer@0.10.6-alpha.4
+  - @mastra/core@0.10.6-alpha.4
+
+## 0.10.6-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [4051477]
+- Updated dependencies [c28ed65]
+- Updated dependencies [d70c420]
+- Updated dependencies [2a16996]
+  - @mastra/deployer@0.10.6-alpha.3
+  - @mastra/core@0.10.6-alpha.3
+
+## 0.10.6-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [ec7f824]
+  - @mastra/core@0.10.6-alpha.2
+  - @mastra/deployer@0.10.6-alpha.2
+
+## 0.10.6-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [ee9af57]
+- Updated dependencies [3270d9d]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/deployer@0.10.6-alpha.1
+  - @mastra/core@0.10.6-alpha.1
+
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+  - Removed dependency [`netlify-cli@^19.1.7` ↗︎](https://www.npmjs.com/package/netlify-cli/v/19.1.7) (from `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [2d12edd]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+  - @mastra/deployer@0.10.6-alpha.0
+
+## 0.10.5
+
+### Patch Changes
+
+- Updated dependencies [8725d02]
+- Updated dependencies [13c97f9]
+- Updated dependencies [105f872]
+  - @mastra/deployer@0.10.5
+  - @mastra/core@0.10.5
+
+## 0.10.4
+
+### Patch Changes
+
+- d90c49f: dependencies updates:
+  - Updated dependency [`execa@^9.6.0` ↗︎](https://www.npmjs.com/package/execa/v/9.6.0) (from `^9.5.2`, in `dependencies`)
+  - Updated dependency [`netlify-cli@^19.1.7` ↗︎](https://www.npmjs.com/package/netlify-cli/v/19.1.7) (from `^19.0.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- Updated dependencies [d1ed912]
+- Updated dependencies [d1ed912]
+- Updated dependencies [f595975]
+- Updated dependencies [d90c49f]
+- Updated dependencies [1ccccff]
+- Updated dependencies [1ccccff]
+- Updated dependencies [afd9fda]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [9597ee5]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [69f6101]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [514fdde]
+- Updated dependencies [f1309d3]
+- Updated dependencies [bebd27c]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+  - @mastra/deployer@0.10.4
+
+## 0.10.4-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [925ab94]
+  - @mastra/core@0.10.4-alpha.3
+  - @mastra/deployer@0.10.4-alpha.3
+
+## 0.10.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4-alpha.2
+  - @mastra/deployer@0.10.4-alpha.2
+
+## 0.10.4-alpha.1
+
+### Patch Changes
+
+- d90c49f: dependencies updates:
+  - Updated dependency [`execa@^9.6.0` ↗︎](https://www.npmjs.com/package/execa/v/9.6.0) (from `^9.5.2`, in `dependencies`)
+  - Updated dependency [`netlify-cli@^19.1.7` ↗︎](https://www.npmjs.com/package/netlify-cli/v/19.1.7) (from `^19.0.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- Updated dependencies [d90c49f]
+- Updated dependencies [1ccccff]
+- Updated dependencies [1ccccff]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [9597ee5]
+- Updated dependencies [514fdde]
+- Updated dependencies [f1309d3]
+- Updated dependencies [bebd27c]
+- Updated dependencies [f7f8293]
+  - @mastra/deployer@0.10.4-alpha.1
+  - @mastra/core@0.10.4-alpha.1
+
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [d1ed912]
+- Updated dependencies [d1ed912]
+- Updated dependencies [f595975]
+- Updated dependencies [afd9fda]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [69f6101]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [14a2566]
+  - @mastra/core@0.10.4-alpha.0
+  - @mastra/deployer@0.10.4-alpha.0
+
+## 0.10.3
+
+### Patch Changes
+
+- Updated dependencies [2b0fc7e]
+  - @mastra/core@0.10.3
+  - @mastra/deployer@0.10.3
+
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [2b0fc7e]
+  - @mastra/core@0.10.3-alpha.0
+  - @mastra/deployer@0.10.3-alpha.0
+
+## 0.10.2
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [ee77e78]
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+- Updated dependencies [ab5adbe]
+- Updated dependencies [e8d2aff]
+- Updated dependencies [1e8bb40]
+- Updated dependencies [1b5fc55]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [37643b8]
+- Updated dependencies [99fd6cf]
+- Updated dependencies [1fcc048]
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [f946acf]
+- Updated dependencies [add596e]
+- Updated dependencies [8dc94d8]
+- Updated dependencies [ecebbeb]
+- Updated dependencies [4187ed4]
+- Updated dependencies [79d5145]
+- Updated dependencies [12b7002]
+- Updated dependencies [f0d559f]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2
+  - @mastra/deployer@0.10.2
+
+## 0.10.2-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [37643b8]
+- Updated dependencies [79d5145]
+  - @mastra/core@0.10.2-alpha.8
+  - @mastra/deployer@0.10.2-alpha.8
+
+## 0.10.2-alpha.7
+
+### Patch Changes
+
+- @mastra/deployer@0.10.2-alpha.7
+- @mastra/core@0.10.2-alpha.7
+
+## 0.10.2-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [99fd6cf]
+- Updated dependencies [1fcc048]
+- Updated dependencies [8dc94d8]
+  - @mastra/core@0.10.2-alpha.6
+  - @mastra/deployer@0.10.2-alpha.6
+
+## 0.10.2-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [1b5fc55]
+- Updated dependencies [add596e]
+- Updated dependencies [ecebbeb]
+  - @mastra/core@0.10.2-alpha.5
+  - @mastra/deployer@0.10.2-alpha.5
+
+## 0.10.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/core@0.10.2-alpha.4
+  - @mastra/deployer@0.10.2-alpha.4
+
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [f946acf]
+  - @mastra/core@0.10.2-alpha.3
+  - @mastra/deployer@0.10.2-alpha.3
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [e8d2aff]
+- Updated dependencies [1e8bb40]
+- Updated dependencies [4187ed4]
+- Updated dependencies [f0d559f]
+  - @mastra/deployer@0.10.2-alpha.2
+  - @mastra/core@0.10.2-alpha.2
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [ee77e78]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2-alpha.1
+  - @mastra/deployer@0.10.2-alpha.1
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/core@0.10.2-alpha.0
+  - @mastra/deployer@0.10.2-alpha.0
+
+## 0.10.1
+
+### Patch Changes
+
+- d70b807: Improve storage.init
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [bed0916]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [fe68410]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+  - @mastra/deployer@0.10.1
+
+## 0.10.1-alpha.3
+
+### Patch Changes
+
+- d70b807: Improve storage.init
+- Updated dependencies [d70b807]
+  - @mastra/core@0.10.1-alpha.3
+  - @mastra/deployer@0.10.1-alpha.3
+
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [fe68410]
+- Updated dependencies [6015bdf]
+  - @mastra/deployer@0.10.1-alpha.2
+  - @mastra/core@0.10.1-alpha.2
+
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [200d0da]
+- Updated dependencies [bed0916]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/core@0.10.1-alpha.1
+  - @mastra/deployer@0.10.1-alpha.1
+
 ## 0.10.1-alpha.0
 
 ### Patch Changes

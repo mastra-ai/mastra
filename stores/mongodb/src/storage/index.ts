@@ -1,6 +1,17 @@
+import { MessageList } from '@mastra/core/agent';
+import type { MastraMessageContentV2 } from '@mastra/core/agent';
+import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
-import type { EvalRow, StorageGetMessagesArg, TABLE_NAMES, WorkflowRun } from '@mastra/core/storage';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type {
+  EvalRow,
+  PaginationInfo,
+  StorageColumn,
+  StorageGetMessagesArg,
+  StorageGetTracesArg,
+  TABLE_NAMES,
+  WorkflowRun,
+} from '@mastra/core/storage';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -9,6 +20,7 @@ import {
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { Db, MongoClientOptions } from 'mongodb';
 import { MongoClient } from 'mongodb';
@@ -37,15 +49,27 @@ export class MongoDBStore extends MastraStorage {
     super({ name: 'MongoDBStore' });
     this.#isConnected = false;
 
-    if (!config.url?.trim().length) {
-      throw new Error(
-        'MongoDBStore: url must be provided and cannot be empty. Passing an empty string may cause fallback to local MongoDB defaults.',
-      );
-    }
+    try {
+      if (!config.url?.trim().length) {
+        throw new Error(
+          'MongoDBStore: url must be provided and cannot be empty. Passing an empty string may cause fallback to local MongoDB defaults.',
+        );
+      }
 
-    if (!config.dbName?.trim().length) {
-      throw new Error(
-        'MongoDBStore: dbName must be provided and cannot be empty. Passing an empty string may cause fallback to local MongoDB defaults.',
+      if (!config.dbName?.trim().length) {
+        throw new Error(
+          'MongoDBStore: dbName must be provided and cannot be empty. Passing an empty string may cause fallback to local MongoDB defaults.',
+        );
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_CONSTRUCTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { url: config.url, dbName: config.dbName },
+        },
+        error,
       );
     }
 
@@ -73,13 +97,37 @@ export class MongoDBStore extends MastraStorage {
     // Nothing to do here, MongoDB is schemaless
   }
 
+  /**
+   * No-op: This backend is schemaless and does not require schema changes.
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // Nothing to do here, MongoDB is schemaless
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       const collection = await this.getCollection(tableName);
       await collection.deleteMany({});
     } catch (error) {
       if (error instanceof Error) {
-        this.logger.error(error.message);
+        const matstraError = new MastraError(
+          {
+            id: 'STORAGE_MONGODB_STORE_CLEAR_TABLE_FAILED',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { tableName },
+          },
+          error,
+        );
+        this.logger.error(matstraError.message);
+        this.logger?.trackException(matstraError);
       }
     }
   }
@@ -89,8 +137,19 @@ export class MongoDBStore extends MastraStorage {
       const collection = await this.getCollection(tableName);
       await collection.insertOne(record);
     } catch (error) {
-      this.logger.error(`Error upserting into table ${tableName}: ${error}`);
-      throw error;
+      if (error instanceof Error) {
+        const matstraError = new MastraError(
+          {
+            id: 'STORAGE_MONGODB_STORE_INSERT_FAILED',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { tableName },
+          },
+          error,
+        );
+        this.logger.error(matstraError.message);
+        this.logger?.trackException(matstraError);
+      }
     }
   }
 
@@ -103,8 +162,15 @@ export class MongoDBStore extends MastraStorage {
       const collection = await this.getCollection(tableName);
       await collection.insertMany(records);
     } catch (error) {
-      this.logger.error(`Error upserting into table ${tableName}: ${error}`);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_BATCH_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
@@ -114,8 +180,15 @@ export class MongoDBStore extends MastraStorage {
       const collection = await this.getCollection(tableName);
       return (await collection.find(keys).toArray()) as R;
     } catch (error) {
-      this.logger.error(`Error loading ${tableName} with keys ${JSON.stringify(keys)}: ${error}`);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_LOAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
@@ -132,8 +205,15 @@ export class MongoDBStore extends MastraStorage {
         metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
       };
     } catch (error) {
-      this.logger.error(`Error loading thread with ID ${threadId}: ${error}`);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_GET_THREAD_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
     }
   }
 
@@ -150,8 +230,15 @@ export class MongoDBStore extends MastraStorage {
         metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
       }));
     } catch (error) {
-      this.logger.error(`Error loading threads by resourceId ${resourceId}: ${error}`);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
+        },
+        error,
+      );
     }
   }
 
@@ -170,8 +257,15 @@ export class MongoDBStore extends MastraStorage {
       );
       return thread;
     } catch (error) {
-      this.logger.error(`Error saving thread ${thread.id}: ${error}`);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_SAVE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: thread.id },
+        },
+        error,
+      );
     }
   }
 
@@ -186,7 +280,13 @@ export class MongoDBStore extends MastraStorage {
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
-      throw new Error(`Thread ${id} not found`);
+      throw new MastraError({
+        id: 'STORAGE_MONGODB_STORE_UPDATE_THREAD_NOT_FOUND',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { threadId: id },
+        text: `Thread ${id} not found`,
+      });
     }
 
     const updatedThread = {
@@ -210,8 +310,15 @@ export class MongoDBStore extends MastraStorage {
         },
       );
     } catch (error) {
-      this.logger.error(`Error updating thread ${id}:) ${error}`);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_UPDATE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: id },
+        },
+        error,
+      );
     }
 
     return updatedThread;
@@ -226,17 +333,32 @@ export class MongoDBStore extends MastraStorage {
       const collectionThreads = await this.getCollection(TABLE_THREADS);
       await collectionThreads.deleteOne({ id: threadId });
     } catch (error) {
-      this.logger.error(`Error deleting thread ${threadId}: ${error}`);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_DELETE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
     }
   }
 
-  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & {
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
-      const limit = typeof selectBy?.last === 'number' ? selectBy.last : 40;
+      const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
       const include = selectBy?.include || [];
-      let messages: MessageType[] = [];
-      let allMessages: MessageType[] = [];
+      let messages: MastraMessageV2[] = [];
+      let allMessages: MastraMessageV2[] = [];
       const collection = await this.getCollection(TABLE_MESSAGES);
       // Get all messages from the thread ordered by creation date descending
       allMessages = (await collection.find({ thread_id: threadId }).sort({ createdAt: -1 }).toArray()).map((row: any) =>
@@ -270,7 +392,7 @@ export class MongoDBStore extends MastraStorage {
         messages.push(
           ...Array.from(selectedIndexes)
             .map(i => allMessages[i])
-            .filter((m): m is MessageType => !!m),
+            .filter((m): m is MastraMessageV2 => !!m),
         );
       }
 
@@ -286,14 +408,30 @@ export class MongoDBStore extends MastraStorage {
       // Sort all messages by creation date ascending
       messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
-      return messages.slice(0, limit) as T[];
+      const list = new MessageList().add(messages.slice(0, limit), 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
-      this.logger.error('Error getting messages:', error as Error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_GET_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
     }
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages({
+    messages,
+    format,
+  }:
+    | { messages: MastraMessageV1[]; format?: undefined | 'v1' }
+    | { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
     if (!messages.length) {
       return messages;
     }
@@ -303,6 +441,7 @@ export class MongoDBStore extends MastraStorage {
       this.logger.error('Thread ID is required to save messages');
       throw new Error('Thread ID is required');
     }
+
     try {
       // Prepare batch statements for all messages
       const messagesToInsert = messages.map(message => {
@@ -318,10 +457,18 @@ export class MongoDBStore extends MastraStorage {
         };
       });
 
-      // Execute all inserts in a single batch
+      // Execute message inserts and thread update in parallel for better performance
       const collection = await this.getCollection(TABLE_MESSAGES);
-      await collection.insertMany(messagesToInsert);
-      return messages;
+      const threadsCollection = await this.getCollection(TABLE_THREADS);
+
+      await Promise.all([
+        collection.insertMany(messagesToInsert),
+        threadsCollection.updateOne({ id: threadId }, { $set: { updatedAt: new Date() } }),
+      ]);
+
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       this.logger.error('Failed to save messages in database: ' + (error as { message: string })?.message);
       throw error;
@@ -372,31 +519,42 @@ export class MongoDBStore extends MastraStorage {
       });
     }
 
-    const collection = await this.getCollection(TABLE_TRACES);
-    const result = await collection
-      .find(query, {
-        sort: { startTime: -1 },
-      })
-      .limit(limit)
-      .skip(offset)
-      .toArray();
+    try {
+      const collection = await this.getCollection(TABLE_TRACES);
+      const result = await collection
+        .find(query, {
+          sort: { startTime: -1 },
+        })
+        .limit(limit)
+        .skip(offset)
+        .toArray();
 
-    return result.map(row => ({
-      id: row.id,
-      parentSpanId: row.parentSpanId,
-      traceId: row.traceId,
-      name: row.name,
-      scope: row.scope,
-      kind: row.kind,
-      status: safelyParseJSON(row.status as string),
-      events: safelyParseJSON(row.events as string),
-      links: safelyParseJSON(row.links as string),
-      attributes: safelyParseJSON(row.attributes as string),
-      startTime: row.startTime,
-      endTime: row.endTime,
-      other: safelyParseJSON(row.other as string),
-      createdAt: row.createdAt,
-    })) as any;
+      return result.map(row => ({
+        id: row.id,
+        parentSpanId: row.parentSpanId,
+        traceId: row.traceId,
+        name: row.name,
+        scope: row.scope,
+        kind: row.kind,
+        status: safelyParseJSON(row.status as string),
+        events: safelyParseJSON(row.events as string),
+        links: safelyParseJSON(row.links as string),
+        attributes: safelyParseJSON(row.attributes as string),
+        startTime: row.startTime,
+        endTime: row.endTime,
+        other: safelyParseJSON(row.other as string),
+        createdAt: row.createdAt,
+      })) as any;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_GET_TRACES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   async getWorkflowRuns({
@@ -436,46 +594,57 @@ export class MongoDBStore extends MastraStorage {
       }
     }
 
-    const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
-    let total = 0;
-    // Only get total count when using pagination
-    if (limit !== undefined && offset !== undefined) {
-      total = await collection.countDocuments(query);
-    }
-
-    // Get results
-    const request = collection.find(query).sort({ createdAt: 'desc' });
-    if (limit) {
-      request.limit(limit);
-    }
-
-    if (offset) {
-      request.skip(offset);
-    }
-
-    const result = await request.toArray();
-    const runs = result.map(row => {
-      let parsedSnapshot: WorkflowRunState | string = row.snapshot;
-      if (typeof parsedSnapshot === 'string') {
-        try {
-          parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-        } catch (e) {
-          // If parsing fails, return the raw snapshot string
-          console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-        }
+    try {
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      let total = 0;
+      // Only get total count when using pagination
+      if (limit !== undefined && offset !== undefined) {
+        total = await collection.countDocuments(query);
       }
 
-      return {
-        workflowName: row.workflow_name as string,
-        runId: row.run_id as string,
-        snapshot: parsedSnapshot,
-        createdAt: new Date(row.createdAt as string),
-        updatedAt: new Date(row.updatedAt as string),
-      };
-    });
+      // Get results
+      const request = collection.find(query).sort({ createdAt: 'desc' });
+      if (limit) {
+        request.limit(limit);
+      }
 
-    // Use runs.length as total when not paginating
-    return { runs, total: total || runs.length };
+      if (offset) {
+        request.skip(offset);
+      }
+
+      const result = await request.toArray();
+      const runs = result.map(row => {
+        let parsedSnapshot: WorkflowRunState | string = row.snapshot;
+        if (typeof parsedSnapshot === 'string') {
+          try {
+            parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+          } catch (e) {
+            // If parsing fails, return the raw snapshot string
+            console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+          }
+        }
+
+        return {
+          workflowName: row.workflow_name as string,
+          runId: row.run_id as string,
+          snapshot: parsedSnapshot,
+          createdAt: new Date(row.createdAt as string),
+          updatedAt: new Date(row.updatedAt as string),
+        };
+      });
+
+      // Use runs.length as total when not paginating
+      return { runs, total: total || runs.length };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_GET_WORKFLOW_RUNS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
@@ -514,8 +683,15 @@ export class MongoDBStore extends MastraStorage {
       if (error instanceof Error && error.message.includes('no such table')) {
         return [];
       }
-      this.logger.error('Failed to get evals for the specified agent: ' + (error as any)?.message);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_GET_EVALS_BY_AGENT_NAME_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentName },
+        },
+        error,
+      );
     }
   }
 
@@ -545,8 +721,15 @@ export class MongoDBStore extends MastraStorage {
         { upsert: true },
       );
     } catch (error) {
-      this.logger.error(`Error persisting workflow snapshot: ${error}`);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
+        },
+        error,
+      );
     }
   }
 
@@ -572,8 +755,15 @@ export class MongoDBStore extends MastraStorage {
 
       return JSON.parse(result[0].snapshot);
     } catch (error) {
-      console.error('Error loading workflow snapshot:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
+        },
+        error,
+      );
     }
   }
 
@@ -602,8 +792,15 @@ export class MongoDBStore extends MastraStorage {
 
       return this.parseWorkflowRun(result);
     } catch (error) {
-      console.error('Error getting workflow run by ID:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId },
+        },
+        error,
+      );
     }
   }
 
@@ -628,7 +825,7 @@ export class MongoDBStore extends MastraStorage {
     };
   }
 
-  private parseRow(row: any): MessageType {
+  private parseRow(row: any): MastraMessageV2 {
     let content = row.content;
     try {
       content = JSON.parse(row.content);
@@ -642,7 +839,8 @@ export class MongoDBStore extends MastraStorage {
       type: row.type,
       createdAt: new Date(row.createdAt as string),
       threadId: row.thread_id,
-    } as MessageType;
+      resourceId: row.resourceId,
+    } as MastraMessageV2;
   }
 
   private transformEvalRow(row: Record<string, any>): EvalRow {
@@ -669,7 +867,62 @@ export class MongoDBStore extends MastraStorage {
     };
   }
 
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new MastraError({
+      id: 'STORAGE_MONGODB_STORE_GET_TRACES_PAGINATED_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      text: 'Method not implemented.',
+    });
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new MastraError({
+      id: 'STORAGE_MONGODB_STORE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      text: 'Method not implemented.',
+    });
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new MastraError({
+      id: 'STORAGE_MONGODB_STORE_GET_MESSAGES_PAGINATED_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      text: 'Method not implemented.',
+    });
+  }
+
   async close(): Promise<void> {
-    await this.#client.close();
+    try {
+      await this.#client.close();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_CLOSE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
+  }
+
+  async updateMessages(_args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]> {
+    this.logger.error('updateMessages is not yet implemented in MongoDBStore');
+    throw new Error('Method not implemented');
   }
 }

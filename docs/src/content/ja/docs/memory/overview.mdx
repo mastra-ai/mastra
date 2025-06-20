@@ -24,17 +24,24 @@ npm install @mastra/memory@latest
 
 **2. エージェントを作成し、`Memory`インスタンスを接続します：**
 
-```typescript filename="src/mastra/agents/index.ts" {10}
+```typescript filename="src/mastra/agents/index.ts" {6-18}
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
+
+// Initialize memory with LibSQLStore for persistence
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "file:../mastra.db", // Or your database URL
+  }),
+});
 
 export const myMemoryAgent = new Agent({
   name: "MemoryAgent",
   instructions: "...",
   model: openai("gpt-4o"),
-
-  memory: new Memory(),
+  memory,
 });
 ```
 
@@ -90,7 +97,7 @@ const memory = new Memory({
 会話履歴はメッセージを保存するために[ストレージアダプター](/reference/memory/Memory#parameters)に依存しています。
 デフォルトでは、[メインのMastraインスタンス](https://mastra.ai/reference/core/mastra-class#initialization)に提供されたものと同じストレージを使用します。
 
-`Memory`インスタンスも`Mastra`オブジェクトもストレージプロバイダーを指定していない場合、Mastraは自動的に小さなローカル`LibSQLStore`（`file:memory.db`）を作成します。この_デフォルトストレージ_により、ローカルでMemoryを試すのが非常に簡単になります。データはページの更新後も残りますが、サーバープロセスが再起動したり、一時的な環境にデプロイしたりすると消えてしまいます。ローカルテスト以外のデプロイメントでは、`Mastra`または`new Memory()`内で直接独自のストレージ設定を提供する必要があります。
+`Memory`インスタンスも`Mastra`オブジェクトもストレージプロバイダーを指定していない場合、Mastraは自動的に小さなローカル`LibSQLStore`（`file:memory.db`）を作成します。この*デフォルトストレージ*により、ローカルでMemoryを試すのが非常に簡単になります。データはページの更新後も残りますが、サーバープロセスが再起動したり、一時的な環境にデプロイしたりすると消えてしまいます。ローカルテスト以外のデプロイメントでは、`Mastra`または`new Memory()`内で直接独自のストレージ設定を提供する必要があります。
 
 `Mastra`インスタンスに`storage`が指定されている場合、それはエージェントに接続されているすべての`Memory`によって自動的に使用されます。その場合、エージェントごとのオーバーライドが必要でない限り、`new Memory()`に`storage`を渡す必要はありません。
 

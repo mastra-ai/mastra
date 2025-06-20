@@ -1,23 +1,29 @@
 import { createClient } from '@libsql/client';
 import type { Client, InValue } from '@libsql/client';
+import { MessageList } from '@mastra/core/agent';
+import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
+  TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_EVALS,
 } from '@mastra/core/storage';
 import type {
   EvalRow,
+  PaginationArgs,
+  PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
 } from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
@@ -32,13 +38,29 @@ function safelyParseJSON(jsonString: string): any {
 export interface LibSQLConfig {
   url: string;
   authToken?: string;
+  /**
+   * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
+   * @default 5
+   */
+  maxRetries?: number;
+  /**
+   * Initial backoff time in milliseconds for retrying write operations on SQLITE_BUSY.
+   * The backoff time will double with each retry (exponential backoff).
+   * @default 100
+   */
+  initialBackoffMs?: number;
 }
 
 export class LibSQLStore extends MastraStorage {
   private client: Client;
+  private readonly maxRetries: number;
+  private readonly initialBackoffMs: number;
 
   constructor(config: LibSQLConfig) {
     super({ name: `LibSQLStore` });
+
+    this.maxRetries = config.maxRetries ?? 5;
+    this.initialBackoffMs = config.initialBackoffMs ?? 100;
 
     // need to re-init every time for in memory dbs or the tables might not exist
     if (config.url.endsWith(':memory:')) {
@@ -46,6 +68,26 @@ export class LibSQLStore extends MastraStorage {
     }
 
     this.client = createClient(config);
+
+    // Set PRAGMAs for better concurrency, especially for file-based databases
+    if (config.url.startsWith('file:') || config.url.includes(':memory:')) {
+      this.client
+        .execute('PRAGMA journal_mode=WAL;')
+        .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL set.'))
+        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA journal_mode=WAL.', err));
+      this.client
+        .execute('PRAGMA busy_timeout = 5000;') // 5 seconds
+        .then(() => this.logger.debug('LibSQLStore: PRAGMA busy_timeout=5000 set.'))
+        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA busy_timeout.', err));
+    }
+  }
+
+  public get supports(): {
+    selectByIncludeResourceScope: boolean;
+  } {
+    return {
+      selectByIncludeResourceScope: true,
+    };
   }
 
   private getCreateTableSQL(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string {
@@ -87,8 +129,83 @@ export class LibSQLStore extends MastraStorage {
       const sql = this.getCreateTableSQL(tableName, schema);
       await this.client.execute(sql);
     } catch (error) {
-      this.logger.error(`Error creating table ${tableName}: ${error}`);
-      throw error;
+      // this.logger.error(`Error creating table ${tableName}: ${error}`);
+      // throw error;
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_CREATE_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  protected getSqlType(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'bigint':
+        return 'INTEGER'; // SQLite uses INTEGER for all integer sizes
+      case 'jsonb':
+        return 'TEXT'; // Store JSON as TEXT in SQLite
+      default:
+        return super.getSqlType(type);
+    }
+  }
+
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+
+    try {
+      // 1. Get existing columns using PRAGMA
+      const pragmaQuery = `PRAGMA table_info(${parsedTableName})`;
+      const result = await this.client.execute(pragmaQuery);
+      const existingColumnNames = new Set(result.rows.map((row: any) => row.name.toLowerCase()));
+
+      // 2. Add missing columns
+      for (const columnName of ifNotExists) {
+        if (!existingColumnNames.has(columnName.toLowerCase()) && schema[columnName]) {
+          const columnDef = schema[columnName];
+          const sqlType = this.getSqlType(columnDef.type); // ensure this exists or implement
+          const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
+          // In SQLite, you must provide a DEFAULT if adding a NOT NULL column to a non-empty table
+          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
+          const alterSql =
+            `ALTER TABLE ${parsedTableName} ADD COLUMN "${columnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+
+          await this.client.execute(alterSql);
+          this.logger?.debug?.(`Added column ${columnName} to table ${parsedTableName}`);
+        }
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_ALTER_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -97,9 +214,19 @@ export class LibSQLStore extends MastraStorage {
     try {
       await this.client.execute(`DELETE FROM ${parsedTableName}`);
     } catch (e) {
-      if (e instanceof Error) {
-        this.logger.error(e.message);
-      }
+      const mastraError = new MastraError(
+        {
+          id: 'LIBSQL_STORE_CLEAR_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        e,
+      );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
     }
   }
 
@@ -127,30 +254,83 @@ export class LibSQLStore extends MastraStorage {
     };
   }
 
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    try {
-      await this.client.execute(
-        this.prepareStatement({
-          tableName,
-          record,
-        }),
-      );
-    } catch (error) {
-      this.logger.error(`Error upserting into table ${tableName}: ${error}`);
-      throw error;
+  private async executeWriteOperationWithRetry<T>(
+    operationFn: () => Promise<T>,
+    operationDescription: string,
+  ): Promise<T> {
+    let retries = 0;
+
+    while (true) {
+      try {
+        return await operationFn();
+      } catch (error: any) {
+        if (
+          error.message &&
+          (error.message.includes('SQLITE_BUSY') || error.message.includes('database is locked')) &&
+          retries < this.maxRetries
+        ) {
+          retries++;
+          const backoffTime = this.initialBackoffMs * Math.pow(2, retries - 1);
+          this.logger.warn(
+            `LibSQLStore: Encountered SQLITE_BUSY during ${operationDescription}. Retrying (${retries}/${this.maxRetries}) in ${backoffTime}ms...`,
+          );
+          await new Promise(resolve => setTimeout(resolve, backoffTime));
+        } else {
+          this.logger.error(`LibSQLStore: Error during ${operationDescription} after ${retries} retries: ${error}`);
+          throw error;
+        }
+      }
     }
   }
 
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    if (records.length === 0) return;
+  public insert(args: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    return this.executeWriteOperationWithRetry(() => this.doInsert(args), `insert into table ${args.tableName}`);
+  }
 
-    try {
-      const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));
-      await this.client.batch(batchStatements, 'write');
-    } catch (error) {
-      this.logger.error(`Error upserting into table ${tableName}: ${error}`);
-      throw error;
-    }
+  private async doInsert({
+    tableName,
+    record,
+  }: {
+    tableName: TABLE_NAMES;
+    record: Record<string, any>;
+  }): Promise<void> {
+    await this.client.execute(
+      this.prepareStatement({
+        tableName,
+        record,
+      }),
+    );
+  }
+
+  public batchInsert(args: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    return this.executeWriteOperationWithRetry(
+      () => this.doBatchInsert(args),
+      `batch insert into table ${args.tableName}`,
+    ).catch(error => {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_BATCH_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName: args.tableName,
+          },
+        },
+        error,
+      );
+    });
+  }
+
+  private async doBatchInsert({
+    tableName,
+    records,
+  }: {
+    tableName: TABLE_NAMES;
+    records: Record<string, any>[];
+  }): Promise<void> {
+    if (records.length === 0) return;
+    const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));
+    await this.client.batch(batchStatements, 'write');
   }
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
@@ -188,51 +368,171 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    const result = await this.load<StorageThreadType>({
-      tableName: TABLE_THREADS,
-      keys: { id: threadId },
-    });
+    try {
+      const result = await this.load<StorageThreadType>({
+        tableName: TABLE_THREADS,
+        keys: { id: threadId },
+      });
 
-    if (!result) {
-      return null;
+      if (!result) {
+        return null;
+      }
+
+      return {
+        ...result,
+        metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_THREAD_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
     }
-
-    return {
-      ...result,
-      metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
-    };
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    const result = await this.client.execute({
-      sql: `SELECT * FROM ${TABLE_THREADS} WHERE resourceId = ?`,
-      args: [resourceId],
-    });
+  /**
+   * @deprecated use getThreadsByResourceIdPaginated instead for paginated results.
+   */
+  public async getThreadsByResourceId(args: { resourceId: string }): Promise<StorageThreadType[]> {
+    const { resourceId } = args;
 
-    if (!result.rows) {
+    try {
+      const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
+      const queryParams: InValue[] = [resourceId];
+
+      const mapRowToStorageThreadType = (row: any): StorageThreadType => ({
+        id: row.id as string,
+        resourceId: row.resourceId as string,
+        title: row.title as string,
+        createdAt: new Date(row.createdAt as string), // Convert string to Date
+        updatedAt: new Date(row.updatedAt as string), // Convert string to Date
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+      });
+
+      // Non-paginated path
+      const result = await this.client.execute({
+        sql: `SELECT * ${baseQuery} ORDER BY createdAt DESC`,
+        args: queryParams,
+      });
+
+      if (!result.rows) {
+        return [];
+      }
+      return result.rows.map(mapRowToStorageThreadType);
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
+        },
+        error,
+      );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
       return [];
     }
+  }
 
-    return result.rows.map(thread => ({
-      id: thread.id,
-      resourceId: thread.resourceId,
-      title: thread.title,
-      createdAt: thread.createdAt,
-      updatedAt: thread.updatedAt,
-      metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-    })) as any as StorageThreadType[];
+  public async getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+    } & PaginationArgs,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    const { resourceId, page = 0, perPage = 100 } = args;
+
+    try {
+      const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
+      const queryParams: InValue[] = [resourceId];
+
+      const mapRowToStorageThreadType = (row: any): StorageThreadType => ({
+        id: row.id as string,
+        resourceId: row.resourceId as string,
+        title: row.title as string,
+        createdAt: new Date(row.createdAt as string), // Convert string to Date
+        updatedAt: new Date(row.updatedAt as string), // Convert string to Date
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+      });
+
+      const currentOffset = page * perPage;
+
+      const countResult = await this.client.execute({
+        sql: `SELECT COUNT(*) as count ${baseQuery}`,
+        args: queryParams,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+      if (total === 0) {
+        return {
+          threads: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      const dataResult = await this.client.execute({
+        sql: `SELECT * ${baseQuery} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        args: [...queryParams, perPage, currentOffset],
+      });
+
+      const threads = (dataResult.rows || []).map(mapRowToStorageThreadType);
+
+      return {
+        threads,
+        total,
+        page,
+        perPage,
+        hasMore: currentOffset + threads.length < total,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
+        },
+        error,
+      );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
+      return { threads: [], total: 0, page, perPage, hasMore: false };
+    }
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    await this.insert({
-      tableName: TABLE_THREADS,
-      record: {
-        ...thread,
-        metadata: JSON.stringify(thread.metadata),
-      },
-    });
+    try {
+      await this.insert({
+        tableName: TABLE_THREADS,
+        record: {
+          ...thread,
+          metadata: JSON.stringify(thread.metadata),
+        },
+      });
 
-    return thread;
+      return thread;
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'LIBSQL_STORE_SAVE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: thread.id },
+        },
+        error,
+      );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
+      throw mastraError;
+    }
   }
 
   async updateThread({
@@ -246,7 +546,13 @@ export class LibSQLStore extends MastraStorage {
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
-      throw new Error(`Thread ${id} not found`);
+      throw new MastraError({
+        id: 'LIBSQL_STORE_UPDATE_THREAD_FAILED_THREAD_NOT_FOUND',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread ${id} not found`,
+        details: { threadId: id },
+      });
     }
 
     const updatedThread = {
@@ -258,85 +564,146 @@ export class LibSQLStore extends MastraStorage {
       },
     };
 
-    await this.client.execute({
-      sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = ? WHERE id = ?`,
-      args: [title, JSON.stringify(updatedThread.metadata), id],
-    });
+    try {
+      await this.client.execute({
+        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = ? WHERE id = ?`,
+        args: [title, JSON.stringify(updatedThread.metadata), id],
+      });
 
-    return updatedThread;
+      return updatedThread;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_UPDATE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to update thread ${id}`,
+          details: { threadId: id },
+        },
+        error,
+      );
+    }
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    await this.client.execute({
-      sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
-      args: [threadId],
-    });
-    // Messages will be automatically deleted due to CASCADE constraint
+    // Delete messages for this thread (manual step)
+    try {
+      await this.client.execute({
+        sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
+        args: [threadId],
+      });
+      await this.client.execute({
+        sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
+        args: [threadId],
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_DELETE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
+    }
+    // TODO: Need to check if CASCADE is enabled so that messages will be automatically deleted due to CASCADE constraint
   }
 
-  private parseRow(row: any): MessageType {
+  private parseRow(row: any): MastraMessageV2 {
     let content = row.content;
     try {
       content = JSON.parse(row.content);
     } catch {
       // use content as is if it's not JSON
     }
-    return {
+    const result = {
       id: row.id,
       content,
       role: row.role,
-      type: row.type,
       createdAt: new Date(row.createdAt as string),
       threadId: row.thread_id,
-    } as MessageType;
+      resourceId: row.resourceId,
+    } as MastraMessageV2;
+    if (row.type && row.type !== `v2`) result.type = row.type;
+    return result;
   }
 
-  async getMessages<T extends MessageType[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
+  private async _getIncludedMessages({
+    threadId,
+    selectBy,
+  }: {
+    threadId: string;
+    selectBy: StorageGetMessagesArg['selectBy'];
+  }) {
+    const include = selectBy?.include;
+    if (!include) return null;
+
+    const unionQueries: string[] = [];
+    const params: any[] = [];
+
+    for (const inc of include) {
+      const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      // if threadId is provided, use it, otherwise use threadId from args
+      const searchId = inc.threadId || threadId;
+      unionQueries.push(
+        `
+            SELECT * FROM (
+              WITH numbered_messages AS (
+                SELECT
+                  id, content, role, type, "createdAt", thread_id, "resourceId",
+                  ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
+                FROM "${TABLE_MESSAGES}"
+                WHERE thread_id = ?
+              ),
+              target_positions AS (
+                SELECT row_num as target_pos
+                FROM numbered_messages
+                WHERE id = ?
+              )
+              SELECT DISTINCT m.*
+              FROM numbered_messages m
+              CROSS JOIN target_positions t
+              WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
+            ) 
+            `, // Keep ASC for final sorting after fetching context
+      );
+      params.push(searchId, id, withPreviousMessages, withNextMessages);
+    }
+    const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
+    const includedResult = await this.client.execute({ sql: finalQuery, args: params });
+    const includedRows = includedResult.rows?.map(row => this.parseRow(row));
+    const seen = new Set<string>();
+    const dedupedRows = includedRows.filter(row => {
+      if (seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    });
+    return dedupedRows;
+  }
+
+  /**
+   * @deprecated use getMessagesPaginated instead for paginated results.
+   */
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & {
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
-      const messages: MessageType[] = [];
-      const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
-
-      // If we have specific messages to select
+      const messages: MastraMessageV2[] = [];
+      const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
       if (selectBy?.include?.length) {
-        const includeIds = selectBy.include.map(i => i.id);
-        const maxPrev = Math.max(...selectBy.include.map(i => i.withPreviousMessages || 0));
-        const maxNext = Math.max(...selectBy.include.map(i => i.withNextMessages || 0));
-
-        // Get messages around all specified IDs in one query using row numbers
-        const includeResult = await this.client.execute({
-          sql: `
-            WITH numbered_messages AS (
-              SELECT 
-                id,
-                content,
-                role,
-                type,
-                "createdAt",
-                thread_id,
-                ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
-              FROM "${TABLE_MESSAGES}"
-              WHERE thread_id = ?
-            ),
-            target_positions AS (
-              SELECT row_num as target_pos
-              FROM numbered_messages
-              WHERE id IN (${includeIds.map(() => '?').join(', ')})
-            )
-            SELECT DISTINCT m.*
-            FROM numbered_messages m
-            CROSS JOIN target_positions t
-            WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
-            ORDER BY m."createdAt" ASC
-          `,
-          args: [threadId, ...includeIds, maxPrev, maxNext],
-        });
-
-        if (includeResult.rows) {
-          messages.push(...includeResult.rows.map((row: any) => this.parseRow(row)));
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
+        if (includeMessages) {
+          messages.push(...includeMessages);
         }
       }
 
-      // Get remaining messages, excluding already fetched IDs
       const excludeIds = messages.map(m => m.id);
       const remainingSql = `
         SELECT 
@@ -345,7 +712,8 @@ export class LibSQLStore extends MastraStorage {
           role, 
           type,
           "createdAt", 
-          thread_id
+          thread_id,
+          "resourceId"
         FROM "${TABLE_MESSAGES}"
         WHERE thread_id = ?
         ${excludeIds.length ? `AND id NOT IN (${excludeIds.map(() => '?').join(', ')})` : ''}
@@ -353,27 +721,133 @@ export class LibSQLStore extends MastraStorage {
         LIMIT ?
       `;
       const remainingArgs = [threadId, ...(excludeIds.length ? excludeIds : []), limit];
-
-      const remainingResult = await this.client.execute({
-        sql: remainingSql,
-        args: remainingArgs,
-      });
-
+      const remainingResult = await this.client.execute({ sql: remainingSql, args: remainingArgs });
       if (remainingResult.rows) {
         messages.push(...remainingResult.rows.map((row: any) => this.parseRow(row)));
       }
-
-      // Sort all messages by creation date
       messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-
-      return messages as T;
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
-      this.logger.error('Error getting messages:', error as Error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
     }
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  public async getMessagesPaginated(
+    args: StorageGetMessagesArg & {
+      format?: 'v1' | 'v2';
+    },
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    const { threadId, format, selectBy } = args;
+    const { page = 0, perPage = 40, dateRange } = selectBy?.pagination || {};
+    const fromDate = dateRange?.start;
+    const toDate = dateRange?.end;
+
+    const messages: MastraMessageV2[] = [];
+
+    if (selectBy?.include?.length) {
+      try {
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
+        if (includeMessages) {
+          messages.push(...includeMessages);
+        }
+      } catch (error) {
+        throw new MastraError(
+          {
+            id: 'LIBSQL_STORE_GET_MESSAGES_PAGINATED_GET_INCLUDE_MESSAGES_FAILED',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { threadId },
+          },
+          error,
+        );
+      }
+    }
+
+    try {
+      const currentOffset = page * perPage;
+
+      const conditions: string[] = [`thread_id = ?`];
+      const queryParams: InValue[] = [threadId];
+
+      if (fromDate) {
+        conditions.push(`"createdAt" >= ?`);
+        queryParams.push(fromDate.toISOString());
+      }
+      if (toDate) {
+        conditions.push(`"createdAt" <= ?`);
+        queryParams.push(toDate.toISOString());
+      }
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      const countResult = await this.client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_MESSAGES} ${whereClause}`,
+        args: queryParams,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+      if (total === 0) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      const dataResult = await this.client.execute({
+        sql: `SELECT id, content, role, type, "createdAt", thread_id FROM ${TABLE_MESSAGES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+        args: [...queryParams, perPage, currentOffset],
+      });
+
+      messages.push(...(dataResult.rows || []).map((row: any) => this.parseRow(row)));
+
+      const messagesToReturn =
+        format === 'v1'
+          ? new MessageList().add(messages, 'memory').get.all.v1()
+          : new MessageList().add(messages, 'memory').get.all.v2();
+
+      return {
+        messages: messagesToReturn,
+        total,
+        page,
+        perPage,
+        hasMore: currentOffset + messages.length < total,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_MESSAGES_PAGINATED_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        error,
+      );
+      this.logger?.trackException?.(mastraError);
+      this.logger?.error?.(mastraError.toString());
+      return { messages: [], total: 0, page, perPage, hasMore: false };
+    }
+  }
+
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages({
+    messages,
+    format,
+  }:
+    | { messages: MastraMessageV1[]; format?: undefined | 'v1' }
+    | { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
     if (messages.length === 0) return messages;
 
     try {
@@ -385,28 +859,159 @@ export class LibSQLStore extends MastraStorage {
       // Prepare batch statements for all messages
       const batchStatements = messages.map(message => {
         const time = message.createdAt || new Date();
+        if (!message.threadId) {
+          throw new Error(
+            `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
+          );
+        }
+        if (!message.resourceId) {
+          throw new Error(
+            `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
+          );
+        }
         return {
-          sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt) 
-                VALUES (?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt, resourceId) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)`,
           args: [
             message.id,
-            threadId,
+            message.threadId!,
             typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
             message.role,
-            message.type,
+            message.type || 'v2',
             time instanceof Date ? time.toISOString() : time,
+            message.resourceId,
           ],
         };
+      });
+
+      const now = new Date().toISOString();
+      batchStatements.push({
+        sql: `UPDATE ${TABLE_THREADS} SET updatedAt = ? WHERE id = ?`,
+        args: [now, threadId],
       });
 
       // Execute all inserts in a single batch
       await this.client.batch(batchStatements, 'write');
 
-      return messages;
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
-      this.logger.error('Failed to save messages in database: ' + (error as { message: string })?.message);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_SAVE_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
+  }
+
+  async updateMessages({
+    messages,
+  }: {
+    messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
+      id: string;
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+    })[];
+  }): Promise<MastraMessageV2[]> {
+    if (messages.length === 0) {
+      return [];
+    }
+
+    const messageIds = messages.map(m => m.id);
+    const placeholders = messageIds.map(() => '?').join(',');
+
+    const selectSql = `SELECT * FROM ${TABLE_MESSAGES} WHERE id IN (${placeholders})`;
+    const existingResult = await this.client.execute({ sql: selectSql, args: messageIds });
+    const existingMessages: MastraMessageV2[] = existingResult.rows.map(row => this.parseRow(row));
+
+    if (existingMessages.length === 0) {
+      return [];
+    }
+
+    const batchStatements = [];
+    const threadIdsToUpdate = new Set<string>();
+    const columnMapping: Record<string, string> = {
+      threadId: 'thread_id',
+    };
+
+    for (const existingMessage of existingMessages) {
+      const updatePayload = messages.find(m => m.id === existingMessage.id);
+      if (!updatePayload) continue;
+
+      const { id, ...fieldsToUpdate } = updatePayload;
+      if (Object.keys(fieldsToUpdate).length === 0) continue;
+
+      threadIdsToUpdate.add(existingMessage.threadId!);
+      if (updatePayload.threadId && updatePayload.threadId !== existingMessage.threadId) {
+        threadIdsToUpdate.add(updatePayload.threadId);
+      }
+
+      const setClauses = [];
+      const args: InValue[] = [];
+      const updatableFields = { ...fieldsToUpdate };
+
+      // Special handling for the 'content' field to merge instead of overwrite
+      if (updatableFields.content) {
+        const newContent = {
+          ...existingMessage.content,
+          ...updatableFields.content,
+          // Deep merge metadata if it exists on both
+          ...(existingMessage.content?.metadata && updatableFields.content.metadata
+            ? {
+                metadata: {
+                  ...existingMessage.content.metadata,
+                  ...updatableFields.content.metadata,
+                },
+              }
+            : {}),
+        };
+        setClauses.push(`${parseSqlIdentifier('content', 'column name')} = ?`);
+        args.push(JSON.stringify(newContent));
+        delete updatableFields.content;
+      }
+
+      for (const key in updatableFields) {
+        if (Object.prototype.hasOwnProperty.call(updatableFields, key)) {
+          const dbKey = columnMapping[key] || key;
+          setClauses.push(`${parseSqlIdentifier(dbKey, 'column name')} = ?`);
+          let value = updatableFields[key as keyof typeof updatableFields];
+
+          if (typeof value === 'object' && value !== null) {
+            value = JSON.stringify(value);
+          }
+          args.push(value as InValue);
+        }
+      }
+
+      if (setClauses.length === 0) continue;
+
+      args.push(id);
+
+      const sql = `UPDATE ${TABLE_MESSAGES} SET ${setClauses.join(', ')} WHERE id = ?`;
+      batchStatements.push({ sql, args });
+    }
+
+    if (batchStatements.length === 0) {
+      return existingMessages;
+    }
+
+    const now = new Date().toISOString();
+    for (const threadId of threadIdsToUpdate) {
+      if (threadId) {
+        batchStatements.push({
+          sql: `UPDATE ${TABLE_THREADS} SET updatedAt = ? WHERE id = ?`,
+          args: [now, threadId],
+        });
+      }
+    }
+
+    await this.client.batch(batchStatements, 'write');
+
+    const updatedResult = await this.client.execute({ sql: selectSql, args: messageIds });
+    return updatedResult.rows.map(row => this.parseRow(row));
   }
 
   private transformEvalRow(row: Record<string, any>): EvalRow {
@@ -431,6 +1036,7 @@ export class LibSQLStore extends MastraStorage {
     };
   }
 
+  /** @deprecated use getEvals instead */
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     try {
       const baseQuery = `SELECT * FROM ${TABLE_EVALS} WHERE agent_name = ?`;
@@ -452,125 +1058,239 @@ export class LibSQLStore extends MastraStorage {
       if (error instanceof Error && error.message.includes('no such table')) {
         return [];
       }
-      this.logger.error('Failed to get evals for the specified agent: ' + (error as any)?.message);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_EVALS_BY_AGENT_NAME_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentName },
+        },
+        error,
+      );
     }
   }
 
-  // TODO: add types
-  async getTraces(
-    {
-      name,
-      scope,
-      page,
-      perPage,
-      attributes,
-      filters,
-      fromDate,
-      toDate,
-    }: {
-      name?: string;
-      scope?: string;
-      page: number;
-      perPage: number;
-      attributes?: Record<string, string>;
-      filters?: Record<string, any>;
-      fromDate?: Date;
-      toDate?: Date;
-    } = {
-      page: 0,
-      perPage: 100,
-    },
-  ): Promise<any[]> {
-    const limit = perPage;
-    const offset = page * perPage;
-
-    const args: (string | number)[] = [];
+  async getEvals(
+    options: {
+      agentName?: string;
+      type?: 'test' | 'live';
+    } & PaginationArgs = {},
+  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
+    const { agentName, type, page = 0, perPage = 100, dateRange } = options;
+    const fromDate = dateRange?.start;
+    const toDate = dateRange?.end;
 
     const conditions: string[] = [];
-    if (name) {
-      conditions.push("name LIKE CONCAT(?, '%')");
-    }
-    if (scope) {
-      conditions.push('scope = ?');
-    }
-    if (attributes) {
-      Object.keys(attributes).forEach(key => {
-        conditions.push(`attributes->>'$.${key}' = ?`);
-      });
+    const queryParams: InValue[] = [];
+
+    if (agentName) {
+      conditions.push(`agent_name = ?`);
+      queryParams.push(agentName);
     }
 
-    if (filters) {
-      Object.entries(filters).forEach(([key, _value]) => {
-        conditions.push(`${key} = ?`);
-      });
+    if (type === 'test') {
+      conditions.push(`(test_info IS NOT NULL AND json_extract(test_info, '$.testPath') IS NOT NULL)`);
+    } else if (type === 'live') {
+      conditions.push(`(test_info IS NULL OR json_extract(test_info, '$.testPath') IS NULL)`);
     }
 
     if (fromDate) {
-      conditions.push('createdAt >= ?');
+      conditions.push(`created_at >= ?`);
+      queryParams.push(fromDate.toISOString());
     }
 
     if (toDate) {
-      conditions.push('createdAt <= ?');
+      conditions.push(`created_at <= ?`);
+      queryParams.push(toDate.toISOString());
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
+    try {
+      const countResult = await this.client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_EVALS} ${whereClause}`,
+        args: queryParams,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+      const currentOffset = page * perPage;
+      const hasMore = currentOffset + perPage < total;
+
+      if (total === 0) {
+        return {
+          evals: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      const dataResult = await this.client.execute({
+        sql: `SELECT * FROM ${TABLE_EVALS} ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+        args: [...queryParams, perPage, currentOffset],
+      });
+
+      return {
+        evals: dataResult.rows?.map(row => this.transformEvalRow(row)) ?? [],
+        total,
+        page,
+        perPage,
+        hasMore,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_EVALS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * @deprecated use getTracesPaginated instead.
+   */
+  public async getTraces(args: {
+    name?: string;
+    scope?: string;
+    page: number;
+    perPage: number;
+    attributes?: Record<string, string>;
+    filters?: Record<string, any>;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<Trace[]> {
+    if (args.fromDate || args.toDate) {
+      (args as any).dateRange = {
+        start: args.fromDate,
+        end: args.toDate,
+      };
+    }
+    try {
+      const result = await this.getTracesPaginated(args);
+      return result.traces;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_TRACES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  public async getTracesPaginated(
+    args: {
+      name?: string;
+      scope?: string;
+      attributes?: Record<string, string>;
+      filters?: Record<string, any>;
+    } & PaginationArgs,
+  ): Promise<PaginationInfo & { traces: Trace[] }> {
+    const { name, scope, page = 0, perPage = 100, attributes, filters, dateRange } = args;
+    const fromDate = dateRange?.start;
+    const toDate = dateRange?.end;
+    const currentOffset = page * perPage;
+
+    const queryArgs: InValue[] = [];
+    const conditions: string[] = [];
+
     if (name) {
-      args.push(name);
+      conditions.push('name LIKE ?');
+      queryArgs.push(`${name}%`);
     }
-
     if (scope) {
-      args.push(scope);
+      conditions.push('scope = ?');
+      queryArgs.push(scope);
     }
-
     if (attributes) {
-      for (const [, value] of Object.entries(attributes)) {
-        args.push(value);
-      }
+      Object.entries(attributes).forEach(([key, value]) => {
+        conditions.push(`json_extract(attributes, '$.${key}') = ?`);
+        queryArgs.push(value);
+      });
     }
-
     if (filters) {
-      for (const [, value] of Object.entries(filters)) {
-        args.push(value);
-      }
+      Object.entries(filters).forEach(([key, value]) => {
+        conditions.push(`${parseSqlIdentifier(key, 'filter key')} = ?`);
+        queryArgs.push(value);
+      });
     }
-
     if (fromDate) {
-      args.push(fromDate.toISOString());
+      conditions.push('createdAt >= ?');
+      queryArgs.push(fromDate.toISOString());
     }
-
     if (toDate) {
-      args.push(toDate.toISOString());
+      conditions.push('createdAt <= ?');
+      queryArgs.push(toDate.toISOString());
     }
 
-    args.push(limit, offset);
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const result = await this.client.execute({
-      sql: `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "startTime" DESC LIMIT ? OFFSET ?`,
-      args,
-    });
+    try {
+      const countResult = await this.client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_TRACES} ${whereClause}`,
+        args: queryArgs,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
 
-    if (!result.rows) {
-      return [];
+      if (total === 0) {
+        return {
+          traces: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      const dataResult = await this.client.execute({
+        sql: `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "startTime" DESC LIMIT ? OFFSET ?`,
+        args: [...queryArgs, perPage, currentOffset],
+      });
+
+      const traces =
+        dataResult.rows?.map(
+          row =>
+            ({
+              id: row.id,
+              parentSpanId: row.parentSpanId,
+              traceId: row.traceId,
+              name: row.name,
+              scope: row.scope,
+              kind: row.kind,
+              status: safelyParseJSON(row.status as string),
+              events: safelyParseJSON(row.events as string),
+              links: safelyParseJSON(row.links as string),
+              attributes: safelyParseJSON(row.attributes as string),
+              startTime: row.startTime,
+              endTime: row.endTime,
+              other: safelyParseJSON(row.other as string),
+              createdAt: row.createdAt,
+            }) as Trace,
+        ) ?? [];
+
+      return {
+        traces,
+        total,
+        page,
+        perPage,
+        hasMore: currentOffset + traces.length < total,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_TRACES_PAGINATED_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
-
-    return result.rows.map(row => ({
-      id: row.id,
-      parentSpanId: row.parentSpanId,
-      traceId: row.traceId,
-      name: row.name,
-      scope: row.scope,
-      kind: row.kind,
-      status: safelyParseJSON(row.status as string),
-      events: safelyParseJSON(row.events as string),
-      links: safelyParseJSON(row.links as string),
-      attributes: safelyParseJSON(row.attributes as string),
-      startTime: row.startTime,
-      endTime: row.endTime,
-      other: safelyParseJSON(row.other as string),
-      createdAt: row.createdAt,
-    })) as any;
   }
 
   async getWorkflowRuns({
@@ -640,8 +1360,14 @@ export class LibSQLStore extends MastraStorage {
       // Use runs.length as total when not paginating
       return { runs, total: total || runs.length };
     } catch (error) {
-      console.error('Error getting workflow runs:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_WORKFLOW_RUNS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -667,16 +1393,27 @@ export class LibSQLStore extends MastraStorage {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const result = await this.client.execute({
-      sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
-      args,
-    });
+    try {
+      const result = await this.client.execute({
+        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
+        args,
+      });
 
-    if (!result.rows?.[0]) {
-      return null;
+      if (!result.rows?.[0]) {
+        return null;
+      }
+
+      return this.parseWorkflowRun(result.rows[0]);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
-
-    return this.parseWorkflowRun(result.rows[0]);
   }
 
   private async hasColumn(table: string, column: string): Promise<boolean> {

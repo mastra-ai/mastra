@@ -13,6 +13,11 @@ import {
   AgentIcon,
   Icon,
   Txt,
+  ToolCoinIcon,
+  EmptyState,
+  Button,
+  MainContentLayout,
+  MainContentContent,
 } from '@mastra/playground-ui';
 import { Link } from 'react-router';
 import { startTransition, useMemo, useRef, useState } from 'react';
@@ -99,42 +104,73 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
     });
   };
 
+  if (filteredTools.length === 0 && !value) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <HeaderTitle>Tools</HeaderTitle>
+        </Header>
+
+        <MainContentContent isCentered={true}>
+          <EmptyState
+            iconSlot={<ToolCoinIcon />}
+            titleSlot="Configure Tools"
+            descriptionSlot="Mastra tools are not configured yet. You can find more information in the documentation."
+            actionSlot={
+              <Button
+                size="lg"
+                className="w-full"
+                variant="light"
+                as="a"
+                href="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
+                target="_blank"
+              >
+                <Icon>
+                  <ToolsIcon />
+                </Icon>
+                Docs
+              </Button>
+            }
+          />
+        </MainContentContent>
+      </MainContentLayout>
+    );
+  }
+
   return (
-    <>
+    <MainContentLayout>
       <Header>
         <HeaderTitle>Tools</HeaderTitle>
       </Header>
 
-      <div className="pt-12 overflow-y-scroll h-[calc(100%-32px)]">
-        <div className="max-w-2xl mx-auto px-4">
-          <div className="px-4 flex items-center gap-2 rounded-lg bg-surface5 focus-within:ring-2 focus-within:ring-accent3">
-            <Icon>
-              <SearchIcon />
-            </Icon>
+      <MainContentContent className="max-w-5xl mx-auto px-4 pt-4">
+        <div className="px-4 flex items-center gap-2 rounded-lg bg-surface5 focus-within:ring-2 focus-within:ring-accent3">
+          <Icon>
+            <SearchIcon />
+          </Icon>
 
-            <input
-              type="text"
-              placeholder="Search for a tool"
-              className="w-full py-2 bg-transparent text-icon3 focus:text-icon6 placeholder:text-icon3 outline-none"
-              value={value}
-              onChange={handleSearch}
-            />
-          </div>
-
-          {filteredTools.length === 0 && (
-            <Txt as="p" className="text-icon3 py-2">
-              No tools found matching your search.
-            </Txt>
-          )}
+          <input
+            type="text"
+            placeholder="Search for a tool"
+            className="w-full py-2 bg-transparent text-icon3 focus:text-icon6 placeholder:text-icon3 outline-none"
+            value={value}
+            onChange={handleSearch}
+          />
         </div>
 
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 max-w-5xl mx-auto px-4 py-8">
+        {filteredTools.length === 0 && (
+          <Txt as="p" className="text-icon3 py-2">
+            No tools found matching your search.
+          </Txt>
+        )}
+
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 max-w-5xl mx-auto  py-8">
           {filteredTools.map(tool => (
             <ToolEntity key={tool.id} tool={tool} />
           ))}
         </div>
-      </div>
-    </>
+      </MainContentContent>
+    </MainContentLayout>
   );
 };
 

@@ -24,7 +24,7 @@ import {
   setAgentInstructionsHandler,
   streamGenerateHandler,
 } from './handlers/agents';
-import { authorizationMiddleware, authenticationMiddleware } from './handlers/auth';
+import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import {
@@ -40,13 +40,13 @@ import {
 } from './handlers/legacyWorkflows.js';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
 import {
+  executeMcpServerToolHandler,
+  getMcpRegistryServerDetailHandler,
   getMcpServerMessageHandler,
   getMcpServerSseHandler,
-  listMcpRegistryServersHandler,
-  getMcpRegistryServerDetailHandler,
-  listMcpServerToolsHandler,
   getMcpServerToolDetailHandler,
-  executeMcpServerToolHandler,
+  listMcpRegistryServersHandler,
+  listMcpServerToolsHandler,
 } from './handlers/mcp';
 import {
   createThreadHandler,
@@ -69,16 +69,19 @@ import { rootHandler } from './handlers/root';
 import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
 import { createIndex, deleteIndex, describeIndex, listIndexes, queryVectors, upsertVectors } from './handlers/vector';
-import { getSpeakersHandler, listenHandler, speakHandler } from './handlers/voice';
+import { getListenerHandler, getSpeakersHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
   createWorkflowRunHandler,
   getWorkflowByIdHandler,
+  getWorkflowRunByIdHandler,
+  getWorkflowRunExecutionResultHandler,
   getWorkflowRunsHandler,
   getWorkflowsHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
   startAsyncWorkflowHandler,
   startWorkflowRunHandler,
+  streamWorkflowHandler,
   watchWorkflowHandler,
 } from './handlers/workflows.js';
 import type { ServerBundleOptions } from './types';
@@ -119,8 +122,14 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       });
       return acc;
     }, {});
-  } catch {
-    console.error('Failed to import tools');
+  } catch (err: any) {
+    console.error(
+      `Failed to import tools
+reason: ${err.message}
+${err.stack.split('\n').slice(1).join('\n')}
+    `,
+      err,
+    );
   }
 
   // Middleware
@@ -149,21 +158,24 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   app.onError(errorHandler);
 
   // Add Mastra to context
-  app.use('*', function setContext(c, next) {
-    const runtimeContext = new RuntimeContext();
-    const proxyRuntimeContext = new Proxy(runtimeContext, {
-      get(target, prop) {
-        if (prop === 'get') {
-          return function (key: string) {
-            const value = target.get(key);
-            return value ?? `<${key}>`;
-          };
+  app.use('*', async function setContext(c, next) {
+    let runtimeContext = new RuntimeContext();
+    if (c.req.method === 'POST' || c.req.method === 'PUT') {
+      const contentType = c.req.header('content-type');
+      if (contentType?.includes('application/json')) {
+        try {
+          const clonedReq = c.req.raw.clone();
+          const body = (await clonedReq.json()) as { runtimeContext?: Record<string, any> };
+          if (body.runtimeContext) {
+            runtimeContext = new RuntimeContext(Object.entries(body.runtimeContext));
+          }
+        } catch {
+          // Body parsing failed, continue without body
         }
-        return Reflect.get(target, prop);
-      },
-    });
+      }
+    }
 
-    c.set('runtimeContext', proxyRuntimeContext);
+    c.set('runtimeContext', runtimeContext);
     c.set('mastra', mastra);
     c.set('tools', tools);
     c.set('playground', options.playground === true);
@@ -1106,6 +1118,46 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     speakHandler,
   );
 
+  app.get(
+    '/api/agents/:agentId/voice/listener',
+    describeRoute({
+      description: 'Get available listener for an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Checks if listener is available for the agent',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                description: 'Listener information depending on the voice provider',
+                properties: {
+                  enabled: { type: 'boolean' },
+                },
+                additionalProperties: true,
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Agent does not have voice capabilities',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    getListenerHandler,
+  );
+
   app.post(
     '/api/agents/:agentId/listen',
     bodyLimit({
@@ -1317,6 +1369,31 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     getMcpServerMessageHandler,
   );
 
+  app.get(
+    '/api/mcp/:serverId/mcp',
+    describeRoute({
+      description: 'Send a message to an MCP server using Streamable HTTP',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Streamable HTTP connection processed',
+        },
+        404: {
+          description: 'MCP server not found',
+        },
+      },
+    }),
+    getMcpServerMessageHandler,
+  );
+
   // New MCP server routes for SSE
   const mcpSseBasePath = '/api/mcp/:serverId/sse';
   const mcpSseMessagePath = '/api/mcp/:serverId/messages';
@@ -1411,7 +1488,43 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               schema: {
                 type: 'object',
                 properties: {
-                  servers: { type: 'array', items: { $ref: '#/components/schemas/ServerInfo' } },
+                  servers: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        name: { type: 'string' },
+                        description: { type: 'string' },
+                        repository: {
+                          type: 'object',
+                          properties: {
+                            url: { type: 'string', description: 'The URL of the repository (e.g., a GitHub URL)' },
+                            source: {
+                              type: 'string',
+                              description: "The source control platform (e.g., 'github', 'gitlab')",
+                              enum: ['github', 'gitlab'],
+                            },
+                            id: { type: 'string', description: 'A unique identifier for the repository at the source' },
+                          },
+                        },
+                        version_detail: {
+                          type: 'object',
+                          properties: {
+                            version: { type: 'string', description: 'The semantic version string (e.g., "1.0.2")' },
+                            release_date: {
+                              type: 'string',
+                              description: 'The ISO 8601 date-time string when this version was released or registered',
+                            },
+                            is_latest: {
+                              type: 'boolean',
+                              description: 'Indicates if this version is the latest available',
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
                   next: { type: 'string', format: 'uri', nullable: true },
                   total_count: { type: 'integer' },
                 },
@@ -1449,12 +1562,117 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
         200: {
           description: 'Detailed information about the MCP server instance.',
           content: {
-            'application/json': { schema: { $ref: '#/components/schemas/ServerDetailInfo' } },
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  description: { type: 'string' },
+                  repository: {
+                    type: 'object',
+                    properties: {
+                      url: { type: 'string' },
+                      source: { type: 'string' },
+                      id: { type: 'string' },
+                    },
+                  },
+                  version_detail: {
+                    type: 'object',
+                    properties: {
+                      version: { type: 'string' },
+                      release_date: { type: 'string' },
+                      is_latest: { type: 'boolean' },
+                    },
+                  },
+                  package_canonical: { type: 'string' },
+                  packages: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        registry_name: { type: 'string' },
+                        name: { type: 'string' },
+                        version: { type: 'string' },
+                        command: {
+                          type: 'object',
+                          properties: {
+                            name: { type: 'string' },
+                            subcommands: {
+                              type: 'array',
+                              items: {
+                                type: 'object',
+                                properties: {
+                                  name: { type: 'string' },
+                                  description: { type: 'string' },
+                                  is_required: { type: 'boolean' },
+                                  subcommands: {
+                                    type: 'array',
+                                    items: { type: 'object' },
+                                  },
+                                  positional_arguments: {
+                                    type: 'array',
+                                    items: { type: 'object' },
+                                  },
+                                  named_arguments: {
+                                    type: 'array',
+                                    items: { type: 'object' },
+                                  },
+                                },
+                              },
+                            },
+                            positional_arguments: {
+                              type: 'array',
+                              items: { type: 'object' },
+                            },
+                            named_arguments: {
+                              type: 'array',
+                              items: { type: 'object' },
+                            },
+                          },
+                        },
+                        environment_variables: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              name: { type: 'string' },
+                              description: { type: 'string' },
+                              required: { type: 'boolean' },
+                              default_value: { type: 'string' },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  remotes: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        transport_type: { type: 'string' },
+                        url: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
         404: {
           description: 'MCP server instance not found.',
-          content: { 'application/json': { schema: { type: 'object', properties: { error: { type: 'string' } } } } },
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  error: { type: 'string' },
+                },
+              },
+            },
+          },
         },
       },
     }),
@@ -2185,6 +2403,68 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     getWorkflowRunsHandler,
   );
 
+  app.get(
+    '/api/workflows/:workflowId/runs/:runId/execution-result',
+    describeRoute({
+      description: 'Get execution result for a workflow run',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Workflow run execution result',
+        },
+        404: {
+          description: 'Workflow run execution result not found',
+        },
+      },
+    }),
+    getWorkflowRunExecutionResultHandler,
+  );
+
+  app.get(
+    '/api/workflows/:workflowId/runs/:runId',
+    describeRoute({
+      description: 'Get workflow run by ID',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Workflow run by ID',
+        },
+        404: {
+          description: 'Workflow run not found',
+        },
+      },
+    }),
+    getWorkflowRunByIdHandler,
+  );
+
   app.post(
     '/api/workflows/:workflowId/resume',
     describeRoute({
@@ -2272,6 +2552,54 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
     }),
     resumeAsyncWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/stream',
+    describeRoute({
+      description: 'Stream workflow in real-time',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                inputData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'workflow run started',
+        },
+        404: {
+          description: 'workflow not found',
+        },
+      },
+      tags: ['workflows'],
+    }),
+    streamWorkflowHandler,
   );
 
   app.post(
@@ -2427,7 +2755,6 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     }),
     watchWorkflowHandler,
   );
-
   // Log routes
   app.get(
     '/api/logs',
@@ -2441,10 +2768,46 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'fromDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'toDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'logLevel',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'filters',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
       ],
       responses: {
         200: {
-          description: 'List of all logs',
+          description: 'Paginated list of all logs',
         },
       },
     }),
@@ -2483,10 +2846,46 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'fromDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'toDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'logLevel',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'filters',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
       ],
       responses: {
         200: {
-          description: 'List of logs for run ID',
+          description: 'Paginated list of logs for run ID',
         },
       },
     }),
@@ -2801,6 +3200,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     app.get(
       '/openapi.json',
       openAPISpecs(app, {
+        includeEmptyPaths: true,
         documentation: {
           info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
         },
@@ -2809,15 +3209,33 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   }
 
   if (options?.isDev || server?.build?.swaggerUI) {
-    app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
+    app.get(
+      '/swagger-ui',
+      describeRoute({
+        hide: true,
+      }),
+      swaggerUI({ url: '/openapi.json' }),
+    );
   }
 
   if (options?.playground) {
     // SSE endpoint for refresh notifications
-    app.get('/refresh-events', handleClientsRefresh);
+    app.get(
+      '/refresh-events',
+      describeRoute({
+        hide: true,
+      }),
+      handleClientsRefresh,
+    );
 
     // Trigger refresh for all clients
-    app.post('/__refresh', handleTriggerClientsRefresh);
+    app.post(
+      '/__refresh',
+      describeRoute({
+        hide: true,
+      }),
+      handleTriggerClientsRefresh,
+    );
     // Playground routes - these should come after API routes
     // Serve assets with specific MIME types
     app.use('/assets/*', async (c, next) => {
@@ -2860,7 +3278,11 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
     if (options?.playground) {
       // For all other routes, serve index.html
-      const indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
+      let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
+      indexHtml = indexHtml.replace(
+        `'%%MASTRA_TELEMETRY_DISABLED%%'`,
+        `${Boolean(process.env.MASTRA_TELEMETRY_DISABLED)}`,
+      );
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
 
@@ -2886,14 +3308,17 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       const logger = mastra.getLogger();
       const host = serverOptions?.host ?? 'localhost';
       logger.info(` Mastra API running on port http://${host}:${port}/api`);
-      if (options?.isDev) {
-        logger.info(`🔗 Open API documentation available at http://${host}:${port}/openapi.json`);
-      }
-      if (options?.isDev) {
-        logger.info(`🧪 Swagger UI available at http://${host}:${port}/swagger-ui`);
-      }
       if (options?.playground) {
-        logger.info(`👨‍💻 Playground available at http://${host}:${port}/`);
+        const playgroundUrl = `http://${host}:${port}`;
+        logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
+      }
+
+      if (process.send) {
+        process.send({
+          type: 'server-ready',
+          port,
+          host,
+        });
       }
     },
   );

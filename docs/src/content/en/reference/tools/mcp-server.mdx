@@ -7,7 +7,7 @@ description: API Reference for MCPServer - A class for exposing Mastra tools and
 
 The `MCPServer` class provides the functionality to expose your existing Mastra tools and Agents as a Model Context Protocol (MCP) server. This allows any MCP client (like Cursor, Windsurf, or Claude Desktop) to connect to these capabilities and make them available to an agent.
 
-Note that if you only need to use your tools or agents directly within your Mastra application, you don't necessarily need to create an MCP server. This API is specifically for exposing your Mastra tools and agents to *external* MCP clients.
+Note that if you only need to use your tools or agents directly within your Mastra application, you don't necessarily need to create an MCP server. This API is specifically for exposing your Mastra tools and agents to _external_ MCP clients.
 
 It supports both [stdio (subprocess) and SSE (HTTP) MCP transports](https://modelcontextprotocol.io/docs/concepts/transports).
 
@@ -58,7 +58,8 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       name: "name",
       type: "string",
       isOptional: false,
-      description: "A descriptive name for your server (e.g., 'My Weather and Agent Server').",
+      description:
+        "A descriptive name for your server (e.g., 'My Weather and Agent Server').",
     },
     {
       name: "version",
@@ -91,7 +92,8 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       name: "id",
       type: "string",
       isOptional: true,
-      description: "Optional unique identifier for the server. If not provided, a UUID will be generated. This ID is considered final and cannot be changed by Mastra if provided.",
+      description:
+        "Optional unique identifier for the server. If not provided, a UUID will be generated. This ID is considered final and cannot be changed by Mastra if provided.",
     },
     {
       name: "description",
@@ -103,25 +105,29 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       name: "repository",
       type: "Repository", // { url: string; source: string; id: string; }
       isOptional: true,
-      description: "Optional repository information for the server's source code.",
+      description:
+        "Optional repository information for the server's source code.",
     },
     {
       name: "releaseDate",
       type: "string", // ISO 8601
       isOptional: true,
-      description: "Optional release date of this server version (ISO 8601 string). Defaults to the time of instantiation if not provided.",
+      description:
+        "Optional release date of this server version (ISO 8601 string). Defaults to the time of instantiation if not provided.",
     },
     {
       name: "isLatest",
       type: "boolean",
       isOptional: true,
-      description: "Optional flag indicating if this is the latest version. Defaults to true if not provided.",
+      description:
+        "Optional flag indicating if this is the latest version. Defaults to true if not provided.",
     },
     {
       name: "packageCanonical",
       type: "'npm' | 'docker' | 'pypi' | 'crates' | string",
       isOptional: true,
-      description: "Optional canonical packaging format if the server is distributed as a package (e.g., 'npm', 'docker').",
+      description:
+        "Optional canonical packaging format if the server is distributed as a package (e.g., 'npm', 'docker').",
     },
     {
       name: "packages",
@@ -139,7 +145,15 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       name: "resources",
       type: "MCPServerResources",
       isOptional: true,
-      description: "An object defining how the server should handle MCP resources. See Resource Handling section for details.",
+      description:
+        "An object defining how the server should handle MCP resources. See Resource Handling section for details.",
+    },
+    {
+      name: "prompts",
+      type: "MCPServerPrompts",
+      isOptional: true,
+      description:
+        "An object defining how the server should handle MCP prompts. See Prompt Handling section for details.",
     },
   ]}
 />
@@ -151,12 +165,13 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
 - **Tool Naming**: Each agent is converted into a tool named `ask_<agentKey>`, where `<agentKey>` is the key you used for that agent in the `agents` object. For instance, if you configure `agents: { myAgentKey: myAgentInstance }`, a tool named `ask_myAgentKey` will be created.
 
 - **Tool Functionality**:
-    - **Description**: The generated tool's description will be in the format: "Ask agent `<AgentName>` a question. Original agent instructions: `<agent description>`".
-    - **Input**: The tool expects a single object argument with a `message` property (string): `{ message: "Your question for the agent" }`.
-    - **Execution**: When this tool is called, it invokes the `generate()` method of the corresponding agent, passing the provided `query`.
-    - **Output**: The direct result from the agent's `generate()` method is returned as the output of the tool.
 
-- **Name Collisions**: If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., you have a tool named `ask_myAgentKey` and also an agent with the key `myAgentKey`), the *explicitly defined tool will take precedence*. The agent will not be converted into a tool in this conflicting case, and a warning will be logged.
+  - **Description**: The generated tool's description will be in the format: "Ask agent `<AgentName>` a question. Original agent instructions: `<agent description>`".
+  - **Input**: The tool expects a single object argument with a `message` property (string): `{ message: "Your question for the agent" }`.
+  - **Execution**: When this tool is called, it invokes the `generate()` method of the corresponding agent, passing the provided `query`.
+  - **Output**: The direct result from the agent's `generate()` method is returned as the output of the tool.
+
+- **Name Collisions**: If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., you have a tool named `ask_myAgentKey` and also an agent with the key `myAgentKey`), the _explicitly defined tool will take precedence_. The agent will not be converted into a tool in this conflicting case, and a warning will be logged.
 
 This makes it straightforward to allow MCP clients to interact with your agents using natural language queries, just like any other tool.
 
@@ -343,21 +358,21 @@ Here are the details for the values needed by the `startHonoSSE` method:
 
 ### startHTTP()
 
-This method helps you integrate the MCP server with an existing web server to use Server-Sent Events (SSE) for communication. You'll call this from your web server's code when it receives a request for the SSE or message paths.
+This method helps you integrate the MCP server with an existing web server to use streamable HTTP for communication. You'll call this from your web server's code when it receives HTTP requests.
 
 ```typescript
 async startHTTP({
   url,
-  ssePath,
-  messagePath,
+  httpPath,
   req,
   res,
+  options = { sessionIdGenerator: () => randomUUID() },
 }: {
   url: URL;
-  ssePath: string;
-  messagePath: string;
-  req: any;
-  res: any;
+  httpPath: string;
+  req: http.IncomingMessage;
+  res: http.ServerResponse<http.IncomingMessage>;
+  options?: StreamableHTTPServerTransportOptions;
 }): Promise<void>
 ```
 
@@ -368,11 +383,13 @@ import http from "http";
 
 const httpServer = http.createServer(async (req, res) => {
   await server.startHTTP({
-    url: new URL(req.url || "", `http://localhost:1234`),
-    ssePath: "/http",
-    messagePath: "/message",
+    url: new URL(req.url || '', 'http://localhost:1234'),
+    httpPath: `/mcp`,
     req,
     res,
+    options: {
+      sessionIdGenerator: undefined,
+    },
   });
 });
 
@@ -386,32 +403,67 @@ Here are the details for the values needed by the `startHTTP` method:
 <PropertiesTable
   content={[
     {
-      name: "url",
-      type: "URL",
-      description: "The web address the user is requesting.",
+      name: 'url',
+      type: 'URL',
+      description: 'The web address the user is requesting.',
     },
     {
-      name: "ssePath",
-      type: "string",
+      name: 'httpPath',
+      type: 'string',
       description:
-        "The specific part of the URL where clients will connect for SSE (e.g., '/http').",
+        "The specific part of the URL where the MCP server will handle HTTP requests (e.g., '/mcp').",
     },
     {
-      name: "messagePath",
-      type: "string",
+      name: 'req',
+      type: 'http.IncomingMessage',
+      description: 'The incoming request object from your web server.',
+    },
+    {
+      name: 'res',
+      type: 'http.ServerResponse',
       description:
-        "The specific part of the URL where clients will send messages (e.g., '/message').",
+        'The response object from your web server, used to send data back.',
     },
     {
-      name: "req",
-      type: "any",
-      description: "The incoming request object from your web server.",
-    },
-    {
-      name: "res",
-      type: "any",
+      name: 'options',
+      type: 'StreamableHTTPServerTransportOptions',
       description:
-        "The response object from your web server, used to send data back.",
+        'Optional configuration for the HTTP transport. See the options table below for more details.',
+      optional: true,
+    },
+  ]}
+/>
+
+The `StreamableHTTPServerTransportOptions` object allows you to customize the behavior of the HTTP transport. Here are the available options:
+
+<PropertiesTable
+  content={[
+    {
+      name: 'sessionIdGenerator',
+      type: '(() => string) | undefined',
+      description:
+        'A function that generates a unique session ID. This should be a cryptographically secure, globally unique string. Return `undefined` to disable session management.',
+    },
+    {
+      name: 'onsessioninitialized',
+      type: '(sessionId: string) => void',
+      description:
+        'A callback that is invoked when a new session is initialized. This is useful for tracking active MCP sessions.',
+      optional: true,
+    },
+    {
+      name: 'enableJsonResponse',
+      type: 'boolean',
+      description:
+        'If `true`, the server will return plain JSON responses instead of using Server-Sent Events (SSE) for streaming. Defaults to `false`.',
+      optional: true,
+    },
+    {
+      name: 'eventStore',
+      type: 'EventStore',
+      description:
+        'An event store for message resumability. Providing this enables clients to reconnect and resume message streams.',
+      optional: true,
     },
   ]}
 />
@@ -524,7 +576,8 @@ async executeTool(
       name: "executionContext",
       type: "object",
       isOptional: true,
-      description: "Optional context for the tool execution, like messages or a toolCallId.",
+      description:
+        "Optional context for the tool execution, like messages or a toolCallId.",
     },
   ]}
 />
@@ -545,6 +598,7 @@ Resources are a core primitive in the Model Context Protocol (MCP) that allow se
 Resources are identified by unique URIs (e.g., `file:///home/user/documents/report.pdf`, `postgres://database/customers/schema`) and can contain either text (UTF-8 encoded) or binary data (base64 encoded).
 
 Clients can discover resources through:
+
 1.  **Direct resources**: Servers expose a list of concrete resources via a `resources/list` endpoint.
 2.  **Resource templates**: For dynamic resources, servers can expose URI templates (RFC 6570) that clients use to construct resource URIs.
 
@@ -562,7 +616,11 @@ export type MCPServerResources = {
   listResources: () => Promise<Resource[]>;
 
   // Callback to get the content of a specific resource
-  getResourceContent: ({ uri }: { uri: string; }) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>;
+  getResourceContent: ({
+    uri,
+  }: {
+    uri: string;
+  }) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>;
 
   // Optional callback to list available resource templates
   resourceTemplates?: () => Promise<ResourceTemplate[]>;
@@ -575,7 +633,11 @@ Example:
 
 ```typescript
 import { MCPServer } from "@mastra/mcp";
-import type { MCPServerResourceContent, Resource, ResourceTemplate } from "@mastra/mcp";
+import type {
+  MCPServerResourceContent,
+  Resource,
+  ResourceTemplate,
+} from "@mastra/mcp";
 
 // Resources/resource templates will generally be dynamically fetched.
 const myResources: Resource[] = [
@@ -588,10 +650,10 @@ const myResourceContents: Record<string, MCPServerResourceContent> = {
 
 const myResourceTemplates: ResourceTemplate[] = [
   {
-    uriTemplate: 'file://data/{id}',
-    name: 'Data File',
-    description: 'A file containing data.',
-    mimeType: 'text/plain',
+    uriTemplate: "file://data/{id}",
+    name: "Data File",
+    description: "A file containing data.",
+    mimeType: "text/plain",
   },
 ];
 
@@ -609,7 +671,9 @@ const myResourceHandlers: MCPServerResources = {
 const serverWithResources = new MCPServer({
   name: "Resourceful Server",
   version: "1.0.0",
-  tools: { /* ... your tools ... */ },
+  tools: {
+    /* ... your tools ... */
+  },
   resources: myResourceHandlers,
 });
 ```
@@ -627,6 +691,7 @@ async server.resources.notifyUpdated({ uri: string }): Promise<void>
 ```
 
 Example:
+
 ```typescript
 // After updating the content of 'file://data.txt'
 await serverWithResources.resources.notifyUpdated({ uri: "file://data.txt" });
@@ -641,10 +706,126 @@ async server.resources.notifyListChanged(): Promise<void>
 ```
 
 Example:
+
 ```typescript
 // After adding a new resource to the list managed by 'myResourceHandlers.listResources'
 await serverWithResources.resources.notifyListChanged();
 ```
+
+## Prompt Handling
+
+### What are MCP Prompts?
+
+Prompts are reusable templates or workflows that MCP servers expose to clients. They can accept arguments, include resource context, support versioning, and be used to standardize LLM interactions.
+
+Prompts are identified by a unique name (and optional version) and can be dynamic or static.
+
+### `MCPServerPrompts` Type
+
+The `prompts` option takes an object of type `MCPServerPrompts`. This type defines the callbacks your server will use to handle prompt requests:
+
+```typescript
+export type MCPServerPrompts = {
+  // Callback to list available prompts
+  listPrompts: () => Promise<Prompt[]>;
+
+  // Callback to get the messages/content for a specific prompt
+  getPromptMessages?: ({
+    name,
+    version,
+    args,
+  }: {
+    name: string;
+    version?: string;
+    args?: any;
+  }) => Promise<{ prompt: Prompt; messages: PromptMessage[] }>;
+};
+```
+
+Example:
+
+```typescript
+import { MCPServer } from "@mastra/mcp";
+import type { Prompt, PromptMessage, MCPServerPrompts } from "@mastra/mcp";
+
+const prompts: Prompt[] = [
+  {
+    name: "analyze-code",
+    description: "Analyze code for improvements",
+    version: "v1"
+  },
+  {
+    name: "analyze-code",
+    description: "Analyze code for improvements (new logic)",
+    version: "v2"
+  }
+];
+
+const myPromptHandlers: MCPServerPrompts = {
+  listPrompts: async () => prompts,
+  getPromptMessages: async ({ name, version, args }) => {
+    if (name === "analyze-code") {
+      if (version === "v2") {
+        const prompt = prompts.find(p => p.name === name && p.version === "v2");
+        if (!prompt) throw new Error("Prompt version not found");
+        return {
+          prompt,
+          messages: [
+            {
+              role: "user",
+              content: { type: "text", text: `Analyze this code with the new logic: ${args.code}` }
+            }
+          ]
+        };
+      }
+      // Default or v1
+      const prompt = prompts.find(p => p.name === name && p.version === "v1");
+      if (!prompt) throw new Error("Prompt version not found");
+      return {
+        prompt,
+        messages: [
+          {
+            role: "user",
+            content: { type: "text", text: `Analyze this code: ${args.code}` }
+          }
+        ]
+      };
+    }
+    throw new Error("Prompt not found");
+  }
+};
+
+const serverWithPrompts = new MCPServer({
+  name: "Promptful Server",
+  version: "1.0.0",
+  tools: { /* ... */ },
+  prompts: myPromptHandlers,
+});
+```
+
+### Notifying Clients of Prompt Changes
+
+If the available prompts change, your server can notify connected clients:
+
+#### `server.prompts.notifyListChanged()`
+
+Call this method when the overall list of available prompts has changed (e.g., a prompt was added or removed). This will send a `notifications/prompts/list_changed` message to clients, prompting them to re-fetch the list of prompts.
+
+```typescript
+await serverWithPrompts.prompts.notifyListChanged();
+```
+
+### Best Practices for Prompt Handling
+
+- Use clear, descriptive prompt names and descriptions.
+- Validate all required arguments in `getPromptMessages`.
+- Include a `version` field if you expect to make breaking changes.
+- Use the `version` parameter to select the correct prompt logic.
+- Notify clients when prompt lists change.
+- Handle errors with informative messages.
+- Document argument expectations and available versions.
+
+---
 
 ## Examples
 
