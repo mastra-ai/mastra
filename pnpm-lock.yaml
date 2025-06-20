@@ -1358,7 +1358,7 @@ importers:
         specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@rollup/plugin-commonjs':
-        specifier: ^28.0.3
+        specifier: ^28.0.5
         version: 28.0.5(rollup@4.43.0)
       '@rollup/plugin-json':
         specifier: ^6.1.0
