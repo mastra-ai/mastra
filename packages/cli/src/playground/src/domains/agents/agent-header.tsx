@@ -1,33 +1,71 @@
+import { useAgent } from '@/hooks/use-agents';
+import { useLocation } from 'react-router';
+
+import { MainTitle, Button, InnerNav, MainHeader } from '@mastra/playground-ui';
+import { AgentIcon } from '@mastra/playground-ui';
+import { ArrowLeftIcon } from 'lucide-react';
+
 import { Link } from 'react-router';
+import { cn } from '@/lib/utils';
 
-import { Header, Breadcrumb, Crumb, HeaderGroup, Button, DividerIcon } from '@mastra/playground-ui';
+export function AgentHeader({ agentId }: { agentId: string }) {
+  const location = useLocation();
 
-export function AgentHeader({ agentName, agentId }: { agentName: string; agentId: string }) {
+  type NavButton = {
+    label: string;
+    path: string;
+  };
+
+  const navButtons: NavButton[] = [
+    {
+      label: 'Details',
+      path: 'chat',
+    },
+    {
+      label: 'Traces',
+      path: 'traces',
+    },
+    {
+      label: 'Evals',
+      path: 'evals',
+    },
+    {
+      label: 'Versions',
+      path: 'versions',
+    },
+    {
+      label: 'Log Drains',
+      path: 'log-drains',
+    },
+  ];
+
+  const { agent } = useAgent(agentId);
+  const currentPath = location.pathname.split('/').pop() || 'chat';
+  const twoColumns = ['traces', 'evals'].includes(currentPath);
+
   return (
-    <Header>
-      <Breadcrumb>
-        <Crumb as={Link} to={`/agents`}>
-          Agents
-        </Crumb>
-        <Crumb as={Link} to={`/agents/${agentId}`} isCurrent>
-          {agentName}
-        </Crumb>
-      </Breadcrumb>
+    <MainHeader variant={twoColumns ? 'twoColsForAgent' : 'oneColForAgent'}>
+      <Button as={Link} variant="backLink" to={`/agents`}>
+        <ArrowLeftIcon />
+        Agents
+      </Button>
 
-      <HeaderGroup>
-        <Button as={Link} to={`/agents/${agentId}/chat`}>
-          Chat
-        </Button>
+      <MainTitle>
+        <AgentIcon /> {agent?.name}
+      </MainTitle>
 
-        <DividerIcon />
-
-        <Button as={Link} to={`/agents/${agentId}/traces`}>
-          Traces
-        </Button>
-        <Button as={Link} to={`/agents/${agentId}/evals`}>
-          Evals
-        </Button>
-      </HeaderGroup>
-    </Header>
+      <InnerNav>
+        {navButtons.map(button => (
+          <Button
+            key={button.path}
+            as={Link}
+            variant={button.path === currentPath ? 'activeNavItem' : 'navItem'}
+            to={`/agents/${agentId}/${button.path}`}
+          >
+            {button.label}
+          </Button>
+        ))}
+      </InnerNav>
+    </MainHeader>
   );
 }

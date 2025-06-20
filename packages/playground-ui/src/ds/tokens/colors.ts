@@ -1,5 +1,5 @@
 export const Colors = {
-  surface1: '#000000',
+  surface1: '#0A0A0A',
   surface2: '#0F0F0F',
   surface3: '#141414',
   surface4: '#1A1A1A',

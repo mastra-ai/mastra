@@ -21,7 +21,7 @@ export const Badge = ({ icon, variant = 'default', className, children, ...props
   return (
     <div
       className={clsx(
-        'bg-surface4 text-ui-sm gap-md h-badge-default inline-flex items-center rounded-md',
+        'bg-surface4 text-ui-md gap-lg h-badge-default inline-flex items-center rounded-md leading-none',
         icon ? 'pl-md pr-1.5' : 'px-1.5',
         icon || variant === 'default' ? 'text-icon5' : variantClasses[variant],
         className,

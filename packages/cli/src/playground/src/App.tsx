@@ -80,6 +80,8 @@ function App() {
                   }
                 >
                   <Route path="chat" element={<Agent />} />
+                  <Route path="versions" element={<Agent />} />
+                  <Route path="log-drains" element={<Agent />} />
                   <Route path="chat/:threadId" element={<Agent />} />
                   <Route path="evals" element={<AgentEvalsPage />} />
                   <Route path="traces" element={<AgentTracesPage />} />

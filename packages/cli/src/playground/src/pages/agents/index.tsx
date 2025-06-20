@@ -4,11 +4,10 @@ import {
   Button,
   DataTable,
   EmptyState,
-  Header,
-  HeaderTitle,
   Icon,
-  MainContentLayout,
-  MainContentContent,
+  MainLayout,
+  MainContent,
+  MainHeader,
 } from '@mastra/playground-ui';
 
 import { useAgents } from '@/hooks/use-agents';
@@ -18,6 +17,8 @@ import { useNavigate } from 'react-router';
 function Agents() {
   const navigate = useNavigate();
   const { agents, isLoading } = useAgents();
+
+  console.log('Agents:', agentsTableColumns);
 
   const agentListData = Object.entries(agents).map(([key, agent]) => ({
     id: key,
@@ -30,13 +31,13 @@ function Agents() {
   if (isLoading) return null;
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>Agents</HeaderTitle>
-      </Header>
+    <MainLayout>
+      <MainHeader variant="forList">
+        <AgentIcon /> Agents
+      </MainHeader>
 
       {agentListData.length === 0 ? (
-        <MainContentContent isCentered={true}>
+        <MainContent isCentered={true}>
           <EmptyState
             iconSlot={<AgentCoinIcon />}
             titleSlot="Configure Agents"
@@ -57,17 +58,17 @@ function Agents() {
               </Button>
             }
           />
-        </MainContentContent>
+        </MainContent>
       ) : (
-        <MainContentContent>
+        <MainContent>
           <DataTable
             columns={agentsTableColumns}
             data={agentListData}
             onClick={row => navigate(`/agents/${row.id}/chat`)}
           />
-        </MainContentContent>
+        </MainContent>
       )}
-    </MainContentLayout>
+    </MainLayout>
   );
 }
 
