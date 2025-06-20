@@ -73,6 +73,8 @@ import { getListenerHandler, getSpeakersHandler, listenHandler, speakHandler } f
 import {
   createWorkflowRunHandler,
   getWorkflowByIdHandler,
+  getWorkflowRunByIdHandler,
+  getWorkflowRunExecutionResultHandler,
   getWorkflowRunsHandler,
   getWorkflowsHandler,
   resumeAsyncWorkflowHandler,
@@ -164,7 +166,6 @@ ${err.stack.split('\n').slice(1).join('\n')}
         try {
           const clonedReq = c.req.raw.clone();
           const body = (await clonedReq.json()) as { runtimeContext?: Record<string, any> };
-
           if (body.runtimeContext) {
             runtimeContext = new RuntimeContext(Object.entries(body.runtimeContext));
           }
@@ -1368,6 +1369,31 @@ ${err.stack.split('\n').slice(1).join('\n')}
     getMcpServerMessageHandler,
   );
 
+  app.get(
+    '/api/mcp/:serverId/mcp',
+    describeRoute({
+      description: 'Send a message to an MCP server using Streamable HTTP',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Streamable HTTP connection processed',
+        },
+        404: {
+          description: 'MCP server not found',
+        },
+      },
+    }),
+    getMcpServerMessageHandler,
+  );
+
   // New MCP server routes for SSE
   const mcpSseBasePath = '/api/mcp/:serverId/sse';
   const mcpSseMessagePath = '/api/mcp/:serverId/messages';
@@ -2310,54 +2336,6 @@ ${err.stack.split('\n').slice(1).join('\n')}
     watchLegacyWorkflowHandler,
   );
 
-  app.post(
-    '/api/workflows/:workflowId/stream',
-    describeRoute({
-      description: 'Stream workflow in real-time',
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: false,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                inputData: { type: 'object' },
-                runtimeContext: {
-                  type: 'object',
-                  description: 'Runtime context for the workflow execution',
-                },
-              },
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'vNext workflow run started',
-        },
-        404: {
-          description: 'vNext workflow not found',
-        },
-      },
-      tags: ['vNextWorkflows'],
-    }),
-    streamWorkflowHandler,
-  );
-
   // Workflow routes
   app.get(
     '/api/workflows',
@@ -2423,6 +2401,68 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     getWorkflowRunsHandler,
+  );
+
+  app.get(
+    '/api/workflows/:workflowId/runs/:runId/execution-result',
+    describeRoute({
+      description: 'Get execution result for a workflow run',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Workflow run execution result',
+        },
+        404: {
+          description: 'Workflow run execution result not found',
+        },
+      },
+    }),
+    getWorkflowRunExecutionResultHandler,
+  );
+
+  app.get(
+    '/api/workflows/:workflowId/runs/:runId',
+    describeRoute({
+      description: 'Get workflow run by ID',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Workflow run by ID',
+        },
+        404: {
+          description: 'Workflow run not found',
+        },
+      },
+    }),
+    getWorkflowRunByIdHandler,
   );
 
   app.post(
@@ -2512,6 +2552,54 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     resumeAsyncWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/stream',
+    describeRoute({
+      description: 'Stream workflow in real-time',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                inputData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'workflow run started',
+        },
+        404: {
+          description: 'workflow not found',
+        },
+      },
+      tags: ['workflows'],
+    }),
+    streamWorkflowHandler,
   );
 
   app.post(
@@ -3112,6 +3200,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
     app.get(
       '/openapi.json',
       openAPISpecs(app, {
+        includeEmptyPaths: true,
         documentation: {
           info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
         },
@@ -3120,15 +3209,33 @@ ${err.stack.split('\n').slice(1).join('\n')}
   }
 
   if (options?.isDev || server?.build?.swaggerUI) {
-    app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
+    app.get(
+      '/swagger-ui',
+      describeRoute({
+        hide: true,
+      }),
+      swaggerUI({ url: '/openapi.json' }),
+    );
   }
 
   if (options?.playground) {
     // SSE endpoint for refresh notifications
-    app.get('/refresh-events', handleClientsRefresh);
+    app.get(
+      '/refresh-events',
+      describeRoute({
+        hide: true,
+      }),
+      handleClientsRefresh,
+    );
 
     // Trigger refresh for all clients
-    app.post('/__refresh', handleTriggerClientsRefresh);
+    app.post(
+      '/__refresh',
+      describeRoute({
+        hide: true,
+      }),
+      handleTriggerClientsRefresh,
+    );
     // Playground routes - these should come after API routes
     // Serve assets with specific MIME types
     app.use('/assets/*', async (c, next) => {

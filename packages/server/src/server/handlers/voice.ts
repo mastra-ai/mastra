@@ -25,11 +25,13 @@ export async function getSpeakersHandler({ mastra, agentId }: VoiceContext) {
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    if (!agent.voice) {
+    const voice = await agent.getVoice();
+
+    if (!voice) {
       throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
     }
 
-    const speakers = await agent.voice.getSpeakers();
+    const speakers = await voice.getSpeakers();
     return speakers;
   } catch (error) {
     return handleError(error, 'Error getting speakers');
@@ -64,11 +66,13 @@ export async function generateSpeechHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    if (!agent.voice) {
+    const voice = await agent.getVoice();
+
+    if (!voice) {
       throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
     }
 
-    const audioStream = await agent.voice.speak(body!.text!, { speaker: body!.speakerId! });
+    const audioStream = await voice.speak(body!.text!, { speaker: body!.speakerId! });
 
     if (!audioStream) {
       throw new HTTPException(500, { message: 'Failed to generate speech' });
@@ -108,7 +112,9 @@ export async function transcribeSpeechHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    if (!agent.voice) {
+    const voice = await agent.getVoice();
+
+    if (!voice) {
       throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
     }
 
@@ -116,7 +122,7 @@ export async function transcribeSpeechHandler({
     audioStream.push(body.audioData);
     audioStream.push(null);
 
-    const text = await agent.voice.listen(audioStream, body.options);
+    const text = await voice.listen(audioStream, body.options);
     return { text };
   } catch (error) {
     return handleError(error, 'Error transcribing speech');
@@ -138,11 +144,13 @@ export async function getListenerHandler({ mastra, agentId }: VoiceContext) {
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    if (!agent.voice) {
+    const voice = await agent.getVoice();
+
+    if (!voice) {
       throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
     }
 
-    const listeners = await agent.voice.getListener();
+    const listeners = await voice.getListener();
     return listeners;
   } catch (error) {
     return handleError(error, 'Error getting listeners');

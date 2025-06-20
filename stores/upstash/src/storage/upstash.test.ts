@@ -187,6 +187,29 @@ describe('UpstashStore', () => {
         updated: 'value',
       });
     });
+
+    it('should update thread updatedAt when a message is saved to it', async () => {
+      const thread = createSampleThread();
+      await store.saveThread({ thread });
+
+      // Get the initial thread to capture the original updatedAt
+      const initialThread = await store.getThreadById({ threadId: thread.id });
+      expect(initialThread).toBeDefined();
+      const originalUpdatedAt = initialThread!.updatedAt;
+
+      // Wait a small amount to ensure different timestamp
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Create and save a message to the thread
+      const message = createSampleMessageV2({ threadId: thread.id });
+      await store.saveMessages({ messages: [message], format: 'v2' });
+
+      // Retrieve the thread again and check that updatedAt was updated
+      const updatedThread = await store.getThreadById({ threadId: thread.id });
+      expect(updatedThread).toBeDefined();
+      expect(updatedThread!.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
+    });
+
     it('should fetch >100000 threads by resource ID', async () => {
       const resourceId = `resource-${randomUUID()}`;
       const total = 100_000;
@@ -298,9 +321,9 @@ describe('UpstashStore', () => {
 
     it('should save and retrieve messages in order', async () => {
       const messages: MastraMessageV2[] = [
-        createSampleMessageV2({ threadId, content: 'First' }),
-        createSampleMessageV2({ threadId, content: 'Second' }),
-        createSampleMessageV2({ threadId, content: 'Third' }),
+        createSampleMessageV2({ threadId, content: { content: 'First' } }),
+        createSampleMessageV2({ threadId, content: { content: 'Second' } }),
+        createSampleMessageV2({ threadId, content: { content: 'Third' } }),
       ];
 
       await store.saveMessages({ messages, format: 'v2' });
@@ -321,16 +344,48 @@ describe('UpstashStore', () => {
       await store.saveThread({ thread: thread3 });
 
       const messages: MastraMessageV2[] = [
-        createSampleMessageV2({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
-        createSampleMessageV2({ threadId: 'thread-one', content: 'Second', resourceId: 'cross-thread-resource' }),
-        createSampleMessageV2({ threadId: 'thread-one', content: 'Third', resourceId: 'cross-thread-resource' }),
+        createSampleMessageV2({
+          threadId: 'thread-one',
+          content: { content: 'First' },
+          resourceId: 'cross-thread-resource',
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-one',
+          content: { content: 'Second' },
+          resourceId: 'cross-thread-resource',
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-one',
+          content: { content: 'Third' },
+          resourceId: 'cross-thread-resource',
+        }),
 
-        createSampleMessageV2({ threadId: 'thread-two', content: 'Fourth', resourceId: 'cross-thread-resource' }),
-        createSampleMessageV2({ threadId: 'thread-two', content: 'Fifth', resourceId: 'cross-thread-resource' }),
-        createSampleMessageV2({ threadId: 'thread-two', content: 'Sixth', resourceId: 'cross-thread-resource' }),
+        createSampleMessageV2({
+          threadId: 'thread-two',
+          content: { content: 'Fourth' },
+          resourceId: 'cross-thread-resource',
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-two',
+          content: { content: 'Fifth' },
+          resourceId: 'cross-thread-resource',
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-two',
+          content: { content: 'Sixth' },
+          resourceId: 'cross-thread-resource',
+        }),
 
-        createSampleMessageV2({ threadId: 'thread-three', content: 'Seventh', resourceId: 'other-resource' }),
-        createSampleMessageV2({ threadId: 'thread-three', content: 'Eighth', resourceId: 'other-resource' }),
+        createSampleMessageV2({
+          threadId: 'thread-three',
+          content: { content: 'Seventh' },
+          resourceId: 'other-resource',
+        }),
+        createSampleMessageV2({
+          threadId: 'thread-three',
+          content: { content: 'Eighth' },
+          resourceId: 'other-resource',
+        }),
       ];
 
       await store.saveMessages({ messages: messages, format: 'v2' });
@@ -449,7 +504,7 @@ describe('UpstashStore', () => {
         await store.saveThread({ thread });
 
         const messages = Array.from({ length: 15 }, (_, i) =>
-          createSampleMessageV2({ threadId: thread.id, content: `Message ${i + 1}` }),
+          createSampleMessageV2({ threadId: thread.id, content: { content: `Message ${i + 1}` } }),
         );
 
         await store.saveMessages({ messages, format: 'v2' });
@@ -489,7 +544,7 @@ describe('UpstashStore', () => {
         await store.saveThread({ thread });
 
         const messages = Array.from({ length: 10 }, (_, i) => {
-          const message = createSampleMessageV2({ threadId: thread.id, content: `Message ${i + 1}` });
+          const message = createSampleMessageV2({ threadId: thread.id, content: { content: `Message ${i + 1}` } });
           // Ensure different timestamps
           message.createdAt = new Date(Date.now() + i * 1000);
           return message;
@@ -522,13 +577,13 @@ describe('UpstashStore', () => {
         const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
         const oldMessages = Array.from({ length: 3 }, (_, i) => {
-          const message = createSampleMessageV2({ threadId: thread.id, content: `Old Message ${i + 1}` });
+          const message = createSampleMessageV2({ threadId: thread.id, content: { content: `Old Message ${i + 1}` } });
           message.createdAt = yesterday;
           return message;
         });
 
         const newMessages = Array.from({ length: 4 }, (_, i) => {
-          const message = createSampleMessageV2({ threadId: thread.id, content: `New Message ${i + 1}` });
+          const message = createSampleMessageV2({ threadId: thread.id, content: { content: `New Message ${i + 1}` } });
           message.createdAt = tomorrow;
           return message;
         });
