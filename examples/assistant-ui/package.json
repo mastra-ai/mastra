@@ -14,8 +14,8 @@
     "@assistant-ui/react-ui": "^0.1.8",
     "@mastra/client-js": "latest",
     "next": "^15.3.1",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^3.25.56"
   },
@@ -26,8 +26,8 @@
   },
   "devDependencies": {
     "@types/node": "^20.17.57",
-    "@types/react": "^19.0.10",
-    "@types/react-dom": "^19.0.4",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
     "eslint": "^8.57.1",
     "eslint-config-next": "15.3.3",
     "postcss": "^8.5.3",
