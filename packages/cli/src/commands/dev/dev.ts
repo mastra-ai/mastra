@@ -32,7 +32,6 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
     }
 
     commands.push('index.mjs');
-    console.log(commands);
     currentServerProcess = execa('node', commands, {
       cwd: dotMastraPath,
       env: {
