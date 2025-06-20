@@ -864,7 +864,7 @@ describe('MongoDBStore', () => {
           agent_name: liveEval.agentName,
           input: liveEval.input,
           output: liveEval.output,
-          result: liveEval.result,
+          result: JSON.stringify(liveEval.result),
           metric_name: liveEval.metricName,
           instructions: liveEval.instructions,
           test_info: null,
@@ -881,7 +881,7 @@ describe('MongoDBStore', () => {
           agent_name: testEval.agentName,
           input: testEval.input,
           output: testEval.output,
-          result: testEval.result,
+          result: JSON.stringify(testEval.result),
           metric_name: testEval.metricName,
           instructions: testEval.instructions,
           test_info: JSON.stringify(testEval.testInfo),
@@ -898,7 +898,7 @@ describe('MongoDBStore', () => {
           agent_name: otherAgentEval.agentName,
           input: otherAgentEval.input,
           output: otherAgentEval.output,
-          result: otherAgentEval.result,
+          result: JSON.stringify(otherAgentEval.result),
           metric_name: otherAgentEval.metricName,
           instructions: otherAgentEval.instructions,
           test_info: null,
@@ -913,16 +913,20 @@ describe('MongoDBStore', () => {
       const allEvals = await store.getEvalsByAgentName(agentName);
       expect(allEvals).toHaveLength(2);
       expect(allEvals.map(e => e.runId)).toEqual(expect.arrayContaining([liveEval.runId, testEval.runId]));
+      expect(allEvals[0]!.result.score).toEqual(liveEval.result.score);
+      expect(allEvals[1]!.result.score).toEqual(testEval.result.score);
 
       // Test getting only live evals
       const liveEvals = await store.getEvalsByAgentName(agentName, 'live');
       expect(liveEvals).toHaveLength(1);
       expect(liveEvals[0]!.runId).toBe(liveEval.runId);
+      expect(liveEvals[0]!.result.score).toEqual(liveEval.result.score);
 
       // Test getting only test evals
       const testEvals = await store.getEvalsByAgentName(agentName, 'test');
       expect(testEvals).toHaveLength(1);
       expect(testEvals[0]!.runId).toBe(testEval.runId);
+      expect(testEvals[0]!.result.score).toEqual(testEval.result.score);
       expect(testEvals[0]!.testInfo).toEqual(testEval.testInfo);
 
       // Test getting evals for non-existent agent
