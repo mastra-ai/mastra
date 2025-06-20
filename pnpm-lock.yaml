@@ -1388,8 +1388,8 @@ importers:
         specifier: ^6.2.1
         version: 6.2.1(esbuild@0.25.5)(rollup@4.43.0)
       rollup-plugin-node-externals:
-        specifier: ^8.0.0
-        version: 8.0.0(rollup@4.43.0)
+        specifier: ^8.0.1
+        version: 8.0.1(rollup@4.43.0)
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
@@ -1460,8 +1460,8 @@ importers:
         specifier: ^6.2.1
         version: 6.2.1(esbuild@0.25.5)(rollup@4.43.0)
       rollup-plugin-node-externals:
-        specifier: ^8.0.0
-        version: 8.0.0(rollup@4.43.0)
+        specifier: ^8.0.1
+        version: 8.0.1(rollup@4.43.0)
       typescript-paths:
         specifier: ^1.5.1
         version: 1.5.1(typescript@5.8.3)
@@ -2248,8 +2248,8 @@ importers:
         specifier: ^8.5.4
         version: 8.5.4
       rollup-plugin-node-externals:
-        specifier: ^8.0.0
-        version: 8.0.0(rollup@4.43.0)
+        specifier: ^8.0.1
+        version: 8.0.1(rollup@4.43.0)
       tailwind-merge:
         specifier: ^3.3.1
         version: 3.3.1
@@ -16299,8 +16299,8 @@ packages:
       esbuild: '>=0.18.0'
       rollup: ^1.20.0 || ^2.0.0 || ^3.0.0 || ^4.0.0
 
-  rollup-plugin-node-externals@8.0.0:
-    resolution: {integrity: sha512-2HIOpWsWn5DqBoYl6iCAmB4kd5GoGbF68PR4xKR1YBPvywiqjtYvDEjHFodyqRL51iAMDITP074Zxs0OKs6F+g==}
+  rollup-plugin-node-externals@8.0.1:
+    resolution: {integrity: sha512-j6uve/BPEyHCmQuXpu5/LT5qXw69QLIi6YnFrs6F7tmGFXjkFDT0zqZMt0KaMuWSvkcxJFBklsKfYYoKKEPwyw==}
     engines: {node: '>= 21 || ^20.6.0 || ^18.19.0'}
     peerDependencies:
       rollup: ^4.0.0
@@ -33695,7 +33695,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  rollup-plugin-node-externals@8.0.0(rollup@4.43.0):
+  rollup-plugin-node-externals@8.0.1(rollup@4.43.0):
     dependencies:
       rollup: 4.43.0
 
