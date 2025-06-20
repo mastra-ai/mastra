@@ -1240,8 +1240,8 @@ export class Agent<
                     vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
                   })
                   .then(r => r.messagesV2),
-                memory.getSystemMessage({ threadId: threadObject.id, memoryConfig }),
-                memory.getUserContextMessage({ threadId: threadObject.id }),
+                memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
+                memory.getUserContextMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
               ])
             : [[], null, null];
 
@@ -1282,8 +1282,7 @@ export class Agent<
           .add(messages, 'user');
 
         const systemMessage =
-          messageList
-            .getSystemMessages()
+          [...messageList.getSystemMessages(), ...messageList.getSystemMessages('memory')]
             ?.map(m => m.content)
             ?.join(`\n`) ?? undefined;
 

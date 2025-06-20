@@ -22,6 +22,7 @@ import type {
   StorageGetTracesArg,
   PaginationInfo,
   StorageColumn,
+  TABLE_RESOURCES,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -37,6 +38,8 @@ export interface DynamoDBStoreConfig {
     secretAccessKey: string;
   };
 }
+
+type SUPPORTED_TABLE_NAMES = Exclude<TABLE_NAMES, typeof TABLE_RESOURCES>;
 
 // Define a type for our service that allows string indexing
 type MastraService = Service<Record<string, any>> & {
@@ -263,7 +266,7 @@ export class DynamoDBStore extends MastraStorage {
   /**
    * Clear all items from a logical "table" (entity type)
    */
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+  async clearTable({ tableName }: { tableName: SUPPORTED_TABLE_NAMES }): Promise<void> {
     this.logger.debug('DynamoDB clearTable called', { tableName });
 
     const entityName = this.getEntityNameForTable(tableName);
@@ -359,7 +362,13 @@ export class DynamoDBStore extends MastraStorage {
   /**
    * Insert a record into the specified "table" (entity)
    */
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+  async insert({
+    tableName,
+    record,
+  }: {
+    tableName: SUPPORTED_TABLE_NAMES;
+    record: Record<string, any>;
+  }): Promise<void> {
     this.logger.debug('DynamoDB insert called', { tableName });
 
     const entityName = this.getEntityNameForTable(tableName);
@@ -393,7 +402,13 @@ export class DynamoDBStore extends MastraStorage {
   /**
    * Insert multiple records as a batch
    */
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+  async batchInsert({
+    tableName,
+    records,
+  }: {
+    tableName: SUPPORTED_TABLE_NAMES;
+    records: Record<string, any>[];
+  }): Promise<void> {
     this.logger.debug('DynamoDB batchInsert called', { tableName, count: records.length });
 
     const entityName = this.getEntityNameForTable(tableName);
@@ -449,7 +464,13 @@ export class DynamoDBStore extends MastraStorage {
   /**
    * Load a record by its keys
    */
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
+  async load<R>({
+    tableName,
+    keys,
+  }: {
+    tableName: SUPPORTED_TABLE_NAMES;
+    keys: Record<string, string>;
+  }): Promise<R | null> {
     this.logger.debug('DynamoDB load called', { tableName, keys });
 
     const entityName = this.getEntityNameForTable(tableName);
@@ -1192,8 +1213,8 @@ export class DynamoDBStore extends MastraStorage {
   }
 
   // Helper methods for entity/table mapping
-  private getEntityNameForTable(tableName: TABLE_NAMES): string | null {
-    const mapping: Record<TABLE_NAMES, string> = {
+  private getEntityNameForTable(tableName: SUPPORTED_TABLE_NAMES): string | null {
+    const mapping: Record<SUPPORTED_TABLE_NAMES, string> = {
       [TABLE_THREADS]: 'thread',
       [TABLE_MESSAGES]: 'message',
       [TABLE_WORKFLOW_SNAPSHOT]: 'workflowSnapshot',
