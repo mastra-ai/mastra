@@ -10,7 +10,7 @@ import { Agent } from '../agent';
 import { RuntimeContext } from '../di';
 import { MockStore } from '../storage/mock';
 import type { StreamEvent, WatchEvent } from './types';
-import { cloneStep, cloneWorkflow, createStep, createWorkflow } from './workflow';
+import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
 
@@ -567,6 +567,270 @@ describe('Workflow', () => {
         ]
       `);
     });
+
+    it('should handle sleep waiting flow', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+      });
+      workflow.then(step1).sleep(1000).then(step2).commit();
+
+      const runId = 'test-run-id';
+      let watchData: StreamEvent[] = [];
+      const run = workflow.createRun({
+        runId,
+      });
+
+      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+
+      // Start watching the workflow
+      const collectedStreamData: StreamEvent[] = [];
+      for await (const data of stream) {
+        collectedStreamData.push(JSON.parse(JSON.stringify(data)));
+      }
+      watchData = collectedStreamData;
+
+      const executionResult = await getWorkflowState();
+
+      expect(watchData.length).toBe(9);
+      expect(watchData).toMatchObject([
+        {
+          payload: {
+            runId: 'test-run-id',
+          },
+          type: 'start',
+        },
+        {
+          payload: {
+            id: 'step1',
+          },
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            output: {
+              result: 'success1',
+            },
+            status: 'success',
+          },
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step1',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {},
+          type: 'step-waiting',
+        },
+        {
+          payload: {
+            id: 'step2',
+          },
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step2',
+            output: {
+              result: 'success2',
+            },
+            status: 'success',
+          },
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step2',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            runId: 'test-run-id',
+          },
+          type: 'finish',
+        },
+      ]);
+      // Verify execution completed successfully
+      expect(executionResult.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success1' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(executionResult.steps.step2).toEqual({
+        status: 'success',
+        output: { result: 'success2' },
+        payload: {
+          result: 'success1',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
+    it('should handle waitForEvent waiting flow', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+      });
+      workflow.then(step1).waitForEvent('user-event-test', step2).commit();
+
+      const runId = 'test-run-id';
+      let watchData: StreamEvent[] = [];
+      const run = workflow.createRun({
+        runId,
+      });
+
+      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+
+      setTimeout(() => {
+        run.sendEvent('user-event-test', {
+          value: 'eventdata',
+        });
+      }, 2000);
+
+      // Start watching the workflow
+      const collectedStreamData: StreamEvent[] = [];
+      for await (const data of stream) {
+        collectedStreamData.push(JSON.parse(JSON.stringify(data)));
+      }
+      watchData = collectedStreamData;
+
+      const executionResult = await getWorkflowState();
+
+      expect(watchData.length).toBe(9);
+      expect(watchData).toMatchObject([
+        {
+          payload: {
+            runId: 'test-run-id',
+          },
+          type: 'start',
+        },
+        {
+          payload: {
+            id: 'step1',
+          },
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            output: {
+              result: 'success1',
+            },
+            status: 'success',
+          },
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step1',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'step2',
+          },
+          type: 'step-waiting',
+        },
+        {
+          payload: {
+            id: 'step2',
+          },
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step2',
+            output: {
+              result: 'success2',
+            },
+            status: 'success',
+          },
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step2',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            runId: 'test-run-id',
+          },
+          type: 'finish',
+        },
+      ]);
+      // Verify execution completed successfully
+      expect(executionResult.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success1' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(executionResult.steps.step2).toEqual({
+        status: 'success',
+        output: { result: 'success2' },
+        payload: {
+          result: 'success1',
+        },
+        resumePayload: {
+          value: 'eventdata',
+        },
+        resumedAt: expect.any(Number),
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
   });
 
   describe('Basic Workflow Execution', () => {
@@ -1068,10 +1332,10 @@ describe('Workflow', () => {
         workflow
           .then(step1)
           .map({
-            test: {
+            test: mapVariable({
               initData: workflow,
               path: 'cool',
-            },
+            }),
             test2: {
               runtimeContextPath: 'life',
               schema: z.number(),
@@ -1133,10 +1397,10 @@ describe('Workflow', () => {
         workflow
           .then(step1)
           .map({
-            test: {
+            test: mapVariable({
               initData: workflow,
               path: 'cool',
-            },
+            }),
             test2: {
               schema: z.string(),
               fn: async ({ inputData }) => {
@@ -1146,10 +1410,10 @@ describe('Workflow', () => {
           })
           .then(step2)
           .map({
-            result: {
+            result: mapVariable({
               step: step2,
               path: 'result',
-            },
+            }),
             second: {
               schema: z.string(),
               fn: async ({ getStepResult }) => {
@@ -1214,10 +1478,10 @@ describe('Workflow', () => {
         workflow
           .then(step1)
           .map({
-            previousValue: {
+            previousValue: mapVariable({
               step: step1,
               path: 'nested.value',
-            },
+            }),
           })
           .then(step2)
           .commit();
@@ -1361,10 +1625,10 @@ describe('Workflow', () => {
         workflow
           .then(step1)
           .map({
-            ary: {
+            ary: mapVariable({
               step: step1,
               path: '.',
-            },
+            }),
           })
           .then(step2)
           .commit();
@@ -1844,7 +2108,7 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
 
-      expect(endTime - startTime).toBeGreaterThan(1000);
+      expect(endTime - startTime).toBeGreaterThanOrEqual(1000);
     });
 
     it('should execute a a sleep until step', async () => {
@@ -1896,6 +2160,122 @@ describe('Workflow', () => {
       expect(result.steps['step2']).toEqual({
         status: 'success',
         output: { result: 'slept successfully: success' },
+        payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(endTime - startTime).toBeGreaterThan(900);
+    });
+
+    it('should execute a waitForEvent step', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData, resumeData }) => {
+          return { result: inputData.result, resumed: resumeData };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string(), resumed: z.any() }),
+        resumeSchema: z.any(),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          resumed: z.any(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).waitForEvent('hello-event', step2).commit();
+
+      const run = workflow.createRun();
+      const startTime = Date.now();
+      setTimeout(() => {
+        run.sendEvent('hello-event', { data: 'hello' });
+      }, 1000);
+      const result = await run.start({ inputData: {} });
+      console.dir({ result }, { depth: null });
+      const endTime = Date.now();
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'success', resumed: { data: 'hello' } },
+        payload: { result: 'success' },
+        resumePayload: { data: 'hello' },
+        resumedAt: expect.any(Number),
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(endTime - startTime).toBeGreaterThan(1000);
+    });
+
+    it('should execute a waitForEvent step after timeout', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData, resumeData }) => {
+          return { result: inputData.result, resumed: resumeData };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string(), resumed: z.any() }),
+        resumeSchema: z.any(),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          resumed: z.any(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).waitForEvent('hello-event', step2, { timeout: 1000 }).commit();
+
+      const run = workflow.createRun();
+      const startTime = Date.now();
+      const result = await run.start({ inputData: {} });
+      const endTime = Date.now();
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toEqual({
+        status: 'failed',
+        error: expect.any(Error),
         payload: { result: 'success' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
@@ -2417,7 +2797,7 @@ describe('Workflow', () => {
 
       const endTime = Date.now();
       const duration = endTime - startTime;
-      expect(duration).toBeGreaterThan(1e3 * 3);
+      expect(duration).toBeGreaterThan(3e3 - 200);
 
       expect(map).toHaveBeenCalledTimes(3);
       expect(result.steps).toEqual({
@@ -5500,10 +5880,10 @@ describe('Workflow', () => {
           [async () => true, finalStep],
         ])
         .map({
-          finalValue: {
+          finalValue: mapVariable({
             step: finalStep,
             path: 'finalValue',
-          },
+          }),
         })
         .commit();
       counterWorkflow

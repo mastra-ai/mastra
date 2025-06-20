@@ -1,5 +1,17 @@
 # create-mastra
 
+## 0.10.6-alpha.1
+
+### Patch Changes
+
+- 21ffb97: Make dynamic form handle schema better
+
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- 9102d89: Fix final output not showing on playground for previously suspended steps
+
 ## 0.10.5
 
 ### Patch Changes

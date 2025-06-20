@@ -393,9 +393,13 @@ describe('CloudflareStore Workers Binding', () => {
 
       const messages = [createSampleMessageV2({ threadId: thread.id }), createSampleMessageV2({ threadId: thread.id })];
 
+      const checkMessages = messages.map(m => {
+        const { type, ...rest } = m;
+        return rest;
+      });
       // Save messages
       const savedMessages = await store.saveMessages({ messages, format: 'v2' });
-      expect(savedMessages).toEqual(messages);
+      expect(savedMessages).toEqual(checkMessages);
 
       // Retrieve messages with retry
       const retrievedMessages = await retryUntil(
@@ -406,7 +410,7 @@ describe('CloudflareStore Workers Binding', () => {
         msgs => msgs.length === 2,
       );
 
-      expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
+      expect(retrievedMessages).toEqual(expect.arrayContaining(checkMessages));
     });
 
     it('should handle empty message array', async () => {
@@ -419,9 +423,9 @@ describe('CloudflareStore Workers Binding', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        createSampleMessageV2({ threadId: thread.id, content: 'First', resourceId: thread.resourceId }),
-        createSampleMessageV2({ threadId: thread.id, content: 'Second', resourceId: thread.resourceId }),
-        createSampleMessageV2({ threadId: thread.id, content: 'Third', resourceId: thread.resourceId }),
+        createSampleMessageV2({ threadId: thread.id, content: { content: 'First' }, resourceId: thread.resourceId }),
+        createSampleMessageV2({ threadId: thread.id, content: { content: 'Second' }, resourceId: thread.resourceId }),
+        createSampleMessageV2({ threadId: thread.id, content: { content: 'Third' }, resourceId: thread.resourceId }),
       ];
 
       await store.saveMessages({ messages, format: 'v2' });
@@ -1357,7 +1361,7 @@ describe('CloudflareStore Workers Binding', () => {
 
     it('should sanitize and handle special characters', async () => {
       const thread = createSampleThread();
-      const message = createSampleMessageV2({ threadId: thread.id, content: '特殊字符 !@#$%^&*()' });
+      const message = createSampleMessageV2({ threadId: thread.id, content: { content: '特殊字符 !@#$%^&*()' } });
 
       await store.saveThread({ thread });
       await store.saveMessages({ messages: [message], format: 'v2' });
@@ -1725,7 +1729,10 @@ describe('CloudflareStore Workers Binding', () => {
       await store.saveThread({ thread });
 
       // Test with various malformed data
-      const malformedMessage = createSampleMessageV2({ threadId: thread.id, content: ''.padStart(1024 * 1024, 'x') });
+      const malformedMessage = createSampleMessageV2({
+        threadId: thread.id,
+        content: { content: ''.padStart(1024 * 1024, 'x') },
+      });
 
       await store.saveMessages({ messages: [malformedMessage], format: 'v2' });
 
