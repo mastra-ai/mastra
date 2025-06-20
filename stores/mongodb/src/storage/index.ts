@@ -500,7 +500,7 @@ export class MongoDBStore extends MastraStorage {
 
     const query: any = {};
     if (name) {
-      query['name'] = `%${name}%`;
+      query['name'] = new RegExp(name);
     }
 
     if (scope) {
@@ -508,9 +508,9 @@ export class MongoDBStore extends MastraStorage {
     }
 
     if (attributes) {
-      Object.keys(attributes).forEach(key => {
-        query[`attributes.${key}`] = attributes[key];
-      });
+      query['$and'] = Object.entries(attributes).map(([key, value]) => ({
+        attributes: new RegExp(`\"${key}\":\"${value}\"`),
+      }));
     }
 
     if (filters) {
@@ -852,11 +852,20 @@ export class MongoDBStore extends MastraStorage {
         console.warn('Failed to parse test_info:', e);
       }
     }
+    const resultValue = JSON.parse(row.result as string);
+    if (!resultValue || typeof resultValue !== 'object' || !('score' in resultValue)) {
+      throw new MastraError({
+        id: 'STORAGE_MONGODB_STORE_INVALID_METRIC_FORMAT',
+        text: `Invalid MetricResult format: ${JSON.stringify(resultValue)}`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+      });
+    }
 
     return {
       input: row.input as string,
       output: row.output as string,
-      result: row.result as MetricResult,
+      result: resultValue as MetricResult,
       agentName: row.agent_name as string,
       metricName: row.metric_name as string,
       instructions: row.instructions as string,
