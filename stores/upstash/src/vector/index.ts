@@ -1,3 +1,4 @@
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   CreateIndexParams,
@@ -46,10 +47,22 @@ export class UpstashVector extends MastraVector {
       metadata: metadata?.[index],
     }));
 
-    await this.client.upsert(points, {
-      namespace,
-    });
-    return generatedIds;
+    try {
+      await this.client.upsert(points, {
+        namespace,
+      });
+      return generatedIds;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_VECTOR_UPSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { namespace, vectorCount: vectors.length },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -83,24 +96,36 @@ export class UpstashVector extends MastraVector {
     filter,
     includeVector = false,
   }: QueryVectorParams): Promise<QueryResult[]> {
-    const ns = this.client.namespace(namespace);
+    try {
+      const ns = this.client.namespace(namespace);
 
-    const filterString = this.transformFilter(filter);
-    const results = await ns.query({
-      topK,
-      vector: queryVector,
-      includeVectors: includeVector,
-      includeMetadata: true,
-      ...(filterString ? { filter: filterString } : {}),
-    });
+      const filterString = this.transformFilter(filter);
+      const results = await ns.query({
+        topK,
+        vector: queryVector,
+        includeVectors: includeVector,
+        includeMetadata: true,
+        ...(filterString ? { filter: filterString } : {}),
+      });
 
-    // Map the results to our expected format
-    return (results || []).map(result => ({
-      id: `${result.id}`,
-      score: result.score,
-      metadata: result.metadata,
-      ...(includeVector && { vector: result.vector || [] }),
-    }));
+      // Map the results to our expected format
+      return (results || []).map(result => ({
+        id: `${result.id}`,
+        score: result.score,
+        metadata: result.metadata,
+        ...(includeVector && { vector: result.vector || [] }),
+      }));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_VECTOR_QUERY_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { namespace, topK },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -108,8 +133,19 @@ export class UpstashVector extends MastraVector {
    * @returns {Promise<string[]>} A promise that resolves to a list of index names.
    */
   async listIndexes(): Promise<string[]> {
-    const indexes = await this.client.listNamespaces();
-    return indexes.filter(Boolean);
+    try {
+      const indexes = await this.client.listNamespaces();
+      return indexes.filter(Boolean);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_VECTOR_LIST_INDEXES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -119,13 +155,25 @@ export class UpstashVector extends MastraVector {
    * @returns A promise that resolves to the index statistics including dimension, count and metric
    */
   async describeIndex({ indexName: namespace }: DescribeIndexParams): Promise<IndexStats> {
-    const info = await this.client.info();
+    try {
+      const info = await this.client.info();
 
-    return {
-      dimension: info.dimension,
-      count: info.namespaces?.[namespace]?.vectorCount || 0,
-      metric: info?.similarityFunction?.toLowerCase() as 'cosine' | 'euclidean' | 'dotproduct',
-    };
+      return {
+        dimension: info.dimension,
+        count: info.namespaces?.[namespace]?.vectorCount || 0,
+        metric: info?.similarityFunction?.toLowerCase() as 'cosine' | 'euclidean' | 'dotproduct',
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_VECTOR_DESCRIBE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { namespace },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -137,7 +185,15 @@ export class UpstashVector extends MastraVector {
     try {
       await this.client.deleteNamespace(namespace);
     } catch (error) {
-      this.logger.error('Failed to delete namespace:', error);
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_VECTOR_DELETE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { namespace },
+        },
+        error,
+      );
     }
   }
 
@@ -162,7 +218,19 @@ export class UpstashVector extends MastraVector {
       if (!update.vector && update.metadata) {
         throw new Error('Both vector and metadata must be provided for an update');
       }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { namespace, id },
+        },
+        error,
+      );
+    }
 
+    try {
       const updatePayload: any = { id: id };
       if (update.vector) {
         updatePayload.vector = update.vector;
@@ -180,8 +248,16 @@ export class UpstashVector extends MastraVector {
       await this.client.upsert(points, {
         namespace,
       });
-    } catch (error: any) {
-      throw new Error(`Failed to update vector by id: ${id} for index name: ${namespace}: ${error.message}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { namespace, id },
+        },
+        error,
+      );
     }
   }
 
@@ -198,7 +274,16 @@ export class UpstashVector extends MastraVector {
         namespace,
       });
     } catch (error) {
-      this.logger.error(`Failed to delete vector by id: ${id} for namespace: ${namespace}:`, error);
+      const mastraError = new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_VECTOR_DELETE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { namespace, id },
+        },
+        error,
+      );
+      this.logger?.error(mastraError.toString());
     }
   }
 }

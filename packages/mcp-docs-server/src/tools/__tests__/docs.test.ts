@@ -75,5 +75,32 @@ describe('docsTool', () => {
       expect(result).toContain('type:');
       expect(result).toContain('description:');
     });
+    it('should work when queryKeywords is an empty array', async () => {
+      const result = await callTool(tools.mastra_mastraDocs, { paths: ['reference'], queryKeywords: [] });
+      expect(result).toContain('Directory contents of reference');
+    });
+
+    it('should normalize whitespace and case in queryKeywords', async () => {
+      const result = await callTool(tools.mastra_mastraDocs, {
+        paths: ['reference'],
+        queryKeywords: ['  Rag ', '  meMory   ', 'rag'], // intentional spaces and case
+      });
+      // Should not throw, and should dedupe/normalize keywords
+      expect(result).toContain('Directory contents of reference');
+    });
+
+    it('should return directory contents when given a valid path', async () => {
+      const result = await callTool(tools.mastra_mastraDocs, { paths: ['reference'], queryKeywords: ['rag'] });
+      expect(result).toContain('Directory contents of reference');
+    });
+
+    it('should use queryKeywords to find relevant content when path is invalid', async () => {
+      const result = await callTool(tools.mastra_mastraDocs, {
+        paths: ['non-existent-path'],
+        queryKeywords: ['memory'],
+      });
+      // Should not throw, and should suggest or return content related to 'memory'
+      expect(result.toLowerCase()).toMatch(/memory/);
+    });
   });
 });

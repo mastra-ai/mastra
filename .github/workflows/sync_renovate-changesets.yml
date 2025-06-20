@@ -4,6 +4,8 @@ on:
     paths:
       - '.github/workflows/sync_renovate-changesets.yml'
       - '**/pnpm-lock.yaml'
+      - 'examples/**/package.json'
+      - 'e2e-tests/**/package.json'
 
 jobs:
   changeset:

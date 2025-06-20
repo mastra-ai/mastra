@@ -703,4 +703,21 @@ Notes:
     }
     return {};
   }
+
+  /**
+   * Updates the metadata of a list of messages
+   * @param messages - The list of messages to update
+   * @returns The list of updated messages
+   */
+  public async updateMessages({
+    messages,
+  }: {
+    messages: Partial<MastraMessageV2> & { id: string }[];
+  }): Promise<MastraMessageV2[]> {
+    if (messages.length === 0) return [];
+
+    // TODO: Possibly handle updating the vector db here when a message is updated.
+
+    return this.storage.updateMessages({ messages });
+  }
 }

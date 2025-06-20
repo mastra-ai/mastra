@@ -132,5 +132,26 @@ describe('examplesTool', () => {
       const result = await callTool(tools.mastra_mastraExamples, { example: 'memory-with-context' });
       expect(result).toMatch(/memory/i);
     });
+    it('should work when queryKeywords is an empty array', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, { queryKeywords: [] });
+      expect(result).toContain('Available code examples:');
+    });
+
+    it('should return the requested example when example name is valid', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, {
+        example: 'quick-start',
+        queryKeywords: ['quick', 'start'],
+      });
+      expect(result.toLowerCase()).toContain('quick');
+    });
+
+    it('should use queryKeywords to find relevant example when example name is invalid', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, {
+        example: 'not-a-real-example',
+        queryKeywords: ['agent'],
+      });
+      // Should not throw, and should suggest or return content related to 'agent'
+      expect(result.toLowerCase()).toMatch(/agent/);
+    });
   });
 });

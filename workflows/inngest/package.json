@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "0.10.5-alpha.1",
+  "version": "0.10.6-alpha.1",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -40,7 +40,7 @@
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
     "ai": "^4.3.16",
-    "eslint": "^9.28.0",
+    "eslint": "^9.29.0",
     "execa": "^9.6.0",
     "get-port": "7.1.0",
     "hono": "^4.7.11",
