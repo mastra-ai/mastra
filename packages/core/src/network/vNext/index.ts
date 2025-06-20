@@ -487,12 +487,12 @@ export class NewAgentNetwork extends MastraBase {
                     ${inputData.task}
                     ${completionResult ? `\n\n${completionResult.object.finalResult}` : ''}
 
-                    Please select the most appropriate agent to handle this task and the prompt to be sent to the agent.
+                    Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive.
                     If you are calling the same agent again, make sure to adjust the prompt to be more specific.
 
                     {
                         "resourceId": string,
-                        "resourceType": "agent" | "workflow",
+                        "resourceType": "agent" | "workflow" | "tool",
                         "prompt": string,
                         "selectionReason": string
                     }
