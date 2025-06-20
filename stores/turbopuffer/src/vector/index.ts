@@ -14,6 +14,11 @@ import { MastraVector } from '@mastra/core/vector';
 import { Turbopuffer } from '@turbopuffer/turbopuffer';
 import type { DistanceMetric, QueryResults, Schema, Vector } from '@turbopuffer/turbopuffer';
 import { TurbopufferFilterTranslator } from './filter';
+import type { TurbopufferVectorFilter } from './filter';
+
+export interface TurbopufferQueryVectorParams extends QueryVectorParams {
+  filter?: TurbopufferVectorFilter;
+}
 
 export interface TurbopufferVectorOptions {
   /** The API key to authenticate with. */
@@ -212,7 +217,13 @@ export class TurbopufferVector extends MastraVector {
     }
   }
 
-  async query({ indexName, queryVector, topK, filter, includeVector }: QueryVectorParams): Promise<QueryResult[]> {
+  async query({
+    indexName,
+    queryVector,
+    topK,
+    filter,
+    includeVector,
+  }: TurbopufferQueryVectorParams): Promise<QueryResult[]> {
     let createIndex;
     try {
       const schemaConfig = this.opts.schemaConfigForIndex?.(indexName);

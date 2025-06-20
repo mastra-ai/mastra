@@ -248,7 +248,7 @@ describe('AstraFilterTranslator', () => {
     });
 
     it('handles deeply nested operators', () => {
-      const filter = {
+      const filter: AstraVectorFilter = {
         'user.profile.preferences.theme': { $in: ['dark', 'light'] },
       };
       expect(translator.translate(filter)).toEqual(filter);
