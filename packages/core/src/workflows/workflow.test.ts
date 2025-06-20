@@ -7015,4 +7015,38 @@ describe('Workflow', () => {
       });
     });
   });
+
+  describe('Tool Integration', () => {
+    it('should create step from tool without TypeScript infinite loop (regression test for vector query tools)', () => {
+      // Regression test for issue where createStep(createVectorQueryTool(...)) caused TypeScript infinite loop
+      const mockTool = createTool({
+        id: 'mock-vector-tool',
+        description: 'Mock vector query tool',
+        inputSchema: z.object({
+          queryText: z.string(),
+          topK: z.number().optional(),
+          filter: z.record(z.any()).optional(),
+        }),
+        outputSchema: z.object({
+          relevantContext: z.array(z.any()),
+          sources: z.array(z.any()),
+        }),
+        execute: async ({ context }) => {
+          return {
+            relevantContext: [`Mock result for: ${context.queryText}`],
+            sources: ['mock-source-1'],
+          };
+        },
+      });
+
+      // This should not cause TypeScript infinite loop
+      const step = createStep(mockTool);
+
+      // Verify the step was created correctly
+      expect(step.id).toBe('mock-vector-tool');
+      expect(step.inputSchema).toBe(mockTool.inputSchema);
+      expect(step.outputSchema).toBe(mockTool.outputSchema);
+      expect(typeof step.execute).toBe('function');
+    });
+  });
 });

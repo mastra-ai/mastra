@@ -81,7 +81,7 @@ export class AgentNetwork extends MastraBase {
 
             // Execute each agent in parallel and collect results
             const results = await Promise.all(
-              actions.map(action =>
+              actions.map((action: { agent: string; input: string; includeHistory?: boolean }) =>
                 this.executeAgent(
                   action.agent,
                   [{ role: 'user', content: action.input }],
@@ -94,7 +94,7 @@ export class AgentNetwork extends MastraBase {
             this.logger.debug('Results:', { results });
 
             // Store the results in the agent history for future reference
-            actions.forEach((action, index) => {
+            actions.forEach((action: { agent: string; input: string; includeHistory?: boolean }, index: number) => {
               this.#addToAgentHistory(action.agent, {
                 input: action.input,
                 output: results[index] || '', // Ensure output is always a string
@@ -102,7 +102,7 @@ export class AgentNetwork extends MastraBase {
             });
 
             // Format the results with agent names for clarity
-            return actions.map((action, index) => `[${action.agent}]: ${results[index]}`).join('\n\n');
+            return actions.map((action: { agent: string; input: string; includeHistory?: boolean }, index: number) => `[${action.agent}]: ${results[index]}`).join('\n\n');
           } catch (err) {
             // Properly type the error
             const error = err as Error;

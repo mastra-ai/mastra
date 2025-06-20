@@ -1,12 +1,14 @@
 import type { z } from 'zod';
 
+import type { MastraUnion } from '../action';
 import type { Mastra } from '../mastra';
+import type { RuntimeContext } from '../runtime-context';
 import type { ToolAction, ToolExecutionContext } from './types';
 
 export class Tool<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
-  TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
+  TContext = ToolExecutionContext<TSchemaIn>,
 > implements ToolAction<TSchemaIn, TSchemaOut, TContext>
 {
   id: string;
@@ -29,22 +31,29 @@ export class Tool<
 export function createTool<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
-  TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
-  TExecute extends ToolAction<TSchemaIn, TSchemaOut, TContext>['execute'] = ToolAction<
-    TSchemaIn,
-    TSchemaOut,
-    TContext
-  >['execute'],
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TContext> & {
-    execute?: TExecute;
+  opts: {
+    id: string;
+    description: string;
+    inputSchema?: TSchemaIn;
+    outputSchema?: TSchemaOut;
+    execute?: (context: {
+      context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : any;
+      mastra?: MastraUnion;
+      runtimeContext: RuntimeContext;
+    }) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
+    mastra?: Mastra;
   },
-): [TSchemaIn, TSchemaOut, TExecute] extends [z.ZodSchema, z.ZodSchema, Function]
-  ? Tool<TSchemaIn, TSchemaOut, TContext> & {
+): [TSchemaIn, TSchemaOut] extends [z.ZodSchema, z.ZodSchema]
+  ? Tool<TSchemaIn, TSchemaOut, any> & {
       inputSchema: TSchemaIn;
       outputSchema: TSchemaOut;
-      execute: (context: TContext) => Promise<any>;
+      execute: (context: {
+        context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : any;
+        mastra?: MastraUnion;
+        runtimeContext: RuntimeContext;
+      }) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
     }
-  : Tool<TSchemaIn, TSchemaOut, TContext> {
-  return new Tool(opts) as any;
+  : Tool<TSchemaIn, TSchemaOut, any> {
+  return new Tool(opts as any) as any;
 }

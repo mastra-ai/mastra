@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core/tools';
+import { createTool, Tool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { GraphRAG } from '../graph-rag';
@@ -8,7 +8,7 @@ import { convertToSources } from '../utils/convert-sources';
 import type { GraphRagToolOptions } from './types';
 import { defaultGraphOptions } from './types';
 
-export const createGraphRAGTool = (options: GraphRagToolOptions) => {
+export const createGraphRAGTool = (options: GraphRagToolOptions): Tool<any, any, any> => {
   const { model, id, description } = options;
 
   const toolId = id || `GraphRAG ${options.vectorStoreName} ${options.indexName} Tool`;
@@ -149,6 +149,5 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
         return { relevantContext: [], sources: [] };
       }
     },
-    // Use any for output schema as the structure of the output causes type inference issues
-  }) as RagTool<typeof inputSchema, any>;
+  });
 };

@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core/tools';
+import { createTool, Tool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 interface GeocodingResponse {
@@ -20,7 +20,7 @@ interface WeatherResponse {
   };
 }
 
-export const weatherTool = createTool({
+export const weatherTool: Tool<any, any, any> = createTool({
   id: 'get-weather',
   description: 'Get current weather for a location',
   inputSchema: z.object({

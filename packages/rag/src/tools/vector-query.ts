@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core/tools';
+import { createTool, Tool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { rerank } from '../rerank';
@@ -8,7 +8,7 @@ import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
 import type { VectorQueryToolOptions } from './types';
 
-export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
+export const createVectorQueryTool = (options: VectorQueryToolOptions): Tool<any, any, any> => {
   const { model, id, description } = options;
   const toolId = id || `VectorQuery ${options.vectorStoreName} ${options.indexName} Tool`;
   const toolDescription = description || defaultVectorQueryDescription();
@@ -132,6 +132,5 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
         return { relevantContext: [], sources: [] };
       }
     },
-    // Use any for output schema as the structure of the output causes type inference issues
-  }) as RagTool<typeof inputSchema, any>;
+  });
 };

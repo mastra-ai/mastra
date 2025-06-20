@@ -34,7 +34,7 @@ export interface IAction<
   TId extends string,
   TSchemaIn extends z.ZodSchema | undefined,
   TSchemaOut extends z.ZodSchema | undefined,
-  TContext extends IExecutionContext<TSchemaIn>,
+  TContext = IExecutionContext<TSchemaIn>,
   TOptions extends unknown = unknown,
 > {
   id: TId;
