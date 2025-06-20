@@ -1,0 +1,118 @@
+# Using Agent in Workflow
+
+Now you'll create a workflow step that uses your AI agent to provide intelligent content analysis.
+
+## Creating an AI Analysis Step
+
+Add this step to your workflow file:
+
+```typescript
+import { contentAgent } from "../agents/content-agent";
+
+const aiAnalysisStep = createStep({
+  id: "ai-analysis",
+  description: "AI-powered content analysis",
+  inputSchema: z.object({
+    content: z.string(),
+    type: z.string(),
+    wordCount: z.number(),
+    metadata: z.object({
+      readingTime: z.number(),
+      difficulty: z.enum(["easy", "medium", "hard"]),
+      processedAt: z.string()
+    }),
+    summary: z.string()
+  }),
+  outputSchema: z.object({
+    content: z.string(),
+    type: z.string(),
+    wordCount: z.number(),
+    metadata: z.object({
+      readingTime: z.number(),
+      difficulty: z.enum(["easy", "medium", "hard"]),
+      processedAt: z.string()
+    }),
+    summary: z.string(),
+    aiAnalysis: z.object({
+      score: z.number(),
+      feedback: z.string()
+    })
+  }),
+  execute: async ({ inputData }) => {
+    const { content, type, wordCount, metadata, summary } = inputData;
+    
+    // Create prompt for the AI agent
+    const prompt = `
+Analyze this ${type} content:
+
+Content: "${content}"
+Word count: ${wordCount}
+Reading time: ${metadata.readingTime} minutes
+Difficulty: ${metadata.difficulty}
+
+Please provide:
+1. A quality score from 1-10
+2. Brief feedback on strengths and areas for improvement
+
+Format as JSON: {"score": number, "feedback": "your feedback here"}
+    `;
+    
+    // Get AI analysis
+    const { text } = await contentAgent.generate([
+      { role: "user", content: prompt }
+    ]);
+    
+    // Parse AI response (with fallback)
+    let aiAnalysis;
+    try {
+      aiAnalysis = JSON.parse(text);
+    } catch {
+      aiAnalysis = {
+        score: 7,
+        feedback: "AI analysis completed. " + text
+      };
+    }
+    
+    console.log(`🤖 AI Score: ${aiAnalysis.score}/10`);
+    
+    return {
+      content,
+      type,
+      wordCount,
+      metadata,
+      summary,
+      aiAnalysis
+    };
+  }
+});
+```
+
+## Testing the AI Step
+
+```typescript
+async function testAIStep() {
+  console.log("🤖 Testing AI analysis step...");
+  
+  const testData = {
+    content: "Renewable energy technologies are rapidly advancing, making clean power more accessible and affordable than ever before.",
+    type: "article",
+    wordCount: 18,
+    metadata: {
+      readingTime: 1,
+      difficulty: "easy",
+      processedAt: new Date().toISOString()
+    },
+    summary: "Renewable energy technologies are rapidly advancing."
+  };
+  
+  const result = await aiAnalysisStep.execute({
+    inputData: testData
+  });
+  
+  console.log("✅ AI Analysis:", result.aiAnalysis);
+}
+
+testAIStep();
+```
+
+Your AI-powered step is ready! Next, you'll add it to your workflow for complete AI-enhanced content processing.

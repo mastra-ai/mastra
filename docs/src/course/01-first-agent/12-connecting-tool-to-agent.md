@@ -1,11 +1,11 @@
 # Connecting the Tool to Your Agent
 
-Now that we've created our tool, we need to connect it to our agent. Go back to your `agents/index.ts` file and update it:
+Now that we've created our tool, we need to connect it to our agent. Go back to your `agents/financial-agent.ts` file and update it:
 
 1. Import the tool:
 
 ```typescript
-import { getTransactionsTool } from "../tools";
+import { getTransactionsTool } from "../tools/get-transactions-tool";
 ```
 
 2. Add the tool to your agent:
