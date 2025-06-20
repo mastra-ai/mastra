@@ -738,7 +738,7 @@ export class NewAgentNetwork extends MastraBase {
           }
         }
 
-        const finalResult = await streamPromise.promise;
+        const finalResult = JSON.stringify(await streamPromise.promise);
 
         const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
         const initData = await getInitData();
@@ -758,7 +758,7 @@ export class NewAgentNetwork extends MastraBase {
         });
 
         return {
-          result: JSON.stringify(finalResult) || '',
+          result: finalResult || '',
           task: inputData.task,
           resourceId: inputData.resourceId,
           resourceType: inputData.resourceType,
