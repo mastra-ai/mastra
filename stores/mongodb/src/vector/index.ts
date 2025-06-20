@@ -11,7 +11,6 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
 import { MongoClient } from 'mongodb';
 import type { MongoClientOptions, Document, Db, Collection } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
@@ -560,7 +559,7 @@ export class MongoDBVector extends MastraVector {
     await collection.updateOne({ _id: '__index_metadata__' }, { $set: { dimension } }, { upsert: true });
   }
 
-  private transformFilter(filter?: VectorFilter): any {
+  private transformFilter(filter?: MongoDBVectorFilter) {
     const translator = new MongoDBFilterTranslator();
     if (!filter) return {};
     return translator.translate(filter);
