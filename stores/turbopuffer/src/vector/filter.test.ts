@@ -105,7 +105,7 @@ describe('TurbopufferFilterTranslator', () => {
   // Array Operators
   describe('array operators', () => {
     it('handles arrays as $in operator', () => {
-      const filter = { tags: ['tag1', 'tag2'] };
+      const filter: TurbopufferVectorFilter = { tags: ['tag1', 'tag2'] };
       expect(translate(filter)).toEqual(['And', [['tags', 'In', ['tag1', 'tag2']]]]);
     });
 

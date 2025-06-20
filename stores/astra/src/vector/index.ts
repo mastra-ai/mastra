@@ -29,7 +29,7 @@ export interface AstraDbOptions {
   keyspace?: string;
 }
 
-export interface AstraQueryVectorParams extends QueryVectorParams {
+interface AstraQueryVectorParams extends QueryVectorParams {
   filter?: AstraVectorFilter;
 }
 

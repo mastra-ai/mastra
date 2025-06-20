@@ -11,11 +11,11 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import type { Schemas } from '@qdrant/js-client-rest';
 
 import { QdrantFilterTranslator } from './filter';
+import type { QdrantVectorFilter } from './filter';
 
 const BATCH_SIZE = 256;
 const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
@@ -23,6 +23,10 @@ const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
   euclidean: 'Euclid',
   dotproduct: 'Dot',
 };
+
+interface QdrantQueryVectorParams extends QueryVectorParams {
+  filter?: QdrantVectorFilter;
+}
 
 export class QdrantVector extends MastraVector {
   private client: QdrantClient;
@@ -131,7 +135,7 @@ export class QdrantVector extends MastraVector {
     }
   }
 
-  transformFilter(filter?: VectorFilter) {
+  transformFilter(filter?: QdrantVectorFilter) {
     const translator = new QdrantFilterTranslator();
     return translator.translate(filter);
   }
@@ -142,7 +146,7 @@ export class QdrantVector extends MastraVector {
     topK = 10,
     filter,
     includeVector = false,
-  }: QueryVectorParams): Promise<QueryResult[]> {
+  }: QdrantQueryVectorParams): Promise<QueryResult[]> {
     const translatedFilter = this.transformFilter(filter) ?? {};
 
     try {

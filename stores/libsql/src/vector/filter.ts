@@ -1,9 +1,9 @@
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
-import type { VectorFilter, OperatorSupport, OperatorValueMap, FilterValue } from '@mastra/core/vector/filter';
+import type { VectorFilter, OperatorSupport, OperatorValueMap, VectorFieldValue } from '@mastra/core/vector/filter';
 
 type LibSQLOperatorValueMap = Omit<OperatorValueMap, '$regex' | '$options'> & {
   $size: number;
-  $contains: FilterValue | FilterValue[] | Record<string, unknown>;
+  $contains: VectorFieldValue | Record<string, unknown>;
 };
 export type LibSQLVectorFilter = VectorFilter<keyof LibSQLOperatorValueMap, LibSQLOperatorValueMap>;
 

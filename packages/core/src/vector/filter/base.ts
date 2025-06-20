@@ -86,9 +86,9 @@ type BlacklistedRootOperators =
   | '$nested'
   | '$datetime'
   | '$null'
-  | '$empty'
-  | '$hasId'
-  | '$hasVector';
+  | '$empty';
+
+type VectorFieldValue = FilterValue | FilterValue[];
 
 // Vector filter parameterized by operator set
 type VectorFilter<
@@ -96,7 +96,7 @@ type VectorFilter<
   ValueMap extends Record<string, any> = OperatorValueMap,
   LogicalValueMap extends Record<string, any> = LogicalOperatorValueMap,
   Blacklisted extends string = BlacklistedRootOperators,
-  FieldValue = FilterValue,
+  FieldValue = VectorFieldValue,
 > = FilterCondition<Op, ValueMap, LogicalValueMap, Blacklisted, FieldValue> | null | undefined;
 
 type FilterCondition<
@@ -104,7 +104,7 @@ type FilterCondition<
   ValueMap extends Record<string, any> = OperatorValueMap,
   LogicalValueMap extends Record<string, any> = LogicalOperatorValueMap,
   Blacklisted extends string = BlacklistedRootOperators,
-  FieldValue = FilterValue,
+  FieldValue = VectorFieldValue,
 > = (FieldCondition<Op, ValueMap, FieldValue> | LogicalCondition<Op, ValueMap, LogicalValueMap>) &
   ForbiddenRootOperators<Blacklisted>;
 
@@ -112,7 +112,7 @@ type FilterCondition<
 type FieldCondition<
   Op extends keyof ValueMap = keyof OperatorValueMap,
   ValueMap extends Record<string, any> = OperatorValueMap,
-  FieldValue = FilterValue,
+  FieldValue = VectorFieldValue,
 > = {
   [field: string]: OperatorCondition<Op, ValueMap> | FieldValue;
 };
@@ -423,6 +423,7 @@ export {
   type ElementOperator,
   type VectorFilter,
   type FilterValue,
+  type VectorFieldValue,
   type FieldCondition,
   type OperatorCondition,
   type OperatorSupport,

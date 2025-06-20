@@ -6,7 +6,7 @@ import type {
   OperatorValueMap,
   LogicalOperatorValueMap,
   BlacklistedRootOperators,
-  FilterValue,
+  VectorFieldValue,
 } from '@mastra/core/vector/filter';
 
 type MongoDBOperatorValueMap = Omit<OperatorValueMap, '$options'> & {
@@ -17,7 +17,7 @@ export type MongoDBVectorFilter = VectorFilter<
   MongoDBOperatorValueMap,
   LogicalOperatorValueMap,
   BlacklistedRootOperators,
-  FilterValue | RegExp
+  VectorFieldValue | RegExp
 >;
 
 /**

@@ -572,21 +572,21 @@ describe('OpenSearchFilterTranslator', () => {
 
   describe('array handling', () => {
     it('translates array values to terms query', () => {
-      const filter = { tags: ['premium', 'new'] };
+      const filter: OpenSearchVectorFilter = { tags: ['premium', 'new'] };
       expect(translator.translate(filter)).toEqual({
         terms: { 'metadata.tags.keyword': ['premium', 'new'] },
       });
     });
 
     it('translates numeric array values to terms query', () => {
-      const filter = { scores: [90, 95, 100] };
+      const filter: OpenSearchVectorFilter = { scores: [90, 95, 100] };
       expect(translator.translate(filter)).toEqual({
         terms: { 'metadata.scores': [90, 95, 100] },
       });
     });
 
     it('translates empty array values to empty terms query', () => {
-      const filter = { tags: [] };
+      const filter: OpenSearchVectorFilter = { tags: [] };
       expect(translator.translate(filter)).toEqual({
         terms: { 'metadata.tags.keyword': [] },
       });

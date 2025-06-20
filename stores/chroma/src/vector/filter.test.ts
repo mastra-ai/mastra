@@ -58,7 +58,7 @@ describe('ChromaFilterTranslator', () => {
   // Array Operations
   describe('array operations', () => {
     it('handles arrays as $in operator', () => {
-      const filter = { tags: ['tag1', 'tag2'] };
+      const filter: ChromaVectorFilter = { tags: ['tag1', 'tag2'] };
       expect(translator.translate(filter)).toEqual({ tags: { $in: ['tag1', 'tag2'] } });
     });
 
@@ -69,7 +69,7 @@ describe('ChromaFilterTranslator', () => {
 
     it('handles arrays as direct values', () => {
       // Direct array value should be converted to $in
-      const filter = { field: ['value1', 'value2'] };
+      const filter: ChromaVectorFilter = { field: ['value1', 'value2'] };
       expect(translator.translate(filter)).toEqual({
         field: { $in: ['value1', 'value2'] },
       });

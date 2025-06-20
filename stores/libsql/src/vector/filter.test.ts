@@ -60,7 +60,7 @@ describe('LibSQLFilterTranslator', () => {
   // Array Operations
   describe('array operations', () => {
     it('translates array to $in', () => {
-      const filter = { field: ['a', 'b'] };
+      const filter: LibSQLVectorFilter = { field: ['a', 'b'] };
       expect(translator.translate(filter)).toEqual({
         field: { $in: ['a', 'b'] },
       });
@@ -764,7 +764,7 @@ describe('LibSQLFilterTranslator', () => {
 
       expect(() =>
         translator.translate({
-          field: { $elemMatch: ['value'] },
+          field: { $elemMatch: ['value'] } as any,
         }),
       ).toThrow('$elemMatch requires an object with conditions');
     });

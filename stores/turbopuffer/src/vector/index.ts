@@ -16,7 +16,7 @@ import type { DistanceMetric, QueryResults, Schema, Vector } from '@turbopuffer/
 import { TurbopufferFilterTranslator } from './filter';
 import type { TurbopufferVectorFilter } from './filter';
 
-export interface TurbopufferQueryVectorParams extends QueryVectorParams {
+interface TurbopufferQueryVectorParams extends QueryVectorParams {
   filter?: TurbopufferVectorFilter;
 }
 
