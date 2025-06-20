@@ -613,7 +613,7 @@ export class NewAgentNetwork extends MastraBase {
             {
               id: randomUUID() as string,
               type: 'text',
-              role: 'user',
+              role: 'assistant',
               content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
               createdAt: new Date(),
               threadId: initData.threadId || runId,
@@ -746,7 +746,7 @@ export class NewAgentNetwork extends MastraBase {
             {
               id: randomUUID() as string,
               type: 'text',
-              role: 'user',
+              role: 'assistant',
               content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
               createdAt: new Date(),
               threadId: initData.threadId || runId,
@@ -823,7 +823,7 @@ export class NewAgentNetwork extends MastraBase {
             {
               id: randomUUID() as string,
               type: 'text',
-              role: 'user',
+              role: 'assistant',
               content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
               createdAt: new Date(),
               threadId: initData.threadId || runId,
