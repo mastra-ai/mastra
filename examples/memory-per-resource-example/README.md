@@ -66,7 +66,6 @@ const memory = new Memory({
 - **Name**: 
 - **Interests**: 
 - **Preferences**: 
-// ... custom template
 `,
     },
   },

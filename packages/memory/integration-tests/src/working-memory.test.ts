@@ -711,7 +711,7 @@ describe('Working Memory Tests', () => {
       expect(retrievedDefault).toBe(workingMemoryData);
     });
 
-    it('should throw error when using resource scope with unsupported storage adapter', async () => {
+    it('should verify storage adapter support for resource working memory', async () => {
       // This test would require a mock storage adapter that doesn't support resource working memory
       // For now, we'll just verify that LibSQL supports it
       expect(storage.supports.resourceWorkingMemory).toBe(true);

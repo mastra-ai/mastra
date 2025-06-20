@@ -175,10 +175,11 @@ describe('Resource-Scoped Working Memory Tests', () => {
       thread: createTestThread('Format Test Thread'),
     });
 
-    const workingMemoryData = `# User Info
-- Name: Charlie
-- Age: 30
-- City: Seattle`;
+    const workingMemoryData = `# User Information
+- **First Name**: Charlie
+- **Last Name**: 
+- **Location**: Seattle
+- **Interests**: Technology`;
 
     await memory.updateWorkingMemory({
       threadId: thread.id,
