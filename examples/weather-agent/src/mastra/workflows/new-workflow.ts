@@ -181,7 +181,9 @@ const weatherWorkflow = createWorkflow({
   outputSchema: z.object({
     activities: z.string(),
   }),
-});
+})
+  .then(fetchWeather)
+  .then(planActivities);
 
 weatherWorkflow.commit();
 
