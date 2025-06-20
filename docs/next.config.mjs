@@ -975,11 +975,6 @@ export default withGT(
         destination: "/:locale/docs/frameworks/agentic-uis/ai-sdk",
         permanent: true,
       },
-      {
-        source: "/:locale/docs/frameworks/agentic-uis",
-        destination: "/:locale/docs/frameworks/agentic-uis/ai-sdk",
-        permanent: true,
-      },
     ],
     trailingSlash: false,
   }),
