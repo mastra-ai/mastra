@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { PassThrough } from 'stream';
 
 import { MastraVoice } from '@mastra/core/voice';
@@ -148,11 +149,11 @@ export class PlayAIVoice extends MastraVoice {
     super({
       speechModel: {
         name: speechModel?.name ?? 'PlayDialog',
-        apiKey: speechModel?.apiKey ?? process.env.PLAYAI_API_KEY,
+        apiKey: speechModel?.apiKey ?? env.PLAYAI_API_KEY,
       },
       speaker: speaker ?? PLAYAI_VOICES[0]?.id,
     });
-    const userId = speechModel?.userId ?? process.env.PLAYAI_USER_ID;
+    const userId = speechModel?.userId ?? env.PLAYAI_USER_ID;
     if (!userId) {
       throw new Error('userId is required');
     }

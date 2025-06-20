@@ -1,4 +1,5 @@
 import { mastra } from './mastra';
+import { exit } from 'node:process';
 
 async function main() {
   const researchNetwork = mastra.getNetwork('Research_Network');
@@ -21,7 +22,7 @@ async function main() {
         console.error(part.error);
         break;
       case 'text-delta':
-        process.stdout.write(part.textDelta);
+        console.log(part.textDelta);
         break;
       case 'tool-call':
         console.log(`calling tool ${part.toolName} with args ${JSON.stringify(part.args, null, 2)}`);
@@ -44,5 +45,5 @@ async function main() {
 // Run the main function with error handling
 main().catch(error => {
   console.error('❌ Error:', error);
-  process.exit(1);
+  exit(1);
 });

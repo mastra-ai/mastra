@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { env } from 'node:process';
 import { subscribe } from '@inngest/realtime';
 import type { Agent, Mastra, ToolExecutionContext, WorkflowRun, WorkflowRuns } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/di';
@@ -80,7 +81,7 @@ export class InngestRun<
   async getRuns(eventId: string) {
     const response = await fetch(`${this.inngest.apiBaseUrl ?? 'https://api.inngest.com'}/v1/events/${eventId}/runs`, {
       headers: {
-        Authorization: `Bearer ${process.env.INNGEST_SIGNING_KEY}`,
+        Authorization: `Bearer ${env.INNGEST_SIGNING_KEY}`,
       },
     });
     const json = await response.json();

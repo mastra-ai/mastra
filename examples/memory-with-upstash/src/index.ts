@@ -1,3 +1,4 @@
+import * as process from 'node:process';
 import { randomUUID } from 'crypto';
 
 import { mastra } from './mastra';

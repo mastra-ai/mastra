@@ -1,3 +1,4 @@
+import process from 'node:process';
 import { MastraBase } from '@mastra/core/base';
 
 import type { RuntimeContext } from '@mastra/core/di';

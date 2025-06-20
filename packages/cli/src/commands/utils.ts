@@ -1,6 +1,8 @@
+import { env } from 'node:process';
+
 export function getPackageManager(): string {
-  const userAgent = process.env.npm_config_user_agent || '';
-  const execPath = process.env.npm_execpath || '';
+  const userAgent = env.npm_config_user_agent || '';
+  const execPath = env.npm_execpath || '';
 
   // Check user agent first
   if (userAgent.includes('yarn')) {

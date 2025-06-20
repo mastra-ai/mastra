@@ -1,5 +1,6 @@
 import { createWriteStream, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { cwd } from 'node:process';
 import { Readable } from 'node:stream';
 import { describe, expect, it, beforeAll } from 'vitest';
 
@@ -7,7 +8,7 @@ import { GoogleVoice } from './index';
 
 describe('GoogleVoice Integration Tests', () => {
   let voice: GoogleVoice;
-  const outputDir = join(process.cwd(), 'test-outputs');
+  const outputDir = join(cwd(), 'test-outputs');
 
   beforeAll(() => {
     // Create output directory if it doesn't exist

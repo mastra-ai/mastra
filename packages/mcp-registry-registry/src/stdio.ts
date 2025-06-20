@@ -1,7 +1,8 @@
 #!/usr/bin/env node
+import { exit } from 'node:process';
 import { runServer } from './server.js';
 
 runServer().catch(error => {
   console.error('Failed to start server:', error);
-  process.exit(1);
+  exit(1);
 });

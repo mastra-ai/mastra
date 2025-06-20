@@ -12,6 +12,7 @@ import type {
   HotelApiResponse,
 } from "@/lib/types";
 import type { StepResult } from "@mastra/core/workflows";
+import { env } from 'node:process';
 
 export class Booking {
   uri: string;
@@ -28,7 +29,7 @@ export class Booking {
     const options = {
       method: "GET",
       headers: {
-        "x-rapidapi-key": process.env.RAPID_API_KEY || "",
+        "x-rapidapi-key": env.RAPID_API_KEY || "",
         "x-rapidapi-host": "booking-com15.p.rapidapi.com",
       },
     };

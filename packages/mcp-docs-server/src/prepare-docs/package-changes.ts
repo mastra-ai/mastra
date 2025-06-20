@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { cwd } from 'node:process';
 import { fromPackageRoot, fromRepoRoot, log } from '../utils.js';
 
 // Define all source directories to scan
@@ -64,7 +65,7 @@ async function processPackageDir(packagePath: string, outputDir: string): Promis
  * Scans package directories and creates organized changelog files
  */
 export async function preparePackageChanges() {
-  const outputDir = path.resolve(process.cwd(), CHANGELOGS_DEST);
+  const outputDir = path.resolve(cwd(), CHANGELOGS_DEST);
 
   // Clean up existing output directory
   try {
@@ -78,7 +79,7 @@ export async function preparePackageChanges() {
 
   // Process each source directory
   for (const sourceDir of SOURCE_DIRS) {
-    const fullSourceDir = path.resolve(process.cwd(), sourceDir);
+    const fullSourceDir = path.resolve(cwd(), sourceDir);
 
     try {
       // Check if directory exists before trying to read it

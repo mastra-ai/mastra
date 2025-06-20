@@ -1,4 +1,5 @@
 #! /usr/bin/env node
+import { argv } from 'node:process';
 import { Command } from 'commander';
 
 import { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
@@ -79,4 +80,4 @@ program
     });
   });
 
-program.parse(process.argv);
+program.parse(argv);

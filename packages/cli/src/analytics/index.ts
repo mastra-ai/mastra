@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
+import process from 'node:process';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';

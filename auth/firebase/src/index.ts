@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 import { MastraAuthProvider } from '@mastra/core/server';
 
@@ -18,8 +19,8 @@ export class MastraAuthFirebase extends MastraAuthProvider<FirebaseUser> {
   constructor(options?: MastraAuthFirebaseOptions) {
     super({ name: options?.name ?? 'firebase' });
 
-    this.serviceAccount = options?.serviceAccount ?? process.env.FIREBASE_SERVICE_ACCOUNT;
-    this.databaseId = options?.databaseId ?? process.env.FIRESTORE_DATABASE_ID ?? process.env.FIREBASE_DATABASE_ID;
+    this.serviceAccount = options?.serviceAccount ?? env.FIREBASE_SERVICE_ACCOUNT;
+    this.databaseId = options?.databaseId ?? env.FIRESTORE_DATABASE_ID ?? env.FIREBASE_DATABASE_ID;
 
     if (!admin.apps.length) {
       admin.initializeApp({

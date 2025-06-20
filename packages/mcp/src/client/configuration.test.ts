@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { env } from 'node:process';
 import path from 'path';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
@@ -21,7 +22,7 @@ describe('MCPClient', () => {
     weatherServerPort = 60000 + Math.floor(Math.random() * 1000); // Generate a random port
     // Start the weather SSE server
     weatherProcess = spawn('npx', ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
-      env: { ...process.env, WEATHER_SERVER_PORT: String(weatherServerPort) }, // Pass port as env var
+      env: { ...env, WEATHER_SERVER_PORT: String(weatherServerPort) }, // Pass port as env var
     });
 
     // Wait for SSE server to be ready

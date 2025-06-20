@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import {
   describe,
   it,
@@ -8,9 +9,11 @@ import { Mastra } from '@mastra/core';
 
 import { GithubIntegration } from '.';
 
-const PERSONAL_ACCESS_TOKEN = process.env.PERSONAL_ACCESS_TOKEN!;
-const dbUri = process.env.DB_URL!;
-const connectionId = process.env.CONNECTION_ID!;
+const PERSONAL_ACCESS_TOKEN = env.PERSONAL_ACCESS_TOKEN!;
+const dbUri = env.DB_URL!;
+const PERSONAL_ACCESS_TOKEN = env.PERSONAL_ACCESS_TOKEN!;
+const dbUri = env.DB_URL!;
+const connectionId = env.CONNECTION_ID!;
 
 const integrationName = 'GITHUB';
 

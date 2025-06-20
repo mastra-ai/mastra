@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import child_process from 'node:child_process';
+import process from 'node:process';
 import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import fsPromises from 'fs/promises';
+import process from 'node:process';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { MastraBase } from '@mastra/core/base';
@@ -69,7 +70,7 @@ export class Deps extends MastraBase {
       cmd: `${this.packageManager} pack --pack-destination ${destination}`,
       args: [],
       env: {
-        PATH: process.env.PATH!,
+        PATH: env.PATH!,
       },
     });
   }

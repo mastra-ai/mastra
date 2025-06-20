@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import type {
   Ai,
   Ai_Cf_Openai_Whisper_Large_V3_Turbo_Output,
@@ -20,8 +21,8 @@ type CloudflareListenOutput =
 
 const defaultListeningModel = {
   model: '@cf/openai/whisper-large-v3-turbo' as const,
-  apiKey: process.env.CLOUDFLARE_AI_API_KEY,
-  account_id: process.env.CLOUDFLARE_ACCOUNT_ID!,
+  apiKey: env.CLOUDFLARE_AI_API_KEY,
+  account_id: env.CLOUDFLARE_ACCOUNT_ID!,
 };
 
 export class CloudflareVoice extends MastraVoice {

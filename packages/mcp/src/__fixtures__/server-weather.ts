@@ -1,3 +1,4 @@
+import { exit } from 'node:process';
 import { MCPServer } from '../server/server';
 import { weatherTool } from './tools';
 
@@ -12,5 +13,5 @@ const server = new MCPServer({
 server.startStdio().catch(error => {
   const errorMessage = 'Fatal error running server';
   console.error(errorMessage, error);
-  process.exit(1);
+  exit(1);
 });

@@ -1,4 +1,5 @@
 import child_process from 'node:child_process';
+import { cwd } from 'node:process';
 import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
@@ -96,7 +97,7 @@ export const init = async ({
     if (configureEditorWithDocsMCP) {
       await installMastraDocsMCPServer({
         editor: configureEditorWithDocsMCP,
-        directory: process.cwd(),
+        directory: cwd(),
       });
     }
 

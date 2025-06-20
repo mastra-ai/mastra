@@ -1,3 +1,4 @@
+import { env } from "node:process";
 import { Step, Workflow } from "@mastra/core/workflows";
 import csvParser from "csv-parser";
 import fs from "fs";
@@ -25,8 +26,7 @@ const syncCsvDataStep = new Step({
   description: "Sync data from City CSV",
   execute: async () => {
     const csvFilePath =
-      process.env.CSV_FILE_PATH ||
-      path.join(process.cwd(), "src/data/city-data.csv");
+      env.CSV_FILE_PATH || path.join(env.cwd, "src/data/city-data.csv");
     console.log("Resolved CSV file path:", csvFilePath);
     const records: { data: CityData; externalId: string }[] = [];
 

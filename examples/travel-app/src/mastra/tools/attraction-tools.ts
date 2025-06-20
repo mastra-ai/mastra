@@ -1,9 +1,11 @@
+import { env } from "node:process";
+
 export async function getAttractionList(query: string) {
   const url = `https://booking-com15.p.rapidapi.com/api/v1/attraction/searchLocation?query=${encodeURIComponent(query)}&languagecode=en-us`;
   const options = {
     method: "GET",
     headers: {
-      "x-rapidapi-key": process.env.RAPID_API_KEY || "",
+      "x-rapidapi-key": env.RAPID_API_KEY || "",
       "x-rapidapi-host": "booking-com15.p.rapidapi.com",
     },
   };
@@ -25,7 +27,7 @@ export async function getFlights() {
   const options = {
     method: "GET",
     headers: {
-      "x-rapidapi-key": process.env.RAPID_API_KEY || "",
+      "x-rapidapi-key": env.RAPID_API_KEY || "",
       "x-rapidapi-host": "booking-com15.p.rapidapi.com",
     },
   };
@@ -44,7 +46,7 @@ export async function getHotels(query: string) {
   const options = {
     method: "GET",
     headers: {
-      "x-rapidapi-key": process.env.RAPID_API_KEY || "",
+      "x-rapidapi-key": env.RAPID_API_KEY || "",
       "x-rapidapi-host": "booking-com15.p.rapidapi.com",
     },
   };

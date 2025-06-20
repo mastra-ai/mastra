@@ -1,4 +1,5 @@
 import { createReadStream, writeFileSync, mkdirSync } from 'fs';
+import { env } from 'node:process';
 import { join } from 'path';
 import { Readable } from 'stream';
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -7,9 +8,9 @@ import { AzureVoice } from './index';
 
 describe('AzureVoice Integration Tests', () => {
   let voice: AzureVoice;
-  const outputDir = join(process.cwd(), 'test-outputs');
-  const subscriptionKey = process.env.AZURE_API_KEY ?? 'fake-key';
-  const region = process.env.AZURE_REGION ?? 'eastus';
+  const outputDir = join(cwd, 'test-outputs');
+  const subscriptionKey = env.AZURE_API_KEY ?? 'fake-key';
+  const region = env.AZURE_REGION ?? 'eastus';
 
   beforeAll(() => {
     try {
@@ -152,8 +153,8 @@ describe('AzureVoice Integration Tests', () => {
     });
 
     it('should handle missing API key', () => {
-      const { AZURE_API_KEY } = process.env;
-      delete process.env.AZURE_API_KEY;
+      const { AZURE_API_KEY } = env;
+      delete env.AZURE_API_KEY;
 
       expect(() => {
         new AzureVoice({
@@ -161,7 +162,7 @@ describe('AzureVoice Integration Tests', () => {
         });
       }).toThrow('No Azure API key provided for speech model');
 
-      process.env.AZURE_API_KEY = AZURE_API_KEY;
+      env.AZURE_API_KEY = AZURE_API_KEY;
     });
   });
 });

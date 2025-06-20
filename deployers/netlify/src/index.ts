@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { cwd } from 'node:process';
 import { join } from 'path';
 import { Deployer } from '@mastra/deployer';
 import { DepsService } from '@mastra/deployer/services';
@@ -37,7 +38,7 @@ to = "/.netlify/functions/api/:splat"
     );
   }
 
-  protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
+  protected async installDependencies(outputDirectory: string, rootDir = cwd()) {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
