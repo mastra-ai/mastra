@@ -20,7 +20,7 @@ interface ChromaUpsertVectorParams extends UpsertVectorParams {
   documents?: string[];
 }
 
-interface ChromaQueryVectorParams extends QueryVectorParams {
+interface ChromaQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
   documentFilter?: ChromaVectorDocumentFilter;
   filter?: ChromaVectorFilter;
 }

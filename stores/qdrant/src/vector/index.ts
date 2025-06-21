@@ -24,7 +24,7 @@ const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
   dotproduct: 'Dot',
 };
 
-interface QdrantQueryVectorParams extends QueryVectorParams {
+interface QdrantQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
   filter?: QdrantVectorFilter;
 }
 

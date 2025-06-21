@@ -23,7 +23,7 @@ export interface MongoDBUpsertVectorParams extends UpsertVectorParams {
   documents?: string[];
 }
 
-interface MongoDBQueryVectorParams extends QueryVectorParams {
+interface MongoDBQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
   documentFilter?: MongoDBVectorFilter;
   filter?: MongoDBVectorFilter;
 }
