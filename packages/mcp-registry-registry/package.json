@@ -30,7 +30,7 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.3",
+    "@modelcontextprotocol/sdk": "^1.13.0",
     "uuid": "^11.1.0",
     "zod": "^3.25.67",
     "zod-to-json-schema": "^3.24.5"
