@@ -1,5 +1,20 @@
 # @mastra/mcp-docs-server
 
+## 0.13.2-alpha.1
+
+### Patch Changes
+
+- 8e1b6e9: dependencies updates:
+  - Updated dependency [`zod@^3.25.67` ↗︎](https://www.npmjs.com/package/zod/v/3.25.67) (from `^3.25.57`, in `dependencies`)
+- ee93d96: dependencies updates:
+  - Updated dependency [`@modelcontextprotocol/sdk@^1.12.3` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/sdk/v/1.12.3) (from `^1.12.1`, in `dependencies`)
+- c00039d: dependencies updates:
+  - Updated dependency [`@modelcontextprotocol/sdk@^1.13.0` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/sdk/v/1.13.0) (from `^1.12.3`, in `dependencies`)
+- Updated dependencies [ee93d96]
+- Updated dependencies [c00039d]
+  - @mastra/mcp@0.10.5-alpha.1
+  - @mastra/core@0.10.7-alpha.2
+
 ## 0.13.2-alpha.0
 
 ### Patch Changes

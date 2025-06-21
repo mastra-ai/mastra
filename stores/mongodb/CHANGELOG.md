@@ -1,5 +1,13 @@
 # @mastra/mongodb
 
+## 0.11.1-alpha.2
+
+### Patch Changes
+
+- a2eceb2: fix: mongo storage trace query
+- 870f156: Parse eval result
+  - @mastra/core@0.10.7-alpha.2
+
 ## 0.11.1-alpha.1
 
 ### Patch Changes

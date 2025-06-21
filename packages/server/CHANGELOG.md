@@ -1,5 +1,12 @@
 # @mastra/deployer
 
+## 0.10.7-alpha.2
+
+### Patch Changes
+
+- 9bf1d55: Fix runtimeContext in mastra server, client SDK
+  - @mastra/core@0.10.7-alpha.2
+
 ## 0.10.7-alpha.1
 
 ### Patch Changes
