@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- 8e1b6e9: dependencies updates:
+  - Updated dependency [`zod@^3.25.67` ↗︎](https://www.npmjs.com/package/zod/v/3.25.67) (from `^3.25.57`, in `dependencies`)
+  - @mastra/core@0.10.7-alpha.2
+
 ## 0.10.3
 
 ### Patch Changes

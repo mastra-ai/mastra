@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.10.7-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [98bbe5a]
+  - @mastra/schema-compat@0.10.3-alpha.0
+
 ## 0.10.7-alpha.1
 
 ### Patch Changes

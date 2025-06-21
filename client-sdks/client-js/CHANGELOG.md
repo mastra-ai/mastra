@@ -1,5 +1,14 @@
 # @mastra/client-js
 
+## 0.10.6-alpha.2
+
+### Patch Changes
+
+- 8e1b6e9: dependencies updates:
+  - Updated dependency [`zod@^3.25.67` ↗︎](https://www.npmjs.com/package/zod/v/3.25.67) (from `^3.25.57`, in `dependencies`)
+- 9bf1d55: Fix runtimeContext in mastra server, client SDK
+  - @mastra/core@0.10.7-alpha.2
+
 ## 0.10.6-alpha.1
 
 ### Patch Changes
