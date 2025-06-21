@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
+import type { ChromaVectorFilter } from './filter';
 import { ChromaFilterTranslator } from './filter';
 
 describe('ChromaFilterTranslator', () => {
@@ -13,17 +14,17 @@ describe('ChromaFilterTranslator', () => {
   describe('basic operations', () => {
     it('handles empty filters', () => {
       expect(translator.translate({})).toEqual({});
-      expect(translator.translate(null as any)).toEqual(null);
-      expect(translator.translate(undefined as any)).toEqual(undefined);
+      expect(translator.translate(null)).toEqual(null);
+      expect(translator.translate(undefined)).toEqual(undefined);
     });
 
     it('retains implicit equality', () => {
-      const filter = { field: 'value' };
+      const filter: ChromaVectorFilter = { field: 'value' };
       expect(translator.translate(filter)).toEqual({ field: 'value' });
     });
 
     it('converts multiple top-level fields to $and', () => {
-      const filter = {
+      const filter: ChromaVectorFilter = {
         field1: 'value1',
         field2: 'value2',
       };
@@ -33,7 +34,7 @@ describe('ChromaFilterTranslator', () => {
     });
 
     it('handles multiple operators on same field', () => {
-      const filter = {
+      const filter: ChromaVectorFilter = {
         price: { $gt: 100, $lt: 200 },
         quantity: { $gte: 10, $lte: 20 },
       };
@@ -49,7 +50,7 @@ describe('ChromaFilterTranslator', () => {
 
     it('normalizes date values', () => {
       const date = new Date('2024-01-01');
-      const filter = { timestamp: { $gt: date } };
+      const filter: ChromaVectorFilter = { timestamp: { $gt: date } };
       expect(translator.translate(filter)).toEqual({ timestamp: { $gt: date.toISOString() } });
     });
   });
@@ -57,7 +58,7 @@ describe('ChromaFilterTranslator', () => {
   // Array Operations
   describe('array operations', () => {
     it('handles arrays as $in operator', () => {
-      const filter = { tags: ['tag1', 'tag2'] };
+      const filter: ChromaVectorFilter = { tags: ['tag1', 'tag2'] };
       expect(translator.translate(filter)).toEqual({ tags: { $in: ['tag1', 'tag2'] } });
     });
 
@@ -68,10 +69,14 @@ describe('ChromaFilterTranslator', () => {
 
     it('handles arrays as direct values', () => {
       // Direct array value should be converted to $in
-      expect(translator.translate({ field: ['value1', 'value2'] })).toEqual({ field: { $in: ['value1', 'value2'] } });
+      const filter: ChromaVectorFilter = { field: ['value1', 'value2'] };
+      expect(translator.translate(filter)).toEqual({
+        field: { $in: ['value1', 'value2'] },
+      });
 
       // Empty direct array
-      expect(translator.translate({ field: [] })).toEqual({ field: { $in: [] } });
+      const filter2 = { field: [] };
+      expect(translator.translate(filter2)).toEqual({ field: { $in: [] } });
     });
 
     describe('$in operator variations', () => {
@@ -99,7 +104,7 @@ describe('ChromaFilterTranslator', () => {
   // Logical Operators
   describe('logical operators', () => {
     it('handles logical operators', () => {
-      const filter = {
+      const filter: ChromaVectorFilter = {
         $or: [{ status: { $eq: 'active' } }, { age: { $gt: 25 } }],
       };
       expect(translator.translate(filter)).toEqual({
@@ -108,7 +113,7 @@ describe('ChromaFilterTranslator', () => {
     });
 
     it('handles nested logical operators', () => {
-      const filter = {
+      const filter: ChromaVectorFilter = {
         $and: [
           { status: { $eq: 'active' } },
           {
@@ -142,7 +147,7 @@ describe('ChromaFilterTranslator', () => {
     });
 
     it('handles complex nested conditions', () => {
-      const filter = {
+      const filter: ChromaVectorFilter = {
         $or: [
           { age: { $gt: 25 } },
           {
@@ -176,7 +181,7 @@ describe('ChromaFilterTranslator', () => {
     });
 
     it('preserves empty objects as exact match conditions', () => {
-      const filter = {
+      const filter: ChromaVectorFilter = {
         metadata: {},
         'user.profile': {},
       };
@@ -187,7 +192,7 @@ describe('ChromaFilterTranslator', () => {
     });
 
     it('handles empty objects in logical operators', () => {
-      const filter = {
+      const filter: ChromaVectorFilter = {
         $or: [{}, { status: 'active' }],
       };
 
@@ -211,7 +216,7 @@ describe('ChromaFilterTranslator', () => {
     });
 
     it('handles empty objects in comparison operators', () => {
-      const filter = {
+      const filter: ChromaVectorFilter = {
         metadata: { $eq: {} },
       };
 
@@ -221,7 +226,7 @@ describe('ChromaFilterTranslator', () => {
     });
 
     it('handles empty objects in array operators', () => {
-      const filter = {
+      const filter: ChromaVectorFilter = {
         tags: { $in: [{}] },
       };
 
@@ -335,7 +340,7 @@ describe('ChromaFilterTranslator', () => {
       });
 
       it('throws error for unsupported logical operators', () => {
-        const invalidFilters = [
+        const invalidFilters: any = [
           {
             $not: { field: 'value' },
           },
@@ -374,7 +379,7 @@ describe('ChromaFilterTranslator', () => {
     });
 
     it('throws error for unsupported operators', () => {
-      const unsupportedFilters = [
+      const unsupportedFilters: any = [
         { field: { $regex: 'pattern' } },
         { field: { $contains: 'value' } },
         { field: { $exists: true } },
@@ -395,7 +400,7 @@ describe('ChromaFilterTranslator', () => {
       expect(() => translator.translate(filter)).toThrow();
     });
     it('throws error for non-logical operators at top level', () => {
-      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
+      const invalidFilters: any = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
 
       invalidFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);

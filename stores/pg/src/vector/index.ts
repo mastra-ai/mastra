@@ -12,12 +12,12 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Mutex } from 'async-mutex';
 import pg from 'pg';
 import xxhash from 'xxhash-wasm';
 
 import { PGFilterTranslator } from './filter';
+import type { PGVectorFilter } from './filter';
 import { buildFilterQuery } from './sql-builder';
 import type { IndexConfig, IndexType } from './types';
 
@@ -31,7 +31,7 @@ export interface PGIndexStats extends IndexStats {
   };
 }
 
-interface PgQueryVectorParams extends QueryVectorParams {
+interface PgQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
   minScore?: number;
   /**
    * HNSW search parameter. Controls the size of the dynamic candidate
@@ -43,6 +43,7 @@ interface PgQueryVectorParams extends QueryVectorParams {
    * Higher values improve accuracy at the cost of speed.
    */
   probes?: number;
+  filter?: PGVectorFilter;
 }
 
 interface PgCreateIndexParams extends CreateIndexParams {
@@ -153,7 +154,7 @@ export class PgVector extends MastraVector {
     return this.schema ? `"${parseSqlIdentifier(this.schema, 'schema name')}"` : undefined;
   }
 
-  transformFilter(filter?: VectorFilter) {
+  transformFilter(filter?: PGVectorFilter) {
     const translator = new PGFilterTranslator();
     return translator.translate(filter);
   }

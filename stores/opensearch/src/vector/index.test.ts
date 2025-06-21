@@ -1,5 +1,5 @@
 // To setup a Opensearch server, run the docker compose file in the opensearch directory
-import type { QueryResult, QueryVectorParams } from '@mastra/core';
+import type { QueryResult } from '@mastra/core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { OpenSearchVector } from './index';
@@ -215,12 +215,11 @@ describe('OpenSearchVector', () => {
 
         await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors, metadata: testMetadata });
 
-        const queryParams: QueryVectorParams = {
+        const results = await vectorDB.query({
           indexName: testIndexName,
           queryVector: [1.0, 0.1, 0.1],
           topK: 3,
-        };
-        const results = await vectorDB.query(queryParams);
+        });
 
         expect(results).toHaveLength(3);
         expect(results[0]?.score).toBeGreaterThan(0);
@@ -1197,7 +1196,7 @@ describe('OpenSearchVector', () => {
           vectorDB.query({
             indexName,
             queryVector: [1, 0, 0],
-            filter: { price: { $invalid: 100 } },
+            filter: { price: { $invalid: 100 } as any },
           }),
         ).rejects.toThrow('Unsupported operator: $invalid');
       });

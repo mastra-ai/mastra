@@ -1,5 +1,11 @@
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
-import type { FieldCondition, OperatorSupport, VectorFilter } from '@mastra/core/vector/filter';
+import type { OperatorSupport, VectorFilter, OperatorValueMap } from '@mastra/core/vector/filter';
+
+type UpstashOperatorValueMap = Omit<OperatorValueMap, '$options' | '$elemMatch'> & {
+  $contains: string;
+};
+
+export type UpstashVectorFilter = VectorFilter<keyof UpstashOperatorValueMap, UpstashOperatorValueMap>;
 
 export class UpstashFilterTranslator extends BaseFilterTranslator {
   protected override getSupportedOperators(): OperatorSupport {
@@ -11,13 +17,13 @@ export class UpstashFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter?: VectorFilter): string | undefined {
+  translate(filter?: UpstashVectorFilter): string | undefined {
     if (this.isEmpty(filter)) return undefined;
     this.validateFilter(filter);
     return this.translateNode(filter);
   }
 
-  private translateNode(node: VectorFilter | FieldCondition, path: string = ''): string {
+  private translateNode(node: UpstashVectorFilter, path: string = ''): string {
     if (this.isRegex(node)) {
       throw new Error('Direct regex pattern format is not supported in Upstash');
     }

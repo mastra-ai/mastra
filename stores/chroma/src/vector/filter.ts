@@ -1,5 +1,36 @@
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
-import type { FieldCondition, VectorFilter, OperatorSupport, QueryOperator } from '@mastra/core/vector/filter';
+import type {
+  VectorFilter,
+  OperatorSupport,
+  QueryOperator,
+  OperatorValueMap,
+  LogicalOperatorValueMap,
+  BlacklistedRootOperators,
+} from '@mastra/core/vector/filter';
+
+type ChromaOperatorValueMap = Omit<OperatorValueMap, '$exists' | '$elemMatch' | '$regex' | '$options'>;
+
+type ChromaLogicalOperatorValueMap = Omit<LogicalOperatorValueMap, '$nor' | '$not'>;
+
+type ChromaBlacklisted = BlacklistedRootOperators | '$nor' | '$not';
+
+export type ChromaVectorFilter = VectorFilter<
+  keyof ChromaOperatorValueMap,
+  ChromaOperatorValueMap,
+  ChromaLogicalOperatorValueMap,
+  ChromaBlacklisted
+>;
+
+type ChromaDocumentOperatorValueMap = ChromaOperatorValueMap;
+
+type ChromaDocumentBlacklisted = Exclude<ChromaBlacklisted, '$contains'>;
+
+export type ChromaVectorDocumentFilter = VectorFilter<
+  keyof ChromaDocumentOperatorValueMap,
+  ChromaDocumentOperatorValueMap,
+  ChromaLogicalOperatorValueMap,
+  ChromaDocumentBlacklisted
+>;
 
 /**
  * Translator for Chroma filter queries.
@@ -18,14 +49,14 @@ export class ChromaFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter?: VectorFilter): VectorFilter {
+  translate(filter?: ChromaVectorFilter): ChromaVectorFilter {
     if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter);
 
     return this.translateNode(filter);
   }
 
-  private translateNode(node: VectorFilter | FieldCondition, currentPath: string = ''): any {
+  private translateNode(node: ChromaVectorFilter, currentPath: string = ''): any {
     // Handle primitive values and arrays
     if (this.isRegex(node)) {
       throw new Error('Regex is not supported in Chroma');

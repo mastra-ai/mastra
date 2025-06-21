@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-
+import type { QdrantVectorFilter } from './filter';
 import { QdrantFilterTranslator } from './filter';
 
 describe('QdrantFilterTranslator', () => {
@@ -7,7 +7,7 @@ describe('QdrantFilterTranslator', () => {
 
   describe('Basic Operators', () => {
     it('should translate direct value match', () => {
-      const filter = { field: 'value' };
+      const filter: QdrantVectorFilter = { field: 'value' };
       const expected = { must: [{ key: 'field', match: { value: 'value' } }] };
       expect(translator.translate(filter)).toEqual(expected);
     });
@@ -63,7 +63,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should handle multiple comparison operators on same field', () => {
-      const filter = { field: { $gt: 10, $lt: 20 } };
+      const filter: QdrantVectorFilter = { field: { $gt: 10, $lt: 20 } };
       const expected = { must: [{ key: 'field', range: { gt: 10, lt: 20 } }] };
       expect(translator.translate(filter)).toEqual(expected);
     });
@@ -71,7 +71,7 @@ describe('QdrantFilterTranslator', () => {
 
   describe('Logical Operators', () => {
     it('should translate $and operator', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         $and: [{ field1: 'value1' }, { field2: { $gt: 100 } }],
       };
 
@@ -86,7 +86,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should translate $or operator', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         $or: [{ field1: 'value1' }, { field2: { $lt: 100 } }],
       };
 
@@ -101,7 +101,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should translate $not operator', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         $not: { field: 'value' },
       };
 
@@ -113,7 +113,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should handle nested logical operators', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         $and: [
           { 'user.age': { $gte: 18 } },
           {
@@ -155,7 +155,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should handle nested must_not operators', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         $not: {
           $not: { field: 'value' },
         },
@@ -171,7 +171,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should handle complex logical combinations with ranges', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         $or: [
           { $and: [{ price: { $gte: 100, $lt: 200 } }, { stock: { $gt: 0 } }] },
           { $and: [{ price: { $lt: 100 } }, { featured: true }] },
@@ -199,13 +199,13 @@ describe('QdrantFilterTranslator', () => {
 
   describe('Custom Operators', () => {
     it('should translate $count operator', () => {
-      const filter = { field: { $count: { $gt: 5 } } };
+      const filter: QdrantVectorFilter = { field: { $count: { $gt: 5 } } };
       const expected = { must: [{ key: 'field', values_count: { gt: 5 } }] };
       expect(translator.translate(filter)).toEqual(expected);
     });
 
     it('should translate $geo operator with radius', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         location: {
           $geo: {
             type: 'radius',
@@ -229,7 +229,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should translate $geo operator with bounding box', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         location: {
           $geo: {
             type: 'box',
@@ -255,7 +255,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should translate $geo operator with polygon', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         location: {
           $geo: {
             type: 'polygon',
@@ -286,7 +286,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should translate $nested operator', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         diet: {
           $nested: {
             food: 'meat',
@@ -322,7 +322,7 @@ describe('QdrantFilterTranslator', () => {
 
     it('should translate $datetime operator', () => {
       const now = new Date();
-      const filter = {
+      const filter: QdrantVectorFilter = {
         timestamp: {
           $datetime: {
             range: {
@@ -357,7 +357,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should handle nested $count with multiple conditions', () => {
-      const filter = { 'array.items': { $count: { $gt: 5, $lt: 10 } } };
+      const filter: QdrantVectorFilter = { 'array.items': { $count: { $gt: 5, $lt: 10 } } };
       const expected = {
         must: [
           {
@@ -370,7 +370,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should translate $nested operator with complex conditions', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         nested_field: {
           $nested: {
             inner_field: { $gt: 100 },
@@ -399,7 +399,7 @@ describe('QdrantFilterTranslator', () => {
 
     it('should translate $datetime operator with multiple range conditions', () => {
       const now = new Date();
-      const filter = {
+      const filter: QdrantVectorFilter = {
         timestamp: {
           $datetime: {
             range: {
@@ -430,7 +430,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should translate $datetime operator with string dates', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         timestamp: {
           $datetime: {
             key: 'timestamp',
@@ -458,7 +458,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should translate complex $nested operator', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         diet: {
           $nested: {
             food: { $in: ['meat', 'fish'] },
@@ -491,19 +491,19 @@ describe('QdrantFilterTranslator', () => {
 
   describe('Special Cases', () => {
     it('should handle nested paths', () => {
-      const filter = { 'obj.field': 'value' };
+      const filter: QdrantVectorFilter = { 'obj.field': 'value' };
       const expected = { must: [{ key: 'obj.field', match: { value: 'value' } }] };
       expect(translator.translate(filter)).toEqual(expected);
     });
 
     it('should handle deep nested paths', () => {
-      const filter = { 'a.b.c.d': { $gt: 100 } };
+      const filter: QdrantVectorFilter = { 'a.b.c.d': { $gt: 100 } };
       const expected = { must: [{ key: 'a.b.c.d', range: { gt: 100 } }] };
       expect(translator.translate(filter)).toEqual(expected);
     });
 
     it('should handle complex combinations', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         $and: [
           { 'user.age': { $gte: 18 } },
           {
@@ -534,7 +534,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should handle multiple nested paths with same prefix', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         $and: [{ 'user.profile.age': { $gte: 18 } }, { 'user.profile.name': 'John' }],
       };
 
@@ -549,7 +549,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should handle mixed array and object paths', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         'items[].category': { $in: ['A', 'B'] },
         'items[].details.price': { $gt: 100 },
       };
@@ -565,7 +565,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should handle empty logical operators in combination', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         $and: [{ $or: [] }, { field: 'value' }],
       };
       const expected = {
@@ -575,7 +575,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should handle deeply nested paths with array notation', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         'users[].addresses[].geo.location': {
           $geo: {
             type: 'radius',
@@ -599,7 +599,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should handle array paths with multiple levels', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         'users[].addresses[].location[].coordinates': { $gt: 100 },
       };
       const expected = {
@@ -614,7 +614,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should handle combination of array and object paths', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         'users[].profile.addresses[].location.coordinates': { $gt: 100 },
       };
       const expected = {
@@ -629,7 +629,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should handle multiple conditions with same array path', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         $and: [
           { 'items[].price': { $gt: 100 } },
           { 'items[].quantity': { $gt: 0 } },
@@ -654,7 +654,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should throw error for invalid geo filter type', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         location: {
           $geo: {
             type: 'invalid',
@@ -667,7 +667,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should throw error for invalid custom operator', () => {
-      const filter = { $invalidCustom: 'value' };
+      const filter: QdrantVectorFilter = { $invalidCustom: 'value' };
       expect(() => translator.translate(filter)).toThrow();
     });
   });
@@ -686,7 +686,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should validate array operator values', () => {
-      const invalidFilters = [
+      const invalidFilters: any = [
         { field: { $in: 'not-an-array' } }, // Should be array
         { field: { $nin: 123 } }, // Should be array
         { field: { $in: {} } }, // Should be array
@@ -697,14 +697,14 @@ describe('QdrantFilterTranslator', () => {
       });
     });
     it('throws error for non-logical operators at top level', () => {
-      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
+      const invalidFilters: any = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
 
       invalidFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
       });
     });
     it('allows logical operators at top level', () => {
-      const validFilters = [{ $and: [{ field: 'value' }] }, { $or: [{ field: 'value' }] }];
+      const validFilters: QdrantVectorFilter[] = [{ $and: [{ field: 'value' }] }, { $or: [{ field: 'value' }] }];
 
       validFilters.forEach(filter => {
         expect(() => translator.translate(filter)).not.toThrow();
@@ -732,7 +732,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should wrap multiple field conditions in single must', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         field1: 'value1',
         field2: 'value2',
       };
@@ -746,7 +746,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should wrap complex single field conditions', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         field: {
           $gt: 10,
           $lt: 20,
@@ -771,7 +771,7 @@ describe('QdrantFilterTranslator', () => {
 
   describe('No Must Wrapper Cases', () => {
     it('should not wrap nested logical operators', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         $and: [{ field1: 'value1' }, { field2: 'value2' }],
       };
       const expected = {
@@ -791,7 +791,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should preserve existing logical structure', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         $or: [{ field1: 'value1' }, { $and: [{ field2: 'value2' }, { field3: 'value3' }] }],
       };
       const expected = {
@@ -826,7 +826,7 @@ describe('QdrantFilterTranslator', () => {
     });
 
     it('should handle regex in nested conditions', () => {
-      const filter = {
+      const filter: QdrantVectorFilter = {
         diet: {
           $nested: {
             food: { $regex: 'meat' },

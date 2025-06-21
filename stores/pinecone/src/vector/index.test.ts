@@ -728,7 +728,11 @@ describe.skip('PineconeVector Integration Tests', () => {
         vectorDB.query({
           indexName: testIndexName,
           queryVector: [1, 0, 0],
-          filter: { field1: { $in: 'not-array' }, field2: { $exists: 'not-boolean' }, field3: { $gt: 'not-number' } },
+          filter: {
+            field1: { $in: 'not-array' },
+            field2: { $exists: 'not-boolean' },
+            field3: { $gt: 'not-number' },
+          } as any,
         }),
       ).rejects.toThrow();
     });
@@ -754,7 +758,7 @@ describe.skip('PineconeVector Integration Tests', () => {
         vectorDB.query({
           indexName: testIndexName,
           queryVector: [1, 0, 0],
-          filter: { field: { $all: 'not-an-array' } },
+          filter: { field: { $all: 'not-an-array' } } as any,
         }),
       ).rejects.toThrow('A non-empty array is required for the $all operator');
     });
@@ -1164,7 +1168,7 @@ describe.skip('PineconeVector Integration Tests', () => {
         vectorDB.query({
           indexName: testIndexName,
           queryVector: [1, 0, 0],
-          filter: { price: { $gt: '500' } }, // string instead of number
+          filter: { price: { $gt: '500' } } as any, // string instead of number
         }),
       ).rejects.toThrow('the $gt operator must be followed by a number');
     });

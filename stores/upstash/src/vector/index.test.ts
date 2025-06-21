@@ -1146,7 +1146,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
           vectorStore.query({
             indexName: filterIndexName,
             queryVector: createVector(0),
-            filter: { field: { $invalidOp: 'value' } },
+            filter: { field: { $invalidOp: 'value' } as any },
           }),
         ).rejects.toThrow();
       });
@@ -1196,7 +1196,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         const results = await vectorStore.query({
           indexName: filterIndexName,
           queryVector: createVector(0),
-          filter: { $and: { not: 'an array' } },
+          filter: { $and: { not: 'an array' } as any },
         });
         expect(results.length).toBeGreaterThan(0);
       });

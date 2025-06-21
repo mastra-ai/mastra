@@ -8,6 +8,7 @@ import type {
   RegexOperator,
   VectorFilter,
 } from '@mastra/core/vector/filter';
+import type { PGVectorFilter } from './filter';
 
 type OperatorType =
   | BasicOperator
@@ -250,7 +251,7 @@ function escapeLikePattern(str: string): string {
   return str.replace(/([%_\\])/g, '\\$1');
 }
 
-export function buildFilterQuery(filter: VectorFilter, minScore: number, topK: number): FilterResult {
+export function buildFilterQuery(filter: PGVectorFilter, minScore: number, topK: number): FilterResult {
   const values = [minScore, topK];
 
   function buildCondition(key: string, value: any, parentPath: string): string {
