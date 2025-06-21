@@ -27,7 +27,7 @@ const REVERSE_METRIC_MAPPING = {
   innerproduct: 'dotproduct',
 } as const;
 
-interface OpenSearchVectorParams extends QueryVectorParams {
+interface OpenSearchVectorParams extends Omit<QueryVectorParams, 'filter'> {
   filter?: OpenSearchVectorFilter;
 }
 

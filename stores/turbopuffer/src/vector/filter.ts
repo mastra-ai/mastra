@@ -62,10 +62,10 @@ export class TurbopufferFilterTranslator extends BaseFilterTranslator {
     }
 
     // Validate the filter structure before translating
-    this.validateFilter(filter as TurbopufferVectorFilter);
+    this.validateFilter(filter);
 
     // Translate the filter
-    const result = this.translateNode(filter as TurbopufferVectorFilter);
+    const result = this.translateNode(filter);
 
     // If we have a single condition (not a logical operator at the top level),
     // wrap it in an implicit AND to match Turbopuffer's expected format

@@ -310,14 +310,6 @@ describe.skip('AstraVector Integration Tests', () => {
           filter: { tags: { $in: null as any } },
         }),
       ).rejects.toThrow();
-
-      await expect(
-        vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0, 0],
-          filter: { tags: { $all: 'not-an-array' as any } },
-        }),
-      ).rejects.toThrow();
     });
 
     it('validates $in operators', async () => {

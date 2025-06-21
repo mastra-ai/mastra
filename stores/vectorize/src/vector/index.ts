@@ -16,9 +16,9 @@ import Cloudflare from 'cloudflare';
 import { VectorizeFilterTranslator } from './filter';
 import type { VectorizeVectorFilter } from './filter';
 
-export type VectorizeQueryParams = QueryVectorParams & {
+interface VectorizeQueryParams extends Omit<QueryVectorParams, 'filter'> {
   filter?: VectorizeVectorFilter;
-};
+}
 
 export class CloudflareVector extends MastraVector {
   client: Cloudflare;
