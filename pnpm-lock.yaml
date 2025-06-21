@@ -1136,7 +1136,7 @@ importers:
         specifier: ^0.4.20
         version: 0.4.20(eslint@9.29.0(jiti@2.4.2))
       postcss:
-        specifier: ^8.5.3
+        specifier: ^8.5.6
         version: 8.5.6
       tailwindcss:
         specifier: ^3.4.17
@@ -2266,7 +2266,7 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1
       postcss:
-        specifier: ^8.5.4
+        specifier: ^8.5.6
         version: 8.5.6
       rollup-plugin-node-externals:
         specifier: ^8.0.1
