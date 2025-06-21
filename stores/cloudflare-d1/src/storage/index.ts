@@ -843,7 +843,7 @@ export class D1Store extends MastraStorage {
 
       // Insert messages and update thread's updatedAt in parallel
       await Promise.all([
-        this.batchInsert({
+        this.batchUpsert({
           tableName: TABLE_MESSAGES,
           records: messagesToInsert,
         }),
@@ -1232,6 +1232,82 @@ export class D1Store extends MastraStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to batch insert into ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Upsert multiple records in a batch operation
+   * @param tableName The table to insert into
+   * @param records The records to insert
+   */
+  private async batchUpsert({
+    tableName,
+    records,
+  }: {
+    tableName: TABLE_NAMES;
+    records: Record<string, any>[];
+  }): Promise<void> {
+    if (records.length === 0) return;
+
+    const fullTableName = this.getTableName(tableName);
+
+    try {
+      // Process records in batches for better performance
+      const batchSize = 50; // Adjust based on performance testing
+
+      for (let i = 0; i < records.length; i += batchSize) {
+        const batch = records.slice(i, i + batchSize);
+
+        const recordsToInsert = batch;
+
+        // For bulk insert, we need to determine the columns from the first record
+        if (recordsToInsert.length > 0) {
+          const firstRecord = recordsToInsert[0];
+          // Ensure firstRecord is not undefined before calling Object.keys
+          const columns = Object.keys(firstRecord || {});
+
+          // Create a bulk insert statement
+          for (const record of recordsToInsert) {
+            // Use type-safe approach to extract values
+            const values = columns.map(col => {
+              if (!record) return null;
+              // Safely access the record properties
+              const value = typeof col === 'string' ? record[col as keyof typeof record] : null;
+              return this.serializeValue(value);
+            });
+
+            const recordToUpsert = columns.reduce(
+              (acc, col) => {
+                if (col !== 'createdAt') acc[col] = `excluded.${col}`;
+                return acc;
+              },
+              {} as Record<string, any>,
+            );
+
+            const query = createSqlBuilder().insert(fullTableName, columns, values, ['id'], recordToUpsert);
+
+            const { sql, params } = query.build();
+            await this.executeQuery({ sql, params });
+          }
+        }
+
+        this.logger.debug(
+          `Processed batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(records.length / batchSize)}`,
+        );
+      }
+
+      this.logger.debug(`Successfully batch upserted ${records.length} records into ${tableName}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_D1_STORAGE_BATCH_UPSERT_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to batch upsert into ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
           details: { tableName },
         },
         error,
