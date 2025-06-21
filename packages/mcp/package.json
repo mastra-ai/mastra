@@ -52,7 +52,7 @@
     "@types/node": "^20.19.0",
     "ai": "4.3.16",
     "eslint": "^9.29.0",
-    "hono-mcp-server-sse-transport": "0.0.6",
+    "hono-mcp-server-sse-transport": "0.0.7",
     "tsup": "^8.5.0",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
