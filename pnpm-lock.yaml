@@ -1732,8 +1732,8 @@ importers:
         specifier: ^9.29.0
         version: 9.29.0(jiti@2.4.2)
       hono-mcp-server-sse-transport:
-        specifier: 0.0.6
-        version: 0.0.6(@modelcontextprotocol/sdk@1.13.0)(hono@4.7.11)
+        specifier: 0.0.7
+        version: 0.0.7(@modelcontextprotocol/sdk@1.13.0)(hono@4.7.11)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.17))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
@@ -13558,8 +13558,8 @@ packages:
   highlightjs-vue@1.0.0:
     resolution: {integrity: sha512-PDEfEF102G23vHmPhLyPboFCD+BkMGu+GuJe2d9/eH4FsCwvgBpnc9n0pGE+ffKdph38s6foEZiEjdgHdzp+IA==}
 
-  hono-mcp-server-sse-transport@0.0.6:
-    resolution: {integrity: sha512-zomsBFZg/JJeeoSoumgYt5PN4jB0opm4iQa97MH70k5DQKX1igOrnAGWd9nPnhSNpU0c8aI+cSUjofavDOP02w==}
+  hono-mcp-server-sse-transport@0.0.7:
+    resolution: {integrity: sha512-humMUuHiwOQNhP9iXRdEQa4TK4AMzsiI8wZep51ErIW154ovzCZGrXuRwyfREly8/0Supg+MEQwyQEFnxNejuA==}
     peerDependencies:
       '@modelcontextprotocol/sdk': '*'
       hono: '*'
@@ -31460,7 +31460,7 @@ snapshots:
 
   highlightjs-vue@1.0.0: {}
 
-  hono-mcp-server-sse-transport@0.0.6(@modelcontextprotocol/sdk@1.13.0)(hono@4.7.11):
+  hono-mcp-server-sse-transport@0.0.7(@modelcontextprotocol/sdk@1.13.0)(hono@4.7.11):
     dependencies:
       '@modelcontextprotocol/sdk': 1.13.0
       hono: 4.7.11
@@ -31586,7 +31586,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.10.0(debug@4.4.1))
+      retry-axios: 2.6.0(axios@1.10.0)
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -35133,7 +35133,7 @@ snapshots:
   ret@0.4.3:
     optional: true
 
-  retry-axios@2.6.0(axios@1.10.0(debug@4.4.1)):
+  retry-axios@2.6.0(axios@1.10.0):
     dependencies:
       axios: 1.10.0(debug@4.4.1)
 
