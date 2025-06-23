@@ -1147,7 +1147,13 @@ export class PostgresStore extends MastraStorage {
           }
           return t.none(
             `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type, "resourceId") 
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             ON CONFLICT (id) DO UPDATE SET
+              thread_id = EXCLUDED.thread_id,
+              content = EXCLUDED.content,
+              role = EXCLUDED.role,
+              type = EXCLUDED.type,
+              "resourceId" = EXCLUDED."resourceId"`,
             [
               message.id,
               message.threadId,

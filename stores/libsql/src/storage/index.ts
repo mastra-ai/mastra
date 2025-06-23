@@ -876,7 +876,14 @@ export class LibSQLStore extends MastraStorage {
         }
         return {
           sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt, resourceId) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  thread_id=excluded.thread_id,
+                  content=excluded.content,
+                  role=excluded.role,
+                  type=excluded.type,
+                  resourceId=excluded.resourceId
+              `,
           args: [
             message.id,
             message.threadId!,
