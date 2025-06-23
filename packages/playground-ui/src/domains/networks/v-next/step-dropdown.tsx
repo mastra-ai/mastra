@@ -163,12 +163,7 @@ const WorkflowStepResultDialog = ({ open, onOpenChange, workflowId, runId }: Wor
           <div className="flex-1 h-full">
             <DialogTitle>Workflow details</DialogTitle>
             <WorkflowRunProvider snapshot={typeof run?.snapshot === 'object' ? run.snapshot : undefined}>
-              <WorkflowGraph
-                workflowId={workflowId}
-                workflow={workflow!}
-                isLoading={isLoading}
-                onShowTrace={() => {}}
-              />
+              <WorkflowGraph workflowId={workflowId} workflow={workflow!} isLoading={isLoading} />
             </WorkflowRunProvider>
           </div>
         </DialogContent>
