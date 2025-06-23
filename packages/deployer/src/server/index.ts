@@ -1950,7 +1950,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
   app.get(
     '/api/memory/network/status',
     describeRoute({
-      description: 'Get netwrok memory status',
+      description: 'Get network memory status',
       tags: ['networkMemory'],
       parameters: [
         {
