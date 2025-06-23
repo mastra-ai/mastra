@@ -55,7 +55,7 @@ export async function prepareMonorepo(monorepoDir, glob) {
   let shelvedChanges = false;
 
   try {
-    const gitStatus = awaitexecAsync('git status --porcelain', {
+    const gitStatus = await execAsync('git status --porcelain', {
       cwd: monorepoDir,
       encoding: 'utf8',
     });
