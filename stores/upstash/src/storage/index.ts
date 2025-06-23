@@ -7,6 +7,7 @@ import {
   MastraStorage,
   TABLE_MESSAGES,
   TABLE_THREADS,
+  TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
   TABLE_TRACES,
@@ -15,6 +16,7 @@ import type {
   TABLE_NAMES,
   StorageColumn,
   StorageGetMessagesArg,
+  StorageResourceType,
   EvalRow,
   WorkflowRuns,
   WorkflowRun,
@@ -43,9 +45,11 @@ export class UpstashStore extends MastraStorage {
 
   public get supports(): {
     selectByIncludeResourceScope: boolean;
+    resourceWorkingMemory: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
+      resourceWorkingMemory: true,
     };
   }
 
@@ -1528,5 +1532,89 @@ export class UpstashStore extends MastraStorage {
   }): Promise<MastraMessageV2[]> {
     this.logger.error('updateMessages is not yet implemented in UpstashStore');
     throw new Error('Method not implemented');
+  }
+
+  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
+    try {
+      const key = `${TABLE_RESOURCES}:${resourceId}`;
+      const data = await this.redis.get<StorageResourceType>(key);
+
+      if (!data) {
+        return null;
+      }
+
+      return {
+        ...data,
+        createdAt: new Date(data.createdAt),
+        updatedAt: new Date(data.updatedAt),
+        // Ensure workingMemory is always returned as a string, regardless of automatic parsing
+        workingMemory: typeof data.workingMemory === 'object' ? JSON.stringify(data.workingMemory) : data.workingMemory,
+        metadata: typeof data.metadata === 'string' ? JSON.parse(data.metadata) : data.metadata,
+      };
+    } catch (error) {
+      this.logger.error('Error getting resource by ID:', error);
+      throw error;
+    }
+  }
+
+  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    try {
+      const key = `${TABLE_RESOURCES}:${resource.id}`;
+      const serializedResource = {
+        ...resource,
+        metadata: JSON.stringify(resource.metadata),
+        createdAt: resource.createdAt.toISOString(),
+        updatedAt: resource.updatedAt.toISOString(),
+      };
+
+      await this.redis.set(key, serializedResource);
+
+      return resource;
+    } catch (error) {
+      this.logger.error('Error saving resource:', error);
+      throw error;
+    }
+  }
+
+  async updateResource({
+    resourceId,
+    workingMemory,
+    metadata,
+  }: {
+    resourceId: string;
+    workingMemory?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<StorageResourceType> {
+    try {
+      const existingResource = await this.getResourceById({ resourceId });
+
+      if (!existingResource) {
+        // Create new resource if it doesn't exist
+        const newResource: StorageResourceType = {
+          id: resourceId,
+          workingMemory,
+          metadata: metadata || {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        return this.saveResource({ resource: newResource });
+      }
+
+      const updatedResource = {
+        ...existingResource,
+        workingMemory: workingMemory !== undefined ? workingMemory : existingResource.workingMemory,
+        metadata: {
+          ...existingResource.metadata,
+          ...metadata,
+        },
+        updatedAt: new Date(),
+      };
+
+      await this.saveResource({ resource: updatedResource });
+      return updatedResource;
+    } catch (error) {
+      this.logger.error('Error updating resource:', error);
+      throw error;
+    }
   }
 }
