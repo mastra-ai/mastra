@@ -526,6 +526,82 @@ export function createTestSuite(storage: MastraStorage) {
         const newUpdatedAt = new Date(updatedThread!.updatedAt);
         expect(newUpdatedAt.getTime()).toBeGreaterThan(initialUpdatedAt.getTime());
       });
+      it('should upsert messages: duplicate id+threadId results in update, not duplicate row', async () => {
+        const thread = await createSampleThread();
+        await storage.saveThread({ thread });
+        const baseMessage = createSampleMessageV2({
+          threadId: thread.id,
+          createdAt: new Date(),
+          content: { content: 'Original' },
+          resourceId: thread.resourceId,
+        });
+
+        // Insert the message for the first time
+        await storage.saveMessages({ messages: [baseMessage], format: 'v2' });
+
+        // Insert again with the same id and threadId but different content
+        const updatedMessage = {
+          ...createSampleMessageV2({
+            threadId: thread.id,
+            createdAt: new Date(),
+            content: { content: 'Updated' },
+            resourceId: thread.resourceId,
+          }),
+          id: baseMessage.id,
+        };
+
+        await storage.saveMessages({ messages: [updatedMessage], format: 'v2' });
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Retrieve messages for the thread
+        const retrievedMessages = await storage.getMessages({ threadId: thread.id, format: 'v2' });
+
+        // Only one message should exist for that id+threadId
+        expect(retrievedMessages.filter(m => m.id === baseMessage.id)).toHaveLength(1);
+
+        // The content should be the updated one
+        expect(retrievedMessages.find(m => m.id === baseMessage.id)?.content.content).toBe('Updated');
+      });
+
+      it('should upsert messages: duplicate id and different threadid', async () => {
+        const thread1 = await createSampleThread();
+        const thread2 = await createSampleThread();
+        await storage.saveThread({ thread: thread1 });
+        await storage.saveThread({ thread: thread2 });
+
+        const message = createSampleMessageV2({
+          threadId: thread1.id,
+          createdAt: new Date(),
+          content: { content: 'Thread1 Content' },
+          resourceId: thread1.resourceId,
+        });
+
+        // Insert message into thread1
+        await storage.saveMessages({ messages: [message], format: 'v2' });
+
+        // Attempt to insert a message with the same id but different threadId
+        const conflictingMessage = {
+          ...createSampleMessageV2({
+            threadId: thread2.id, // different thread
+            content: { content: 'Thread2 Content' },
+            resourceId: thread2.resourceId,
+          }),
+          id: message.id,
+        };
+
+        // Save should move the message to the new thread
+        await storage.saveMessages({ messages: [conflictingMessage], format: 'v2' });
+
+        // Retrieve messages for both threads
+        const thread1Messages = await storage.getMessages({ threadId: thread1.id, format: 'v2' });
+        const thread2Messages = await storage.getMessages({ threadId: thread2.id, format: 'v2' });
+
+        // Thread 1 should NOT have the message with that id
+        expect(thread1Messages.find(m => m.id === message.id)).toBeUndefined();
+
+        // Thread 2 should have the message with that id
+        expect(thread2Messages.find(m => m.id === message.id)?.content.content).toBe('Thread2 Content');
+      });
     });
 
     describe('Edge Cases and Error Handling', () => {

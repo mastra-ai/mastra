@@ -11,12 +11,14 @@ import type {
   UpdateVectorParams,
   UpsertVectorParams,
 } from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Index } from '@upstash/vector';
 
 import { UpstashFilterTranslator } from './filter';
+import type { UpstashVectorFilter } from './filter';
 
-export class UpstashVector extends MastraVector {
+type UpstashQueryVectorParams = QueryVectorParams<UpstashVectorFilter>;
+
+export class UpstashVector extends MastraVector<UpstashVectorFilter> {
   private client: Index;
 
   /**
@@ -67,10 +69,10 @@ export class UpstashVector extends MastraVector {
 
   /**
    * Transforms a Mastra vector filter into an Upstash-compatible filter string.
-   * @param {VectorFilter} [filter] - The filter to transform.
+   * @param {UpstashVectorFilter} [filter] - The filter to transform.
    * @returns {string | undefined} The transformed filter string, or undefined if no filter is provided.
    */
-  transformFilter(filter?: VectorFilter) {
+  transformFilter(filter?: UpstashVectorFilter) {
     const translator = new UpstashFilterTranslator();
     return translator.translate(filter);
   }
@@ -95,7 +97,7 @@ export class UpstashVector extends MastraVector {
     topK = 10,
     filter,
     includeVector = false,
-  }: QueryVectorParams): Promise<QueryResult[]> {
+  }: UpstashQueryVectorParams): Promise<QueryResult[]> {
     try {
       const ns = this.client.namespace(namespace);
 

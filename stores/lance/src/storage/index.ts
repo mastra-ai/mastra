@@ -71,6 +71,17 @@ export class LanceStorage extends MastraStorage {
     }
   }
 
+  private getPrimaryKeys(tableName: TABLE_NAMES): string[] {
+    let primaryId: string[] = ['id'];
+    if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+      primaryId = ['workflow_name', 'run_id'];
+    } else if (tableName === TABLE_EVALS) {
+      primaryId = ['agent_name', 'metric_name', 'run_id'];
+    }
+
+    return primaryId;
+  }
+
   /**
    * @internal
    * Private constructor to enforce using the create factory method
@@ -436,6 +447,8 @@ export class LanceStorage extends MastraStorage {
     try {
       const table = await this.lanceClient.openTable(tableName);
 
+      const primaryId = this.getPrimaryKeys(tableName as TABLE_NAMES);
+
       const processedRecord = { ...record };
 
       for (const key in processedRecord) {
@@ -449,7 +462,7 @@ export class LanceStorage extends MastraStorage {
         }
       }
 
-      await table.add([processedRecord], { mode: 'overwrite' });
+      await table.mergeInsert(primaryId).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([processedRecord]);
     } catch (error: any) {
       throw new MastraError(
         {
@@ -495,6 +508,8 @@ export class LanceStorage extends MastraStorage {
     try {
       const table = await this.lanceClient.openTable(tableName);
 
+      const primaryId = this.getPrimaryKeys(tableName as TABLE_NAMES);
+
       const processedRecords = records.map(record => {
         const processedRecord = { ...record };
 
@@ -515,7 +530,7 @@ export class LanceStorage extends MastraStorage {
         return processedRecord;
       });
 
-      await table.add(processedRecords, { mode: 'overwrite' });
+      await table.mergeInsert(primaryId).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(processedRecords);
     } catch (error: any) {
       throw new MastraError(
         {
@@ -788,7 +803,7 @@ export class LanceStorage extends MastraStorage {
     try {
       const record = { id, title, metadata: JSON.stringify(metadata) };
       const table = await this.lanceClient.openTable(TABLE_THREADS);
-      await table.add([record], { mode: 'overwrite' });
+      await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([record]);
 
       const query = table.query().where(`id = '${id}'`);
 
@@ -1005,7 +1020,8 @@ export class LanceStorage extends MastraStorage {
       }));
 
       const table = await this.lanceClient.openTable(TABLE_MESSAGES);
-      await table.add(transformedMessages, { mode: 'overwrite' });
+      await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(transformedMessages);
+
       const list = new MessageList().add(messages, 'memory');
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
@@ -1322,11 +1338,9 @@ export class LanceStorage extends MastraStorage {
       const records = await query.toArray();
       let createdAt: number;
       const now = Date.now();
-      let mode: 'append' | 'overwrite' = 'append';
 
       if (records.length > 0) {
         createdAt = records[0].createdAt ?? now;
-        mode = 'overwrite';
       } else {
         createdAt = now;
       }
@@ -1339,7 +1353,11 @@ export class LanceStorage extends MastraStorage {
         updatedAt: now,
       };
 
-      await table.add([record], { mode });
+      await table
+        .mergeInsert(['workflow_name', 'run_id'])
+        .whenMatchedUpdateAll()
+        .whenNotMatchedInsertAll()
+        .execute([record]);
     } catch (error: any) {
       throw new MastraError(
         {
