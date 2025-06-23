@@ -1024,7 +1024,10 @@ export class PostgresStore extends MastraStorage {
     }
 
     try {
-      const perPage = perPageInput !== undefined ? perPageInput : 40;
+      const perPage =
+        perPageInput !== undefined
+          ? perPageInput
+          : this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
       const currentOffset = page * perPage;
 
       const conditions: string[] = [`thread_id = $1`];
@@ -1045,7 +1048,7 @@ export class PostgresStore extends MastraStorage {
       const countResult = await this.db.one(countQuery, queryParams);
       const total = parseInt(countResult.count, 10);
 
-      if (total === 0) {
+      if (total === 0 && messages.length === 0) {
         return {
           messages: [],
           total: 0,
@@ -1055,10 +1058,14 @@ export class PostgresStore extends MastraStorage {
         };
       }
 
+      const excludeIds = messages.map(m => m.id);
+      const excludeIdsParam = excludeIds.map((_, idx) => `$${idx + paramIndex}`).join(', ');
+      paramIndex += excludeIds.length;
+
       const dataQuery = `${selectStatement} FROM ${this.getTableName(
         TABLE_MESSAGES,
-      )} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      const rows = await this.db.manyOrNone(dataQuery, [...queryParams, perPage, currentOffset]);
+      )} ${whereClause} ${excludeIds.length ? `AND id NOT IN (${excludeIdsParam})` : ''}${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+      const rows = await this.db.manyOrNone(dataQuery, [...queryParams, ...excludeIds, perPage, currentOffset]);
       messages.push(...(rows || []));
 
       const list = new MessageList().add(messages, 'memory');
