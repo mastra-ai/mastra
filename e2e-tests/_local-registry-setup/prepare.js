@@ -5,10 +5,13 @@ import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
-let maxRetries = 3;
+let maxRetries = 5;
 function retryWithTimeout(fn, timeout, name, retryCount = 0) {
   const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error(`Command "${name}" timed out after ${timeout}ms`)), timeout);
+    setTimeout(
+      () => reject(new Error(`Command "${name}" timed out after ${timeout}ms in ${retryCount} retries`)),
+      timeout,
+    );
   });
 
   const callbackPromise = fn();
