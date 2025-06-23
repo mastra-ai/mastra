@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
-let maxRetries = 2;
+let maxRetries = 3;
 function retryWithTimeout(fn, timeout, name, retryCount = 0) {
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => reject(new Error(`Command "${name}" timed out after ${timeout}ms`)), timeout);
@@ -94,7 +94,7 @@ export async function prepareMonorepo(monorepoDir, glob) {
           stdio: ['inherit', 'inherit', 'inherit'],
         });
       },
-      5000,
+      10000,
       'pnpm changeset pre exit',
     );
 
@@ -105,7 +105,7 @@ export async function prepareMonorepo(monorepoDir, glob) {
           stdio: ['inherit', 'inherit', 'inherit'],
         });
       },
-      5000,
+      10000,
       'pnpm changeset version --snapshot create-mastra-e2e-test',
     );
   } catch (error) {
