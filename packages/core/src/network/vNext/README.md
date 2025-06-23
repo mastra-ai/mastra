@@ -88,7 +88,7 @@ const agentStep1 = createStep({
 });
 
 const agentStep2 = createStep({
-  id: 'agent-step',
+  id: 'agent-step-two',
   description: 'This step is used to do research and text synthesis.',
   inputSchema: z.object({
     text: z.string().describe('The city to research'),
@@ -202,7 +202,7 @@ const agentStep1 = createStep({
 });
 
 const agentStep2 = createStep({
-  id: 'agent-step',
+  id: 'agent-step-two',
   description: 'This step is used to do research and text synthesis.',
   inputSchema: z.object({
     text: z.string().describe('The city to research'),

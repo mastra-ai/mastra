@@ -99,7 +99,6 @@ export class Agent<
 > extends MastraBase {
   public id: TAgentId;
   public name: TAgentId;
-  public description?: string;
   #instructions: DynamicArgument<string>;
   readonly #description?: string;
   readonly model?: DynamicArgument<MastraLanguageModel>;
@@ -119,7 +118,6 @@ export class Agent<
 
     this.name = config.name;
     this.id = config.name;
-    this.description = config.description;
 
     this.#instructions = config.instructions;
     this.#description = config.description;

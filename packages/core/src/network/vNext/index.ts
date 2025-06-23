@@ -217,7 +217,7 @@ export class NewAgentNetwork extends MastraBase {
     const agentList = Object.entries(agentsToUse)
       .map(([name, agent]) => {
         // Use agent name instead of description since description might not exist
-        return ` - **${name}**: ${agent.description}`;
+        return ` - **${name}**: ${agent.getDescription()}`;
       })
       .join('\n');
 
