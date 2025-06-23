@@ -33,5 +33,8 @@ export async function setupTestProject(pathToStoreFiles, registryUrl) {
     cwd: newPath,
     stdio: 'inherit',
     shell: true,
+    env: {
+      ...process.env,
+    },
   });
 }
