@@ -1,5 +1,34 @@
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
-import type { FieldCondition, VectorFilter, OperatorSupport } from '@mastra/core/vector/filter';
+import type {
+  VectorFilter,
+  OperatorSupport,
+  OperatorValueMap,
+  LogicalOperatorValueMap,
+  BlacklistedRootOperators,
+  VectorFieldValue,
+} from '@mastra/core/vector/filter';
+
+type PGOperatorValueMap = Omit<OperatorValueMap, '$in' | '$all' | '$nin' | '$eq' | '$ne'> & {
+  $size: number;
+  $contains: VectorFieldValue | Record<string, unknown>;
+  $all: VectorFieldValue;
+  $in: VectorFieldValue;
+  $nin: VectorFieldValue;
+  $eq: VectorFieldValue;
+  $ne: VectorFieldValue;
+};
+
+type PGBlacklisted = BlacklistedRootOperators | '$contains' | '$size';
+
+type PGFilterValue = VectorFieldValue | RegExp;
+
+export type PGVectorFilter = VectorFilter<
+  keyof PGOperatorValueMap,
+  PGOperatorValueMap,
+  LogicalOperatorValueMap,
+  PGBlacklisted,
+  PGFilterValue
+>;
 
 /**
  * Translates MongoDB-style filters to PG compatible filters.
@@ -11,7 +40,7 @@ import type { FieldCondition, VectorFilter, OperatorSupport } from '@mastra/core
  * - Can take either a single condition or an array of conditions
  *
  */
-export class PGFilterTranslator extends BaseFilterTranslator {
+export class PGFilterTranslator extends BaseFilterTranslator<PGVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
@@ -19,7 +48,7 @@ export class PGFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter?: VectorFilter): VectorFilter {
+  translate(filter?: PGVectorFilter): PGVectorFilter {
     if (this.isEmpty(filter)) {
       return filter;
     }
@@ -27,7 +56,7 @@ export class PGFilterTranslator extends BaseFilterTranslator {
     return this.translateNode(filter);
   }
 
-  private translateNode(node: VectorFilter | FieldCondition, currentPath: string = ''): any {
+  private translateNode(node: PGVectorFilter, currentPath: string = ''): any {
     // Helper to wrap result with path if needed
     const withPath = (result: any) => (currentPath ? { [currentPath]: result } : result);
 
@@ -49,14 +78,14 @@ export class PGFilterTranslator extends BaseFilterTranslator {
     const entries = Object.entries(node as Record<string, any>);
     const result: Record<string, any> = {};
 
-    if ('$options' in node && !('$regex' in node)) {
+    if (node && '$options' in node && !('$regex' in node)) {
       throw new Error('$options is not valid without $regex');
     }
 
     // Handle special regex object format
-    if ('$regex' in node) {
+    if (node && '$regex' in node) {
       const options = (node as any).$options || '';
-      return withPath(this.translateRegexPattern(node.$regex, options));
+      return withPath(this.translateRegexPattern((node as any).$regex, options));
     }
 
     // Process remaining entries
