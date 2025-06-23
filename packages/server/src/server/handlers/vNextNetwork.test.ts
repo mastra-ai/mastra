@@ -1,4 +1,5 @@
-import { createMockModel, type Workflow } from '@mastra/core';
+import { createMockModel } from '@mastra/core';
+import type { Workflow } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { NewAgentNetwork } from '@mastra/core/network/vNext';
