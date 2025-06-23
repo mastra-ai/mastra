@@ -1036,7 +1036,7 @@ importers:
         specifier: ^5.76.1
         version: 5.80.10(react@19.1.0)
       '@tanstack/react-virtual':
-        specifier: ^3.13.2
+        specifier: ^3.13.10
         version: 3.13.10(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@uiw/codemirror-theme-dracula':
         specifier: ^4.23.10
