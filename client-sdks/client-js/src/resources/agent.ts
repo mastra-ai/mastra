@@ -605,11 +605,10 @@ export class Agent extends BaseResource {
       let hasProcessedToolCalls = false;
 
       // If no tool calls or they've been processed, pipe the original response
-      if (response.body) {
-        response.clone().body!.pipeTo(writable, {
-          preventClose: true,
-        });
-      }
+      response.clone().body!.pipeTo(writable, {
+        preventClose: true,
+      });
+
       await this.processChatResponse({
         stream: response.clone().body!,
         update: ({ message }) => {
