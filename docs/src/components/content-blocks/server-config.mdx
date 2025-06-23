@@ -1,0 +1,212 @@
+import { Callout, Steps, Tabs } from "nextra/components";
+
+<Steps>
+
+##### Update the system
+
+Update the system packages before installing any new packages.
+
+```bash copy
+sudo apt update && sudo apt upgrade -y
+```
+
+##### Install nginx
+
+```bash copy
+sudo apt install nginx -y
+```
+
+##### Remove nginx files if they exist
+
+Let's start by setting up an environment variable for the site name. In our example, we will use `mastra` as the site name.
+
+```bash copy
+export SITE_NAME="mastra"
+```
+
+Then we can remove the nginx files if they exist.
+
+```bash copy
+sudo rm -f /etc/nginx/sites-available/$SITE_NAME
+sudo rm -f /etc/nginx/sites-enabled/$SITE_NAME
+```
+
+##### Set up certbot for SSL
+
+To set up certbot for SSL, let's start by stopping nginx temporarily.
+
+```bash copy
+sudo systemctl stop nginx
+```
+
+Now we can obtain a certificate for our domain name.
+
+Let's start by setting up an environment variable for the domain name and email.
+Replace `<your-domain-name>` with your domain name and `<your-email>` with your email.
+
+```bash copy
+export DOMAIN_NAME="<your-domain-name>"
+export EMAIL="<your-email>"
+```
+
+```bash copy
+sudo apt install certbot -y
+sudo certbot certonly --standalone -d $DOMAIN_NAME --non-interactive --agree-tos -m $EMAIL
+```
+
+Finally, let's ensure that the SSL files exists or we generate them.
+
+```bash copy
+if [ ! -f /etc/letsencrypt/options-ssl-nginx.conf ]; then
+  sudo wget https://raw.githubusercontent.com/certbot/certbot/refs/heads/main/certbot-nginx/src/certbot_nginx/_internal/tls_configs/options-ssl-nginx.conf -P /etc/letsencrypt/
+fi
+
+if [ ! -f /etc/letsencrypt/ssl-dhparams.pem ]; then
+  sudo openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048
+fi
+```
+
+##### Configure nginx
+
+```bash copy
+sudo cat > /etc/nginx/sites-available/$SITE_NAME <<EOL
+limit_req_zone \$binary_remote_addr zone=mylimit:10m rate=10r/s;
+
+server {
+  listen 80;
+  server_name $DOMAIN_NAME;
+
+  # Redirect all HTTP requests to HTTPS
+  return 301 https://\$host\$request_uri;
+}
+
+server {
+  listen 443 ssl;
+  server_name $DOMAIN_NAME;
+
+  ssl_certificate /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem;
+  include /etc/letsencrypt/options-ssl-nginx.conf;
+  ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+  # Enable rate limiting
+  limit_req zone=mylimit burst=20 nodelay;
+
+  location / {
+      # Proxy to Mastra server running on port 4111
+      proxy_pass http://localhost:4111;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade \$http_upgrade;
+      proxy_set_header Connection 'upgrade';
+      proxy_set_header Host \$host;
+      proxy_cache_bypass \$http_upgrade;
+
+      # Disable buffering for streaming support
+      proxy_buffering off;
+      proxy_set_header X-Accel-Buffering no;
+  }
+}
+EOL
+```
+
+<Callout>
+To ensure there's no issues with streaming, we need to disable buffering. That's why we have **`proxy_buffering off;`** and **`proxy_set_header X-Accel-Buffering no;`**.
+</Callout>
+
+Create a symbolic link to the site in the sites-enabled directory.
+
+```bash copy
+sudo ln -s /etc/nginx/sites-available/$SITE_NAME /etc/nginx/sites-enabled/$SITE_NAME
+```
+
+Restart nginx.
+
+```bash copy
+sudo systemctl restart nginx
+```
+
+##### Install nodejs
+
+We need to install nodejs to run the Mastra application. We will do this using `nvm`.
+
+```bash copy
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+```
+
+Once the installation is complete, you can verify the installation by running:
+
+```bash copy
+nvm --version
+```
+
+Now we can install the latest LTS version of nodejs.
+
+```bash copy
+nvm install --lts
+```
+
+Once the installation is complete, you can verify the installation by running:
+
+```bash copy
+node --version
+```
+
+##### Clone your Mastra application
+
+<Tabs items={["Public Repository", "Private Repository"]}>
+<Tabs.Tab>
+
+```bash copy
+git clone https://github.com/<your-username>/<your-repository>.git
+```
+
+</Tabs.Tab>
+
+<Tabs.Tab>
+
+```bash copy
+git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
+```
+
+</Tabs.Tab>
+</Tabs>
+
+Navigate to the repository directory.
+
+```bash copy
+cd "<your-repository>"
+```
+
+##### Install dependencies
+
+```bash copy
+npm install
+```
+
+##### Set up environment variables
+
+Create a `.env` file and add your environment variables.
+
+```bash copy
+touch .env
+```
+
+Then edit `.env` and add your environment variables. Here's an example:
+
+```bash copy
+OPENAI_API_KEY=<your-openai-api-key>
+```
+
+##### Build the application
+
+```bash copy
+npm run build
+```
+
+##### Run the application
+
+```bash copy
+node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
+```
+
+</Steps>
