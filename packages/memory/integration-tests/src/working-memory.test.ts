@@ -3,7 +3,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
-import type { MastraMessageV1, StorageThreadType } from '@mastra/core';
+import type { MastraMessageV1 } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
@@ -486,13 +486,6 @@ describe('Working Memory Tests', () => {
     });
 
     it('should remember information from working memory in subsequent calls', async () => {
-      const agent = new Agent({
-        name: 'Memory Test Agent',
-        instructions: 'You are a helpful AI agent. Remember and recall information about the user.',
-        model: openai('gpt-4o'),
-        memory,
-      });
-
       const thread = await memory.saveThread({
         thread: createTestThread('Remembering Test'),
       });
