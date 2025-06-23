@@ -10,6 +10,7 @@ export type ConvertedTool = {
   parameters: InternalCoreTool['parameters'];
   execute: InternalCoreTool['execute'];
   toolType?: MCPToolType;
+  outputSchema?: InternalCoreTool['parameters'];
 };
 
 interface MCPServerSSEOptionsBase {

@@ -29,11 +29,10 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.13.0",
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
     "fast-deep-equal": "^3.1.3",
-    "hono": "^4.7.11",
     "uuid": "^11.1.0",
     "zod-from-json-schema": "^0.0.5"
   },
@@ -52,7 +51,8 @@
     "@types/node": "^20.19.0",
     "ai": "4.3.16",
     "eslint": "^9.29.0",
-    "hono-mcp-server-sse-transport": "0.0.6",
+    "hono-mcp-server-sse-transport": "0.0.7",
+    "hono": "^4.7.11",
     "tsup": "^8.5.0",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",

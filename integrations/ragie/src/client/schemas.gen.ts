@@ -1509,7 +1509,7 @@ export const RetrieveParamsSchema = {
       type: 'integer',
       title: 'Max Chunks Per Document',
       description:
-        'Maximum number of chunks to retrieve per document. Use this to increase the number of documents the final chunks are retreived from. This feature is in beta and may change in the future.',
+        'Maximum number of chunks to retrieve per document. Use this to increase the number of documents the final chunks are retrieved from. This feature is in beta and may change in the future.',
       examples: [0],
     },
     partition: {

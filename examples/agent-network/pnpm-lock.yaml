@@ -7,7 +7,9 @@ settings:
 overrides:
   '@mastra/client-js': link:../../client-sdks/client-js
   '@mastra/core': link:../../packages/core
+  '@mastra/libsql': link:../../stores/libsql
   '@mastra/loggers': link:../../packages/loggers
+  '@mastra/memory': link:../../packages/memory
 
 importers:
 
@@ -22,9 +24,15 @@ importers:
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
+      '@mastra/libsql':
+        specifier: link:../../stores/libsql
+        version: link:../../stores/libsql
       '@mastra/loggers':
         specifier: link:../../packages/loggers
         version: link:../../packages/loggers
+      '@mastra/memory':
+        specifier: link:../../packages/memory
+        version: link:../../packages/memory
       zod:
         specifier: ^3.25.67
         version: 3.25.67
