@@ -1,9 +1,12 @@
 import { exec, execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
+
+const execAsync = promisify(exec);
 
 let maxRetries = 2;
-async function retryWithTimeout(fn, timeout, name, retryCount = 0) {
+function retryWithTimeout(fn, timeout, name, retryCount = 0) {
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => reject(new Error(`Command "${name}" timed out after ${timeout}ms`)), timeout);
   });
@@ -53,11 +56,11 @@ export async function prepareMonorepo(monorepoDir, glob) {
     });
 
     if (gitStatus.length > 0) {
-      await exec('git add -A', {
+      await execAsync('git add -A', {
         cwd: monorepoDir,
         stdio: ['inherit', 'inherit', 'inherit'],
       });
-      await exec('git commit -m "SAVEPOINT"', {
+      await execAsync('git commit -m "SAVEPOINT"', {
         cwd: monorepoDir,
         stdio: ['inherit', 'inherit', 'inherit'],
       });
@@ -86,7 +89,7 @@ export async function prepareMonorepo(monorepoDir, glob) {
 
     await retryWithTimeout(
       async () => {
-        await exec('pnpm changeset pre exit', {
+        await execAsync('pnpm changeset pre exit', {
           cwd: monorepoDir,
           stdio: ['inherit', 'inherit', 'inherit'],
         });
@@ -97,7 +100,7 @@ export async function prepareMonorepo(monorepoDir, glob) {
 
     await retryWithTimeout(
       async () => {
-        await exec('pnpm changeset version --snapshot create-mastra-e2e-test', {
+        await execAsync('pnpm changeset version --snapshot create-mastra-e2e-test', {
           cwd: monorepoDir,
           stdio: ['inherit', 'inherit', 'inherit'],
         });
