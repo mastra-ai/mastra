@@ -20,7 +20,6 @@ export async function setupTestProject(pathToStoreFiles, registryUrl) {
   spawnSync('pnpm', ['install'], {
     cwd: newPath,
     stdio: 'inherit',
-    shell: true,
     env: {
       ...process.env,
       npm_config_registry: registryUrl,
