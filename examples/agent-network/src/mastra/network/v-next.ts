@@ -72,7 +72,6 @@ const agentStep2 = createStep({
 export const workflow1 = createWorkflow({
   id: 'workflow1',
   description: 'This workflow is perfect for researching a specific city.',
-  steps: [],
   inputSchema: z.object({
     city: z.string(),
   }),
