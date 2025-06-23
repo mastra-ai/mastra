@@ -6,11 +6,14 @@ While [conversation history](/docs/memory/overview#conversation-history) and [se
 
 Think of it as the agent's active thoughts or scratchpad – the key information they keep available about the user or task. It's similar to how a person would naturally remember someone's name, preferences, or important details during a conversation.
 
+This is useful for maintaining ongoing state that's always relevant and should always be available to the agent.
+
 Working memory can persist at two different scopes:
 - **Thread-scoped** (default): Memory is isolated per conversation thread
 - **Resource-scoped**: Memory persists across all conversation threads for the same user
 
-This is useful for maintaining ongoing state that's always relevant and should always be available to the agent.
+**Important:** Switching between scopes means the agent won't see memory from the other scope - thread-scoped memory is completely separate from resource-scoped memory.
+
 
 ## Quick Start
 
