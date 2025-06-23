@@ -485,7 +485,7 @@ describe('Working Memory Tests', () => {
       });
     });
 
-    it.only('should remember information from working memory in subsequent calls', async () => {
+    it('should remember information from working memory in subsequent calls', async () => {
       const agent = new Agent({
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Remember and recall information about the user.',
