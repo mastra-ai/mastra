@@ -11,8 +11,9 @@ export function NetworkInformation({ networkId, isVNext }: { networkId: string; 
   const { vNextNetwork, isLoading: isVNextNetworkLoading } = useVNextNetwork(networkId, isVNext);
 
   const networkToUse = isVNext ? vNextNetwork : network;
+  const isLoadingToUse = isVNext ? isVNextNetworkLoading : isLoading;
 
-  if (!networkToUse || isLoading || isVNextNetworkLoading) {
+  if (!networkToUse || isLoadingToUse) {
     return null;
   }
 

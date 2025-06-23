@@ -14,8 +14,8 @@ export function NetworkWorkflows({ network }: { network: GetVNextNetworkResponse
     <div className="p-4">
       <h3 className="text-sm font-medium text-mastra-el-5 mb-3">Network Workflows</h3>
       <div className="space-y-3">
-        {network.workflows.map((workflow, index) => (
-          <div key={index} className="bg-mastra-bg-2 py-2 px-3 rounded-md">
+        {network.workflows.map(workflow => (
+          <div key={workflow.name} className="bg-mastra-bg-2 py-2 px-3 rounded-md">
             <div className="flex justify-between items-center">
               <div className="flex gap-1 items-center">
                 <Brain className="h-3 w-3 text-mastra-el-4" />

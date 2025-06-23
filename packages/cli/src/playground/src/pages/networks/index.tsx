@@ -67,7 +67,7 @@ function Networks() {
         </MainContentContent>
       ) : (
         <MainContentContent>
-          <DataTable isLoading={isLoading} data={allNetworks} columns={networksTableColumns} />
+          <DataTable isLoading={isLoading || isVNextLoading} data={allNetworks} columns={networksTableColumns} />
         </MainContentContent>
       )}
     </MainContentLayout>
