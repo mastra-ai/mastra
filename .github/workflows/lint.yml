@@ -323,7 +323,7 @@ jobs:
         run: pnpm install
 
       - name: Build
-        run: pnpm turbo --filter "@mastra/core" build
+        run: pnpm build
 
       - name: Install e2e test dependencies
         working-directory: ./e2e-tests/kitchen-sink
