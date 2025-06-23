@@ -33,14 +33,13 @@ interface LanceUpsertVectorParams extends UpsertVectorParams {
   tableName: string;
 }
 
-interface LanceQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
+interface LanceQueryVectorParams extends QueryVectorParams<LanceVectorFilter> {
   tableName: string;
   columns?: string[];
   includeAllColumns?: boolean;
-  filter?: LanceVectorFilter;
 }
 
-export class LanceVectorStore extends MastraVector {
+export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
   private lanceClient!: Connection;
 
   /**

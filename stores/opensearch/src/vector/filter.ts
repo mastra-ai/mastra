@@ -25,7 +25,7 @@ export type OpenSearchVectorFilter = VectorFilter<
  * Maintains OpenSearch-compatible syntax while ensuring proper validation
  * and normalization of values.
  */
-export class OpenSearchFilterTranslator extends BaseFilterTranslator {
+export class OpenSearchFilterTranslator extends BaseFilterTranslator<OpenSearchVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,

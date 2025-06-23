@@ -1,3 +1,5 @@
+import type { VectorFilter } from './filter';
+
 export interface QueryResult {
   id: string;
   score: number;
@@ -30,11 +32,11 @@ export interface CreateIndexParams {
   metric?: 'cosine' | 'euclidean' | 'dotproduct';
 }
 
-export interface QueryVectorParams {
+export interface QueryVectorParams<Filter = VectorFilter> {
   indexName: string;
   queryVector: number[];
   topK?: number;
-  filter?: unknown;
+  filter?: Filter;
   includeVector?: boolean;
 }
 

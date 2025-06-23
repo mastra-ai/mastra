@@ -16,11 +16,9 @@ import { Index } from '@upstash/vector';
 import { UpstashFilterTranslator } from './filter';
 import type { UpstashVectorFilter } from './filter';
 
-interface UpstashQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
-  filter?: UpstashVectorFilter;
-}
+type UpstashQueryVectorParams = QueryVectorParams<UpstashVectorFilter>;
 
-export class UpstashVector extends MastraVector {
+export class UpstashVector extends MastraVector<UpstashVectorFilter> {
   private client: Index;
 
   /**

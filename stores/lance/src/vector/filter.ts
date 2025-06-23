@@ -21,7 +21,7 @@ export type LanceVectorFilter = VectorFilter<
   LanceBlacklisted
 >;
 
-export class LanceFilterTranslator extends BaseFilterTranslator {
+export class LanceFilterTranslator extends BaseFilterTranslator<LanceVectorFilter, string> {
   translate(filter: LanceVectorFilter): string {
     if (!filter || Object.keys(filter).length === 0) {
       return '';

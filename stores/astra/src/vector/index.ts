@@ -29,11 +29,9 @@ export interface AstraDbOptions {
   keyspace?: string;
 }
 
-interface AstraQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
-  filter?: AstraVectorFilter;
-}
+type AstraQueryVectorParams = QueryVectorParams<AstraVectorFilter>;
 
-export class AstraVector extends MastraVector {
+export class AstraVector extends MastraVector<AstraVectorFilter> {
   readonly #db: Db;
 
   constructor({ token, endpoint, keyspace }: AstraDbOptions) {

@@ -19,9 +19,8 @@ import type { LibSQLVectorFilter } from './filter';
 import { LibSQLFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
 
-interface LibSQLQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
+interface LibSQLQueryVectorParams extends QueryVectorParams<LibSQLVectorFilter> {
   minScore?: number;
-  filter?: LibSQLVectorFilter;
 }
 
 export interface LibSQLVectorConfig {
@@ -42,7 +41,7 @@ export interface LibSQLVectorConfig {
   initialBackoffMs?: number;
 }
 
-export class LibSQLVector extends MastraVector {
+export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   private turso: TursoClient;
   private readonly maxRetries: number;
   private readonly initialBackoffMs: number;

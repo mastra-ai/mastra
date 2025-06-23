@@ -25,7 +25,7 @@ export type LibSQLVectorFilter = VectorFilter<keyof LibSQLOperatorValueMap, LibS
  * - Can take either a single condition or an array of conditions
  *
  */
-export class LibSQLFilterTranslator extends BaseFilterTranslator {
+export class LibSQLFilterTranslator extends BaseFilterTranslator<LibSQLVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,

@@ -24,9 +24,7 @@ const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
   dotproduct: 'Dot',
 };
 
-interface QdrantQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
-  filter?: QdrantVectorFilter;
-}
+type QdrantQueryVectorParams = QueryVectorParams<QdrantVectorFilter>;
 
 export class QdrantVector extends MastraVector {
   private client: QdrantClient;

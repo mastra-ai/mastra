@@ -27,7 +27,7 @@ export type MongoDBVectorFilter = VectorFilter<
  * Maintains MongoDB-compatible syntax while ensuring proper validation
  * and normalization of values.
  */
-export class MongoDBFilterTranslator extends BaseFilterTranslator {
+export class MongoDBFilterTranslator extends BaseFilterTranslator<MongoDBVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,

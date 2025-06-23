@@ -20,12 +20,11 @@ interface ChromaUpsertVectorParams extends UpsertVectorParams {
   documents?: string[];
 }
 
-interface ChromaQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
+interface ChromaQueryVectorParams extends QueryVectorParams<ChromaVectorFilter> {
   documentFilter?: ChromaVectorDocumentFilter;
-  filter?: ChromaVectorFilter;
 }
 
-export class ChromaVector extends MastraVector {
+export class ChromaVector extends MastraVector<ChromaVectorFilter> {
   private client: ChromaClient;
   private collections: Map<string, any>;
 

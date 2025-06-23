@@ -32,7 +32,7 @@ export type PineconeVectorFilter = VectorFilter<
   PineconeBlacklisted
 >;
 
-export class PineconeFilterTranslator extends BaseFilterTranslator {
+export class PineconeFilterTranslator extends BaseFilterTranslator<PineconeVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,

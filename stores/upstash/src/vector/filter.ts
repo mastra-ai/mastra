@@ -7,7 +7,7 @@ type UpstashOperatorValueMap = Omit<OperatorValueMap, '$options' | '$elemMatch'>
 
 export type UpstashVectorFilter = VectorFilter<keyof UpstashOperatorValueMap, UpstashOperatorValueMap>;
 
-export class UpstashFilterTranslator extends BaseFilterTranslator {
+export class UpstashFilterTranslator extends BaseFilterTranslator<UpstashVectorFilter, string | undefined> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,

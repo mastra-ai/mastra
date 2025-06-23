@@ -118,7 +118,7 @@ export type QdrantVectorFilter = VectorFilter<
  * - $null -> is_null check
  * - $empty -> is_empty check
  */
-export class QdrantFilterTranslator extends BaseFilterTranslator {
+export class QdrantFilterTranslator extends BaseFilterTranslator<QdrantVectorFilter> {
   protected override isLogicalOperator(key: string): key is LogicalOperator {
     return super.isLogicalOperator(key) || key === '$hasId' || key === '$hasVector';
   }

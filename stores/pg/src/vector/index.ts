@@ -31,7 +31,7 @@ export interface PGIndexStats extends IndexStats {
   };
 }
 
-interface PgQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
+interface PgQueryVectorParams extends QueryVectorParams<PGVectorFilter> {
   minScore?: number;
   /**
    * HNSW search parameter. Controls the size of the dynamic candidate
@@ -43,7 +43,6 @@ interface PgQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
    * Higher values improve accuracy at the cost of speed.
    */
   probes?: number;
-  filter?: PGVectorFilter;
 }
 
 interface PgCreateIndexParams extends CreateIndexParams {
@@ -57,7 +56,7 @@ interface PgDefineIndexParams {
   indexConfig: IndexConfig;
 }
 
-export class PgVector extends MastraVector {
+export class PgVector extends MastraVector<PGVectorFilter> {
   private pool: pg.Pool;
   private describeIndexCache: Map<string, PGIndexStats> = new Map();
   private createdIndexes = new Map<string, number>();

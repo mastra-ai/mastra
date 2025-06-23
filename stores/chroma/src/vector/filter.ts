@@ -37,7 +37,7 @@ export type ChromaVectorDocumentFilter = VectorFilter<
  * Maintains MongoDB-compatible syntax while ensuring proper validation
  * and normalization of values.
  */
-export class ChromaFilterTranslator extends BaseFilterTranslator {
+export class ChromaFilterTranslator extends BaseFilterTranslator<ChromaVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,

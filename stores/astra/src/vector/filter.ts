@@ -28,7 +28,7 @@ export type AstraVectorFilter = VectorFilter<
  * Maintains MongoDB-compatible syntax while ensuring proper validation
  * and normalization of values.
  */
-export class AstraFilterTranslator extends BaseFilterTranslator {
+export class AstraFilterTranslator extends BaseFilterTranslator<AstraVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,

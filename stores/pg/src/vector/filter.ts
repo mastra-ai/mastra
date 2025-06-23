@@ -40,7 +40,7 @@ export type PGVectorFilter = VectorFilter<
  * - Can take either a single condition or an array of conditions
  *
  */
-export class PGFilterTranslator extends BaseFilterTranslator {
+export class PGFilterTranslator extends BaseFilterTranslator<PGVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,

@@ -26,10 +26,9 @@ interface PineconeIndexStats extends IndexStats {
   namespaces?: IndexStatsDescription['namespaces'];
 }
 
-interface PineconeQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
+interface PineconeQueryVectorParams extends QueryVectorParams<PineconeVectorFilter> {
   namespace?: string;
   sparseVector?: RecordSparseValues;
-  filter?: PineconeVectorFilter;
 }
 
 interface PineconeUpsertVectorParams extends UpsertVectorParams {
@@ -45,7 +44,7 @@ interface PineconeDeleteVectorParams extends DeleteVectorParams {
   namespace?: string;
 }
 
-export class PineconeVector extends MastraVector {
+export class PineconeVector extends MastraVector<PineconeVectorFilter> {
   private client: Pinecone;
 
   /**

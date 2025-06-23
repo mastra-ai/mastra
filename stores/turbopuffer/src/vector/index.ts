@@ -16,9 +16,7 @@ import type { DistanceMetric, QueryResults, Schema, Vector } from '@turbopuffer/
 import { TurbopufferFilterTranslator } from './filter';
 import type { TurbopufferVectorFilter } from './filter';
 
-interface TurbopufferQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
-  filter?: TurbopufferVectorFilter;
-}
+type TurbopufferQueryVectorParams = QueryVectorParams<TurbopufferVectorFilter>;
 
 export interface TurbopufferVectorOptions {
   /** The API key to authenticate with. */
@@ -63,7 +61,7 @@ export interface TurbopufferVectorOptions {
   };
 }
 
-export class TurbopufferVector extends MastraVector {
+export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
   private client: Turbopuffer;
   private filterTranslator: TurbopufferFilterTranslator;
   // There is no explicit create index operation in Turbopuffer, so just register that

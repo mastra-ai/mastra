@@ -20,7 +20,7 @@ export type VectorizeVectorFilter = VectorFilter<
   VectorizeBlacklistedRootOperators
 >;
 
-export class VectorizeFilterTranslator extends BaseFilterTranslator {
+export class VectorizeFilterTranslator extends BaseFilterTranslator<VectorizeVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,

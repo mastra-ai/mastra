@@ -23,9 +23,8 @@ export interface MongoDBUpsertVectorParams extends UpsertVectorParams {
   documents?: string[];
 }
 
-interface MongoDBQueryVectorParams extends Omit<QueryVectorParams, 'filter'> {
+interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVectorFilter> {
   documentFilter?: MongoDBVectorFilter;
-  filter?: MongoDBVectorFilter;
 }
 
 export interface MongoDBIndexReadyParams {
@@ -43,7 +42,7 @@ interface MongoDBDocument extends Document {
   [key: string]: any; // Index signature for additional properties
 }
 // The MongoDBVector class
-export class MongoDBVector extends MastraVector {
+export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private client: MongoClient;
   private db: Db;
   private collections: Map<string, Collection<MongoDBDocument>>;
