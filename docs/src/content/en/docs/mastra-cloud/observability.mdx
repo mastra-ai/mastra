@@ -19,10 +19,7 @@ You can view detailed logs for debugging and monitoring your application's behav
 
 Key features:
 
-- **Time**: When the log entry was recorded
-- **Level**: Log severity, such as info or debug
-- **Hostname**: Identifies which server handled the request
-- **Message**: API startup, storage activity, and agent or workflow call details
+Each log entry includes its severity level and a detailed message showing agent, workflow, or storage activity.
 
 ## Traces
 
@@ -36,16 +33,7 @@ With a [logger](/docs/observability/logging) enabled, you can view detailed outp
 
 Key features:
 
-- **generate**: Ran the agent using the configured tools and model
-   - **convertTools**: Converted tool definitions into a standard format
-      - **getAssignedTools**: Retrieved tools assigned to the agent
-      - **getToolSets**: Retrieved sets of tools passed during streaming or generation
-      - **getMemoryTools**: Retrieved memory tools used by the agent
-      - **getClientTools**: Retrieved tools that run on the client side
-      - **getWorkflowTools**: Retrieved workflows exposed as tools
-   - **ai.generateText**: Generated a response using the configured language model
-      - **ai.generateText.doGenerate**: Handled the text generation with parameters and runtime context
-      - **ai.toolCall**: Executed tool calls during generation
+Tools passed to the agent during generation are standardized using `convertTools`. This includes retrieving client-side tools, memory tools, and tools exposed from workflows.
 
 
 ### Workflows
@@ -56,16 +44,7 @@ With a [logger](/docs/observability/logging) enabled, you can view detailed outp
 
 Key features:
 
-- **runWorkflow**: Ran a workflow with input and options
-- **createWorkflow**: Set up a new workflow by defining its steps, schema, metadata, and tools
-- **executeWorkflow**: Handled the step-by-step execution of a workflow
-   - **initializeContext**: Set up the shared context used across all workflow steps
-   - **executeStep**: Ran a single step using the current context and memory
-   - **shouldRunStep**: Checked whether a step should run based on its conditions and current state
-   - **mergePartialContext**: Merged step output into the existing context
-   - **isValidStepOutput**: Validated that the step output was an object
-- **getWorkflowSchema**: Built the workflow’s input/output schema based on its steps
-- **createWorkflowTool**: Wrapped a workflow as a tool so it could be used inside agents or other workflows
+Workflows are created using `createWorkflow`, which sets up steps, metadata, and tools. You can run them with `runWorkflow` by passing input and options.
 
 ## Next steps
 
