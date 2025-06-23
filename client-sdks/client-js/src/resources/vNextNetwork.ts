@@ -41,7 +41,7 @@ export class VNextNetwork extends BaseResource {
   }
 
   /**
-   * Generates a response from the v-next network
+   * Generates a response from the v-next network using multiple primitives
    * @param params - Generation parameters including message
    * @returns Promise containing the generated response
    */
