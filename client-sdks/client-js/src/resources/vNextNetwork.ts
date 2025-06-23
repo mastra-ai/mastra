@@ -34,7 +34,7 @@ export class VNextNetwork extends BaseResource {
    * @returns Promise containing the generated response
    */
   generate(params: GenerateOrStreamVNextNetworkParams): Promise<GenerateVNextNetworkResponse> {
-    return this.request(`/api/networks/${this.networkId}/generate`, {
+    return this.request(`/api/networks/v-next/${this.networkId}/generate`, {
       method: 'POST',
       body: params,
     });
@@ -46,7 +46,7 @@ export class VNextNetwork extends BaseResource {
    * @returns Promise containing the generated response
    */
   loop(params: { message: string }): Promise<LoopVNextNetworkResponse> {
-    return this.request(`/api/networks/${this.networkId}/loop`, {
+    return this.request(`/api/networks/v-next/${this.networkId}/loop`, {
       method: 'POST',
       body: params,
     });

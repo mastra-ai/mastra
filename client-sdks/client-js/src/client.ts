@@ -144,7 +144,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the created memory thread
    */
   public createNetworkMemoryThread(params: CreateNetworkMemoryThreadParams): Promise<CreateMemoryThreadResponse> {
-    return this.request(`/api/memory/network/threads?networId=${params.networkId}`, { method: 'POST', body: params });
+    return this.request(`/api/memory/network/threads?networkId=${params.networkId}`, { method: 'POST', body: params });
   }
 
   /**
@@ -172,7 +172,7 @@ export class MastraClient extends BaseResource {
    * Gets the status of the memory system
    * @returns Promise containing memory system status
    */
-  public getNetowrkMemoryStatus(networkId: string): Promise<{ result: boolean }> {
+  public getNetworkMemoryStatus(networkId: string): Promise<{ result: boolean }> {
     return this.request(`/api/memory/network/status?networkId=${networkId}`);
   }
 
