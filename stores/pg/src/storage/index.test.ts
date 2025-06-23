@@ -1857,7 +1857,7 @@ describe('PostgresStore', () => {
         expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
         expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
 
-        const crossThreadMessages2: MastraMessageV2[] = await store.getMessages({
+        const crossThreadMessages2 = await store.getMessagesPaginated({
           threadId: 'thread-one',
           format: 'v2',
           selectBy: {
@@ -1873,11 +1873,11 @@ describe('PostgresStore', () => {
           },
         });
 
-        expect(crossThreadMessages2).toHaveLength(3);
-        expect(crossThreadMessages2.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
-        expect(crossThreadMessages2.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+        expect(crossThreadMessages2.messages).toHaveLength(3);
+        expect(crossThreadMessages2.messages.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
+        expect(crossThreadMessages2.messages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
 
-        const crossThreadMessages3: MastraMessageV2[] = await store.getMessages({
+        const crossThreadMessages3 = await store.getMessagesPaginated({
           threadId: 'thread-two',
           format: 'v2',
           selectBy: {
@@ -1893,9 +1893,9 @@ describe('PostgresStore', () => {
           },
         });
 
-        expect(crossThreadMessages3).toHaveLength(3);
-        expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
-        expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
+        expect(crossThreadMessages3.messages).toHaveLength(3);
+        expect(crossThreadMessages3.messages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+        expect(crossThreadMessages3.messages.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
       });
 
       it('should return messages using both last and include (cross-thread, deduped)', async () => {
