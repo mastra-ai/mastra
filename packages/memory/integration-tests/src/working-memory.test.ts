@@ -522,10 +522,6 @@ describe('Working Memory Tests', () => {
         resourceId,
       });
 
-      console.log(JSON.stringify(JSON.parse(response.request.body || '{}'), null, 2));
-
-      console.log(JSON.stringify(response, null, 2));
-
       expect(response.text.toLowerCase()).toContain('wolf');
     });
 

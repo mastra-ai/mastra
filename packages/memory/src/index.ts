@@ -707,16 +707,9 @@ export class Memory extends MastraMemory {
     });
   }
 
-  public async getUserContextMessage({
-    threadId,
-    resourceId,
-    memoryConfig,
-  }: {
-    threadId: string;
-    resourceId?: string;
-    memoryConfig?: MemoryConfig;
-  }) {
-    const workingMemory = await this.getWorkingMemory({ threadId, resourceId, memoryConfig });
+  public async getUserContextMessage({ threadId }: { threadId: string }) {
+    const workingMemory = await this.getWorkingMemory({ threadId });
+
     if (!workingMemory) {
       return null;
     }

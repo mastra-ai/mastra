@@ -1367,13 +1367,7 @@ export class Agent<
               ];
             }
             if (responseMessages) {
-              messageList.add(
-                responseMessages.filter((m: CoreMessage) => {
-                  if (m.role === 'tool' && Array.isArray(m.content) && m.content.length === 0) return false;
-                  return true;
-                }),
-                'response',
-              );
+              messageList.add(responseMessages, 'response');
             }
 
             // renaming the thread doesn't need to block finishing the req
