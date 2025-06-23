@@ -15,11 +15,11 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
+import type { LibSQLVectorFilter } from './filter';
 import { LibSQLFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
 
-interface LibSQLQueryVectorParams extends QueryVectorParams {
+interface LibSQLQueryVectorParams extends QueryVectorParams<LibSQLVectorFilter> {
   minScore?: number;
 }
 
@@ -41,7 +41,7 @@ export interface LibSQLVectorConfig {
   initialBackoffMs?: number;
 }
 
-export class LibSQLVector extends MastraVector {
+export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   private turso: TursoClient;
   private readonly maxRetries: number;
   private readonly initialBackoffMs: number;
@@ -109,7 +109,7 @@ export class LibSQLVector extends MastraVector {
     throw new Error('LibSQLVector: Max retries reached, but no error was re-thrown from the loop.');
   }
 
-  transformFilter(filter?: VectorFilter) {
+  transformFilter(filter?: LibSQLVectorFilter) {
     const translator = new LibSQLFilterTranslator();
     return translator.translate(filter);
   }
