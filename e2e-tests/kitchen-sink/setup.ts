@@ -8,7 +8,6 @@ import { tmpdir } from 'node:os';
 import { createRequire } from 'module';
 import { startRegistry } from '../_local-registry-setup/index.js';
 import { publishPackages } from '../_local-registry-setup/publish.js';
-import fs from 'node:fs';
 
 const require = createRequire(import.meta.url);
 
@@ -33,26 +32,27 @@ export default async function setup() {
   const packages = ['mastra', '@mastra/loggers'];
   const publishFilterArgs = packages.map(p => [`--filter="${p}^..."`, `--filter="${p}"`]).flat();
 
-  console.log('SUUUUPPP', fs.readFileSync(join(rootDir, 'packages', 'core', 'package.json'), 'utf8'));
   publishPackages(publishFilterArgs, tag, rootDir, registry);
 
   console.log('[Setup] Published packages', { publishFilterArgs, tag, rootDir });
 
-  const stopVerdaccio = () => {
+  const shutdown = () => {
+    teardown();
+
     try {
-      // registry.kill();
+      registry.kill();
     } catch {
       // ignore
     }
 
     try {
-      //registry.kill();
+      registry.kill();
     } catch {
       // ignore
     }
   };
 
-  return { stopVerdaccio, registryUrl: registry.toString() };
+  return { shutdown, registryUrl: registry.toString() };
 }
 
 declare module 'vitest' {

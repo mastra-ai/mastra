@@ -8,12 +8,12 @@ async function setup() {
   const fixturePath = await mkdtemp(join(tmpdir(), 'mastra-kitchen-sink-test'));
   const projectPath = join(fixturePath, 'project');
 
-  const { stopVerdaccio, registryUrl } = await setupVerdaccio();
+  const { shutdown, registryUrl } = await setupVerdaccio();
 
   await setupTestProject(projectPath, registryUrl);
   await ping();
 
-  stopVerdaccio();
+  shutdown();
 }
 
 const ping = async () => {
