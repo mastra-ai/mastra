@@ -31,7 +31,7 @@
   "dependencies": {
     "@google-cloud/speech": "^6.7.1",
     "@google-cloud/text-to-speech": "^6.1.0",
-    "zod": "^3.25.57"
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
