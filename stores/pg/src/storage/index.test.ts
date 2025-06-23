@@ -239,8 +239,6 @@ describe('PostgresStore', () => {
       const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(retrievedMessages).toHaveLength(3);
 
-      console.log(`nonpaginated`, JSON.stringify(retrievedMessages, null, 2));
-
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
         expect((msg.content.parts[0] as any).text).toEqual(messageContent[idx]);
