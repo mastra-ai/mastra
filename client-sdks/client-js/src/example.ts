@@ -1,4 +1,5 @@
 import { MastraClient } from './client';
+import z from 'zod';
 // import type { WorkflowRunResult } from './types';
 
 // Agent
