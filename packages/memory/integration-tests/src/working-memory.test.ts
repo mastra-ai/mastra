@@ -3,7 +3,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
-import type { MastraMessageV1 } from '@mastra/core';
+import type { MastraMessageV1, StorageThreadType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
@@ -614,6 +614,69 @@ describe('Working Memory Tests', () => {
         const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
         const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
         expect(extractUserData(wmObj)).toMatchObject(second);
+      });
+
+      // Skip this for now it's an edge case where an agent updates the working memory based off of the
+      // message history.
+      it.skip('should not update working from message history', async () => {
+        const newThread = await memory.saveThread({
+          thread: createTestThread('Test111'),
+        });
+        const first = { city: 'Toronto', temperature: 80 };
+        const generateOptions = {
+          memory: {
+            resource: resourceId,
+            thread: newThread.id,
+            options: {
+              lastMessages: 0,
+              semanticRecall: undefined,
+              workingMemory: {
+                enabled: true,
+                schema: z.object({
+                  city: z.string(),
+                  temperature: z.number().optional(),
+                }),
+              },
+              threads: {
+                generateTitle: false,
+              },
+            },
+          },
+        };
+        await agent.generate('Now I am in Toronto and it is 80 degrees', generateOptions);
+
+        await agent.generate('how are you doing?', generateOptions);
+
+        const firstWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id });
+        const wm = typeof firstWorkingMemory === 'string' ? JSON.parse(firstWorkingMemory) : firstWorkingMemory;
+        const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
+
+        expect(wmObj).toMatchObject(first);
+
+        const updatedThread = await memory.getThreadById({ threadId: newThread.id });
+        if (!updatedThread) {
+          throw new Error('Thread not found');
+        }
+        // Update thread metadata with new working memory
+        await memory.saveThread({
+          thread: {
+            ...updatedThread,
+            metadata: {
+              ...(updatedThread.metadata || {}),
+              workingMemory: { city: 'Waterloo', temperature: 78 },
+            },
+          },
+          memoryConfig: generateOptions.memory.options,
+        });
+
+        // This should not update the working memory
+        await agent.generate('how are you doing?', generateOptions);
+
+        const result = await agent.generate('Can you tell me where I am?', generateOptions);
+
+        expect(result.text).toContain('Waterloo');
+        const secondWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id });
+        expect(secondWorkingMemory).toMatchObject({ city: 'Waterloo', temperature: 78 });
       });
     });
   });
