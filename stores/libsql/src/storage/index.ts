@@ -748,7 +748,9 @@ export class LibSQLStore extends MastraStorage {
     },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
     const { threadId, format, selectBy } = args;
-    const { page = 0, perPage = 40, dateRange } = selectBy?.pagination || {};
+    const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
+    const perPage =
+      perPageInput !== undefined ? perPageInput : this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
     const fromDate = dateRange?.start;
     const toDate = dateRange?.end;
 
@@ -795,7 +797,7 @@ export class LibSQLStore extends MastraStorage {
       });
       const total = Number(countResult.rows?.[0]?.count ?? 0);
 
-      if (total === 0) {
+      if (total === 0 && messages.length === 0) {
         return {
           messages: [],
           total: 0,
@@ -805,9 +807,12 @@ export class LibSQLStore extends MastraStorage {
         };
       }
 
+      const excludeIds = messages.map(m => m.id);
+      const excludeIdsParam = excludeIds.map((_, idx) => `$${idx + queryParams.length + 1}`).join(', ');
+
       const dataResult = await this.client.execute({
-        sql: `SELECT id, content, role, type, "createdAt", thread_id FROM ${TABLE_MESSAGES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
-        args: [...queryParams, perPage, currentOffset],
+        sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} ${excludeIds.length ? `AND id NOT IN (${excludeIdsParam})` : ''} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+        args: [...queryParams, ...excludeIds, perPage, currentOffset],
       });
 
       messages.push(...(dataResult.rows || []).map((row: any) => this.parseRow(row)));

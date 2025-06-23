@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import type { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent, Mastra, ToolExecutionContext, WorkflowRun, WorkflowRuns } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/di';
@@ -278,7 +279,7 @@ export class InngestRun<
     });
 
     return {
-      stream: readable,
+      stream: readable as ReadableStream<StreamEvent>,
       getWorkflowState: () => this.executionResults!,
     };
   }
