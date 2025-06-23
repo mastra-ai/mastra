@@ -597,7 +597,7 @@ importers:
     dependencies:
       mem0ai:
         specifier: ^2.1.31
-        version: 2.1.31(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250619.0)(@google/genai@1.5.1(@modelcontextprotocol/sdk@1.13.0)(encoding@0.1.13))(@langchain/core@0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.67)))(@mistralai/mistralai@1.7.2(zod@3.25.67))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0)(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.4.1(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.2)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2)
+        version: 2.1.31(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250620.0)(@google/genai@1.5.1(@modelcontextprotocol/sdk@1.13.0)(encoding@0.1.13))(@langchain/core@0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.67)))(@mistralai/mistralai@1.7.2(zod@3.25.67))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0)(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.4.1(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.2)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -722,7 +722,7 @@ importers:
         version: 1.2.11(zod@3.25.67)
       '@copilotkit/runtime':
         specifier: ^1.9.1
-        version: 1.9.1(b8d6fa6adebcd01a4f8ec7d4f4590daa)
+        version: 1.9.1(4d671d80cac5fa4bd5346bf9f467eb12)
       hono:
         specifier: ^4.7.11
         version: 4.8.1
@@ -2543,8 +2543,8 @@ importers:
         version: 4.4.1(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20250612.0
-        version: 4.20250619.0
+        specifier: ^4.20250620.0
+        version: 4.20250620.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -2586,8 +2586,8 @@ importers:
         version: 4.4.1(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20250610.0
-        version: 4.20250619.0
+        specifier: ^4.20250620.0
+        version: 4.20250620.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3116,8 +3116,8 @@ importers:
         version: 3.25.67
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20250610.0
-        version: 4.20250619.0
+        specifier: ^4.20250620.0
+        version: 4.20250620.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -4807,8 +4807,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@cloudflare/workers-types@4.20250619.0':
-    resolution: {integrity: sha512-OYmVTA45rEEsOmchtltDnrG6BBaOPB7LUGKoyE8AwkfanUOc3/wwuMZ50i1jq6NKrV1TZLsKUKzrwe1NtVGOzQ==}
+  '@cloudflare/workers-types@4.20250620.0':
+    resolution: {integrity: sha512-EVvRB/DJEm6jhdKg+A4Qm4y/ry1cIvylSgSO3/f/Bv161vldDRxaXM2YoQQWFhLOJOw0qtrHsKOD51KYxV1XCw==}
 
   '@codemirror/autocomplete@6.18.6':
     resolution: {integrity: sha512-PHHBXFomUs5DF+9tCOM/UoW6XQ4R44lLNNhRaW9PKPTU0D7lIjRg3ElxaJnTwsl/oHiR93WSXDBrekhoUGCPtg==}
@@ -6357,8 +6357,8 @@ packages:
     peerDependencies:
       '@langchain/core': '>=0.3.58 <0.4.0'
 
-  '@langchain/community@0.3.46':
-    resolution: {integrity: sha512-loix9LkoNcn1gQlVCopmrJW9TmgZb+YpZw7nkFzXT6ozR8ZDh1XlFq1ymR5gTFtdNzF0neK2oJtE9iEl1lm7Dw==}
+  '@langchain/community@0.3.45':
+    resolution: {integrity: sha512-KkAGmnP+w5tozLYsj/kGKwyfuPnCcA6MyDXfNF7oDo7L1TxhUgdEKhvNsY7ooLXz6Xh/LV5Kqp2B8U0jfYCQKQ==}
     engines: {node: '>=18'}
     peerDependencies:
       '@arcjet/redact': ^v1.0.0-alpha.23
@@ -6393,7 +6393,7 @@ packages:
       '@huggingface/transformers': ^3.2.3
       '@ibm-cloud/watsonx-ai': '*'
       '@lancedb/lancedb': ^0.12.0
-      '@langchain/core': '>=0.3.58 <0.4.0'
+      '@langchain/core': '>=0.2.21 <0.4.0'
       '@layerup/layerup-security': ^1.5.12
       '@libsql/client': ^0.14.0
       '@mendable/firecrawl-js': ^1.4.3
@@ -20006,7 +20006,7 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20250617.0':
     optional: true
 
-  '@cloudflare/workers-types@4.20250619.0': {}
+  '@cloudflare/workers-types@4.20250620.0': {}
 
   '@codemirror/autocomplete@6.18.6':
     dependencies:
@@ -20068,7 +20068,7 @@ snapshots:
 
   '@colors/colors@1.5.0': {}
 
-  '@copilotkit/runtime@1.9.1(b8d6fa6adebcd01a4f8ec7d4f4590daa)':
+  '@copilotkit/runtime@1.9.1(4d671d80cac5fa4bd5346bf9f467eb12)':
     dependencies:
       '@ag-ui/client': 0.0.28
       '@ag-ui/core': 0.0.28
@@ -20079,7 +20079,7 @@ snapshots:
       '@copilotkit/shared': 1.9.1(encoding@0.1.13)
       '@graphql-yoga/plugin-defer-stream': 3.13.5(graphql-yoga@5.13.5(graphql@16.11.0))(graphql@16.11.0)
       '@langchain/aws': 0.1.11(@langchain/core@0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.67)))
-      '@langchain/community': 0.3.46(503baf94e6c2a369f90ad8127507fef5)
+      '@langchain/community': 0.3.45(2bae216e060a1ba4487496b28be768f5)
       '@langchain/core': 0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.67))
       '@langchain/google-gauth': 0.1.8(@langchain/core@0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.67)))(encoding@0.1.13)(zod@3.25.67)
       '@langchain/langgraph-sdk': 0.0.70(@langchain/core@0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.67)))(react@19.1.0)
@@ -21590,7 +21590,7 @@ snapshots:
     transitivePeerDependencies:
       - aws-crt
 
-  '@langchain/community@0.3.46(503baf94e6c2a369f90ad8127507fef5)':
+  '@langchain/community@0.3.45(2bae216e060a1ba4487496b28be768f5)':
     dependencies:
       '@browserbasehq/stagehand': 1.14.0(@playwright/test@1.53.1)(deepmerge@4.3.1)(dotenv@16.5.0)(encoding@0.1.13)(openai@4.104.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.67))(zod@3.25.67)
       '@ibm-cloud/watsonx-ai': 1.6.7
@@ -21607,6 +21607,7 @@ snapshots:
       openai: 4.104.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.67)
       uuid: 10.0.0
       zod: 3.25.67
+      zod-to-json-schema: 3.24.5(zod@3.25.67)
     optionalDependencies:
       '@aws-crypto/sha256-js': 5.2.0
       '@aws-sdk/client-bedrock-agent-runtime': 3.830.0
@@ -21633,7 +21634,7 @@ snapshots:
       jsdom: 26.1.0
       jsonwebtoken: 9.0.2
       lodash: 4.17.21
-      mem0ai: 2.1.31(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250619.0)(@google/genai@1.5.1(@modelcontextprotocol/sdk@1.13.0)(encoding@0.1.13))(@langchain/core@0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.67)))(@mistralai/mistralai@1.7.2(zod@3.25.67))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0)(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.4.1(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.2)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2)
+      mem0ai: 2.1.31(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250620.0)(@google/genai@1.5.1(@modelcontextprotocol/sdk@1.13.0)(encoding@0.1.13))(@langchain/core@0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.67)))(@mistralai/mistralai@1.7.2(zod@3.25.67))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0)(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.4.1(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.2)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2)
       mongodb: 6.17.0(@aws-sdk/credential-providers@3.830.0)(gcp-metadata@5.3.0(encoding@0.1.13))(socks@2.8.5)
       neo4j-driver: 5.28.1
       pdf-parse: 1.1.1
@@ -25889,7 +25890,7 @@ snapshots:
     dependencies:
       '@types/yargs-parser': 21.0.3
 
-  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3)':
+  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.1
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
@@ -25897,7 +25898,7 @@ snapshots:
       '@typescript-eslint/type-utils': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       debug: 4.4.1(supports-color@8.1.1)
-      eslint: 9.29.0(jiti@2.4.2)
+      eslint: 8.57.1
       graphemer: 1.4.0
       ignore: 5.3.2
       natural-compare-lite: 1.4.0
@@ -28079,7 +28080,7 @@ snapshots:
       '@rollup/plugin-replace': 5.0.7(rollup@3.29.5)
       '@rollup/plugin-terser': 0.4.4(rollup@3.29.5)
       '@types/jest': 29.5.14
-      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3)
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       ansi-escapes: 4.3.2
       asyncro: 3.0.0
@@ -28096,8 +28097,8 @@ snapshots:
       eslint: 8.57.1
       eslint-config-prettier: 8.10.0(eslint@8.57.1)
       eslint-plugin-flowtype: 8.0.3(@babel/plugin-syntax-flow@7.27.1(@babel/core@7.27.4))(@babel/plugin-transform-react-jsx@7.27.1(@babel/core@7.27.4))(eslint@8.57.1)
-      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@5.62.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3))(eslint@8.57.1)
-      eslint-plugin-jest: 27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(jest@29.7.0(@types/node@20.19.1)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.1)(typescript@5.8.3)))(typescript@5.8.3)
+      eslint-plugin-import: 2.31.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)
+      eslint-plugin-jest: 27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(jest@29.7.0(@types/node@20.19.1)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.1)(typescript@5.8.3)))(typescript@5.8.3)
       eslint-plugin-jsx-a11y: 6.10.2(eslint@8.57.1)
       eslint-plugin-prettier: 4.2.1(eslint-config-prettier@8.10.0(eslint@8.57.1))(eslint@8.57.1)(prettier@2.8.8)
       eslint-plugin-react: 7.37.5(eslint@8.57.1)
@@ -28502,7 +28503,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.0(@typescript-eslint/parser@5.62.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3))(eslint-import-resolver-node@0.3.9)(eslint@8.57.1):
+  eslint-module-utils@2.12.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint-import-resolver-node@0.3.9)(eslint@8.57.1):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
@@ -28538,7 +28539,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-import@2.31.0(@typescript-eslint/parser@5.62.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3))(eslint@8.57.1):
+  eslint-plugin-import@2.31.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.9
@@ -28549,7 +28550,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 8.57.1
       eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.12.0(@typescript-eslint/parser@5.62.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3))(eslint-import-resolver-node@0.3.9)(eslint@8.57.1)
+      eslint-module-utils: 2.12.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint-import-resolver-node@0.3.9)(eslint@8.57.1)
       hasown: 2.0.2
       is-core-module: 2.16.1
       is-glob: 4.0.3
@@ -28567,12 +28568,12 @@ snapshots:
       - eslint-import-resolver-webpack
       - supports-color
 
-  eslint-plugin-jest@27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(jest@29.7.0(@types/node@20.19.1)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.1)(typescript@5.8.3)))(typescript@5.8.3):
+  eslint-plugin-jest@27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(jest@29.7.0(@types/node@20.19.1)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.1)(typescript@5.8.3)))(typescript@5.8.3):
     dependencies:
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       eslint: 8.57.1
     optionalDependencies:
-      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3))(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3)
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)
       jest: 29.7.0(@types/node@20.19.1)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.1)(typescript@5.8.3))
     transitivePeerDependencies:
       - supports-color
@@ -29972,7 +29973,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.10.0(debug@4.4.1))
+      retry-axios: 2.6.0(axios@1.10.0)
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -31424,10 +31425,10 @@ snapshots:
 
   media-typer@1.1.0: {}
 
-  mem0ai@2.1.31(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250619.0)(@google/genai@1.5.1(@modelcontextprotocol/sdk@1.13.0)(encoding@0.1.13))(@langchain/core@0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.67)))(@mistralai/mistralai@1.7.2(zod@3.25.67))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0)(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.4.1(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.2)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2):
+  mem0ai@2.1.31(@anthropic-ai/sdk@0.27.3(encoding@0.1.13))(@cloudflare/workers-types@4.20250620.0)(@google/genai@1.5.1(@modelcontextprotocol/sdk@1.13.0)(encoding@0.1.13))(@langchain/core@0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.67)))(@mistralai/mistralai@1.7.2(zod@3.25.67))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0)(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.4.1(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.5.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.2)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2):
     dependencies:
       '@anthropic-ai/sdk': 0.27.3(encoding@0.1.13)
-      '@cloudflare/workers-types': 4.20250619.0
+      '@cloudflare/workers-types': 4.20250620.0
       '@google/genai': 1.5.1(@modelcontextprotocol/sdk@1.13.0)(encoding@0.1.13)
       '@langchain/core': 0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.2)(zod@3.25.67))
       '@mistralai/mistralai': 1.7.2(zod@3.25.67)
@@ -33292,7 +33293,7 @@ snapshots:
       onetime: 7.0.0
       signal-exit: 4.1.0
 
-  retry-axios@2.6.0(axios@1.10.0(debug@4.4.1)):
+  retry-axios@2.6.0(axios@1.10.0):
     dependencies:
       axios: 1.10.0(debug@4.4.1)
 
