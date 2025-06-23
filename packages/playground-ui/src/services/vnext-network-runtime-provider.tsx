@@ -7,10 +7,9 @@ import {
   AppendMessage,
   AssistantRuntimeProvider,
 } from '@assistant-ui/react';
-import { processDataStream } from '@ai-sdk/ui-utils';
 import { useState, ReactNode, useEffect, useRef } from 'react';
 
-import { ChatProps, Message } from '@/types';
+import { ChatProps } from '@/types';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useVNextNetworkChat } from '@/services/vnext-network-chat-provider';
 import { useMessages } from './vnext-message-provider';
@@ -92,27 +91,6 @@ export function VNextMastraNetworkRuntimeProvider({
             return message;
           });
         });
-
-        // setMessages(currentConversation => {
-        //   return [
-        //     ...currentConversation,
-        //     {
-        //       role: 'assistant',
-        //       metadata: {
-        //         custom: {
-        //           id,
-        //         },
-        //       },
-        //       content: [
-        //         {
-        //           type: 'text',
-        //           text: 'start',
-        //         },
-        //       ],
-        //     },
-        //     { role: 'assistant', content: [{ type: 'text', text: `\`\`\`json\n${formatted}\`\`\`` }] },
-        //   ];
-        // });
       };
 
       if (initialMessages && threadId && memory) {
@@ -274,7 +252,7 @@ export function VNextMastraNetworkRuntimeProvider({
 
       setIsRunning(false);
     } catch (error) {
-      console.error('Error occured in MastraRuntimeProvider', error);
+      console.error('Error occurred in VNextMastraNetworkRuntimeProvider', error);
       setIsRunning(false);
     }
   };

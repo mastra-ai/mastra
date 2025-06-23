@@ -12,7 +12,6 @@ import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 
-import { AssistantMessage } from './assistant-message';
 import { UserMessage } from './user-message';
 import { useEffect, useRef } from 'react';
 import { useAutoscroll } from '@/hooks/use-autoscroll';

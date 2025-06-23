@@ -1,5 +1,5 @@
 import { NetworkThread } from '@/components/assistant-ui/network-threads';
-import { ChatProps, Message } from '@/types';
+import { Message } from '@/types';
 import { VNextMastraNetworkRuntimeProvider } from '@/services/vnext-network-runtime-provider';
 import { VNextNetworkChatProvider } from '@/services/vnext-network-chat-provider';
 import { MessagesProvider } from '@/services/vnext-message-provider';

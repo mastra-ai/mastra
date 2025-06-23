@@ -199,6 +199,6 @@ export async function loopVNextNetworkHandler({
 
     return result;
   } catch (error) {
-    return handleError(error, 'Error streaming from network');
+    return handleError(error, 'Error looping network');
   }
 }
