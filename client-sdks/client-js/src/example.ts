@@ -1,11 +1,29 @@
+import { createTool } from '@mastra/core';
 import { MastraClient } from './client';
+import z from 'zod';
 // import type { WorkflowRunResult } from './types';
 
 // Agent
-
 (async () => {
   const client = new MastraClient({
     baseUrl: 'http://localhost:4111',
+  });
+  const weatherTool = createTool({
+    id: 'weatherTool',
+    description: 'Get the weather in a city',
+    execute: async ({ context }) => {
+      console.log('executing tool');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      return {
+        weather: `The weather in ${context.city} is sunny`,
+      };
+    },
+    inputSchema: z.object({
+      city: z.string(),
+    }),
+    outputSchema: z.object({
+      weather: z.string(),
+    }),
   });
 
   console.log('Starting agent...');
@@ -14,6 +32,9 @@ import { MastraClient } from './client';
     const agent = client.getAgent('weatherAgent');
     const response = await agent.stream({
       messages: 'what is the weather in new york?',
+      // clientTools: {
+      //   weatherTool,
+      // },
     });
 
     response.processDataStream({
@@ -28,6 +49,9 @@ import { MastraClient } from './client';
       },
       onErrorPart: error => {
         console.error(error);
+      },
+      onToolCallPart(streamPart) {
+        console.log(streamPart);
       },
     });
   } catch (error) {

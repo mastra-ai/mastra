@@ -1,4 +1,14 @@
-import { parseDataStreamPart, processDataStream } from '@ai-sdk/ui-utils';
+import {
+  parsePartialJson,
+  processDataStream,
+  type JSONValue,
+  type ReasoningUIPart,
+  type TextUIPart,
+  type ToolInvocation,
+  type ToolInvocationUIPart,
+  type UIMessage,
+  type UseChatOptions,
+} from '@ai-sdk/ui-utils';
 import { Tool, type CoreMessage, type GenerateReturn } from '@mastra/core';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
@@ -181,6 +191,351 @@ export class Agent extends BaseResource {
     return response;
   }
 
+  private async processChatResponse({
+    stream,
+    update,
+    onToolCall,
+    onFinish,
+    getCurrentDate = () => new Date(),
+    lastMessage,
+  }: {
+    stream: ReadableStream<Uint8Array>;
+    update: (options: { message: UIMessage; data: JSONValue[] | undefined; replaceLastMessage: boolean }) => void;
+    onToolCall?: UseChatOptions['onToolCall'];
+    onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: string }) => void;
+    generateId?: () => string;
+    getCurrentDate?: () => Date;
+    lastMessage: UIMessage | undefined;
+  }) {
+    const replaceLastMessage = lastMessage?.role === 'assistant';
+    let step = replaceLastMessage
+      ? 1 +
+        // find max step in existing tool invocations:
+        (lastMessage.toolInvocations?.reduce((max, toolInvocation) => {
+          return Math.max(max, toolInvocation.step ?? 0);
+        }, 0) ?? 0)
+      : 0;
+
+    const message: UIMessage = replaceLastMessage
+      ? structuredClone(lastMessage)
+      : {
+          id: crypto.randomUUID(),
+          createdAt: getCurrentDate(),
+          role: 'assistant',
+          content: '',
+          parts: [],
+        };
+
+    let currentTextPart: TextUIPart | undefined = undefined;
+    let currentReasoningPart: ReasoningUIPart | undefined = undefined;
+    let currentReasoningTextDetail: { type: 'text'; text: string; signature?: string } | undefined = undefined;
+
+    function updateToolInvocationPart(toolCallId: string, invocation: ToolInvocation) {
+      const part = message.parts.find(
+        part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
+      ) as ToolInvocationUIPart | undefined;
+
+      if (part != null) {
+        part.toolInvocation = invocation;
+      } else {
+        message.parts.push({
+          type: 'tool-invocation',
+          toolInvocation: invocation,
+        });
+      }
+    }
+
+    const data: JSONValue[] = [];
+
+    // keep list of current message annotations for message
+    let messageAnnotations: JSONValue[] | undefined = replaceLastMessage ? lastMessage?.annotations : undefined;
+
+    // keep track of partial tool calls
+    const partialToolCalls: Record<string, { text: string; step: number; index: number; toolName: string }> = {};
+
+    let usage: any = {
+      completionTokens: NaN,
+      promptTokens: NaN,
+      totalTokens: NaN,
+    };
+    let finishReason: string = 'unknown';
+
+    function execUpdate() {
+      // make a copy of the data array to ensure UI is updated (SWR)
+      const copiedData = [...data];
+
+      // keeps the currentMessage up to date with the latest annotations,
+      // even if annotations preceded the message creation
+      if (messageAnnotations?.length) {
+        message.annotations = messageAnnotations;
+      }
+
+      const copiedMessage = {
+        // deep copy the message to ensure that deep changes (msg attachments) are updated
+        // with SolidJS. SolidJS uses referential integration of sub-objects to detect changes.
+        ...structuredClone(message),
+        // add a revision id to ensure that the message is updated with SWR. SWR uses a
+        // hashing approach by default to detect changes, but it only works for shallow
+        // changes. This is why we need to add a revision id to ensure that the message
+        // is updated with SWR (without it, the changes get stuck in SWR and are not
+        // forwarded to rendering):
+        revisionId: crypto.randomUUID(),
+      } as UIMessage;
+
+      update({
+        message: copiedMessage,
+        data: copiedData,
+        replaceLastMessage,
+      });
+    }
+
+    await processDataStream({
+      stream,
+      onTextPart(value) {
+        if (currentTextPart == null) {
+          currentTextPart = {
+            type: 'text',
+            text: value,
+          };
+          message.parts.push(currentTextPart);
+        } else {
+          currentTextPart.text += value;
+        }
+
+        message.content += value;
+        execUpdate();
+      },
+      onReasoningPart(value) {
+        if (currentReasoningTextDetail == null) {
+          currentReasoningTextDetail = { type: 'text', text: value };
+          if (currentReasoningPart != null) {
+            currentReasoningPart.details.push(currentReasoningTextDetail);
+          }
+        } else {
+          currentReasoningTextDetail.text += value;
+        }
+
+        if (currentReasoningPart == null) {
+          currentReasoningPart = {
+            type: 'reasoning',
+            reasoning: value,
+            details: [currentReasoningTextDetail],
+          };
+          message.parts.push(currentReasoningPart);
+        } else {
+          currentReasoningPart.reasoning += value;
+        }
+
+        message.reasoning = (message.reasoning ?? '') + value;
+
+        execUpdate();
+      },
+      onReasoningSignaturePart(value) {
+        if (currentReasoningTextDetail != null) {
+          currentReasoningTextDetail.signature = value.signature;
+        }
+      },
+      onRedactedReasoningPart(value) {
+        if (currentReasoningPart == null) {
+          currentReasoningPart = {
+            type: 'reasoning',
+            reasoning: '',
+            details: [],
+          };
+          message.parts.push(currentReasoningPart);
+        }
+
+        currentReasoningPart.details.push({
+          type: 'redacted',
+          data: value.data,
+        });
+
+        currentReasoningTextDetail = undefined;
+
+        execUpdate();
+      },
+      onFilePart(value) {
+        message.parts.push({
+          type: 'file',
+          mimeType: value.mimeType,
+          data: value.data,
+        });
+
+        execUpdate();
+      },
+      onSourcePart(value) {
+        message.parts.push({
+          type: 'source',
+          source: value,
+        });
+
+        execUpdate();
+      },
+      onToolCallStreamingStartPart(value) {
+        if (message.toolInvocations == null) {
+          message.toolInvocations = [];
+        }
+
+        // add the partial tool call to the map
+        partialToolCalls[value.toolCallId] = {
+          text: '',
+          step,
+          toolName: value.toolName,
+          index: message.toolInvocations.length,
+        };
+
+        const invocation = {
+          state: 'partial-call',
+          step,
+          toolCallId: value.toolCallId,
+          toolName: value.toolName,
+          args: undefined,
+        } as const;
+
+        message.toolInvocations.push(invocation);
+
+        updateToolInvocationPart(value.toolCallId, invocation);
+
+        execUpdate();
+      },
+      onToolCallDeltaPart(value) {
+        const partialToolCall = partialToolCalls[value.toolCallId];
+
+        partialToolCall!.text += value.argsTextDelta;
+
+        const { value: partialArgs } = parsePartialJson(partialToolCall!.text);
+
+        const invocation = {
+          state: 'partial-call',
+          step: partialToolCall!.step,
+          toolCallId: value.toolCallId,
+          toolName: partialToolCall!.toolName,
+          args: partialArgs,
+        } as const;
+
+        message.toolInvocations![partialToolCall!.index] = invocation;
+
+        updateToolInvocationPart(value.toolCallId, invocation);
+
+        execUpdate();
+      },
+      async onToolCallPart(value) {
+        const invocation = {
+          state: 'call',
+          step,
+          ...value,
+        } as const;
+
+        if (partialToolCalls[value.toolCallId] != null) {
+          // change the partial tool call to a full tool call
+          message.toolInvocations![partialToolCalls[value.toolCallId]!.index] = invocation;
+        } else {
+          if (message.toolInvocations == null) {
+            message.toolInvocations = [];
+          }
+
+          message.toolInvocations.push(invocation);
+        }
+
+        updateToolInvocationPart(value.toolCallId, invocation);
+
+        execUpdate();
+
+        // invoke the onToolCall callback if it exists. This is blocking.
+        // In the future we should make this non-blocking, which
+        // requires additional state management for error handling etc.
+        if (onToolCall) {
+          const result = await onToolCall({ toolCall: value });
+          if (result != null) {
+            const invocation = {
+              state: 'result',
+              step,
+              ...value,
+              result,
+            } as const;
+
+            // store the result in the tool invocation
+            message.toolInvocations![message.toolInvocations!.length - 1] = invocation;
+
+            updateToolInvocationPart(value.toolCallId, invocation);
+
+            execUpdate();
+          }
+        }
+      },
+      onToolResultPart(value) {
+        const toolInvocations = message.toolInvocations;
+
+        if (toolInvocations == null) {
+          throw new Error('tool_result must be preceded by a tool_call');
+        }
+
+        // find if there is any tool invocation with the same toolCallId
+        // and replace it with the result
+        const toolInvocationIndex = toolInvocations.findIndex(invocation => invocation.toolCallId === value.toolCallId);
+
+        if (toolInvocationIndex === -1) {
+          throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
+        }
+
+        const invocation = {
+          ...toolInvocations[toolInvocationIndex],
+          state: 'result' as const,
+          ...value,
+        } as const;
+
+        toolInvocations[toolInvocationIndex] = invocation as ToolInvocation;
+
+        updateToolInvocationPart(value.toolCallId, invocation as ToolInvocation);
+
+        execUpdate();
+      },
+      onDataPart(value) {
+        data.push(...value);
+        execUpdate();
+      },
+      onMessageAnnotationsPart(value) {
+        if (messageAnnotations == null) {
+          messageAnnotations = [...value];
+        } else {
+          messageAnnotations.push(...value);
+        }
+
+        execUpdate();
+      },
+      onFinishStepPart(value) {
+        step += 1;
+
+        // reset the current text and reasoning parts
+        currentTextPart = value.isContinued ? currentTextPart : undefined;
+        currentReasoningPart = undefined;
+        currentReasoningTextDetail = undefined;
+      },
+      onStartStepPart(value) {
+        // keep message id stable when we are updating an existing message:
+        if (!replaceLastMessage) {
+          message.id = value.messageId;
+        }
+
+        // add a step boundary part to the message
+        message.parts.push({ type: 'step-start' });
+        execUpdate();
+      },
+      onFinishMessagePart(value) {
+        finishReason = value.finishReason;
+        if (value.usage != null) {
+          // usage = calculateLanguageModelUsage(value.usage);
+          usage = value.usage;
+        }
+      },
+      onErrorPart(error) {
+        throw new Error(error);
+      },
+    });
+
+    onFinish?.({ message, finishReason, usage });
+  }
+
   /**
    * Streams a response from the agent
    * @param params - Stream parameters including prompt
@@ -201,8 +556,36 @@ export class Agent extends BaseResource {
       clientTools: processClientTools(params.clientTools),
     };
 
-    const { runId, resourceId, threadId, runtimeContext } = processedParams as StreamParams;
+    // Create a readable stream that will handle the response processing
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
 
+    // Start processing the response in the background
+    const response = await this.processStreamResponse(processedParams, writable);
+
+    // Create a new response with the readable stream
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
+    };
+
+    // Add the processDataStream method to the response
+    streamResponse.processDataStream = async (options = {}) => {
+      await processDataStream({
+        stream: readable as ReadableStream<Uint8Array>,
+        ...options,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
+   * Processes the stream response and handles tool calls
+   */
+  private async processStreamResponse(processedParams: any, writable: WritableStream<Uint8Array>) {
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
     } = await this.request(`/api/agents/${this.agentId}/stream`, {
@@ -215,118 +598,101 @@ export class Agent extends BaseResource {
       throw new Error('No response body');
     }
 
-    const userMessage = new MessageList().add(params.messages, 'user').get.all.core();
-    let assistantMessages: CoreMessage[] = [];
-    let toolCalls: { toolCallId: string; toolName: string; args: any }[] = [];
-    let finishReasonToolCalls = false;
+    try {
+      let toolCalls: ToolInvocation[] = [];
+      let finishReasonToolCalls = false;
+      let messages: UIMessage[] = [];
+      let hasProcessedToolCalls = false;
 
-    const NEWLINE = '\n'.charCodeAt(0);
-
-    // concatenates all the chunks into a single Uint8Array
-    function concatChunks(chunks: Uint8Array[], totalLength: number) {
-      const concatenatedChunks = new Uint8Array(totalLength);
-
-      let offset = 0;
-      for (const chunk of chunks) {
-        concatenatedChunks.set(chunk, offset);
-        offset += chunk.length;
+      // If no tool calls or they've been processed, pipe the original response
+      if (response.body) {
+        response.clone().body!.pipeTo(writable, {
+          preventClose: true,
+        });
       }
-      chunks.length = 0;
-
-      return concatenatedChunks;
-    }
-
-    const reader = response.clone().body?.getReader();
-    const decoder = new TextDecoder();
-    const chunks: Uint8Array[] = [];
-    let totalLength = 0;
-
-    while (true && reader) {
-      const { value } = await reader.read();
-
-      if (value) {
-        chunks.push(value);
-        totalLength += value.length;
-        if (value[value.length - 1] !== NEWLINE) {
-          // if the last character is not a newline, we have not read the whole JSON value
-          continue;
-        }
-      }
-
-      if (chunks.length === 0) {
-        break; // we have reached the end of the stream
-      }
-
-      const concatenatedChunks = concatChunks(chunks, totalLength);
-      totalLength = 0;
-
-      const streamParts = decoder
-        .decode(concatenatedChunks, { stream: true })
-        .split('\n')
-        .filter(line => line !== '') // splitting leaves an empty string at the end
-        .map(parseDataStreamPart);
-
-      for (const { type, value } of streamParts) {
-        if (type === 'tool_call') {
-          toolCalls.push(value);
-        }
-        if (type === 'text') {
-          console.log('text', value);
-          assistantMessages.push({
-            role: 'assistant',
-            content: value,
-          });
-        }
-        if (type === 'finish_step') {
-          if (value.finishReason === 'tool-calls') {
+      await this.processChatResponse({
+        stream: response.clone().body!,
+        update: ({ message }) => {
+          messages.push(message);
+        },
+        onFinish: ({ finishReason, message }) => {
+          if (finishReason === 'tool-calls') {
             finishReasonToolCalls = true;
+            const toolCall = [...(message?.parts ?? [])]
+              .reverse()
+              .find(part => part.type === 'tool-invocation')?.toolInvocation;
+            if (toolCall) {
+              toolCalls.push(toolCall);
+            }
+          }
+        },
+        lastMessage: undefined,
+      });
+
+      // Handle tool calls if needed
+      if (finishReasonToolCalls && !hasProcessedToolCalls) {
+        hasProcessedToolCalls = true;
+
+        for (const toolCall of toolCalls) {
+          const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
+          if (clientTool && clientTool.execute) {
+            const result = await clientTool.execute(
+              {
+                context: toolCall?.args,
+                runId: processedParams.runId,
+                resourceId: processedParams.resourceId,
+                threadId: processedParams.threadId,
+                runtimeContext: processedParams.runtimeContext as RuntimeContext,
+              },
+              {
+                messages: (response as unknown as { messages: CoreMessage[] }).messages,
+                toolCallId: toolCall?.toolCallId,
+              },
+            );
+
+            const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
+
+            const toolInvocationPart = lastMessage?.parts?.find(
+              part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
+            ) as ToolInvocationUIPart | undefined;
+
+            if (toolInvocationPart) {
+              toolInvocationPart.toolInvocation = {
+                ...toolInvocationPart.toolInvocation,
+                state: 'result',
+                result,
+              };
+            }
+
+            const toolInvocation = lastMessage?.toolInvocations?.find(
+              toolInvocation => toolInvocation.toolCallId === toolCall.toolCallId,
+            ) as ToolInvocation | undefined;
+
+            if (toolInvocation) {
+              toolInvocation.state = 'result';
+              // @ts-ignore
+              toolInvocation.result = result;
+            }
+
+            // Convert messages to the correct format for the recursive call
+            const originalMessages = processedParams.messages;
+            const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
+
+            // Recursively call stream with updated messages
+            this.processStreamResponse(
+              {
+                ...processedParams,
+                messages: [...messageArray, ...messages, lastMessage],
+              },
+              writable,
+            );
           }
         }
       }
+    } catch (error) {
+      console.error('Error processing stream response:', error);
+    } finally {
     }
-
-    if (finishReasonToolCalls) {
-      for (const toolCall of toolCalls) {
-        const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
-        if (clientTool && clientTool.execute) {
-          const result = await clientTool.execute(
-            { context: toolCall?.args, runId, resourceId, threadId, runtimeContext: runtimeContext as RuntimeContext },
-            {
-              messages: (response as unknown as { messages: CoreMessage[] }).messages,
-              toolCallId: toolCall?.toolCallId,
-            },
-          );
-          const updatedMessages = [
-            ...userMessage,
-            ...assistantMessages,
-            {
-              role: 'tool',
-              content: [
-                {
-                  type: 'tool-result',
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  result,
-                },
-              ],
-            },
-          ];
-          console.log('updated messages', updatedMessages);
-          return this.stream({
-            ...params,
-            messages: updatedMessages,
-          });
-        }
-      }
-    }
-
-    response.processDataStream = async (options = {}) => {
-      await processDataStream({
-        stream: response.body as ReadableStream<Uint8Array>,
-        ...options,
-      });
-    };
-
     return response;
   }
 
