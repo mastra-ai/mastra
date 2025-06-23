@@ -1,22 +1,16 @@
 import { openai } from '@ai-sdk/openai';
+import type { UIMessage } from '@ai-sdk/ui-utils';
 import { describe, it } from 'vitest';
-import {
-  createStep,
-  createWorkflow,
-  type CoreMessage,
-  type MemoryConfig,
-  type MessageType,
-  type StorageGetMessagesArg,
-  type StorageThreadType,
-} from '../../';
-import { createTool } from '../../tools/index';
-import type { AiMessageType, MastraMessageV2 } from '../../agent';
-import { Agent } from '../../agent';
-import { MastraMemory, MastraMessageV1 } from '../../memory';
-import { RuntimeContext } from '../../runtime-context';
-import { NewAgentNetwork } from './index';
 import { z } from 'zod';
-import { UIMessage } from '@ai-sdk/ui-utils';
+import { createStep, createWorkflow } from '../..';
+import type { CoreMessage, MemoryConfig, StorageGetMessagesArg, StorageThreadType } from '../../';
+import { Agent } from '../../agent';
+import type { MastraMessageV2 } from '../../agent';
+import type { MastraMessageV1 } from '../../memory';
+import { MastraMemory } from '../../memory';
+import { RuntimeContext } from '../../runtime-context';
+import { createTool } from '../../tools/index';
+import { NewAgentNetwork } from './index';
 
 class MockMemory extends MastraMemory {
   #byResourceId: Map<string, any[]> = new Map();
@@ -29,6 +23,17 @@ class MockMemory extends MastraMemory {
         lastMessages: 10,
       },
     });
+  }
+
+  async getWorkingMemory({ threadId }: { threadId: string }) {
+    return this.#byThreadId.get(threadId) || [];
+  }
+
+  async getWorkingMemoryTemplate() {
+    return {
+      format: 'json' as const,
+      content: '{ "test": "test" }',
+    };
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }) {
@@ -81,12 +86,7 @@ class MockMemory extends MastraMemory {
     return args.messages as MastraMessageV1[];
   }
 
-  async rememberMessages({
-    threadId,
-    resourceId,
-    vectorMessageSearch,
-    config,
-  }: {
+  async rememberMessages({}: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
@@ -98,11 +98,7 @@ class MockMemory extends MastraMemory {
     };
   }
 
-  async query({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: UIMessage[] }> {
+  async query({ threadId }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: UIMessage[] }> {
     // console.log('MEM query', threadId, resourceId, selectBy);
     const thread = this.#byThreadId.get(threadId) ?? [];
     return {
