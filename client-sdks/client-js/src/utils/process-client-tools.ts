@@ -28,5 +28,5 @@ export function processClientTools(clientTools: ToolsInput | undefined): ToolsIn
         ];
       }
     }),
-  ) as Record<string, any>;
+  );
 }

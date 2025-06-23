@@ -691,7 +691,6 @@ export class Agent extends BaseResource {
       }
     } catch (error) {
       console.error('Error processing stream response:', error);
-    } finally {
     }
     return response;
   }
