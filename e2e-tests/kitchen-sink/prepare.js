@@ -29,10 +29,9 @@ export async function setupTestProject(pathToStoreFiles, registryUrl) {
 
   console.log('[Setup Test Project] Starting dev server');
 
-  spawnSync('pnpm', ['dev', '&'], {
+  spawn('pnpm', ['dev'], {
     cwd: newPath,
     stdio: 'inherit',
-    shell: true,
     env: {
       ...process.env,
     },
