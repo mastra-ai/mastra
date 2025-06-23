@@ -32,7 +32,7 @@
     "cloudflare": "^4.3.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250612.0",
+    "@cloudflare/workers-types": "^4.20250620.0",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
