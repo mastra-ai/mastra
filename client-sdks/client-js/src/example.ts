@@ -12,7 +12,6 @@ import z from 'zod';
     id: 'weatherTool',
     description: 'Get the weather in a city',
     execute: async ({ context }) => {
-      console.log('executing tool');
       await new Promise(resolve => setTimeout(resolve, 5000));
       return {
         weather: `The weather in ${context.city} is sunny`,
