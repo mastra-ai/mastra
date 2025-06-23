@@ -32,10 +32,6 @@ export default function VNextNetwork() {
     }
   }, [memory?.result, threadId]);
 
-  useEffect(() => {
-    console.log('messages====', messages);
-  }, [messages]);
-
   if (isNetworkLoading) {
     return null;
   }
