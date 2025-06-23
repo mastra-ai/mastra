@@ -149,6 +149,19 @@ export class ClickhouseStore extends MastraStorage {
     };
   }
 
+  private escape(value: any): string {
+    if (typeof value === 'string') {
+      return `'${value.replace(/'/g, "''")}'`;
+    }
+    if (value instanceof Date) {
+      return `'${value.toISOString()}'`;
+    }
+    if (value === null || value === undefined) {
+      return 'NULL';
+    }
+    return value.toString();
+  }
+
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     try {
       const baseQuery = `SELECT *, toDateTime64(createdAt, 3) as createdAt FROM ${TABLE_EVALS} WHERE agent_name = {var_agent_name:String}`;
@@ -1007,13 +1020,62 @@ export class ClickhouseStore extends MastraStorage {
         throw new Error(`Thread ${threadId} not found`);
       }
 
+      // Clickhouse's MergeTree engine does not support native upserts or unique constraints on (id, thread_id).
+      // Note: We cannot switch to ReplacingMergeTree without a schema migration,
+      // as it would require altering the table engine.
+      // To ensure correct upsert behavior, we first fetch existing (id, thread_id) pairs for the incoming messages.
+      const existingResult = await this.db.query({
+        query: `SELECT id, thread_id FROM ${TABLE_MESSAGES} WHERE id IN ({ids:Array(String)})`,
+        query_params: {
+          ids: messages.map(m => m.id),
+        },
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+        format: 'JSONEachRow',
+      });
+      const existingRows: Array<{ id: string; thread_id: string }> = await existingResult.json();
+
+      const existingSet = new Set(existingRows.map(row => `${row.id}::${row.thread_id}`));
+      // Partition the batch into new inserts and updates:
+      // New messages are inserted in bulk.
+      const toInsert = messages.filter(m => !existingSet.has(`${m.id}::${threadId}`));
+      // Existing messages are updated via ALTER TABLE ... UPDATE.
+      const toUpdate = messages.filter(m => existingSet.has(`${m.id}::${threadId}`));
+      const updatePromises = toUpdate.map(message =>
+        this.db.command({
+          query: `
+      ALTER TABLE ${TABLE_MESSAGES}
+      UPDATE content = {var_content:String}, role = {var_role:String}, type = {var_type:String}
+      WHERE id = {var_id:String} AND thread_id = {var_thread_id:String}
+    `,
+          query_params: {
+            var_content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+            var_role: message.role,
+            var_type: message.type || 'v2',
+            var_id: message.id,
+            var_thread_id: threadId,
+          },
+          clickhouse_settings: {
+            // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+            date_time_input_format: 'best_effort',
+            use_client_time_zone: 1,
+            output_format_json_quote_64bit_integers: 0,
+          },
+        }),
+      );
+
       // Execute message inserts and thread update in parallel for better performance
       await Promise.all([
         // Insert messages
         this.db.insert({
           table: TABLE_MESSAGES,
           format: 'JSONEachRow',
-          values: messages.map(message => ({
+          values: toInsert.map(message => ({
             id: message.id,
             thread_id: threadId,
             content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
@@ -1028,6 +1090,7 @@ export class ClickhouseStore extends MastraStorage {
             output_format_json_quote_64bit_integers: 0,
           },
         }),
+        ...updatePromises,
         // Update thread's updatedAt timestamp
         this.db.insert({
           table: TABLE_THREADS,

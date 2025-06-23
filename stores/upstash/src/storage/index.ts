@@ -853,6 +853,27 @@ export class UpstashStore extends MastraStorage {
           const createdAtScore = new Date(message.createdAt).getTime();
           const score = message._index !== undefined ? message._index : createdAtScore;
 
+          // Check if this message id exists in another thread
+          const existingKeyPattern = this.getMessageKey('*', message.id);
+          const keys = await this.scanKeys(existingKeyPattern);
+
+          if (keys.length > 0) {
+            const pipeline2 = this.redis.pipeline();
+            keys.forEach(key => pipeline2.get(key));
+            const results = await pipeline2.exec();
+            const existingMessages = results.filter(
+              (msg): msg is MastraMessageV2 | MastraMessageV1 => msg !== null,
+            ) as (MastraMessageV2 | MastraMessageV1)[];
+            for (const existingMessage of existingMessages) {
+              const existingMessageKey = this.getMessageKey(existingMessage.threadId!, existingMessage.id);
+              if (existingMessage && existingMessage.threadId !== message.threadId) {
+                pipeline.del(existingMessageKey);
+                // Remove from old thread's sorted set
+                pipeline.zrem(this.getThreadMessagesKey(existingMessage.threadId!), existingMessage.id);
+              }
+            }
+          }
+
           // Store the message data
           pipeline.set(key, message);
 
