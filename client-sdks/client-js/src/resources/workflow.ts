@@ -237,9 +237,9 @@ export class Workflow extends BaseResource {
   }
 
   /**
-   * Starts a vNext workflow run and returns a stream
+   * Starts a workflow run and returns a stream
    * @param params - Object containing the optional runId, inputData and runtimeContext
-   * @returns Promise containing the vNext workflow execution results
+   * @returns Promise containing the workflow execution results
    */
   async stream(params: { runId?: string; inputData: Record<string, any>; runtimeContext?: RuntimeContext }) {
     const searchParams = new URLSearchParams();
@@ -248,7 +248,7 @@ export class Workflow extends BaseResource {
       searchParams.set('runId', params.runId);
     }
 
-    const runtimeContext = params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined;
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
     const response: Response = await this.request(
       `/api/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
       {

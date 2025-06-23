@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "5.1.6-alpha.0",
+  "version": "5.1.7-alpha.1",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -77,6 +77,7 @@
     "@xyflow/react": "^12.6.4",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
+    "prettier": "^3.5.3",
     "json-schema-to-zod": "^2.6.1",
     "motion": "^12.16.0",
     "prism-react-renderer": "^2.4.1",
@@ -98,7 +99,7 @@
     "tailwindcss-animate": "^1.0.7",
     "unified": "^11.0.5",
     "use-debounce": "^10.0.5",
-    "zod": "^3.25.57",
+    "zod": "^3.25.67",
     "zustand": "^5.0.5"
   },
   "peerDependencies": {
@@ -111,14 +112,14 @@
   "devDependencies": {
     "@mastra/core": "workspace:*",
     "@types/node": "^20.19.0",
-    "@types/react": "^19.1.7",
+    "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.5.2",
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "postcss": "^8.5.4",
-    "rollup-plugin-node-externals": "^8.0.0",
+    "rollup-plugin-node-externals": "^8.0.1",
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",

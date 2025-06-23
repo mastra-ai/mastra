@@ -1,5 +1,52 @@
 # @mastra/mcp
 
+## 0.10.5-alpha.0
+
+### Patch Changes
+
+- 4d21bf2: throw mastra errors for MCP
+- Updated dependencies [d1baedb]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [2097952]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [0e17048]
+  - @mastra/core@0.10.7-alpha.1
+
+## 0.10.4
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`@modelcontextprotocol/sdk@^1.12.1` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/sdk/v/1.12.1) (from `^1.10.2`, in `dependencies`)
+  - Updated dependency [`hono@^4.7.11` ↗︎](https://www.npmjs.com/package/hono/v/4.7.11) (from `^4.7.4`, in `dependencies`)
+- 36f1c36: MCP Client and Server streamable http fixes
+- bd1674f: Change how connection promise works for client connection
+- 69f76f7: Fix Agents as tools when building mastra mcp server
+- Updated dependencies [63f6b7d]
+- Updated dependencies [12a95fc]
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+- Updated dependencies [d70c420]
+- Updated dependencies [ee9af57]
+- Updated dependencies [36f1c36]
+- Updated dependencies [2a16996]
+- Updated dependencies [10d352e]
+- Updated dependencies [9589624]
+- Updated dependencies [53d3c37]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6
+
+## 0.10.4-alpha.1
+
+### Patch Changes
+
+- bd1674f: Change how connection promise works for client connection
+- 69f76f7: Fix Agents as tools when building mastra mcp server
+
 ## 0.10.4-alpha.0
 
 ### Patch Changes

@@ -1,5 +1,4 @@
 import type { Mastra } from '@mastra/core';
-import type { RuntimeContext } from '@mastra/core/di';
 import {
   getWorkflowsHandler as getOriginalWorkflowsHandler,
   getWorkflowByIdHandler as getOriginalWorkflowByIdHandler,
@@ -71,8 +70,8 @@ export async function createWorkflowRunHandler(c: Context) {
 export async function startAsyncWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const runtimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const { inputData } = await c.req.json();
     const runId = c.req.query('runId');
 
@@ -93,8 +92,8 @@ export async function startAsyncWorkflowHandler(c: Context) {
 export async function startWorkflowRunHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const runtimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const { inputData } = await c.req.json();
     const runId = c.req.query('runId');
 
@@ -122,6 +121,8 @@ export function watchWorkflowHandler(c: Context) {
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to watch workflow' });
     }
+
+    c.header('Transfer-Encoding', 'chunked');
 
     return stream(
       c,
@@ -159,11 +160,13 @@ export function watchWorkflowHandler(c: Context) {
 export async function streamWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const runtimeContext = c.get('runtimeContext');
     const logger = mastra.getLogger();
     const workflowId = c.req.param('workflowId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const { inputData } = await c.req.json();
     const runId = c.req.query('runId');
+
+    c.header('Transfer-Encoding', 'chunked');
 
     return stream(
       c,
@@ -203,9 +206,9 @@ export async function streamWorkflowHandler(c: Context) {
 export async function resumeAsyncWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const runtimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const { step, resumeData } = await c.req.json();
 
     if (!runId) {
@@ -229,9 +232,10 @@ export async function resumeAsyncWorkflowHandler(c: Context) {
 export async function resumeWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const runtimeContext = c.get('runtimeContext');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
-    const { step, resumeData, runtimeContext } = await c.req.json();
+    const { step, resumeData } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });

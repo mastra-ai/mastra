@@ -6,14 +6,12 @@ import { isWebContainer } from '@webcontainer/env';
 import { execa } from 'execa';
 import getPort from 'get-port';
 
-import { openBrowser } from '../../services/browser';
 import { logger } from '../../utils/logger.js';
 
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
-let isInitialServerStart = true;
 const ON_ERROR_MAX_RESTARTS = 3;
 
 const startServer = async (dotMastraPath: string, port: number, env: Map<string, string>, errorRestartCount = 0) => {
@@ -26,7 +24,11 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
 
     if (!isWebContainer()) {
       const instrumentation = import.meta.resolve('@opentelemetry/instrumentation/hook.mjs');
-      commands.push('--import=./instrumentation.mjs', `--import=${instrumentation}`);
+      commands.push(
+        `--import=${import.meta.resolve('mastra/telemetry-loader')}`,
+        '--import=./instrumentation.mjs',
+        `--import=${instrumentation}`,
+      );
     }
 
     commands.push('index.mjs');
@@ -55,11 +57,6 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {
         serverIsReady = true;
-
-        if (isInitialServerStart) {
-          isInitialServerStart = false;
-          void openBrowser(`http://localhost:${port}`, true);
-        }
 
         // Send refresh signal
         try {
@@ -150,13 +147,14 @@ export async function dev({
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
-  const defaultToolsPath = join(mastraDir, 'tools/**/*');
+  const defaultToolsPath = join(mastraDir, 'tools/**/*.{js,ts}');
   const discoveredTools = [defaultToolsPath, ...(tools || [])];
 
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
   const bundler = new DevBundler(env);
+  bundler.__setLogger(logger);
   await bundler.prepare(dotMastraPath);
 
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);

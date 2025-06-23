@@ -1,6 +1,6 @@
 {
   "name": "@mastra/chroma",
-  "version": "0.10.3-alpha.0",
+  "version": "0.10.4-alpha.0",
   "description": "Chroma vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -33,7 +33,7 @@
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
-    "eslint": "^9.28.0",
+    "eslint": "^9.29.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.3"

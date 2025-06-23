@@ -13,6 +13,7 @@ npm install @mastra/upstash
 ```typescript
 import { UpstashVector } from '@mastra/upstash';
 
+// In upstash they refer to the store as an index
 const vectorStore = new UpstashVector({
   url: process.env.UPSTASH_VECTOR_REST_URL,
   token: process.env.UPSTASH_VECTOR_TOKEN
@@ -26,6 +27,9 @@ const ids = await vectorStore.upsert({
   vectors,
   metadata
 });
+
+// There is no store.createIndex call here, Upstash creates indexes (known as namespaces in Upstash) automatically
+// when you upsert if that namespace does not exist yet.
 
 // Query vectors
 const results = await vectorStore.query({

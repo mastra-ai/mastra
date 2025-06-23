@@ -93,7 +93,6 @@ export async function getBundlerOptions(entryFile: string, outputDir: string): P
   const result = {
     hasCustomConfig: false,
   } as const;
-
   const bundle = await getBundlerOptionsBundler(entryFile, result);
 
   await bundle.write({

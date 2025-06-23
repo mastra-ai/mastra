@@ -1,4 +1,4 @@
-import type { MastraMessageV2 } from '../agent';
+import type { MastraMessageContentV2, MastraMessageV2 } from '../agent';
 import { MastraBase } from '../base';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { Trace } from '../telemetry';
@@ -62,6 +62,26 @@ export abstract class MastraStorage extends MastraBase {
     if (!date) return undefined;
     const dateObj = this.ensureDate(date);
     return dateObj?.toISOString();
+  }
+
+  /**
+   * Resolves limit for how many messages to fetch
+   *
+   * @param last The number of messages to fetch
+   * @param defaultLimit The default limit to use if last is not provided
+   * @returns The resolved limit
+   */
+  protected resolveMessageLimit({
+    last,
+    defaultLimit,
+  }: {
+    last: number | false | undefined;
+    defaultLimit: number;
+  }): number {
+    // TODO: Figure out consistent default limit for all stores as some stores use 40 and some use no limit (Number.MAX_SAFE_INTEGER)
+    if (typeof last === 'number') return Math.max(0, last);
+    if (last === false) return 0;
+    return defaultLimit;
   }
 
   protected getSqlType(type: StorageColumn['type']): string {
@@ -156,6 +176,14 @@ export abstract class MastraStorage extends MastraBase {
   abstract saveMessages(
     args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
   ): Promise<MastraMessageV2[] | MastraMessageV1[]>;
+
+  abstract updateMessages(args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]>;
 
   abstract getTraces(args: StorageGetTracesArg): Promise<any[]>;
 
