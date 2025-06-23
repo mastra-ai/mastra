@@ -1686,6 +1686,286 @@ describe('PostgresStore', () => {
           );
         }
       });
+
+      it('should save and retrieve messages', async () => {
+        const thread = createSampleThread();
+        await store.saveThread({ thread });
+
+        const messages = [
+          createSampleMessageV1({ threadId: thread.id }),
+          createSampleMessageV1({ threadId: thread.id }),
+        ];
+
+        // Save messages
+        const savedMessages = await store.saveMessages({ messages });
+        expect(savedMessages).toEqual(messages);
+
+        // Retrieve messages
+        const retrievedMessages = await store.getMessagesPaginated({ threadId: thread.id, format: 'v1' });
+        expect(retrievedMessages.messages).toHaveLength(2);
+        const checkMessages = messages.map(m => {
+          const { resourceId, ...rest } = m;
+          return rest;
+        });
+        expect(retrievedMessages.messages).toEqual(expect.arrayContaining(checkMessages));
+      });
+
+      it('should maintain message order', async () => {
+        const thread = createSampleThread();
+        await store.saveThread({ thread });
+
+        const messageContent = ['First', 'Second', 'Third'];
+
+        const messages = messageContent.map(content =>
+          createSampleMessageV2({
+            threadId: thread.id,
+            content: { content, parts: [{ type: 'text', text: content }] },
+          }),
+        );
+
+        await store.saveMessages({ messages, format: 'v2' });
+
+        const retrievedMessages = await store.getMessagesPaginated({ threadId: thread.id, format: 'v2' });
+        expect(retrievedMessages.messages).toHaveLength(3);
+
+        // Verify order is maintained
+        retrievedMessages.messages.forEach((msg, idx) => {
+          expect((msg.content.parts[0] as any).text).toEqual(messageContent[idx]);
+        });
+      });
+
+      it('should rollback on error during message save', async () => {
+        const thread = createSampleThread();
+        await store.saveThread({ thread });
+
+        const messages = [
+          createSampleMessageV1({ threadId: thread.id }),
+          { ...createSampleMessageV1({ threadId: thread.id }), id: null } as any, // This will cause an error
+        ];
+
+        await expect(store.saveMessages({ messages })).rejects.toThrow();
+
+        // Verify no messages were saved
+        const savedMessages = await store.getMessagesPaginated({ threadId: thread.id, format: 'v2' });
+        expect(savedMessages.messages).toHaveLength(0);
+      });
+
+      it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
+        const thread = createSampleThread({ id: 'thread-one' });
+        await store.saveThread({ thread });
+
+        const thread2 = createSampleThread({ id: 'thread-two' });
+        await store.saveThread({ thread: thread2 });
+
+        const thread3 = createSampleThread({ id: 'thread-three' });
+        await store.saveThread({ thread: thread3 });
+
+        const messages: MastraMessageV2[] = [
+          createSampleMessageV2({
+            threadId: 'thread-one',
+            content: { content: 'First' },
+            resourceId: 'cross-thread-resource',
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-one',
+            content: { content: 'Second' },
+            resourceId: 'cross-thread-resource',
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-one',
+            content: { content: 'Third' },
+            resourceId: 'cross-thread-resource',
+          }),
+
+          createSampleMessageV2({
+            threadId: 'thread-two',
+            content: { content: 'Fourth' },
+            resourceId: 'cross-thread-resource',
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-two',
+            content: { content: 'Fifth' },
+            resourceId: 'cross-thread-resource',
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-two',
+            content: { content: 'Sixth' },
+            resourceId: 'cross-thread-resource',
+          }),
+
+          createSampleMessageV2({
+            threadId: 'thread-three',
+            content: { content: 'Seventh' },
+            resourceId: 'other-resource',
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-three',
+            content: { content: 'Eighth' },
+            resourceId: 'other-resource',
+          }),
+        ];
+
+        await store.saveMessages({ messages: messages, format: 'v2' });
+
+        const retrievedMessages = await store.getMessagesPaginated({ threadId: 'thread-one', format: 'v2' });
+        expect(retrievedMessages.messages).toHaveLength(3);
+        expect(retrievedMessages.messages.map((m: any) => m.content.parts[0].text)).toEqual([
+          'First',
+          'Second',
+          'Third',
+        ]);
+
+        const retrievedMessages2 = await store.getMessagesPaginated({ threadId: 'thread-two', format: 'v2' });
+        expect(retrievedMessages2.messages).toHaveLength(3);
+        expect(retrievedMessages2.messages.map((m: any) => m.content.parts[0].text)).toEqual([
+          'Fourth',
+          'Fifth',
+          'Sixth',
+        ]);
+
+        const retrievedMessages3 = await store.getMessagesPaginated({ threadId: 'thread-three', format: 'v2' });
+        expect(retrievedMessages3.messages).toHaveLength(2);
+        expect(retrievedMessages3.messages.map((m: any) => m.content.parts[0].text)).toEqual(['Seventh', 'Eighth']);
+
+        const { messages: crossThreadMessages } = await store.getMessagesPaginated({
+          threadId: 'thread-doesnt-exist',
+          format: 'v2',
+          selectBy: {
+            last: 0,
+            include: [
+              {
+                id: messages[1].id,
+                threadId: 'thread-one',
+                withNextMessages: 2,
+                withPreviousMessages: 2,
+              },
+              {
+                id: messages[4].id,
+                threadId: 'thread-two',
+                withPreviousMessages: 2,
+                withNextMessages: 2,
+              },
+            ],
+          },
+        });
+
+        expect(crossThreadMessages).toHaveLength(6);
+        expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+        expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+
+        const crossThreadMessages2 = await store.getMessagesPaginated({
+          threadId: 'thread-one',
+          format: 'v2',
+          selectBy: {
+            last: 0,
+            include: [
+              {
+                id: messages[4].id,
+                threadId: 'thread-two',
+                withPreviousMessages: 1,
+                withNextMessages: 1,
+              },
+            ],
+          },
+        });
+
+        expect(crossThreadMessages2.messages).toHaveLength(3);
+        expect(crossThreadMessages2.messages.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
+        expect(crossThreadMessages2.messages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+
+        const crossThreadMessages3 = await store.getMessagesPaginated({
+          threadId: 'thread-two',
+          format: 'v2',
+          selectBy: {
+            last: 0,
+            include: [
+              {
+                id: messages[1].id,
+                threadId: 'thread-one',
+                withNextMessages: 1,
+                withPreviousMessages: 1,
+              },
+            ],
+          },
+        });
+
+        expect(crossThreadMessages3.messages).toHaveLength(3);
+        expect(crossThreadMessages3.messages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+        expect(crossThreadMessages3.messages.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
+      });
+
+      it('should return messages using both last and include (cross-thread, deduped)', async () => {
+        const thread = createSampleThread({ id: 'thread-one' });
+        await store.saveThread({ thread });
+
+        const thread2 = createSampleThread({ id: 'thread-two' });
+        await store.saveThread({ thread: thread2 });
+
+        const now = new Date();
+
+        // Setup: create messages in two threads
+        const messages = [
+          createSampleMessageV2({
+            threadId: 'thread-one',
+            content: { content: 'A' },
+            createdAt: new Date(now.getTime()),
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-one',
+            content: { content: 'B' },
+            createdAt: new Date(now.getTime() + 1000),
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-one',
+            content: { content: 'C' },
+            createdAt: new Date(now.getTime() + 2000),
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-two',
+            content: { content: 'D' },
+            createdAt: new Date(now.getTime() + 3000),
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-two',
+            content: { content: 'E' },
+            createdAt: new Date(now.getTime() + 4000),
+          }),
+          createSampleMessageV2({
+            threadId: 'thread-two',
+            content: { content: 'F' },
+            createdAt: new Date(now.getTime() + 5000),
+          }),
+        ];
+        await store.saveMessages({ messages, format: 'v2' });
+
+        // Use last: 2 and include a message from another thread with context
+        const { messages: result } = await store.getMessagesPaginated({
+          threadId: 'thread-one',
+          format: 'v2',
+          selectBy: {
+            last: 2,
+            include: [
+              {
+                id: messages[4].id, // 'E' from thread-bar
+                threadId: 'thread-two',
+                withPreviousMessages: 1,
+                withNextMessages: 1,
+              },
+            ],
+          },
+        });
+
+        // Should include last 2 from thread-one and 3 from thread-two (D, E, F)
+        expect(result.map(m => m.content.content).sort()).toEqual(['B', 'C', 'D', 'E', 'F']);
+        // Should include 2 from thread-one
+        expect(result.filter(m => m.threadId === 'thread-one').map((m: any) => m.content.content)).toEqual(['B', 'C']);
+        // Should include 3 from thread-two
+        expect(result.filter(m => m.threadId === 'thread-two').map((m: any) => m.content.content)).toEqual([
+          'D',
+          'E',
+          'F',
+        ]);
+      });
     });
 
     describe('getThreadsByResourceId with pagination', () => {
