@@ -1728,8 +1728,6 @@ describe('PostgresStore', () => {
         const retrievedMessages = await store.getMessagesPaginated({ threadId: thread.id, format: 'v2' });
         expect(retrievedMessages.messages).toHaveLength(3);
 
-        console.log(JSON.stringify(retrievedMessages.messages, null, 2));
-
         // Verify order is maintained
         retrievedMessages.messages.forEach((msg, idx) => {
           expect((msg.content.parts[0] as any).text).toEqual(messageContent[idx]);

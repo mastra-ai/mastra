@@ -359,7 +359,6 @@ export function createTestSuite(storage: MastraStorage) {
 
         const messages = [
           createSampleMessageV1({ threadId: thread.id }),
-          // @ts-ignore
           { ...createSampleMessageV1({ threadId: thread.id }), id: null }, // This will cause an error
         ] as MastraMessageV1[];
 
@@ -1320,7 +1319,6 @@ export function createTestSuite(storage: MastraStorage) {
 
         const messages = [
           createSampleMessageV1({ threadId: thread.id }),
-          // @ts-ignore
           { ...createSampleMessageV1({ threadId: thread.id }), id: null }, // This will cause an error
         ] as MastraMessageV1[];
 
