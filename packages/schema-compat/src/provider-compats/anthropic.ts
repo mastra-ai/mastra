@@ -19,9 +19,8 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
 
   processZodType(value: ZodTypeAny): ZodTypeAny {
     if (isOptional(value)) {
-      const handleTypes: AllZodType[] = ['ZodObject', 'ZodArray', 'ZodUnion', 'ZodNever', 'ZodUndefined'];
+      const handleTypes: AllZodType[] = ['ZodObject', 'ZodArray', 'ZodUnion', 'ZodNever', 'ZodUndefined', 'ZodTuple'];
       if (this.getModel().modelId.includes('claude-3.5-haiku')) handleTypes.push('ZodString');
-      if (this.getModel().modelId.includes('claude-3.7')) handleTypes.push('ZodTuple');
       return this.defaultZodOptionalHandler(value, handleTypes);
     } else if (isObj(value)) {
       return this.defaultZodObjectHandler(value);
@@ -40,10 +39,6 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
       }
     }
 
-    if (this.getModel().modelId.includes('claude-3.7')) {
-      return this.defaultUnsupportedZodTypeHandler(value, ['ZodNever', 'ZodTuple', 'ZodUndefined']);
-    } else {
-      return this.defaultUnsupportedZodTypeHandler(value, ['ZodNever', 'ZodUndefined']);
-    }
+    return this.defaultUnsupportedZodTypeHandler(value, ['ZodNever', 'ZodTuple', 'ZodUndefined']);
   }
 }

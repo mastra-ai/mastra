@@ -32,7 +32,7 @@
     "js-tiktoken": "^1.0.20",
     "node-html-better-parser": "^1.4.11",
     "pathe": "^2.0.3",
-    "zod": "^3.25.57"
+    "zod": "^3.25.67"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.0-alpha.0",
