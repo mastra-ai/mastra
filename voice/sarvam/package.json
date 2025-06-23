@@ -30,7 +30,7 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "zod": "^3.25.57"
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
