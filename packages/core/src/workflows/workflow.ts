@@ -1011,7 +1011,7 @@ export class Workflow<
     getStepResult<T extends Step<any, any, any, any, any, TEngineType>>(
       stepId: T,
     ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
-    suspend: (suspendPayload: any) => Promise<void>;
+    suspend: (suspendPayload: any) => Promise<any>;
     resume?: {
       steps: string[];
       resumePayload: any;

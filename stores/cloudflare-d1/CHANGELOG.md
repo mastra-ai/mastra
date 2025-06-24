@@ -1,5 +1,16 @@
 # @mastra/cloudflare-d1
 
+## 0.11.1-alpha.2
+
+### Patch Changes
+
+- 0fb9d64: [MASTRA-4018] Update saveMessages in storage adapters to upsert messages
+- Updated dependencies [15e9d26]
+- Updated dependencies [07d6d88]
+- Updated dependencies [5d74aab]
+- Updated dependencies [144eb0b]
+  - @mastra/core@0.10.7-alpha.2
+
 ## 0.11.1-alpha.1
 
 ### Patch Changes

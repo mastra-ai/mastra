@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 0.10.7-alpha.2
+
+### Patch Changes
+
+- 15e9d26: Added per-resource working memory for LibSQL, Upstash, and PG
+- 07d6d88: Bump MCP SDK version and add tool output schema support to MCPServer and MCPClient
+- 5d74aab: Return isComplete of true in routing step when no resource is selected
+- 144eb0b: [MASTRA-3669] Metadata Filter Types
+- Updated dependencies [98bbe5a]
+  - @mastra/schema-compat@0.10.3-alpha.0
+
 ## 0.10.7-alpha.1
 
 ### Patch Changes
