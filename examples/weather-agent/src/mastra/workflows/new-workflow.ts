@@ -1,3 +1,4 @@
+import { stdout } from 'node:process';
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
@@ -163,7 +164,7 @@ const planActivities = createStep({
     let activitiesText = '';
 
     for await (const chunk of response.textStream) {
-      process.stdout.write(chunk);
+      stdout.write(chunk);
       activitiesText += chunk;
     }
 

@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs';
+import { cwd } from 'node:process';
 import path from 'path';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
@@ -3976,7 +3977,7 @@ describe('Workflow', () => {
 
   describe('Suspend and Resume', () => {
     afterAll(async () => {
-      const pathToDb = path.join(process.cwd(), 'mastra.db');
+      const pathToDb = path.join(cwd(), 'mastra.db');
 
       if (fs.existsSync(pathToDb)) {
         fs.rmSync(pathToDb);

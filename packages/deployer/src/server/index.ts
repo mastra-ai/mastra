@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { readFile } from 'fs/promises';
+import process from 'node:process';
 import { join } from 'path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';

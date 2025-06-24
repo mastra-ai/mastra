@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { createOpenAI } from '@ai-sdk/openai';
 import { embedMany } from 'ai';
 import { describe, it, expect, vi } from 'vitest';
@@ -17,7 +18,7 @@ Welcome to our comprehensive guide on modern web development. This resource cove
 `;
 
 const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: env.OPENAI_API_KEY,
 });
 
 vi.setConfig({ testTimeout: 10_000, hookTimeout: 10_000 });

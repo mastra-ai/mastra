@@ -1,5 +1,6 @@
 import fs from 'fs';
 import fsPromises from 'fs/promises';
+import process from 'node:process';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { MastraBase } from '@mastra/core/base';

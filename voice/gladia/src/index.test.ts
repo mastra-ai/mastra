@@ -1,5 +1,6 @@
 import { createReadStream } from 'fs';
 import path from 'path';
+import process from 'process';
 import { describe, it, expect } from 'vitest';
 import { GladiaVoice } from './index';
 

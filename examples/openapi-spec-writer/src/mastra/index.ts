@@ -1,3 +1,4 @@
+import { env } from "node:process";
 import { PinoLogger } from "@mastra/loggers";
 import { Mastra } from "@mastra/core/mastra";
 import { UpstashTransport } from "@mastra/loggers/upstash";
@@ -10,8 +11,8 @@ export const mastra = new Mastra({
     level: "debug",
     transports: {
       upstash: new UpstashTransport({
-        upstashToken: process.env.UPSTASH_API_KEY!,
-        upstashUrl: process.env.UPSTASH_URL!,
+        upstashToken: env.UPSTASH_API_KEY!,
+        upstashUrl: env.UPSTASH_URL!,
       }),
     },
   }),

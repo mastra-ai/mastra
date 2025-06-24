@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import type { ResolveHookContext } from 'node:module';
 import { builtinModules } from 'node:module';
 import { join } from 'node:path';
+import { cwd } from 'node:process';
 import { pathToFileURL } from 'node:url';
 
 const cache = new Map<string, Record<string, string>>();
@@ -43,7 +44,7 @@ async function getParentPath(specifier: string, url: string): Promise<string | n
   if (!cache.size) {
     const moduleResolveMap = JSON.parse(
       // cwd refers to the output/build directory
-      await readFile(join(process.cwd(), 'module-resolve-map.json'), 'utf-8'),
+      await readFile(join(cwd(), 'module-resolve-map.json'), 'utf-8'),
     ) as Record<string, Record<string, string>>;
 
     for (const [id, rest] of Object.entries(moduleResolveMap)) {

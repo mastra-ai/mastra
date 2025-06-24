@@ -1,0 +1,51 @@
+---
+'@mastra/mcp-registry-registry': patch
+'@mastra/voice-openai-realtime': patch
+'@mastra/mcp-docs-server': patch
+'@mastra/firecrawl': patch
+'create-mastra': patch
+'@mastra/client-js': patch
+'@mastra/deployer-cloudflare': patch
+'@mastra/cloudflare-d1': patch
+'@mastra/github': patch
+'@mastra/ragie': patch
+'@mastra/turbopuffer': patch
+'@mastra/deployer-netlify': patch
+'@mastra/mem0': patch
+'@mastra/deployer': patch
+'@mastra/clickhouse': patch
+'@mastra/cloudflare': patch
+'@mastra/inngest': patch
+'@mastra/deployer-vercel': patch
+'@mastra/vectorize': patch
+'@mastra/voice-cloudflare': patch
+'@mastra/voice-elevenlabs': patch
+'@mastra/pinecone': patch
+'@mastra/voice-speechify': patch
+'@mastra/cloud': patch
+'@mastra/evals': patch
+'@mastra/mongodb': patch
+'@mastra/upstash': patch
+'@mastra/voice-deepgram': patch
+'@mastra/auth-firebase': patch
+'@mastra/auth-supabase': patch
+'@mastra/auth': patch
+'@mastra/core': patch
+'mastra': patch
+'@mastra/mcp': patch
+'@mastra/rag': patch
+'@mastra/astra': patch
+'@mastra/lance': patch
+'@mastra/voice-google': patch
+'@mastra/voice-openai': patch
+'@mastra/voice-playai': patch
+'@mastra/voice-sarvam': patch
+'@mastra/auth-workos': patch
+'@mastra/voice-azure': patch
+'@mastra/auth-auth0': patch
+'@mastra/auth-clerk': patch
+'@mastra/voice-murf': patch
+'@mastra/pg': patch
+---
+
+Make global process compatible with Deno

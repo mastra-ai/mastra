@@ -1,3 +1,4 @@
+import { exit } from 'node:process';
 import { spawn as nodeSpawn } from 'child_process';
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
@@ -6,7 +7,7 @@ import { fileURLToPath } from 'url';
 const dir = process.argv[2];
 if (!dir) {
   console.error('Usage: node scripts/ignore-example.js <directory>');
-  process.exit(1);
+  exit(1);
 }
 
 /**
@@ -135,4 +136,4 @@ if (ignored) {
   }
 }
 
-process.exit(ignored ? 0 : 1);
+exit(ignored ? 0 : 1);

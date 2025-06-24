@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { env } from 'node:process';
 import * as os from 'os';
 import * as path from 'path';
 import type { MCPServer } from '@mastra/mcp';
@@ -88,7 +89,7 @@ export function createLogger(server?: MCPServer): Logger {
       await sendLog('error', message, errorData);
     },
     debug: async (message: string, data?: any) => {
-      if (process.env.DEBUG || process.env.NODE_ENV === 'development') {
+      if (env.DEBUG || env.NODE_ENV === 'development') {
         await sendLog('debug', message, data);
       }
     },

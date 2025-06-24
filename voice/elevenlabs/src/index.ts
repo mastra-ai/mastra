@@ -1,4 +1,5 @@
 import { File } from 'node:buffer';
+import { env } from 'node:process';
 import { MastraVoice } from '@mastra/core/voice';
 import { ElevenLabsClient } from 'elevenlabs';
 
@@ -50,7 +51,7 @@ export class ElevenLabsVoice extends MastraVoice {
     listeningModel,
     speaker,
   }: { speechModel?: ElevenLabsVoiceConfig; listeningModel?: ElevenLabsVoiceConfig; speaker?: string } = {}) {
-    const apiKey = speechModel?.apiKey ?? process.env.ELEVENLABS_API_KEY;
+    const apiKey = speechModel?.apiKey ?? env.ELEVENLABS_API_KEY;
     super({
       speechModel: {
         name: speechModel?.name ?? 'eleven_multilingual_v2',

@@ -1,4 +1,5 @@
 #! /usr/bin/env node
+import { env, argv } from 'node:process';
 import { Command } from 'commander';
 
 import { config } from 'dotenv';
@@ -26,7 +27,7 @@ const analytics = new PosthogAnalytics({
 
 const program = new Command();
 
-const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
+const origin = env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 
 program
   .version(`${version}`, '-v, --version')
@@ -256,7 +257,7 @@ program
     });
   });
 
-program.parse(process.argv);
+program.parse(argv);
 
 export { create } from './commands/create/create';
 export { PosthogAnalytics } from './analytics/index';

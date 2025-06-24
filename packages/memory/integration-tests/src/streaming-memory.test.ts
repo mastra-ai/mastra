@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { UUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import path from 'node:path';
+import { kill } from 'node:process';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
 import { Agent } from '@mastra/core/agent';
@@ -168,7 +169,7 @@ describe('Memory Streaming Tests', () => {
       // Kill the server and its process group
       if (mastraServer?.pid) {
         try {
-          process.kill(-mastraServer.pid, 'SIGTERM');
+          kill(-mastraServer.pid, 'SIGTERM');
         } catch (e) {
           console.error('Failed to kill Mastra server:', e);
         }

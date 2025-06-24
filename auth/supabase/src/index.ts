@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 import { MastraAuthProvider } from '@mastra/core/server';
 
@@ -15,8 +16,8 @@ export class MastraAuthSupabase extends MastraAuthProvider<User> {
   constructor(options?: MastraAuthSupabaseOptions) {
     super({ name: options?.name ?? 'supabase' });
 
-    const supabaseUrl = options?.url ?? process.env.SUPABASE_URL;
-    const supabaseAnonKey = options?.anonKey ?? process.env.SUPABASE_ANON_KEY;
+    const supabaseUrl = options?.url ?? env.SUPABASE_URL;
+    const supabaseAnonKey = options?.anonKey ?? env.SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey) {
       throw new Error(

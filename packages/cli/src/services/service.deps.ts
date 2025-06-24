@@ -1,5 +1,6 @@
 import fs from 'fs';
 import fsPromises from 'fs/promises';
+import { cwd } from 'node:process';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execa } from 'execa';
@@ -28,7 +29,7 @@ export class DepsService {
   }
 
   private getPackageManager(): string {
-    const lockFile = this.findLockFile(process.cwd());
+    const lockFile = this.findLockFile(cwd());
     switch (lockFile) {
       case 'pnpm-lock.yaml':
         return 'pnpm';
@@ -61,7 +62,7 @@ export class DepsService {
 
   public async checkDependencies(dependencies: string[]): Promise<string> {
     try {
-      const packageJsonPath = path.join(process.cwd(), 'package.json');
+      const packageJsonPath = path.join(cwd(), 'package.json');
 
       try {
         await fsPromises.access(packageJsonPath);
@@ -85,7 +86,7 @@ export class DepsService {
 
   public async getProjectName() {
     try {
-      const packageJsonPath = path.join(process.cwd(), 'package.json');
+      const packageJsonPath = path.join(cwd(), 'package.json');
       const packageJson = await fsPromises.readFile(packageJsonPath, 'utf-8');
       const pkg = JSON.parse(packageJson);
       return pkg.name;

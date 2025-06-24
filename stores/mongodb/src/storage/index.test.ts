@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { env } from 'node:process';
 import type { MastraMessageV1, MastraMessageV2, MetricResult, WorkflowRunState } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
@@ -140,8 +141,8 @@ class Test {
 }
 
 const TEST_CONFIG: MongoDBConfig = {
-  url: process.env.MONGODB_URL || 'mongodb://localhost:27017',
-  dbName: process.env.MONGODB_DB_NAME || 'mastra-test-db',
+  url: env.MONGODB_URL || 'mongodb://localhost:27017',
+  dbName: env.MONGODB_DB_NAME || 'mastra-test-db',
 };
 
 describe('MongoDBStore', () => {

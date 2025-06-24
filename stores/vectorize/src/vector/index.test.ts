@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { env } from 'node:process';
 import type { QueryResult } from '@mastra/core';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
@@ -240,8 +241,8 @@ describe('CloudflareVector', () => {
 
   beforeAll(() => {
     // Load from environment variables for CI/CD
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+    const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+    const apiToken = env.CLOUDFLARE_API_TOKEN;
 
     if (!accountId || !apiToken) {
       throw new Error(

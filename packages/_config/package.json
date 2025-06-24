@@ -16,6 +16,7 @@
   "dependencies": {
     "@vitest/eslint-plugin": "^1.2.7",
     "eslint-plugin-import-x": "^4.15.2",
+    "eslint-plugin-n": "^17.19.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-testing-library": "^7.5.3",

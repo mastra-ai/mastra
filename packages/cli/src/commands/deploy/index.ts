@@ -1,3 +1,4 @@
+import { cwd } from 'node:process';
 import { join } from 'path';
 import { getDeployer } from '@mastra/deployer';
 
@@ -5,9 +6,9 @@ import { FileService } from '../../services/service.file';
 import { logger } from '../../utils/logger';
 
 export async function deploy({ dir }: { dir?: string }) {
-  let mastraDir = dir || join(process.cwd(), 'src/mastra');
+  let mastraDir = dir || join(cwd(), 'src/mastra');
   try {
-    const outputDirectory = join(process.cwd(), '.mastra');
+    const outputDirectory = join(cwd(), '.mastra');
     const fs = new FileService();
     const mastraEntryFile = fs.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
     const deployer = await getDeployer(mastraEntryFile, outputDirectory);

@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { env } from 'node:process';
 import type {
   CoreMessage,
   GenerateObjectResult,
@@ -1126,7 +1127,7 @@ export class Agent<
   }) {
     return {
       before: async () => {
-        if (process.env.NODE_ENV !== 'test') {
+        if (env.NODE_ENV !== 'test') {
           this.logger.debug(`[Agents:${this.name}] - Starting generation`, { runId });
         }
 

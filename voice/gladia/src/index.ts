@@ -1,3 +1,4 @@
+import process from 'process';
 import type { Readable } from 'stream';
 import { MastraVoice } from '@mastra/core/voice';
 

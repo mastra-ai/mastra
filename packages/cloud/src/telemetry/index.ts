@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { ExportResultCode } from '@opentelemetry/core';
 import type { ExportResult } from '@opentelemetry/core';
@@ -21,16 +22,16 @@ class MastraCloudExporter implements SpanExporter {
   private logger?: IMastraLogger;
 
   constructor({ accessToken, endpoint, logger }: MastraCloudExporterOptions = {}) {
-    if (!accessToken && !process.env.MASTRA_CLOUD_ACCESS_TOKEN) {
+    if (!accessToken && !env.MASTRA_CLOUD_ACCESS_TOKEN) {
       throw new Error('Mastra Cloud Access Token is required');
     }
 
-    if (!endpoint && !process.env.MASTRA_CLOUD_ENDPOINT) {
+    if (!endpoint && !env.MASTRA_CLOUD_ENDPOINT) {
       throw new Error('Mastra Cloud Endpoint is required');
     }
 
-    this.accessToken = accessToken ?? process.env.MASTRA_CLOUD_ACCESS_TOKEN!;
-    this.endpoint = endpoint ?? process.env.MASTRA_CLOUD_ENDPOINT!;
+    this.accessToken = accessToken ?? env.MASTRA_CLOUD_ACCESS_TOKEN!;
+    this.endpoint = endpoint ?? env.MASTRA_CLOUD_ENDPOINT!;
     this.serializer = JsonTraceSerializer;
 
     if (logger) {

@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { PassThrough } from 'stream';
 
 import { createClient } from '@deepgram/sdk';
@@ -22,7 +23,7 @@ export class DeepgramVoice extends MastraVoice {
     listeningModel,
     speaker,
   }: { speechModel?: DeepgramVoiceConfig; listeningModel?: DeepgramVoiceConfig; speaker?: DeepgramVoiceId } = {}) {
-    const defaultApiKey = process.env.DEEPGRAM_API_KEY;
+    const defaultApiKey = env.DEEPGRAM_API_KEY;
 
     const defaultSpeechModel = {
       name: 'aura',

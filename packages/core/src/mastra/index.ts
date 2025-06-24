@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
@@ -146,8 +147,7 @@ export class Mastra<
       if (config?.logger) {
         logger = config.logger;
       } else {
-        const levelOnEnv =
-          process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
+        const levelOnEnv = env.NODE_ENV === 'production' && env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
         logger = new ConsoleLogger({ name: 'Mastra', level: levelOnEnv }) as unknown as TLogger;
       }
     }

@@ -1,3 +1,4 @@
+import { env } from "node:process";
 import { NextConfig } from "next";
 import path from "path";
 
@@ -14,7 +15,7 @@ const nextConfig: NextConfig = {
     ],
   },
   generateBuildId: async () => {
-    return process.env.VERCEL_GIT_COMMIT_SHA || "stable-build";
+    return env.VERCEL_GIT_COMMIT_SHA || "stable-build";
   },
 
   webpack: (config, { isServer }) => {

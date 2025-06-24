@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { createSampleMessageV1, createSampleThread, checkWorkflowSnapshot } from '@internal/storage-test-utils';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
@@ -22,8 +23,8 @@ dotenv.config();
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
 const TEST_CONFIG: CloudflareStoreConfig = {
-  accountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
-  apiToken: process.env.CLOUDFLARE_API_TOKEN || '',
+  accountId: env.CLOUDFLARE_ACCOUNT_ID || '',
+  apiToken: env.CLOUDFLARE_API_TOKEN || '',
   namespacePrefix: 'mastra-test', // Fixed prefix for test isolation
 };
 

@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { MastraAuthProvider } from '@mastra/core/server';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 
@@ -15,7 +16,7 @@ export class MastraJwtAuth extends MastraAuthProvider<JwtUser> {
   constructor(options?: MastraJwtAuthOptions) {
     super({ name: options?.name ?? 'jwt' });
 
-    this.secret = options?.secret ?? process.env.JWT_AUTH_SECRET ?? '';
+    this.secret = options?.secret ?? env.JWT_AUTH_SECRET ?? '';
 
     if (!this.secret) {
       throw new Error('JWT auth secret is required');

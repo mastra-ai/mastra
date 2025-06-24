@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { env } from 'node:process';
 import {
   createSampleMessageV1,
   createSampleThread,
@@ -17,9 +18,9 @@ import type { ClickhouseConfig } from '.';
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const TEST_CONFIG: ClickhouseConfig = {
-  url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
-  username: process.env.CLICKHOUSE_USERNAME || 'default',
-  password: process.env.CLICKHOUSE_PASSWORD || 'password',
+  url: env.CLICKHOUSE_URL || 'http://localhost:8123',
+  username: env.CLICKHOUSE_USERNAME || 'default',
+  password: env.CLICKHOUSE_PASSWORD || 'password',
   ttl: {
     mastra_traces: {
       row: { interval: 10, unit: 'SECOND' },

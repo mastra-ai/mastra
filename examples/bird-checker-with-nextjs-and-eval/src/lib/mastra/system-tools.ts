@@ -1,3 +1,5 @@
+import { env } from "node:process";
+
 export type Image = {
   alt_description: string;
   urls: {
@@ -38,7 +40,7 @@ export const getRandomImage = async ({
       {
         method: "GET",
         headers: {
-          Authorization: `Client-ID ${process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY}`,
+          Authorization: `Client-ID ${env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY}`,
           "Accept-Version": "v1",
         },
         cache: "no-store",

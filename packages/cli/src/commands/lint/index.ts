@@ -1,4 +1,5 @@
 import { readFileSync } from 'fs';
+import { cwd } from 'node:process';
 import { join } from 'path';
 import { getDeployer } from '@mastra/deployer';
 import { FileService } from '../../services/service.file.js';
@@ -50,12 +51,8 @@ function getMastraPackages(packageJson: PackageJson): MastraPackage[] {
 
 export async function lint({ dir, root, tools }: { dir?: string; root?: string; tools?: string[] }): Promise<boolean> {
   try {
-    const rootDir = root || process.cwd();
-    const mastraDir = dir
-      ? dir.startsWith('/')
-        ? dir
-        : join(process.cwd(), dir)
-      : join(process.cwd(), 'src', 'mastra');
+    const rootDir = root || cwd();
+    const mastraDir = dir ? (dir.startsWith('/') ? dir : join(cwd(), dir)) : join(cwd(), 'src', 'mastra');
     const outputDirectory = join(rootDir, '.mastra');
 
     const defaultToolsPath = join(mastraDir, 'tools');

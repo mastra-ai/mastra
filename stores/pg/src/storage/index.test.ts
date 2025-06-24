@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { env } from 'node:process';
 import {
   createSampleEval,
   createSampleTraceForDB,
@@ -27,11 +28,11 @@ import { PostgresStore } from '.';
 import type { PostgresConfig } from '.';
 
 const TEST_CONFIG: PostgresConfig = {
-  host: process.env.POSTGRES_HOST || 'localhost',
-  port: Number(process.env.POSTGRES_PORT) || 5434,
-  database: process.env.POSTGRES_DB || 'postgres',
-  user: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || 'postgres',
+  host: env.POSTGRES_HOST || 'localhost',
+  port: Number(env.POSTGRES_PORT) || 5434,
+  database: env.POSTGRES_DB || 'postgres',
+  user: env.POSTGRES_USER || 'postgres',
+  password: env.POSTGRES_PASSWORD || 'postgres',
 };
 
 const connectionString = `postgresql://${TEST_CONFIG.user}:${TEST_CONFIG.password}@${TEST_CONFIG.host}:${TEST_CONFIG.port}/${TEST_CONFIG.database}`;

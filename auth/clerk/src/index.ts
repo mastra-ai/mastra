@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { createClerkClient } from '@clerk/backend';
 import type { ClerkClient } from '@clerk/backend';
 import { verifyJwks } from '@mastra/auth';
@@ -20,9 +21,9 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> {
   constructor(options?: MastraAuthClerkOptions) {
     super({ name: options?.name ?? 'clerk' });
 
-    const jwksUri = options?.jwksUri ?? process.env.CLERK_JWKS_URI;
-    const secretKey = options?.secretKey ?? process.env.CLERK_SECRET_KEY;
-    const publishableKey = options?.publishableKey ?? process.env.CLERK_PUBLISHABLE_KEY;
+    const jwksUri = options?.jwksUri ?? env.CLERK_JWKS_URI;
+    const secretKey = options?.secretKey ?? env.CLERK_SECRET_KEY;
+    const publishableKey = options?.publishableKey ?? env.CLERK_PUBLISHABLE_KEY;
 
     if (!jwksUri || !secretKey || !publishableKey) {
       throw new Error(

@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 
 import { AstraVector } from './';
@@ -65,9 +66,9 @@ describe.skip('AstraVector Integration Tests', () => {
 
   beforeAll(async () => {
     // Ensure required environment variables are set
-    const token = process.env.ASTRA_DB_TOKEN;
-    const endpoint = process.env.ASTRA_DB_ENDPOINT;
-    const keyspace = process.env.ASTRA_DB_KEYSPACE;
+    const token = env.ASTRA_DB_TOKEN;
+    const endpoint = env.ASTRA_DB_ENDPOINT;
+    const keyspace = env.ASTRA_DB_KEYSPACE;
 
     if (!token || !endpoint) {
       throw new Error('Please set ASTRA_DB_TOKEN and ASTRA_DB_ENDPOINT environment variables');

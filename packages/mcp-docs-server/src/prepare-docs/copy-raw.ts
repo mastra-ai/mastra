@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { exit } from 'node:process';
 import { fromPackageRoot, fromRepoRoot, log } from '../utils.js';
 
 const DOCS_SOURCE = fromRepoRoot('docs/src/content/en/docs');
@@ -46,6 +47,6 @@ export async function copyRaw() {
     log('✅ Documentation files copied successfully');
   } catch (error) {
     console.error('❌ Failed to copy documentation files:', error);
-    process.exit(1);
+    exit(1);
   }
 }
