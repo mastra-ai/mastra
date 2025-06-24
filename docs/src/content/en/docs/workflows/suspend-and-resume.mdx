@@ -69,7 +69,7 @@ A workflow can be resumed by calling `resume` and providing the required `resume
 ```typescript {6,12,13,14} filename="src/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
-const run = mastra.getWorkflow("testWorkflow").createRun();
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 const result = await run.start({
   inputData: { suggestions: ["London", "Paris", "New York"] }
@@ -125,7 +125,7 @@ const dowhileWorkflow = createWorkflow({
   )
   .commit();
 
-const run = dowhileWorkflow.createRun();
+const run = await dowhileWorkflow.createRunAsync();
 const result = await run.start({ inputData: { value: 0 } });
 
 if (result.status === "suspended") {
@@ -148,7 +148,7 @@ import { RuntimeContext } from "@mastra/core/di";
 import { mastra } from "./mastra";
 
 const runtimeContext = new RuntimeContext();
-const run = mastra.getWorkflow("testWorkflow").createRun();
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 const result = await run.start({
   inputData: { suggestions: ["London", "Paris", "New York"] },
