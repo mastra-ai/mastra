@@ -60,10 +60,6 @@ export class DevBundler extends Bundler {
     await this.writeInstrumentationFile(outputDir);
     await this.writePackageJson(outputDir, new Map(), {});
 
-    this.logger.info('Installing dependencies');
-    await this.installDependencies(outputDirectory);
-    this.logger.info('Done installing dependencies');
-
     const copyPublic = this.copyPublic.bind(this);
 
     const watcher = await createWatcher(

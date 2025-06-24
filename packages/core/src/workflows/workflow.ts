@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 import EventEmitter from 'events';
+import type { ReadableStream } from 'node:stream/web';
+import { TransformStream } from 'node:stream/web';
 import { z } from 'zod';
 import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
@@ -1009,7 +1011,7 @@ export class Workflow<
     getStepResult<T extends Step<any, any, any, any, any, TEngineType>>(
       stepId: T,
     ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
-    suspend: (suspendPayload: any) => Promise<void>;
+    suspend: (suspendPayload: any) => Promise<any>;
     resume?: {
       steps: string[];
       resumePayload: any;

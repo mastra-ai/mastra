@@ -44,6 +44,109 @@ describe('MastraInngestWorkflow', () => {
   });
 
   describe.sequential('Basic Workflow Execution', () => {
+    it('should be able to bail workflow execution', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ bail, inputData }) => {
+          if (inputData.value === 'bail') {
+            return bail({ result: 'bailed' });
+          }
+
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { result: 'step2: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1, step2],
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      });
+
+      const run = workflow.createRun();
+      const result = await run.start({ inputData: { value: 'bail' } });
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'bailed' },
+        payload: { value: 'bail' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toBeUndefined();
+
+      const run2 = workflow.createRun();
+      const result2 = await run2.start({ inputData: { value: 'no-bail' } });
+
+      srv.close();
+
+      expect(result2.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'step1: no-bail' },
+        payload: { value: 'no-bail' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result2.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'step2: step1: no-bail' },
+        payload: { result: 'step1: no-bail' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
     it('should execute a single step workflow successfully', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',

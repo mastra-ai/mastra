@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.10.7-alpha.1",
+  "version": "0.10.7-alpha.2",
   "license": "Elastic-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -48,6 +48,16 @@
       "require": {
         "types": "./dist/workflows/constants.d.cts",
         "default": "./dist/workflows/constants.cjs"
+      }
+    },
+    "./network/vNext": {
+      "import": {
+        "types": "./dist/network/vNext/index.d.ts",
+        "default": "./dist/network/vNext/index.js"
+      },
+      "require": {
+        "types": "./dist/network/vNext/index.d.cts",
+        "default": "./dist/network/vNext/index.cjs"
       }
     },
     "./vector/filter": {
@@ -130,6 +140,7 @@
     "hono-openapi": "^0.4.8",
     "json-schema": "^0.4.0",
     "json-schema-to-zod": "^2.6.1",
+    "zod-to-json-schema": "^3.24.5",
     "pino": "^9.7.0",
     "pino-pretty": "^13.0.0",
     "radash": "^12.1.0",
@@ -160,7 +171,7 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.3",
-    "zod": "^3.25.57"
+    "zod": "^3.25.67"
   },
   "engines": {
     "node": ">=20"

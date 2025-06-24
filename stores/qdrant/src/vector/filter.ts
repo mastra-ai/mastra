@@ -1,5 +1,103 @@
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
-import type { FieldCondition, VectorFilter, LogicalOperator, OperatorSupport } from '@mastra/core/vector/filter';
+import type {
+  VectorFilter,
+  LogicalOperator,
+  OperatorSupport,
+  OperatorValueMap,
+  LogicalOperatorValueMap,
+  BlacklistedRootOperators,
+} from '@mastra/core/vector/filter';
+
+type QdrantOperatorValueMap = Omit<OperatorValueMap, '$options' | '$elemMatch' | '$all'> & {
+  /**
+   * $count: Filter by array length or value count.
+   * Example: { tags: { $count: { gt: 2 } } }
+   */
+  $count: {
+    $gt?: number;
+    $gte?: number;
+    $lt?: number;
+    $lte?: number;
+    $eq?: number;
+  };
+
+  /**
+   * $geo: Geospatial filter.
+   * Example: { location: { $geo: { type: 'geo_radius', center: [lon, lat], radius: 1000 } } }
+   */
+  $geo: {
+    type: string;
+    [key: string]: any;
+  };
+
+  /**
+   * $hasId: Filter by point IDs.
+   * Allowed at root level.
+   * Example: { $hasId: '123' } or { $hasId: ['123', '456'] }
+   */
+  $hasId: string | string[];
+
+  /**
+   * $nested: Nested object filter.
+   * Example: { metadata: { $nested: { key: 'foo', filter: { $eq: 'bar' } } } }
+   */
+  $nested: {
+    // Additional properties depend on the nested object structure
+    [key: string]: any;
+  };
+
+  /**
+   * $hasVector: Filter by vector existence or field.
+   * Allowed at root level.
+   * Example: { $hasVector: true } or { $hasVector: 'vector_field' }
+   */
+  $hasVector: boolean | string;
+
+  /**
+   * $datetime: RFC 3339 datetime range.
+   * Example: { createdAt: { $datetime: { gte: '2024-01-01T00:00:00Z' } } }
+   */
+  $datetime: {
+    key?: string;
+    range?: {
+      gt?: Date | string;
+      gte?: Date | string;
+      lt?: Date | string;
+      lte?: Date | string;
+      eq?: Date | string;
+    };
+  };
+
+  /**
+   * $null: Check if a field is null.
+   * Example: { metadata: { $null: true } }
+   */
+  $null: boolean;
+
+  /**
+   * $empty: Check if an array or object field is empty.
+   * Example: { tags: { $empty: true } }
+   */
+  $empty: boolean;
+};
+
+type QdrantLogicalOperatorValueMap = Omit<LogicalOperatorValueMap, '$nor'>;
+
+type QdrantBlacklistedRootOperators =
+  | BlacklistedRootOperators
+  | '$count'
+  | '$geo'
+  | '$nested'
+  | '$datetime'
+  | '$null'
+  | '$empty';
+
+export type QdrantVectorFilter = VectorFilter<
+  keyof QdrantOperatorValueMap,
+  QdrantOperatorValueMap,
+  QdrantLogicalOperatorValueMap,
+  QdrantBlacklistedRootOperators
+>;
 
 /**
  * Translates MongoDB-style filters to Qdrant compatible filters.
@@ -20,7 +118,7 @@ import type { FieldCondition, VectorFilter, LogicalOperator, OperatorSupport } f
  * - $null -> is_null check
  * - $empty -> is_empty check
  */
-export class QdrantFilterTranslator extends BaseFilterTranslator {
+export class QdrantFilterTranslator extends BaseFilterTranslator<QdrantVectorFilter> {
   protected override isLogicalOperator(key: string): key is LogicalOperator {
     return super.isLogicalOperator(key) || key === '$hasId' || key === '$hasVector';
   }
@@ -35,7 +133,7 @@ export class QdrantFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter?: VectorFilter): VectorFilter {
+  translate(filter?: QdrantVectorFilter): QdrantVectorFilter {
     if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter);
     return this.translateNode(filter);
@@ -46,8 +144,8 @@ export class QdrantFilterTranslator extends BaseFilterTranslator {
     return fieldKey ? { key: fieldKey, ...condition } : condition;
   }
 
-  private translateNode(node: VectorFilter | FieldCondition, isNested: boolean = false, fieldKey?: string): any {
-    if (!this.isEmpty(node) && typeof node === 'object' && 'must' in node) {
+  private translateNode(node: QdrantVectorFilter, isNested: boolean = false, fieldKey?: string): any {
+    if (!this.isEmpty(node) && !!node && typeof node === 'object' && 'must' in node) {
       return node;
     }
 

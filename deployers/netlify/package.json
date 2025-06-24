@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-netlify",
-  "version": "0.10.7-alpha.1",
+  "version": "0.10.7-alpha.2",
   "description": "",
   "type": "module",
   "files": [
@@ -35,7 +35,7 @@
     "@rollup/plugin-virtual": "^3.0.2",
     "date-fns": "^4.1.0",
     "execa": "^9.6.0",
-    "zod": "^3.25.57"
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

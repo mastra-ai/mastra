@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import type { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent, Mastra, ToolExecutionContext, WorkflowRun, WorkflowRuns } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/di';
@@ -278,7 +279,7 @@ export class InngestRun<
     });
 
     return {
-      stream: readable,
+      stream: readable as ReadableStream<StreamEvent>,
       getWorkflowState: () => this.executionResults!,
     };
   }
@@ -1162,6 +1163,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     const stepRes = await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}`, async () => {
       let execResults: any;
       let suspended: { payload: any } | undefined;
+      let bailed: { payload: any } | undefined;
 
       try {
         const result = await step.execute({
@@ -1182,6 +1184,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           suspend: async (suspendPayload: any) => {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             suspended = { payload: suspendPayload };
+          },
+          bail: (result: any) => {
+            bailed = { payload: result };
           },
           resume: {
             steps: resume?.steps?.slice(1) || [],
@@ -1227,6 +1232,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
           resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
         };
+      } else if (bailed) {
+        execResults = { status: 'bailed', output: bailed.payload, payload: prevOutput, endedAt: Date.now(), startedAt };
       }
 
       if (execResults.status === 'failed') {
@@ -1397,6 +1404,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
                 // TODO: this function shouldn't have suspend probably?
                 suspend: async (_suspendPayload: any) => {},
+                bail: () => {},
                 [EMITTER_SYMBOL]: emitter,
                 engine: {
                   step: this.inngestStep,
