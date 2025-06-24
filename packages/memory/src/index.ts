@@ -3,13 +3,7 @@ import type { CoreTool, MastraMessageV1 } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
-import type {
-  MemoryConfig,
-  SharedMemoryConfig,
-  StorageThreadType,
-  WorkingMemoryFormat,
-  WorkingMemoryTemplate,
-} from '@mastra/core/memory';
+import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
 import type { CoreMessage, TextPart, UIMessage } from 'ai';
@@ -66,6 +60,16 @@ export class Memory extends MastraMemory {
     ) {
       throw new Error(
         `Memory error: Attached storage adapter "${this.storage.name || 'unknown'}" doesn't support semanticRecall: { scope: "resource" } yet and currently only supports per-thread semantic recall.`,
+      );
+    }
+
+    if (
+      config.workingMemory?.enabled &&
+      config.workingMemory.scope === `resource` &&
+      !this.storage.supports.resourceWorkingMemory
+    ) {
+      throw new Error(
+        `Memory error: Attached storage adapter "${this.storage.name || 'unknown'}" doesn't support workingMemory: { scope: "resource" } yet and currently only supports per-thread working memory. Supported adapters: LibSQL, PostgreSQL, Upstash.`,
       );
     }
   }
@@ -252,21 +256,41 @@ export class Memory extends MastraMemory {
   }): Promise<StorageThreadType> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
-    if (config.workingMemory?.enabled && !thread?.metadata?.workingMemory) {
-      // if working memory is enabled but the thread doesn't have it, we need to set it
-      let workingMemory = config.workingMemory.template || this.defaultWorkingMemoryTemplate;
+    if (config.workingMemory?.enabled) {
+      const scope = config.workingMemory.scope || 'thread';
 
-      if (config.workingMemory.schema) {
-        workingMemory = JSON.stringify(zodToJsonSchema(config.workingMemory.schema));
-      }
+      if (scope === 'resource' && thread.resourceId) {
+        // For resource scope, initialize working memory in resource table
+        const existingResource = await this.storage.getResourceById({ resourceId: thread.resourceId });
 
-      return this.storage.saveThread({
-        thread: deepMerge(thread, {
-          metadata: {
+        if (!existingResource?.workingMemory) {
+          let workingMemory = config.workingMemory.template || this.defaultWorkingMemoryTemplate;
+
+          if (config.workingMemory.schema) {
+            workingMemory = JSON.stringify(zodToJsonSchema(config.workingMemory.schema));
+          }
+
+          await this.storage.updateResource({
+            resourceId: thread.resourceId,
             workingMemory,
-          },
-        }),
-      });
+          });
+        }
+      } else if (scope === 'thread' && !thread?.metadata?.workingMemory) {
+        // For thread scope, initialize working memory in thread metadata (existing behavior)
+        let workingMemory = config.workingMemory.template || this.defaultWorkingMemoryTemplate;
+
+        if (config.workingMemory.schema) {
+          workingMemory = JSON.stringify(zodToJsonSchema(config.workingMemory.schema));
+        }
+
+        return this.storage.saveThread({
+          thread: deepMerge(thread, {
+            metadata: {
+              workingMemory,
+            },
+          }),
+        });
+      }
     }
 
     return this.storage.saveThread({ thread });
@@ -290,6 +314,49 @@ export class Memory extends MastraMemory {
 
   async deleteThread(threadId: string): Promise<void> {
     await this.storage.deleteThread({ threadId });
+  }
+
+  async updateWorkingMemory({
+    threadId,
+    resourceId,
+    workingMemory,
+    memoryConfig,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string;
+    memoryConfig?: MemoryConfig;
+  }): Promise<void> {
+    const config = this.getMergedThreadConfig(memoryConfig || {});
+
+    if (!config.workingMemory?.enabled) {
+      throw new Error('Working memory is not enabled for this memory instance');
+    }
+
+    const scope = config.workingMemory.scope || 'thread';
+
+    if (scope === 'resource' && resourceId) {
+      // Update working memory in resource table
+      await this.storage.updateResource({
+        resourceId,
+        workingMemory,
+      });
+    } else {
+      // Update working memory in thread metadata (existing behavior)
+      const thread = await this.storage.getThreadById({ threadId });
+      if (!thread) {
+        throw new Error(`Thread ${threadId} not found`);
+      }
+
+      await this.storage.updateThread({
+        id: threadId,
+        title: thread.title || 'Untitled Thread',
+        metadata: {
+          ...thread.metadata,
+          workingMemory,
+        },
+      });
+    }
   }
 
   private chunkText(text: string, tokenSize = 4096) {
@@ -555,26 +622,36 @@ export class Memory extends MastraMemory {
 
   public async getWorkingMemory({
     threadId,
-    format,
+    resourceId,
+    memoryConfig,
   }: {
     threadId: string;
-    format?: WorkingMemoryFormat;
+    resourceId?: string;
+    memoryConfig?: MemoryConfig;
   }): Promise<string | null> {
-    if (!this.threadConfig.workingMemory?.enabled) {
+    const config = this.getMergedThreadConfig(memoryConfig || {});
+    if (!config.workingMemory?.enabled) {
       return null;
     }
 
-    const thread = await this.storage.getThreadById({ threadId });
+    const scope = config.workingMemory.scope || 'thread';
+    let workingMemoryData: string | null = null;
 
-    if (format === 'json') {
-      try {
-        return JSON.parse(thread?.metadata?.workingMemory as string) || null;
-      } catch (e) {
-        this.logger.error('Unable to parse working memory as JSON. Returning string.', e);
-      }
+    if (scope === 'resource' && resourceId) {
+      // Get working memory from resource table
+      const resource = await this.storage.getResourceById({ resourceId });
+      workingMemoryData = resource?.workingMemory || null;
+    } else {
+      // Get working memory from thread metadata (default behavior)
+      const thread = await this.storage.getThreadById({ threadId });
+      workingMemoryData = thread?.metadata?.workingMemory as string;
     }
 
-    return thread?.metadata?.workingMemory ? JSON.stringify(thread?.metadata?.workingMemory) : null;
+    if (!workingMemoryData) {
+      return null;
+    }
+
+    return workingMemoryData;
   }
 
   public async getWorkingMemoryTemplate(): Promise<WorkingMemoryTemplate | null> {
@@ -605,9 +682,11 @@ export class Memory extends MastraMemory {
 
   public async getSystemMessage({
     threadId,
+    resourceId,
     memoryConfig,
   }: {
     threadId: string;
+    resourceId?: string;
     memoryConfig?: MemoryConfig;
   }): Promise<string | null> {
     const config = this.getMergedThreadConfig(memoryConfig);
@@ -616,7 +695,7 @@ export class Memory extends MastraMemory {
     }
 
     const workingMemoryTemplate = await this.getWorkingMemoryTemplate();
-    const workingMemoryData = await this.getWorkingMemory({ threadId });
+    const workingMemoryData = await this.getWorkingMemory({ threadId, resourceId, memoryConfig: config });
 
     if (!workingMemoryTemplate) {
       return null;
@@ -628,8 +707,16 @@ export class Memory extends MastraMemory {
     });
   }
 
-  public async getUserContextMessage({ threadId }: { threadId: string }) {
-    const workingMemory = await this.getWorkingMemory({ threadId });
+  public async getUserContextMessage({
+    threadId,
+    resourceId,
+    memoryConfig,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    memoryConfig?: MemoryConfig;
+  }) {
+    const workingMemory = await this.getWorkingMemory({ threadId, resourceId, memoryConfig });
     if (!workingMemory) {
       return null;
     }

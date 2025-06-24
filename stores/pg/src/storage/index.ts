@@ -8,6 +8,7 @@ import {
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_TRACES,
+  TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
 } from '@mastra/core/storage';
@@ -16,6 +17,7 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
+  StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
@@ -101,9 +103,11 @@ export class PostgresStore extends MastraStorage {
 
   public get supports(): {
     selectByIncludeResourceScope: boolean;
+    resourceWorkingMemory: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
+      resourceWorkingMemory: true,
     };
   }
 
@@ -1024,7 +1028,10 @@ export class PostgresStore extends MastraStorage {
     }
 
     try {
-      const perPage = perPageInput !== undefined ? perPageInput : 40;
+      const perPage =
+        perPageInput !== undefined
+          ? perPageInput
+          : this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
       const currentOffset = page * perPage;
 
       const conditions: string[] = [`thread_id = $1`];
@@ -1045,7 +1052,7 @@ export class PostgresStore extends MastraStorage {
       const countResult = await this.db.one(countQuery, queryParams);
       const total = parseInt(countResult.count, 10);
 
-      if (total === 0) {
+      if (total === 0 && messages.length === 0) {
         return {
           messages: [],
           total: 0,
@@ -1055,10 +1062,14 @@ export class PostgresStore extends MastraStorage {
         };
       }
 
+      const excludeIds = messages.map(m => m.id);
+      const excludeIdsParam = excludeIds.map((_, idx) => `$${idx + paramIndex}`).join(', ');
+      paramIndex += excludeIds.length;
+
       const dataQuery = `${selectStatement} FROM ${this.getTableName(
         TABLE_MESSAGES,
-      )} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      const rows = await this.db.manyOrNone(dataQuery, [...queryParams, perPage, currentOffset]);
+      )} ${whereClause} ${excludeIds.length ? `AND id NOT IN (${excludeIdsParam})` : ''}${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+      const rows = await this.db.manyOrNone(dataQuery, [...queryParams, ...excludeIds, perPage, currentOffset]);
       messages.push(...(rows || []));
 
       const list = new MessageList().add(messages, 'memory');
@@ -1140,7 +1151,13 @@ export class PostgresStore extends MastraStorage {
           }
           return t.none(
             `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type, "resourceId") 
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             ON CONFLICT (id) DO UPDATE SET
+              thread_id = EXCLUDED.thread_id,
+              content = EXCLUDED.content,
+              role = EXCLUDED.role,
+              type = EXCLUDED.type,
+              "resourceId" = EXCLUDED."resourceId"`,
             [
               message.id,
               message.threadId,
@@ -1657,5 +1674,102 @@ export class PostgresStore extends MastraStorage {
       }
       return message;
     });
+  }
+
+  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
+    const tableName = this.getTableName(TABLE_RESOURCES);
+    const result = await this.db.oneOrNone<StorageResourceType>(`SELECT * FROM ${tableName} WHERE id = $1`, [
+      resourceId,
+    ]);
+
+    if (!result) {
+      return null;
+    }
+
+    return {
+      ...result,
+      // Ensure workingMemory is always returned as a string, regardless of automatic parsing
+      workingMemory:
+        typeof result.workingMemory === 'object' ? JSON.stringify(result.workingMemory) : result.workingMemory,
+      metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
+    };
+  }
+
+  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    const tableName = this.getTableName(TABLE_RESOURCES);
+    await this.db.none(
+      `INSERT INTO ${tableName} (id, "workingMemory", metadata, "createdAt", "updatedAt") 
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        resource.id,
+        resource.workingMemory,
+        JSON.stringify(resource.metadata),
+        resource.createdAt.toISOString(),
+        resource.updatedAt.toISOString(),
+      ],
+    );
+
+    return resource;
+  }
+
+  async updateResource({
+    resourceId,
+    workingMemory,
+    metadata,
+  }: {
+    resourceId: string;
+    workingMemory?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<StorageResourceType> {
+    const existingResource = await this.getResourceById({ resourceId });
+
+    if (!existingResource) {
+      // Create new resource if it doesn't exist
+      const newResource: StorageResourceType = {
+        id: resourceId,
+        workingMemory,
+        metadata: metadata || {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      return this.saveResource({ resource: newResource });
+    }
+
+    const updatedResource = {
+      ...existingResource,
+      workingMemory: workingMemory !== undefined ? workingMemory : existingResource.workingMemory,
+      metadata: {
+        ...existingResource.metadata,
+        ...metadata,
+      },
+      updatedAt: new Date(),
+    };
+
+    const tableName = this.getTableName(TABLE_RESOURCES);
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (workingMemory !== undefined) {
+      updates.push(`"workingMemory" = $${paramIndex}`);
+      values.push(workingMemory);
+      paramIndex++;
+    }
+
+    if (metadata) {
+      updates.push(`metadata = $${paramIndex}`);
+      values.push(JSON.stringify(updatedResource.metadata));
+      paramIndex++;
+    }
+
+    updates.push(`"updatedAt" = $${paramIndex}`);
+    values.push(updatedResource.updatedAt.toISOString());
+    paramIndex++;
+
+    values.push(resourceId);
+
+    await this.db.none(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
+
+    return updatedResource;
   }
 }

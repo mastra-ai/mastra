@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
+import type { UpstashVectorFilter } from './filter';
 import { UpstashFilterTranslator } from './filter';
 
 describe('UpstashFilterTranslator', () => {
@@ -22,7 +23,7 @@ describe('UpstashFilterTranslator', () => {
 
   it('translates nested paths', () => {
     expect(translator.translate({ 'geography.continent': 'Asia' })).toBe("geography.continent = 'Asia'");
-    expect(translator.translate({ geography: { continent: 'Asia' } })).toBe("geography.continent = 'Asia'");
+    expect(translator.translate({ geography: { continent: 'Asia' } } as any)).toBe("geography.continent = 'Asia'");
   });
 
   it('translates comparison operators', () => {
@@ -65,7 +66,7 @@ describe('UpstashFilterTranslator', () => {
   });
 
   it('translates complex nested conditions', () => {
-    const filter = {
+    const filter: UpstashVectorFilter = {
       $and: [
         { population: { $gte: 1000000 } },
         { 'geography.continent': 'Asia' },
@@ -154,7 +155,7 @@ describe('UpstashFilterTranslator', () => {
 
   describe('complex scenarios', () => {
     it('deeply nested logical operators', () => {
-      const filter = {
+      const filter: UpstashVectorFilter = {
         $or: [
           {
             $and: [
@@ -214,7 +215,7 @@ describe('UpstashFilterTranslator', () => {
     });
 
     it('complex filtering with all operator types', () => {
-      const filter = {
+      const filter: UpstashVectorFilter = {
         $and: [
           {
             $or: [{ name: { $regex: 'San*' } }, { name: { $regex: 'New*' } }],
@@ -531,7 +532,7 @@ describe('UpstashFilterTranslator', () => {
     });
 
     it('throws error for invalid $not operator', () => {
-      expect(() => translator.translate({ field: { $not: true } })).toThrow();
+      expect(() => translator.translate({ field: { $not: true } } as any)).toThrow();
     });
 
     it('throws error for regex operators', () => {
@@ -539,7 +540,7 @@ describe('UpstashFilterTranslator', () => {
       expect(() => translator.translate(filter)).toThrow();
     });
     it('throws error for non-logical operators at top level', () => {
-      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
+      const invalidFilters: any = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
 
       invalidFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);

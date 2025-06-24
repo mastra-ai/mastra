@@ -76,7 +76,7 @@ export function WorkflowDefaultNode({
           output={step?.output}
           error={step?.error}
           mapConfig={data.mapConfig}
-          onShowTrace={runId ? () => onShowTrace?.({ runId, stepName: fullLabel }) : undefined}
+          onShowTrace={runId && onShowTrace ? () => onShowTrace?.({ runId, stepName: fullLabel }) : undefined}
         />
       </div>
 

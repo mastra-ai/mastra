@@ -52,6 +52,11 @@ export class CoreToolBuilder extends MastraBase {
     return this.originalTool.inputSchema ?? z.object({});
   };
 
+  private getOutputSchema = () => {
+    if ('outputSchema' in this.originalTool) return this.originalTool.outputSchema;
+    return null;
+  };
+
   // For provider-defined tools, we need to include all required properties
   private buildProviderTool(tool: ToolToConvert): (CoreTool & { id: `${string}.${string}` }) | undefined {
     if (
@@ -67,6 +72,7 @@ export class CoreToolBuilder extends MastraBase {
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
         parameters: convertZodSchemaToAISDKSchema(this.getParameters()),
+        outputSchema: convertZodSchemaToAISDKSchema(this.getOutputSchema()),
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
@@ -165,6 +171,7 @@ export class CoreToolBuilder extends MastraBase {
       type: 'function' as const,
       description: this.originalTool.description,
       parameters: this.getParameters(),
+      outputSchema: this.getOutputSchema(),
       execute: this.originalTool.execute
         ? this.createExecute(
             this.originalTool,
@@ -195,9 +202,20 @@ export class CoreToolBuilder extends MastraBase {
       mode: 'aiSdkSchema',
     });
 
+    let processedOutputSchema;
+
+    if (this.getOutputSchema()) {
+      processedOutputSchema = applyCompatLayer({
+        schema: this.getOutputSchema(),
+        compatLayers: schemaCompatLayers,
+        mode: 'aiSdkSchema',
+      });
+    }
+
     return {
       ...definition,
       parameters: processedSchema,
+      outputSchema: processedOutputSchema,
     };
   }
 }

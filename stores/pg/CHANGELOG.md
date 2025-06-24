@@ -1,5 +1,32 @@
 # @mastra/pg
 
+## 0.12.0-alpha.3
+
+### Minor Changes
+
+- 8a3bfd2: Update peerdeps to latest core
+
+### Patch Changes
+
+- Updated dependencies [792c4c0]
+- Updated dependencies [502fe05]
+- Updated dependencies [4efcfa0]
+  - @mastra/core@0.10.7-alpha.3
+
+## 0.11.1-alpha.2
+
+### Patch Changes
+
+- 15e9d26: Added per-resource working memory for LibSQL, Upstash, and PG
+- 0fb9d64: [MASTRA-4018] Update saveMessages in storage adapters to upsert messages
+- 144eb0b: [MASTRA-3669] Metadata Filter Types
+- f0150c4: Fix LibSQLStore and PgStore getMessagesPaginated implementation
+- Updated dependencies [15e9d26]
+- Updated dependencies [07d6d88]
+- Updated dependencies [5d74aab]
+- Updated dependencies [144eb0b]
+  - @mastra/core@0.10.7-alpha.2
+
 ## 0.11.1-alpha.1
 
 ### Patch Changes

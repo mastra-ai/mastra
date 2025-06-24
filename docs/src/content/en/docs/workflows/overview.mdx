@@ -157,12 +157,12 @@ With the Mastra Dev Server running you can run the workflow from the Mastra Play
 
 #### Command line
 
-Create a run instance of any Mastra workflow using `createRun` and `start`:
+Create a run instance of any Mastra workflow using `createRunAsync` and `start`:
 
 ```typescript {3,5} filename="src/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
-const run = mastra.getWorkflow("testWorkflow").createRun();
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 const result = await run.start({
   inputData: {
@@ -172,7 +172,7 @@ const result = await run.start({
 
 console.log(JSON.stringify(result, null, 2));
 ```
-> see [createRun](/reference/workflows/create-run) and [start](/reference/workflows/start) for more information.
+> see [createRunAsync](/reference/workflows/create-run-async) and [start](/reference/workflows/start) for more information.
 
 To trigger this workflow, run the following:
 
@@ -189,7 +189,7 @@ Similar to the run method shown above, workflows can also be streamed:
 ```typescript {5} filename="src/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
-const run = mastra.getWorkflow("testWorkflow").createRun();
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 const result = await run.stream({
   inputData: {
@@ -211,7 +211,7 @@ A workflow can also be watched, allowing you to inspect each event that is emitt
 ```typescript {5} filename="src/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
-const run = mastra.getWorkflow("testWorkflow").createRun();
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 run.watch((event) => {
   console.log(event);

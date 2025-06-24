@@ -13,13 +13,13 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: latest
-        version: 1.2.10(zod@3.25.56)
+        version: 1.2.10(zod@3.25.67)
       '@mastra/core':
         specifier: link:../../../../packages/core
         version: link:../../../../packages/core
       zod:
-        specifier: ^3.25.56
-        version: 3.25.56
+        specifier: ^3.25.67
+        version: 3.25.67
 
 packages:
 
@@ -50,23 +50,23 @@ packages:
   secure-json-parse@2.7.0:
     resolution: {integrity: sha512-6aU+Rwsezw7VR8/nyvKTx8QpWH9FrcYiXXlqC4z5d5XQBDRqtbfsRjnwGyqbi3gddNtWHuEk9OANUotL26qKUw==}
 
-  zod@3.25.56:
-    resolution: {integrity: sha512-rd6eEF3BTNvQnR2e2wwolfTmUTnp70aUTqr0oaGbHifzC3BKJsoV+Gat8vxUMR1hwOKBs6El+qWehrHbCpW6SQ==}
+  zod@3.25.67:
+    resolution: {integrity: sha512-idA2YXwpCdqUSKRCACDE6ItZD9TZzy3OZMtpfLoh6oPR47lipysRrJfjzMqFxQ3uJuUPyUeWe1r9vLH33xO/Qw==}
 
 snapshots:
 
-  '@ai-sdk/anthropic@1.2.10(zod@3.25.56)':
+  '@ai-sdk/anthropic@1.2.10(zod@3.25.67)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.7(zod@3.25.56)
-      zod: 3.25.56
+      '@ai-sdk/provider-utils': 2.2.7(zod@3.25.67)
+      zod: 3.25.67
 
-  '@ai-sdk/provider-utils@2.2.7(zod@3.25.56)':
+  '@ai-sdk/provider-utils@2.2.7(zod@3.25.67)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
       nanoid: 3.3.11
       secure-json-parse: 2.7.0
-      zod: 3.25.56
+      zod: 3.25.67
 
   '@ai-sdk/provider@1.1.3':
     dependencies:
@@ -78,4 +78,4 @@ snapshots:
 
   secure-json-parse@2.7.0: {}
 
-  zod@3.25.56: {}
+  zod@3.25.67: {}

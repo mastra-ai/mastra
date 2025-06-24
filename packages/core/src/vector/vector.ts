@@ -1,5 +1,6 @@
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { VectorFilter } from './filter';
 import type {
   CreateIndexParams,
   UpsertVectorParams,
@@ -12,7 +13,7 @@ import type {
   DeleteIndexParams,
 } from './types';
 
-export abstract class MastraVector extends MastraBase {
+export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
   constructor() {
     super({ name: 'MastraVector', component: 'VECTOR' });
   }
@@ -21,7 +22,7 @@ export abstract class MastraVector extends MastraBase {
     return '_';
   }
 
-  abstract query(params: QueryVectorParams): Promise<QueryResult[]>;
+  abstract query(params: QueryVectorParams<Filter>): Promise<QueryResult[]>;
   // Adds type checks for positional arguments if used
   abstract upsert(params: UpsertVectorParams): Promise<string[]>;
   // Adds type checks for positional arguments if used
