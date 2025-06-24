@@ -35,12 +35,14 @@
     "@rollup/plugin-virtual": "^3.0.2",
     "date-fns": "^4.1.0",
     "execa": "^9.6.0",
+    "fs-extra": "^11.3.0",
     "zod": "^3.25.67"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
+    "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.19.0",
     "eslint": "^9.29.0",
     "tsup": "^8.5.0",
