@@ -234,7 +234,7 @@ Here, we'll get the weather workflow from the mastra instance, then create a run
 import { mastra } from "./";
 
 const workflow = mastra.getWorkflow("weatherWorkflow");
-const run = workflow.createRun();
+const run = await workflow.createRunAsync();
 
 // Start the workflow with Lagos as the location
 const result = await run.start({ inputData: { location: "Lagos" } });

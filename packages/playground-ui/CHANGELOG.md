@@ -1,5 +1,60 @@
 # @mastra/playground-ui
 
+## 5.1.7-alpha.6
+
+### Patch Changes
+
+- b9f5599: dependencies updates:
+  - Updated dependency [`@codemirror/lang-json@^6.0.2` ↗︎](https://www.npmjs.com/package/@codemirror/lang-json/v/6.0.2) (from `^6.0.1`, in `dependencies`)
+- 5af21a8: fix: remove final output on workflows for now
+- Updated dependencies [bee3fe4]
+  - @mastra/client-js@0.10.6-alpha.5
+  - @mastra/core@0.10.7-alpha.5
+
+## 5.1.7-alpha.5
+
+### Patch Changes
+
+- d569c16: dependencies updates:
+  - Updated dependency [`react-code-block@1.1.3` ↗︎](https://www.npmjs.com/package/react-code-block/v/1.1.3) (from `1.1.1`, in `dependencies`)
+
+## 5.1.7-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [a8b194f]
+  - @mastra/core@0.10.7-alpha.4
+  - @mastra/client-js@0.10.6-alpha.4
+
+## 5.1.7-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [18a5d59]
+- Updated dependencies [792c4c0]
+- Updated dependencies [502fe05]
+- Updated dependencies [4efcfa0]
+  - @mastra/client-js@0.10.6-alpha.3
+  - @mastra/core@0.10.7-alpha.3
+
+## 5.1.7-alpha.2
+
+### Patch Changes
+
+- 8e1b6e9: dependencies updates:
+  - Updated dependency [`zod@^3.25.67` ↗︎](https://www.npmjs.com/package/zod/v/3.25.67) (from `^3.25.57`, in `dependencies`)
+- 5d74aab: vNext network in playground
+- be3d5a3: Remove recharts and ramada (unused deps)
+- Updated dependencies [8e1b6e9]
+- Updated dependencies [15e9d26]
+- Updated dependencies [9bf1d55]
+- Updated dependencies [07d6d88]
+- Updated dependencies [5d74aab]
+- Updated dependencies [5d74aab]
+- Updated dependencies [144eb0b]
+  - @mastra/client-js@0.10.6-alpha.2
+  - @mastra/core@0.10.7-alpha.2
+
 ## 5.1.7-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,37 @@
 # @mastra/core
 
+## 0.10.7-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [a853c43]
+  - @mastra/schema-compat@0.10.3-alpha.1
+
+## 0.10.7-alpha.4
+
+### Patch Changes
+
+- a8b194f: Fix double tool call for working memory
+
+## 0.10.7-alpha.3
+
+### Patch Changes
+
+- 792c4c0: feat: pass runId to onFinish
+- 502fe05: createRun() -> createRunAsync()
+- 4efcfa0: Added bail() method and more ergonomic suspend function return value
+
+## 0.10.7-alpha.2
+
+### Patch Changes
+
+- 15e9d26: Added per-resource working memory for LibSQL, Upstash, and PG
+- 07d6d88: Bump MCP SDK version and add tool output schema support to MCPServer and MCPClient
+- 5d74aab: Return isComplete of true in routing step when no resource is selected
+- 144eb0b: [MASTRA-3669] Metadata Filter Types
+- Updated dependencies [98bbe5a]
+  - @mastra/schema-compat@0.10.3-alpha.0
+
 ## 0.10.7-alpha.1
 
 ### Patch Changes

@@ -140,19 +140,6 @@ export abstract class MastraMemory extends MastraBase {
   }
 
   /**
-   * Get a user context message to inject into the conversation.
-   * This will be called before each conversation turn.
-   * Implementations can override this to inject custom system messages.
-   */
-  public async getUserContextMessage(_input: {
-    threadId: string;
-    resourceId?: string;
-    memoryConfig?: MemoryConfig;
-  }): Promise<string | null> {
-    return null;
-  }
-
-  /**
    * Get tools that should be available to the agent.
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.

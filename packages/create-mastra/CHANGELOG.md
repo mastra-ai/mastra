@@ -1,5 +1,17 @@
 # create-mastra
 
+## 0.10.6-alpha.3
+
+### Patch Changes
+
+- f9b4350: fix icons not showing on all agents
+
+## 0.10.6-alpha.2
+
+### Patch Changes
+
+- 5d74aab: vNext network in playground
+
 ## 0.10.6-alpha.1
 
 ### Patch Changes

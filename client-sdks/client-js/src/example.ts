@@ -1,8 +1,8 @@
 import { MastraClient } from './client';
+import z from 'zod';
 // import type { WorkflowRunResult } from './types';
 
 // Agent
-
 (async () => {
   const client = new MastraClient({
     baseUrl: 'http://localhost:4111',
@@ -28,6 +28,9 @@ import { MastraClient } from './client';
       },
       onErrorPart: error => {
         console.error(error);
+      },
+      onToolCallPart(streamPart) {
+        console.log(streamPart);
       },
     });
   } catch (error) {

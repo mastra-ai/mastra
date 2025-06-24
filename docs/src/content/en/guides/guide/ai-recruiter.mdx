@@ -187,7 +187,7 @@ const mastra = new Mastra({
 });
 
 (async () => {
-  const run = mastra.getWorkflow("candidateWorkflow").createRun();
+  const run = await mastra.getWorkflow("candidateWorkflow").createRunAsync();
 
   console.log("Run", run.runId);
 

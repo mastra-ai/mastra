@@ -1,5 +1,53 @@
 # @mastra/deployer-vercel
 
+## 0.11.0-alpha.5
+
+### Patch Changes
+
+- @mastra/core@0.10.7-alpha.5
+- @mastra/deployer@0.10.7-alpha.5
+
+## 0.11.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [a8b194f]
+  - @mastra/core@0.10.7-alpha.4
+  - @mastra/deployer@0.10.7-alpha.4
+
+## 0.11.0-alpha.3
+
+### Minor Changes
+
+- 3df52d1: fix deployers netlify and vercel on both cli and git integrations, improve DX
+
+### Patch Changes
+
+- Updated dependencies [792c4c0]
+- Updated dependencies [502fe05]
+- Updated dependencies [10a4f10]
+- Updated dependencies [4efcfa0]
+  - @mastra/core@0.10.7-alpha.3
+  - @mastra/deployer@0.10.7-alpha.3
+
+## 0.10.7-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [8e1b6e9]
+- Updated dependencies [36cd0f1]
+- Updated dependencies [2eab82b]
+- Updated dependencies [15e9d26]
+- Updated dependencies [9bf1d55]
+- Updated dependencies [914684e]
+- Updated dependencies [07d6d88]
+- Updated dependencies [5d74aab]
+- Updated dependencies [5d74aab]
+- Updated dependencies [17903a3]
+- Updated dependencies [144eb0b]
+  - @mastra/deployer@0.10.7-alpha.2
+  - @mastra/core@0.10.7-alpha.2
+
 ## 0.10.7-alpha.1
 
 ### Patch Changes
