@@ -10,6 +10,7 @@ import type {
   MCPServerHonoSSEOptions,
   MCPServerHTTPOptions,
   MCPServerSSEOptions,
+  MCPToolType,
   PackageInfo,
   RemoteInfo,
   Repository,
@@ -188,14 +189,18 @@ export abstract class MCPServerBase extends MastraBase {
    * Gets a list of tools provided by this MCP server, including their schemas.
    * @returns An object containing an array of tool information.
    */
-  public abstract getToolListInfo(): { tools: Array<{ name: string; description?: string; inputSchema: string }> };
+  public abstract getToolListInfo(): {
+    tools: Array<{ name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType }>;
+  };
 
   /**
    * Gets information for a specific tool provided by this MCP server.
    * @param toolId The ID/name of the tool to retrieve.
    * @returns Tool information (name, description, inputSchema) or undefined if not found.
    */
-  public abstract getToolInfo(toolId: string): { name: string; description?: string; inputSchema: string } | undefined;
+  public abstract getToolInfo(
+    toolId: string,
+  ): { name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType } | undefined;
 
   /**
    * Executes a specific tool provided by this MCP server.

@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import type { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent, Mastra, ToolExecutionContext, WorkflowRun, WorkflowRuns } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/di';
@@ -278,7 +279,7 @@ export class InngestRun<
     });
 
     return {
-      stream: readable,
+      stream: readable as ReadableStream<StreamEvent>,
       getWorkflowState: () => this.executionResults!,
     };
   }
@@ -722,11 +723,12 @@ export function init(inngest: Inngest) {
         any,
         InngestEngineType
       >[],
+      TPrevSchema extends z.ZodType<any> = TInput,
     >(
-      workflow: Workflow<InngestEngineType, TSteps, string, TInput, TOutput, TInput>,
+      workflow: Workflow<InngestEngineType, TSteps, string, TInput, TOutput, TPrevSchema>,
       opts: { id: TWorkflowId },
-    ): Workflow<InngestEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput> {
-      const wf = new Workflow({
+    ): Workflow<InngestEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
+      const wf: Workflow<InngestEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> = new Workflow({
         id: opts.id,
         inputSchema: workflow.inputSchema,
         outputSchema: workflow.outputSchema,

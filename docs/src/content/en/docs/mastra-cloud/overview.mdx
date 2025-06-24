@@ -3,61 +3,69 @@ title: Mastra Cloud
 description: Deployment and monitoring service for Mastra applications
 ---
 
+import { MastraCloudCallout } from '@/components/mastra-cloud-callout'
+import { FileTree } from "nextra/components";
+
 # Mastra Cloud
 
-Mastra Cloud is a deployment service built by the Mastra team that runs,
-manages, and monitors Mastra applications. It works with standard Mastra
-projects and handles deployment, scaling, and operational tasks.
+[Mastra Cloud](https://mastra.ai/cloud) is a platform for deploying, managing, monitoring, and debugging Mastra applications. When you [deploy](/docs/mastra-cloud/setting-up) your application, Mastra Cloud exposes your agents, tools, and workflows as REST API endpoints.
 
-> **Beta Notice**
-> Mastra Cloud is currently in **public beta**. Features, APIs, and UIs may
-> change as development continues.
+<MastraCloudCallout />
 
-## Core Functionality
+## Platform features
 
-- **Atomic Deployments** - Agents and workflows deploy as a single unit
-- **Project Organization** - Group agents and workflows into projects with assigned URLs
-- **Environment Variables** - Store configuration securely by environment
-- **Testing Console** - Send messages to agents through a web interface
-- **Execution Tracing** - Record agent interactions and tool calls
-- **Workflow Visualization** - Display workflow steps and execution paths
-- **Logs** - Standard logging output for debugging
-- **Platform Compatibility** - Uses the same infrastructure as Cloudflare, Vercel, and Netlify deployers
+Deploy and manage your applications with automated builds, organized projects, and no additional configuration.
 
-## Dashboard Components
+![Platform features](/image/mastra-cloud/mastra-cloud-platform-features.jpg)
 
-The Mastra Cloud dashboard contains:
+Key features:
 
-- **Projects List** - All projects in the account
-- **Project Details** - Deployments, environment variables, and access URLs
-- **Deployment History** - Record of deployments with timestamps and status
-- **Agent Inspector** - Agent configuration view showing models, tools, and system prompts
-- **Testing Console** - Interface for sending messages to agents
-- **Trace Explorer** - Records of tool calls, parameters, and responses
-- **Workflow Viewer** - Diagram of workflow steps and connections
+Mastra Cloud supports zero-config deployment, continuous integration with GitHub, and atomic deployments that package agents, tools, and workflows together.
 
-## Technical Implementation
+## Project Dashboard
 
-Mastra Cloud runs on the same core code as the platform-specific deployers with these modifications:
+Monitor and debug your applications with detailed output logs, deployment state, and interactive tools.
 
-- **Edge Network Distribution** - Geographically distributed execution
-- **Dynamic Resource Allocation** - Adjusts compute resources based on traffic
-- **Mastra-specific Runtime** - Runtime optimized for agent execution
-- **Standard Deployment API** - Consistent deployment interface across environments
-- **Tracing Infrastructure** - Records all agent and workflow execution steps
+![Project dashboard](/image/mastra-cloud/mastra-cloud-project-dashboard.jpg)
 
-## Use Cases
+Key features:
 
-Common usage patterns:
+The Project Dashboard gives you an overview of your application's status and deployments, with access to logs and a built-in playground for testing agents and workflows.
 
-- Deploying applications without managing infrastructure
-- Maintaining staging and production environments
-- Monitoring agent behavior across many requests
-- Testing agent responses through a web interface
-- Deploying to multiple regions
+## Project structure
 
-## Setup Process
+Use a standard Mastra project structure for proper detection and deployment.
 
-1. [Configure a Mastra Cloud project](/docs/mastra-cloud/setting-up)
-2. [Deploy code](/docs/mastra-cloud/deploying)
-3. [View execution traces](/docs/mastra-cloud/observability)
+<FileTree>
+  <FileTree.Folder name="src" defaultOpen>
+    <FileTree.Folder name="mastra" defaultOpen>
+      <FileTree.Folder name="agents" defaultOpen>
+        <FileTree.File name="agent-name.ts" />
+      </FileTree.Folder>
+      <FileTree.Folder name="tools" defaultOpen>
+        <FileTree.File name="tool-name.ts" />
+      </FileTree.Folder>
+      <FileTree.Folder name="workflows" defaultOpen>
+        <FileTree.File name="workflow-name.ts" />
+      </FileTree.Folder>
+      <FileTree.File name="index.ts" />
+    </FileTree.Folder>
+  </FileTree.Folder>
+  <FileTree.File name="package.json" />
+</FileTree>
+
+Mastra Cloud scans your repository for:
+
+- **Agents**: Defined using: `new Agent({...})`
+- **Tools**: Defined using: `createTool({...})`
+- **Workflows**: Defined using: `createWorkflow({...})`
+- **Steps**: Defined using: `createStep({...})`
+- **Environment Variables**: API keys and configuration variables
+
+## Technical implementation
+
+Mastra Cloud is purpose-built for Mastra agents, tools, and workflows. It handles long-running requests, records detailed traces for every execution, and includes built-in support for evals.
+
+## Next steps
+
+- [Setting Up and Deploying](/docs/mastra-cloud/setting-up)

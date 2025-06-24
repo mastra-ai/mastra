@@ -1,4 +1,3 @@
-import type { VectorFilter } from '@mastra/core/vector/filter';
 import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 import { MongoDBVector } from './';
 
@@ -329,7 +328,7 @@ describe('MongoDBVector Integration Tests', () => {
       const results = await retryQuery({
         indexName: testIndexName2,
         queryVector: [1, 0, 0, 0],
-        filter: null as unknown as VectorFilter,
+        filter: null,
       });
       const results2 = await retryQuery({
         indexName: testIndexName2,

@@ -1,12 +1,19 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowUp, Paperclip, Square } from 'lucide-react';
 import React, { useRef, useState } from 'react';
-import { omit } from 'remeda';
 
 import { Button } from '../../components/ui/button';
 import { FilePreview } from '../../components/ui/file-preview';
 import { useAutosizeTextArea } from '../../hooks/use-autosize-textarea';
 import { cn } from '../../lib/utils';
+
+function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
+  const newObj = { ...obj };
+  for (const key of keys) {
+    delete newObj[key];
+  }
+  return newObj;
+}
 
 interface MessageInputBaseProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   value: string;
