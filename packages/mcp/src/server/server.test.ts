@@ -1364,11 +1364,12 @@ describe('MCPServer - Elicitation', () => {
           parameters: z.object({
             message: z.string().describe('Message to show to user'),
           }),
-          execute: async ({ message }) => {
-            // Use the server's elicitation functionality
+          execute: async (context, options) => {
+            // Use the session-aware elicitation functionality
             try {
-              const result = await elicitationServer.elicitation.sendRequest({
-                message: message,
+              const elicitation = options.elicitation;
+              const result = await elicitation.sendRequest({
+                message: context.message,
                 requestedSchema: {
                   type: 'object',
                   properties: {
@@ -1394,6 +1395,14 @@ describe('MCPServer - Elicitation', () => {
           },
         },
       },
+    });
+
+    beforeEach(async () => {
+      try {
+        await elicitationClient?.disconnect();
+      } catch (error) {
+        console.error('Error disconnecting elicitation client:', error);
+      }
     });
 
     elicitationHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
@@ -1481,7 +1490,6 @@ describe('MCPServer - Elicitation', () => {
       return { action: 'reject' as const };
     });
 
-    await elicitationClient.disconnect();
     elicitationClient = new InternalMastraMCPClient({
       name: 'elicitation-reject-client',
       server: {
@@ -1509,7 +1517,6 @@ describe('MCPServer - Elicitation', () => {
       return { action: 'cancel' as const };
     });
 
-    await elicitationClient.disconnect();
     elicitationClient = new InternalMastraMCPClient({
       name: 'elicitation-cancel-client',
       server: {
@@ -1537,7 +1544,6 @@ describe('MCPServer - Elicitation', () => {
       throw new Error('Handler error');
     });
 
-    await elicitationClient.disconnect();
     elicitationClient = new InternalMastraMCPClient({
       name: 'elicitation-error-client',
       server: {
@@ -1561,7 +1567,6 @@ describe('MCPServer - Elicitation', () => {
   });
 
   it('should error when client has no elicitation handler', async () => {
-    await elicitationClient.disconnect();
     elicitationClient = new InternalMastraMCPClient({
       name: 'no-elicitation-handler-client',
       server: {
@@ -1618,11 +1623,78 @@ describe('MCPServer - Elicitation', () => {
       },
     });
 
-    console.log('result', result);
-
     expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
     expect(result.content[0].text).toContain('Elicitation response content does not match requested schema');
   });
+
+  it('should isolate elicitation handlers between different client connections', async () => {
+    const client1Handler = vi.fn(async request => {
+      expect(request.message).toBe('Please provide your information');
+      expect(request.requestedSchema).toBeDefined();
+      expect(request.requestedSchema.properties.name).toBeDefined();
+
+      return {
+        action: 'accept' as const,
+        content: {
+          name: 'John Doe',
+          email: 'john@example.com',
+        },
+      };
+    });
+    const client2Handler = vi.fn(async request => {
+      expect(request.message).toBe('Please provide your information');
+      expect(request.requestedSchema).toBeDefined();
+      expect(request.requestedSchema.properties.name).toBeDefined();
+
+      return {
+        action: 'accept' as const,
+        content: {
+          name: 'John Doe',
+          email: 'john@example.com',
+        },
+      };
+    });
+
+    // Create two independent client instances
+    const elicitationClient1 = new MCPClient({
+      id: 'elicitation-isolation-client-1',
+      servers: {
+        elicitation1: {
+          url: new URL(`http://localhost:${ELICITATION_PORT}/http`),
+        },
+      },
+    });
+
+    const elicitationClient2 = new MCPClient({
+      id: 'elicitation-isolation-client-2',
+      servers: {
+        elicitation2: {
+          url: new URL(`http://localhost:${ELICITATION_PORT}/http`),
+        },
+      },
+    });
+
+    // Each client registers its own independent handler
+    elicitationClient1.elicitation.onRequest('elicitation1', client1Handler);
+    elicitationClient2.elicitation.onRequest('elicitation2', client2Handler);
+
+    const tools = await elicitationClient1.getTools();
+    const tool = tools['elicitation1_testElicitationTool'];
+    expect(tool).toBeDefined();
+    await tool.execute({
+      context: {
+        message: 'Please provide your information',
+      },
+    });
+
+    const tools2 = await elicitationClient2.getTools();
+    const tool2 = tools2['elicitation2_testElicitationTool'];
+    expect(tool2).toBeDefined();
+
+    // Verify handlers are isolated - they should not interfere with each other
+    expect(client1Handler).toHaveBeenCalled();
+    expect(client2Handler).not.toHaveBeenCalled();
+  }, 10000);
 });
 
 describe('MCPServer with Tool Output Schema', () => {

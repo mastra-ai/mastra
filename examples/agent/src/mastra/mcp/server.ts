@@ -173,12 +173,12 @@ export const myMcpServerTwo = new MCPServer({
       inputSchema: z.object({
         reason: z.string().optional().describe('Optional reason for collecting contact info'),
       }),
-      execute: async ({ context }) => {
+      execute: async ({ context }, options) => {
         const { reason } = context;
 
         try {
-          // Use the elicitation functionality to request user input
-          const result = await myMcpServerTwo.elicitation.sendRequest({
+          // Use the session-aware elicitation functionality
+          const result = await options.elicitation.sendRequest({
             message: reason
               ? `Please provide your contact information. ${reason}`
               : 'Please provide your contact information',

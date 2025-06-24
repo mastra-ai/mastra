@@ -1,3 +1,4 @@
+import type { InternalCoreTool } from '@mastra/core';
 import type {
   ElicitRequest,
   ElicitResult,
@@ -36,6 +37,18 @@ export type MCPServerPrompts = {
 
 export type ElicitationActions = {
   sendRequest: (request: ElicitRequest['params']) => Promise<ElicitResult>;
+};
+
+export type MCPTool = {
+  id?: InternalCoreTool['id'];
+  description?: InternalCoreTool['description'];
+  parameters: InternalCoreTool['parameters'];
+  outputSchema?: InternalCoreTool['outputSchema'];
+  // Patch type to include elicitation in execute options
+  execute: (
+    params: any,
+    options: Parameters<NonNullable<InternalCoreTool['execute']>>[1] & { elicitation: ElicitationActions },
+  ) => Promise<any>;
 };
 
 export type { Resource, ResourceTemplate };
