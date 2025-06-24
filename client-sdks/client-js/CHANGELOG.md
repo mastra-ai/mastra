@@ -1,5 +1,12 @@
 # @mastra/client-js
 
+## 0.10.6-alpha.5
+
+### Patch Changes
+
+- bee3fe4: Fix client side tool calling
+  - @mastra/core@0.10.7-alpha.5
+
 ## 0.10.6-alpha.4
 
 ### Patch Changes

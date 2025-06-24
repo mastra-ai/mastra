@@ -1,5 +1,13 @@
 # mastra
 
+## 0.10.7-alpha.5
+
+### Patch Changes
+
+- f9b4350: fix icons not showing on all agents
+  - @mastra/core@0.10.7-alpha.5
+  - @mastra/deployer@0.10.7-alpha.5
+
 ## 0.10.7-alpha.4
 
 ### Patch Changes
