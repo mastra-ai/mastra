@@ -7,10 +7,6 @@ Now you'll register your workflow with the main Mastra instance so you can use i
 Open your `src/mastra/index.ts` file and add your workflow:
 
 ```typescript
-import { Mastra } from "@mastra/core/mastra";
-import { PinoLogger } from "@mastra/loggers";
-import { LibSQLStore } from "@mastra/libsql";
-
 // Import your workflow
 import { contentWorkflow } from "./workflows/content-workflow";
 
@@ -19,14 +15,10 @@ export const mastra = new Mastra({
   workflows: {
     contentWorkflow,
   },
-  storage: new LibSQLStore({
-    url: ":memory:",
-  }),
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
-  }),
+  // ...Existing code
 });
 ```
+
+Note: You may already have workflows registered, in which case, this workflow should be added to the workflows object.
 
 Your workflow is now registered with Mastra! Next, you'll learn how to use it in the playground.

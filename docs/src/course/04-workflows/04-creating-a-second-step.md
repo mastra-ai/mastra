@@ -14,7 +14,7 @@ const enhanceContentStep = createStep({
     content: z.string(),
     type: z.string(),
     wordCount: z.number(),
-    isValid: z.boolean()
+    isValid: z.boolean(),
   }),
   outputSchema: z.object({
     content: z.string(),
@@ -23,20 +23,20 @@ const enhanceContentStep = createStep({
     metadata: z.object({
       readingTime: z.number(),
       difficulty: z.enum(["easy", "medium", "hard"]),
-      processedAt: z.string()
-    })
+      processedAt: z.string(),
+    }),
   }),
   execute: async ({ inputData }) => {
     const { content, type, wordCount } = inputData;
-    
+
     // Calculate reading time (200 words per minute)
     const readingTime = Math.ceil(wordCount / 200);
-    
+
     // Determine difficulty based on word count
     let difficulty: "easy" | "medium" | "hard" = "easy";
     if (wordCount > 100) difficulty = "medium";
     if (wordCount > 300) difficulty = "hard";
-    
+
     return {
       content,
       type,
@@ -44,38 +44,15 @@ const enhanceContentStep = createStep({
       metadata: {
         readingTime,
         difficulty,
-        processedAt: new Date().toISOString()
-      }
+        processedAt: new Date().toISOString(),
+      },
     };
-  }
+  },
 });
 ```
 
 ## Notice the Input Schema
 
 The input schema of this step matches the output schema of the previous step. This is important for chaining steps together!
-
-## Testing the Enhancement Step
-
-```typescript
-async function testEnhanceStep() {
-  // First run validation
-  const validated = await validateContentStep.execute({
-    inputData: {
-      content: "This is a longer article with more content to test the enhancement step properly.",
-      type: "article"
-    }
-  });
-  
-  // Then enhance the result
-  const enhanced = await enhanceContentStep.execute({
-    inputData: validated
-  });
-  
-  console.log("✅ Enhanced result:", enhanced);
-}
-
-testEnhanceStep();
-```
 
 Your second step is ready! Next, you'll learn how to chain these steps together into a complete workflow.

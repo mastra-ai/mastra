@@ -57,8 +57,8 @@ Please provide:
 Format as JSON: {"score": number, "feedback": "your feedback here"}
     `;
 
-    // Get the content-agent from the mastra instance.
-    const contentAgent = mastra.getAgent("content-agent");
+    // Get the contentAgent from the mastra instance.
+    const contentAgent = mastra.getAgent("contentAgent");
     const { text } = await contentAgent.generate([
       { role: "user", content: prompt },
     ]);
@@ -86,35 +86,6 @@ Format as JSON: {"score": number, "feedback": "your feedback here"}
     };
   },
 });
-```
-
-## Testing the AI Step
-
-```typescript
-async function testAIStep() {
-  console.log("🤖 Testing AI analysis step...");
-
-  const testData = {
-    content:
-      "Renewable energy technologies are rapidly advancing, making clean power more accessible and affordable than ever before.",
-    type: "article",
-    wordCount: 18,
-    metadata: {
-      readingTime: 1,
-      difficulty: "easy",
-      processedAt: new Date().toISOString(),
-    },
-    summary: "Renewable energy technologies are rapidly advancing.",
-  };
-
-  const result = await aiAnalysisStep.execute({
-    inputData: testData,
-  });
-
-  console.log("✅ AI Analysis:", result.aiAnalysis);
-}
-
-testAIStep();
 ```
 
 Your agent-powered step is ready! Next, you'll add it to your workflow for complete AI-enhanced content processing.

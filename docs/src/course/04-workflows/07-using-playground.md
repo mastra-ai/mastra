@@ -8,14 +8,14 @@ Start your Mastra development server using the `mastra dev` command. If you are 
 
 ```bash
 npm run dev
-
-You should see output like:
 ```
 
+You should see output like:
+
+```bash
 🚀 Mastra Dev Server starting...
 📊 Playground available at: http://localhost:4111
-
-````
+```
 
 ## Accessing Workflows in Playground
 
@@ -28,12 +28,13 @@ You should see output like:
 1. Click on your `contentWorkflow`
 2. You'll see an input form based on your workflow's input schema
 3. Enter some test content in the form:
-   ```json
-   {
-     "content": "Machine learning is revolutionizing healthcare by enabling faster diagnoses and personalized treatments.",
-     "type": "article"
-   }
-````
+
+```json
+{
+  "content": "Machine learning is revolutionizing healthcare by enabling faster diagnoses and personalized treatments.",
+  "type": "article"
+}
+```
 
 4. Click "Run Workflow"
 5. Watch the execution progress and see the results

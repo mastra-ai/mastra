@@ -12,7 +12,7 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const contentAgent = new Agent({
-  name: "content-agent",
+  name: "Content Agent",
   description: "AI agent for analyzing and improving content",
   instructions: `
     You are a professional content analyst. Your role is to:
@@ -34,7 +34,22 @@ export const contentAgent = new Agent({
 - **Instructions**: Detailed prompts that guide the AI's behavior
 - **Model**: Which AI model to use (GPT-4o-mini is fast and cost-effective)
 
-## Testing Your Agent
+## Registering and Testing Your Agent
+
+Open your `src/mastra/index.ts` file and add your agent (you may need to append it to the agents object in the Mastra class):
+
+```typescript
+// Import your workflow
+import { contentAgent } from "./agents/content-agent";
+
+export const mastra = new Mastra({
+  // Register your agent here
+  agents: {
+    contentAgent,
+  },
+  // ...Existing code
+});
+```
 
 You can test this agent in the Playground by navigating to the Agents tab and selecting `content-agent`. Use the chat interface to validate the agent is working.
 

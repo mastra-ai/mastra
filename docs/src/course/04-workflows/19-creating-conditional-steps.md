@@ -12,11 +12,11 @@ const assessContentStep = createStep({
   description: "Assesses content to determine processing path",
   inputSchema: z.object({
     content: z.string(),
-    type: z.string(),
+    type: z.enum(["article", "blog", "social"]).default("article"),
   }),
   outputSchema: z.object({
     content: z.string(),
-    type: z.string(),
+    type: z.enum(["article", "blog", "social"]).default("article"),
     wordCount: z.number(),
     complexity: z.enum(["simple", "moderate", "complex"]),
     category: z.enum(["short", "medium", "long"]),
@@ -61,7 +61,7 @@ const quickProcessingStep = createStep({
   description: "Quick processing for short and simple content",
   inputSchema: z.object({
     content: z.string(),
-    type: z.string(),
+    type: z.enum(["article", "blog", "social"]).default("article"),
     wordCount: z.number(),
     complexity: z.enum(["simple", "moderate", "complex"]),
     category: z.enum(["short", "medium", "long"]),
@@ -96,7 +96,7 @@ const generalProcessingStep = createStep({
   description: "General processing for all other content",
   inputSchema: z.object({
     content: z.string(),
-    type: z.string(),
+    type: z.enum(["article", "blog", "social"]).default("article"),
     wordCount: z.number(),
     complexity: z.enum(["simple", "moderate", "complex"]),
     category: z.enum(["short", "medium", "long"]),
