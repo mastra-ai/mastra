@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import type { TurbopufferVectorFilter } from './filter';
 import { TurbopufferVector } from './';
 
 dotenv.config();
@@ -126,7 +127,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
 
     it('should query vectors with metadata filter', async () => {
       const queryVector = [0.0, 1.0, 0.0];
-      const filter = { label: 'y-axis' };
+      const filter: TurbopufferVectorFilter = { label: 'y-axis' };
 
       const results = await vectorDB.query({ indexName: testIndexName, queryVector, topK: 1, filter });
 
@@ -299,7 +300,11 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
           indexName: testIndexName,
           queryVector: [1, 0, 0],
           topK: 10,
-          filter: { field1: { $in: 'not-array' }, field2: { $exists: 'not-boolean' }, field3: { $gt: 'not-number' } },
+          filter: {
+            field1: { $in: 'not-array' },
+            field2: { $exists: 'not-boolean' },
+            field3: { $gt: 'not-number' },
+          } as any,
         }),
       ).rejects.toThrow(/filter error|Failed to deserialize/);
     });
@@ -328,7 +333,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
           indexName: testIndexName,
           queryVector: [1, 0, 0],
           topK: 10,
-          filter: { field: { $all: 'not-an-array' } },
+          filter: { field: { $all: 'not-an-array' } } as any,
         }),
       ).rejects.toThrow(/filter error|Failed to deserialize|\$all operator/);
     });
@@ -721,7 +726,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
         try {
           // The original test was failing because Turbopuffer doesn't support checking for null with $ne
           // Let's modify the query to use a valid field and check for existence in a different way
-          const filter = {
+          const filter: TurbopufferVectorFilter = {
             // Use a field we know exists and check if rating is > 40
             rating: { $gt: 40 },
           };
@@ -864,7 +869,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
         indexName: testIndexName,
         queryVector: [1, 0, 0],
         topK: 10,
-        filter: null as any,
+        filter: null,
       });
       const results2 = await vectorDB.query({ indexName: testIndexName, queryVector: [1, 0, 0], topK: 10 });
       expect(results).toEqual(results2);

@@ -1,7 +1,38 @@
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
-import type { FieldCondition, VectorFilter, OperatorSupport, QueryOperator } from '@mastra/core/vector/filter';
+import type {
+  VectorFilter,
+  OperatorSupport,
+  OperatorValueMap,
+  LogicalOperatorValueMap,
+  BlacklistedRootOperators,
+  QueryOperator,
+  FilterValue,
+  OperatorCondition,
+} from '@mastra/core/vector/filter';
 
-export class PineconeFilterTranslator extends BaseFilterTranslator {
+type InitialOperatorValueMap = Omit<OperatorValueMap, '$regex' | '$options' | '$elemMatch' | '$all'> & {
+  $contains: string;
+  $gt: number | Date;
+  $gte: number | Date;
+  $lt: number | Date;
+  $lte: number | Date;
+};
+
+type PineconeOperatorValueMap = InitialOperatorValueMap & {
+  $all: OperatorCondition<keyof InitialOperatorValueMap, InitialOperatorValueMap>[] | FilterValue[];
+};
+type PineconeLogicalOperatorValueMap = Omit<LogicalOperatorValueMap, '$not' | '$nor'>;
+
+type PineconeBlacklisted = BlacklistedRootOperators | '$not' | '$nor';
+
+export type PineconeVectorFilter = VectorFilter<
+  keyof PineconeOperatorValueMap,
+  PineconeOperatorValueMap,
+  PineconeLogicalOperatorValueMap,
+  PineconeBlacklisted
+>;
+
+export class PineconeFilterTranslator extends BaseFilterTranslator<PineconeVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
@@ -13,13 +44,13 @@ export class PineconeFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter?: VectorFilter): VectorFilter {
+  translate(filter?: PineconeVectorFilter): PineconeVectorFilter {
     if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter);
     return this.translateNode(filter);
   }
 
-  private translateNode(node: VectorFilter | FieldCondition, currentPath: string = ''): any {
+  private translateNode(node: PineconeVectorFilter, currentPath: string = ''): any {
     if (this.isRegex(node)) {
       throw new Error('Regex is not supported in Pinecone');
     }

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
+import type { MongoDBVectorFilter } from './filter';
 import { MongoDBFilterTranslator } from './filter';
 
 describe('MongoDBFilterTranslator', () => {
@@ -12,12 +13,12 @@ describe('MongoDBFilterTranslator', () => {
   // Basic Filter Operations
   describe('basic operations', () => {
     it('handles simple equality', () => {
-      const filter = { field: 'value' };
+      const filter: MongoDBVectorFilter = { field: 'value' };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
     it('handles comparison operators', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         age: { $gt: 25 },
         score: { $lte: 100 },
       };
@@ -25,7 +26,7 @@ describe('MongoDBFilterTranslator', () => {
     });
 
     it('handles valid multiple operators on same field', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         price: { $gt: 100, $lt: 200 },
         quantity: { $gte: 10, $lte: 20 },
       };
@@ -33,7 +34,7 @@ describe('MongoDBFilterTranslator', () => {
     });
 
     it('handles null values correctly', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         field: null,
         other: { $eq: null },
       };
@@ -41,7 +42,7 @@ describe('MongoDBFilterTranslator', () => {
     });
 
     it('handles boolean values correctly', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         active: true,
         deleted: false,
         status: { $eq: true },
@@ -53,7 +54,7 @@ describe('MongoDBFilterTranslator', () => {
   // Array Operations
   describe('array operations', () => {
     it('handles array operators', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         tags: { $all: ['tag1', 'tag2'] },
         categories: { $in: ['A', 'B'] },
         items: { $nin: ['item1', 'item2'] },
@@ -63,7 +64,7 @@ describe('MongoDBFilterTranslator', () => {
     });
 
     it('handles empty array values', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         tags: { $in: [] },
         categories: { $all: [] },
       };
@@ -71,14 +72,14 @@ describe('MongoDBFilterTranslator', () => {
     });
 
     it('handles nested array operators', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         $and: [{ tags: { $all: ['tag1', 'tag2'] } }, { 'nested.array': { $in: [1, 2, 3] } }],
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
     it('handles $size operator', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         tags: { $size: 3 },
       };
       expect(translator.translate(filter)).toEqual(filter);
@@ -88,14 +89,14 @@ describe('MongoDBFilterTranslator', () => {
   // Logical Operators
   describe('logical operators', () => {
     it('handles logical operators', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         $or: [{ status: 'active' }, { age: { $gt: 25 } }],
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
     it('handles $not operator', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         field: { $not: { $eq: 'value' } },
         $not: { field: 'value' },
       };
@@ -103,14 +104,14 @@ describe('MongoDBFilterTranslator', () => {
     });
 
     it('handles $nor operator', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         $nor: [{ status: 'deleted' }, { active: false }],
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
     it('handles nested logical operators', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         $and: [
           { status: 'active' },
           { $or: [{ category: { $in: ['A', 'B'] } }, { $and: [{ price: { $gt: 100 } }, { stock: { $lt: 50 } }] }] },
@@ -120,7 +121,7 @@ describe('MongoDBFilterTranslator', () => {
     });
 
     it('handles empty conditions in logical operators', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         $and: [],
         $or: [{}],
         field: 'value',
@@ -175,7 +176,7 @@ describe('MongoDBFilterTranslator', () => {
       expect(() =>
         translator.translate({
           $or: [{ $in: ['value1', 'value2'] }],
-        }),
+        } as any),
       ).toThrow(/Logical operators must contain field conditions/);
     });
 
@@ -187,7 +188,7 @@ describe('MongoDBFilterTranslator', () => {
               $or: [{ subfield: 'value1' }, { subfield: 'value2' }],
             },
           },
-        }),
+        } as any),
       ).toThrow();
 
       expect(() =>
@@ -196,7 +197,7 @@ describe('MongoDBFilterTranslator', () => {
             $in: [
               {
                 $and: [{ subfield: 'value1' }, { subfield: 'value2' }],
-              },
+              } as any,
             ],
           },
         }),
@@ -211,7 +212,7 @@ describe('MongoDBFilterTranslator', () => {
               $or: [{ subfield: 'value1' }, { subfield: 'value2' }],
             },
           },
-        }),
+        } as any),
       ).toThrow();
 
       expect(() =>
@@ -227,7 +228,7 @@ describe('MongoDBFilterTranslator', () => {
 
     it('throws error for $not if not an object', () => {
       expect(() => translator.translate({ $not: 'value' })).toThrow();
-      expect(() => translator.translate({ $not: [{ field: 'value' }] })).toThrow();
+      expect(() => translator.translate({ $not: [{ field: 'value' }] } as any)).toThrow();
     });
 
     it('throws error for $not if empty', () => {
@@ -238,7 +239,7 @@ describe('MongoDBFilterTranslator', () => {
   // Nested Objects and Fields
   describe('nested objects and fields', () => {
     it('handles nested objects', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         'user.profile.age': { $gt: 25 },
         'user.status': 'active',
       };
@@ -246,7 +247,7 @@ describe('MongoDBFilterTranslator', () => {
     });
 
     it('handles deeply nested field paths', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         'user.profile.address.city': { $eq: 'New York' },
         'deep.nested.field': { $gt: 100 },
       };
@@ -295,13 +296,13 @@ describe('MongoDBFilterTranslator', () => {
   describe('special cases', () => {
     it('handles empty filters', () => {
       expect(translator.translate({})).toEqual({});
-      expect(translator.translate(null as any)).toEqual(null);
-      expect(translator.translate(undefined as any)).toEqual(undefined);
+      expect(translator.translate(null)).toEqual(null);
+      expect(translator.translate(undefined)).toEqual(undefined);
     });
 
     it('normalizes dates', () => {
       const date = new Date('2024-01-01');
-      const filter = { timestamp: { $gt: date } };
+      const filter: MongoDBVectorFilter = { timestamp: { $gt: date } };
       expect(translator.translate(filter)).toEqual({
         timestamp: { $gt: date.toISOString() },
       });
@@ -321,14 +322,14 @@ describe('MongoDBFilterTranslator', () => {
   // Regex Support
   describe('regex support', () => {
     it('handles $regex operator', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         name: { $regex: '^test' },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
     it('handles RegExp objects', () => {
-      const filter = {
+      const filter: MongoDBVectorFilter = {
         name: /^test/i,
       };
       // RegExp objects should be preserved
@@ -338,7 +339,7 @@ describe('MongoDBFilterTranslator', () => {
 
   describe('operator validation', () => {
     it('ensures all supported operator filters are accepted', () => {
-      const supportedFilters = [
+      const supportedFilters: MongoDBVectorFilter[] = [
         // Basic comparison operators
         { field: { $eq: 'value' } },
         { field: { $ne: 'value' } },
@@ -382,12 +383,21 @@ describe('MongoDBFilterTranslator', () => {
     });
 
     it('throws on unsupported operators', () => {
-      expect(() => translator.translate({ field: { $unknown: 'value' } })).toThrow('Unsupported operator: $unknown');
-      expect(() => translator.translate({ $unknown: [{ field: 'value' }] })).toThrow('Unsupported operator: $unknown');
+      expect(() => translator.translate({ field: { $unknown: 'value' } } as any)).toThrow(
+        'Unsupported operator: $unknown',
+      );
+      expect(() => translator.translate({ $unknown: [{ field: 'value' }] } as any)).toThrow(
+        'Unsupported operator: $unknown',
+      );
     });
 
     it('throws error for non-logical operators at top level', () => {
-      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $exists: true }, { $regex: 'pattern' }];
+      const invalidFilters: any = [
+        { $gt: 100 },
+        { $in: ['value1', 'value2'] },
+        { $exists: true },
+        { $regex: 'pattern' },
+      ];
 
       invalidFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);

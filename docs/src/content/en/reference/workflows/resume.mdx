@@ -10,7 +10,7 @@ The `.resume()` method resumes a suspended workflow run with new data, allowing 
 ## Usage
 
 ```typescript
-const run = counterWorkflow.createRun();
+const run = await counterWorkflow.createRunAsync();
 const result = await run.start({ inputData: { startValue: 0 } });
 
 if (result.status === "suspended") {

@@ -124,23 +124,25 @@ export type StreamEvent =
       id: string;
     };
 
+export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending';
+
 export type WatchEvent = {
   type: 'watch';
   payload: {
     currentStep?: {
       id: string;
-      status: 'running' | 'success' | 'failed' | 'suspended' | 'waiting';
+      status: WorkflowRunStatus;
       output?: Record<string, any>;
       resumePayload?: Record<string, any>;
       payload?: Record<string, any>;
       error?: string | Error;
     };
     workflowState: {
-      status: 'running' | 'success' | 'failed' | 'suspended' | 'waiting';
+      status: WorkflowRunStatus;
       steps: Record<
         string,
         {
-          status: 'running' | 'success' | 'failed' | 'suspended' | 'waiting';
+          status: WorkflowRunStatus;
           output?: Record<string, any>;
           payload?: Record<string, any>;
           resumePayload?: Record<string, any>;
@@ -176,7 +178,7 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
 export interface WorkflowRunState {
   // Core state info
   runId: string;
-  status: 'success' | 'failed' | 'suspended' | 'running' | 'waiting';
+  status: WorkflowRunStatus;
   result?: Record<string, any>;
   error?: string | Error;
   value: Record<string, string>;
