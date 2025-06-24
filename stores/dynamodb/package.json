@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.828.0",
-    "@aws-sdk/lib-dynamodb": "^3.828.0",
+    "@aws-sdk/lib-dynamodb": "^3.830.0",
     "electrodb": "^3.4.3"
   },
   "peerDependencies": {
