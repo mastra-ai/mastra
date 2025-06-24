@@ -208,6 +208,61 @@ const paragraphMemory = new Memory({
 });
 ```
 
+## Structured Working Memory
+
+Working memory can also be defined using a structured schema instead of a Markdown template. This allows you to specify the exact fields and types that should be tracked, using a [Zod](https://zod.dev/) schema. When using a schema, the agent will see and update working memory as a JSON object matching your schema.
+
+**Important:** You must specify either `template` or `schema`, but not both.
+
+### Example: Schema-Based Working Memory
+
+```typescript
+import { z } from 'zod';
+import { Memory } from '@mastra/memory';
+
+const userProfileSchema = z.object({
+  name: z.string().optional(),
+  location: z.string().optional(),
+  timezone: z.string().optional(),
+  preferences: z.object({
+    communicationStyle: z.string().optional(),
+    projectGoal: z.string().optional(),
+    deadlines: z.array(z.string()).optional(),
+  }).optional(),
+});
+
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      schema: userProfileSchema,
+      // template: ... (do not set)
+    },
+  },
+});
+```
+
+When a schema is provided, the agent receives the working memory as a JSON object. For example:
+
+```json
+{
+  "name": "Sam",
+  "location": "Berlin",
+  "timezone": "CET",
+  "preferences": {
+    "communicationStyle": "Formal",
+    "projectGoal": "Launch MVP",
+    "deadlines": ["2025-07-01"]
+  }
+}
+```
+
+## Choosing Between Template and Schema
+
+- Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad.
+- Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON.
+- Only one mode can be active at a time: setting both `template` and `schema` is not supported.
+
 ## Example: Multi-step Retention
 
 Below is a simplified view of how the `User Profile` template updates across a short user
@@ -247,4 +302,5 @@ instructions on _how_ and _when_ to use this template in your agent's `instructi
 
 - [Streaming working memory](/examples/memory/streaming-working-memory)
 - [Using a working memory template](/examples/memory/streaming-working-memory-advanced)
+- [Using a working memory schema](/examples/memory/streaming-working-memory-structured)
 - [Per-resource working memory](https://github.com/mastra-ai/mastra/tree/main/examples/memory-per-resource-example) - Complete example showing resource-scoped memory persistence
