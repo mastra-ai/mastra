@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 5.1.7-alpha.6
+
+### Patch Changes
+
+- b9f5599: dependencies updates:
+  - Updated dependency [`@codemirror/lang-json@^6.0.2` ↗︎](https://www.npmjs.com/package/@codemirror/lang-json/v/6.0.2) (from `^6.0.1`, in `dependencies`)
+- 5af21a8: fix: remove final output on workflows for now
+- Updated dependencies [bee3fe4]
+  - @mastra/client-js@0.10.6-alpha.5
+  - @mastra/core@0.10.7-alpha.5
+
 ## 5.1.7-alpha.5
 
 ### Patch Changes

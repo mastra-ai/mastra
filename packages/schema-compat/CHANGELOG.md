@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 0.10.3-alpha.1
+
+### Patch Changes
+
+- a853c43: Allow for object.passthrough in schema compat (aka MCP tool support).
+
 ## 0.10.3-alpha.0
 
 ### Patch Changes
