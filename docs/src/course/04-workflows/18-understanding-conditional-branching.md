@@ -5,14 +5,16 @@ Learn how to create workflows that take different paths based on data conditions
 ## What is Conditional Branching?
 
 Conditional branching allows workflows to:
+
 - **Make decisions**: Choose different processing paths based on data
-- **Handle variations**: Process different content types differently  
+- **Handle variations**: Process different content types differently
 - **Optimize performance**: Skip unnecessary steps for certain inputs
 - **Customize behavior**: Provide different experiences based on conditions
 
 ## Real-World Example
 
 Imagine a content processing workflow that:
+
 - **Short content** (< 50 words): Gets quick processing
 - **Medium content** (50-200 words): Gets standard processing
 - **Long content** (> 200 words): Gets detailed processing with extra analysis
@@ -28,6 +30,7 @@ Imagine a content processing workflow that:
 ```
 
 Where:
+
 - **condition**: An async function that returns `true` or `false`
 - **step**: The step to execute if the condition is `true`
 
@@ -39,7 +42,7 @@ Conditions are functions that examine the input data:
 // Example condition function
 async ({ inputData }) => {
   return inputData.wordCount < 50;
-}
+};
 ```
 
 ## Multiple Paths
