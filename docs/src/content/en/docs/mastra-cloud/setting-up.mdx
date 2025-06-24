@@ -3,126 +3,90 @@ title: Setting Up a Project
 description: Configuration steps for Mastra Cloud projects
 ---
 
-# Setting Up a Mastra Cloud Project
+import { MastraCloudCallout } from '@/components/mastra-cloud-callout'
+import { Steps } from "nextra/components";
 
-> **Beta Notice**
-> Mastra Cloud is currently in **beta**.
+# Setting Up and Deploying
 
-This page describes the steps to set up a project on Mastra Cloud using GitHub integration.
+This page explains how to set up a project on [Mastra Cloud](https://mastra.ai/cloud) with automatic deployments using our GitHub integration.
+
+<MastraCloudCallout />
 
 ## Prerequisites
 
-- A Mastra Cloud account
-- A GitHub account
-- A GitHub repository containing a Mastra application
+- A [Mastra Cloud](https://mastra.ai/cloud) account
+- A GitHub account / repository containing a Mastra application
 
-## Project Creation Process
+> See our [Getting started](/docs/getting-started/installation) guide to scaffold out a new Mastra project with sensible defaults.
 
-1. **Sign in to Mastra Cloud**
+## Setup and Deploy process
 
-   - Navigate to the Mastra Cloud dashboard at https://cloud.mastra.ai
-   - Sign in with your account credentials
+<Steps>
 
-2. **Add a New Project**
+### Sign in to Mastra Cloud
 
-   - From the "All Projects" view, click the "Add new" button in the top right
-   - This opens the GitHub repository import dialog
+Head over to [https://cloud.mastra.ai/](https://cloud.mastra.ai) and sign in with either:
 
-   ![Mastra Cloud Projects Dashboard](/image/cloud-agents.png)
+- **GitHub**
+- **Google**
 
-3. **Import Git Repository**
+### Install the Mastra GitHub app
 
-   - Search for repositories or select from the list of available GitHub repositories
-   - Click the "Import" button next to the repository you want to deploy
+When prompted, install the Mastra GitHub app.
 
-4. **Configure Deployment Details**
-   The deployment configuration page includes:
-   - **Repo Name**: The GitHub repository name (read-only)
-   - **Project Name**: Customize the project name (defaults to repo name)
-   - **Branch**: Select the branch to deploy (dropdown, defaults to `main`)
-   - **Project root**: Set the root directory of your project (defaults to `/`)
-   - **Mastra Directory**: Specify where Mastra files are located (defaults to `src/mastra`)
-   - **Build Command**: Optional command to run during build process
-   - **Store Settings**: Configure data storage options
-   - **Environment Variables**: Add key-value pairs for configuration (e.g., API keys)
+![Install GitHub](/image/mastra-cloud/mastra-cloud-install-github.jpg)
 
-## Project Structure Requirements
+### Create a new project
 
-Mastra Cloud scans the GitHub repository for:
+Click the **Create new project** button to create a new project.
 
-- **Agents**: Agent definitions (e.g., Weather Agent) with models and tools
-- **Workflows**: Workflow step definitions (e.g., weather-workflow)
-- **Environment Variables**: Required API keys and configuration variables
+![Create new project](/image/mastra-cloud/mastra-cloud-create-new-project.jpg)
 
-The repository should contain a standard Mastra project structure for proper detection and deployment.
+### Import a Git repository
 
-## Understanding the Dashboard
+Search for a repository, then click **Import**.
 
-After creating a project, the dashboard shows:
+![Import Git repository](/image/mastra-cloud/mastra-cloud-import-git-repository.jpg)
 
-### Project Overview
+### Configure the deployment
 
-- **Created Date**: When the project was created
-- **Domains**: URLs for accessing your deployed application
-  - Format: `https://[project-name].mastra.cloud`
-  - Format: `https://[random-id].mastra.cloud`
-- **Status**: Current deployment status (success or archived)
-- **Branch**: The branch deployed (typically `main`)
-- **Environment Variables**: Configured API keys and settings
-- **Workflows**: List of detected workflows with step counts
-- **Agents**: List of detected agents with models and tools
-- **Database Usage**: Reads, writes, and storage statistics
+Mastra Cloud automatically detects the right build settings, but you can customize them using the options described below.
 
-### Deployments Section
+![Deployment details](/image/mastra-cloud/mastra-cloud-deployment-details.jpg)
 
-- List of all deployments with:
-  - Deployment ID (based on commit hash)
-  - Status (success/archived)
-  - Branch
-  - Commit hash
-  - Timestamp
+- **Importing from GitHub**: The GitHub repository name
+- **Project name**: Customize the project name
+- **Branch**: The branch to deploy from
+- **Project root**: The root directory of your project
+- **Mastra directory**: Where Mastra files are located
+- **Environment variables**: Add environment variables used by the application
+- **Build and Store settings**:
+   - **Install command**: Runs pre-build to install project dependencies
+   - **Project setup command**: Runs pre-build to prepare any external dependencies
+   - **Port**: The network port the server will use
+   - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/docs/storage/overview) storage
+- **Deploy Project**: Starts the deployment process
 
-### Logs Section
+### Deploy project
 
-The Logs view displays:
+Click **Deploy Project** to create and deploy your application using the configuration you’ve set.
 
-- Timestamp for each log entry
-- Log level (info, debug)
-- Hostname
-- Detailed log messages, including:
-  - API startup information
-  - Storage initialization
-  - Agent and workflow activity
+</Steps>
 
-## Navigation
+## Successful deployment
 
-The sidebar provides access to:
+After a successful deployment you'll be shown the **Overview** screen where you can view your project's status, domains, latest deployments and connected agents and workflows.
 
-- **Overview**: Project summary and statistics
-- **Deployments**: Deployment history and details
-- **Logs**: Application logs for debugging
-- **Agents**: List and configuration of all agents
-- **Workflows**: List and structure of all workflows
-- **Settings**: Project configuration options
+![Successful deployment](/image/mastra-cloud/mastra-cloud-successful-deployment.jpg)
 
-## Environment Variable Configuration
+## Continuous integration
 
-Set environment variables through the dashboard:
+Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
 
-1. Navigate to your project in the dashboard
-2. Go to the "Environment Variables" section
-3. Add or edit variables (such as `OPENAI_API_KEY`)
-4. Save the configuration
+## Testing your application
 
-Environment variables are encrypted and made available to your application during deployment and execution.
+After a successful deployment you can test your agents and workflows from the [Playground](/docs/mastra-cloud/dashboard#playground) in Mastra Cloud, or interact with them using our [Client SDK](/docs/client-js/overview).
 
-## Testing Your Deployment
+## Next steps
 
-After deployment, you can test your agents and workflows using:
-
-1. The custom domain assigned to your project: `https://[project-name].mastra.cloud`
-2. The dashboard interface for direct interaction with agents
-
-## Next Steps
-
-After setting up your project, automatic deployments occur whenever you push to the `main` branch of your GitHub repository. See the [deployment documentation](./deploying.mdx) for more details.
+- [Navigating the Dashboard](/docs/mastra-cloud/dashboard)
