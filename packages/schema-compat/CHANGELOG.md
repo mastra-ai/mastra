@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- 98bbe5a: Claude cannot handle tuple schemas now.
+
 ## 0.10.2
 
 ### Patch Changes

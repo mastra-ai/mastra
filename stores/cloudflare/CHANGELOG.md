@@ -1,5 +1,17 @@
 # @mastra/cloudflare
 
+## 0.10.5-alpha.2
+
+### Patch Changes
+
+- 15e9d26: Added per-resource working memory for LibSQL, Upstash, and PG
+- 0fb9d64: [MASTRA-4018] Update saveMessages in storage adapters to upsert messages
+- Updated dependencies [15e9d26]
+- Updated dependencies [07d6d88]
+- Updated dependencies [5d74aab]
+- Updated dependencies [144eb0b]
+  - @mastra/core@0.10.7-alpha.2
+
 ## 0.10.5-alpha.1
 
 ### Patch Changes
