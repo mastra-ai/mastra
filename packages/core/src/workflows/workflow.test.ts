@@ -11,7 +11,6 @@ import { RuntimeContext } from '../di';
 import { MockStore } from '../storage/mock';
 import type { StreamEvent, WatchEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
-import { wrap } from 'module';
 
 const testStorage = new MockStore();
 
