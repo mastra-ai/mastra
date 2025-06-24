@@ -1,5 +1,17 @@
 # @mastra/voice-gladia
 
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 8e1b6e9: dependencies updates:
+  - Updated dependency [`zod@^3.25.67` ↗︎](https://www.npmjs.com/package/zod/v/3.25.67) (from `^3.24.3`, in `dependencies`)
+- Updated dependencies [15e9d26]
+- Updated dependencies [07d6d88]
+- Updated dependencies [5d74aab]
+- Updated dependencies [144eb0b]
+  - @mastra/core@0.10.7-alpha.2
+
 ## 0.10.1
 
 ### Patch Changes

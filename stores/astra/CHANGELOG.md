@@ -1,5 +1,16 @@
 # @mastra/astra
 
+## 0.10.3-alpha.1
+
+### Patch Changes
+
+- 144eb0b: [MASTRA-3669] Metadata Filter Types
+- Updated dependencies [15e9d26]
+- Updated dependencies [07d6d88]
+- Updated dependencies [5d74aab]
+- Updated dependencies [144eb0b]
+  - @mastra/core@0.10.7-alpha.2
+
 ## 0.10.3-alpha.0
 
 ### Patch Changes
