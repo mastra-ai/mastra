@@ -1,8 +1,28 @@
-import type { VectorFilter } from '@mastra/core/vector/filter';
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
+import type {
+  VectorFilter,
+  OperatorValueMap,
+  LogicalOperatorValueMap,
+  BlacklistedRootOperators,
+} from '@mastra/core/vector/filter';
 
-export class LanceFilterTranslator extends BaseFilterTranslator {
-  translate(filter: VectorFilter): string {
+type LanceOperatorValueMap = OperatorValueMap & {
+  $like: string;
+  $notLike: string;
+  $contains: string;
+};
+
+type LanceBlacklisted = BlacklistedRootOperators | '$like' | '$notLike' | '$contains';
+
+export type LanceVectorFilter = VectorFilter<
+  keyof LanceOperatorValueMap,
+  LanceOperatorValueMap,
+  LogicalOperatorValueMap,
+  LanceBlacklisted
+>;
+
+export class LanceFilterTranslator extends BaseFilterTranslator<LanceVectorFilter, string> {
+  translate(filter: LanceVectorFilter): string {
     if (!filter || Object.keys(filter).length === 0) {
       return '';
     }

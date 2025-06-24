@@ -31,7 +31,7 @@ const mastra = new Mastra({
   },
 });
 
-const run = mastra.getWorkflow("myWorkflow").createRun();
+const run = await mastra.getWorkflow("myWorkflow").createRunAsync();
 ```
 
 ## API Reference
@@ -99,7 +99,11 @@ Validates and finalizes the workflow configuration. Must be called after adding 
 
 #### `createRun()`
 
-Creates a new workflow run instance, allowing you to execute the workflow with specific input data. Accepts optional run ID.
+Deprecated. Creates a new workflow run instance, allowing you to execute the workflow with specific input data. Accepts optional run ID.
+
+#### `createRunAsync()`
+
+Creates a new workflow run instance, allowing you to execute the workflow with specific input data. Accepts optional run ID. Stores a pending workflow run snapshot into storage.
 
 #### `execute()`
 

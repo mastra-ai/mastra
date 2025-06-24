@@ -1288,7 +1288,7 @@ describe('PgVector', () => {
           vectorDB.query({
             indexName,
             queryVector: [1, 0, 0],
-            filter: { price: { $invalid: 100 } },
+            filter: { price: { $invalid: 100 } } as any,
           }),
         ).rejects.toThrow('Unsupported operator: $invalid');
       });
@@ -1567,7 +1567,7 @@ describe('PgVector', () => {
           vectorDB.query({
             indexName,
             queryVector: [1, 0, 0],
-            filter: { price: { $invalid: 100 } },
+            filter: { price: { $invalid: 100 } } as any,
           }),
         ).rejects.toThrow('Unsupported operator: $invalid');
       });

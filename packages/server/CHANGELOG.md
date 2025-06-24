@@ -1,5 +1,29 @@
 # @mastra/deployer
 
+## 0.10.7-alpha.3
+
+### Patch Changes
+
+- 502fe05: createRun() -> createRunAsync()
+- 4afab04: fix: getAgentsHandler return type
+- 10a4f10: Cancel agent generate/stream when request aborts
+- Updated dependencies [792c4c0]
+- Updated dependencies [502fe05]
+- Updated dependencies [4efcfa0]
+  - @mastra/core@0.10.7-alpha.3
+
+## 0.10.7-alpha.2
+
+### Patch Changes
+
+- 9bf1d55: Fix runtimeContext in mastra server, client SDK
+- 5d74aab: vNext network in playground
+- Updated dependencies [15e9d26]
+- Updated dependencies [07d6d88]
+- Updated dependencies [5d74aab]
+- Updated dependencies [144eb0b]
+  - @mastra/core@0.10.7-alpha.2
+
 ## 0.10.7-alpha.1
 
 ### Patch Changes

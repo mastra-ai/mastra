@@ -11,6 +11,7 @@ import {
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_TRACES,
+  TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
 import type {
@@ -19,6 +20,7 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
+  StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
@@ -84,9 +86,11 @@ export class LibSQLStore extends MastraStorage {
 
   public get supports(): {
     selectByIncludeResourceScope: boolean;
+    resourceWorkingMemory: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
+      resourceWorkingMemory: true,
     };
   }
 
@@ -1426,6 +1430,96 @@ export class LibSQLStore extends MastraStorage {
         error,
       );
     }
+  }
+
+  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
+    const result = await this.load<StorageResourceType>({
+      tableName: TABLE_RESOURCES,
+      keys: { id: resourceId },
+    });
+
+    if (!result) {
+      return null;
+    }
+
+    return {
+      ...result,
+      // Ensure workingMemory is always returned as a string, even if auto-parsed as JSON
+      workingMemory:
+        typeof result.workingMemory === 'object' ? JSON.stringify(result.workingMemory) : result.workingMemory,
+      metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
+    };
+  }
+
+  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    await this.insert({
+      tableName: TABLE_RESOURCES,
+      record: {
+        ...resource,
+        metadata: JSON.stringify(resource.metadata),
+      },
+    });
+
+    return resource;
+  }
+
+  async updateResource({
+    resourceId,
+    workingMemory,
+    metadata,
+  }: {
+    resourceId: string;
+    workingMemory?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<StorageResourceType> {
+    const existingResource = await this.getResourceById({ resourceId });
+
+    if (!existingResource) {
+      // Create new resource if it doesn't exist
+      const newResource: StorageResourceType = {
+        id: resourceId,
+        workingMemory,
+        metadata: metadata || {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      return this.saveResource({ resource: newResource });
+    }
+
+    const updatedResource = {
+      ...existingResource,
+      workingMemory: workingMemory !== undefined ? workingMemory : existingResource.workingMemory,
+      metadata: {
+        ...existingResource.metadata,
+        ...metadata,
+      },
+      updatedAt: new Date(),
+    };
+
+    const updates: string[] = [];
+    const values: InValue[] = [];
+
+    if (workingMemory !== undefined) {
+      updates.push('workingMemory = ?');
+      values.push(workingMemory);
+    }
+
+    if (metadata) {
+      updates.push('metadata = ?');
+      values.push(JSON.stringify(updatedResource.metadata));
+    }
+
+    updates.push('updatedAt = ?');
+    values.push(updatedResource.updatedAt.toISOString());
+
+    values.push(resourceId);
+
+    await this.client.execute({
+      sql: `UPDATE ${TABLE_RESOURCES} SET ${updates.join(', ')} WHERE id = ?`,
+      args: values,
+    });
+
+    return updatedResource;
   }
 
   private async hasColumn(table: string, column: string): Promise<boolean> {

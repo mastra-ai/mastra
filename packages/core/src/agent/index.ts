@@ -1240,8 +1240,8 @@ export class Agent<
                     vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
                   })
                   .then(r => r.messagesV2),
-                memory.getSystemMessage({ threadId: threadObject.id, memoryConfig }),
-                memory.getUserContextMessage({ threadId: threadObject.id }),
+                memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
+                memory.getUserContextMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
               ])
             : [[], null, null];
 
@@ -1282,8 +1282,7 @@ export class Agent<
           .add(messages, 'user');
 
         const systemMessage =
-          messageList
-            .getSystemMessages()
+          [...messageList.getSystemMessages(), ...messageList.getSystemMessages('memory')]
             ?.map(m => m.content)
             ?.join(`\n`) ?? undefined;
 
@@ -1547,7 +1546,7 @@ export class Agent<
         messages: messageObjects,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.({ ...result, runId });
         },
         maxSteps: maxSteps,
         runId,
@@ -1586,7 +1585,7 @@ export class Agent<
         messages: messageObjects,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.({ ...result, runId });
         },
         maxSteps,
         runId,
@@ -1620,7 +1619,7 @@ export class Agent<
       tools: convertedTools,
       structuredOutput: output,
       onStepFinish: (result: any) => {
-        return onStepFinish?.(result);
+        return onStepFinish?.({ ...result, runId });
       },
       maxSteps,
       runId,
@@ -1751,7 +1750,7 @@ export class Agent<
         temperature,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.({ ...result, runId });
         },
         onFinish: async (result: any) => {
           try {
@@ -1771,7 +1770,7 @@ export class Agent<
               runId,
             });
           }
-          await onFinish?.(result);
+          await onFinish?.({ ...result, runId });
         },
         maxSteps,
         runId,
@@ -1797,7 +1796,7 @@ export class Agent<
         temperature,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.({ ...result, runId });
         },
         onFinish: async (result: any) => {
           try {
@@ -1817,7 +1816,7 @@ export class Agent<
               runId,
             });
           }
-          await onFinish?.(result);
+          await onFinish?.({ ...result, runId });
         },
         maxSteps,
         runId,
@@ -1841,7 +1840,7 @@ export class Agent<
       temperature,
       structuredOutput: output,
       onStepFinish: (result: any) => {
-        return onStepFinish?.(result);
+        return onStepFinish?.({ ...result, runId });
       },
       onFinish: async (result: any) => {
         try {
@@ -1861,7 +1860,7 @@ export class Agent<
             runId,
           });
         }
-        await onFinish?.(result);
+        await onFinish?.({ ...result, runId });
       },
       runId,
       toolChoice,
