@@ -834,7 +834,7 @@ describe('Workflow', () => {
   });
 
   describe('Basic Workflow Execution', () => {
-    it.only('should be able to bail workflow execution', async () => {
+    it('should be able to bail workflow execution', async () => {
       const step1 = createStep({
         id: 'step1',
         execute: async ({ bail, inputData }) => {
@@ -862,7 +862,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result: z.string(),
         }),
-        steps: [step1],
+        steps: [step1, step2],
       });
 
       workflow.then(step1).then(step2).commit();
@@ -872,8 +872,8 @@ describe('Workflow', () => {
 
       expect(result.steps['step1']).toEqual({
         status: 'success',
-        output: { result: 'success' },
-        payload: {},
+        output: { result: 'bailed' },
+        payload: { value: 'bail' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -885,16 +885,16 @@ describe('Workflow', () => {
 
       expect(result2.steps['step1']).toEqual({
         status: 'success',
-        output: { result: 'success' },
-        payload: {},
+        output: { result: 'step1: no-bail' },
+        payload: { value: 'no-bail' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
 
       expect(result2.steps['step2']).toEqual({
         status: 'success',
-        output: { result: 'step2: no-bail' },
-        payload: { result: 'success' },
+        output: { result: 'step2: step1: no-bail' },
+        payload: { result: 'step1: no-bail' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });

@@ -176,7 +176,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         if (lastOutput.result.status !== 'success') {
           if (lastOutput.result.status === 'bailed') {
-            lastOutput.status = 'success';
+            lastOutput.result.status = 'success';
           }
 
           const result = (await this.fmtReturnValue(

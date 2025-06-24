@@ -95,6 +95,7 @@ export class InngestRun<
       await new Promise(resolve => setTimeout(resolve, 1000));
       runs = await this.getRuns(eventId);
       if (runs?.[0]?.status === 'Failed' || runs?.[0]?.status === 'Cancelled') {
+        console.log(runs?.[0]);
         throw new Error(`Function run ${runs?.[0]?.status}`);
       }
     }
@@ -1233,7 +1234,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
         };
       } else if (bailed) {
-        execResults = { status: 'bailed', output: bailed.payload, endedAt: Date.now() };
+        execResults = { status: 'bailed', output: bailed.payload, payload: prevOutput, endedAt: Date.now(), startedAt };
       }
 
       if (execResults.status === 'failed') {
