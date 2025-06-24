@@ -126,6 +126,47 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
+### Early exit
+
+You can bail out of a workflow execution successfully by calling `bail()` in a step. This returns whatever payload is passed to the `bail()` function as the result of the workflow.
+
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  id: 'step1',
+  execute: async ({ bail, inputData }) => {
+    return bail({ result: 'bailed' });
+  },
+  inputSchema: z.object({ value: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .commit();
+```
+
+Unsuccessful bails happen through throwing an error in the step.
+
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  id: 'step1',
+  execute: async ({ bail, inputData }) => {
+    throw new Error('bailed');
+  },
+  inputSchema: z.object({ value: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .commit();
+```
 #### Example Run Instance
 
 The following example demonstrates how to start a run with multiple inputs. Each input will pass through the `mapStep` sequentially.
