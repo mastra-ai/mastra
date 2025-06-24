@@ -29,7 +29,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "cloudflare": "^4.3.0"
+    "cloudflare": "^4.4.1"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250620.0",
@@ -40,7 +40,7 @@
     "@types/node": "^20.19.0",
     "dotenv": "^16.5.0",
     "eslint": "^9.29.0",
-    "miniflare": "^4.20250604.1",
+    "miniflare": "^4.20250617.3",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.3"
