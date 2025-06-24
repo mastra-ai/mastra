@@ -115,10 +115,10 @@ export class Workflow extends BaseResource {
     if (params?.toDate) {
       searchParams.set('toDate', params.toDate.toISOString());
     }
-    if (params?.limit) {
+    if (params?.limit !== undefined) {
       searchParams.set('limit', String(params.limit));
     }
-    if (params?.offset) {
+    if (params?.offset !== undefined) {
       searchParams.set('offset', String(params.offset));
     }
     if (params?.resourceId) {
