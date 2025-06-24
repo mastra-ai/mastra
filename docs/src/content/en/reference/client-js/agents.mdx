@@ -98,6 +98,47 @@ while (true) {
 }
 ```
 
+### Client tools
+
+Client-side tools allow you to execute custom functions on the client side when the agent requests them.
+
+#### Basic Usage
+
+```typescript
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+
+const colorChangeTool = createTool({
+  id: 'changeColor',
+  description: 'Changes the background color',
+  inputSchema: z.object({
+    color: z.string(),
+  }),
+  execute: async ({ context }) => {
+    document.body.style.backgroundColor = context.color;
+    return { success: true };
+  }
+})
+
+
+// Use with generate
+const response = await agent.generate({
+  messages: 'Change the background to blue',
+  clientTools: {colorChangeTool},
+});
+
+// Use with stream
+const response = await agent.stream({
+  messages: 'Change the background to green',
+  clientTools: {colorChangeTool},
+});
+
+response.processDataStream({
+  onTextPart: (text) => console.log(text),
+  onToolCallPart: (toolCall) => console.log('Tool called:', toolCall.toolName),
+});
+```
+
 ### Get Agent Tool
 
 Retrieve information about a specific tool available to the agent:
