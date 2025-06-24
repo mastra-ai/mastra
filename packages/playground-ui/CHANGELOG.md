@@ -1,5 +1,12 @@
 # @mastra/playground-ui
 
+## 5.1.7-alpha.5
+
+### Patch Changes
+
+- d569c16: dependencies updates:
+  - Updated dependency [`react-code-block@1.1.3` ↗︎](https://www.npmjs.com/package/react-code-block/v/1.1.3) (from `1.1.1`, in `dependencies`)
+
 ## 5.1.7-alpha.4
 
 ### Patch Changes

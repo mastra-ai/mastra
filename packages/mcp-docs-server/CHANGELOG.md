@@ -1,5 +1,11 @@
 # @mastra/mcp-docs-server
 
+## 0.13.2-alpha.3
+
+### Patch Changes
+
+- d2a783c: Minor lesson 1 course updates, added lesson 4 on workflows
+
 ## 0.13.2-alpha.2
 
 ### Patch Changes

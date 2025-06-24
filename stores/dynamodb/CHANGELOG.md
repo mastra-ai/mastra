@@ -1,5 +1,12 @@
 # @mastra/dynamodb
 
+## 0.12.0-alpha.4
+
+### Patch Changes
+
+- ab52239: dependencies updates:
+  - Updated dependency [`@aws-sdk/lib-dynamodb@^3.830.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/lib-dynamodb/v/3.830.0) (from `^3.828.0`, in `dependencies`)
+
 ## 0.12.0-alpha.3
 
 ### Minor Changes
