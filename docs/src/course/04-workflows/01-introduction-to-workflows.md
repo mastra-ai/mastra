@@ -7,6 +7,7 @@ Welcome to the fourth lesson of the Mastra course! In this lesson, you'll learn 
 Workflows in Mastra let you chain together multiple operations in a predictable, type-safe manner. Think of them as a recipe that breaks down complex tasks into smaller, manageable steps.
 
 Instead of writing one big function that does everything, workflows let you:
+
 - Break complex operations into smaller, reusable steps
 - Define clear inputs and outputs for each step
 - Chain steps together with automatic data validation
@@ -15,6 +16,7 @@ Instead of writing one big function that does everything, workflows let you:
 ## Simple Example
 
 Without workflows, you might write:
+
 ```typescript
 async function processContent(text: string) {
   // All logic in one function - hard to test and reuse
@@ -25,7 +27,8 @@ async function processContent(text: string) {
 }
 ```
 
-With workflows, the same logic becomes modular and reusable:
+With workflows, the same logic becomes modular and reusable with tracing built in at every step.
+
 ```typescript
 export const contentWorkflow = createWorkflow({...})
   .then(validateStep)

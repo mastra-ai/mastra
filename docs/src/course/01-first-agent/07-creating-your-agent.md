@@ -2,11 +2,7 @@
 
 Let's create a simple agent that will help users analyze financial transaction data. We'll create a new file called `agents/financial-agent.ts`.
 
-First, create the new agent file:
-
-```bash
-touch src/mastra/agents/financial-agent.ts
-```
+First, create the new agent file at src/mastra/agents/financial-agent.ts
 
 Now add the necessary imports at the top of your file:
 

@@ -2,62 +2,33 @@
 
 Let's test your conditional workflow with different types of content to see how it routes to different processing paths.
 
-## Testing Different Content Types
+## Registering the New Workflow
 
-Add this comprehensive test to your workflow file:
+Update your Mastra configuration to include your new workflow workflows:
 
 ```typescript
-async function testConditionalWorkflow() {
-  console.log("🔀 Testing conditional workflow with different content types...\n");
-  
-  const testCases = [
-    {
-      name: "Short Simple Content",
-      content: "AI is changing the world quickly.",
-      type: "social"
-    },
-    {
-      name: "Medium Moderate Content", 
-      content: "Artificial intelligence technologies are rapidly advancing across multiple industries. Machine learning algorithms are becoming more sophisticated and capable of handling complex tasks that previously required human intervention. This technological evolution is creating new opportunities while also presenting unique challenges.",
-      type: "blog"
-    },
-    {
-      name: "Long Complex Content",
-      content: "The phenomenological manifestation of contemporary technological paradigms necessitates comprehensive epistemological reconsideration of traditional methodological frameworks. Interdisciplinary synthesis of computational architectures with anthropocentric design principles facilitates unprecedented optimization of human-machine collaborative ecosystems. These multidimensional transformations fundamentally reconceptualize organizational infrastructures and operational methodologies across diverse institutional contexts, requiring sophisticated analytical frameworks for effective implementation and evaluation of emerging technological solutions.",
-      type: "article"
-    }
-  ];
-  
-  for (const testCase of testCases) {
-    console.log(`\n📝 Testing: ${testCase.name}`);
-    console.log(`Content preview: "${testCase.content.substring(0, 50)}..."`);
-    
-    try {
-      const run = conditionalWorkflow.createRun();
-      const result = await run.start({
-        inputData: {
-          content: testCase.content,
-          type: testCase.type
-        }
-      });
-      
-      console.log(`✅ Processing type: ${result.result.processingType}`);
-      console.log(`📋 Recommendations: ${result.result.recommendations.length} items`);
-      
-    } catch (error) {
-      console.error(`❌ Failed: ${error.message}`);
-    }
-  }
-}
+// In src/mastra/index.ts
+import {
+  contentWorkflow,
+  aiContentWorkflow,
+  parallelAnalysisWorkflow,
+  conditionalWorkflow,
+} from "./workflows/content-workflow";
 
-testConditionalWorkflow();
+export const mastra = new Mastra({
+  workflows: {
+    contentWorkflow,
+    aiContentWorkflow,
+    parallelAnalysisWorkflow,
+    conditionalWorkflow, // Add the conditional workflow
+  },
+  // ... rest of configuration
+});
 ```
 
-## Expected Results
+## Testing the conditional workflow
 
-- **Short Simple**: Should trigger `quickProcessingStep` → "quick" processing
-- **Medium Moderate**: Should trigger `standardProcessingStep` → "standard" processing  
-- **Long Complex**: Should trigger `detailedProcessingStep` → "detailed" processing
+You can now test this new conditional workflow in the playground. Be sure to test different content lengths and content types.
 
 ## Understanding the Flow
 
@@ -69,6 +40,7 @@ testConditionalWorkflow();
 ## Debugging Conditions
 
 If a condition isn't working as expected:
+
 - Check the assessment step output
 - Verify condition logic matches your expectations
 - Test individual conditions in isolation
@@ -77,6 +49,7 @@ If a condition isn't working as expected:
 ## Branch Benefits
 
 Conditional workflows provide:
+
 - **Intelligent routing**: Right processing for right content
 - **Performance optimization**: Skip heavy processing for simple content
 - **Customized experience**: Different handling for different scenarios

@@ -2,11 +2,7 @@
 
 Let's create a tool that fetches transaction data from a Google Sheet. We'll create a new file called `tools/get-transactions-tool.ts`.
 
-First, create the new tool file:
-
-```bash
-touch src/mastra/tools/get-transactions-tool.ts
-```
+First, create the new tool file at src/mastra/tools/get-transactions-tool.ts
 
 Now add the necessary imports:
 

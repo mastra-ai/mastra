@@ -12,77 +12,80 @@ export const parallelAnalysisWorkflow = createWorkflow({
   description: "Run multiple content analyses in parallel",
   inputSchema: z.object({
     content: z.string(),
-    type: z.enum(["article", "blog", "social"]).default("article")
+    type: z.enum(["article", "blog", "social"]).default("article"),
   }),
   outputSchema: z.object({
     results: z.object({
       seo: z.object({
         seoScore: z.number(),
-        keywords: z.array(z.string())
+        keywords: z.array(z.string()),
       }),
       readability: z.object({
         readabilityScore: z.number(),
-        gradeLevel: z.string()
+        gradeLevel: z.string(),
       }),
       sentiment: z.object({
         sentiment: z.enum(["positive", "neutral", "negative"]),
-        confidence: z.number()
-      })
-    })
-  })
+        confidence: z.number(),
+      }),
+    }),
+  }),
 })
   .parallel([seoAnalysisStep, readabilityStep, sentimentStep])
-  .then(createStep({
-    id: "combine-results",
-    description: "Combines parallel analysis results",
-    inputSchema: z.object({
-      "seo-analysis": z.object({
-        seoScore: z.number(),
-        keywords: z.array(z.string())
-      }),
-      "readability-analysis": z.object({
-        readabilityScore: z.number(),
-        gradeLevel: z.string()
-      }),
-      "sentiment-analysis": z.object({
-        sentiment: z.enum(["positive", "neutral", "negative"]),
-        confidence: z.number()
-      })
-    }),
-    outputSchema: z.object({
-      results: z.object({
-        seo: z.object({
+  .then(
+    createStep({
+      id: "combine-results",
+      description: "Combines parallel analysis results",
+      inputSchema: z.object({
+        "seo-analysis": z.object({
           seoScore: z.number(),
-          keywords: z.array(z.string())
+          keywords: z.array(z.string()),
         }),
-        readability: z.object({
+        "readability-analysis": z.object({
           readabilityScore: z.number(),
-          gradeLevel: z.string()
+          gradeLevel: z.string(),
         }),
-        sentiment: z.object({
+        "sentiment-analysis": z.object({
           sentiment: z.enum(["positive", "neutral", "negative"]),
-          confidence: z.number()
-        })
-      })
+          confidence: z.number(),
+        }),
+      }),
+      outputSchema: z.object({
+        results: z.object({
+          seo: z.object({
+            seoScore: z.number(),
+            keywords: z.array(z.string()),
+          }),
+          readability: z.object({
+            readabilityScore: z.number(),
+            gradeLevel: z.string(),
+          }),
+          sentiment: z.object({
+            sentiment: z.enum(["positive", "neutral", "negative"]),
+            confidence: z.number(),
+          }),
+        }),
+      }),
+      execute: async ({ inputData }) => {
+        console.log("🔄 Combining parallel results...");
+
+        return {
+          results: {
+            seo: inputData["seo-analysis"],
+            readability: inputData["readability-analysis"],
+            sentiment: inputData["sentiment-analysis"],
+          },
+        };
+      },
     }),
-    execute: async ({ inputData }) => {
-      console.log("🔄 Combining parallel results...");
-      
-      return {
-        results: {
-          seo: inputData["seo-analysis"],
-          readability: inputData["readability-analysis"],
-          sentiment: inputData["sentiment-analysis"]
-        }
-      };
-    }
-  }))
+  )
   .commit();
 ```
 
 ## Understanding Parallel Data Flow
 
 When steps run in parallel:
+
 1. Each step receives the same input data
 2. Steps execute simultaneously
 3. Results are collected into an object with step IDs as keys

@@ -12,7 +12,7 @@ export const contentWorkflow = createWorkflow({
   description: "Validates, enhances, and summarizes content",
   inputSchema: z.object({
     content: z.string(),
-    type: z.enum(["article", "blog", "social"]).default("article")
+    type: z.enum(["article", "blog", "social"]).default("article"),
   }),
   outputSchema: z.object({
     content: z.string(),
@@ -21,10 +21,10 @@ export const contentWorkflow = createWorkflow({
     metadata: z.object({
       readingTime: z.number(),
       difficulty: z.enum(["easy", "medium", "hard"]),
-      processedAt: z.string()
+      processedAt: z.string(),
     }),
-    summary: z.string()
-  })
+    summary: z.string(),
+  }),
 })
   .then(validateContentStep)
   .then(enhanceContentStep)
@@ -40,32 +40,12 @@ export const contentWorkflow = createWorkflow({
 
 ## Testing the Updated Workflow
 
-```typescript
-async function testUpdatedWorkflow() {
-  console.log("🔄 Testing updated 3-step workflow...\n");
-  
-  const run = contentWorkflow.createRun();
-  
-  const result = await run.start({
-    inputData: {
-      content: "Artificial intelligence is revolutionizing healthcare by enabling faster diagnoses, personalized treatment plans, and more efficient drug discovery processes. These advances are helping doctors provide better care while reducing costs.",
-      type: "article"
-    }
-  });
-  
-  console.log("✅ Workflow completed!");
-  console.log("📊 Word count:", result.result.wordCount);
-  console.log("⏱️ Reading time:", result.result.metadata.readingTime, "minutes");
-  console.log("🎯 Difficulty:", result.result.metadata.difficulty);
-  console.log("📝 Summary:", result.result.summary);
-}
-
-testUpdatedWorkflow();
-```
+You can now test this workflow in the playground to validate it works as expected.
 
 ## The Complete Flow
 
 Your workflow now:
+
 1. **Validates** content and counts words
 2. **Enhances** with metadata like reading time and difficulty
 3. **Summarizes** the content for quick understanding

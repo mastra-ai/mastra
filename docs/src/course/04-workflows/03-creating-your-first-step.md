@@ -4,12 +4,7 @@ Let's create your first workflow step! We'll build a step that validates text co
 
 ## Setting Up
 
-First, create a new file for your workflow:
-
-```bash
-mkdir -p src/mastra/workflows
-touch src/mastra/workflows/content-workflow.ts
-```
+First, create a new file for your workflow in the `src/mastra/workflows` directory. Let's name this file `content-workflow.ts`
 
 ## Creating a Validation Step
 
@@ -24,31 +19,31 @@ const validateContentStep = createStep({
   description: "Validates incoming text content",
   inputSchema: z.object({
     content: z.string().min(1, "Content cannot be empty"),
-    type: z.enum(["article", "blog", "social"]).default("article")
+    type: z.enum(["article", "blog", "social"]).default("article"),
   }),
   outputSchema: z.object({
     content: z.string(),
     type: z.string(),
     wordCount: z.number(),
-    isValid: z.boolean()
+    isValid: z.boolean(),
   }),
   execute: async ({ inputData }) => {
     const { content, type } = inputData;
-    
+
     const wordCount = content.trim().split(/\s+/).length;
     const isValid = wordCount >= 5; // Minimum 5 words
-    
+
     if (!isValid) {
       throw new Error(`Content too short: ${wordCount} words`);
     }
-    
+
     return {
       content: content.trim(),
       type,
       wordCount,
-      isValid
+      isValid,
     };
-  }
+  },
 });
 ```
 

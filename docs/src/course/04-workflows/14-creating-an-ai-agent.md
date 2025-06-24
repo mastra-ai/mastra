@@ -1,10 +1,10 @@
 # Creating an AI Agent
 
-Learn how to create an AI agent that can be used within your workflows for more intelligent content processing.
+Learn how to create an Mastra agent that can be used within your workflows for more intelligent content processing.
 
 ## Creating a Content Analysis Agent
 
-Create a new file for your agent:
+Create a new file for your agent in the `src/mastra/agents` directory. Use `content-agent.ts` as the name of the file with the following contents:
 
 ```typescript
 // src/mastra/agents/content-agent.ts
@@ -23,7 +23,7 @@ export const contentAgent = new Agent({
     
     Always provide constructive, actionable feedback.
   `,
-  model: openai("gpt-4o-mini")
+  model: openai("gpt-4o-mini"),
 });
 ```
 
@@ -36,39 +36,14 @@ export const contentAgent = new Agent({
 
 ## Testing Your Agent
 
-Create a test file to verify your agent works:
-
-```typescript
-// src/test-agent.ts
-import { contentAgent } from "./mastra/agents/content-agent";
-
-async function testAgent() {
-  console.log("🤖 Testing content agent...");
-  
-  const { text } = await contentAgent.generate([
-    {
-      role: "user",
-      content: "Please analyze this content: 'AI is changing the world rapidly.'"
-    }
-  ]);
-  
-  console.log("🎯 Agent response:", text);
-}
-
-testAgent();
-```
-
-## Running the Agent Test
-
-```bash
-npx tsx src/test-agent.ts
-```
+You can test this agent in the Playground by navigating to the Agents tab and selecting `content-agent`. Use the chat interface to validate the agent is working.
 
 The agent should provide analysis of the content, including themes, quality assessment, and improvement suggestions.
 
 ## Why Use Agents in Workflows?
 
 Agents add intelligence to workflows by:
+
 - **Understanding context**: AI can interpret meaning, not just process data
 - **Generating insights**: Provide analysis that simple logic cannot
 - **Adapting responses**: Give different feedback based on content type

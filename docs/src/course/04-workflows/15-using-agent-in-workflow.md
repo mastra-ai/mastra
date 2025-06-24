@@ -2,13 +2,13 @@
 
 Now you'll create a workflow step that uses your AI agent to provide intelligent content analysis.
 
+In each step, in the execute function, you have access to the `mastra` class which provides you the ability to access Agents, Tools, and even other Workflows. In this case, we use the `mastra` class to get our agent and call that agent's `generate()` function.
+
 ## Creating an AI Analysis Step
 
 Add this step to your workflow file:
 
 ```typescript
-import { contentAgent } from "../agents/content-agent";
-
 const aiAnalysisStep = createStep({
   id: "ai-analysis",
   description: "AI-powered content analysis",
@@ -19,9 +19,9 @@ const aiAnalysisStep = createStep({
     metadata: z.object({
       readingTime: z.number(),
       difficulty: z.enum(["easy", "medium", "hard"]),
-      processedAt: z.string()
+      processedAt: z.string(),
     }),
-    summary: z.string()
+    summary: z.string(),
   }),
   outputSchema: z.object({
     content: z.string(),
@@ -30,17 +30,17 @@ const aiAnalysisStep = createStep({
     metadata: z.object({
       readingTime: z.number(),
       difficulty: z.enum(["easy", "medium", "hard"]),
-      processedAt: z.string()
+      processedAt: z.string(),
     }),
     summary: z.string(),
     aiAnalysis: z.object({
       score: z.number(),
-      feedback: z.string()
-    })
+      feedback: z.string(),
+    }),
   }),
-  execute: async ({ inputData }) => {
+  execute: async ({ inputData, mastra }) => {
     const { content, type, wordCount, metadata, summary } = inputData;
-    
+
     // Create prompt for the AI agent
     const prompt = `
 Analyze this ${type} content:
@@ -56,12 +56,13 @@ Please provide:
 
 Format as JSON: {"score": number, "feedback": "your feedback here"}
     `;
-    
-    // Get AI analysis
+
+    // Get the content-agent from the mastra instance.
+    const contentAgent = mastra.getAgent("content-agent");
     const { text } = await contentAgent.generate([
-      { role: "user", content: prompt }
+      { role: "user", content: prompt },
     ]);
-    
+
     // Parse AI response (with fallback)
     let aiAnalysis;
     try {
@@ -69,21 +70,21 @@ Format as JSON: {"score": number, "feedback": "your feedback here"}
     } catch {
       aiAnalysis = {
         score: 7,
-        feedback: "AI analysis completed. " + text
+        feedback: "AI analysis completed. " + text,
       };
     }
-    
+
     console.log(`🤖 AI Score: ${aiAnalysis.score}/10`);
-    
+
     return {
       content,
       type,
       wordCount,
       metadata,
       summary,
-      aiAnalysis
+      aiAnalysis,
     };
-  }
+  },
 });
 ```
 
@@ -92,27 +93,28 @@ Format as JSON: {"score": number, "feedback": "your feedback here"}
 ```typescript
 async function testAIStep() {
   console.log("🤖 Testing AI analysis step...");
-  
+
   const testData = {
-    content: "Renewable energy technologies are rapidly advancing, making clean power more accessible and affordable than ever before.",
+    content:
+      "Renewable energy technologies are rapidly advancing, making clean power more accessible and affordable than ever before.",
     type: "article",
     wordCount: 18,
     metadata: {
       readingTime: 1,
       difficulty: "easy",
-      processedAt: new Date().toISOString()
+      processedAt: new Date().toISOString(),
     },
-    summary: "Renewable energy technologies are rapidly advancing."
+    summary: "Renewable energy technologies are rapidly advancing.",
   };
-  
+
   const result = await aiAnalysisStep.execute({
-    inputData: testData
+    inputData: testData,
   });
-  
+
   console.log("✅ AI Analysis:", result.aiAnalysis);
 }
 
 testAIStep();
 ```
 
-Your AI-powered step is ready! Next, you'll add it to your workflow for complete AI-enhanced content processing.
+Your agent-powered step is ready! Next, you'll add it to your workflow for complete AI-enhanced content processing.

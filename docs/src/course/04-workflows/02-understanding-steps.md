@@ -5,6 +5,7 @@ Steps are the building blocks of workflows. Each step is a self-contained unit t
 ## What is a Step?
 
 A step has three main parts:
+
 1. **Input Schema** - what data it expects to receive
 2. **Output Schema** - what data it will produce
 3. **Execute Function** - the logic that transforms input to output
@@ -12,6 +13,7 @@ A step has three main parts:
 ## Step Structure
 
 Every step follows this pattern:
+
 ```typescript
 const myStep = createStep({
   id: "unique-step-name",
@@ -27,13 +29,14 @@ const myStep = createStep({
     return {
       // Return data matching output schema
     };
-  }
+  },
 });
 ```
 
 ## Why Use Schemas?
 
 Schemas provide several benefits:
+
 - **Type Safety**: TypeScript knows exactly what data flows between steps
 - **Runtime Validation**: Invalid data is caught immediately with helpful error messages
 - **Documentation**: Schemas serve as living documentation of your workflow
@@ -45,5 +48,6 @@ Schemas provide several benefits:
 - **Testable**: Each step can be tested in isolation
 - **Composable**: Steps can be combined in different ways
 - **Reliable**: Schemas catch data flow issues early
+- **Traceable**: Every step is traced so you can see the flow of data
 
 Next, you'll create your first step!
