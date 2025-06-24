@@ -232,7 +232,10 @@ export abstract class SchemaCompatLayer {
    * @param value - The Zod object to process
    * @returns The processed Zod object
    */
-  public defaultZodObjectHandler(value: ZodObject<any, any, any>): ZodObject<any, any, any> {
+  public defaultZodObjectHandler(
+    value: ZodObject<any, any, any>,
+    options: { passthrough?: boolean } = { passthrough: true },
+  ): ZodObject<any, any, any> {
     const processedShape = Object.entries(value.shape).reduce<Record<string, ZodTypeAny>>((acc, [key, propValue]) => {
       acc[key] = this.processZodType(propValue as ZodTypeAny);
       return acc;
@@ -250,6 +253,11 @@ export abstract class SchemaCompatLayer {
     if (value.description) {
       result = result.describe(value.description);
     }
+
+    if (options.passthrough && value._def.unknownKeys === 'passthrough') {
+      result = result.passthrough();
+    }
+
     return result;
   }
 
