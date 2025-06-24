@@ -131,7 +131,11 @@ export abstract class MastraMemory extends MastraBase {
    * This will be called before each conversation turn.
    * Implementations can override this to inject custom system messages.
    */
-  public async getSystemMessage(_input: { threadId: string; memoryConfig?: MemoryConfig }): Promise<string | null> {
+  public async getSystemMessage(_input: {
+    threadId: string;
+    resourceId?: string;
+    memoryConfig?: MemoryConfig;
+  }): Promise<string | null> {
     return null;
   }
 
@@ -140,7 +144,11 @@ export abstract class MastraMemory extends MastraBase {
    * This will be called before each conversation turn.
    * Implementations can override this to inject custom system messages.
    */
-  public async getUserContextMessage(_input: { threadId: string }): Promise<string | null> {
+  public async getUserContextMessage(_input: {
+    threadId: string;
+    resourceId?: string;
+    memoryConfig?: MemoryConfig;
+  }): Promise<string | null> {
     return null;
   }
 

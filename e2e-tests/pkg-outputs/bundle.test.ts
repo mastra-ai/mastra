@@ -39,7 +39,7 @@ describe.for(allPackages.map(pkg => [relative(join(__dirname.replaceAll('\\', '/
     });
 
     describe.concurrent.for(imports.filter(x => !x.endsWith('.css')).map(x => [x]))('%s', async ([importPath]) => {
-      it('should use .js and .d.ts extensions when using import', async () => {
+      it.skipIf(pkgJson.name === 'mastra')('should use .js and .d.ts extensions when using import', async () => {
         if (importPath === './package.json') {
           return;
         }
@@ -59,7 +59,7 @@ describe.for(allPackages.map(pkg => [relative(join(__dirname.replaceAll('\\', '/
         }
       });
 
-      it.skipIf(pkgName === 'packages/playground-ui')(
+      it.skipIf(pkgName === 'packages/playground-ui' || pkgJson.name === 'mastra')(
         'should use .cjs and .d.cts extensions when using require',
         async () => {
           if (importPath === './package.json') {

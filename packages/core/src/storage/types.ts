@@ -98,3 +98,11 @@ export type StorageGetTracesArg = {
   fromDate?: Date;
   toDate?: Date;
 };
+
+export type StorageResourceType = {
+  id: string;
+  workingMemory?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+};
