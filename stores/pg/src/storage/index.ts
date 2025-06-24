@@ -8,6 +8,7 @@ import {
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_TRACES,
+  TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
 } from '@mastra/core/storage';
@@ -16,6 +17,7 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
+  StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
@@ -101,9 +103,11 @@ export class PostgresStore extends MastraStorage {
 
   public get supports(): {
     selectByIncludeResourceScope: boolean;
+    resourceWorkingMemory: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
+      resourceWorkingMemory: true,
     };
   }
 
@@ -1670,5 +1674,102 @@ export class PostgresStore extends MastraStorage {
       }
       return message;
     });
+  }
+
+  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
+    const tableName = this.getTableName(TABLE_RESOURCES);
+    const result = await this.db.oneOrNone<StorageResourceType>(`SELECT * FROM ${tableName} WHERE id = $1`, [
+      resourceId,
+    ]);
+
+    if (!result) {
+      return null;
+    }
+
+    return {
+      ...result,
+      // Ensure workingMemory is always returned as a string, regardless of automatic parsing
+      workingMemory:
+        typeof result.workingMemory === 'object' ? JSON.stringify(result.workingMemory) : result.workingMemory,
+      metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
+    };
+  }
+
+  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    const tableName = this.getTableName(TABLE_RESOURCES);
+    await this.db.none(
+      `INSERT INTO ${tableName} (id, "workingMemory", metadata, "createdAt", "updatedAt") 
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        resource.id,
+        resource.workingMemory,
+        JSON.stringify(resource.metadata),
+        resource.createdAt.toISOString(),
+        resource.updatedAt.toISOString(),
+      ],
+    );
+
+    return resource;
+  }
+
+  async updateResource({
+    resourceId,
+    workingMemory,
+    metadata,
+  }: {
+    resourceId: string;
+    workingMemory?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<StorageResourceType> {
+    const existingResource = await this.getResourceById({ resourceId });
+
+    if (!existingResource) {
+      // Create new resource if it doesn't exist
+      const newResource: StorageResourceType = {
+        id: resourceId,
+        workingMemory,
+        metadata: metadata || {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      return this.saveResource({ resource: newResource });
+    }
+
+    const updatedResource = {
+      ...existingResource,
+      workingMemory: workingMemory !== undefined ? workingMemory : existingResource.workingMemory,
+      metadata: {
+        ...existingResource.metadata,
+        ...metadata,
+      },
+      updatedAt: new Date(),
+    };
+
+    const tableName = this.getTableName(TABLE_RESOURCES);
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (workingMemory !== undefined) {
+      updates.push(`"workingMemory" = $${paramIndex}`);
+      values.push(workingMemory);
+      paramIndex++;
+    }
+
+    if (metadata) {
+      updates.push(`metadata = $${paramIndex}`);
+      values.push(JSON.stringify(updatedResource.metadata));
+      paramIndex++;
+    }
+
+    updates.push(`"updatedAt" = $${paramIndex}`);
+    values.push(updatedResource.updatedAt.toISOString());
+    paramIndex++;
+
+    values.push(resourceId);
+
+    await this.db.none(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
+
+    return updatedResource;
   }
 }

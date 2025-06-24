@@ -1,5 +1,31 @@
 # mastra
 
+## 0.10.7-alpha.2
+
+### Patch Changes
+
+- 5d74aab: vNext network in playground
+- 17903a3: Remove install step from dev for telemetry
+- 8e1b6e9: dependencies updates:
+  - Updated dependency [`zod@^3.25.67` ↗︎](https://www.npmjs.com/package/zod/v/3.25.67) (from `^3.25.57`, in `dependencies`)
+- be3d5a3: Remove recharts and ramada (unused deps)
+- Updated dependencies [8e1b6e9]
+- Updated dependencies [36cd0f1]
+- Updated dependencies [2eab82b]
+- Updated dependencies [ee93d96]
+- Updated dependencies [c00039d]
+- Updated dependencies [15e9d26]
+- Updated dependencies [9bf1d55]
+- Updated dependencies [914684e]
+- Updated dependencies [07d6d88]
+- Updated dependencies [5d74aab]
+- Updated dependencies [5d74aab]
+- Updated dependencies [17903a3]
+- Updated dependencies [144eb0b]
+  - @mastra/deployer@0.10.7-alpha.2
+  - @mastra/mcp@0.10.5-alpha.1
+  - @mastra/core@0.10.7-alpha.2
+
 ## 0.10.7-alpha.1
 
 ### Patch Changes

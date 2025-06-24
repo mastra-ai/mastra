@@ -23,9 +23,12 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   StorageGetTracesArg,
+  TABLE_RESOURCES,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+
+type SUPPORTED_TABLE_NAMES = Exclude<TABLE_NAMES, typeof TABLE_RESOURCES>;
 
 function safelyParseJSON(jsonString: string): any {
   try {
@@ -66,7 +69,7 @@ export type ClickhouseConfig = {
   };
 };
 
-export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
+export const TABLE_ENGINES: Record<SUPPORTED_TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
   [TABLE_WORKFLOW_SNAPSHOT]: `ReplacingMergeTree()`,
   [TABLE_TRACES]: `MergeTree()`,
@@ -401,7 +404,7 @@ export class ClickhouseStore extends MastraStorage {
     tableName,
     schema,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: SUPPORTED_TABLE_NAMES;
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
     try {
@@ -590,7 +593,13 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
+  async load<R>({
+    tableName,
+    keys,
+  }: {
+    tableName: SUPPORTED_TABLE_NAMES;
+    keys: Record<string, string>;
+  }): Promise<R | null> {
     try {
       const keyEntries = Object.entries(keys);
       const conditions = keyEntries
@@ -604,7 +613,7 @@ export class ClickhouseStore extends MastraStorage {
       }, {});
 
       const result = await this.db.query({
-        query: `SELECT *, toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt FROM ${tableName} ${TABLE_ENGINES[tableName as TABLE_NAMES].startsWith('ReplacingMergeTree') ? 'FINAL' : ''} WHERE ${conditions}`,
+        query: `SELECT *, toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt FROM ${tableName} ${TABLE_ENGINES[tableName as SUPPORTED_TABLE_NAMES].startsWith('ReplacingMergeTree') ? 'FINAL' : ''} WHERE ${conditions}`,
         query_params: values,
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')

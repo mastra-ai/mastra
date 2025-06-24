@@ -1,5 +1,19 @@
 # @mastra/mongodb
 
+## 0.11.1-alpha.2
+
+### Patch Changes
+
+- a2eceb2: fix: mongo storage trace query
+- 0fb9d64: [MASTRA-4018] Update saveMessages in storage adapters to upsert messages
+- 870f156: Parse eval result
+- 144eb0b: [MASTRA-3669] Metadata Filter Types
+- Updated dependencies [15e9d26]
+- Updated dependencies [07d6d88]
+- Updated dependencies [5d74aab]
+- Updated dependencies [144eb0b]
+  - @mastra/core@0.10.7-alpha.2
+
 ## 0.11.1-alpha.1
 
 ### Patch Changes

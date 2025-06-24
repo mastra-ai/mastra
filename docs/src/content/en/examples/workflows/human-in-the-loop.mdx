@@ -106,11 +106,7 @@ const humanInputStep = createStep({
   }),
   execute: async ({ inputData, resumeData, suspend, getInitData }) => {
     if (!resumeData?.selection) {
-      await suspend({ suggestions: inputData?.suggestions });
-      return {
-        selection: "",
-        vacationDescription: inputData?.vacationDescription,
-      };
+      return suspend({ suggestions: inputData?.suggestions });
     }
 
     return {

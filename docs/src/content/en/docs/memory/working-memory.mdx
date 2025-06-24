@@ -2,11 +2,18 @@ import YouTube from "@/components/youtube";
 
 # Working Memory
 
-While [conversation history](/docs/memory/overview#conversation-history) and [semantic recall](./semantic-recall.mdx) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions within a thread.
+While [conversation history](/docs/memory/overview#conversation-history) and [semantic recall](./semantic-recall.mdx) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
 
 Think of it as the agent's active thoughts or scratchpad – the key information they keep available about the user or task. It's similar to how a person would naturally remember someone's name, preferences, or important details during a conversation.
 
 This is useful for maintaining ongoing state that's always relevant and should always be available to the agent.
+
+Working memory can persist at two different scopes:
+- **Thread-scoped** (default): Memory is isolated per conversation thread
+- **Resource-scoped**: Memory persists across all conversation threads for the same user
+
+**Important:** Switching between scopes means the agent won't see memory from the other scope - thread-scoped memory is completely separate from resource-scoped memory.
+
 
 ## Quick Start
 
@@ -37,6 +44,85 @@ const agent = new Agent({
 Working memory is a block of Markdown text that the agent is able to update over time to store continuously relevant information:
 
 <YouTube id="ik-ld_XA96s" />
+
+## Memory Persistence Scopes
+
+Working memory can operate in two different scopes, allowing you to choose how memory persists across conversations:
+
+### Thread-Scoped Memory (Default)
+
+By default, working memory is scoped to individual conversation threads. Each thread maintains its own isolated memory:
+
+```typescript
+const memory = new Memory({
+  storage,
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: 'thread', // Default - memory is isolated per thread
+      template: `# User Profile
+- **Name**: 
+- **Interests**: 
+- **Current Goal**: 
+`,
+    },
+  },
+});
+```
+
+**Use cases:**
+- Different conversations about separate topics
+- Temporary or session-specific information
+- Workflows where each thread needs working memory but threads are ephemeral and not related to each other
+
+### Resource-Scoped Memory
+
+Resource-scoped memory persists across all conversation threads for the same user (resourceId), enabling persistent user memory:
+
+```typescript
+const memory = new Memory({
+  storage,
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: 'resource', // Memory persists across all user threads
+      template: `# User Profile
+- **Name**: 
+- **Location**: 
+- **Interests**: 
+- **Preferences**: 
+- **Long-term Goals**: 
+`,
+    },
+  },
+});
+```
+
+**Use cases:**
+- Personal assistants that remember user preferences
+- Customer service bots that maintain customer context
+- Educational applications that track student progress
+
+### Usage with Agents
+
+When using resource-scoped memory, make sure to pass the `resourceId` parameter:
+
+```typescript
+// Resource-scoped memory requires resourceId
+const response = await agent.generate("Hello!", {
+  threadId: "conversation-123",
+  resourceId: "user-alice-456" // Same user across different threads
+});
+```
+
+## Storage Adapter Support
+
+Resource-scoped working memory requires specific storage adapters that support the `mastra_resources` table:
+
+### ✅ Supported Storage Adapters
+- **LibSQL** (`@mastra/libsql`)
+- **PostgreSQL** (`@mastra/pg`)
+- **Upstash** (`@mastra/upstash`)
 
 ## Custom Templates
 
@@ -161,3 +247,4 @@ instructions on _how_ and _when_ to use this template in your agent's `instructi
 
 - [Streaming working memory](/examples/memory/streaming-working-memory)
 - [Using a working memory template](/examples/memory/streaming-working-memory-advanced)
+- [Per-resource working memory](https://github.com/mastra-ai/mastra/tree/main/examples/memory-per-resource-example) - Complete example showing resource-scoped memory persistence
