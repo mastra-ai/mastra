@@ -1,5 +1,20 @@
 # @mastra/deployer-netlify
 
+## 0.11.0-alpha.3
+
+### Minor Changes
+
+- 3df52d1: fix deployers netlify and vercel on both cli and git integrations, improve DX
+
+### Patch Changes
+
+- Updated dependencies [792c4c0]
+- Updated dependencies [502fe05]
+- Updated dependencies [10a4f10]
+- Updated dependencies [4efcfa0]
+  - @mastra/core@0.10.7-alpha.3
+  - @mastra/deployer@0.10.7-alpha.3
+
 ## 0.10.7-alpha.2
 
 ### Patch Changes

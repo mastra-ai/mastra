@@ -1,5 +1,18 @@
 # @mastra/vectorize
 
+## 0.11.0-alpha.1
+
+### Minor Changes
+
+- 8a3bfd2: Update peerdeps to latest core
+
+### Patch Changes
+
+- Updated dependencies [792c4c0]
+- Updated dependencies [502fe05]
+- Updated dependencies [4efcfa0]
+  - @mastra/core@0.10.7-alpha.3
+
 ## 0.10.3-alpha.0
 
 ### Patch Changes

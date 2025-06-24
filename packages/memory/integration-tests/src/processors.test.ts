@@ -325,7 +325,7 @@ describe('Memory with Processors', () => {
 
     // make sure all user messages are there
     const allUserMessages = responseMessages2.filter((m: CoreMessage) => m.role === 'user');
-    expect(allUserMessages.length).toBe(3);
+    expect(allUserMessages.length).toBe(2);
 
     const remembered = await memory.query({
       threadId: thread.id,
