@@ -1,5 +1,15 @@
 # @mastra/client-js
 
+## 0.10.6-alpha.3
+
+### Patch Changes
+
+- 18a5d59: clientTools client side execution
+- Updated dependencies [792c4c0]
+- Updated dependencies [502fe05]
+- Updated dependencies [4efcfa0]
+  - @mastra/core@0.10.7-alpha.3
+
 ## 0.10.6-alpha.2
 
 ### Patch Changes
