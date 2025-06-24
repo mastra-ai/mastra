@@ -30,7 +30,7 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "cloudflare": "^4.3.0",
+    "cloudflare": "^4.4.1",
     "zod": "^3.25.67"
   },
   "devDependencies": {
