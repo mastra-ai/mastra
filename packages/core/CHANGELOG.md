@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.10.7-alpha.3
+
+### Patch Changes
+
+- 792c4c0: feat: pass runId to onFinish
+- 502fe05: createRun() -> createRunAsync()
+- 4efcfa0: Added bail() method and more ergonomic suspend function return value
+
 ## 0.10.7-alpha.2
 
 ### Patch Changes
