@@ -1,6 +1,7 @@
 import { client } from '@/lib/client';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useDebouncedCallback } from 'use-debounce';
+import { WorkflowRunStatus } from '@mastra/core';
 import { LegacyWorkflowRunResult, WorkflowWatchResult } from '@mastra/client-js';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { useState } from 'react';
@@ -233,6 +234,215 @@ export const useWatchWorkflow = () => {
   return {
     watchWorkflow,
     watchResult,
+  };
+};
+
+type StreamResult = WorkflowWatchResult & {
+  stepIds: string[];
+};
+
+export const useStreamWorkflow = () => {
+  const [streamResult, setStreamResult] = useState<StreamResult>({} as StreamResult);
+
+  const streamWorkflow = useMutation({
+    mutationFn: async ({
+      workflowId,
+      runId,
+      inputData,
+      runtimeContext: playgroundRuntimeContext,
+    }: {
+      workflowId: string;
+      runId: string;
+      inputData: Record<string, unknown>;
+      runtimeContext: Record<string, unknown>;
+    }) => {
+      setStreamResult({} as StreamResult);
+      const runtimeContext = new RuntimeContext();
+      Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
+        runtimeContext.set(key as keyof RuntimeContext, value);
+      });
+      const workflow = client.getWorkflow(workflowId);
+      const stream = await workflow.stream({ runId, inputData, runtimeContext });
+
+      if (!stream) throw new Error('No stream returned');
+
+      // Get a reader from the ReadableStream
+      const reader = stream.getReader();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          console.log('stream value===', value);
+          if (value.type === 'start') {
+            setStreamResult((prev: StreamResult) => ({
+              ...prev,
+              stepIds: [],
+              runId: value.payload.runId,
+              eventTimestamp: new Date(),
+              payload: {
+                ...prev.payload,
+                workflowState: {
+                  ...prev.payload.workflowState,
+                  status: WorkflowRunStatus.RUNNING,
+                },
+              },
+            }));
+          }
+
+          if (value.type === 'step-start') {
+            setStreamResult((prev: StreamResult) => {
+              const current = prev.payload.workflowState.steps[value.payload.id];
+              return {
+                ...prev,
+                stepIds: current ? prev.stepIds : [...prev.stepIds, value.payload.id],
+                payload: {
+                  ...prev.payload,
+                  currentStep: {
+                    id: value.payload.id,
+                    ...value.payload,
+                  },
+                  workflowState: {
+                    ...prev.payload.workflowState,
+                    steps: {
+                      ...prev.payload.workflowState.steps,
+                      [value.payload.id]: {
+                        ...(current || {}),
+                        ...value.payload,
+                      },
+                    },
+                  },
+                },
+                eventTimestamp: new Date(),
+              };
+            });
+          }
+
+          if (value.type === 'step-suspended') {
+            setStreamResult((prev: StreamResult) => {
+              const current = prev.payload.workflowState.steps[value.payload.id];
+              return {
+                ...prev,
+                payload: {
+                  ...prev.payload,
+                  currentStep: {
+                    id: value.payload.id,
+                    ...value.payload,
+                  },
+                  workflowState: {
+                    ...prev.payload.workflowState,
+                    status: WorkflowRunStatus.SUSPENDED,
+                    steps: {
+                      ...prev.payload.workflowState.steps,
+                      [value.payload.id]: {
+                        ...(current || {}),
+                        ...value.payload,
+                      },
+                    },
+                  },
+                },
+                eventTimestamp: new Date(),
+              };
+            });
+          }
+
+          if (value.type === 'step-waiting') {
+            setStreamResult((prev: StreamResult) => {
+              const current = prev.payload.workflowState.steps[value.payload.id];
+              return {
+                ...prev,
+                payload: {
+                  ...prev.payload,
+                  currentStep: {
+                    id: value.payload.id,
+                    ...value.payload,
+                  },
+                  workflowState: {
+                    ...prev.payload.workflowState,
+                    status: WorkflowRunStatus.WAITING,
+                    steps: {
+                      ...prev.payload.workflowState.steps,
+                      [value.payload.id]: {
+                        ...current,
+                        ...value.payload,
+                      },
+                    },
+                  },
+                },
+                eventTimestamp: new Date(),
+              };
+            });
+          }
+
+          if (value.type === 'step-result') {
+            setStreamResult((prev: StreamResult) => {
+              const current = prev.payload.workflowState.steps[value.payload.id];
+              return {
+                ...prev,
+                payload: {
+                  ...prev.payload,
+                  currentStep: {
+                    id: value.payload.id,
+                    ...value.payload,
+                  },
+                  workflowState: {
+                    ...prev.payload.workflowState,
+                    status: WorkflowRunStatus.RUNNING,
+                    steps: {
+                      ...prev.payload.workflowState.steps,
+                      [value.payload.id]: {
+                        ...current,
+                        ...value.payload,
+                      },
+                    },
+                  },
+                },
+                eventTimestamp: new Date(),
+              };
+            });
+          }
+
+          if (value.type === 'step-finish') {
+            setStreamResult((prev: StreamResult) => {
+              return {
+                ...prev,
+                payload: {
+                  ...prev.payload,
+                  currentStep: undefined,
+                },
+                eventTimestamp: new Date(),
+              };
+            });
+          }
+
+          if (value.type === 'finish') {
+            setStreamResult((prev: StreamResult) => {
+              const lastStepId = prev.stepIds[prev.stepIds.length - 1];
+              const lastStep = prev.payload.workflowState.steps[lastStepId];
+              return {
+                ...prev,
+                payload: {
+                  ...prev.payload,
+                  currentStep: undefined,
+                  workflowState: {
+                    ...prev.payload.workflowState,
+                    status: lastStep.status,
+                  },
+                },
+                eventTimestamp: new Date(),
+              };
+            });
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    },
+  });
+
+  return {
+    streamWorkflow,
+    streamResult,
   };
 };
 

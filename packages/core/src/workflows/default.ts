@@ -371,6 +371,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       type: 'step-start',
       payload: {
         id: step.id,
+        ...stepInfo,
+        status: 'running',
       },
     });
 
@@ -503,7 +505,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         type: 'step-suspended',
         payload: {
           id: step.id,
-          output: execResults.output,
+          ...execResults,
+          // output: execResults.output,
         },
       });
     } else {
@@ -511,8 +514,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         type: 'step-result',
         payload: {
           id: step.id,
-          status: execResults.status,
-          output: execResults.output,
+          ...execResults,
+          // status: execResults.status,
+          // output: execResults.output,
         },
       });
 
@@ -1087,6 +1091,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         type: 'step-waiting',
         payload: {
           id: entry.id,
+          payload: prevOutput,
+          startedAt,
+          status: 'waiting',
         },
       });
       await this.persistStepUpdate({
@@ -1149,6 +1156,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         type: 'step-waiting',
         payload: {
           id: entry.id,
+          payload: prevOutput,
+          startedAt,
+          status: 'waiting',
         },
       });
 
@@ -1213,6 +1223,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         type: 'step-waiting',
         payload: {
           id: entry.step.id,
+          payload: prevOutput,
+          startedAt,
+          status: 'waiting',
         },
       });
 

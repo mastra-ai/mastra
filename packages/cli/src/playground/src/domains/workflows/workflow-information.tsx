@@ -10,7 +10,7 @@ import {
   useExecuteWorkflow,
   useWatchWorkflow,
   useResumeWorkflow,
-  ExtendedWorkflowWatchResult,
+  useStreamWorkflow,
 } from '@/hooks/use-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -29,6 +29,7 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
   const { createWorkflowRun, startWorkflowRun } = useExecuteWorkflow();
   const { watchWorkflow, watchResult } = useWatchWorkflow();
   const { resumeWorkflow } = useResumeWorkflow();
+  const { streamWorkflow } = useStreamWorkflow();
 
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
@@ -107,7 +108,15 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
                       workflow={workflow}
                       isLoading={isWorkflowLoading}
                       createWorkflowRun={createWorkflowRun.mutateAsync}
-                      startWorkflowRun={startWorkflowRun.mutateAsync}
+                      startWorkflowRun={async params => {
+                        startWorkflowRun.mutateAsync(params);
+                        streamWorkflow.mutateAsync({
+                          workflowId: params.workflowId,
+                          runId: params.runId,
+                          inputData: params.input,
+                          runtimeContext: params.runtimeContext,
+                        });
+                      }}
                       resumeWorkflow={resumeWorkflow.mutateAsync}
                       watchWorkflow={watchWorkflow.mutateAsync}
                       watchResult={watchResult}
