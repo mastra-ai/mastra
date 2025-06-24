@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.10.7-alpha.4
+
+### Patch Changes
+
+- a8b194f: Fix double tool call for working memory
+
 ## 0.10.7-alpha.3
 
 ### Patch Changes

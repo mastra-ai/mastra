@@ -1,5 +1,13 @@
 # @mastra/mcp
 
+## 0.10.5-alpha.2
+
+### Patch Changes
+
+- dc93062: Add elicitation support to MCPServer and MCPClient. Also fixes connectivity issues between multiple MCPClient instances and an MCPServer.
+- Updated dependencies [a8b194f]
+  - @mastra/core@0.10.7-alpha.4
+
 ## 0.10.5-alpha.1
 
 ### Patch Changes
