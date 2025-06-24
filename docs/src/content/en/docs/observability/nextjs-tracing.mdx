@@ -56,7 +56,11 @@ npm install @opentelemetry/api langfuse-vercel
 2. Create an instrumentation file:
 
 ```ts filename="instrumentation.ts" copy
-import { ATTR_SERVICE_NAME, NodeSDK, resourceFromAttributes } from '@mastra/core/telemetry/otel-vendor';
+import {
+  NodeSDK,
+  ATTR_SERVICE_NAME,
+  resourceFromAttributes,
+} from "@mastra/core/telemetry/otel-vendor";
 import { LangfuseExporter } from "langfuse-vercel";
 
 export function register() {
@@ -66,7 +70,7 @@ export function register() {
 
   const sdk = new NodeSDK({
     resource: resourceFromAttributes({
-      [ATTR_SERVICE_NAME]: 'ai',
+      [ATTR_SERVICE_NAME]: "ai",
     }),
     traceExporter: exporter,
   });
