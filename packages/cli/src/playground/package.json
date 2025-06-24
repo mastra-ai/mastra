@@ -43,7 +43,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "framer-motion": "^11.18.2",
-    "lucide-react": "^0.468.0",
+    "lucide-react": "^0.522.0",
     "next-themes": "^0.4.5",
     "pnpm": "^10.7.1",
     "posthog-js": "^1.234.6",
