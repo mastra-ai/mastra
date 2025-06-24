@@ -574,7 +574,7 @@ export class Agent extends BaseResource {
     // Add the processDataStream method to the response
     streamResponse.processDataStream = async (options = {}) => {
       await processDataStream({
-        stream: readable as ReadableStream<Uint8Array>,
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
         ...options,
       });
     };
@@ -604,10 +604,7 @@ export class Agent extends BaseResource {
       let messages: UIMessage[] = [];
       let hasProcessedToolCalls = false;
 
-      // If no tool calls or they've been processed, pipe the original response
-      response.clone().body!.pipeTo(writable, {
-        preventClose: true,
-      });
+      response.clone().body!.pipeTo(writable);
 
       await this.processChatResponse({
         stream: response.clone().body!,
