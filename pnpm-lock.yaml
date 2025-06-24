@@ -302,6 +302,9 @@ importers:
       execa:
         specifier: ^9.6.0
         version: 9.6.0
+      fs-extra:
+        specifier: ^11.3.0
+        version: 11.3.0
       zod:
         specifier: ^3.25.67
         version: 3.25.67
@@ -315,6 +318,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.1)
+      '@types/fs-extra':
+        specifier: ^11.0.4
+        version: 11.0.4
       '@types/node':
         specifier: ^20.17.57
         version: 20.19.1
@@ -352,6 +358,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.1)
+      '@types/fs-extra':
+        specifier: ^11.0.4
+        version: 11.0.4
       '@types/node':
         specifier: ^20.17.57
         version: 20.19.1
