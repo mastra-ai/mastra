@@ -59,7 +59,7 @@
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
-    "use-debounce": "^10.0.4"
+    "use-debounce": "^10.0.5"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "^7.52.8",
