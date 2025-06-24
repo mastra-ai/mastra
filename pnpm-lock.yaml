@@ -979,7 +979,7 @@ importers:
   packages/cli/src/playground:
     dependencies:
       '@codemirror/lang-json':
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2
       '@hookform/resolvers':
         specifier: ^3.10.0
@@ -2094,7 +2094,7 @@ importers:
         specifier: ^2.2.0
         version: 2.2.0(zod@3.25.67)
       '@codemirror/lang-json':
-        specifier: ^6.0.1
+        specifier: ^6.0.2
         version: 6.0.2
       '@dagrejs/dagre':
         specifier: ^1.1.4

@@ -11,7 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@codemirror/lang-json": "^6.0.1",
+    "@codemirror/lang-json": "^6.0.2",
     "@hookform/resolvers": "^3.10.0",
     "@lezer/highlight": "^1.2.1",
     "@mastra/client-js": "workspace:*",
