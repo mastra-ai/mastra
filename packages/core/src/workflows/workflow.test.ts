@@ -834,6 +834,72 @@ describe('Workflow', () => {
   });
 
   describe('Basic Workflow Execution', () => {
+    it.only('should be able to bail workflow execution', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ bail, inputData }) => {
+          if (inputData.value === 'bail') {
+            return bail({ result: 'bailed' });
+          }
+
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { result: 'step2: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const run = workflow.createRun();
+      const result = await run.start({ inputData: { value: 'bail' } });
+
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toBeUndefined();
+
+      const run2 = workflow.createRun();
+      const result2 = await run2.start({ inputData: { value: 'no-bail' } });
+
+      expect(result2.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result2.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'step2: no-bail' },
+        payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
     it('should throw error when execution flow not defined', () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
@@ -4102,7 +4168,7 @@ describe('Workflow', () => {
         .fn()
         .mockImplementationOnce(async ({ suspend, resumeData }) => {
           if (!resumeData?.humanPrompt) {
-            await suspend();
+            return suspend();
           }
         })
         .mockImplementationOnce(() => ({ improvedOutput: 'human intervention output' }));
@@ -4443,7 +4509,7 @@ describe('Workflow', () => {
       const promptAgentAction = vi
         .fn()
         .mockImplementationOnce(async ({ suspend }) => {
-          return await suspend({ testPayload: 'hello' });
+          return suspend({ testPayload: 'hello' });
         })
         .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
       const evaluateToneAction = vi.fn().mockResolvedValue({

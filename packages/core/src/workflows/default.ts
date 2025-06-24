@@ -173,7 +173,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           emitter: params.emitter,
           runtimeContext: params.runtimeContext,
         });
+
         if (lastOutput.result.status !== 'success') {
+          if (lastOutput.result.status === 'bailed') {
+            lastOutput.status = 'success';
+          }
+
           const result = (await this.fmtReturnValue(
             executionSpan,
             params.emitter,
