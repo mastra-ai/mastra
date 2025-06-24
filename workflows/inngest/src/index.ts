@@ -95,7 +95,6 @@ export class InngestRun<
       await new Promise(resolve => setTimeout(resolve, 1000));
       runs = await this.getRuns(eventId);
       if (runs?.[0]?.status === 'Failed' || runs?.[0]?.status === 'Cancelled') {
-        console.log(runs?.[0]);
         throw new Error(`Function run ${runs?.[0]?.status}`);
       }
     }
