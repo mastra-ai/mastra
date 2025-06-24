@@ -25,7 +25,6 @@ import type {
   DynamicMapping,
   StreamEvent,
   WorkflowRunState,
-  WorkflowRunStatus,
 } from './types';
 
 export type DefaultEngineType = {};
