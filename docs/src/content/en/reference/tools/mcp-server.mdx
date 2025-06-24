@@ -833,6 +833,192 @@ For practical examples of setting up and deploying an MCPServer, see the [Deploy
 
 The example at the beginning of this page also demonstrates how to instantiate `MCPServer` with both tools and agents.
 
+## Elicitation
+
+### What is Elicitation?
+
+Elicitation is a feature in the Model Context Protocol (MCP) that allows servers to request structured information from users. This enables interactive workflows where servers can collect additional data dynamically.
+
+The `MCPServer` class automatically includes elicitation capabilities. Tools receive an `options` parameter in their `execute` function that includes an `elicitation.sendRequest()` method for requesting user input.
+
+### Tool Execution Signature
+
+When tools are executed within an MCP server context, they receive an additional `options` parameter:
+
+```typescript
+execute: async ({ context }, options) => {
+  // context contains the tool's input parameters
+  // options contains server capabilities like elicitation
+  
+  const result = await options.elicitation.sendRequest({
+    message: "Please provide information",
+    requestedSchema: { /* schema */ }
+  });
+  
+  return result;
+}
+```
+
+### How Elicitation Works
+
+A common use case is during tool execution. When a tool needs user input, it can use the elicitation functionality provided through the tool's execution options:
+
+1. The tool calls `options.elicitation.sendRequest()` with a message and schema
+2. The request is sent to the connected MCP client
+3. The client presents the request to the user (via UI, command line, etc.)
+4. The user provides input, rejects, or cancels the request
+5. The client sends the response back to the server
+6. The tool receives the response and continues execution
+
+### Using Elicitation in Tools
+
+Here's an example of a tool that uses elicitation to collect user contact information:
+
+```typescript
+import { MCPServer } from "@mastra/mcp";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const server = new MCPServer({
+  name: "Interactive Server",
+  version: "1.0.0",
+  tools: {
+    collectContactInfo: createTool({
+      id: "collectContactInfo",
+      description: "Collects user contact information through elicitation",
+      inputSchema: z.object({
+        reason: z.string().optional().describe("Reason for collecting contact info"),
+      }),
+      execute: async ({ context }, options) => {
+        const { reason } = context;
+
+        try {
+          // Request user input via elicitation through the options parameter
+          const result = await options.elicitation.sendRequest({
+            message: reason 
+              ? `Please provide your contact information. ${reason}`
+              : 'Please provide your contact information',
+            requestedSchema: {
+              type: 'object',
+              properties: {
+                name: {
+                  type: 'string',
+                  title: 'Full Name',
+                  description: 'Your full name',
+                },
+                email: {
+                  type: 'string',
+                  title: 'Email Address', 
+                  description: 'Your email address',
+                  format: 'email',
+                },
+                phone: {
+                  type: 'string',
+                  title: 'Phone Number',
+                  description: 'Your phone number (optional)',
+                },
+              },
+              required: ['name', 'email'],
+            },
+          });
+
+          // Handle the user's response
+          if (result.action === 'accept') {
+            return `Contact information collected: ${JSON.stringify(result.content, null, 2)}`;
+          } else if (result.action === 'reject') {
+            return 'Contact information collection was declined by the user.';
+          } else {
+            return 'Contact information collection was cancelled by the user.';
+          }
+        } catch (error) {
+          return `Error collecting contact information: ${error}`;
+        }
+      },
+    }),
+  },
+});
+```
+
+### Elicitation Request Schema
+
+The `requestedSchema` must be a flat object with primitive properties only. Supported types include:
+
+- **String**: `{ type: 'string', title: 'Display Name', description: 'Help text' }`
+- **Number**: `{ type: 'number', minimum: 0, maximum: 100 }`
+- **Boolean**: `{ type: 'boolean', default: false }`
+- **Enum**: `{ type: 'string', enum: ['option1', 'option2'] }`
+
+Example schema:
+
+```typescript
+{
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      title: 'Full Name',
+      description: 'Your complete name',
+    },
+    age: {
+      type: 'number',
+      title: 'Age',
+      minimum: 18,
+      maximum: 120,
+    },
+    newsletter: {
+      type: 'boolean',
+      title: 'Subscribe to Newsletter',
+      default: false,
+    },
+  },
+  required: ['name'],
+}
+```
+
+### Response Actions
+
+Users can respond to elicitation requests in three ways:
+
+1. **Accept** (`action: 'accept'`): User provided data and confirmed submission
+   - Contains `content` field with the submitted data
+2. **Reject** (`action: 'reject'`): User explicitly declined to provide information
+   - No content field
+3. **Cancel** (`action: 'cancel'`): User dismissed the request without deciding
+   - No content field
+
+Tools should handle all three response types appropriately.
+
+### Security Considerations
+
+- **Never request sensitive information** like passwords, SSNs, or credit card numbers
+- Validate all user input against the provided schema
+- Handle rejection and cancellation gracefully
+- Provide clear reasons for data collection
+- Respect user privacy and preferences
+
+### Tool Execution API
+
+The elicitation functionality is available through the `options` parameter in tool execution:
+
+```typescript
+// Within a tool's execute function
+options.elicitation.sendRequest({
+  message: string,           // Message to display to user
+  requestedSchema: object    // JSON schema defining expected response structure
+}): Promise<ElicitResult>
+```
+
+Note that elicitation is **session-aware** when using HTTP-based transports (SSE or HTTP). This means that when multiple clients are connected to the same server, elicitation requests are routed to the correct client session that initiated the tool execution.
+
+The `ElicitResult` type:
+
+```typescript
+type ElicitResult = {
+  action: 'accept' | 'reject' | 'cancel';
+  content?: any; // Only present when action is 'accept'
+}
+```
+
 ## Related Information
 
 - For connecting to MCP servers in Mastra, see the [MCPClient documentation](./mcp-client).
