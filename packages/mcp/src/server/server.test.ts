@@ -1348,6 +1348,283 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
   });
 });
 
+describe('MCPServer - Elicitation', () => {
+  let elicitationServer: MCPServer;
+  let elicitationClient: InternalMastraMCPClient;
+  let elicitationHttpServer: http.Server;
+  const ELICITATION_PORT = 9600 + Math.floor(Math.random() * 1000);
+
+  beforeAll(async () => {
+    elicitationServer = new MCPServer({
+      name: 'ElicitationTestServer',
+      version: '1.0.0',
+      tools: {
+        testElicitationTool: {
+          description: 'A tool that uses elicitation to collect user input',
+          parameters: z.object({
+            message: z.string().describe('Message to show to user'),
+          }),
+          execute: async ({ message }) => {
+            // Use the server's elicitation functionality
+            try {
+              const result = await elicitationServer.elicitation.sendRequest({
+                message: message,
+                requestedSchema: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string', title: 'Name' },
+                    email: { type: 'string', title: 'Email', format: 'email' },
+                  },
+                  required: ['name'],
+                },
+              });
+              return result;
+            } catch (error) {
+              console.error('Error sending elicitation request:', error);
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error collecting information: ${error}`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+          },
+        },
+      },
+    });
+
+    elicitationHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+      const url = new URL(req.url || '', `http://localhost:${ELICITATION_PORT}`);
+      await elicitationServer.startHTTP({
+        url,
+        httpPath: '/http',
+        req,
+        res,
+      });
+    });
+
+    await new Promise<void>(resolve => elicitationHttpServer.listen(ELICITATION_PORT, () => resolve()));
+  });
+
+  afterAll(async () => {
+    await elicitationClient?.disconnect();
+    if (elicitationHttpServer) {
+      elicitationHttpServer.closeAllConnections?.();
+      await new Promise<void>((resolve, reject) => {
+        elicitationHttpServer.close(err => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    }
+    if (elicitationServer) {
+      await elicitationServer.close();
+    }
+  });
+
+  it('should have elicitation capability enabled', () => {
+    // Test that the server has elicitation functionality available
+    expect(elicitationServer.elicitation).toBeDefined();
+    expect(elicitationServer.elicitation.sendRequest).toBeDefined();
+  });
+
+  it('should handle elicitation request with accept response', async () => {
+    const mockElicitationHandler = vi.fn(async request => {
+      expect(request.message).toBe('Please provide your information');
+      expect(request.requestedSchema).toBeDefined();
+      expect(request.requestedSchema.properties.name).toBeDefined();
+
+      return {
+        action: 'accept' as const,
+        content: {
+          name: 'John Doe',
+          email: 'john@example.com',
+        },
+      };
+    });
+
+    elicitationClient = new InternalMastraMCPClient({
+      name: 'elicitation-test-client',
+      server: {
+        url: new URL(`http://localhost:${ELICITATION_PORT}/http`),
+      },
+    });
+    elicitationClient.elicitation.onRequest(mockElicitationHandler);
+    await elicitationClient.connect();
+
+    const tools = await elicitationClient.tools();
+    const tool = tools['testElicitationTool'];
+    expect(tool).toBeDefined();
+
+    const result = await tool.execute({
+      context: {
+        message: 'Please provide your information',
+      },
+    });
+
+    expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      action: 'accept',
+      content: {
+        name: 'John Doe',
+        email: 'john@example.com',
+      },
+    });
+  });
+
+  it('should handle elicitation request with reject response', async () => {
+    const mockElicitationHandler = vi.fn(async request => {
+      expect(request.message).toBe('Please provide sensitive data');
+      return { action: 'reject' as const };
+    });
+
+    await elicitationClient.disconnect();
+    elicitationClient = new InternalMastraMCPClient({
+      name: 'elicitation-reject-client',
+      server: {
+        url: new URL(`http://localhost:${ELICITATION_PORT}/http`),
+      },
+    });
+    elicitationClient.elicitation.onRequest(mockElicitationHandler);
+    await elicitationClient.connect();
+
+    const tools = await elicitationClient.tools();
+    const tool = tools['testElicitationTool'];
+
+    const result = await tool.execute({
+      context: {
+        message: 'Please provide sensitive data',
+      },
+    });
+
+    expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(result.content[0].text)).toEqual({ action: 'reject' });
+  });
+
+  it('should handle elicitation request with cancel response', async () => {
+    const mockElicitationHandler = vi.fn(async () => {
+      return { action: 'cancel' as const };
+    });
+
+    await elicitationClient.disconnect();
+    elicitationClient = new InternalMastraMCPClient({
+      name: 'elicitation-cancel-client',
+      server: {
+        url: new URL(`http://localhost:${ELICITATION_PORT}/http`),
+      },
+    });
+    elicitationClient.elicitation.onRequest(mockElicitationHandler);
+    await elicitationClient.connect();
+
+    const tools = await elicitationClient.tools();
+    const tool = tools['testElicitationTool'];
+
+    const result = await tool.execute({
+      context: {
+        message: 'Please provide optional data',
+      },
+    });
+
+    expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(result.content[0].text)).toEqual({ action: 'cancel' });
+  });
+
+  it('should error when elicitation handler throws error', async () => {
+    const mockElicitationHandler = vi.fn(async () => {
+      throw new Error('Handler error');
+    });
+
+    await elicitationClient.disconnect();
+    elicitationClient = new InternalMastraMCPClient({
+      name: 'elicitation-error-client',
+      server: {
+        url: new URL(`http://localhost:${ELICITATION_PORT}/http`),
+      },
+    });
+    elicitationClient.elicitation.onRequest(mockElicitationHandler);
+    await elicitationClient.connect();
+
+    const tools = await elicitationClient.tools();
+    const tool = tools['testElicitationTool'];
+
+    const result = await tool.execute({
+      context: {
+        message: 'This will cause an error',
+      },
+    });
+
+    expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
+    expect(result.content[0].text).toContain('Handler error');
+  });
+
+  it('should error when client has no elicitation handler', async () => {
+    await elicitationClient.disconnect();
+    elicitationClient = new InternalMastraMCPClient({
+      name: 'no-elicitation-handler-client',
+      server: {
+        url: new URL(`http://localhost:${ELICITATION_PORT}/http`),
+        // No elicitationHandler provided
+      },
+    });
+    await elicitationClient.connect();
+
+    const tools = await elicitationClient.tools();
+    const tool = tools['testElicitationTool'];
+
+    const result = await tool.execute({
+      context: {
+        message: 'This should fail gracefully',
+      },
+    });
+
+    // When no elicitation handler is provided, the server's elicitInput should fail
+    // and the tool should return a reject response
+    expect(result.content[0].text).toContain('Method not found');
+  });
+
+  it('should validate elicitation request schema structure', async () => {
+    const mockElicitationHandler = vi.fn(async request => {
+      expect(request.message).toBe('Please provide your information');
+      expect(request.requestedSchema).toBeDefined();
+      expect(request.requestedSchema.properties.name).toBeDefined();
+
+      return {
+        action: 'accept' as const,
+        content: {
+          validated: true,
+        },
+      };
+    });
+
+    elicitationClient = new InternalMastraMCPClient({
+      name: 'elicitation-test-client',
+      server: {
+        url: new URL(`http://localhost:${ELICITATION_PORT}/http`),
+      },
+    });
+    elicitationClient.elicitation.onRequest(mockElicitationHandler);
+    await elicitationClient.connect();
+
+    const tools = await elicitationClient.tools();
+    const tool = tools['testElicitationTool'];
+    expect(tool).toBeDefined();
+
+    const result = await tool.execute({
+      context: {
+        message: 'Please provide your information',
+      },
+    });
+
+    console.log('result', result);
+
+    expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
+    expect(result.content[0].text).toContain('Elicitation response content does not match requested schema');
+  });
+});
+
 describe('MCPServer with Tool Output Schema', () => {
   let serverWithOutputSchema: MCPServer;
   let clientWithOutputSchema: MCPClient;

@@ -198,17 +198,11 @@ export class MCPServer extends MCPServerBase {
   private async handleElicitationRequest(request: ElicitRequest['params']): Promise<ElicitResult> {
     this.logger.debug(`Sending elicitation request: ${request.message}`);
 
-    try {
-      const response = await this.server.elicitInput(request);
+    const response = await this.server.elicitInput(request);
 
-      this.logger.debug(`Received elicitation response: ${JSON.stringify(response)}`);
+    this.logger.debug(`Received elicitation response: ${JSON.stringify(response)}`);
 
-      return response;
-    } catch (error) {
-      this.logger.error('Error during elicitation request:', error);
-      // Return rejection on error
-      return { action: 'reject' };
-    }
+    return response;
   }
 
   private convertAgentsToTools(

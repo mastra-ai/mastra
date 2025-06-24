@@ -1,5 +1,5 @@
 import { MCPClient } from '@mastra/mcp';
-import type { ElicitationHandler } from '@mastra/mcp';
+// import type { ElicitationHandler } from '@mastra/mcp';
 import { createInterface } from 'readline';
 
 // Create readline interface for user input
@@ -18,7 +18,7 @@ function askQuestion(question: string): Promise<string> {
 }
 
 // Elicitation handler that prompts the user for input
-const elicitationHandler: ElicitationHandler = async request => {
+const elicitationHandler = async request => {
   console.log('\n🔔 Elicitation Request Received:');
   console.log(`Message: ${request.message}`);
   console.log('Requested Schema:');
@@ -61,13 +61,13 @@ const elicitationHandler: ElicitationHandler = async request => {
 
     // Check for cancellation
     if (answer.toLowerCase() === 'cancel' || answer.toLowerCase() === 'c') {
-      return { action: 'cancel' };
+      return { action: 'cancel' as const };
     }
 
     // Handle empty responses
     if (answer === '' && isRequired) {
       console.log(`❌ Error: ${fieldName} is required`);
-      return { action: 'reject' };
+      return { action: 'reject' as const };
     } else if (answer !== '') {
       content[fieldName] = answer;
     }
@@ -81,13 +81,13 @@ const elicitationHandler: ElicitationHandler = async request => {
 
   if (confirmAnswer.toLowerCase() === 'yes' || confirmAnswer.toLowerCase() === 'y') {
     return {
-      action: 'accept',
+      action: 'accept' as const,
       content,
     };
   } else if (confirmAnswer.toLowerCase() === 'cancel' || confirmAnswer.toLowerCase() === 'c') {
-    return { action: 'cancel' };
+    return { action: 'cancel' as const };
   } else {
-    return { action: 'reject' };
+    return { action: 'reject' as const };
   }
 };
 
@@ -96,10 +96,11 @@ async function main() {
     servers: {
       myMcpServerTwo: {
         url: new URL('http://localhost:4111/api/mcp/myMcpServerTwo/mcp'),
-        elicitationHandler, // Add the elicitation handler
       },
     },
   });
+
+  mcpClient.elicitation.onRequest('myMcpServerTwo', elicitationHandler);
 
   try {
     console.log('Connecting to MCP server...');
