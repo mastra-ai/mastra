@@ -3793,7 +3793,11 @@ describe('MastraInngestWorkflow', () => {
       expect(initialResult.steps).toMatchObject({
         input: { input: 'test' },
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
-        promptAgent: { status: 'suspended', payload: { testPayload: 'hello' } },
+        promptAgent: {
+          status: 'suspended',
+          suspendedPayload: { testPayload: 'hello' },
+          payload: { userInput: 'test input' },
+        },
       });
 
       const newCtx = {
