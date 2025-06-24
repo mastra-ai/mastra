@@ -44,12 +44,6 @@ export default async function setup() {
     } catch {
       // ignore
     }
-
-    try {
-      registry.kill();
-    } catch {
-      // ignore
-    }
   };
 
   return { shutdown, registryUrl: registry.toString() };

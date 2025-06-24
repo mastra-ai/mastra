@@ -31,8 +31,9 @@ export async function setupTestProject(pathToStoreFiles, registryUrl) {
   spawn('pnpm', ['dev'], {
     cwd: newPath,
     stdio: 'inherit',
-    env: {
-      ...process.env,
-    },
+    spawn('pnpm', ['dev'], {
+    cwd: newPath,
+    stdio: 'inherit',
+  });
   });
 }
