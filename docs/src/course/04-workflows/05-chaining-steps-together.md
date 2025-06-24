@@ -14,7 +14,7 @@ export const contentWorkflow = createWorkflow({
   description: "Validates and enhances content",
   inputSchema: z.object({
     content: z.string(),
-    type: z.enum(["article", "blog", "social"]).default("article")
+    type: z.enum(["article", "blog", "social"]).default("article"),
   }),
   outputSchema: z.object({
     content: z.string(),
@@ -23,9 +23,9 @@ export const contentWorkflow = createWorkflow({
     metadata: z.object({
       readingTime: z.number(),
       difficulty: z.enum(["easy", "medium", "hard"]),
-      processedAt: z.string()
-    })
-  })
+      processedAt: z.string(),
+    }),
+  }),
 })
   .then(validateContentStep)
   .then(enhanceContentStep)
@@ -49,6 +49,7 @@ export const contentWorkflow = createWorkflow({
 ## Schema Validation
 
 The workflow automatically validates:
+
 - Input data matches the workflow's input schema
 - Each step's output matches the next step's input schema
 - Final output matches the workflow's output schema

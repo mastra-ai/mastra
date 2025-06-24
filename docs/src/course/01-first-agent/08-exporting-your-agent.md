@@ -18,13 +18,14 @@ export const mastra = new Mastra({
     url: ":memory:",
   }),
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```
 
 This creates a new Mastra instance that includes:
+
 - Your financial agent
 - In-memory storage for development
 - A logger for debugging and monitoring
