@@ -55,7 +55,7 @@ export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
     modelItem = `groq('llama-3.3-70b-versatile')`;
   } else if (llmProvider === 'google') {
     providerImport = `import { google } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `google('gemini-1.5-pro-latest')`;
+    modelItem = `google('gemini-2.5-pro-exp-03-25')`;
   } else if (llmProvider === 'cerebras') {
     providerImport = `import { cerebras } from '${getAISDKPackage(llmProvider)}';`;
     modelItem = `cerebras('llama-3.3-70b')`;

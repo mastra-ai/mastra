@@ -341,7 +341,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
-    apiKey: "GOOGLE_API_KEY",
+    apiKey: "GOOGLE_GENERATIVE_AI_API_KEY",
   },
   {
     provider: "Google Generative AI",
@@ -351,7 +351,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
-    apiKey: "GOOGLE_API_KEY",
+    apiKey: "GOOGLE_GENERATIVE_AI_API_KEY",
   },
   {
     provider: "Google Generative AI",
@@ -361,7 +361,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
-    apiKey: "GOOGLE_API_KEY",
+    apiKey: "GOOGLE_GENERATIVE_AI_API_KEY",
   },
   {
     provider: "Google Vertex",
