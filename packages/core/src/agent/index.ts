@@ -1347,7 +1347,26 @@ export class Agent<
           threadId,
         });
         const memory = this.getMemory();
-        const thread = threadAfter || (threadId ? await memory?.getThreadById({ threadId }) : undefined);
+        const messageListResponses = new MessageList({ threadId, resourceId })
+          .add(result.response.messages, 'response')
+          .get.all.core();
+        const usedWorkingMemory = messageListResponses?.some(
+          m => m.role === 'tool' && m?.content?.some(c => c?.toolName === 'updateWorkingMemory'),
+        );
+        // working memory updates the thread, so we need to get the latest thread if we used it
+        const thread = usedWorkingMemory
+          ? threadId
+            ? await memory?.getThreadById({ threadId })
+            : undefined
+          : threadAfter;
+
+        this.logger.debug(`[Agent:${this.name}] - Thread after: ${JSON.stringify(thread)}`, {
+          responseMessages: result.response.messages,
+          messageListResponses,
+          threadAfter,
+          usedWorkingMemory,
+          thread,
+        });
 
         if (memory && resourceId && thread) {
           try {
@@ -1385,6 +1404,15 @@ export class Agent<
               if (!title) {
                 return;
               }
+
+              this.logger.debug(`[Agent:${this.name}] - Saving thread with title: ${title}`, {
+                runId,
+                threadId: thread.id,
+                resourceId,
+                memoryConfig,
+                title,
+                metadata: thread.metadata,
+              });
 
               return memory.createThread({
                 threadId: thread.id,
