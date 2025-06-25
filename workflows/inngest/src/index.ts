@@ -20,7 +20,7 @@ import type {
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
-import type { Inngest, BaseContext, InngestFunction, type ServeHandlerOptions } from 'inngest';
+import type { Inngest, BaseContext, InngestFunction, ServeHandlerOptions } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
 import { z } from 'zod';
 
