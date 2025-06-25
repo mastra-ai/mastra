@@ -35,6 +35,12 @@ After connecting your Mastra project’s Git repository to Vercel, update the pr
 
 - **Build command**: `npm run build` (optional)
 
+### Environment variables
+
+Before your first deployment, make sure to add any environment variables used by your application. For example, if you're using OpenAI as the LLM, you'll need to set `OPENAI_API_KEY` in your Vercel project settings.
+
+> See [Environment variables](https://vercel.com/docs/environment-variables) for more details.
+
 Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
 
 ## Manual deployment
@@ -42,7 +48,7 @@ Your project is now configured with automatic deployments which occur whenever y
 Manual deployments are also possible using the [Vercel CLI](https://vercel.com/docs/cli). With the Vercel CLI installed run the following from your project root to deploy your application.
 
 ```bash copy
-vercel --prod --prebuilt
+npm run build && vercel --prod --prebuilt --archive=tgz
 ```
 
 > You can also run `vercel dev` from your project root to test your Mastra application locally.
@@ -59,32 +65,22 @@ The build output for Mastra applications using the `VercelDeployer` includes all
           <FileTree.File name="index.mjs" />
         </FileTree.Folder>
       </FileTree.Folder>
+      <FileTree.File name="config.json" />
     </FileTree.Folder>
   </FileTree.Folder>
-  <FileTree.File name="vercel.json" />
   <FileTree.File name="package.json" />
 </FileTree>
 
 
-The `VercelDeployer` automatically generates a `vercel.json` configuration file in `.vercel/output` with the following settings:
+The `VercelDeployer` automatically generates a `config.json` configuration file in `.vercel/output` with the following settings:
 
 ```json
 {
-  "version": 2,
-  "installCommand": "npm install --omit=dev",
-  "builds": [
-    {
-      "src": "index.mjs",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": ["**"]
-      }
-    }
-  ],
+  "version": 3,
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "index.mjs"
+      "dest": "/"
     }
   ]
 }

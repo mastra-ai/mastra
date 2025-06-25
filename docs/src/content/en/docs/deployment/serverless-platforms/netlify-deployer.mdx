@@ -35,7 +35,15 @@ After connecting your Mastra project’s Git repository to Netlify, update the p
 
 - **Build command**: `npm run build` (optional)
 
+### Environment variables
+
+Before your first deployment, make sure to add any environment variables used by your application. For example, if you're using OpenAI as the LLM, you'll need to set `OPENAI_API_KEY` in your Netlify project settings.
+
+> See [Environment variables overview](https://docs.netlify.com/environment-variables/overview/) for more details.
+
+
 Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
+
 
 ## Manual deployment
 
@@ -59,9 +67,9 @@ The build output for Mastra applications using the `NetlifyDeployer` includes al
           <FileTree.File name="index.mjs" />
         </FileTree.Folder>
       </FileTree.Folder>
+    <FileTree.File name="config.json" />
     </FileTree.Folder>
   </FileTree.Folder>
-  <FileTree.File name="config.json" />
   <FileTree.File name="package.json" />
 </FileTree>
 

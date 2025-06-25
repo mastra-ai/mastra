@@ -42,6 +42,20 @@ In your Cloudflare dashboard, navigate to **Profile** > **API Tokens**, then sel
 
 > To learn how to create a Cloudflare API token, see [Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/) in the Cloudflare docs.
 
+## Continuous integration
+
+After connecting your Mastra project’s Git repository to Cloudflare, update the project settings. In the Cloudflare dashboard, go to **Settings** > **Build configuration** and set the following:
+
+- **Build command**: `npm run build` (optional)
+
+### Environment variables
+
+Before your first deployment, make sure to add all required environment variables. For example, if you're using OpenAI as your LLM, set the `OPENAI_API_KEY` in your Cloudflare project settings. You’ll also need to add your Cloudflare API token.
+
+> See [Add environment variables via the dashboard](https://developers.cloudflare.com/workers/configuration/environment-variables/#add-environment-variables-via-the-dashboard) for more details.
+
+Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
+
 ## Manual deployment
 
 Manual deployments are also possible using the [Cloudflare Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/). With the Wrangler CLI installed run the following from your project root to deploy your application.
@@ -60,9 +74,9 @@ The build output for Mastra applications using the `CloudflareDeployer` includes
   <FileTree.Folder name=".mastra" defaultOpen>
     <FileTree.Folder name="output" defaultOpen>
       <FileTree.File name="index.mjs" />
+      <FileTree.File name="wrangler.json" />
       </FileTree.Folder>
   </FileTree.Folder>
-  <FileTree.File name="wrangler.json" />
   <FileTree.File name="package.json" />
 </FileTree>
 
