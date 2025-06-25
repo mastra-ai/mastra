@@ -40,6 +40,8 @@ import type {
   ServerCapabilities,
   Prompt,
   CallToolResult,
+  ElicitResult,
+  ElicitRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
@@ -47,29 +49,15 @@ import { SSETransport } from 'hono-mcp-server-sse-transport';
 import { z } from 'zod';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
-import type {
-  MCPServerPromptMessagesCallback,
-  MCPServerPrompts,
-  MCPServerResourceContentCallback,
-  MCPServerResources,
-} from './types';
-
+import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MCPTool } from './types';
 export class MCPServer extends MCPServerBase {
   private server: Server;
   private stdioTransport?: StdioServerTransport;
   private sseTransport?: SSEServerTransport;
   private sseHonoTransports: Map<string, SSETransport>;
   private streamableHTTPTransports: Map<string, StreamableHTTPServerTransport> = new Map();
-  private listToolsHandlerIsRegistered: boolean = false;
-  private callToolHandlerIsRegistered: boolean = false;
-  private listResourcesHandlerIsRegistered: boolean = false;
-  private readResourceHandlerIsRegistered: boolean = false;
-  private listResourceTemplatesHandlerIsRegistered: boolean = false;
-  private subscribeResourceHandlerIsRegistered: boolean = false;
-  private unsubscribeResourceHandlerIsRegistered: boolean = false;
-
-  private listPromptsHandlerIsRegistered: boolean = false;
-  private getPromptHandlerIsRegistered: boolean = false;
+  // Track server instances for each HTTP session
+  private httpServerInstances: Map<string, Server> = new Map();
 
   private definedResources?: Resource[];
   private definedResourceTemplates?: ResourceTemplate[];
@@ -79,6 +67,7 @@ export class MCPServer extends MCPServerBase {
   private subscriptions: Set<string> = new Set();
   public readonly resources: ServerResourceActions;
   public readonly prompts: ServerPromptActions;
+  public readonly elicitation: ElicitationActions;
 
   /**
    * Get the current stdio transport.
@@ -120,6 +109,7 @@ export class MCPServer extends MCPServerBase {
     const capabilities: ServerCapabilities = {
       tools: {},
       logging: { enabled: true },
+      elicitation: {},
     };
 
     if (opts.resources) {
@@ -137,24 +127,9 @@ export class MCPServer extends MCPServerBase {
     );
 
     this.sseHonoTransports = new Map();
-    this.registerListToolsHandler();
-    this.registerCallToolHandler();
-    if (opts.resources) {
-      this.registerListResourcesHandler();
-      this.registerReadResourceHandler({ getResourcesCallback: opts.resources.getResourceContent });
-      this.registerSubscribeResourceHandler();
-      this.registerUnsubscribeResourceHandler();
 
-      if (opts.resources.resourceTemplates) {
-        this.registerListResourceTemplatesHandler();
-      }
-    }
-    if (opts.prompts) {
-      this.registerListPromptsHandler();
-      this.registerGetPromptHandler({
-        getPromptMessagesCallback: opts.prompts.getPromptMessages,
-      });
-    }
+    // Register all handlers on the main server instance
+    this.registerHandlersOnServer(this.server);
 
     this.resources = new ServerResourceActions({
       getSubscriptions: () => this.subscriptions,
@@ -175,6 +150,400 @@ export class MCPServer extends MCPServerBase {
         this.definedPrompts = undefined;
       },
     });
+
+    this.elicitation = {
+      sendRequest: async request => {
+        return this.handleElicitationRequest(request);
+      },
+    };
+  }
+
+  /**
+   * Handle an elicitation request by sending it to the connected client.
+   * This method sends an elicitation/create request to the client and waits for the response.
+   *
+   * @param request - The elicitation request containing message and schema
+   * @param serverInstance - Optional server instance to use; defaults to main server for backward compatibility
+   * @returns Promise that resolves to the client's response
+   */
+  private async handleElicitationRequest(
+    request: ElicitRequest['params'],
+    serverInstance?: Server,
+  ): Promise<ElicitResult> {
+    this.logger.debug(`Sending elicitation request: ${request.message}`);
+
+    const server = serverInstance || this.server;
+    const response = await server.elicitInput(request);
+
+    this.logger.debug(`Received elicitation response: ${JSON.stringify(response)}`);
+
+    return response;
+  }
+
+  /**
+   * Creates a new Server instance configured with all handlers for HTTP sessions.
+   * Each HTTP client connection gets its own Server instance to avoid routing conflicts.
+   */
+  private createServerInstance(): Server {
+    const capabilities: ServerCapabilities = {
+      tools: {},
+      logging: { enabled: true },
+      elicitation: {},
+    };
+
+    if (this.resourceOptions) {
+      capabilities.resources = { subscribe: true, listChanged: true };
+    }
+
+    if (this.promptOptions) {
+      capabilities.prompts = { listChanged: true };
+    }
+
+    const serverInstance = new Server({ name: this.name, version: this.version }, { capabilities });
+
+    // Register all handlers on the new server instance
+    this.registerHandlersOnServer(serverInstance);
+
+    return serverInstance;
+  }
+
+  /**
+   * Registers all MCP handlers on a given server instance.
+   * This allows us to create multiple server instances with identical functionality.
+   */
+  private registerHandlersOnServer(serverInstance: Server) {
+    // List tools handler
+    serverInstance.setRequestHandler(ListToolsRequestSchema, async () => {
+      this.logger.debug('Handling ListTools request');
+      return {
+        tools: Object.values(this.convertedTools).map(tool => {
+          const toolSpec: any = {
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.parameters.jsonSchema,
+          };
+          if (tool.outputSchema) {
+            toolSpec.outputSchema = tool.outputSchema.jsonSchema;
+          }
+          return toolSpec;
+        }),
+      };
+    });
+
+    // Call tool handler
+    serverInstance.setRequestHandler(CallToolRequestSchema, async request => {
+      const startTime = Date.now();
+      try {
+        const tool = this.convertedTools[request.params.name] as MCPTool;
+        if (!tool) {
+          this.logger.warn(`CallTool: Unknown tool '${request.params.name}' requested.`);
+          return {
+            content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }],
+            isError: true,
+          };
+        }
+
+        const validation = tool.parameters.validate?.(request.params.arguments ?? {});
+        if (validation && !validation.success) {
+          this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
+            errors: validation.error,
+          });
+          return {
+            content: [{ type: 'text', text: `Invalid tool arguments: ${JSON.stringify(validation.error)}` }],
+            isError: true,
+          };
+        }
+        if (!tool.execute) {
+          this.logger.warn(`CallTool: Tool '${request.params.name}' does not have an execute function.`);
+          return {
+            content: [{ type: 'text', text: `Tool '${request.params.name}' does not have an execute function.` }],
+            isError: true,
+          };
+        }
+
+        // Create session-aware elicitation for this tool execution
+        const sessionElicitation = {
+          sendRequest: async (request: ElicitRequest['params']) => {
+            return this.handleElicitationRequest(request, serverInstance);
+          },
+        };
+
+        const result = await tool.execute(validation?.value, {
+          messages: [],
+          toolCallId: '',
+          elicitation: sessionElicitation,
+        });
+
+        this.logger.debug(`CallTool: Tool '${request.params.name}' executed successfully with result:`, result);
+        const duration = Date.now() - startTime;
+        this.logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
+
+        const response: CallToolResult = { isError: false, content: [] };
+
+        if (tool.outputSchema) {
+          if (!result.structuredContent) {
+            throw new Error(`Tool ${request.params.name} has an output schema but no structured content was provided.`);
+          }
+          const outputValidation = tool.outputSchema.validate?.(result.structuredContent ?? {});
+          if (outputValidation && !outputValidation.success) {
+            this.logger.warn(`CallTool: Invalid structured content for '${request.params.name}'`, {
+              errors: outputValidation.error,
+            });
+            throw new Error(
+              `Invalid structured content for tool ${request.params.name}: ${JSON.stringify(outputValidation.error)}`,
+            );
+          }
+          response.structuredContent = result.structuredContent;
+        }
+
+        if (response.structuredContent) {
+          response.content = [{ type: 'text', text: JSON.stringify(response.structuredContent) }];
+        } else {
+          response.content = [
+            {
+              type: 'text',
+              text: typeof result === 'string' ? result : JSON.stringify(result),
+            },
+          ];
+        }
+
+        return response;
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        if (error instanceof z.ZodError) {
+          this.logger.warn('Invalid tool arguments', {
+            tool: request.params.name,
+            errors: error.errors,
+            duration: `${duration}ms`,
+          });
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        this.logger.error(`Tool execution failed: ${request.params.name}`, { error });
+        return {
+          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+          isError: true,
+        };
+      }
+    });
+
+    // Register resource handlers if resources are configured
+    if (this.resourceOptions) {
+      this.registerResourceHandlersOnServer(serverInstance);
+    }
+
+    // Register prompt handlers if prompts are configured
+    if (this.promptOptions) {
+      this.registerPromptHandlersOnServer(serverInstance);
+    }
+  }
+
+  /**
+   * Registers resource-related handlers on a server instance.
+   */
+  private registerResourceHandlersOnServer(serverInstance: Server) {
+    const capturedResourceOptions = this.resourceOptions;
+    if (!capturedResourceOptions) return;
+
+    // List resources handler
+    if (capturedResourceOptions.listResources) {
+      serverInstance.setRequestHandler(ListResourcesRequestSchema, async () => {
+        this.logger.debug('Handling ListResources request');
+        if (this.definedResources) {
+          return { resources: this.definedResources };
+        } else {
+          try {
+            const resources = await capturedResourceOptions.listResources!();
+            this.definedResources = resources;
+            this.logger.debug(`Fetched and cached ${this.definedResources.length} resources.`);
+            return { resources: this.definedResources };
+          } catch (error) {
+            this.logger.error('Error fetching resources via listResources():', { error });
+            throw error;
+          }
+        }
+      });
+    }
+
+    // Read resource handler
+    if (capturedResourceOptions.getResourceContent) {
+      serverInstance.setRequestHandler(ReadResourceRequestSchema, async request => {
+        const startTime = Date.now();
+        const uri = request.params.uri;
+        this.logger.debug(`Handling ReadResource request for URI: ${uri}`);
+
+        if (!this.definedResources) {
+          const resources = await this.resourceOptions?.listResources?.();
+          if (!resources) throw new Error('Failed to load resources');
+          this.definedResources = resources;
+        }
+
+        const resource = this.definedResources?.find(r => r.uri === uri);
+
+        if (!resource) {
+          this.logger.warn(`ReadResource: Unknown resource URI '${uri}' requested.`);
+          throw new Error(`Resource not found: ${uri}`);
+        }
+
+        try {
+          const resourcesOrResourceContent = await capturedResourceOptions.getResourceContent({ uri });
+          const resourcesContent = Array.isArray(resourcesOrResourceContent)
+            ? resourcesOrResourceContent
+            : [resourcesOrResourceContent];
+          const contents: ResourceContents[] = resourcesContent.map(resourceContent => {
+            const contentItem: ResourceContents = {
+              uri: resource.uri,
+              mimeType: resource.mimeType,
+            };
+            if ('text' in resourceContent) {
+              contentItem.text = resourceContent.text;
+            }
+
+            if ('blob' in resourceContent) {
+              contentItem.blob = resourceContent.blob;
+            }
+
+            return contentItem;
+          });
+          const duration = Date.now() - startTime;
+          this.logger.info(`Resource '${uri}' read successfully in ${duration}ms.`);
+          return {
+            contents,
+          };
+        } catch (error) {
+          const duration = Date.now() - startTime;
+          this.logger.error(`Failed to get content for resource URI '${uri}' in ${duration}ms`, { error });
+          throw error;
+        }
+      });
+    }
+
+    // Resource templates handler
+    if (capturedResourceOptions.resourceTemplates) {
+      serverInstance.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+        this.logger.debug('Handling ListResourceTemplates request');
+        if (this.definedResourceTemplates) {
+          return { resourceTemplates: this.definedResourceTemplates };
+        } else {
+          try {
+            const templates = await capturedResourceOptions.resourceTemplates!();
+            this.definedResourceTemplates = templates;
+            this.logger.debug(`Fetched and cached ${this.definedResourceTemplates.length} resource templates.`);
+            return { resourceTemplates: this.definedResourceTemplates };
+          } catch (error) {
+            this.logger.error('Error fetching resource templates via resourceTemplates():', { error });
+            throw error;
+          }
+        }
+      });
+    }
+
+    // Subscribe/unsubscribe handlers
+    serverInstance.setRequestHandler(SubscribeRequestSchema, async (request: { params: { uri: string } }) => {
+      const uri = request.params.uri;
+      this.logger.info(`Received resources/subscribe request for URI: ${uri}`);
+      this.subscriptions.add(uri);
+      return {};
+    });
+
+    serverInstance.setRequestHandler(UnsubscribeRequestSchema, async (request: { params: { uri: string } }) => {
+      const uri = request.params.uri;
+      this.logger.info(`Received resources/unsubscribe request for URI: ${uri}`);
+      this.subscriptions.delete(uri);
+      return {};
+    });
+  }
+
+  /**
+   * Registers prompt-related handlers on a server instance.
+   */
+  private registerPromptHandlersOnServer(serverInstance: Server) {
+    const capturedPromptOptions = this.promptOptions;
+    if (!capturedPromptOptions) return;
+
+    // List prompts handler
+    if (capturedPromptOptions.listPrompts) {
+      serverInstance.setRequestHandler(ListPromptsRequestSchema, async () => {
+        this.logger.debug('Handling ListPrompts request');
+        if (this.definedPrompts) {
+          return {
+            prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
+          };
+        } else {
+          try {
+            const prompts = await capturedPromptOptions.listPrompts();
+            for (const prompt of prompts) {
+              PromptSchema.parse(prompt);
+            }
+            this.definedPrompts = prompts;
+            this.logger.debug(`Fetched and cached ${this.definedPrompts.length} prompts.`);
+            return {
+              prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
+            };
+          } catch (error) {
+            this.logger.error('Error fetching prompts via listPrompts():', {
+              error: error instanceof Error ? error.message : String(error),
+            });
+            throw error;
+          }
+        }
+      });
+    }
+
+    // Get prompt handler
+    if (capturedPromptOptions.getPromptMessages) {
+      serverInstance.setRequestHandler(
+        GetPromptRequestSchema,
+        async (request: { params: { name: string; version?: string; arguments?: any } }) => {
+          const startTime = Date.now();
+          const { name, version, arguments: args } = request.params;
+          if (!this.definedPrompts) {
+            const prompts = await this.promptOptions?.listPrompts?.();
+            if (!prompts) throw new Error('Failed to load prompts');
+            this.definedPrompts = prompts;
+          }
+          // Select prompt by name and version (if provided)
+          let prompt;
+          if (version) {
+            prompt = this.definedPrompts?.find(p => p.name === name && p.version === version);
+          } else {
+            // Select the first matching name if no version is provided.
+            prompt = this.definedPrompts?.find(p => p.name === name);
+          }
+          if (!prompt) throw new Error(`Prompt "${name}"${version ? ` (version ${version})` : ''} not found`);
+          // Validate required arguments
+          if (prompt.arguments) {
+            for (const arg of prompt.arguments) {
+              if (arg.required && (args?.[arg.name] === undefined || args?.[arg.name] === null)) {
+                throw new Error(`Missing required argument: ${arg.name}`);
+              }
+            }
+          }
+          try {
+            let messages: any[] = [];
+            if (capturedPromptOptions.getPromptMessages) {
+              messages = await capturedPromptOptions.getPromptMessages({ name, version, args });
+            }
+            const duration = Date.now() - startTime;
+            this.logger.info(
+              `Prompt '${name}'${version ? ` (version ${version})` : ''} retrieved successfully in ${duration}ms.`,
+            );
+            return { prompt, messages };
+          } catch (error) {
+            const duration = Date.now() - startTime;
+            this.logger.error(`Failed to get content for prompt '${name}' in ${duration}ms`, { error });
+            throw error;
+          }
+        },
+      );
+    }
   }
 
   private convertAgentsToTools(
@@ -315,6 +684,7 @@ export class MCPServer extends MCPServerBase {
         runtimeContext: new RuntimeContext(),
         description: workflowToolDefinition.description,
       };
+
       const coreTool = makeCoreTool(workflowToolDefinition, options) as InternalCoreTool;
 
       workflowTools[workflowToolName] = {
@@ -410,417 +780,6 @@ export class MCPServer extends MCPServerBase {
     );
 
     return allConvertedTools;
-  }
-
-  /**
-   * Register the ListTools handler for listing all available tools.
-   */
-  private registerListToolsHandler() {
-    if (this.listToolsHandlerIsRegistered) {
-      return;
-    }
-    this.listToolsHandlerIsRegistered = true;
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      this.logger.debug('Handling ListTools request');
-      return {
-        tools: Object.values(this.convertedTools).map(tool => {
-          const toolSpec: any = {
-            name: tool.name,
-            description: tool.description,
-            inputSchema: tool.parameters.jsonSchema,
-          };
-          if (tool.outputSchema) {
-            toolSpec.outputSchema = tool.outputSchema.jsonSchema;
-          }
-          return toolSpec;
-        }),
-      };
-    });
-  }
-
-  /**
-   * Register the CallTool handler for executing a tool by name.
-   */
-  private registerCallToolHandler() {
-    if (this.callToolHandlerIsRegistered) {
-      return;
-    }
-    this.callToolHandlerIsRegistered = true;
-    this.server.setRequestHandler(CallToolRequestSchema, async request => {
-      const startTime = Date.now();
-      try {
-        const tool = this.convertedTools[request.params.name];
-        if (!tool) {
-          this.logger.warn(`CallTool: Unknown tool '${request.params.name}' requested.`);
-          return {
-            content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }],
-            isError: true,
-          };
-        }
-
-        const validation = tool.parameters.validate?.(request.params.arguments ?? {});
-        if (validation && !validation.success) {
-          this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
-            errors: validation.error,
-          });
-          return {
-            content: [{ type: 'text', text: `Invalid tool arguments: ${JSON.stringify(validation.error)}` }],
-            isError: true,
-          };
-        }
-        if (!tool.execute) {
-          this.logger.warn(`CallTool: Tool '${request.params.name}' does not have an execute function.`);
-          return {
-            content: [{ type: 'text', text: `Tool '${request.params.name}' does not have an execute function.` }],
-            isError: true,
-          };
-        }
-
-        const result = await tool.execute(validation?.value, { messages: [], toolCallId: '' });
-
-        this.logger.debug(`CallTool: Tool '${request.params.name}' executed successfully with result:`, result);
-        const duration = Date.now() - startTime;
-        this.logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
-
-        const response: CallToolResult = { isError: false, content: [] };
-
-        if (tool.outputSchema) {
-          if (!result.structuredContent) {
-            throw new Error(`Tool ${request.params.name} has an output schema but no structured content was provided.`);
-          }
-          const outputValidation = tool.outputSchema.validate?.(result.structuredContent ?? {});
-          if (outputValidation && !outputValidation.success) {
-            this.logger.warn(`CallTool: Invalid structured content for '${request.params.name}'`, {
-              errors: outputValidation.error,
-            });
-            throw new Error(
-              `Invalid structured content for tool ${request.params.name}: ${JSON.stringify(outputValidation.error)}`,
-            );
-          }
-          response.structuredContent = result.structuredContent;
-        }
-
-        if (result.content) {
-          response.content = result.content;
-        } else if (response.structuredContent) {
-          response.content = [{ type: 'text', text: JSON.stringify(response.structuredContent) }];
-        } else {
-          response.content = [
-            {
-              type: 'text',
-              text: typeof result === 'string' ? result : JSON.stringify(result),
-            },
-          ];
-        }
-
-        return response;
-      } catch (error) {
-        const duration = Date.now() - startTime;
-        if (error instanceof z.ZodError) {
-          this.logger.warn('Invalid tool arguments', {
-            tool: request.params.name,
-            errors: error.errors,
-            duration: `${duration}ms`,
-          });
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-        this.logger.error(`Tool execution failed: ${request.params.name}`, { error });
-        return {
-          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
-          isError: true,
-        };
-      }
-    });
-  }
-
-  /**
-   * Register the ListResources handler for listing all available resources.
-   */
-  private registerListResourcesHandler() {
-    if (this.listResourcesHandlerIsRegistered) {
-      return;
-    }
-    this.listResourcesHandlerIsRegistered = true;
-    const capturedResourceOptions = this.resourceOptions; // Capture for TS narrowing
-
-    if (!capturedResourceOptions?.listResources) {
-      this.logger.warn('ListResources capability not supported by server configuration.');
-      return;
-    }
-
-    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
-      this.logger.debug('Handling ListResources request');
-      if (this.definedResources) {
-        return { resources: this.definedResources };
-      } else {
-        try {
-          const resources = await capturedResourceOptions.listResources();
-          // Cache the resources
-          this.definedResources = resources;
-          this.logger.debug(`Fetched and cached ${this.definedResources.length} resources.`);
-          return { resources: this.definedResources };
-        } catch (error) {
-          this.logger.error('Error fetching resources via listResources():', { error });
-          // Re-throw to let the MCP Server SDK handle formatting the error response
-          throw error;
-        }
-      }
-    });
-  }
-
-  /**
-   * Register the ReadResource handler for reading a resource by URI.
-   */
-  private registerReadResourceHandler({
-    getResourcesCallback,
-  }: {
-    getResourcesCallback: MCPServerResourceContentCallback;
-  }) {
-    if (this.readResourceHandlerIsRegistered) {
-      return;
-    }
-    this.readResourceHandlerIsRegistered = true;
-    this.server.setRequestHandler(ReadResourceRequestSchema, async request => {
-      const startTime = Date.now();
-      const uri = request.params.uri;
-      this.logger.debug(`Handling ReadResource request for URI: ${uri}`);
-
-      if (!this.definedResources) {
-        const resources = await this.resourceOptions?.listResources?.();
-        if (!resources) throw new Error('Failed to load resources');
-        this.definedResources = resources;
-      }
-
-      const resource = this.definedResources?.find(r => r.uri === uri);
-
-      if (!resource) {
-        this.logger.warn(`ReadResource: Unknown resource URI '${uri}' requested.`);
-        throw new Error(`Resource not found: ${uri}`);
-      }
-
-      try {
-        const resourcesOrResourceContent = await getResourcesCallback({ uri });
-        const resourcesContent = Array.isArray(resourcesOrResourceContent)
-          ? resourcesOrResourceContent
-          : [resourcesOrResourceContent];
-        const contents: ResourceContents[] = resourcesContent.map(resourceContent => {
-          const contentItem: ResourceContents = {
-            uri: resource.uri,
-            mimeType: resource.mimeType,
-          };
-          if ('text' in resourceContent) {
-            contentItem.text = resourceContent.text;
-          }
-
-          if ('blob' in resourceContent) {
-            contentItem.blob = resourceContent.blob;
-          }
-
-          return contentItem;
-        });
-        const duration = Date.now() - startTime;
-        this.logger.info(`Resource '${uri}' read successfully in ${duration}ms.`);
-        return {
-          contents,
-        };
-      } catch (error) {
-        const duration = Date.now() - startTime;
-        this.logger.error(`Failed to get content for resource URI '${uri}' in ${duration}ms`, { error });
-        throw error;
-      }
-    });
-  }
-
-  /**
-   * Register the ListResourceTemplates handler.
-   */
-  private registerListResourceTemplatesHandler() {
-    if (this.listResourceTemplatesHandlerIsRegistered) {
-      return;
-    }
-
-    // If this method is called, this.resourceOptions and this.resourceOptions.resourceTemplates should exist
-    // due to the constructor logic checking opts.resources.resourceTemplates.
-    if (!this.resourceOptions || typeof this.resourceOptions.resourceTemplates !== 'function') {
-      this.logger.warn(
-        'ListResourceTemplates handler called, but resourceTemplates function is not available on resourceOptions or not a function.',
-      );
-      // Register a handler that returns empty templates if not properly configured.
-      this.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
-        this.logger.debug('Handling ListResourceTemplates request (no templates configured or resourceOptions issue)');
-        return { resourceTemplates: [] };
-      });
-      this.listResourceTemplatesHandlerIsRegistered = true;
-      return;
-    }
-
-    // Typescript can now infer resourceTemplatesFn is a function.
-    const resourceTemplatesFn = this.resourceOptions.resourceTemplates;
-
-    this.listResourceTemplatesHandlerIsRegistered = true;
-    this.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
-      this.logger.debug('Handling ListResourceTemplates request');
-      if (this.definedResourceTemplates) {
-        return { resourceTemplates: this.definedResourceTemplates };
-      } else {
-        try {
-          const templates = await resourceTemplatesFn(); // Safe to call now
-          this.definedResourceTemplates = templates;
-          this.logger.debug(`Fetched and cached ${this.definedResourceTemplates.length} resource templates.`);
-          return { resourceTemplates: this.definedResourceTemplates };
-        } catch (error) {
-          this.logger.error('Error fetching resource templates via resourceTemplates():', { error });
-          // Re-throw to let the MCP Server SDK handle formatting the error response
-          throw error;
-        }
-      }
-    });
-  }
-
-  /**
-   * Register the SubscribeResource handler.
-   */
-  private registerSubscribeResourceHandler() {
-    if (this.subscribeResourceHandlerIsRegistered) {
-      return;
-    }
-    if (!SubscribeRequestSchema) {
-      this.logger.warn('SubscribeRequestSchema not available, cannot register SubscribeResource handler.');
-      return;
-    }
-    this.subscribeResourceHandlerIsRegistered = true;
-    this.server.setRequestHandler(SubscribeRequestSchema, async (request: { params: { uri: string } }) => {
-      const uri = request.params.uri;
-      this.logger.info(`Received resources/subscribe request for URI: ${uri}`);
-      this.subscriptions.add(uri);
-      return {};
-    });
-  }
-
-  /**
-   * Register the UnsubscribeResource handler.
-   */
-  private registerUnsubscribeResourceHandler() {
-    if (this.unsubscribeResourceHandlerIsRegistered) {
-      return;
-    }
-    this.unsubscribeResourceHandlerIsRegistered = true;
-
-    this.server.setRequestHandler(UnsubscribeRequestSchema, async (request: { params: { uri: string } }) => {
-      const uri = request.params.uri;
-      this.logger.info(`Received resources/unsubscribe request for URI: ${uri}`);
-      this.subscriptions.delete(uri);
-      return {};
-    });
-  }
-
-  /**
-   * Register the ListPrompts handler.
-   */
-  private registerListPromptsHandler() {
-    if (this.listPromptsHandlerIsRegistered) {
-      return;
-    }
-    this.listPromptsHandlerIsRegistered = true;
-    const capturedPromptOptions = this.promptOptions;
-
-    if (!capturedPromptOptions?.listPrompts) {
-      this.logger.warn('ListPrompts capability not supported by server configuration.');
-      return;
-    }
-
-    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
-      this.logger.debug('Handling ListPrompts request');
-      if (this.definedPrompts) {
-        return {
-          prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
-        };
-      } else {
-        try {
-          const prompts = await capturedPromptOptions.listPrompts();
-          // Parse and cache the prompts
-          for (const prompt of prompts) {
-            PromptSchema.parse(prompt);
-          }
-          this.definedPrompts = prompts;
-          this.logger.debug(`Fetched and cached ${this.definedPrompts.length} prompts.`);
-          return {
-            prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
-          };
-        } catch (error) {
-          this.logger.error('Error fetching prompts via listPrompts():', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-          // Re-throw to let the MCP Server SDK handle formatting the error response
-          throw error;
-        }
-      }
-    });
-  }
-
-  /**
-   * Register the GetPrompt handler.
-   */
-  private registerGetPromptHandler({
-    getPromptMessagesCallback,
-  }: {
-    getPromptMessagesCallback?: MCPServerPromptMessagesCallback;
-  }) {
-    if (this.getPromptHandlerIsRegistered) return;
-    this.getPromptHandlerIsRegistered = true;
-    // Accept optional version parameter in prompts/get
-    this.server.setRequestHandler(
-      GetPromptRequestSchema,
-      async (request: { params: { name: string; version?: string; arguments?: any } }) => {
-        const startTime = Date.now();
-        const { name, version, arguments: args } = request.params;
-        if (!this.definedPrompts) {
-          const prompts = await this.promptOptions?.listPrompts?.();
-          if (!prompts) throw new Error('Failed to load prompts');
-          this.definedPrompts = prompts;
-        }
-        // Select prompt by name and version (if provided)
-        let prompt;
-        if (version) {
-          prompt = this.definedPrompts?.find(p => p.name === name && p.version === version);
-        } else {
-          // Select the first matching name if no version is provided.
-          prompt = this.definedPrompts?.find(p => p.name === name);
-        }
-        if (!prompt) throw new Error(`Prompt "${name}"${version ? ` (version ${version})` : ''} not found`);
-        // Validate required arguments
-        if (prompt.arguments) {
-          for (const arg of prompt.arguments) {
-            if (arg.required && (args?.[arg.name] === undefined || args?.[arg.name] === null)) {
-              throw new Error(`Missing required argument: ${arg.name}`);
-            }
-          }
-        }
-        try {
-          let messages: any[] = [];
-          if (getPromptMessagesCallback) {
-            messages = await getPromptMessagesCallback({ name, version, args });
-          }
-          const duration = Date.now() - startTime;
-          this.logger.info(
-            `Prompt '${name}'${version ? ` (version ${version})` : ''} retrieved successfully in ${duration}ms.`,
-          );
-          return { prompt, messages };
-        } catch (error) {
-          const duration = Date.now() - startTime;
-          this.logger.error(`Failed to get content for prompt '${name}' in ${duration}ms`, { error });
-          throw error;
-        }
-      },
-    );
   }
 
   /**
@@ -1067,15 +1026,24 @@ export class MCPServer extends MCPServerBase {
                   `startHTTP: Streamable HTTP transport closed for session ${closedSessionId}, removing from map.`,
                 );
                 this.streamableHTTPTransports.delete(closedSessionId);
+                // Also clean up the server instance for this session
+                if (this.httpServerInstances.has(closedSessionId)) {
+                  this.httpServerInstances.delete(closedSessionId);
+                  this.logger.debug(`startHTTP: Cleaned up server instance for closed session ${closedSessionId}`);
+                }
               }
             };
 
-            // Connect the MCP server instance to the new transport
-            await this.server.connect(transport);
+            // Create a new server instance for this HTTP session
+            const sessionServerInstance = this.createServerInstance();
 
-            // Store the transport when the session is initialized
+            // Connect the new server instance to the new transport
+            await sessionServerInstance.connect(transport);
+
+            // Store both the transport and server instance when the session is initialized
             if (transport.sessionId) {
               this.streamableHTTPTransports.set(transport.sessionId, transport);
+              this.httpServerInstances.set(transport.sessionId, sessionServerInstance);
               this.logger.debug(
                 `startHTTP: Streamable HTTP session initialized and stored with ID: ${transport.sessionId}`,
               );
@@ -1232,14 +1200,6 @@ export class MCPServer extends MCPServerBase {
    * Close the MCP server and all its connections
    */
   async close() {
-    this.callToolHandlerIsRegistered = false;
-    this.listToolsHandlerIsRegistered = false;
-    this.listResourcesHandlerIsRegistered = false;
-    this.readResourceHandlerIsRegistered = false;
-    this.listResourceTemplatesHandlerIsRegistered = false;
-    this.subscribeResourceHandlerIsRegistered = false;
-    this.unsubscribeResourceHandlerIsRegistered = false;
-
     try {
       if (this.stdioTransport) {
         await this.stdioTransport.close?.();
@@ -1255,12 +1215,19 @@ export class MCPServer extends MCPServerBase {
         }
         this.sseHonoTransports.clear();
       }
-      // Close all active Streamable HTTP transports
+      // Close all active Streamable HTTP transports and their server instances
       if (this.streamableHTTPTransports) {
         for (const transport of this.streamableHTTPTransports.values()) {
           await transport.close?.();
         }
         this.streamableHTTPTransports.clear();
+      }
+      // Close all HTTP server instances
+      if (this.httpServerInstances) {
+        for (const serverInstance of this.httpServerInstances.values()) {
+          await serverInstance.close?.();
+        }
+        this.httpServerInstances.clear();
       }
       await this.server.close();
       this.logger.info('MCP server closed.');

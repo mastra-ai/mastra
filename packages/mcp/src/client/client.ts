@@ -14,6 +14,8 @@ import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/p
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type {
   ClientCapabilities,
+  ElicitRequest,
+  ElicitResult,
   GetPromptResult,
   ListPromptsResult,
   LoggingLevel,
@@ -28,12 +30,14 @@ import {
   ListPromptsResultSchema,
   GetPromptResultSchema,
   PromptListChangedNotificationSchema,
+  ElicitRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { z } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import type { JSONSchema } from 'zod-from-json-schema';
+import { ElicitationClientActions } from './elicitationActions';
 import { PromptClientActions } from './promptActions';
 import { ResourceClientActions } from './resourceActions';
 
@@ -50,6 +54,9 @@ export interface LogMessage {
 }
 
 export type LogHandler = (logMessage: LogMessage) => void;
+
+// Elicitation handler type
+export type ElicitationHandler = (request: ElicitRequest['params']) => Promise<ElicitResult>;
 
 // Base options common to all server definitions
 type BaseServerOptions = {
@@ -130,7 +137,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private currentOperationContext: RuntimeContext | null = null;
   public readonly resources: ResourceClientActions;
   public readonly prompts: PromptClientActions;
-
+  public readonly elicitation: ElicitationClientActions;
   constructor({
     name,
     version = '1.0.0',
@@ -145,21 +152,25 @@ export class InternalMastraMCPClient extends MastraBase {
     this.enableServerLogs = server.enableServerLogs ?? true;
     this.serverConfig = server;
 
+    const clientCapabilities = { ...capabilities, elicitation: {} };
+
     this.client = new Client(
       {
         name,
         version,
       },
       {
-        capabilities,
+        capabilities: clientCapabilities,
       },
     );
 
     // Set up log message capturing
     this.setupLogging();
 
+
     this.resources = new ResourceClientActions({ client: this, logger: this.logger });
     this.prompts = new PromptClientActions({ client: this, logger: this.logger });
+    this.elicitation = new ElicitationClientActions({ client: this, logger: this.logger });
   }
 
   /**
@@ -447,6 +458,14 @@ export class InternalMastraMCPClient extends MastraBase {
     this.log('debug', 'Setting resource list changed notification handler');
     this.client.setNotificationHandler(ResourceListChangedNotificationSchema, () => {
       handler();
+    });
+  }
+
+  setElicitationRequestHandler(handler: ElicitationHandler): void {
+    this.log('debug', 'Setting elicitation request handler');
+    this.client.setRequestHandler(ElicitRequestSchema, async (request) => {
+      this.log('debug', `Received elicitation request: ${request.params.message}`);
+      return handler(request.params);
     });
   }
 

@@ -56,7 +56,7 @@ describe('Working Memory Tests', () => {
   describe('Working Memory Test with Template', () => {
     beforeEach(async () => {
       // Create a new unique database file in the temp directory for each test
-      const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-`)), 'test.db');
+      const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
       console.log('dbPath', dbPath);
 
       storage = new LibSQLStore({
@@ -170,7 +170,7 @@ describe('Working Memory Tests', () => {
     });
 
     it('should respect working memory enabled/disabled setting', async () => {
-      const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-`)), 'test.db');
+      const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
 
       // Create memory instance with working memory disabled
       const disabledMemory = new Memory({
@@ -440,34 +440,27 @@ describe('Working Memory Tests', () => {
     });
   });
 
-  describe('Working Memory with Schema', () => {
+  describe('Working Memory with agent memory', () => {
     let agent: Agent;
+    let thread: any;
+    let memory: Memory;
+
     beforeEach(async () => {
-      const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-`)), 'test.db');
+      const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
       storage = new LibSQLStore({
         url: `file:${dbPath}`,
-      });
-      vector = new LibSQLVector({
-        connectionUrl: `file:${dbPath}`,
       });
 
       memory = new Memory({
         storage,
-        vector,
-        embedder: fastembed,
         options: {
           workingMemory: {
             enabled: true,
             schema: z.object({
-              city: z.string(),
-              temperature: z.number().optional(),
+              favouriteAnimal: z.string(),
             }),
           },
-          lastMessages: 10,
-          semanticRecall: {
-            topK: 3,
-            messageRange: 2,
-          },
+          lastMessages: 1,
           threads: {
             generateTitle: false,
           },
@@ -492,41 +485,192 @@ describe('Working Memory Tests', () => {
       });
     });
 
-    afterEach(async () => {
-      //@ts-ignore
-      await storage.client.close();
-      //@ts-ignore
-      await vector.turso.close();
+    it('should remember information from working memory in subsequent calls', async () => {
+      const thread = await memory.saveThread({
+        thread: createTestThread('Remembering Test'),
+      });
+
+      // First call to establish a fact in working memory
+      await agent.generate('My favorite animal is the majestic wolf.', {
+        threadId: thread.id,
+        resourceId,
+      });
+
+      // Verify it's in the working memory
+      const workingMemoryAfterFirstCall = await memory.getWorkingMemory({ threadId: thread.id });
+      expect(workingMemoryAfterFirstCall).not.toBeNull();
+      if (workingMemoryAfterFirstCall) {
+        expect(workingMemoryAfterFirstCall.toLowerCase()).toContain('wolf');
+      }
+
+      // add messages to the thread
+      await agent.generate('How are you doing?', {
+        threadId: thread.id,
+        resourceId,
+      });
+
+      // third call to see if the agent remembers the fact
+      const response = await agent.generate('What is my favorite animal?', {
+        threadId: thread.id,
+        resourceId,
+      });
+
+      expect(response.text.toLowerCase()).toContain('wolf');
     });
 
-    it('should accept valid working memory updates matching the schema', async () => {
-      const validMemory = { city: 'Austin', temperature: 85 };
-      await agent.generate('I am in Austin and it is 85 degrees', {
-        threadId: thread.id,
-        resourceId,
+    describe('Working Memory with Schema', () => {
+      let agent: Agent;
+      beforeEach(async () => {
+        const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
+        storage = new LibSQLStore({
+          url: `file:${dbPath}`,
+        });
+        vector = new LibSQLVector({
+          connectionUrl: `file:${dbPath}`,
+        });
+
+        memory = new Memory({
+          storage,
+          vector,
+          embedder: fastembed,
+          options: {
+            workingMemory: {
+              enabled: true,
+              schema: z.object({
+                city: z.string(),
+                temperature: z.number().optional(),
+              }),
+            },
+            lastMessages: 10,
+            semanticRecall: {
+              topK: 3,
+              messageRange: 2,
+            },
+            threads: {
+              generateTitle: false,
+            },
+          },
+        });
+        // Reset message counter
+        messageCounter = 0;
+
+        // Create a new thread for each test
+        thread = await memory.saveThread({
+          thread: createTestThread('Working Memory Test Thread'),
+        });
+
+        const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+        const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
+        const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
+        expect(extractUserData(wmObj)).toMatchObject({});
+
+        agent = new Agent({
+          name: 'Memory Test Agent',
+          instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
+          model: openai('gpt-4o'),
+          memory,
+        });
       });
 
-      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
-      const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
-      const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
-      expect(extractUserData(wmObj)).toMatchObject(validMemory);
-    });
-
-    it('should recall the most recent valid schema-based working memory', async () => {
-      const second = { city: 'Denver', temperature: 75 };
-      await agent.generate('Now I am in Seattle and it is 60 degrees', {
-        threadId: thread.id,
-        resourceId,
-      });
-      await agent.generate('Now I am in Denver and it is 75 degrees', {
-        threadId: thread.id,
-        resourceId,
+      afterEach(async () => {
+        //@ts-ignore
+        await storage.client.close();
+        //@ts-ignore
+        await vector.turso.close();
       });
 
-      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
-      const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
-      const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
-      expect(extractUserData(wmObj)).toMatchObject(second);
+      it('should accept valid working memory updates matching the schema', async () => {
+        const validMemory = { city: 'Austin', temperature: 85 };
+        await agent.generate('I am in Austin and it is 85 degrees', {
+          threadId: thread.id,
+          resourceId,
+        });
+
+        const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+        const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
+        const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
+        expect(extractUserData(wmObj)).toMatchObject(validMemory);
+      });
+
+      it('should recall the most recent valid schema-based working memory', async () => {
+        const second = { city: 'Denver', temperature: 75 };
+        await agent.generate('Now I am in Seattle and it is 60 degrees', {
+          threadId: thread.id,
+          resourceId,
+        });
+        await agent.generate('Now I am in Denver and it is 75 degrees', {
+          threadId: thread.id,
+          resourceId,
+        });
+
+        const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+        const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
+        const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
+        expect(extractUserData(wmObj)).toMatchObject(second);
+      });
+
+      // Skip this for now it's an edge case where an agent updates the working memory based off of the
+      // message history.
+      it.skip('should not update working from message history', async () => {
+        const newThread = await memory.saveThread({
+          thread: createTestThread('Test111'),
+        });
+        const first = { city: 'Toronto', temperature: 80 };
+        const generateOptions = {
+          memory: {
+            resource: resourceId,
+            thread: newThread.id,
+            options: {
+              lastMessages: 0,
+              semanticRecall: undefined,
+              workingMemory: {
+                enabled: true,
+                schema: z.object({
+                  city: z.string(),
+                  temperature: z.number().optional(),
+                }),
+              },
+              threads: {
+                generateTitle: false,
+              },
+            },
+          },
+        };
+        await agent.generate('Now I am in Toronto and it is 80 degrees', generateOptions);
+
+        await agent.generate('how are you doing?', generateOptions);
+
+        const firstWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id });
+        const wm = typeof firstWorkingMemory === 'string' ? JSON.parse(firstWorkingMemory) : firstWorkingMemory;
+        const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
+
+        expect(wmObj).toMatchObject(first);
+
+        const updatedThread = await memory.getThreadById({ threadId: newThread.id });
+        if (!updatedThread) {
+          throw new Error('Thread not found');
+        }
+        // Update thread metadata with new working memory
+        await memory.saveThread({
+          thread: {
+            ...updatedThread,
+            metadata: {
+              ...(updatedThread.metadata || {}),
+              workingMemory: { city: 'Waterloo', temperature: 78 },
+            },
+          },
+          memoryConfig: generateOptions.memory.options,
+        });
+
+        // This should not update the working memory
+        await agent.generate('how are you doing?', generateOptions);
+
+        const result = await agent.generate('Can you tell me where I am?', generateOptions);
+
+        expect(result.text).toContain('Waterloo');
+        const secondWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id });
+        expect(secondWorkingMemory).toMatchObject({ city: 'Waterloo', temperature: 78 });
+      });
     });
   });
 
