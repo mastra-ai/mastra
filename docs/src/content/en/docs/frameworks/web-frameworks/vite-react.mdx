@@ -75,17 +75,36 @@ If you prefer to customize the setup, run the `init` command and choose from the
 npx mastra@latest init
 ```
 
+<Callout type="warning">
+By default, `mastra init` suggests `src` as the install location. If you're using Vite/React at the root of your project (e.g., `app`, not `src/app`), enter `.` when prompted:
+</Callout>
+
 Add the `dev` and `build` scripts to `package.json`:
 
-```json filename="package.json"
-{
-  "scripts": {
-    ...
-    "dev:mastra": "mastra dev --dir mastra",
-    "build:mastra": "mastra build --dir mastra"
-  }
-}
-```
+<Tabs items={["app", "src/app"]}>
+  <Tabs.Tab>
+    ```json filename="package.json"
+    {
+      "scripts": {
+        ...
+        "dev:mastra": "mastra dev --dir mastra",
+        "build:mastra": "mastra build --dir mastra"
+      }
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```json filename="package.json"
+    {
+      "scripts": {
+        ...
+        "dev:mastra": "mastra dev --dir src/mastra",
+        "build:mastra": "mastra build --dir src/mastra"
+      }
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
 
 ## Configure TypeScript
 
