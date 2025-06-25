@@ -105,18 +105,18 @@ export function VNextMastraNetworkRuntimeProvider({
             const formattedMessageId = uuid();
             const parts = message.parts;
             const routingStep = parts?.[2];
-            const responseStep = parts?.[3];
+            const responseStep = parts?.slice(3);
             const routingDecision = JSON.parse(routingStep?.text ?? '{}');
 
             const resourceStepId = routingDecision?.resourceType === 'agent' ? 'agent-step' : 'workflow-step';
 
-            let finalResponse = responseStep?.text ?? '';
+            let finalResponse = responseStep ?? [];
             let runId = '';
 
             let runResult = {};
 
             if (resourceStepId === 'workflow-step') {
-              const parsedResult = JSON.parse(responseStep?.text ?? '{}') ?? {};
+              const parsedResult = JSON.parse(responseStep?.[0]?.text ?? '{}') ?? {};
               runResult = parsedResult?.runResult ?? {};
               runId = parsedResult?.runId ?? '';
             }
@@ -166,15 +166,20 @@ export function VNextMastraNetworkRuntimeProvider({
                     },
                   ],
                 },
-                {
-                  role: 'assistant',
-                  content: [{ type: 'text', text: resourceStepId === 'workflow-step' ? '' : finalResponse }],
-                  metadata: {
-                    custom: {
-                      id: formattedMessageId,
-                    },
-                  },
-                },
+                ...finalResponse.map(
+                  response =>
+                    ({
+                      role: 'assistant',
+                      content: [
+                        { type: 'text', text: resourceStepId === 'workflow-step' ? '' : (response?.text ?? '') },
+                      ],
+                      metadata: {
+                        custom: {
+                          id: formattedMessageId,
+                        },
+                      },
+                    }) as ThreadMessageLike,
+                ),
               ];
             });
 
