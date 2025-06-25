@@ -89,7 +89,7 @@ export class LibSQLStore extends MastraStorage {
     await this.createIndex({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       indexName: 'idx_workflow_name_created_at',
-      columns: ['workflow_name', 'created_at'],
+      columns: ['workflow_name', 'createdAt'],
       ascending: false,
     });
   }
