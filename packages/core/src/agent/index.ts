@@ -546,12 +546,32 @@ export class Agent<
   async generateTitleFromUserMessage({
     message,
     runtimeContext = new RuntimeContext(),
+    model,
   }: {
     message: string | MessageInput;
     runtimeContext?: RuntimeContext;
+    model?: MastraLanguageModel | ((ctx: RuntimeContext) => MastraLanguageModel | Promise<MastraLanguageModel>);
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
-    const llm = await this.getLLM({ runtimeContext });
+    let llm;
+    if (model) {
+      // Use the provided model for title generation
+      const resolvedModel = typeof model === 'function' ? await model(runtimeContext) : model;
+      const MastraLLM = (await import('../llm/model')).MastraLLM;
+      llm = new MastraLLM({ model: resolvedModel, mastra: this.#mastra });
+
+      // Apply stored primitives if available
+      if (this.#primitives) {
+        llm.__registerPrimitives(this.#primitives);
+      }
+
+      if (this.#mastra) {
+        llm.__registerMastra(this.#mastra);
+      }
+    } else {
+      // Use the agent's default model
+      llm = await this.getLLM({ runtimeContext });
+    }
 
     const normMessage = new MessageList().add(message, 'user').get.all.ui().at(-1);
     if (!normMessage) {
@@ -604,7 +624,11 @@ export class Agent<
     return userMessages.at(-1);
   }
 
-  async genTitle(userMessage: string | MessageInput | undefined, runtimeContext: RuntimeContext) {
+  async genTitle(
+    userMessage: string | MessageInput | undefined,
+    runtimeContext: RuntimeContext,
+    model?: MastraLanguageModel | ((ctx: RuntimeContext) => MastraLanguageModel | Promise<MastraLanguageModel>),
+  ) {
     let title = `New Thread ${new Date().toISOString()}`;
     try {
       if (userMessage) {
@@ -613,6 +637,7 @@ export class Agent<
           title = await this.generateTitleFromUserMessage({
             message: normMessage,
             runtimeContext,
+            model,
           });
         }
       }
@@ -1390,9 +1415,25 @@ export class Agent<
 
               const config = memory.getMergedThreadConfig(memoryConfig);
               const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
+
+              // Check if title generation is enabled and extract model if provided
+              const generateTitleConfig = config?.threads?.generateTitle;
+              let shouldGenerateTitle = false;
+              let titleModel:
+                | MastraLanguageModel
+                | ((ctx: RuntimeContext) => MastraLanguageModel | Promise<MastraLanguageModel>)
+                | undefined;
+
+              if (typeof generateTitleConfig === 'boolean') {
+                shouldGenerateTitle = generateTitleConfig;
+              } else if (typeof generateTitleConfig === 'object' && generateTitleConfig !== null) {
+                shouldGenerateTitle = true;
+                titleModel = generateTitleConfig.model;
+              }
+
               const title =
-                config?.threads?.generateTitle && userMessage
-                  ? await this.genTitle(userMessage, runtimeContext)
+                shouldGenerateTitle && userMessage
+                  ? await this.genTitle(userMessage, runtimeContext, titleModel)
                   : undefined;
               if (!title) {
                 return;

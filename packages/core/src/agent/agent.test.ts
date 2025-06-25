@@ -20,6 +20,62 @@ import { Agent } from './index';
 
 config();
 
+class MockMemory extends MastraMemory {
+  threads: Record<string, StorageThreadType> = {};
+
+  constructor() {
+    super({ name: 'mock' });
+    Object.defineProperty(this, 'storage', {
+      get: () => ({
+        init: async () => {},
+        getThreadById: this.getThreadById.bind(this),
+        saveThread: async ({ thread }: { thread: StorageThreadType }) => {
+          return this.saveThread({ thread });
+        },
+      }),
+    });
+    this._hasOwnStorage = true;
+  }
+
+  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+    return this.threads[threadId] || null;
+  }
+
+  async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
+    const newThread = { ...thread, updatedAt: new Date() };
+    if (!newThread.createdAt) {
+      newThread.createdAt = new Date();
+    }
+    this.threads[thread.id] = newThread;
+    return this.threads[thread.id];
+  }
+
+  async rememberMessages() {
+    return { messages: [], messagesV2: [] };
+  }
+  async getThreadsByResourceId() {
+    return [];
+  }
+  async saveMessages() {
+    return [];
+  }
+  async query() {
+    return { messages: [], uiMessages: [] };
+  }
+  async deleteThread(threadId: string) {
+    delete this.threads[threadId];
+  }
+
+  // Add missing method implementations
+  async getWorkingMemory() {
+    return null;
+  }
+
+  async getWorkingMemoryTemplate() {
+    return null;
+  }
+}
+
 const mockFindUser = vi.fn().mockImplementation(async data => {
   const list = [
     { name: 'Dero Israel', email: 'dero@mail.com' },
@@ -584,6 +640,85 @@ describe('agent', () => {
     expect(userMsg?.content).toEqual([{ type: 'text', text: 'Hello' }]); // convertToCoreMessages makes text content an array
   });
 
+  it('should use custom model for title generation when provided in generateTitle config', async () => {
+    // Track which model was used for title generation
+    let titleModelUsed = false;
+    let agentModelUsed = false;
+
+    // Create a mock model for the agent's main model
+    const agentModel = new MockLanguageModelV1({
+      doGenerate: async () => {
+        agentModelUsed = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: `Agent model response`,
+        };
+      },
+    });
+
+    // Create a different mock model for title generation
+    const titleModel = new MockLanguageModelV1({
+      doGenerate: async () => {
+        titleModelUsed = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 5, completionTokens: 10 },
+          text: `Custom Title Model Response`,
+        };
+      },
+    });
+
+    // Create memory with generateTitle config using custom model
+    const mockMemory = new MockMemory();
+
+    // Override getMergedThreadConfig to return our test config
+    mockMemory.getMergedThreadConfig = () => {
+      return {
+        threads: {
+          generateTitle: {
+            model: titleModel,
+          },
+        },
+      };
+    };
+
+    const agent = new Agent({
+      name: 'title-test-agent',
+      instructions: 'test agent for title generation',
+      model: agentModel,
+      memory: mockMemory,
+    });
+
+    // Generate a response that will trigger title generation
+    await agent.generate('What is the weather like today?', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-1',
+          title: 'New Thread 2024-01-01T00:00:00.000Z', // Starts with "New Thread" to trigger title generation
+        },
+      },
+    });
+
+    // The agent's main model should have been used for the response
+    expect(agentModelUsed).toBe(true);
+
+    // Give some time for the async title generation to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // The custom title model should have been used for title generation
+    expect(titleModelUsed).toBe(true);
+
+    // Verify the thread was created
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+    expect(thread).toBeDefined();
+    expect(thread?.resourceId).toBe('user-1');
+    expect(thread?.title).toBe('Custom Title Model Response');
+  });
+
   describe('voice capabilities', () => {
     class MockVoice extends MastraVoice {
       async speak(): Promise<NodeJS.ReadableStream> {
@@ -845,58 +980,6 @@ describe('agent', () => {
 });
 
 describe('agent memory with metadata', () => {
-  class MockMemory extends MastraMemory {
-    threads: Record<string, StorageThreadType> = {};
-
-    constructor() {
-      super({ name: 'mock' });
-      Object.defineProperty(this, 'storage', {
-        get: () => ({
-          init: async () => {},
-          getThreadById: this.getThreadById.bind(this),
-          saveThread: async ({ thread }: { thread: StorageThreadType }) => {
-            return this.saveThread({ thread });
-          },
-        }),
-      });
-      this._hasOwnStorage = true;
-    }
-
-    async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-      return this.threads[threadId] || null;
-    }
-
-    async saveThread({
-      thread,
-    }: {
-      thread: StorageThreadType;
-      memoryConfig?: MemoryConfig;
-    }): Promise<StorageThreadType> {
-      const newThread = { ...thread, updatedAt: new Date() };
-      if (!newThread.createdAt) {
-        newThread.createdAt = new Date();
-      }
-      this.threads[thread.id] = newThread;
-      return this.threads[thread.id];
-    }
-
-    async rememberMessages() {
-      return { messages: [], messagesV2: [] };
-    }
-    async getThreadsByResourceId() {
-      return [];
-    }
-    async saveMessages() {
-      return [];
-    }
-    async query() {
-      return { messages: [], uiMessages: [] };
-    }
-    async deleteThread(threadId: string) {
-      delete this.threads[threadId];
-    }
-  }
-
   let dummyModel;
   beforeEach(() => {
     dummyModel = new MockLanguageModelV1({
