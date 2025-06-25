@@ -1,5 +1,13 @@
 # @mastra/client-js
 
+## 0.10.7-alpha.0
+
+### Patch Changes
+
+- a344ac7: Fix tool streaming in agent network
+- Updated dependencies [a344ac7]
+  - @mastra/core@0.10.8-alpha.0
+
 ## 0.10.6
 
 ### Patch Changes
