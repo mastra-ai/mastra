@@ -1,5 +1,46 @@
 # @mastra/playground-ui
 
+## 5.1.7
+
+### Patch Changes
+
+- 8e1b6e9: dependencies updates:
+  - Updated dependency [`zod@^3.25.67` ↗︎](https://www.npmjs.com/package/zod/v/3.25.67) (from `^3.25.57`, in `dependencies`)
+- d569c16: dependencies updates:
+  - Updated dependency [`react-code-block@1.1.3` ↗︎](https://www.npmjs.com/package/react-code-block/v/1.1.3) (from `1.1.1`, in `dependencies`)
+- b9f5599: dependencies updates:
+  - Updated dependency [`@codemirror/lang-json@^6.0.2` ↗︎](https://www.npmjs.com/package/@codemirror/lang-json/v/6.0.2) (from `^6.0.1`, in `dependencies`)
+- 5af21a8: fix: remove final output on workflows for now
+- 5d74aab: vNext network in playground
+- 9102d89: Fix final output not showing on playground for previously suspended steps
+- 21ffb97: Make dynamic form handle schema better
+- be3d5a3: Remove recharts and ramada (unused deps)
+- Updated dependencies [8e1b6e9]
+- Updated dependencies [15e9d26]
+- Updated dependencies [d1baedb]
+- Updated dependencies [d8f2d19]
+- Updated dependencies [9bf1d55]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [07d6d88]
+- Updated dependencies [9d52b17]
+- Updated dependencies [2097952]
+- Updated dependencies [18a5d59]
+- Updated dependencies [792c4c0]
+- Updated dependencies [5d74aab]
+- Updated dependencies [5d74aab]
+- Updated dependencies [bee3fe4]
+- Updated dependencies [a8b194f]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [502fe05]
+- Updated dependencies [144eb0b]
+- Updated dependencies [8ba1b51]
+- Updated dependencies [4efcfa0]
+- Updated dependencies [c0d41f6]
+- Updated dependencies [0e17048]
+  - @mastra/client-js@0.10.6
+  - @mastra/core@0.10.7
+
 ## 5.1.7-alpha.7
 
 ### Patch Changes

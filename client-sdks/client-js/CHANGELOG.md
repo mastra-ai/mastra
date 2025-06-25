@@ -1,5 +1,35 @@
 # @mastra/client-js
 
+## 0.10.6
+
+### Patch Changes
+
+- 8e1b6e9: dependencies updates:
+  - Updated dependency [`zod@^3.25.67` ↗︎](https://www.npmjs.com/package/zod/v/3.25.67) (from `^3.25.57`, in `dependencies`)
+- 9bf1d55: Fix runtimeContext in mastra server, client SDK
+- 18a5d59: clientTools client side execution
+- 5d74aab: vNext network in playground
+- bee3fe4: Fix client side tool calling
+- c0d41f6: Fix streaming for agent tool calls
+- Updated dependencies [15e9d26]
+- Updated dependencies [d1baedb]
+- Updated dependencies [d8f2d19]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [07d6d88]
+- Updated dependencies [9d52b17]
+- Updated dependencies [2097952]
+- Updated dependencies [792c4c0]
+- Updated dependencies [5d74aab]
+- Updated dependencies [a8b194f]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [502fe05]
+- Updated dependencies [144eb0b]
+- Updated dependencies [8ba1b51]
+- Updated dependencies [4efcfa0]
+- Updated dependencies [0e17048]
+  - @mastra/core@0.10.7
+
 ## 0.10.6-alpha.6
 
 ### Patch Changes

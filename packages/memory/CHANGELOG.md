@@ -1,5 +1,37 @@
 # @mastra/memory
 
+## 0.11.0
+
+### Minor Changes
+
+- 8a3bfd2: Update peerdeps to latest core
+
+### Patch Changes
+
+- 8e1b6e9: dependencies updates:
+  - Updated dependency [`zod@^3.25.67` ↗︎](https://www.npmjs.com/package/zod/v/3.25.67) (from `^3.25.57`, in `dependencies`)
+- 15e9d26: Added per-resource working memory for LibSQL, Upstash, and PG
+- d8f2d19: Add updateMessages API to storage classes (only support for PG and LibSQL for now) and to memory class. Additionally allow for metadata to be saved in the content field of a message.
+- a8b194f: Fix double tool call for working memory
+- Updated dependencies [15e9d26]
+- Updated dependencies [d1baedb]
+- Updated dependencies [d8f2d19]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [07d6d88]
+- Updated dependencies [9d52b17]
+- Updated dependencies [2097952]
+- Updated dependencies [792c4c0]
+- Updated dependencies [5d74aab]
+- Updated dependencies [a8b194f]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [502fe05]
+- Updated dependencies [144eb0b]
+- Updated dependencies [8ba1b51]
+- Updated dependencies [4efcfa0]
+- Updated dependencies [0e17048]
+  - @mastra/core@0.10.7
+
 ## 0.11.0-alpha.3
 
 ### Patch Changes

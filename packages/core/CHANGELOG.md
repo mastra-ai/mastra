@@ -1,5 +1,30 @@
 # @mastra/core
 
+## 0.10.7
+
+### Patch Changes
+
+- 15e9d26: Added per-resource working memory for LibSQL, Upstash, and PG
+- d1baedb: fix bad merge with mastra error
+- d8f2d19: Add updateMessages API to storage classes (only support for PG and LibSQL for now) and to memory class. Additionally allow for metadata to be saved in the content field of a message.
+- 4d21bf2: throw mastra errors for MCP
+- 07d6d88: Bump MCP SDK version and add tool output schema support to MCPServer and MCPClient
+- 9d52b17: Fix inngest workflows streaming and add step metadata
+- 2097952: [MASTRA-4021] Fix PG getMessages and update messageLimit for all storage adapters
+- 792c4c0: feat: pass runId to onFinish
+- 5d74aab: Return isComplete of true in routing step when no resource is selected
+- a8b194f: Fix double tool call for working memory
+- 4fb0cc2: Type safe variable mapping
+- d2a7a31: Fix memory message context for when LLM providers throw an error if the first message is a tool call.
+- 502fe05: createRun() -> createRunAsync()
+- 144eb0b: [MASTRA-3669] Metadata Filter Types
+- 8ba1b51: Add custom routes by default to jsonapi
+- 4efcfa0: Added bail() method and more ergonomic suspend function return value
+- 0e17048: Throw mastra errors in storage packages
+- Updated dependencies [98bbe5a]
+- Updated dependencies [a853c43]
+  - @mastra/schema-compat@0.10.3
+
 ## 0.10.7-alpha.5
 
 ### Patch Changes

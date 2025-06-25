@@ -1,5 +1,44 @@
 # @mastra/deployer
 
+## 0.10.7
+
+### Patch Changes
+
+- 8e1b6e9: dependencies updates:
+  - Updated dependency [`zod@^3.25.67` ↗︎](https://www.npmjs.com/package/zod/v/3.25.67) (from `^3.25.57`, in `dependencies`)
+- 36cd0f1: dependencies updates:
+  - Updated dependency [`@rollup/plugin-commonjs@^28.0.6` ↗︎](https://www.npmjs.com/package/@rollup/plugin-commonjs/v/28.0.6) (from `^28.0.5`, in `dependencies`)
+- 2eab82b: dependencies updates:
+  - Updated dependency [`rollup-plugin-node-externals@^8.0.1` ↗︎](https://www.npmjs.com/package/rollup-plugin-node-externals/v/8.0.1) (from `^8.0.0`, in `dependencies`)
+- 9bf1d55: Fix runtimeContext in mastra server, client SDK
+- 914684e: Fix workflow watch and stream not streaming
+- 5d74aab: vNext network in playground
+- 17903a3: Remove install step from dev for telemetry
+- 10a4f10: Cancel agent generate/stream when request aborts
+- Updated dependencies [15e9d26]
+- Updated dependencies [d1baedb]
+- Updated dependencies [d8f2d19]
+- Updated dependencies [9bf1d55]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [07d6d88]
+- Updated dependencies [9d52b17]
+- Updated dependencies [2097952]
+- Updated dependencies [792c4c0]
+- Updated dependencies [5d74aab]
+- Updated dependencies [5d74aab]
+- Updated dependencies [a8b194f]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [502fe05]
+- Updated dependencies [144eb0b]
+- Updated dependencies [4afab04]
+- Updated dependencies [8ba1b51]
+- Updated dependencies [10a4f10]
+- Updated dependencies [4efcfa0]
+- Updated dependencies [0e17048]
+  - @mastra/core@0.10.7
+  - @mastra/server@0.10.7
+
 ## 0.10.7-alpha.5
 
 ### Patch Changes
