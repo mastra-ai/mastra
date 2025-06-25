@@ -27,7 +27,7 @@ const PROVIDERS = {
     apiKey: 'ANTHROPIC_API_KEY',
   },
   google: {
-    model: 'gemini-1.5-pro-latest',
+    model: 'gemini-2.5-pro',
     package: '@ai-sdk/google',
     apiKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
   },
