@@ -604,87 +604,97 @@ export class Agent extends BaseResource {
       let messages: UIMessage[] = [];
       let hasProcessedToolCalls = false;
 
-      response.clone().body!.pipeTo(writable);
+      // Use tee() to split the stream into two branches
+      const [streamForWritable, streamForProcessing] = response.body.tee();
 
-      await this.processChatResponse({
-        stream: response.clone().body!,
+      // Pipe one branch to the writable stream
+      streamForWritable
+        .pipeTo(writable, {
+          preventClose: true,
+        })
+        .catch(error => {
+          console.error('Error piping to writable stream:', error);
+        });
+
+      // Process the other branch for chat response handling
+      this.processChatResponse({
+        stream: streamForProcessing,
         update: ({ message }) => {
           messages.push(message);
         },
-        onFinish: ({ finishReason, message }) => {
+        onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
-            finishReasonToolCalls = true;
             const toolCall = [...(message?.parts ?? [])]
               .reverse()
               .find(part => part.type === 'tool-invocation')?.toolInvocation;
             if (toolCall) {
               toolCalls.push(toolCall);
             }
+
+            // Handle tool calls if needed
+            for (const toolCall of toolCalls) {
+              const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
+              if (clientTool && clientTool.execute) {
+                const result = await clientTool.execute(
+                  {
+                    context: toolCall?.args,
+                    runId: processedParams.runId,
+                    resourceId: processedParams.resourceId,
+                    threadId: processedParams.threadId,
+                    runtimeContext: processedParams.runtimeContext as RuntimeContext,
+                  },
+                  {
+                    messages: (response as unknown as { messages: CoreMessage[] }).messages,
+                    toolCallId: toolCall?.toolCallId,
+                  },
+                );
+
+                const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
+
+                const toolInvocationPart = lastMessage?.parts?.find(
+                  part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
+                ) as ToolInvocationUIPart | undefined;
+
+                if (toolInvocationPart) {
+                  toolInvocationPart.toolInvocation = {
+                    ...toolInvocationPart.toolInvocation,
+                    state: 'result',
+                    result,
+                  };
+                }
+
+                const toolInvocation = lastMessage?.toolInvocations?.find(
+                  toolInvocation => toolInvocation.toolCallId === toolCall.toolCallId,
+                ) as ToolInvocation | undefined;
+
+                if (toolInvocation) {
+                  toolInvocation.state = 'result';
+                  // @ts-ignore
+                  toolInvocation.result = result;
+                }
+
+                // Convert messages to the correct format for the recursive call
+                const originalMessages = processedParams.messages;
+                const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
+
+                // Recursively call stream with updated messages
+                this.processStreamResponse(
+                  {
+                    ...processedParams,
+                    messages: [...messageArray, ...messages, lastMessage],
+                  },
+                  writable,
+                );
+              }
+            }
+          } else {
+            setTimeout(() => {
+              writable.close();
+            }, 0);
           }
         },
         lastMessage: undefined,
       });
-
-      // Handle tool calls if needed
-      if (finishReasonToolCalls && !hasProcessedToolCalls) {
-        hasProcessedToolCalls = true;
-
-        for (const toolCall of toolCalls) {
-          const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
-          if (clientTool && clientTool.execute) {
-            const result = await clientTool.execute(
-              {
-                context: toolCall?.args,
-                runId: processedParams.runId,
-                resourceId: processedParams.resourceId,
-                threadId: processedParams.threadId,
-                runtimeContext: processedParams.runtimeContext as RuntimeContext,
-              },
-              {
-                messages: (response as unknown as { messages: CoreMessage[] }).messages,
-                toolCallId: toolCall?.toolCallId,
-              },
-            );
-
-            const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
-
-            const toolInvocationPart = lastMessage?.parts?.find(
-              part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
-            ) as ToolInvocationUIPart | undefined;
-
-            if (toolInvocationPart) {
-              toolInvocationPart.toolInvocation = {
-                ...toolInvocationPart.toolInvocation,
-                state: 'result',
-                result,
-              };
-            }
-
-            const toolInvocation = lastMessage?.toolInvocations?.find(
-              toolInvocation => toolInvocation.toolCallId === toolCall.toolCallId,
-            ) as ToolInvocation | undefined;
-
-            if (toolInvocation) {
-              toolInvocation.state = 'result';
-              // @ts-ignore
-              toolInvocation.result = result;
-            }
-
-            // Convert messages to the correct format for the recursive call
-            const originalMessages = processedParams.messages;
-            const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
-
-            // Recursively call stream with updated messages
-            this.processStreamResponse(
-              {
-                ...processedParams,
-                messages: [...messageArray, ...messages, lastMessage],
-              },
-              writable,
-            );
-          }
-        }
-      }
     } catch (error) {
       console.error('Error processing stream response:', error);
     }
