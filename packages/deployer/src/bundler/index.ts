@@ -269,14 +269,11 @@ export abstract class Bundler extends MastraBundler {
         await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
       }
     } catch (error) {
-      console.log(error);
       const message = error instanceof Error ? error.message : String(error);
       throw new MastraError(
         {
           id: 'DEPLOYER_BUNDLER_INSTRUMENTATION_FILE_FAILED',
-          text: `Failed to write instrumentation file: ${message}
-          ${customInstrumentation ? `Found custom instrumentation file: ${customInstrumentation}` : ''}
-          `,
+          text: `Failed to write instrumentation file: ${message}, ${customInstrumentation ? ` Found custom instrumentation file: ${customInstrumentation}` : ''}`,
           domain: ErrorDomain.DEPLOYER,
           category: ErrorCategory.SYSTEM,
         },
