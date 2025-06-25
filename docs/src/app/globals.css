@@ -411,10 +411,6 @@ pre code.nextra-code:not([class*="twoslash-"]) > span[data-highlighted-line] {
   }
 }
 
-div[role="tabpanel"] h3 {
-  display: none;
-}
-
 .nextra-code {
   white-space: nowrap;
 }
