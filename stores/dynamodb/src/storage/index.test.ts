@@ -1366,30 +1366,8 @@ describe('DynamoDBStore Integration Tests', () => {
 
   describe('DynamoDBStore Double-nesting Prevention', () => {
     beforeEach(async () => {
-      // Clear any existing data
-      try {
-        const scanCommand = new ScanCommand({ TableName: dynamoDbConfig.tableName });
-        const scanResult = await client.send(scanCommand);
-
-        if (scanResult.Items && scanResult.Items.length > 0) {
-          const deleteRequests = scanResult.Items.map(item => ({
-            DeleteRequest: { Key: item },
-          }));
-
-          // Split into batches of 25 (DynamoDB limit)
-          for (let i = 0; i < deleteRequests.length; i += 25) {
-            const batch = deleteRequests.slice(i, i + 25);
-            const batchWriteCommand = new BatchWriteItemCommand({
-              RequestItems: {
-                [dynamoDbConfig.tableName]: batch,
-              },
-            });
-            await client.send(batchWriteCommand);
-          }
-        }
-      } catch (error) {
-        // Ignore errors during cleanup
-      }
+      // Clear any existing data using the same helper function as other tests
+      await clearTable(setupClient, TEST_TABLE_NAME);
     });
 
     test('should handle stringified JSON content without double-nesting', async () => {
