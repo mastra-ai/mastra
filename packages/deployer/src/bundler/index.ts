@@ -264,7 +264,6 @@ export abstract class Bundler extends MastraBundler {
       if (customInstrumentation) {
         const result = await writeCustomInstrumentation(customInstrumentation, join(outputDirectory, this.outputDir));
         externalDependencies = [...externalDependencies, ...result.externalDependencies];
-        console.log({ result });
         await this.writeInstrumentationFile(join(outputDirectory, this.outputDir), customInstrumentation);
       } else {
         await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
