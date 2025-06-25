@@ -300,7 +300,6 @@ ${JSON.stringify(message, null, 2)}`,
       );
     }
 
-
     const messageV2 = this.inputToMastraMessageV2(message, messageSource);
 
     const { exists, shouldReplace, id } = this.shouldReplaceMessage(messageV2);
