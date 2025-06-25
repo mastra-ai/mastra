@@ -1,5 +1,5 @@
-import { Brain } from 'lucide-react';
 import { GetVNextNetworkResponse } from '@mastra/client-js';
+import { WorkflowIcon } from '@mastra/playground-ui';
 
 export function NetworkWorkflows({ network }: { network: GetVNextNetworkResponse }) {
   if (!network.workflows || network.workflows.length === 0) {
@@ -18,10 +18,10 @@ export function NetworkWorkflows({ network }: { network: GetVNextNetworkResponse
           <div key={workflow.name} className="bg-mastra-bg-2 py-2 px-3 rounded-md">
             <div className="flex justify-between items-center">
               <div className="flex gap-1 items-center">
-                <Brain className="h-3 w-3 text-mastra-el-4" />
+                <WorkflowIcon className="h-3 w-3 text-mastra-el-4" />
                 <h4 className="text-xs font-medium text-mastra-el-5">{workflow.name}</h4>
               </div>
-              <p className="text-xs py-0.5 px-1.5">{workflow.description}</p>
+              <p className="text-xs py-0.5 px-1.5 w-3/4 truncate">{workflow.description}</p>
             </div>
           </div>
         ))}

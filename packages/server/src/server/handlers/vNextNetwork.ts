@@ -202,3 +202,35 @@ export async function loopVNextNetworkHandler({
     return handleError(error, 'Error looping network');
   }
 }
+
+export async function loopStreamVNextNetworkHandler({
+  mastra,
+  networkId,
+  body,
+  runtimeContext,
+}: NetworkContext & {
+  runtimeContext: RuntimeContext;
+  body: { message: string; threadId?: string; resourceId?: string; maxIterations?: number };
+}) {
+  try {
+    const network = mastra.vnext_getNetwork(networkId!);
+
+    if (!network) {
+      throw new HTTPException(404, { message: 'Network not found' });
+    }
+
+    validateBody({ message: body.message });
+
+    const { message, threadId, resourceId, maxIterations } = body;
+    const result = await network.loopStream(message, {
+      runtimeContext,
+      threadId,
+      resourceId,
+      maxIterations,
+    });
+
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error streaming network loop');
+  }
+}
