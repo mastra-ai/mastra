@@ -58,6 +58,7 @@ const allSchemas = {
       age: z.number().gte(18),
     }),
   }),
+  objectPassthrough: z.object({}).passthrough().describe('add something in this object'),
 
   // Optional and nullable
   optional: z.string().optional(),

@@ -373,6 +373,13 @@ export interface GenerateOrStreamVNextNetworkParams {
   resourceId?: string;
 }
 
+export interface LoopStreamVNextNetworkParams {
+  message: string;
+  threadId?: string;
+  resourceId?: string;
+  maxIterations?: number;
+}
+
 export interface LoopVNextNetworkResponse {
   status: 'success';
   result: {

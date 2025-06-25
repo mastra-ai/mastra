@@ -182,6 +182,74 @@ npx tsx src/test-workflow.ts
 
 </Steps>
 
+#### Run Workflow Results
+
+The result of running a workflow using either `start()` or `resume()` will look like one of the following, depending on the outcome.
+
+##### Status success
+
+```json
+{
+  "status": "success",
+  "steps": {
+    // ...
+    "step-1": {
+      // ...
+      "status": "success",
+    }
+  },
+  "result": {
+    "output": "London + step-1"
+  }
+}
+```
+
+- **status**: Shows the final state of the workflow execution, either: `success`, `suspended`, or `error`
+- **steps**: Lists each step in the workflow, including inputs and outputs
+- **status**: Shows the outcome of each individual step
+- **result**: Includes the final output of the workflow, typed according to the `outputSchema`
+
+
+##### Status suspended
+
+```json
+{
+  "status": "suspended",
+  "steps": {
+    // ...
+    "step-1": {
+      // ...
+      "status": "suspended",
+    }
+  },
+  "suspended": [
+    [
+      "step-1"
+    ]
+  ]
+}
+```
+
+- **suspended**: An optional array listing any steps currently awaiting input before continuing
+
+##### Status failed
+
+```json
+{
+  "status": "failed",
+  "steps": {
+    // ...
+    "step-1": {
+      // ...
+      "status": "failed",
+      "error": "Test error",
+    }
+  },
+  "error": "Test error"
+}
+```
+- **error**: An optional field that includes the error message if the workflow fails
+
 ### Stream Workflow
 
 Similar to the run method shown above, workflows can also be streamed:
