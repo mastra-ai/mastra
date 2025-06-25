@@ -51,7 +51,7 @@
     "@autoform/react": "^3.1.0",
     "@autoform/zod": "^2.2.0",
     "@codemirror/lang-json": "^6.0.2",
-    "@dagrejs/dagre": "^1.1.4",
+    "@dagrejs/dagre": "^1.1.5",
     "@hookform/resolvers": "^3.10.0",
     "@lezer/highlight": "^1.2.1",
     "@lukeed/uuid": "^2.0.1",
