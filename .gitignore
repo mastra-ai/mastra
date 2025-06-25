@@ -34,3 +34,4 @@ voice/**/test-data/
 
 serviceAccount.json
 tsup.config.bundled_*
+CLAUDE.local.md
