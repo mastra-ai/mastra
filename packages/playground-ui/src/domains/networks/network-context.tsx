@@ -5,6 +5,10 @@ type NetworkContextType = {
   modelSettings: ModelSettings;
   setModelSettings: React.Dispatch<React.SetStateAction<ModelSettings>>;
   resetModelSettings: () => void;
+  chatWithLoop: boolean;
+  setChatWithLoop: React.Dispatch<React.SetStateAction<boolean>>;
+  maxIterations: number | undefined;
+  setMaxIterations: React.Dispatch<React.SetStateAction<number | undefined>>;
 };
 
 const defaultModelSettings: ModelSettings = {
@@ -18,9 +22,13 @@ export const NetworkContext = createContext<NetworkContextType>({} as NetworkCon
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
   const [modelSettings, setModelSettings] = useState<ModelSettings>(defaultModelSettings);
+  const [chatWithLoop, setChatWithLoop] = useState<boolean>(false);
+  const [maxIterations, setMaxIterations] = useState<number | undefined>(undefined);
 
   const resetModelSettings = () => {
     setModelSettings(defaultModelSettings);
+    setChatWithLoop(false);
+    setMaxIterations(undefined);
   };
 
   return (
@@ -29,6 +37,10 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         modelSettings,
         setModelSettings,
         resetModelSettings,
+        chatWithLoop,
+        setChatWithLoop,
+        maxIterations,
+        setMaxIterations,
       }}
     >
       {children}

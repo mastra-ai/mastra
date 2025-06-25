@@ -6,6 +6,7 @@ import type {
   GenerateVNextNetworkResponse,
   LoopVNextNetworkResponse,
   GenerateOrStreamVNextNetworkParams,
+  LoopStreamVNextNetworkParams,
 } from '../types';
 
 import { BaseResource } from './base';
@@ -130,6 +131,35 @@ export class VNextNetwork extends BaseResource {
 
     if (!response.ok) {
       throw new Error(`Failed to stream vNext network: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    for await (const record of this.streamProcessor(response.body)) {
+      if (typeof record === 'string') {
+        onRecord(JSON.parse(record));
+      } else {
+        onRecord(record);
+      }
+    }
+  }
+
+  /**
+   * Streams a response from the v-next network loop
+   * @param params - Stream parameters including message
+   * @returns Promise containing the results
+   */
+  async loopStream(params: LoopStreamVNextNetworkParams, onRecord: (record: WatchEvent) => void) {
+    const response: Response = await this.request(`/api/networks/v-next/${this.networkId}/loop-stream`, {
+      method: 'POST',
+      body: params,
+      stream: true,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to stream vNext network loop: ${response.statusText}`);
     }
 
     if (!response.body) {

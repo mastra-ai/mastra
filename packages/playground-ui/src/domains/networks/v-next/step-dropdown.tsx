@@ -19,6 +19,7 @@ const LabelMappings = {
   'routing-step': 'Decision making process',
   'agent-step': 'Agent execution',
   'workflow-step': 'Workflow execution',
+  'final-step': 'Task completed',
 };
 
 export const StepDropdown = () => {
@@ -72,7 +73,7 @@ const Steps = ({ id }: { id: string }) => {
       {currentState.executionSteps
         .filter(stepId => stepId !== 'start')
         .map((stepId: any, index: number) => (
-          <StepEntry key={index} stepId={stepId} step={currentState.steps[stepId]} runId={currentState.runId} />
+          <StepEntry key={index} stepId={stepId} step={currentState.steps[stepId] || {}} runId={currentState.runId} />
         ))}
     </ol>
   );
@@ -127,6 +128,30 @@ const StepEntry = ({ stepId, step, runId }: { stepId: any; step: any; runId?: st
 
             <Txt variant="ui-sm" className="text-icon6">
               {stepResult?.output?.resourceId || 'N/A'}
+            </Txt>
+          </div>
+        </div>
+      )}
+
+      {stepId === 'final-step' && expanded && (
+        <div className="bg-surface1 p-3 space-y-4">
+          <div>
+            <Txt variant="ui-sm" className="text-icon3 font-medium">
+              Task:
+            </Txt>
+
+            <Txt variant="ui-sm" className="text-icon6">
+              {stepResult?.output?.task || 'N/A'}
+            </Txt>
+          </div>
+
+          <div>
+            <Txt variant="ui-sm" className="text-icon3 font-medium">
+              Number of iterations:
+            </Txt>
+
+            <Txt variant="ui-sm" className="text-icon6">
+              {stepResult?.output?.iteration || 'N/A'}
             </Txt>
           </div>
         </div>
