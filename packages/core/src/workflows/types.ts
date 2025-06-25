@@ -124,16 +124,7 @@ export type StreamEvent =
       id: string;
     };
 
-export const WorkflowRunStatus = {
-  RUNNING: 'running',
-  SUCCESS: 'success',
-  FAILED: 'failed',
-  SUSPENDED: 'suspended',
-  WAITING: 'waiting',
-  PENDING: 'pending',
-} as const;
-
-export type WorkflowRunStatus = (typeof WorkflowRunStatus)[keyof typeof WorkflowRunStatus];
+export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending';
 
 export type WatchEvent = {
   type: 'watch';

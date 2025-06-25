@@ -8,7 +8,6 @@ import {
   useLegacyWorkflow,
   useWorkflow,
   useExecuteWorkflow,
-  useWatchWorkflow,
   useResumeWorkflow,
   useStreamWorkflow,
 } from '@/hooks/use-workflows';
@@ -26,10 +25,9 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, !isLegacy);
   const { isLoading: isRunsLoading, data: runs } = useWorkflowRuns({ workflowId });
   const { data: legacyWorkflow, isLoading: isLegacyWorkflowLoading } = useLegacyWorkflow(workflowId, !!isLegacy);
-  const { createWorkflowRun, startWorkflowRun } = useExecuteWorkflow();
-  const { watchWorkflow, watchResult } = useWatchWorkflow();
+  const { createWorkflowRun } = useExecuteWorkflow();
   const { resumeWorkflow } = useResumeWorkflow();
-  const { streamWorkflow } = useStreamWorkflow();
+  const { streamWorkflow, streamResult, isStreaming } = useStreamWorkflow();
 
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
@@ -108,19 +106,10 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
                       workflow={workflow}
                       isLoading={isWorkflowLoading}
                       createWorkflowRun={createWorkflowRun.mutateAsync}
-                      startWorkflowRun={async params => {
-                        startWorkflowRun.mutateAsync(params);
-                        streamWorkflow.mutateAsync({
-                          workflowId: params.workflowId,
-                          runId: params.runId,
-                          inputData: params.input,
-                          runtimeContext: params.runtimeContext,
-                        });
-                      }}
+                      streamWorkflow={streamWorkflow.mutateAsync}
                       resumeWorkflow={resumeWorkflow.mutateAsync}
-                      watchWorkflow={watchWorkflow.mutateAsync}
-                      watchResult={watchResult}
-                      isWatchingWorkflow={watchWorkflow.isPending}
+                      streamResult={streamResult}
+                      isStreamingWorkflow={isStreaming}
                       isResumingWorkflow={resumeWorkflow.isPending}
                     />
                   )}

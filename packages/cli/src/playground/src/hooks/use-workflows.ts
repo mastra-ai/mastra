@@ -1,10 +1,10 @@
 import { client } from '@/lib/client';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { useDebouncedCallback } from 'use-debounce';
-import { WorkflowRunStatus } from '@mastra/core';
 import { LegacyWorkflowRunResult, WorkflowWatchResult } from '@mastra/client-js';
+import { WorkflowRunStatus } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
 
 export type ExtendedLegacyWorkflowRunResult = LegacyWorkflowRunResult & {
   sanitizedOutput?: string | null;
@@ -237,12 +237,9 @@ export const useWatchWorkflow = () => {
   };
 };
 
-type StreamResult = WorkflowWatchResult & {
-  stepIds: string[];
-};
-
 export const useStreamWorkflow = () => {
-  const [streamResult, setStreamResult] = useState<StreamResult>({} as StreamResult);
+  const [streamResult, setStreamResult] = useState<WorkflowWatchResult>({} as WorkflowWatchResult);
+  const [isStreaming, setIsStreaming] = useState(false);
 
   const streamWorkflow = useMutation({
     mutationFn: async ({
@@ -256,7 +253,8 @@ export const useStreamWorkflow = () => {
       inputData: Record<string, unknown>;
       runtimeContext: Record<string, unknown>;
     }) => {
-      setStreamResult({} as StreamResult);
+      setIsStreaming(true);
+      setStreamResult({} as WorkflowWatchResult);
       const runtimeContext = new RuntimeContext();
       Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
         runtimeContext.set(key as keyof RuntimeContext, value);
@@ -270,32 +268,31 @@ export const useStreamWorkflow = () => {
       const reader = stream.getReader();
 
       try {
+        let status = '' as WorkflowRunStatus;
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          console.log('stream value===', value);
           if (value.type === 'start') {
-            setStreamResult((prev: StreamResult) => ({
+            setStreamResult((prev: WorkflowWatchResult) => ({
               ...prev,
-              stepIds: [],
               runId: value.payload.runId,
               eventTimestamp: new Date(),
               payload: {
-                ...prev.payload,
+                ...(prev?.payload || {}),
                 workflowState: {
-                  ...prev.payload.workflowState,
-                  status: WorkflowRunStatus.RUNNING,
+                  ...(prev?.payload?.workflowState || {}),
+                  status: 'running',
                 },
               },
             }));
           }
 
           if (value.type === 'step-start') {
-            setStreamResult((prev: StreamResult) => {
-              const current = prev.payload.workflowState.steps[value.payload.id];
+            setIsStreaming(true);
+            setStreamResult((prev: WorkflowWatchResult) => {
+              const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
               return {
                 ...prev,
-                stepIds: current ? prev.stepIds : [...prev.stepIds, value.payload.id],
                 payload: {
                   ...prev.payload,
                   currentStep: {
@@ -319,19 +316,20 @@ export const useStreamWorkflow = () => {
           }
 
           if (value.type === 'step-suspended') {
-            setStreamResult((prev: StreamResult) => {
-              const current = prev.payload.workflowState.steps[value.payload.id];
+            setStreamResult((prev: WorkflowWatchResult) => {
+              const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
               return {
                 ...prev,
                 payload: {
                   ...prev.payload,
                   currentStep: {
                     id: value.payload.id,
+                    ...(prev?.payload?.currentStep || {}),
                     ...value.payload,
                   },
                   workflowState: {
                     ...prev.payload.workflowState,
-                    status: WorkflowRunStatus.SUSPENDED,
+                    status: 'suspended',
                     steps: {
                       ...prev.payload.workflowState.steps,
                       [value.payload.id]: {
@@ -344,22 +342,24 @@ export const useStreamWorkflow = () => {
                 eventTimestamp: new Date(),
               };
             });
+            setIsStreaming(false);
           }
 
           if (value.type === 'step-waiting') {
-            setStreamResult((prev: StreamResult) => {
-              const current = prev.payload.workflowState.steps[value.payload.id];
+            setStreamResult((prev: WorkflowWatchResult) => {
+              const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
               return {
                 ...prev,
                 payload: {
                   ...prev.payload,
                   currentStep: {
                     id: value.payload.id,
+                    ...(prev?.payload?.currentStep || {}),
                     ...value.payload,
                   },
                   workflowState: {
                     ...prev.payload.workflowState,
-                    status: WorkflowRunStatus.WAITING,
+                    status: 'waiting',
                     steps: {
                       ...prev.payload.workflowState.steps,
                       [value.payload.id]: {
@@ -375,24 +375,42 @@ export const useStreamWorkflow = () => {
           }
 
           if (value.type === 'step-result') {
-            setStreamResult((prev: StreamResult) => {
-              const current = prev.payload.workflowState.steps[value.payload.id];
+            status = value.payload.status;
+            setStreamResult((prev: WorkflowWatchResult) => {
+              const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
+              const { output: valueOutput, ...rest } = value.payload;
+
+              const output =
+                valueOutput && Object.keys(valueOutput).length > 0
+                  ? Object.entries(valueOutput).reduce(
+                      (_acc, [_key, _value]) => {
+                        const val = _value as { type: string; data: unknown };
+                        _acc[_key] =
+                          val.type?.toLowerCase() === 'buffer' ? { type: 'Buffer', data: `[...buffered data]` } : val;
+                        return _acc;
+                      },
+                      {} as Record<string, unknown>,
+                    )
+                  : valueOutput || undefined;
               return {
                 ...prev,
                 payload: {
                   ...prev.payload,
                   currentStep: {
                     id: value.payload.id,
-                    ...value.payload,
+                    ...(prev?.payload?.currentStep || {}),
+                    ...rest,
+                    output,
                   },
                   workflowState: {
                     ...prev.payload.workflowState,
-                    status: WorkflowRunStatus.RUNNING,
+                    status: 'running',
                     steps: {
                       ...prev.payload.workflowState.steps,
                       [value.payload.id]: {
                         ...current,
-                        ...value.payload,
+                        ...rest,
+                        output,
                       },
                     },
                   },
@@ -403,7 +421,7 @@ export const useStreamWorkflow = () => {
           }
 
           if (value.type === 'step-finish') {
-            setStreamResult((prev: StreamResult) => {
+            setStreamResult((prev: WorkflowWatchResult) => {
               return {
                 ...prev,
                 payload: {
@@ -416,9 +434,7 @@ export const useStreamWorkflow = () => {
           }
 
           if (value.type === 'finish') {
-            setStreamResult((prev: StreamResult) => {
-              const lastStepId = prev.stepIds[prev.stepIds.length - 1];
-              const lastStep = prev.payload.workflowState.steps[lastStepId];
+            setStreamResult((prev: WorkflowWatchResult) => {
               return {
                 ...prev,
                 payload: {
@@ -426,7 +442,7 @@ export const useStreamWorkflow = () => {
                   currentStep: undefined,
                   workflowState: {
                     ...prev.payload.workflowState,
-                    status: lastStep.status,
+                    status,
                   },
                 },
                 eventTimestamp: new Date(),
@@ -435,6 +451,7 @@ export const useStreamWorkflow = () => {
           }
         }
       } finally {
+        setIsStreaming(false);
         reader.releaseLock();
       }
     },
@@ -443,6 +460,7 @@ export const useStreamWorkflow = () => {
   return {
     streamWorkflow,
     streamResult,
+    isStreaming,
   };
 };
 

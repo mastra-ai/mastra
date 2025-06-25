@@ -90,20 +90,24 @@ const fetchWeather = createStep({
   inputSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
   }),
+  resumeSchema: z.object({
+    city: z.string().describe('The city to get the weather for'),
+  }),
   outputSchema: forecastSchema,
-  execute: async ({ inputData }) => {
-    if (!inputData) {
-      throw new Error('Input data not found');
+  execute: async ({ inputData, resumeData, suspend }) => {
+    if (!resumeData) {
+      suspend();
+      return {};
     }
 
-    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`;
+    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(resumeData.city)}&count=1`;
     const geocodingResponse = await fetch(geocodingUrl);
     const geocodingData = (await geocodingResponse.json()) as {
       results: { latitude: number; longitude: number; name: string }[];
     };
 
     if (!geocodingData.results?.[0]) {
-      throw new Error(`Location '${inputData.city}' not found`);
+      throw new Error(`Location '${resumeData.city}' not found`);
     }
 
     const { latitude, longitude, name } = geocodingData.results[0];
@@ -128,7 +132,7 @@ const fetchWeather = createStep({
       minTemp: Math.min(...data.hourly.temperature_2m),
       condition: getWeatherCondition(data.current.weathercode),
       precipitationChance: data.hourly.precipitation_probability.reduce((acc, curr) => Math.max(acc, curr), 0),
-      location: inputData.city,
+      location: resumeData.city,
     };
 
     return forecast;
@@ -143,6 +147,7 @@ const planActivities = createStep({
     activities: z.string(),
   }),
   execute: async ({ inputData }) => {
+    console.log('inputData===', inputData);
     const forecast = inputData;
 
     if (!forecast) {
@@ -153,23 +158,32 @@ const planActivities = createStep({
       ${JSON.stringify(forecast, null, 2)}
       `;
 
-    const response = await agent.stream([
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ]);
+    console.log('prompt===', prompt);
+    try {
+      const response = await agent.stream([
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ]);
 
-    let activitiesText = '';
+      let activitiesText = '';
 
-    for await (const chunk of response.textStream) {
-      process.stdout.write(chunk);
-      activitiesText += chunk;
+      for await (const chunk of response.textStream) {
+        process.stdout.write(chunk);
+        console.log('agent streamchunk===', chunk);
+        activitiesText += chunk;
+      }
+
+      return {
+        activities: activitiesText,
+      };
+    } catch (error) {
+      console.log('Error in planActivities step:', error);
+      return {
+        activities: `Error in planActivities step: ${error?.stack || error}`,
+      };
     }
-
-    return {
-      activities: activitiesText,
-    };
   },
 });
 

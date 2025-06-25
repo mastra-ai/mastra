@@ -338,8 +338,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     const stepInfo = {
       ...stepResults[step.id],
-      payload: prevOutput,
-      ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : {}),
+      ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
       ...(startTime ? { startedAt: startTime } : {}),
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
     };
@@ -448,6 +447,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         } else if (bailed) {
           execResults = { status: 'bailed', output: bailed.payload, endedAt: Date.now() };
         } else {
+          console.log('step result===', result);
           execResults = { status: 'success', output: result, endedAt: Date.now() };
         }
 
