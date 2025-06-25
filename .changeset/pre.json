@@ -71,6 +71,9 @@
     "@mastra/inngest": "0.11.0"
   },
   "changesets": [
-    "silly-jokes-nail"
+    "great-toys-repair",
+    "lovely-dancers-exist",
+    "silly-jokes-nail",
+    "three-jars-sell"
   ]
 }

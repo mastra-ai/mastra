@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.10.8-alpha.1
+
+### Patch Changes
+
+- b8f16b2: Fixes generateTitle overwriting working memory when both get used in the same LLM response cycle.
+- 3e04487: Fix provider tools to check for output schema before attaching to tool
+- dc4ca0a: Fixed a regression where intentionally serialized JSON message content was being parsed back into an object by MessageList
+
 ## 0.10.8-alpha.0
 
 ### Patch Changes
