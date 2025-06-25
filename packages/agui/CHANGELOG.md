@@ -1,5 +1,30 @@
 # @mastra/agui
 
+## 1.0.4
+
+### Patch Changes
+
+- 362446a: dependencies updates:
+  - Updated dependency [`@copilotkit/runtime@^1.9.1` ↗︎](https://www.npmjs.com/package/@copilotkit/runtime/v/1.9.1) (from `^1.8.14`, in `dependencies`)
+- Updated dependencies [15e9d26]
+- Updated dependencies [d1baedb]
+- Updated dependencies [d8f2d19]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [07d6d88]
+- Updated dependencies [9d52b17]
+- Updated dependencies [2097952]
+- Updated dependencies [792c4c0]
+- Updated dependencies [5d74aab]
+- Updated dependencies [a8b194f]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [502fe05]
+- Updated dependencies [144eb0b]
+- Updated dependencies [8ba1b51]
+- Updated dependencies [4efcfa0]
+- Updated dependencies [0e17048]
+  - @mastra/core@0.10.7
+
 ## 1.0.4-alpha.0
 
 ### Patch Changes
