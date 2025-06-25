@@ -15,6 +15,69 @@ describe('PgVector', () => {
     vectorDB = new PgVector({ connectionString });
   });
 
+  describe('Public Fields Access', () => {
+    it('should expose pool field as public', () => {
+      expect(vectorDB.pool).toBeDefined();
+      expect(typeof vectorDB.pool).toBe('object');
+      expect(vectorDB.pool.connect).toBeDefined();
+      expect(typeof vectorDB.pool.connect).toBe('function');
+    });
+
+    it('should allow direct database connections via public pool field', async () => {
+      const client = await vectorDB.pool.connect();
+      try {
+        const result = await client.query('SELECT 1 as test');
+        expect(result.rows[0].test).toBe(1);
+      } finally {
+        client.release();
+      }
+    });
+
+    it('should provide access to pool configuration via public pool field', () => {
+      expect(vectorDB.pool.options).toBeDefined();
+      expect(vectorDB.pool.options.connectionString).toBe(connectionString);
+      expect(vectorDB.pool.options.max).toBeDefined();
+      expect(vectorDB.pool.options.idleTimeoutMillis).toBeDefined();
+    });
+
+    it('should allow pool monitoring via public pool field', () => {
+      expect(vectorDB.pool.totalCount).toBeDefined();
+      expect(vectorDB.pool.idleCount).toBeDefined();
+      expect(vectorDB.pool.waitingCount).toBeDefined();
+      expect(typeof vectorDB.pool.totalCount).toBe('number');
+      expect(typeof vectorDB.pool.idleCount).toBe('number');
+      expect(typeof vectorDB.pool.waitingCount).toBe('number');
+    });
+
+    it('should allow executing raw SQL via public pool field', async () => {
+      const client = await vectorDB.pool.connect();
+      try {
+        // Test a simple vector-related query
+        const result = await client.query('SELECT version()');
+        expect(result.rows[0].version).toBeDefined();
+        expect(typeof result.rows[0].version).toBe('string');
+      } finally {
+        client.release();
+      }
+    });
+
+    it('should maintain proper connection lifecycle via public pool field', async () => {
+      const initialIdleCount = vectorDB.pool.idleCount;
+      const initialTotalCount = vectorDB.pool.totalCount;
+
+      const client = await vectorDB.pool.connect();
+      
+      // After connecting, total count should be >= initial, idle count should be less
+      expect(vectorDB.pool.totalCount).toBeGreaterThanOrEqual(initialTotalCount);
+      expect(vectorDB.pool.idleCount).toBeLessThanOrEqual(initialIdleCount);
+      
+      client.release();
+      
+      // After releasing, idle count should return to at least initial value
+      expect(vectorDB.pool.idleCount).toBeGreaterThanOrEqual(initialIdleCount);
+    });
+  });
+
   afterAll(async () => {
     // Clean up test tables
     await vectorDB.deleteIndex({ indexName: testIndexName });
