@@ -1,5 +1,12 @@
 # @mastra/deployer-cloudflare
 
+## 0.10.7-alpha.6
+
+### Patch Changes
+
+- 8e6b8e5: dependencies updates:
+  - Updated dependency [`cloudflare@^4.4.1` ↗︎](https://www.npmjs.com/package/cloudflare/v/4.4.1) (from `^4.3.0`, in `dependencies`)
+
 ## 0.10.7-alpha.5
 
 ### Patch Changes

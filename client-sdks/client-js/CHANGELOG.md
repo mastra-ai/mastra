@@ -1,5 +1,11 @@
 # @mastra/client-js
 
+## 0.10.6-alpha.6
+
+### Patch Changes
+
+- c0d41f6: Fix streaming for agent tool calls
+
 ## 0.10.6-alpha.5
 
 ### Patch Changes
