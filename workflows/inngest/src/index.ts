@@ -410,6 +410,49 @@ export class InngestWorkflow<
     return run;
   }
 
+  async createRunAsync(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
+    const runIdToUse = options?.runId || randomUUID();
+
+    // Return a new Run instance with object parameters
+    const run: Run<TEngineType, TSteps, TInput, TOutput> =
+      this.runs.get(runIdToUse) ??
+      new InngestRun(
+        {
+          workflowId: this.id,
+          runId: runIdToUse,
+          executionEngine: this.executionEngine,
+          executionGraph: this.executionGraph,
+          serializedStepGraph: this.serializedStepGraph,
+          mastra: this.#mastra,
+          retryConfig: this.retryConfig,
+          cleanup: () => this.runs.delete(runIdToUse),
+        },
+        this.inngest,
+      );
+
+    this.runs.set(runIdToUse, run);
+
+    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+      workflowName: this.id,
+      runId: runIdToUse,
+      snapshot: {
+        runId: runIdToUse,
+        status: 'pending',
+        value: {},
+        context: {},
+        activePaths: [],
+        serializedStepGraph: this.serializedStepGraph,
+        suspendedPaths: {},
+        result: undefined,
+        error: undefined,
+        // @ts-ignore
+        timestamp: Date.now(),
+      },
+    });
+
+    return run;
+  }
+
   getFunction() {
     if (this.function) {
       return this.function;

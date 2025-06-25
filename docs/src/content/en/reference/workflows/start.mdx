@@ -10,7 +10,7 @@ The `.start()` method starts a workflow run with input data, allowing you to exe
 ## Usage
 
 ```typescript
-const run = myWorkflow.createRun();
+const run = await myWorkflow.createRunAsync();
 
 // Start the workflow with input data
 const result = await run.start({

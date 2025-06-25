@@ -1,11 +1,13 @@
 # Creating the getTransactions Tool
 
-Let's create a tool that fetches transaction data from a Google Sheet. We'll add this to your `tools/index.ts` file.
+Let's create a tool that fetches transaction data from a Google Sheet. We'll create a new file called `tools/get-transactions-tool.ts`.
 
-First, make sure you have the necessary imports:
+First, create the new tool file at src/mastra/tools/get-transactions-tool.ts
+
+Now add the necessary imports:
 
 ```typescript
-import { createTool } from "@mastra/core";
+import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 ```
 

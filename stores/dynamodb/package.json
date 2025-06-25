@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dynamodb",
-  "version": "0.11.1-alpha.2",
+  "version": "0.12.0",
   "description": "DynamoDB storage adapter for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -37,11 +37,11 @@
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.828.0",
-    "@aws-sdk/lib-dynamodb": "^3.828.0",
+    "@aws-sdk/lib-dynamodb": "^3.830.0",
     "electrodb": "^3.4.3"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.4-0 <0.11.0"
+    "@mastra/core": ">=0.10.7-0 <0.11.0-0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

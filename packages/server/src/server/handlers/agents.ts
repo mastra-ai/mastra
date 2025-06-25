@@ -70,7 +70,9 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
       }),
     );
 
-    const serializedAgents = serializedAgentsMap.reduce<any>((acc, { id, ...rest }) => {
+    const serializedAgents = serializedAgentsMap.reduce<
+      Record<string, Omit<(typeof serializedAgentsMap)[number], 'id'>>
+    >((acc, { id, ...rest }) => {
       acc[id] = rest;
       return acc;
     }, {});
@@ -216,6 +218,7 @@ export async function generateHandler({
   runtimeContext,
   agentId,
   body,
+  abortSignal,
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
@@ -224,6 +227,7 @@ export async function generateHandler({
     resourceid?: string;
     runtimeContext?: Record<string, unknown>;
   };
+  abortSignal?: AbortSignal;
 }) {
   try {
     const agent = mastra.getAgent(agentId);
@@ -248,6 +252,7 @@ export async function generateHandler({
       // @ts-expect-error TODO fix types
       resourceId: finalResourceId,
       runtimeContext: finalRuntimeContext,
+      signal: abortSignal,
     });
 
     return result;
@@ -261,6 +266,7 @@ export async function streamGenerateHandler({
   runtimeContext,
   agentId,
   body,
+  abortSignal,
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
@@ -269,6 +275,7 @@ export async function streamGenerateHandler({
     resourceid?: string;
     runtimeContext?: string;
   };
+  abortSignal?: AbortSignal;
 }): Promise<Response | undefined> {
   try {
     const agent = mastra.getAgent(agentId);
@@ -293,6 +300,7 @@ export async function streamGenerateHandler({
       // @ts-expect-error TODO fix types
       resourceId: finalResourceId,
       runtimeContext: finalRuntimeContext,
+      signal: abortSignal,
     });
 
     const streamResponse = rest.output

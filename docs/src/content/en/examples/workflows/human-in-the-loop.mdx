@@ -208,7 +208,7 @@ import { select } from "@inquirer/prompts";
 import { humanInputStep } from "./workflows/human-in-the-loop-workflow";
 
 const workflow = mastra.getWorkflow("travelAgentWorkflow");
-const run = workflow.createRun({});
+const run = await workflow.createRunAsync();
 
 // Start the workflow with initial vacation description
 const result = await run.start({
