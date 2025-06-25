@@ -84,16 +84,6 @@ export class LibSQLStore extends MastraStorage {
     }
   }
 
-  async init(): Promise<void> {
-    await super.init();
-    await this.createIndex({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      indexName: 'idx_workflow_name_created_at',
-      columns: ['workflow_name', 'createdAt'],
-      ascending: false,
-    });
-  }
-
   public get supports(): {
     selectByIncludeResourceScope: boolean;
     resourceWorkingMemory: boolean;
@@ -102,24 +92,6 @@ export class LibSQLStore extends MastraStorage {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
     };
-  }
-
-  private async createIndex({
-    tableName,
-    indexName,
-    columns,
-    ascending,
-  }: {
-    tableName: TABLE_NAMES;
-    indexName: string;
-    columns: string[];
-    ascending?: boolean;
-  }): Promise<void> {
-    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
-    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
-    const parsedColumns = columns.map(col => parseSqlIdentifier(col, 'column name'));
-    const sql = `CREATE INDEX IF NOT EXISTS ${parsedIndexName} ON ${parsedTableName} (${parsedColumns.join(', ')} ${ascending ? 'ASC' : 'DESC'});`;
-    await this.client.execute(sql);
   }
 
   private getCreateTableSQL(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string {
