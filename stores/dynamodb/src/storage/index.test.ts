@@ -1370,19 +1370,19 @@ describe('DynamoDBStore Integration Tests', () => {
       try {
         const scanCommand = new ScanCommand({ TableName: dynamoDbConfig.tableName });
         const scanResult = await client.send(scanCommand);
-        
+
         if (scanResult.Items && scanResult.Items.length > 0) {
           const deleteRequests = scanResult.Items.map(item => ({
-            DeleteRequest: { Key: item }
+            DeleteRequest: { Key: item },
           }));
-          
+
           // Split into batches of 25 (DynamoDB limit)
           for (let i = 0; i < deleteRequests.length; i += 25) {
             const batch = deleteRequests.slice(i, i + 25);
             const batchWriteCommand = new BatchWriteItemCommand({
               RequestItems: {
-                [dynamoDbConfig.tableName]: batch
-              }
+                [dynamoDbConfig.tableName]: batch,
+              },
             });
             await client.send(batchWriteCommand);
           }
@@ -1419,23 +1419,22 @@ describe('DynamoDBStore Integration Tests', () => {
       expect(retrievedMessages).toHaveLength(1);
 
       const retrievedMessage = retrievedMessages[0] as MastraMessageV2;
-      
+
       // Check that content is properly structured as a V2 message
       expect(typeof retrievedMessage.content).toBe('object');
       expect(retrievedMessage.content.format).toBe(2);
-      
+
       // CRITICAL: The content.content should still be the original stringified JSON
       // NOT double-nested like: { content: '{"format":2,"parts":[...],"content":"{\\"userInput\\":\\"test data\\"}"}' }
       expect(retrievedMessage.content.content).toBe(stringifiedContent);
-      
+
       // Verify the content can be parsed as the original JSON
       const parsedContent = JSON.parse(retrievedMessage.content.content as string);
       expect(parsedContent).toEqual({ userInput: 'test data', metadata: { key: 'value' } });
-      
+
       // Additional check: ensure the message doesn't have the "Found unhandled message" structure
       expect(retrievedMessage.content.parts).toBeDefined();
       expect(Array.isArray(retrievedMessage.content.parts)).toBe(true);
     });
   });
-
 }); // End Main Describe
