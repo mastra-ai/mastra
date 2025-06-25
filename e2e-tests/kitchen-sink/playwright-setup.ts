@@ -24,6 +24,7 @@ const ping = async () => {
       fetch('http://localhost:4111')
         .then(res => {
           if (res.ok) {
+            clearInterval(intervalId);
             resolve(undefined);
           } else if (counter > 10) {
             clearInterval(intervalId);
