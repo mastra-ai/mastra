@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.7-alpha.0
+
+### Patch Changes
+
+- a344ac7: Fix tool streaming in agent network
+
 ## 0.10.6
 
 ### Patch Changes
