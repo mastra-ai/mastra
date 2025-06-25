@@ -167,6 +167,57 @@ export const myMcpServerTwo = new MCPServer({
         return `Hello, ${context.name}! Welcome to the MCP server.`;
       },
     }),
+    collectContactInfo: createTool({
+      id: 'collectContactInfo',
+      description: 'Collects user contact information through elicitation.',
+      inputSchema: z.object({
+        reason: z.string().optional().describe('Optional reason for collecting contact info'),
+      }),
+      execute: async ({ context }, options) => {
+        const { reason } = context;
+
+        try {
+          // Use the session-aware elicitation functionality
+          const result = await options.elicitation.sendRequest({
+            message: reason
+              ? `Please provide your contact information. ${reason}`
+              : 'Please provide your contact information',
+            requestedSchema: {
+              type: 'object',
+              properties: {
+                name: {
+                  type: 'string',
+                  title: 'Full Name',
+                  description: 'Your full name',
+                },
+                email: {
+                  type: 'string',
+                  title: 'Email Address',
+                  description: 'Your email address',
+                  format: 'email',
+                },
+                phone: {
+                  type: 'string',
+                  title: 'Phone Number',
+                  description: 'Your phone number (optional)',
+                },
+              },
+              required: ['name', 'email'],
+            },
+          });
+
+          if (result.action === 'accept') {
+            return `Thank you! Contact information collected: ${JSON.stringify(result.content, null, 2)}`;
+          } else if (result.action === 'reject') {
+            return 'Contact information collection was declined by the user.';
+          } else {
+            return 'Contact information collection was cancelled by the user.';
+          }
+        } catch (error) {
+          return `Error collecting contact information: ${error}`;
+        }
+      },
+    }),
   },
 });
 

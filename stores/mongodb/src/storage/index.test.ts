@@ -1,7 +1,13 @@
 import { randomUUID } from 'crypto';
 import type { MastraMessageV1, MastraMessageV2, MetricResult, WorkflowRunState } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
-import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import {
+  TABLE_EVALS,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_TRACES,
+  TABLE_WORKFLOW_SNAPSHOT,
+} from '@mastra/core/storage';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { MongoDBConfig } from './index';
 import { MongoDBStore } from './index';
@@ -23,6 +29,7 @@ class Test {
       await this.store.clearTable({ tableName: TABLE_MESSAGES });
       await this.store.clearTable({ tableName: TABLE_THREADS });
       await this.store.clearTable({ tableName: TABLE_EVALS });
+      await this.store.clearTable({ tableName: TABLE_TRACES });
     } catch (error) {
       // Ignore errors during table clearing
       console.warn('Error clearing tables:', error);
@@ -78,6 +85,7 @@ class Test {
       content: {
         format: 2,
         parts: [{ type: 'text', text: content }],
+        content: content,
       },
       createdAt: new Date(),
       resourceId,
@@ -353,6 +361,83 @@ describe('MongoDBStore', () => {
       retrievedMessages.forEach((msg, idx) => {
         expect((msg as any).content.parts).toEqual(messages[idx]!.content.parts);
       });
+    });
+    it('should upsert messages: duplicate id+threadId results in update, not duplicate row', async () => {
+      const test = new Test(store).build();
+      await test.clearTables();
+      const thread = test.generateSampleThread();
+      await store.saveThread({ thread });
+      const baseMessage = test.generateSampleMessageV2({
+        threadId: thread.id,
+        content: 'Original',
+        resourceId: thread.resourceId,
+      });
+
+      // Insert the message for the first time
+      await store.saveMessages({ messages: [baseMessage], format: 'v2' });
+
+      // Insert again with the same id and threadId but different content
+      const updatedMessage = {
+        ...test.generateSampleMessageV2({
+          threadId: thread.id,
+          content: 'Updated',
+          resourceId: thread.resourceId,
+        }),
+        createdAt: baseMessage.createdAt,
+        id: baseMessage.id,
+      };
+
+      await store.saveMessages({ messages: [updatedMessage], format: 'v2' });
+
+      // Retrieve messages for the thread
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
+
+      // Only one message should exist for that id+threadId
+      expect(retrievedMessages.filter(m => m.id === baseMessage.id)).toHaveLength(1);
+
+      // The content should be the updated one
+      expect(retrievedMessages.find(m => m.id === baseMessage.id)?.content.content).toBe('Updated');
+    });
+
+    it('should upsert messages: duplicate id and different threadid', async () => {
+      const test = new Test(store).build();
+      const thread1 = test.generateSampleThread();
+      const thread2 = test.generateSampleThread();
+      await store.saveThread({ thread: thread1 });
+      await store.saveThread({ thread: thread2 });
+
+      const message = test.generateSampleMessageV2({
+        threadId: thread1.id,
+        content: 'Thread1 Content',
+        resourceId: thread1.resourceId,
+      });
+
+      // Insert message into thread1
+      await store.saveMessages({ messages: [message], format: 'v2' });
+
+      // Attempt to insert a message with the same id but different threadId
+      const conflictingMessage = {
+        ...test.generateSampleMessageV2({
+          threadId: thread2.id, // different thread
+          content: 'Thread2 Content',
+          resourceId: thread2.resourceId,
+        }),
+        createdAt: message.createdAt,
+        id: message.id,
+      };
+
+      // Save should move the message to the new thread
+      await store.saveMessages({ messages: [conflictingMessage], format: 'v2' });
+
+      // Retrieve messages for both threads
+      const thread1Messages = await store.getMessages({ threadId: thread1.id, format: 'v2' });
+      const thread2Messages = await store.getMessages({ threadId: thread2.id, format: 'v2' });
+
+      // Thread 1 should NOT have the message with that id
+      expect(thread1Messages.find(m => m.id === message.id)).toBeUndefined();
+
+      // Thread 2 should have the message with that id
+      expect(thread2Messages.find(m => m.id === message.id)?.content.content).toBe('Thread2 Content');
     });
 
     // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
@@ -846,6 +931,152 @@ describe('MongoDBStore', () => {
     });
   });
 
+  describe('Trace Operations', () => {
+    const sampleTrace = (
+      name: string,
+      scope: string,
+      startTime = Date.now(),
+      attributes: Record<string, string> = {},
+    ) => ({
+      id: `trace-${randomUUID()}`,
+      parentSpanId: `span-${randomUUID()}`,
+      traceId: `traceid-${randomUUID()}`,
+      name,
+      scope,
+      kind: 1,
+      startTime: startTime,
+      endTime: startTime + 100,
+      status: JSON.stringify({ code: 0 }),
+      attributes: JSON.stringify({ key: 'value', scopeAttr: scope, ...attributes }),
+      events: JSON.stringify([{ name: 'event1', timestamp: startTime + 50 }]),
+      links: JSON.stringify([]),
+      createdAt: new Date(startTime).toISOString(),
+      updatedAt: new Date(startTime).toISOString(),
+    });
+
+    beforeEach(async () => {
+      const test = new Test(store).build();
+      await test.clearTables();
+    });
+
+    it('should batch insert and retrieve traces', async () => {
+      const trace1 = sampleTrace('trace-op-1', 'scope-A');
+      const trace2 = sampleTrace('trace-op-2', 'scope-A', Date.now() + 10);
+      const trace3 = sampleTrace('trace-op-3', 'scope-B', Date.now() + 20);
+      const records = [trace1, trace2, trace3];
+
+      await store.batchInsert({ tableName: TABLE_TRACES, records });
+
+      const allTraces = await store.getTraces();
+      expect(allTraces.length).toBe(3);
+    });
+
+    it('should handle Date objects for createdAt/updatedAt fields in batchInsert', async () => {
+      const now = new Date();
+      const traceWithDateObjects = {
+        id: `trace-${randomUUID()}`,
+        parentSpanId: `span-${randomUUID()}`,
+        traceId: `traceid-${randomUUID()}`,
+        name: 'test-trace-with-dates',
+        scope: 'default-tracer',
+        kind: 1,
+        startTime: now.getTime(),
+        endTime: now.getTime() + 100,
+        status: JSON.stringify({ code: 0 }),
+        attributes: JSON.stringify({ key: 'value' }),
+        events: JSON.stringify([]),
+        links: JSON.stringify([]),
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await store.batchInsert({ tableName: TABLE_TRACES, records: [traceWithDateObjects] });
+
+      const allTraces = await store.getTraces({ name: 'test-trace-with-dates', page: 0, perPage: 10 });
+      expect(allTraces.length).toBe(1);
+      expect(allTraces[0].name).toBe('test-trace-with-dates');
+    });
+
+    it('should retrieve traces filtered by name', async () => {
+      const now = Date.now();
+      const trace1 = sampleTrace('trace-filter-name', 'scope-X', now);
+      const trace2 = sampleTrace('trace-filter-name', 'scope-Y', now + 10);
+      const trace3 = sampleTrace('other-name', 'scope-X', now + 20);
+      await store.batchInsert({ tableName: TABLE_TRACES, records: [trace1, trace2, trace3] });
+
+      const filteredTraces = await store.getTraces({ name: 'trace-filter-name', page: 0, perPage: 10 });
+      expect(filteredTraces.length).toBe(2);
+      expect(filteredTraces.every(t => t.name === 'trace-filter-name')).toBe(true);
+      expect(filteredTraces[0].scope).toBe('scope-Y');
+      expect(filteredTraces[1].scope).toBe('scope-X');
+    });
+
+    it('should retrieve traces filtered by attributes', async () => {
+      const now = Date.now();
+      const trace1 = sampleTrace('trace-filter-attribute-A', 'scope-X', now, { componentName: 'component-TARGET' });
+      const trace2 = sampleTrace('trace-filter-attribute-B', 'scope-Y', now + 10, { componentName: 'component-OTHER' });
+      const trace3 = sampleTrace('trace-filter-attribute-C', 'scope-Z', now + 20, {
+        componentName: 'component-TARGET',
+        andFilterTest: 'TARGET',
+      });
+      await store.batchInsert({ tableName: TABLE_TRACES, records: [trace1, trace2, trace3] });
+
+      const filteredTraces = await store.getTraces({
+        attributes: { componentName: 'component-TARGET' },
+        page: 0,
+        perPage: 10,
+      });
+      expect(filteredTraces.length).toBe(2);
+      expect(filteredTraces[0].name).toBe('trace-filter-attribute-C');
+      expect(filteredTraces[1].name).toBe('trace-filter-attribute-A');
+
+      const filteredTraces2 = await store.getTraces({
+        attributes: { componentName: 'component-TARGET', andFilterTest: 'TARGET' },
+        page: 0,
+        perPage: 10,
+      });
+      expect(filteredTraces2.length).toBe(1);
+      expect(filteredTraces2[0].name).toBe('trace-filter-attribute-C');
+    });
+
+    it('should retrieve traces filtered by scope', async () => {
+      const now = Date.now();
+      const trace1 = sampleTrace('trace-filter-scope-A', 'scope-TARGET', now);
+      const trace2 = sampleTrace('trace-filter-scope-B', 'scope-OTHER', now + 10);
+      const trace3 = sampleTrace('trace-filter-scope-C', 'scope-TARGET', now + 20);
+      await store.batchInsert({ tableName: TABLE_TRACES, records: [trace1, trace2, trace3] });
+
+      const filteredTraces = await store.getTraces({ scope: 'scope-TARGET', page: 0, perPage: 10 });
+      expect(filteredTraces.length).toBe(2);
+      expect(filteredTraces.every(t => t.scope === 'scope-TARGET')).toBe(true);
+      expect(filteredTraces[0].name).toBe('trace-filter-scope-C');
+      expect(filteredTraces[1].name).toBe('trace-filter-scope-A');
+    });
+
+    it('should handle pagination for getTraces', async () => {
+      const now = Date.now();
+      const traceData = Array.from({ length: 5 }, (_, i) => sampleTrace('trace-page', `scope-page`, now + i * 10));
+      await store.batchInsert({ tableName: TABLE_TRACES, records: traceData });
+
+      const page1 = await store.getTraces({ name: 'trace-page', page: 0, perPage: 2 });
+      expect(page1.length).toBe(2);
+      expect(page1[0]!.startTime).toBe(traceData[4]!.startTime);
+      expect(page1[1]!.startTime).toBe(traceData[3]!.startTime);
+
+      const page2 = await store.getTraces({ name: 'trace-page', page: 1, perPage: 2 });
+      expect(page2.length).toBe(2);
+      expect(page2[0]!.startTime).toBe(traceData[2]!.startTime);
+      expect(page2[1]!.startTime).toBe(traceData[1]!.startTime);
+
+      const page3 = await store.getTraces({ name: 'trace-page', page: 2, perPage: 2 });
+      expect(page3.length).toBe(1);
+      expect(page3[0]!.startTime).toBe(traceData[0]!.startTime);
+
+      const page4 = await store.getTraces({ name: 'trace-page', page: 3, perPage: 2 });
+      expect(page4.length).toBe(0);
+    });
+  });
+
   describe('Eval Operations', () => {
     it('should retrieve evals by agent name', async () => {
       const test = new Test(store).build();
@@ -864,7 +1095,7 @@ describe('MongoDBStore', () => {
           agent_name: liveEval.agentName,
           input: liveEval.input,
           output: liveEval.output,
-          result: liveEval.result,
+          result: JSON.stringify(liveEval.result),
           metric_name: liveEval.metricName,
           instructions: liveEval.instructions,
           test_info: null,
@@ -881,7 +1112,7 @@ describe('MongoDBStore', () => {
           agent_name: testEval.agentName,
           input: testEval.input,
           output: testEval.output,
-          result: testEval.result,
+          result: JSON.stringify(testEval.result),
           metric_name: testEval.metricName,
           instructions: testEval.instructions,
           test_info: JSON.stringify(testEval.testInfo),
@@ -898,7 +1129,7 @@ describe('MongoDBStore', () => {
           agent_name: otherAgentEval.agentName,
           input: otherAgentEval.input,
           output: otherAgentEval.output,
-          result: otherAgentEval.result,
+          result: JSON.stringify(otherAgentEval.result),
           metric_name: otherAgentEval.metricName,
           instructions: otherAgentEval.instructions,
           test_info: null,
@@ -913,16 +1144,20 @@ describe('MongoDBStore', () => {
       const allEvals = await store.getEvalsByAgentName(agentName);
       expect(allEvals).toHaveLength(2);
       expect(allEvals.map(e => e.runId)).toEqual(expect.arrayContaining([liveEval.runId, testEval.runId]));
+      expect(allEvals[0]!.result.score).toEqual(liveEval.result.score);
+      expect(allEvals[1]!.result.score).toEqual(testEval.result.score);
 
       // Test getting only live evals
       const liveEvals = await store.getEvalsByAgentName(agentName, 'live');
       expect(liveEvals).toHaveLength(1);
       expect(liveEvals[0]!.runId).toBe(liveEval.runId);
+      expect(liveEvals[0]!.result.score).toEqual(liveEval.result.score);
 
       // Test getting only test evals
       const testEvals = await store.getEvalsByAgentName(agentName, 'test');
       expect(testEvals).toHaveLength(1);
       expect(testEvals[0]!.runId).toBe(testEval.runId);
+      expect(testEvals[0]!.result.score).toEqual(testEval.result.score);
       expect(testEvals[0]!.testInfo).toEqual(testEval.testInfo);
 
       // Test getting evals for non-existent agent

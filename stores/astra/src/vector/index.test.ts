@@ -297,7 +297,7 @@ describe.skip('AstraVector Integration Tests', () => {
         vectorDB.query({
           indexName: testIndexName2,
           queryVector: [1, 0, 0, 0],
-          filter: { tags: { $all: 'not-an-array' } },
+          filter: { tags: { $all: 'not-an-array' as any } },
         }),
       ).rejects.toThrow();
     });
@@ -307,15 +307,7 @@ describe.skip('AstraVector Integration Tests', () => {
         vectorDB.query({
           indexName: testIndexName2,
           queryVector: [1, 0, 0, 0],
-          filter: { tags: { $in: null } },
-        }),
-      ).rejects.toThrow();
-
-      await expect(
-        vectorDB.query({
-          indexName: testIndexName2,
-          queryVector: [1, 0, 0, 0],
-          filter: { tags: { $all: 'not-an-array' } },
+          filter: { tags: { $in: null as any } },
         }),
       ).rejects.toThrow();
     });
@@ -327,7 +319,7 @@ describe.skip('AstraVector Integration Tests', () => {
           vectorDB.query({
             indexName: testIndexName2,
             queryVector: [1, 0, 0, 0],
-            filter: { field: { $in: val } },
+            filter: { field: { $in: val as any } },
           }),
         ).rejects.toThrow();
       }
@@ -340,7 +332,7 @@ describe.skip('AstraVector Integration Tests', () => {
           vectorDB.query({
             indexName: testIndexName2,
             queryVector: [1, 0, 0, 0],
-            filter: { field: { $nin: val } },
+            filter: { field: { $nin: val as any } },
           }),
         ).rejects.toThrow();
       }
@@ -353,7 +345,7 @@ describe.skip('AstraVector Integration Tests', () => {
           vectorDB.query({
             indexName: testIndexName2,
             queryVector: [1, 0, 0, 0],
-            filter: { field: { $all: val } },
+            filter: { field: { $all: val as any } },
           }),
         ).rejects.toThrow();
       }
@@ -366,7 +358,7 @@ describe.skip('AstraVector Integration Tests', () => {
           vectorDB.query({
             indexName: testIndexName2,
             queryVector: [1, 0, 0, 0],
-            filter: { field: { $exists: val } },
+            filter: { field: { $exists: val as any } },
           }),
         ).rejects.toThrow();
       }
@@ -395,9 +387,9 @@ describe.skip('AstraVector Integration Tests', () => {
           indexName: testIndexName2,
           queryVector: [1, 0, 0, 0],
           filter: {
-            field1: { $in: 'not-array' },
-            field2: { $exists: 'not-boolean' },
-            field3: { $gt: 'not-number' },
+            field1: { $in: 'not-array' as any },
+            field2: { $exists: 'not-boolean' as any },
+            field3: { $gt: 'not-number' as any },
           },
         }),
       ).rejects.toThrow();

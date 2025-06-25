@@ -1,6 +1,6 @@
 {
   "name": "@mastra/ragie",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
@@ -73,7 +73,7 @@
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.4",
     "ts-to-zod": "^3.15.0",
-    "zod": "^3.25.57"
+    "zod": "^3.25.67"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.0-alpha.0"

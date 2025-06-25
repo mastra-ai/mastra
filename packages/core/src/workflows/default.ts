@@ -6,7 +6,7 @@ import { EMITTER_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
-import type { StepFailure, StepResult, StepSuccess } from './types';
+import type { Emitter, StepFailure, StepResult, StepSuccess } from './types';
 import type { DefaultEngineType, SerializedStepFlowEntry, StepFlowEntry } from './workflow';
 
 export type ExecutionContext = {
@@ -27,7 +27,7 @@ export type ExecutionContext = {
 export class DefaultExecutionEngine extends ExecutionEngine {
   protected async fmtReturnValue<TOutput>(
     executionSpan: Span | undefined,
-    emitter: { emit: (event: string, data: any) => Promise<void> },
+    emitter: Emitter,
     stepResults: Record<string, StepResult<any, any, any, any>>,
     lastOutput: StepResult<any, any, any, any>,
     error?: Error | string,
@@ -119,7 +119,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumePayload: any;
       resumePath: number[];
     };
-    emitter: { emit: (event: string, data: any) => Promise<void> };
+    emitter: Emitter;
     retryConfig?: {
       attempts?: number;
       delay?: number;
@@ -173,7 +173,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           emitter: params.emitter,
           runtimeContext: params.runtimeContext,
         });
+
         if (lastOutput.result.status !== 'success') {
+          if (lastOutput.result.status === 'bailed') {
+            lastOutput.result.status = 'success';
+          }
+
           const result = (await this.fmtReturnValue(
             executionSpan,
             params.emitter,
@@ -246,14 +251,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   getStepOutput(stepResults: Record<string, any>, step?: StepFlowEntry): any {
     if (!step) {
       return stepResults.input;
-    } else if (step.type === 'step') {
+    } else if (step.type === 'step' || step.type === 'waitForEvent') {
       return stepResults[step.step.id]?.output;
     } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
       return stepResults[step.id]?.output;
     } else if (step.type === 'parallel' || step.type === 'conditional') {
       return step.steps.reduce(
         (acc, entry) => {
-          if (entry.type === 'step') {
+          if (entry.type === 'step' || entry.type === 'waitForEvent') {
             acc[entry.step.id] = stepResults[entry.step.id]?.output;
           } else if (entry.type === 'parallel' || entry.type === 'conditional') {
             const parallelResult = this.getStepOutput(stepResults, entry)?.output;
@@ -280,6 +285,30 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     await new Promise(resolve => setTimeout(resolve, duration));
   }
 
+  async executeWaitForEvent({
+    event,
+    emitter,
+    timeout,
+  }: {
+    event: string;
+    emitter: Emitter;
+    timeout?: number;
+  }): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const cb = (eventData: any) => {
+        resolve(eventData);
+      };
+      if (timeout) {
+        setTimeout(() => {
+          emitter.off(`user-event-${event}`, cb);
+          reject(new Error('Timeout waiting for event'));
+        }, timeout);
+      }
+
+      emitter.once(`user-event-${event}`, cb);
+    });
+  }
+
   async executeStep({
     workflowId,
     runId,
@@ -301,7 +330,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumePayload: any;
     };
     prevOutput: any;
-    emitter: { emit: (event: string, data: any) => Promise<void> };
+    emitter: Emitter;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
@@ -375,6 +404,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     for (let i = 0; i < retries + 1; i++) {
       try {
         let suspended: { payload: any } | undefined;
+        let bailed: { payload: any } | undefined;
         const result = await runStep({
           runId,
           mastra: this.mastra!,
@@ -394,9 +424,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
             return null;
           },
-          suspend: async (suspendPayload: any) => {
+          suspend: async (suspendPayload: any): Promise<any> => {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             suspended = { payload: suspendPayload };
+          },
+          bail: (result: any) => {
+            bailed = { payload: result };
           },
           resume: {
             steps: resume?.steps?.slice(1) || [],
@@ -410,6 +443,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         if (suspended) {
           execResults = { status: 'suspended', suspendPayload: suspended.payload, suspendedAt: Date.now() };
+        } else if (bailed) {
+          execResults = { status: 'bailed', output: bailed.payload, endedAt: Date.now() };
         } else {
           execResults = { status: 'success', output: result, endedAt: Date.now() };
         }
@@ -518,7 +553,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumePath: number[];
     };
     executionContext: ExecutionContext;
-    emitter: { emit: (event: string, data: any) => Promise<void> };
+    emitter: Emitter;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     let execResults: any;
@@ -601,7 +636,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumePath: number[];
     };
     executionContext: ExecutionContext;
-    emitter: { emit: (event: string, data: any) => Promise<void> };
+    emitter: Emitter;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     let execResults: any;
@@ -629,7 +664,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               },
 
               // TODO: this function shouldn't have suspend probably?
-              suspend: async (_suspendPayload: any) => {},
+              suspend: async (_suspendPayload: any): Promise<any> => {},
+              bail: () => {},
               [EMITTER_SYMBOL]: emitter,
               engine: {},
             });
@@ -733,7 +769,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumePath: number[];
     };
     executionContext: ExecutionContext;
-    emitter: { emit: (event: string, data: any) => Promise<void> };
+    emitter: Emitter;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     const { step, condition } = entry;
@@ -771,7 +807,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           const result = stepResults[step.id];
           return result?.status === 'success' ? result.output : null;
         },
-        suspend: async (_suspendPayload: any) => {},
+        suspend: async (_suspendPayload: any): Promise<any> => {},
+        bail: () => {},
         [EMITTER_SYMBOL]: emitter,
         engine: {},
       });
@@ -810,7 +847,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumePath: number[];
     };
     executionContext: ExecutionContext;
-    emitter: { emit: (event: string, data: any) => Promise<void> };
+    emitter: Emitter;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     const { step, opts } = entry;
@@ -874,7 +911,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     serializedStepGraph: SerializedStepFlowEntry[];
     executionContext: ExecutionContext;
-    workflowStatus: 'success' | 'failed' | 'suspended' | 'running';
+    workflowStatus: 'success' | 'failed' | 'suspended' | 'running' | 'waiting';
     result?: Record<string, any>;
     error?: string | Error;
   }) {
@@ -922,7 +959,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumePath: number[];
     };
     executionContext: ExecutionContext;
-    emitter: { emit: (event: string, data: any) => Promise<void> };
+    emitter: Emitter;
     runtimeContext: RuntimeContext;
   }): Promise<{
     result: StepResult<any, any, any, any>;
@@ -1021,7 +1058,57 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     } else if (entry.type === 'sleep') {
       const startedAt = Date.now();
+      await emitter.emit('watch', {
+        type: 'watch',
+        payload: {
+          currentStep: {
+            id: entry.id,
+            status: 'waiting',
+            payload: prevOutput,
+            startedAt,
+          },
+          workflowState: {
+            status: 'waiting',
+            steps: {
+              ...stepResults,
+              [entry.id]: {
+                status: 'waiting',
+                payload: prevOutput,
+                startedAt,
+              },
+            },
+            result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: Date.now(),
+      });
+      await emitter.emit('watch-v2', {
+        type: 'step-waiting',
+        payload: {
+          id: entry.id,
+        },
+      });
+      await this.persistStepUpdate({
+        workflowId,
+        runId,
+        serializedStepGraph,
+        stepResults,
+        executionContext,
+        workflowStatus: 'waiting',
+      });
+
       await this.executeSleep({ id: entry.id, duration: entry.duration });
+
+      await this.persistStepUpdate({
+        workflowId,
+        runId,
+        serializedStepGraph,
+        stepResults,
+        executionContext,
+        workflowStatus: 'running',
+      });
+
       const endedAt = Date.now();
       const stepInfo = {
         payload: prevOutput,
@@ -1033,7 +1120,58 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
     } else if (entry.type === 'sleepUntil') {
       const startedAt = Date.now();
+      await emitter.emit('watch', {
+        type: 'watch',
+        payload: {
+          currentStep: {
+            id: entry.id,
+            status: 'waiting',
+            payload: prevOutput,
+            startedAt,
+          },
+          workflowState: {
+            status: 'waiting',
+            steps: {
+              ...stepResults,
+              [entry.id]: {
+                status: 'waiting',
+                payload: prevOutput,
+                startedAt,
+              },
+            },
+            result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: Date.now(),
+      });
+      await emitter.emit('watch-v2', {
+        type: 'step-waiting',
+        payload: {
+          id: entry.id,
+        },
+      });
+
+      await this.persistStepUpdate({
+        workflowId,
+        runId,
+        serializedStepGraph,
+        stepResults,
+        executionContext,
+        workflowStatus: 'waiting',
+      });
+
       await this.executeSleep({ id: entry.id, duration: entry.date.getTime() - Date.now() });
+
+      await this.persistStepUpdate({
+        workflowId,
+        runId,
+        serializedStepGraph,
+        stepResults,
+        executionContext,
+        workflowStatus: 'running',
+      });
+
       const endedAt = Date.now();
       const stepInfo = {
         payload: prevOutput,
@@ -1043,9 +1181,94 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
       execResults = { ...stepInfo, status: 'success', output: prevOutput };
       stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
+    } else if (entry.type === 'waitForEvent') {
+      const startedAt = Date.now();
+      let eventData: any;
+      await emitter.emit('watch', {
+        type: 'watch',
+        payload: {
+          currentStep: {
+            id: entry.step.id,
+            status: 'waiting',
+            payload: prevOutput,
+            startedAt,
+          },
+          workflowState: {
+            status: 'waiting',
+            steps: {
+              ...stepResults,
+              [entry.step.id]: {
+                status: 'waiting',
+                payload: prevOutput,
+                startedAt,
+              },
+            },
+            result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: Date.now(),
+      });
+      await emitter.emit('watch-v2', {
+        type: 'step-waiting',
+        payload: {
+          id: entry.step.id,
+        },
+      });
+
+      await this.persistStepUpdate({
+        workflowId,
+        runId,
+        serializedStepGraph,
+        stepResults,
+        executionContext,
+        workflowStatus: 'waiting',
+      });
+
+      try {
+        eventData = await this.executeWaitForEvent({ event: entry.event, emitter, timeout: entry.timeout });
+
+        await this.persistStepUpdate({
+          workflowId,
+          runId,
+          serializedStepGraph,
+          stepResults,
+          executionContext,
+          workflowStatus: 'running',
+        });
+
+        const { step } = entry;
+        execResults = await this.executeStep({
+          workflowId,
+          runId,
+          step,
+          stepResults,
+          executionContext,
+          resume: {
+            resumePayload: eventData,
+            steps: [entry.step.id],
+          },
+          prevOutput,
+          emitter,
+          runtimeContext,
+        });
+      } catch (error) {
+        execResults = {
+          status: 'failed',
+          error: error as Error,
+        };
+      }
+      const endedAt = Date.now();
+      const stepInfo = {
+        payload: prevOutput,
+        startedAt,
+        endedAt,
+      };
+
+      execResults = { ...execResults, ...stepInfo };
     }
 
-    if (entry.type === 'step' || entry.type === 'loop' || entry.type === 'foreach') {
+    if (entry.type === 'step' || entry.type === 'waitForEvent' || entry.type === 'loop' || entry.type === 'foreach') {
       stepResults[entry.step.id] = execResults;
     }
 

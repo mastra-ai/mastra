@@ -639,7 +639,7 @@ export class Machine<
   }
 
   #buildBaseState(stepNode: StepNode, nextSteps: StepNode[] = []): any {
-    // NOTE: THIS CLEARS THE STEPGRAPH :: no concequences for now
+    // NOTE: THIS CLEARS THE STEPGRAPH :: no consequences for now
     const nextStep = nextSteps.shift();
 
     return {

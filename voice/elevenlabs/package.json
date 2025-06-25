@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-elevenlabs",
-  "version": "0.10.3",
+  "version": "0.10.4",
   "description": "Mastra ElevenLabs voice integration",
   "type": "module",
   "files": [
@@ -30,14 +30,14 @@
   "license": "Elastic-2.0",
   "dependencies": {
     "elevenlabs": "^1.59.0",
-    "zod": "^3.25.57"
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
-    "eslint": "^9.28.0",
+    "eslint": "^9.29.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^2.1.9"

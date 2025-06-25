@@ -9,8 +9,12 @@ export enum ErrorDomain {
   MASTRA_VOICE = 'MASTRA_VOICE',
   MASTRA_VECTOR = 'MASTRA_VECTOR',
   LLM = 'LLM',
-  UNKNOWN = 'UNKNOWN',
+  EVAL = 'EVAL',
+  A2A = 'A2A',
+  MASTRA_INSTANCE = 'MASTRA_INSTANCE',
+  MASTRA = 'MASTRA',
   DEPLOYER = 'DEPLOYER',
+  STORAGE = 'STORAGE',
 }
 
 export enum ErrorCategory {

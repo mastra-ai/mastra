@@ -512,6 +512,10 @@ aside > div:nth-child(1) ul li.active:has(a[href="/reference"]) {
   }
 }
 
+article main li:has(ul) ul {
+  margin-top: calc(var(--x-spacing) * 2);
+}
+
 aside a[href="/docs"],
 aside button[data-href="/docs/reference"],
 aside a[href="/examples"],

@@ -307,6 +307,17 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/local-dev/creating-a-new-project",
+        destination: "/docs/getting-started/installation",
+        permanent: true,
+      },
+      {
+        source: "/docs/local-dev/add-to-existing-project",
+        destination:
+          "/docs/getting-started/installation#add-to-an-existing-project",
+        permanent: true,
+      },
+      {
         source: "/docs/deployment/client",
         destination: "/docs/client-js/overview",
         permanent: true,
@@ -955,6 +966,13 @@ export default withGT(
       {
         source: "/:locale/reference/rag/vector-search",
         destination: "/:locale/examples/rag/query/hybrid-vector-search",
+        permanent: true,
+      },
+
+      // redirect overview pages
+      {
+        source: "/:locale/docs/frameworks/agentic-uis",
+        destination: "/:locale/docs/frameworks/agentic-uis/ai-sdk",
         permanent: true,
       },
     ],

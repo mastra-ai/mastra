@@ -3,6 +3,7 @@ import type * as http from 'node:http';
 import type { InternalCoreTool } from '@mastra/core';
 import { createTool, makeCoreTool } from '@mastra/core';
 import type { ToolsInput, Agent } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MCPServerBase } from '@mastra/core/mcp';
 import type {
   MCPServerConfig,
@@ -38,6 +39,9 @@ import type {
   ResourceTemplate,
   ServerCapabilities,
   Prompt,
+  CallToolResult,
+  ElicitResult,
+  ElicitRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
@@ -45,29 +49,15 @@ import { SSETransport } from 'hono-mcp-server-sse-transport';
 import { z } from 'zod';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
-import type {
-  MCPServerPromptMessagesCallback,
-  MCPServerPrompts,
-  MCPServerResourceContentCallback,
-  MCPServerResources,
-} from './types';
-
+import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MCPTool } from './types';
 export class MCPServer extends MCPServerBase {
   private server: Server;
   private stdioTransport?: StdioServerTransport;
   private sseTransport?: SSEServerTransport;
   private sseHonoTransports: Map<string, SSETransport>;
   private streamableHTTPTransports: Map<string, StreamableHTTPServerTransport> = new Map();
-  private listToolsHandlerIsRegistered: boolean = false;
-  private callToolHandlerIsRegistered: boolean = false;
-  private listResourcesHandlerIsRegistered: boolean = false;
-  private readResourceHandlerIsRegistered: boolean = false;
-  private listResourceTemplatesHandlerIsRegistered: boolean = false;
-  private subscribeResourceHandlerIsRegistered: boolean = false;
-  private unsubscribeResourceHandlerIsRegistered: boolean = false;
-
-  private listPromptsHandlerIsRegistered: boolean = false;
-  private getPromptHandlerIsRegistered: boolean = false;
+  // Track server instances for each HTTP session
+  private httpServerInstances: Map<string, Server> = new Map();
 
   private definedResources?: Resource[];
   private definedResourceTemplates?: ResourceTemplate[];
@@ -77,6 +67,7 @@ export class MCPServer extends MCPServerBase {
   private subscriptions: Set<string> = new Set();
   public readonly resources: ServerResourceActions;
   public readonly prompts: ServerPromptActions;
+  public readonly elicitation: ElicitationActions;
 
   /**
    * Get the current stdio transport.
@@ -118,6 +109,7 @@ export class MCPServer extends MCPServerBase {
     const capabilities: ServerCapabilities = {
       tools: {},
       logging: { enabled: true },
+      elicitation: {},
     };
 
     if (opts.resources) {
@@ -135,24 +127,9 @@ export class MCPServer extends MCPServerBase {
     );
 
     this.sseHonoTransports = new Map();
-    this.registerListToolsHandler();
-    this.registerCallToolHandler();
-    if (opts.resources) {
-      this.registerListResourcesHandler();
-      this.registerReadResourceHandler({ getResourcesCallback: opts.resources.getResourceContent });
-      this.registerSubscribeResourceHandler();
-      this.registerUnsubscribeResourceHandler();
 
-      if (opts.resources.resourceTemplates) {
-        this.registerListResourceTemplatesHandler();
-      }
-    }
-    if (opts.prompts) {
-      this.registerListPromptsHandler();
-      this.registerGetPromptHandler({
-        getPromptMessagesCallback: opts.prompts.getPromptMessages,
-      });
-    }
+    // Register all handlers on the main server instance
+    this.registerHandlersOnServer(this.server);
 
     this.resources = new ServerResourceActions({
       getSubscriptions: () => this.subscriptions,
@@ -173,6 +150,400 @@ export class MCPServer extends MCPServerBase {
         this.definedPrompts = undefined;
       },
     });
+
+    this.elicitation = {
+      sendRequest: async request => {
+        return this.handleElicitationRequest(request);
+      },
+    };
+  }
+
+  /**
+   * Handle an elicitation request by sending it to the connected client.
+   * This method sends an elicitation/create request to the client and waits for the response.
+   *
+   * @param request - The elicitation request containing message and schema
+   * @param serverInstance - Optional server instance to use; defaults to main server for backward compatibility
+   * @returns Promise that resolves to the client's response
+   */
+  private async handleElicitationRequest(
+    request: ElicitRequest['params'],
+    serverInstance?: Server,
+  ): Promise<ElicitResult> {
+    this.logger.debug(`Sending elicitation request: ${request.message}`);
+
+    const server = serverInstance || this.server;
+    const response = await server.elicitInput(request);
+
+    this.logger.debug(`Received elicitation response: ${JSON.stringify(response)}`);
+
+    return response;
+  }
+
+  /**
+   * Creates a new Server instance configured with all handlers for HTTP sessions.
+   * Each HTTP client connection gets its own Server instance to avoid routing conflicts.
+   */
+  private createServerInstance(): Server {
+    const capabilities: ServerCapabilities = {
+      tools: {},
+      logging: { enabled: true },
+      elicitation: {},
+    };
+
+    if (this.resourceOptions) {
+      capabilities.resources = { subscribe: true, listChanged: true };
+    }
+
+    if (this.promptOptions) {
+      capabilities.prompts = { listChanged: true };
+    }
+
+    const serverInstance = new Server({ name: this.name, version: this.version }, { capabilities });
+
+    // Register all handlers on the new server instance
+    this.registerHandlersOnServer(serverInstance);
+
+    return serverInstance;
+  }
+
+  /**
+   * Registers all MCP handlers on a given server instance.
+   * This allows us to create multiple server instances with identical functionality.
+   */
+  private registerHandlersOnServer(serverInstance: Server) {
+    // List tools handler
+    serverInstance.setRequestHandler(ListToolsRequestSchema, async () => {
+      this.logger.debug('Handling ListTools request');
+      return {
+        tools: Object.values(this.convertedTools).map(tool => {
+          const toolSpec: any = {
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.parameters.jsonSchema,
+          };
+          if (tool.outputSchema) {
+            toolSpec.outputSchema = tool.outputSchema.jsonSchema;
+          }
+          return toolSpec;
+        }),
+      };
+    });
+
+    // Call tool handler
+    serverInstance.setRequestHandler(CallToolRequestSchema, async request => {
+      const startTime = Date.now();
+      try {
+        const tool = this.convertedTools[request.params.name] as MCPTool;
+        if (!tool) {
+          this.logger.warn(`CallTool: Unknown tool '${request.params.name}' requested.`);
+          return {
+            content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }],
+            isError: true,
+          };
+        }
+
+        const validation = tool.parameters.validate?.(request.params.arguments ?? {});
+        if (validation && !validation.success) {
+          this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
+            errors: validation.error,
+          });
+          return {
+            content: [{ type: 'text', text: `Invalid tool arguments: ${JSON.stringify(validation.error)}` }],
+            isError: true,
+          };
+        }
+        if (!tool.execute) {
+          this.logger.warn(`CallTool: Tool '${request.params.name}' does not have an execute function.`);
+          return {
+            content: [{ type: 'text', text: `Tool '${request.params.name}' does not have an execute function.` }],
+            isError: true,
+          };
+        }
+
+        // Create session-aware elicitation for this tool execution
+        const sessionElicitation = {
+          sendRequest: async (request: ElicitRequest['params']) => {
+            return this.handleElicitationRequest(request, serverInstance);
+          },
+        };
+
+        const result = await tool.execute(validation?.value, {
+          messages: [],
+          toolCallId: '',
+          elicitation: sessionElicitation,
+        });
+
+        this.logger.debug(`CallTool: Tool '${request.params.name}' executed successfully with result:`, result);
+        const duration = Date.now() - startTime;
+        this.logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
+
+        const response: CallToolResult = { isError: false, content: [] };
+
+        if (tool.outputSchema) {
+          if (!result.structuredContent) {
+            throw new Error(`Tool ${request.params.name} has an output schema but no structured content was provided.`);
+          }
+          const outputValidation = tool.outputSchema.validate?.(result.structuredContent ?? {});
+          if (outputValidation && !outputValidation.success) {
+            this.logger.warn(`CallTool: Invalid structured content for '${request.params.name}'`, {
+              errors: outputValidation.error,
+            });
+            throw new Error(
+              `Invalid structured content for tool ${request.params.name}: ${JSON.stringify(outputValidation.error)}`,
+            );
+          }
+          response.structuredContent = result.structuredContent;
+        }
+
+        if (response.structuredContent) {
+          response.content = [{ type: 'text', text: JSON.stringify(response.structuredContent) }];
+        } else {
+          response.content = [
+            {
+              type: 'text',
+              text: typeof result === 'string' ? result : JSON.stringify(result),
+            },
+          ];
+        }
+
+        return response;
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        if (error instanceof z.ZodError) {
+          this.logger.warn('Invalid tool arguments', {
+            tool: request.params.name,
+            errors: error.errors,
+            duration: `${duration}ms`,
+          });
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        this.logger.error(`Tool execution failed: ${request.params.name}`, { error });
+        return {
+          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+          isError: true,
+        };
+      }
+    });
+
+    // Register resource handlers if resources are configured
+    if (this.resourceOptions) {
+      this.registerResourceHandlersOnServer(serverInstance);
+    }
+
+    // Register prompt handlers if prompts are configured
+    if (this.promptOptions) {
+      this.registerPromptHandlersOnServer(serverInstance);
+    }
+  }
+
+  /**
+   * Registers resource-related handlers on a server instance.
+   */
+  private registerResourceHandlersOnServer(serverInstance: Server) {
+    const capturedResourceOptions = this.resourceOptions;
+    if (!capturedResourceOptions) return;
+
+    // List resources handler
+    if (capturedResourceOptions.listResources) {
+      serverInstance.setRequestHandler(ListResourcesRequestSchema, async () => {
+        this.logger.debug('Handling ListResources request');
+        if (this.definedResources) {
+          return { resources: this.definedResources };
+        } else {
+          try {
+            const resources = await capturedResourceOptions.listResources!();
+            this.definedResources = resources;
+            this.logger.debug(`Fetched and cached ${this.definedResources.length} resources.`);
+            return { resources: this.definedResources };
+          } catch (error) {
+            this.logger.error('Error fetching resources via listResources():', { error });
+            throw error;
+          }
+        }
+      });
+    }
+
+    // Read resource handler
+    if (capturedResourceOptions.getResourceContent) {
+      serverInstance.setRequestHandler(ReadResourceRequestSchema, async request => {
+        const startTime = Date.now();
+        const uri = request.params.uri;
+        this.logger.debug(`Handling ReadResource request for URI: ${uri}`);
+
+        if (!this.definedResources) {
+          const resources = await this.resourceOptions?.listResources?.();
+          if (!resources) throw new Error('Failed to load resources');
+          this.definedResources = resources;
+        }
+
+        const resource = this.definedResources?.find(r => r.uri === uri);
+
+        if (!resource) {
+          this.logger.warn(`ReadResource: Unknown resource URI '${uri}' requested.`);
+          throw new Error(`Resource not found: ${uri}`);
+        }
+
+        try {
+          const resourcesOrResourceContent = await capturedResourceOptions.getResourceContent({ uri });
+          const resourcesContent = Array.isArray(resourcesOrResourceContent)
+            ? resourcesOrResourceContent
+            : [resourcesOrResourceContent];
+          const contents: ResourceContents[] = resourcesContent.map(resourceContent => {
+            const contentItem: ResourceContents = {
+              uri: resource.uri,
+              mimeType: resource.mimeType,
+            };
+            if ('text' in resourceContent) {
+              contentItem.text = resourceContent.text;
+            }
+
+            if ('blob' in resourceContent) {
+              contentItem.blob = resourceContent.blob;
+            }
+
+            return contentItem;
+          });
+          const duration = Date.now() - startTime;
+          this.logger.info(`Resource '${uri}' read successfully in ${duration}ms.`);
+          return {
+            contents,
+          };
+        } catch (error) {
+          const duration = Date.now() - startTime;
+          this.logger.error(`Failed to get content for resource URI '${uri}' in ${duration}ms`, { error });
+          throw error;
+        }
+      });
+    }
+
+    // Resource templates handler
+    if (capturedResourceOptions.resourceTemplates) {
+      serverInstance.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+        this.logger.debug('Handling ListResourceTemplates request');
+        if (this.definedResourceTemplates) {
+          return { resourceTemplates: this.definedResourceTemplates };
+        } else {
+          try {
+            const templates = await capturedResourceOptions.resourceTemplates!();
+            this.definedResourceTemplates = templates;
+            this.logger.debug(`Fetched and cached ${this.definedResourceTemplates.length} resource templates.`);
+            return { resourceTemplates: this.definedResourceTemplates };
+          } catch (error) {
+            this.logger.error('Error fetching resource templates via resourceTemplates():', { error });
+            throw error;
+          }
+        }
+      });
+    }
+
+    // Subscribe/unsubscribe handlers
+    serverInstance.setRequestHandler(SubscribeRequestSchema, async (request: { params: { uri: string } }) => {
+      const uri = request.params.uri;
+      this.logger.info(`Received resources/subscribe request for URI: ${uri}`);
+      this.subscriptions.add(uri);
+      return {};
+    });
+
+    serverInstance.setRequestHandler(UnsubscribeRequestSchema, async (request: { params: { uri: string } }) => {
+      const uri = request.params.uri;
+      this.logger.info(`Received resources/unsubscribe request for URI: ${uri}`);
+      this.subscriptions.delete(uri);
+      return {};
+    });
+  }
+
+  /**
+   * Registers prompt-related handlers on a server instance.
+   */
+  private registerPromptHandlersOnServer(serverInstance: Server) {
+    const capturedPromptOptions = this.promptOptions;
+    if (!capturedPromptOptions) return;
+
+    // List prompts handler
+    if (capturedPromptOptions.listPrompts) {
+      serverInstance.setRequestHandler(ListPromptsRequestSchema, async () => {
+        this.logger.debug('Handling ListPrompts request');
+        if (this.definedPrompts) {
+          return {
+            prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
+          };
+        } else {
+          try {
+            const prompts = await capturedPromptOptions.listPrompts();
+            for (const prompt of prompts) {
+              PromptSchema.parse(prompt);
+            }
+            this.definedPrompts = prompts;
+            this.logger.debug(`Fetched and cached ${this.definedPrompts.length} prompts.`);
+            return {
+              prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
+            };
+          } catch (error) {
+            this.logger.error('Error fetching prompts via listPrompts():', {
+              error: error instanceof Error ? error.message : String(error),
+            });
+            throw error;
+          }
+        }
+      });
+    }
+
+    // Get prompt handler
+    if (capturedPromptOptions.getPromptMessages) {
+      serverInstance.setRequestHandler(
+        GetPromptRequestSchema,
+        async (request: { params: { name: string; version?: string; arguments?: any } }) => {
+          const startTime = Date.now();
+          const { name, version, arguments: args } = request.params;
+          if (!this.definedPrompts) {
+            const prompts = await this.promptOptions?.listPrompts?.();
+            if (!prompts) throw new Error('Failed to load prompts');
+            this.definedPrompts = prompts;
+          }
+          // Select prompt by name and version (if provided)
+          let prompt;
+          if (version) {
+            prompt = this.definedPrompts?.find(p => p.name === name && p.version === version);
+          } else {
+            // Select the first matching name if no version is provided.
+            prompt = this.definedPrompts?.find(p => p.name === name);
+          }
+          if (!prompt) throw new Error(`Prompt "${name}"${version ? ` (version ${version})` : ''} not found`);
+          // Validate required arguments
+          if (prompt.arguments) {
+            for (const arg of prompt.arguments) {
+              if (arg.required && (args?.[arg.name] === undefined || args?.[arg.name] === null)) {
+                throw new Error(`Missing required argument: ${arg.name}`);
+              }
+            }
+          }
+          try {
+            let messages: any[] = [];
+            if (capturedPromptOptions.getPromptMessages) {
+              messages = await capturedPromptOptions.getPromptMessages({ name, version, args });
+            }
+            const duration = Date.now() - startTime;
+            this.logger.info(
+              `Prompt '${name}'${version ? ` (version ${version})` : ''} retrieved successfully in ${duration}ms.`,
+            );
+            return { prompt, messages };
+          } catch (error) {
+            const duration = Date.now() - startTime;
+            this.logger.error(`Failed to get content for prompt '${name}' in ${duration}ms`, { error });
+            throw error;
+          }
+        },
+      );
+    }
   }
 
   private convertAgentsToTools(
@@ -313,12 +684,14 @@ export class MCPServer extends MCPServerBase {
         runtimeContext: new RuntimeContext(),
         description: workflowToolDefinition.description,
       };
+
       const coreTool = makeCoreTool(workflowToolDefinition, options) as InternalCoreTool;
 
       workflowTools[workflowToolName] = {
         name: workflowToolName,
         description: coreTool.description,
         parameters: coreTool.parameters,
+        outputSchema: coreTool.outputSchema,
         execute: coreTool.execute!,
         toolType: 'workflow',
       };
@@ -368,14 +741,33 @@ export class MCPServer extends MCPServerBase {
         name: toolName,
         description: coreTool.description,
         parameters: coreTool.parameters,
+        outputSchema: coreTool.outputSchema,
         execute: coreTool.execute!,
       };
       this.logger.info(`Registered explicit tool: '${toolName}'`);
     }
     this.logger.info(`Total defined tools registered: ${Object.keys(definedConvertedTools).length}`);
 
-    const agentDerivedTools = this.convertAgentsToTools(agentsConfig, definedConvertedTools);
-    const workflowDerivedTools = this.convertWorkflowsToTools(workflowsConfig, definedConvertedTools);
+    let agentDerivedTools: Record<string, ConvertedTool> = {};
+    let workflowDerivedTools: Record<string, ConvertedTool> = {};
+    try {
+      agentDerivedTools = this.convertAgentsToTools(agentsConfig, definedConvertedTools);
+      workflowDerivedTools = this.convertWorkflowsToTools(workflowsConfig, definedConvertedTools);
+    } catch (e) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_AGENT_OR_WORKFLOW_TOOL_CONVERSION_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to convert tools:', {
+        error: mastraError.toString(),
+      });
+      throw mastraError;
+    }
 
     const allConvertedTools = { ...definedConvertedTools, ...agentDerivedTools, ...workflowDerivedTools };
 
@@ -391,392 +783,27 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Register the ListTools handler for listing all available tools.
-   */
-  private registerListToolsHandler() {
-    if (this.listToolsHandlerIsRegistered) {
-      return;
-    }
-    this.listToolsHandlerIsRegistered = true;
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      this.logger.debug('Handling ListTools request');
-      return {
-        tools: Object.values(this.convertedTools).map(tool => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.parameters.jsonSchema,
-        })),
-      };
-    });
-  }
-
-  /**
-   * Register the CallTool handler for executing a tool by name.
-   */
-  private registerCallToolHandler() {
-    if (this.callToolHandlerIsRegistered) {
-      return;
-    }
-    this.callToolHandlerIsRegistered = true;
-    this.server.setRequestHandler(CallToolRequestSchema, async request => {
-      const startTime = Date.now();
-      try {
-        const tool = this.convertedTools[request.params.name];
-        if (!tool) {
-          this.logger.warn(`CallTool: Unknown tool '${request.params.name}' requested.`);
-          return {
-            content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }],
-            isError: true,
-          };
-        }
-
-        this.logger.debug(`CallTool: Invoking '${request.params.name}' with arguments:`, request.params.arguments);
-
-        const validation = tool.parameters.validate?.(request.params.arguments ?? {});
-        if (validation && !validation.success) {
-          this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
-            errors: validation.error,
-          });
-          return {
-            content: [{ type: 'text', text: `Invalid tool arguments: ${JSON.stringify(validation.error)}` }],
-            isError: true,
-          };
-        }
-        if (!tool.execute) {
-          this.logger.warn(`CallTool: Tool '${request.params.name}' does not have an execute function.`);
-          return {
-            content: [{ type: 'text', text: `Tool '${request.params.name}' does not have an execute function.` }],
-            isError: true,
-          };
-        }
-
-        const result = await tool.execute(validation?.value, { messages: [], toolCallId: '' });
-        const duration = Date.now() - startTime;
-        this.logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: typeof result === 'string' ? result : JSON.stringify(result),
-            },
-          ],
-          isError: false,
-        };
-      } catch (error) {
-        const duration = Date.now() - startTime;
-        if (error instanceof z.ZodError) {
-          this.logger.warn('Invalid tool arguments', {
-            tool: request.params.name,
-            errors: error.errors,
-            duration: `${duration}ms`,
-          });
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-        this.logger.error(`Tool execution failed: ${request.params.name}`, { error });
-        return {
-          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
-          isError: true,
-        };
-      }
-    });
-  }
-
-  /**
-   * Register the ListResources handler for listing all available resources.
-   */
-  private registerListResourcesHandler() {
-    if (this.listResourcesHandlerIsRegistered) {
-      return;
-    }
-    this.listResourcesHandlerIsRegistered = true;
-    const capturedResourceOptions = this.resourceOptions; // Capture for TS narrowing
-
-    if (!capturedResourceOptions?.listResources) {
-      this.logger.warn('ListResources capability not supported by server configuration.');
-      return;
-    }
-
-    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
-      this.logger.debug('Handling ListResources request');
-      if (this.definedResources) {
-        return { resources: this.definedResources };
-      } else {
-        try {
-          const resources = await capturedResourceOptions.listResources();
-          // Cache the resources
-          this.definedResources = resources;
-          this.logger.debug(`Fetched and cached ${this.definedResources.length} resources.`);
-          return { resources: this.definedResources };
-        } catch (error) {
-          this.logger.error('Error fetching resources via listResources():', { error });
-          // Re-throw to let the MCP Server SDK handle formatting the error response
-          throw error;
-        }
-      }
-    });
-  }
-
-  /**
-   * Register the ReadResource handler for reading a resource by URI.
-   */
-  private registerReadResourceHandler({
-    getResourcesCallback,
-  }: {
-    getResourcesCallback: MCPServerResourceContentCallback;
-  }) {
-    if (this.readResourceHandlerIsRegistered) {
-      return;
-    }
-    this.readResourceHandlerIsRegistered = true;
-    this.server.setRequestHandler(ReadResourceRequestSchema, async request => {
-      const startTime = Date.now();
-      const uri = request.params.uri;
-      this.logger.debug(`Handling ReadResource request for URI: ${uri}`);
-
-      if (!this.definedResources) {
-        const resources = await this.resourceOptions?.listResources?.();
-        if (!resources) throw new Error('Failed to load resources');
-        this.definedResources = resources;
-      }
-
-      const resource = this.definedResources?.find(r => r.uri === uri);
-
-      if (!resource) {
-        this.logger.warn(`ReadResource: Unknown resource URI '${uri}' requested.`);
-        throw new Error(`Resource not found: ${uri}`);
-      }
-
-      try {
-        const resourcesOrResourceContent = await getResourcesCallback({ uri });
-        const resourcesContent = Array.isArray(resourcesOrResourceContent)
-          ? resourcesOrResourceContent
-          : [resourcesOrResourceContent];
-        const contents: ResourceContents[] = resourcesContent.map(resourceContent => {
-          const contentItem: ResourceContents = {
-            uri: resource.uri,
-            mimeType: resource.mimeType,
-          };
-          if ('text' in resourceContent) {
-            contentItem.text = resourceContent.text;
-          }
-
-          if ('blob' in resourceContent) {
-            contentItem.blob = resourceContent.blob;
-          }
-
-          return contentItem;
-        });
-        const duration = Date.now() - startTime;
-        this.logger.info(`Resource '${uri}' read successfully in ${duration}ms.`);
-        return {
-          contents,
-        };
-      } catch (error) {
-        const duration = Date.now() - startTime;
-        this.logger.error(`Failed to get content for resource URI '${uri}' in ${duration}ms`, { error });
-        throw error;
-      }
-    });
-  }
-
-  /**
-   * Register the ListResourceTemplates handler.
-   */
-  private registerListResourceTemplatesHandler() {
-    if (this.listResourceTemplatesHandlerIsRegistered) {
-      return;
-    }
-
-    // If this method is called, this.resourceOptions and this.resourceOptions.resourceTemplates should exist
-    // due to the constructor logic checking opts.resources.resourceTemplates.
-    if (!this.resourceOptions || typeof this.resourceOptions.resourceTemplates !== 'function') {
-      this.logger.warn(
-        'ListResourceTemplates handler called, but resourceTemplates function is not available on resourceOptions or not a function.',
-      );
-      // Register a handler that returns empty templates if not properly configured.
-      this.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
-        this.logger.debug('Handling ListResourceTemplates request (no templates configured or resourceOptions issue)');
-        return { resourceTemplates: [] };
-      });
-      this.listResourceTemplatesHandlerIsRegistered = true;
-      return;
-    }
-
-    // Typescript can now infer resourceTemplatesFn is a function.
-    const resourceTemplatesFn = this.resourceOptions.resourceTemplates;
-
-    this.listResourceTemplatesHandlerIsRegistered = true;
-    this.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
-      this.logger.debug('Handling ListResourceTemplates request');
-      if (this.definedResourceTemplates) {
-        return { resourceTemplates: this.definedResourceTemplates };
-      } else {
-        try {
-          const templates = await resourceTemplatesFn(); // Safe to call now
-          this.definedResourceTemplates = templates;
-          this.logger.debug(`Fetched and cached ${this.definedResourceTemplates.length} resource templates.`);
-          return { resourceTemplates: this.definedResourceTemplates };
-        } catch (error) {
-          this.logger.error('Error fetching resource templates via resourceTemplates():', { error });
-          // Re-throw to let the MCP Server SDK handle formatting the error response
-          throw error;
-        }
-      }
-    });
-  }
-
-  /**
-   * Register the SubscribeResource handler.
-   */
-  private registerSubscribeResourceHandler() {
-    if (this.subscribeResourceHandlerIsRegistered) {
-      return;
-    }
-    if (!SubscribeRequestSchema) {
-      this.logger.warn('SubscribeRequestSchema not available, cannot register SubscribeResource handler.');
-      return;
-    }
-    this.subscribeResourceHandlerIsRegistered = true;
-    this.server.setRequestHandler(SubscribeRequestSchema as any, async (request: { params: { uri: string } }) => {
-      const uri = request.params.uri;
-      this.logger.info(`Received resources/subscribe request for URI: ${uri}`);
-      this.subscriptions.add(uri);
-      return {};
-    });
-  }
-
-  /**
-   * Register the UnsubscribeResource handler.
-   */
-  private registerUnsubscribeResourceHandler() {
-    if (this.unsubscribeResourceHandlerIsRegistered) {
-      return;
-    }
-    this.unsubscribeResourceHandlerIsRegistered = true;
-
-    this.server.setRequestHandler(UnsubscribeRequestSchema as any, async (request: { params: { uri: string } }) => {
-      const uri = request.params.uri;
-      this.logger.info(`Received resources/unsubscribe request for URI: ${uri}`);
-      this.subscriptions.delete(uri);
-      return {};
-    });
-  }
-
-  /**
-   * Register the ListPrompts handler.
-   */
-  private registerListPromptsHandler() {
-    if (this.listPromptsHandlerIsRegistered) {
-      return;
-    }
-    this.listPromptsHandlerIsRegistered = true;
-    const capturedPromptOptions = this.promptOptions;
-
-    if (!capturedPromptOptions?.listPrompts) {
-      this.logger.warn('ListPrompts capability not supported by server configuration.');
-      return;
-    }
-
-    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
-      this.logger.debug('Handling ListPrompts request');
-      if (this.definedPrompts) {
-        return {
-          prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
-        };
-      } else {
-        try {
-          const prompts = await capturedPromptOptions.listPrompts();
-          // Parse and cache the prompts
-          for (const prompt of prompts) {
-            PromptSchema.parse(prompt);
-          }
-          this.definedPrompts = prompts;
-          this.logger.debug(`Fetched and cached ${this.definedPrompts.length} prompts.`);
-          return {
-            prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
-          };
-        } catch (error) {
-          this.logger.error('Error fetching prompts via listPrompts():', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-          // Re-throw to let the MCP Server SDK handle formatting the error response
-          throw error;
-        }
-      }
-    });
-  }
-
-  /**
-   * Register the GetPrompt handler.
-   */
-  private registerGetPromptHandler({
-    getPromptMessagesCallback,
-  }: {
-    getPromptMessagesCallback?: MCPServerPromptMessagesCallback;
-  }) {
-    if (this.getPromptHandlerIsRegistered) return;
-    this.getPromptHandlerIsRegistered = true;
-    // Accept optional version parameter in prompts/get
-    this.server.setRequestHandler(
-      GetPromptRequestSchema,
-      async (request: { params: { name: string; version?: string; arguments?: any } }) => {
-        const startTime = Date.now();
-        const { name, version, arguments: args } = request.params;
-        if (!this.definedPrompts) {
-          const prompts = await this.promptOptions?.listPrompts?.();
-          if (!prompts) throw new Error('Failed to load prompts');
-          this.definedPrompts = prompts;
-        }
-        // Select prompt by name and version (if provided)
-        let prompt;
-        if (version) {
-          prompt = this.definedPrompts?.find(p => p.name === name && p.version === version);
-        } else {
-          // Select the first matching name if no version is provided.
-          prompt = this.definedPrompts?.find(p => p.name === name);
-        }
-        if (!prompt) throw new Error(`Prompt "${name}"${version ? ` (version ${version})` : ''} not found`);
-        // Validate required arguments
-        if (prompt.arguments) {
-          for (const arg of prompt.arguments) {
-            if (arg.required && (args?.[arg.name] === undefined || args?.[arg.name] === null)) {
-              throw new Error(`Missing required argument: ${arg.name}`);
-            }
-          }
-        }
-        try {
-          let messages: any[] = [];
-          if (getPromptMessagesCallback) {
-            messages = await getPromptMessagesCallback({ name, version, args });
-          }
-          const duration = Date.now() - startTime;
-          this.logger.info(
-            `Prompt '${name}'${version ? ` (version ${version})` : ''} retrieved successfully in ${duration}ms.`,
-          );
-          return { prompt, messages };
-        } catch (error) {
-          const duration = Date.now() - startTime;
-          this.logger.error(`Failed to get content for prompt '${name}' in ${duration}ms`, { error });
-          throw error;
-        }
-      },
-    );
-  }
-
-  /**
    * Start the MCP server using stdio transport (for Windsurf integration).
    */
   public async startStdio(): Promise<void> {
     this.stdioTransport = new StdioServerTransport();
-    await this.server.connect(this.stdioTransport);
+    try {
+      await this.server.connect(this.stdioTransport);
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_STDIO_CONNECTION_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to connect MCP server using stdio transport:', {
+        error: mastraError.toString(),
+      });
+      throw mastraError;
+    }
     this.logger.info('Started MCP Server (stdio)');
   }
 
@@ -791,23 +818,42 @@ export class MCPServer extends MCPServerBase {
    * @param res HTTP response (must support .write/.end)
    */
   public async startSSE({ url, ssePath, messagePath, req, res }: MCPServerSSEOptions): Promise<void> {
-    if (url.pathname === ssePath) {
-      await this.connectSSE({
-        messagePath,
-        res,
-      });
-    } else if (url.pathname === messagePath) {
-      this.logger.debug('Received message');
-      if (!this.sseTransport) {
-        res.writeHead(503);
-        res.end('SSE connection not established');
-        return;
+    try {
+      if (url.pathname === ssePath) {
+        await this.connectSSE({
+          messagePath,
+          res,
+        });
+      } else if (url.pathname === messagePath) {
+        this.logger.debug('Received message');
+        if (!this.sseTransport) {
+          res.writeHead(503);
+          res.end('SSE connection not established');
+          return;
+        }
+        await this.sseTransport.handlePostMessage(req, res);
+      } else {
+        this.logger.debug('Unknown path:', { path: url.pathname });
+        res.writeHead(404);
+        res.end();
       }
-      await this.sseTransport.handlePostMessage(req, res);
-    } else {
-      this.logger.debug('Unknown path:', { path: url.pathname });
-      res.writeHead(404);
-      res.end();
+    } catch (e) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_SSE_START_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          details: {
+            url: url.toString(),
+            ssePath,
+            messagePath,
+          },
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to start MCP Server (SSE):', { error: mastraError.toString() });
+      throw mastraError;
     }
   }
 
@@ -821,31 +867,50 @@ export class MCPServer extends MCPServerBase {
    * @param context Incoming Hono context
    */
   public async startHonoSSE({ url, ssePath, messagePath, context }: MCPServerHonoSSEOptions) {
-    if (url.pathname === ssePath) {
-      return streamSSE(context, async stream => {
-        await this.connectHonoSSE({
-          messagePath,
-          stream,
+    try {
+      if (url.pathname === ssePath) {
+        return streamSSE(context, async stream => {
+          await this.connectHonoSSE({
+            messagePath,
+            stream,
+          });
         });
-      });
-    } else if (url.pathname === messagePath) {
-      this.logger.debug('Received message');
-      const sessionId = context.req.query('sessionId');
-      this.logger.debug('Received message for sessionId', { sessionId });
-      if (!sessionId) {
-        return context.text('No sessionId provided', 400);
+      } else if (url.pathname === messagePath) {
+        this.logger.debug('Received message');
+        const sessionId = context.req.query('sessionId');
+        this.logger.debug('Received message for sessionId', { sessionId });
+        if (!sessionId) {
+          return context.text('No sessionId provided', 400);
+        }
+        if (!this.sseHonoTransports.has(sessionId)) {
+          return context.text(`No transport found for sessionId ${sessionId}`, 400);
+        }
+        const message = await this.sseHonoTransports.get(sessionId)?.handlePostMessage(context);
+        if (!message) {
+          return context.text('Transport not found', 400);
+        }
+        return message;
+      } else {
+        this.logger.debug('Unknown path:', { path: url.pathname });
+        return context.text('Unknown path', 404);
       }
-      if (!this.sseHonoTransports.has(sessionId)) {
-        return context.text(`No transport found for sessionId ${sessionId}`, 400);
-      }
-      const message = await this.sseHonoTransports.get(sessionId)?.handlePostMessage(context);
-      if (!message) {
-        return context.text('Transport not found', 400);
-      }
-      return message;
-    } else {
-      this.logger.debug('Unknown path:', { path: url.pathname });
-      return context.text('Unknown path', 404);
+    } catch (e) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_HONO_SSE_START_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          details: {
+            url: url.toString(),
+            ssePath,
+            messagePath,
+          },
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to start MCP Server (Hono SSE):', { error: mastraError.toString() });
+      throw mastraError;
     }
   }
 
@@ -961,15 +1026,24 @@ export class MCPServer extends MCPServerBase {
                   `startHTTP: Streamable HTTP transport closed for session ${closedSessionId}, removing from map.`,
                 );
                 this.streamableHTTPTransports.delete(closedSessionId);
+                // Also clean up the server instance for this session
+                if (this.httpServerInstances.has(closedSessionId)) {
+                  this.httpServerInstances.delete(closedSessionId);
+                  this.logger.debug(`startHTTP: Cleaned up server instance for closed session ${closedSessionId}`);
+                }
               }
             };
 
-            // Connect the MCP server instance to the new transport
-            await this.server.connect(transport);
+            // Create a new server instance for this HTTP session
+            const sessionServerInstance = this.createServerInstance();
 
-            // Store the transport when the session is initialized
+            // Connect the new server instance to the new transport
+            await sessionServerInstance.connect(transport);
+
+            // Store both the transport and server instance when the session is initialized
             if (transport.sessionId) {
               this.streamableHTTPTransports.set(transport.sessionId, transport);
+              this.httpServerInstances.set(transport.sessionId, sessionServerInstance);
               this.logger.debug(
                 `startHTTP: Streamable HTTP session initialized and stored with ID: ${transport.sessionId}`,
               );
@@ -1011,7 +1085,17 @@ export class MCPServer extends MCPServerBase {
         }
       }
     } catch (error) {
-      this.logger.error('startHTTP: Error handling Streamable HTTP request:', { error });
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_HTTP_CONNECTION_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          text: 'Failed to connect MCP server using HTTP transport',
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('startHTTP: Error handling Streamable HTTP request:', { error: mastraError });
       // If headers haven't been sent, send an error response
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -1025,9 +1109,6 @@ export class MCPServer extends MCPServerBase {
             id: null, // Cannot determine original request ID in catch
           }),
         );
-      } else {
-        // If headers were already sent (e.g., during SSE stream), just log the error
-        this.logger.error('startHTTP: Error after headers sent:', error);
       }
     }
   }
@@ -1039,18 +1120,35 @@ export class MCPServer extends MCPServerBase {
     messagePath: string;
     res: http.ServerResponse<http.IncomingMessage>;
   }) {
-    this.logger.debug('Received SSE connection');
-    this.sseTransport = new SSEServerTransport(messagePath, res);
-    await this.server.connect(this.sseTransport);
+    try {
+      this.logger.debug('Received SSE connection');
+      this.sseTransport = new SSEServerTransport(messagePath, res);
+      await this.server.connect(this.sseTransport);
 
-    this.server.onclose = async () => {
-      this.sseTransport = undefined;
-      await this.server.close();
-    };
+      this.server.onclose = async () => {
+        this.sseTransport = undefined;
+        await this.server.close();
+      };
 
-    res.on('close', () => {
-      this.sseTransport = undefined;
-    });
+      res.on('close', () => {
+        this.sseTransport = undefined;
+      });
+    } catch (e) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_SSE_CONNECT_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          details: {
+            messagePath,
+          },
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to connect to MCP Server (SSE):', { error: mastraError });
+      throw mastraError;
+    }
   }
 
   public async connectHonoSSE({ messagePath, stream }: { messagePath: string; stream: SSEStreamingApi }) {
@@ -1064,21 +1162,37 @@ export class MCPServer extends MCPServerBase {
       this.logger.debug('SSE Transport aborted with sessionId:', { sessionId });
       this.sseHonoTransports.delete(sessionId);
     });
+    try {
+      await this.server.connect(sseTransport);
+      this.server.onclose = async () => {
+        this.logger.debug('SSE Transport closed with sessionId:', { sessionId });
+        this.sseHonoTransports.delete(sessionId);
+        await this.server.close();
+      };
 
-    await this.server.connect(sseTransport);
-    this.server.onclose = async () => {
-      this.logger.debug('SSE Transport closed with sessionId:', { sessionId });
-      this.sseHonoTransports.delete(sessionId);
-      await this.server.close();
-    };
-
-    while (true) {
-      // This will keep the connection alive
-      // You can also await for a promise that never resolves
-      const sessionIds = Array.from(this.sseHonoTransports.keys() || []);
-      this.logger.debug('Active Hono SSE sessions:', { sessionIds });
-      await stream.write(':keep-alive\n\n');
-      await stream.sleep(60_000);
+      while (true) {
+        // This will keep the connection alive
+        // You can also await for a promise that never resolves
+        const sessionIds = Array.from(this.sseHonoTransports.keys() || []);
+        this.logger.debug('Active Hono SSE sessions:', { sessionIds });
+        await stream.write(':keep-alive\n\n');
+        await stream.sleep(60_000);
+      }
+    } catch (e) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_HONO_SSE_CONNECT_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          details: {
+            messagePath,
+          },
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Failed to connect to MCP Server (Hono SSE):', { error: mastraError });
+      throw mastraError;
     }
   }
 
@@ -1086,14 +1200,6 @@ export class MCPServer extends MCPServerBase {
    * Close the MCP server and all its connections
    */
   async close() {
-    this.callToolHandlerIsRegistered = false;
-    this.listToolsHandlerIsRegistered = false;
-    this.listResourcesHandlerIsRegistered = false;
-    this.readResourceHandlerIsRegistered = false;
-    this.listResourceTemplatesHandlerIsRegistered = false;
-    this.subscribeResourceHandlerIsRegistered = false;
-    this.unsubscribeResourceHandlerIsRegistered = false;
-
     try {
       if (this.stdioTransport) {
         await this.stdioTransport.close?.();
@@ -1109,17 +1215,34 @@ export class MCPServer extends MCPServerBase {
         }
         this.sseHonoTransports.clear();
       }
-      // Close all active Streamable HTTP transports
+      // Close all active Streamable HTTP transports and their server instances
       if (this.streamableHTTPTransports) {
         for (const transport of this.streamableHTTPTransports.values()) {
           await transport.close?.();
         }
         this.streamableHTTPTransports.clear();
       }
+      // Close all HTTP server instances
+      if (this.httpServerInstances) {
+        for (const serverInstance of this.httpServerInstances.values()) {
+          await serverInstance.close?.();
+        }
+        this.httpServerInstances.clear();
+      }
       await this.server.close();
       this.logger.info('MCP server closed.');
     } catch (error) {
-      this.logger.error('Error closing MCP server:', { error });
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_CLOSE_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error('Error closing MCP server:', { error: mastraError });
+      throw mastraError;
     }
   }
 
@@ -1160,7 +1283,7 @@ export class MCPServer extends MCPServerBase {
    * @returns An object containing an array of tool information.
    */
   public getToolListInfo(): {
-    tools: Array<{ name: string; description?: string; inputSchema: any; toolType?: MCPToolType }>;
+    tools: Array<{ name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType }>;
   } {
     this.logger.debug(`Getting tool list information for MCPServer '${this.name}'`);
     return {
@@ -1169,6 +1292,7 @@ export class MCPServer extends MCPServerBase {
         name: tool.name,
         description: tool.description,
         inputSchema: tool.parameters?.jsonSchema || tool.parameters,
+        outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
         toolType: tool.toolType,
       })),
     };
@@ -1181,7 +1305,7 @@ export class MCPServer extends MCPServerBase {
    */
   public getToolInfo(
     toolId: string,
-  ): { name: string; description?: string; inputSchema: any; toolType?: MCPToolType } | undefined {
+  ): { name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType } | undefined {
     const tool = this.convertedTools[toolId];
     if (!tool) {
       this.logger.debug(`Tool '${toolId}' not found on MCPServer '${this.name}'`);
@@ -1192,6 +1316,7 @@ export class MCPServer extends MCPServerBase {
       name: tool.name,
       description: tool.description,
       inputSchema: tool.parameters?.jsonSchema || tool.parameters,
+      outputSchema: tool.outputSchema?.jsonSchema || tool.outputSchema,
       toolType: tool.toolType,
     };
   }
@@ -1210,35 +1335,52 @@ export class MCPServer extends MCPServerBase {
     executionContext?: { messages?: any[]; toolCallId?: string },
   ): Promise<any> {
     const tool = this.convertedTools[toolId];
-    if (!tool) {
-      this.logger.warn(`ExecuteTool: Unknown tool '${toolId}' requested on MCPServer '${this.name}'.`);
-      throw new Error(`Unknown tool: ${toolId}`);
-    }
-
-    this.logger.debug(`ExecuteTool: Invoking '${toolId}' with arguments:`, args);
-
-    let validatedArgs = args;
-    if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse === 'function') {
-      const validation = tool.parameters.safeParse(args ?? {});
-      if (!validation.success) {
-        const errorMessages = validation.error.errors
-          .map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`)
-          .join(', ');
-        this.logger.warn(`ExecuteTool: Invalid tool arguments for '${toolId}': ${errorMessages}`, {
-          errors: validation.error.format(),
-        });
-        throw new z.ZodError(validation.error.issues);
+    let validatedArgs: any;
+    try {
+      if (!tool) {
+        this.logger.warn(`ExecuteTool: Unknown tool '${toolId}' requested on MCPServer '${this.name}'.`);
+        throw new Error(`Unknown tool: ${toolId}`);
       }
-      validatedArgs = validation.data;
-    } else {
-      this.logger.debug(
-        `ExecuteTool: Tool '${toolId}' parameters is not a Zod schema with safeParse or is undefined. Skipping validation.`,
-      );
-    }
 
-    if (!tool.execute) {
-      this.logger.error(`ExecuteTool: Tool '${toolId}' does not have an execute function.`);
-      throw new Error(`Tool '${toolId}' cannot be executed.`);
+      this.logger.debug(`ExecuteTool: Invoking '${toolId}' with arguments:`, args);
+
+      if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse === 'function') {
+        const validation = tool.parameters.safeParse(args ?? {});
+        if (!validation.success) {
+          const errorMessages = validation.error.errors
+            .map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`)
+            .join(', ');
+          this.logger.warn(`ExecuteTool: Invalid tool arguments for '${toolId}': ${errorMessages}`, {
+            errors: validation.error.format(),
+          });
+          throw new z.ZodError(validation.error.issues);
+        }
+        validatedArgs = validation.data;
+      } else {
+        this.logger.debug(
+          `ExecuteTool: Tool '${toolId}' parameters is not a Zod schema with safeParse or is undefined. Skipping validation.`,
+        );
+      }
+
+      if (!tool.execute) {
+        this.logger.error(`ExecuteTool: Tool '${toolId}' does not have an execute function.`);
+        throw new Error(`Tool '${toolId}' cannot be executed.`);
+      }
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_TOOL_EXECUTE_PREPARATION_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          details: {
+            toolId,
+            args,
+          },
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
     }
 
     try {
@@ -1250,8 +1392,21 @@ export class MCPServer extends MCPServerBase {
       this.logger.info(`ExecuteTool: Tool '${toolId}' executed successfully.`);
       return result;
     } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_TOOL_EXECUTE_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.USER,
+          details: {
+            toolId,
+            validatedArgs: validatedArgs,
+          },
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
       this.logger.error(`ExecuteTool: Tool execution failed for '${toolId}':`, { error });
-      throw error instanceof Error ? error : new Error(`Execution of tool '${toolId}' failed: ${String(error)}`);
+      throw mastraError;
     }
   }
 }
