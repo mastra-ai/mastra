@@ -526,7 +526,6 @@ describe('LibSQLStore updateMessages', () => {
     const fromDb = await store.getMessages({ threadId: thread.id, format: 'v2' });
     expect(fromDb[0].role).toBe(originalMessage.role);
   });
-
 });
 
 describe('LibSQLStore Double-nesting Prevention', () => {
@@ -568,19 +567,19 @@ describe('LibSQLStore Double-nesting Prevention', () => {
     expect(retrievedMessages).toHaveLength(1);
 
     const retrievedMessage = retrievedMessages[0] as MastraMessageV2;
-    
+
     // Check that content is properly structured as a V2 message
     expect(typeof retrievedMessage.content).toBe('object');
     expect(retrievedMessage.content.format).toBe(2);
-    
+
     // CRITICAL: The content.content should still be the original stringified JSON
     // NOT double-nested like: { content: '{"format":2,"parts":[...],"content":"{\\"userInput\\":\\"test data\\"}"}' }
     expect(retrievedMessage.content.content).toBe(stringifiedContent);
-    
+
     // Verify the content can be parsed as the original JSON
     const parsedContent = JSON.parse(retrievedMessage.content.content as string);
     expect(parsedContent).toEqual({ userInput: 'test data', metadata: { key: 'value' } });
-    
+
     // Additional check: ensure the message doesn't have the "Found unhandled message" structure
     expect(retrievedMessage.content.parts).toBeDefined();
     expect(Array.isArray(retrievedMessage.content.parts)).toBe(true);
