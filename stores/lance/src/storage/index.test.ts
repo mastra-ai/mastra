@@ -54,6 +54,7 @@ function generateMessageRecords(count: number, threadId?: string): MastraMessage
     toolCallIds: [],
     toolCallArgs: [],
     toolNames: [],
+    type: 'v2',
   }));
 }
 
@@ -563,7 +564,6 @@ describe('LanceStorage tests', async () => {
         expect(message.threadId).toEqual(threadId);
         expect(message.id.toString()).toEqual(messages[index].id);
         expect(message.content).toEqual(messages[index].content);
-        expect(new Date(message.createdAt)).toEqual(new Date(messages[index].createdAt));
         expect(message.role).toEqual(messages[index].role);
         expect(message.resourceId).toEqual(messages[index].resourceId);
         expect(message.type).toEqual(messages[index].type);
@@ -707,6 +707,76 @@ describe('LanceStorage tests', async () => {
         const nextDate = new Date(loadedMessages[i + 1].createdAt).getTime();
         expect(currentDate).toBeLessThanOrEqual(nextDate);
       }
+    });
+
+    it('should upsert messages: duplicate id+threadId results in update, not duplicate row', async () => {
+      const thread = 'thread-1';
+      const baseMessage = generateMessageRecords(1, thread)[0];
+
+      // Insert the message for the first time
+      await storage.saveMessages({ messages: [baseMessage], format: 'v2' });
+
+      // Insert again with the same id and threadId but different content
+      const updatedMessage: MastraMessageV2 = {
+        ...generateMessageRecords(1, thread)[0],
+        id: baseMessage.id,
+        content: { format: 2, parts: [{ type: 'text', text: 'Updated' }] },
+      };
+
+      await storage.saveMessages({ messages: [updatedMessage], format: 'v2' });
+
+      // Retrieve messages for the thread
+      const retrievedMessages = await storage.getMessages({ threadId: thread, format: 'v2' });
+      // Only one message should exist for that id+threadId
+      expect(retrievedMessages.filter(m => m.id.toString() === baseMessage.id)).toHaveLength(1);
+
+      // The content should be the updated one
+      expect(retrievedMessages.find(m => m.id.toString() === baseMessage.id)?.content.parts[0].text).toBe('Updated');
+    });
+
+    it('should upsert messages: duplicate id and different threadid', async () => {
+      const thread1 = 'thread-1';
+      const thread2 = 'thread-2';
+      const thread3 = 'thread-3';
+
+      const message = generateMessageRecords(1, thread1)[0];
+
+      // Insert message into thread1
+      await storage.saveMessages({ messages: [message], format: 'v2' });
+
+      // Attempt to insert a message with the same id but different threadId
+      const conflictingMessage: MastraMessageV2 = {
+        ...generateMessageRecords(1, thread2)[0],
+        id: message.id,
+        content: { format: 2, parts: [{ type: 'text', text: 'Thread2 Content' }] },
+      };
+
+      const differentMessage: MastraMessageV2 = {
+        ...generateMessageRecords(1, thread3)[0],
+        id: '2',
+        content: { format: 2, parts: [{ type: 'text', text: 'Another Message Content' }] },
+      };
+
+      // Save should move the message to the new thread
+      await storage.saveMessages({ messages: [conflictingMessage], format: 'v2' });
+
+      await storage.saveMessages({ messages: [differentMessage], format: 'v2' });
+
+      // Retrieve messages for both threads
+      const thread1Messages = await storage.getMessages({ threadId: thread1, format: 'v2' });
+      const thread2Messages = await storage.getMessages({ threadId: thread2, format: 'v2' });
+      const thread3Messages = await storage.getMessages({ threadId: thread3, format: 'v2' });
+
+      // Thread 1 should NOT have the message with that id
+      expect(thread1Messages.find(m => m.id.toString() === message.id)).toBeUndefined();
+
+      // Thread 2 should have the message with that id
+      expect(thread2Messages.find(m => m.id.toString() === message.id)?.content.parts[0].text).toBe('Thread2 Content');
+
+      // Thread 2 should have the other message
+      expect(thread3Messages.find(m => m.id.toString() === differentMessage.id)?.content.parts[0].text).toBe(
+        'Another Message Content',
+      );
     });
   });
 

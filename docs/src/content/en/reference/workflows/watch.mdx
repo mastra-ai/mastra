@@ -10,7 +10,7 @@ The `.watch()` method allows you to monitor the execution of a workflow run, pro
 ## Usage
 
 ```typescript
-const run = myWorkflow.createRun();
+const run = await myWorkflow.createRunAsync();
 
 // Add a watcher to monitor execution
 run.watch(event => {

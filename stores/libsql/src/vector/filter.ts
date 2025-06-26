@@ -1,5 +1,19 @@
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
-import type { FieldCondition, VectorFilter, OperatorSupport } from '@mastra/core/vector/filter';
+import type { VectorFilter, OperatorSupport, OperatorValueMap, VectorFieldValue } from '@mastra/core/vector/filter';
+
+type LibSQLOperatorValueMap = Omit<
+  OperatorValueMap,
+  '$regex' | '$options' | '$in' | '$all' | '$nin' | '$eq' | '$ne'
+> & {
+  $size: number;
+  $contains: VectorFieldValue | Record<string, unknown>;
+  $all: VectorFieldValue;
+  $in: VectorFieldValue;
+  $nin: VectorFieldValue;
+  $eq: VectorFieldValue;
+  $ne: VectorFieldValue;
+};
+export type LibSQLVectorFilter = VectorFilter<keyof LibSQLOperatorValueMap, LibSQLOperatorValueMap>;
 
 /**
  * Translates MongoDB-style filters to LibSQL compatible filters.
@@ -11,7 +25,7 @@ import type { FieldCondition, VectorFilter, OperatorSupport } from '@mastra/core
  * - Can take either a single condition or an array of conditions
  *
  */
-export class LibSQLFilterTranslator extends BaseFilterTranslator {
+export class LibSQLFilterTranslator extends BaseFilterTranslator<LibSQLVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
@@ -20,7 +34,7 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter?: VectorFilter): VectorFilter {
+  translate(filter?: LibSQLVectorFilter): LibSQLVectorFilter {
     if (this.isEmpty(filter)) {
       return filter;
     }
@@ -28,7 +42,7 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
     return this.translateNode(filter);
   }
 
-  private translateNode(node: VectorFilter | FieldCondition, currentPath: string = ''): any {
+  private translateNode(node: LibSQLVectorFilter, currentPath: string = ''): any {
     if (this.isRegex(node)) {
       throw new Error('Direct regex pattern format is not supported in LibSQL');
     }
@@ -74,7 +88,7 @@ export class LibSQLFilterTranslator extends BaseFilterTranslator {
 
       if (this.isLogicalOperator(key)) {
         result[key] = Array.isArray(value)
-          ? value.map((filter: VectorFilter) => this.translateNode(filter))
+          ? value.map((filter: LibSQLVectorFilter) => this.translateNode(filter))
           : this.translateNode(value);
       } else if (this.isOperator(key)) {
         if (this.isArrayOperator(key) && !Array.isArray(value) && key !== '$elemMatch') {

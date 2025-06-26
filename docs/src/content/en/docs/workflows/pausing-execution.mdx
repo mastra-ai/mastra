@@ -46,7 +46,7 @@ workflow
     .then(step3)
     .commit();
 
-const run = await workflow.createRun()
+const run = await workflow.createRunAsync()
 run.start({})
 
 setTimeout(() => {

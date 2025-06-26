@@ -45,7 +45,7 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
       const innerZodType = this.processZodType(value._def.innerType);
       return innerZodType.nullable();
     } else if (isObj(value)) {
-      return this.defaultZodObjectHandler(value);
+      return this.defaultZodObjectHandler(value, { passthrough: false });
     } else if (isArr(value)) {
       return this.defaultZodArrayHandler(value);
     } else if (isUnion(value)) {

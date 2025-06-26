@@ -262,7 +262,6 @@ export function WorkflowTrigger({
           <WorkflowJsonDialog result={restResult} />
         </div>
       )}
-      {result && <WorkflowResultSection result={result} workflow={workflow} />}
     </div>
   );
 }

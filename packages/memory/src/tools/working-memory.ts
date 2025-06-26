@@ -27,15 +27,11 @@ export const updateWorkingMemoryTool = ({ format }: { format: WorkingMemoryForma
 
     const workingMemory = context.memory;
 
-    // Update thread metadata with new working memory
-    await memory.saveThread({
-      thread: {
-        ...thread,
-        metadata: {
-          ...thread.metadata,
-          workingMemory: workingMemory,
-        },
-      },
+    // Use the new updateWorkingMemory method which handles both thread and resource scope
+    await memory.updateWorkingMemory({
+      threadId,
+      resourceId: resourceId || thread.resourceId,
+      workingMemory: workingMemory,
     });
 
     return { success: true };

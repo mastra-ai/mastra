@@ -11,6 +11,7 @@ import {
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_TRACES,
+  TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
 import type {
@@ -19,6 +20,7 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
+  StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
@@ -84,9 +86,11 @@ export class LibSQLStore extends MastraStorage {
 
   public get supports(): {
     selectByIncludeResourceScope: boolean;
+    resourceWorkingMemory: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
+      resourceWorkingMemory: true,
     };
   }
 
@@ -748,7 +752,9 @@ export class LibSQLStore extends MastraStorage {
     },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
     const { threadId, format, selectBy } = args;
-    const { page = 0, perPage = 40, dateRange } = selectBy?.pagination || {};
+    const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
+    const perPage =
+      perPageInput !== undefined ? perPageInput : this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
     const fromDate = dateRange?.start;
     const toDate = dateRange?.end;
 
@@ -795,7 +801,7 @@ export class LibSQLStore extends MastraStorage {
       });
       const total = Number(countResult.rows?.[0]?.count ?? 0);
 
-      if (total === 0) {
+      if (total === 0 && messages.length === 0) {
         return {
           messages: [],
           total: 0,
@@ -805,9 +811,12 @@ export class LibSQLStore extends MastraStorage {
         };
       }
 
+      const excludeIds = messages.map(m => m.id);
+      const excludeIdsParam = excludeIds.map((_, idx) => `$${idx + queryParams.length + 1}`).join(', ');
+
       const dataResult = await this.client.execute({
-        sql: `SELECT id, content, role, type, "createdAt", thread_id FROM ${TABLE_MESSAGES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
-        args: [...queryParams, perPage, currentOffset],
+        sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} ${excludeIds.length ? `AND id NOT IN (${excludeIdsParam})` : ''} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+        args: [...queryParams, ...excludeIds, perPage, currentOffset],
       });
 
       messages.push(...(dataResult.rows || []).map((row: any) => this.parseRow(row)));
@@ -871,7 +880,14 @@ export class LibSQLStore extends MastraStorage {
         }
         return {
           sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt, resourceId) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  thread_id=excluded.thread_id,
+                  content=excluded.content,
+                  role=excluded.role,
+                  type=excluded.type,
+                  resourceId=excluded.resourceId
+              `,
           args: [
             message.id,
             message.threadId!,
@@ -1414,6 +1430,96 @@ export class LibSQLStore extends MastraStorage {
         error,
       );
     }
+  }
+
+  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
+    const result = await this.load<StorageResourceType>({
+      tableName: TABLE_RESOURCES,
+      keys: { id: resourceId },
+    });
+
+    if (!result) {
+      return null;
+    }
+
+    return {
+      ...result,
+      // Ensure workingMemory is always returned as a string, even if auto-parsed as JSON
+      workingMemory:
+        typeof result.workingMemory === 'object' ? JSON.stringify(result.workingMemory) : result.workingMemory,
+      metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
+    };
+  }
+
+  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    await this.insert({
+      tableName: TABLE_RESOURCES,
+      record: {
+        ...resource,
+        metadata: JSON.stringify(resource.metadata),
+      },
+    });
+
+    return resource;
+  }
+
+  async updateResource({
+    resourceId,
+    workingMemory,
+    metadata,
+  }: {
+    resourceId: string;
+    workingMemory?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<StorageResourceType> {
+    const existingResource = await this.getResourceById({ resourceId });
+
+    if (!existingResource) {
+      // Create new resource if it doesn't exist
+      const newResource: StorageResourceType = {
+        id: resourceId,
+        workingMemory,
+        metadata: metadata || {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      return this.saveResource({ resource: newResource });
+    }
+
+    const updatedResource = {
+      ...existingResource,
+      workingMemory: workingMemory !== undefined ? workingMemory : existingResource.workingMemory,
+      metadata: {
+        ...existingResource.metadata,
+        ...metadata,
+      },
+      updatedAt: new Date(),
+    };
+
+    const updates: string[] = [];
+    const values: InValue[] = [];
+
+    if (workingMemory !== undefined) {
+      updates.push('workingMemory = ?');
+      values.push(workingMemory);
+    }
+
+    if (metadata) {
+      updates.push('metadata = ?');
+      values.push(JSON.stringify(updatedResource.metadata));
+    }
+
+    updates.push('updatedAt = ?');
+    values.push(updatedResource.updatedAt.toISOString());
+
+    values.push(resourceId);
+
+    await this.client.execute({
+      sql: `UPDATE ${TABLE_RESOURCES} SET ${updates.join(', ')} WHERE id = ?`,
+      args: values,
+    });
+
+    return updatedResource;
   }
 
   private async hasColumn(table: string, column: string): Promise<boolean> {

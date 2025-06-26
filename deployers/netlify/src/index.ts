@@ -1,40 +1,13 @@
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import process from 'process';
 import { Deployer } from '@mastra/deployer';
 import { DepsService } from '@mastra/deployer/services';
+import { move, writeJson } from 'fs-extra/esm';
 
 export class NetlifyDeployer extends Deployer {
-  protected scope: string;
-  protected projectName: string;
-  protected token: string;
-
-  constructor({ scope, projectName, token }: { scope: string; projectName: string; token: string }) {
+  constructor() {
     super({ name: 'NETLIFY' });
-
-    this.scope = scope;
-    this.projectName = projectName;
-    this.token = token;
-  }
-
-  writeFiles({ dir }: { dir: string }): void {
-    if (!existsSync(join(dir, 'netlify/functions/api'))) {
-      mkdirSync(join(dir, 'netlify/functions/api'), { recursive: true });
-    }
-
-    // TODO ENV KEYS
-    writeFileSync(
-      join(dir, 'netlify.toml'),
-      `[functions]
-node_bundler = "esbuild"            
-directory = "netlify/functions"
-
-[[redirects]]
-force = true
-from = "/*"
-status = 200
-to = "/.netlify/functions/api/:splat"
-`,
-    );
+    this.outputDir = join('.netlify', 'v1', 'functions', 'api');
   }
 
   protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
@@ -57,18 +30,33 @@ to = "/.netlify/functions/api/:splat"
 
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
-
-    this.writeFiles({ dir: join(outputDirectory, this.outputDir) });
   }
 
   async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
-    return this._bundle(
+    const result = await this._bundle(
       this.getEntry(),
       entryFile,
       outputDirectory,
       toolsPaths,
-      join(outputDirectory, this.outputDir, 'netlify', 'functions', 'api'),
+      join(outputDirectory, this.outputDir),
     );
+
+    await writeJson(join(outputDirectory, '.netlify', 'v1', 'config.json'), {
+      redirects: [
+        {
+          force: true,
+          from: '/*',
+          to: '/.netlify/functions/api/:splat',
+          status: 200,
+        },
+      ],
+    });
+
+    await move(join(outputDirectory, '.netlify', 'v1'), join(process.cwd(), '.netlify', 'v1'), {
+      overwrite: true,
+    });
+
+    return result;
   }
 
   private getEntry(): string {

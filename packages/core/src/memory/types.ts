@@ -43,6 +43,7 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
 
 type BaseWorkingMemory = {
   enabled: boolean;
+  scope?: 'thread' | 'resource';
   /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
   use?: never;
 };

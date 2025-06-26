@@ -10,7 +10,7 @@ The `.stream()` method allows you to monitor the execution of a workflow run, pr
 ## Usage
 
 ```typescript
-const run = myWorkflow.createRun();
+const run = await myWorkflow.createRunAsync();
 
 // Add a stream to monitor execution
 const result = run.stream({ inputData: {...} });

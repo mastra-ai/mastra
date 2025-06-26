@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 import EventEmitter from 'events';
+import type { ReadableStream } from 'node:stream/web';
+import { TransformStream } from 'node:stream/web';
 import { z } from 'zod';
 import type { Mastra, WorkflowRun } from '..';
 import type { MastraPrimitives } from '../action';
@@ -992,6 +994,61 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
+    this.mastra?.getLogger().warn('createRun() is deprecated. Use createRunAsync() instead.');
+
+    return run;
+  }
+
+  /**
+   * Creates a new workflow run instance and stores a snapshot of the workflow in the storage
+   * @param options Optional configuration for the run
+   * @returns A Run instance that can be used to execute the workflow
+   */
+  async createRunAsync(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
+    if (this.stepFlow.length === 0) {
+      throw new Error(
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
+      );
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
+    }
+    const runIdToUse = options?.runId || randomUUID();
+
+    // Return a new Run instance with object parameters
+    const run =
+      this.#runs.get(runIdToUse) ??
+      new Run({
+        workflowId: this.id,
+        runId: runIdToUse,
+        executionEngine: this.executionEngine,
+        executionGraph: this.executionGraph,
+        mastra: this.#mastra,
+        retryConfig: this.retryConfig,
+        serializedStepGraph: this.serializedStepGraph,
+        cleanup: () => this.#runs.delete(runIdToUse),
+      });
+
+    this.#runs.set(runIdToUse, run);
+
+    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+      workflowName: this.id,
+      runId: runIdToUse,
+      snapshot: {
+        runId: runIdToUse,
+        status: 'pending',
+        value: {},
+        context: {},
+        activePaths: [],
+        serializedStepGraph: this.serializedStepGraph,
+        suspendedPaths: {},
+        result: undefined,
+        error: undefined,
+        // @ts-ignore
+        timestamp: Date.now(),
+      },
+    });
+
     return run;
   }
 
@@ -1009,7 +1066,7 @@ export class Workflow<
     getStepResult<T extends Step<any, any, any, any, any, TEngineType>>(
       stepId: T,
     ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
-    suspend: (suspendPayload: any) => Promise<void>;
+    suspend: (suspendPayload: any) => Promise<any>;
     resume?: {
       steps: string[];
       resumePayload: any;
@@ -1023,13 +1080,17 @@ export class Workflow<
     this.__registerMastra(mastra);
 
     const run = resume?.steps?.length ? this.createRun({ runId: resume.runId }) : this.createRun();
+    const unwatchV2 = run.watch(event => {
+      emitter.emit('nested-watch-v2', event);
+    }, 'watch-v2');
     const unwatch = run.watch(event => {
       emitter.emit('nested-watch', { event, workflowId: this.id, runId: run.runId, isResume: !!resume?.steps?.length });
-    });
+    }, 'watch');
     const res = resume?.steps?.length
       ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext })
       : await run.start({ inputData, runtimeContext });
     unwatch();
+    unwatchV2();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
       const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
       return stepRes?.status === 'suspended';
@@ -1301,16 +1362,8 @@ export class Run<
   watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
     const watchCb = (event: WatchEvent) => {
       this.updateState(event.payload);
-
-      if (type !== 'watch-v2') {
-        cb({ type: event.type, payload: this.getState() as any, eventTimestamp: event.eventTimestamp });
-      }
+      cb({ type: event.type, payload: this.getState() as any, eventTimestamp: event.eventTimestamp });
     };
-
-    this.emitter.on('watch', watchCb);
-    if (type === 'watch-v2') {
-      this.emitter.on('watch-v2', cb);
-    }
 
     const nestedWatchCb = ({ event, workflowId }: { event: WatchEvent; workflowId: string }) => {
       try {
@@ -1336,15 +1389,25 @@ export class Run<
         console.error(e);
       }
     };
-    this.emitter.on('nested-watch', nestedWatchCb);
+
+    if (type === 'watch') {
+      this.emitter.on('watch', watchCb);
+      this.emitter.on('nested-watch', nestedWatchCb);
+    } else if (type === 'watch-v2') {
+      this.emitter.on('watch-v2', cb);
+      this.emitter.on('nested-watch-v2', (event: WatchEvent) => {
+        this.emitter.emit('watch-v2', event);
+      });
+    }
 
     return () => {
       if (type === 'watch-v2') {
         this.emitter.off('watch-v2', cb);
+        this.emitter.off('nested-watch-v2', nestedWatchCb);
+      } else {
+        this.emitter.off('watch', watchCb);
+        this.emitter.off('nested-watch', nestedWatchCb);
       }
-
-      this.emitter.off('watch', watchCb);
-      this.emitter.off('nested-watch', nestedWatchCb);
     };
   }
 

@@ -44,6 +44,109 @@ describe('MastraInngestWorkflow', () => {
   });
 
   describe.sequential('Basic Workflow Execution', () => {
+    it('should be able to bail workflow execution', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ bail, inputData }) => {
+          if (inputData.value === 'bail') {
+            return bail({ result: 'bailed' });
+          }
+
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { result: 'step2: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1, step2],
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      });
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: { value: 'bail' } });
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'bailed' },
+        payload: { value: 'bail' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toBeUndefined();
+
+      const run2 = await workflow.createRunAsync();
+      const result2 = await run2.start({ inputData: { value: 'no-bail' } });
+
+      srv.close();
+
+      expect(result2.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'step1: no-bail' },
+        payload: { value: 'no-bail' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result2.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'step2: step1: no-bail' },
+        payload: { result: 'step1: no-bail' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
     it('should execute a single step workflow successfully', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
@@ -95,7 +198,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
 
       expect(execute).toHaveBeenCalled();
@@ -170,7 +273,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
 
       expect(step1Action).toHaveBeenCalled();
@@ -251,7 +354,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
 
       expect(executionOrder).toMatchObject(['step1', 'step2']);
@@ -325,7 +428,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const startTime = Date.now();
       const result = await run.start({ inputData: {} });
       const endTime = Date.now();
@@ -417,7 +520,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const startTime = Date.now();
       const result = await run.start({ inputData: {} });
       const endTime = Date.now();
@@ -507,7 +610,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const startTime = Date.now();
       setTimeout(() => {
         run.sendEvent('hello-event', { data: 'hello' });
@@ -601,7 +704,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const startTime = Date.now();
       const result = await run.start({ inputData: {} });
       const endTime = Date.now();
@@ -686,7 +789,7 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { inputData: 'test-input' } });
 
       expect(result.steps.step1).toMatchObject({ status: 'success', output: { result: 'success' } });
@@ -773,7 +876,7 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { inputValue: 'test-input' } });
 
       expect(step1Action).toHaveBeenCalled();
@@ -840,7 +943,7 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       await run.start({ inputData: { inputData: 'test-input' } });
 
       expect(execute).toHaveBeenCalledWith(
@@ -915,7 +1018,7 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { cool: 'test-input' } });
 
       expect(execute).toHaveBeenCalledWith(
@@ -997,7 +1100,7 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       await run.start({ inputData: {} });
 
       expect(step2Action).toHaveBeenCalledWith(
@@ -1100,7 +1203,7 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { status: 'success' } });
       srv.close();
 
@@ -1176,7 +1279,7 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       let result: Awaited<ReturnType<typeof run.start>> | undefined = undefined;
       try {
         result = await run.start({ inputData: {} });
@@ -1281,7 +1384,7 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { status: 'success' } });
       srv.close();
 
@@ -1364,7 +1467,7 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { count: 5 } });
       srv.close();
 
@@ -1432,7 +1535,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
 
       await expect(run.start({ inputData: {} })).resolves.toMatchObject({
         steps: {
@@ -1516,7 +1619,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
 
       expect(result.steps).toMatchObject({
@@ -1610,7 +1713,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = mainWorkflow.createRun();
+      const run = await mainWorkflow.createRunAsync();
       const result = await run.start({ inputData: {} });
 
       expect(result.steps).toMatchObject({
@@ -1738,7 +1841,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
 
       expect(step2Action).toHaveBeenCalled();
@@ -1840,7 +1943,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { target: 10, value: 0 } });
 
       expect(increment).toHaveBeenCalledTimes(12);
@@ -1943,7 +2046,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { target: 10, value: 0 } });
 
       expect(increment).toHaveBeenCalledTimes(12);
@@ -2032,7 +2135,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
 
       const endTime = Date.now();
@@ -2185,7 +2288,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 1 } });
 
       expect(start).toHaveBeenCalledTimes(1);
@@ -2334,7 +2437,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 6 } });
 
       expect(start).toHaveBeenCalledTimes(1);
@@ -2400,7 +2503,7 @@ describe('MastraInngestWorkflow', () => {
       ).rejects.toThrow();
 
       // Should pass validation
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       await run.start({
         inputData: {
           required: 'test',
@@ -2506,7 +2609,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
 
       expect(result.steps['nested-a']).toMatchObject({ status: 'success', output: { result: 'success3' } });
@@ -2572,7 +2675,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
 
       expect(result.steps.step1).toMatchObject({ status: 'success', output: { result: 'success' } });
@@ -2629,7 +2732,7 @@ describe('MastraInngestWorkflow', () => {
 
       workflow.then(step1).then(step2).commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
 
       expect(result.steps.step1).toMatchObject({ status: 'success', output: { result: 'success' } });
@@ -2704,7 +2807,8 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const result = await workflow.createRun().start({ inputData: {} });
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
 
       srv.close();
 
@@ -2775,7 +2879,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
 
       // Start watching the workflow
       let cnt = 0;
@@ -2964,7 +3068,7 @@ describe('MastraInngestWorkflow', () => {
       const onTransition = vi.fn();
       const onTransition2 = vi.fn();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
 
       run.watch(onTransition);
       run.watch(onTransition2);
@@ -2974,7 +3078,7 @@ describe('MastraInngestWorkflow', () => {
       expect(onTransition).toHaveBeenCalledTimes(5);
       expect(onTransition2).toHaveBeenCalledTimes(5);
 
-      const run2 = workflow.createRun();
+      const run2 = await workflow.createRunAsync();
 
       run2.watch(onTransition2);
 
@@ -2983,7 +3087,7 @@ describe('MastraInngestWorkflow', () => {
       expect(onTransition).toHaveBeenCalledTimes(5);
       expect(onTransition2).toHaveBeenCalledTimes(10);
 
-      const run3 = workflow.createRun();
+      const run3 = await workflow.createRunAsync();
 
       run3.watch(onTransition);
 
@@ -3018,8 +3122,8 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({}),
         steps: [],
       });
-      const run = workflow.createRun();
-      const run2 = workflow.createRun({ runId: run.runId });
+      const run = await workflow.createRunAsync();
+      const run2 = await workflow.createRunAsync({ runId: run.runId });
 
       expect(run.runId).toBeDefined();
       expect(run2.runId).toBeDefined();
@@ -3133,7 +3237,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = promptEvalWorkflow.createRun();
+      const run = await promptEvalWorkflow.createRunAsync();
 
       // Create a promise to track when the workflow is ready to resume
       let resolveWorkflowSuspended: (value: unknown) => void;
@@ -3283,7 +3387,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
 
       const started = run.start({ inputData: { input: 'test' } });
 
@@ -3485,7 +3589,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const started = run.start({ inputData: { input: 'test' } });
       let improvedResponseResultPromise: Promise<any | undefined>;
 
@@ -3679,7 +3783,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = promptEvalWorkflow.createRun();
+      const run = await promptEvalWorkflow.createRunAsync();
 
       const initialResult = await run.start({ inputData: { input: 'test' } });
       expect(initialResult.steps.promptAgent.status).toBe('suspended');
@@ -3690,7 +3794,11 @@ describe('MastraInngestWorkflow', () => {
       expect(initialResult.steps).toMatchObject({
         input: { input: 'test' },
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
-        promptAgent: { status: 'suspended', payload: { testPayload: 'hello' } },
+        promptAgent: {
+          status: 'suspended',
+          suspendedPayload: { testPayload: 'hello' },
+          payload: { userInput: 'test input' },
+        },
       });
 
       const newCtx = {
@@ -3804,7 +3912,7 @@ describe('MastraInngestWorkflow', () => {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Access new instance properties directly - should work without warning
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       await run.start({ inputData: {} });
 
       expect(telemetry).toBeDefined();
@@ -3907,7 +4015,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({
         inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
@@ -4044,7 +4152,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({
         inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
@@ -4187,7 +4295,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 0 } });
 
       srv.close();
@@ -4339,7 +4447,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 0 } });
 
       srv.close();
@@ -4498,7 +4606,7 @@ describe('MastraInngestWorkflow', () => {
           port: (ctx as any).handlerPort,
         });
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
 
         srv.close();
@@ -4657,7 +4765,7 @@ describe('MastraInngestWorkflow', () => {
           port: (ctx as any).handlerPort,
         });
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
 
         srv.close();
@@ -4854,7 +4962,7 @@ describe('MastraInngestWorkflow', () => {
           port: (ctx as any).handlerPort,
         });
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 1 } });
 
         srv.close();
@@ -5008,7 +5116,7 @@ describe('MastraInngestWorkflow', () => {
         });
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
 
         expect(begin).toHaveBeenCalledTimes(1);
@@ -5158,7 +5266,7 @@ describe('MastraInngestWorkflow', () => {
           port: (ctx as any).handlerPort,
         });
 
-        const run = counterWorkflow.createRun();
+        const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
         const results = result.steps;
 
@@ -5340,7 +5448,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 0 } });
 
       expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
@@ -5502,7 +5610,7 @@ describe('MastraInngestWorkflow', () => {
       });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      const run = counterWorkflow.createRun();
+      const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 0 } });
 
       srv.close();
@@ -5578,7 +5686,7 @@ describe('MastraInngestWorkflow', () => {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Access new instance properties directly - should work without warning
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       await run.start({ inputData: {} });
 
       srv.close();
@@ -5639,7 +5747,7 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({ runtimeContext });
 
       srv.close();
@@ -5692,7 +5800,7 @@ describe('MastraInngestWorkflow', () => {
       });
       workflow.then(step).commit();
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       await run.start({ runtimeContext });
 
       const resumeruntimeContext = new RuntimeContext();
@@ -5764,7 +5872,7 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
-      const run = workflow.createRun();
+      const run = await workflow.createRunAsync();
       const result = await run.start({});
 
       srv.close();
@@ -5835,7 +5943,7 @@ describe('MastraInngestWorkflow', () => {
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
-      const run = workflow.createRun({
+      const run = await workflow.createRunAsync({
         runId,
       });
 
@@ -5998,7 +6106,7 @@ describe('MastraInngestWorkflow', () => {
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
-      const run = workflow.createRun({
+      const run = await workflow.createRunAsync({
         runId,
       });
 
@@ -6163,7 +6271,7 @@ describe('MastraInngestWorkflow', () => {
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
-      const run = workflow.createRun({
+      const run = await workflow.createRunAsync({
         runId,
       });
 
@@ -6388,7 +6496,7 @@ describe('MastraInngestWorkflow', () => {
 
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      const run = promptEvalWorkflow.createRun();
+      const run = await promptEvalWorkflow.createRunAsync();
 
       const { stream, getWorkflowState } = run.stream({ inputData: { input: 'test' } });
 
@@ -6577,10 +6685,10 @@ describe('MastraInngestWorkflow', () => {
 
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      const run = workflow.createRun({
+      const run = await workflow.createRunAsync({
         runId: 'test-run-id',
       });
-      const { stream } = await run.stream({
+      const { stream } = run.stream({
         inputData: {
           prompt1: 'Capital of France, just the name',
           prompt2: 'Capital of UK, just the name',

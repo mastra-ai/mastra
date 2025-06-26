@@ -9,14 +9,32 @@ import {
   MainContentLayout,
   MainContentContent,
 } from '@mastra/playground-ui';
-import { useNetworks } from '@/hooks/use-networks';
+import { useNetworks, useVNextNetworks } from '@/hooks/use-networks';
+
 import { networksTableColumns } from '@/domains/networks/table.columns';
 import { NetworkIcon } from 'lucide-react';
 
 function Networks() {
   const { networks, isLoading } = useNetworks();
+  const { vNextNetworks, isLoading: isVNextLoading } = useVNextNetworks();
 
-  if (isLoading) return null;
+  if (isLoading || isVNextLoading) return null;
+
+  const allNetworks = [
+    ...(networks?.map(network => ({
+      ...network,
+      routingModel: network.routingModel.modelId,
+      agentsSize: network.agents.length,
+      isVNext: false,
+    })) ?? []),
+    ...(vNextNetworks?.map(network => ({
+      ...network,
+      routingModel: network.routingModel.modelId,
+      agentsSize: network.agents.length,
+      workflowsSize: network.workflows.length,
+      isVNext: true,
+    })) ?? []),
+  ];
 
   return (
     <MainContentLayout>
@@ -24,7 +42,7 @@ function Networks() {
         <HeaderTitle>Networks</HeaderTitle>
       </Header>
 
-      {networks.length === 0 ? (
+      {allNetworks.length === 0 ? (
         <MainContentContent isCentered={true}>
           <EmptyState
             iconSlot={<AgentNetworkCoinIcon />}
@@ -49,7 +67,7 @@ function Networks() {
         </MainContentContent>
       ) : (
         <MainContentContent>
-          <DataTable isLoading={isLoading} data={networks} columns={networksTableColumns} />
+          <DataTable isLoading={isLoading || isVNextLoading} data={allNetworks} columns={networksTableColumns} />
         </MainContentContent>
       )}
     </MainContentLayout>

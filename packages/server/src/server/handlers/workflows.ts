@@ -219,7 +219,7 @@ export async function createWorkflowRunHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    const run = workflow.createRun({ runId: prevRunId });
+    const run = await workflow.createRunAsync({ runId: prevRunId });
 
     return { runId: run.runId };
   } catch (error) {
@@ -248,7 +248,7 @@ export async function startAsyncWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    const _run = workflow.createRun({ runId });
+    const _run = await workflow.createRunAsync({ runId });
     const result = await _run.start({
       inputData,
       runtimeContext,
@@ -290,7 +290,7 @@ export async function startWorkflowRunHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = workflow.createRun({ runId });
+    const _run = await workflow.createRunAsync({ runId });
     void _run.start({
       inputData,
       runtimeContext,
@@ -328,7 +328,7 @@ export async function watchWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = workflow.createRun({ runId });
+    const _run = await workflow.createRunAsync({ runId });
     let unwatch: () => void;
     let asyncRef: NodeJS.Immediate | null = null;
     const stream = new ReadableStream<string>({
@@ -387,7 +387,7 @@ export async function streamWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    const run = workflow.createRun({ runId });
+    const run = await workflow.createRunAsync({ runId });
     const result = run.stream({
       inputData,
       runtimeContext,
@@ -433,7 +433,7 @@ export async function resumeAsyncWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = workflow.createRun({ runId });
+    const _run = await workflow.createRunAsync({ runId });
     const result = await _run.resume({
       step: body.step,
       resumeData: body.resumeData,
@@ -481,7 +481,7 @@ export async function resumeWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = workflow.createRun({ runId });
+    const _run = await workflow.createRunAsync({ runId });
 
     void _run.resume({
       step: body.step,

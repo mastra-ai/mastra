@@ -138,6 +138,7 @@ class Test {
       content: {
         format: 2,
         parts: [{ type: 'text', text: content }],
+        content: content,
       },
       createdAt: new Date(),
       resourceId,
@@ -458,6 +459,83 @@ describe('MongoDBStore', () => {
         expect((msg as any).content.parts).toEqual(messages[idx]!.content.parts);
       });
     });
+    it('should upsert messages: duplicate id+threadId results in update, not duplicate row', async () => {
+      const test = new Test(store).build();
+      await test.clearTables();
+      const thread = test.generateSampleThread();
+      await store.saveThread({ thread });
+      const baseMessage = test.generateSampleMessageV2({
+        threadId: thread.id,
+        content: 'Original',
+        resourceId: thread.resourceId,
+      });
+
+      // Insert the message for the first time
+      await store.saveMessages({ messages: [baseMessage], format: 'v2' });
+
+      // Insert again with the same id and threadId but different content
+      const updatedMessage = {
+        ...test.generateSampleMessageV2({
+          threadId: thread.id,
+          content: 'Updated',
+          resourceId: thread.resourceId,
+        }),
+        createdAt: baseMessage.createdAt,
+        id: baseMessage.id,
+      };
+
+      await store.saveMessages({ messages: [updatedMessage], format: 'v2' });
+
+      // Retrieve messages for the thread
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
+
+      // Only one message should exist for that id+threadId
+      expect(retrievedMessages.filter(m => m.id === baseMessage.id)).toHaveLength(1);
+
+      // The content should be the updated one
+      expect(retrievedMessages.find(m => m.id === baseMessage.id)?.content.content).toBe('Updated');
+    });
+
+    it('should upsert messages: duplicate id and different threadid', async () => {
+      const test = new Test(store).build();
+      const thread1 = test.generateSampleThread();
+      const thread2 = test.generateSampleThread();
+      await store.saveThread({ thread: thread1 });
+      await store.saveThread({ thread: thread2 });
+
+      const message = test.generateSampleMessageV2({
+        threadId: thread1.id,
+        content: 'Thread1 Content',
+        resourceId: thread1.resourceId,
+      });
+
+      // Insert message into thread1
+      await store.saveMessages({ messages: [message], format: 'v2' });
+
+      // Attempt to insert a message with the same id but different threadId
+      const conflictingMessage = {
+        ...test.generateSampleMessageV2({
+          threadId: thread2.id, // different thread
+          content: 'Thread2 Content',
+          resourceId: thread2.resourceId,
+        }),
+        createdAt: message.createdAt,
+        id: message.id,
+      };
+
+      // Save should move the message to the new thread
+      await store.saveMessages({ messages: [conflictingMessage], format: 'v2' });
+
+      // Retrieve messages for both threads
+      const thread1Messages = await store.getMessages({ threadId: thread1.id, format: 'v2' });
+      const thread2Messages = await store.getMessages({ threadId: thread2.id, format: 'v2' });
+
+      // Thread 1 should NOT have the message with that id
+      expect(thread1Messages.find(m => m.id === message.id)).toBeUndefined();
+
+      // Thread 2 should have the message with that id
+      expect(thread2Messages.find(m => m.id === message.id)?.content.content).toBe('Thread2 Content');
+    });
 
     // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
     //   const test = new Test().withStore(store).build();
@@ -561,6 +639,55 @@ describe('MongoDBStore', () => {
     //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
     //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
     // });
+
+    it('should handle stringified JSON content without double-nesting', async () => {
+      const test = new Test(store).build();
+      await test.clearTables();
+      const thread = test.generateSampleThread();
+      await store.saveThread({ thread });
+
+      // Simulate user passing stringified JSON as message content (like the original bug report)
+      // This simulates what happens when user does JSON.stringify(inputData) in their code
+      const stringifiedContent = JSON.stringify({ userInput: 'test data', metadata: { key: 'value' } });
+      const message: MastraMessageV2 = {
+        id: `msg-${randomUUID()}`,
+        role: 'user',
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: stringifiedContent }],
+          content: stringifiedContent, // This is the stringified JSON that user passed
+        },
+        createdAt: new Date(),
+      };
+
+      // Save the message - this should stringify the whole content object for storage
+      await store.saveMessages({ messages: [message], format: 'v2' });
+
+      // Retrieve the message - this is where double-nesting could occur
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
+      expect(retrievedMessages).toHaveLength(1);
+
+      const retrievedMessage = retrievedMessages[0] as MastraMessageV2;
+
+      // Check that content is properly structured as a V2 message
+      expect(typeof retrievedMessage.content).toBe('object');
+      expect(retrievedMessage.content.format).toBe(2);
+
+      // CRITICAL: The content.content should still be the original stringified JSON
+      // NOT double-nested like: { content: '{"format":2,"parts":[...],"content":"{\\"userInput\\":\\"test data\\"}"}' }
+      expect(retrievedMessage.content.content).toBe(stringifiedContent);
+
+      // Verify the content can be parsed as the original JSON
+      const parsedContent = JSON.parse(retrievedMessage.content.content as string);
+      expect(parsedContent).toEqual({ userInput: 'test data', metadata: { key: 'value' } });
+
+      // Additional check: ensure the message doesn't have the "Found unhandled message" structure
+      // that would indicate MessageList failed to recognize it as a valid message
+      expect(retrievedMessage.content.parts).toBeDefined();
+      expect(Array.isArray(retrievedMessage.content.parts)).toBe(true);
+    });
   });
 
   describe('Edge Cases and Error Handling', () => {

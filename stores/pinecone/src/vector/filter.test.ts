@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
+import type { PineconeVectorFilter } from './filter';
 import { PineconeFilterTranslator } from './filter';
 
 describe('PineconeFilterTranslator', () => {
@@ -13,17 +14,17 @@ describe('PineconeFilterTranslator', () => {
   describe('basic operations', () => {
     it('handles empty filters', () => {
       expect(translator.translate({})).toEqual({});
-      expect(translator.translate(null as any)).toEqual(null);
-      expect(translator.translate(undefined as any)).toEqual(undefined);
+      expect(translator.translate(null)).toEqual(null);
+      expect(translator.translate(undefined)).toEqual(undefined);
     });
 
     it('allows implicit equality', () => {
-      const filter = { field: 'value' };
+      const filter: PineconeVectorFilter = { field: 'value' };
       expect(translator.translate(filter)).toEqual({ field: 'value' });
     });
 
     it('allows multiple top-level fields', () => {
-      const filter = {
+      const filter: PineconeVectorFilter = {
         field1: 'value1',
         field2: 'value2',
       };
@@ -34,7 +35,7 @@ describe('PineconeFilterTranslator', () => {
     });
 
     it('handles multiple operators on same field', () => {
-      const filter = {
+      const filter: PineconeVectorFilter = {
         price: { $gt: 100, $lt: 200 },
         quantity: { $gte: 10, $lte: 20 },
       };
@@ -46,12 +47,12 @@ describe('PineconeFilterTranslator', () => {
 
     it('normalizes date values', () => {
       const date = new Date('2024-01-01');
-      const filter = { timestamp: { $gt: date } };
+      const filter: PineconeVectorFilter = { timestamp: { $gt: date } };
       expect(translator.translate(filter)).toEqual({ timestamp: { $gt: date.toISOString() } });
     });
 
     it('handles $exists operator', () => {
-      const filter = { field: { $exists: true } };
+      const filter: PineconeVectorFilter = { field: { $exists: true } };
       expect(translator.translate(filter)).toEqual({ field: { $exists: true } });
     });
   });
@@ -59,12 +60,12 @@ describe('PineconeFilterTranslator', () => {
   // Array Operations
   describe('array operations', () => {
     it('handles arrays as $in operator', () => {
-      const filter = { tags: ['tag1', 'tag2'] };
+      const filter: PineconeVectorFilter = { tags: ['tag1', 'tag2'] };
       expect(translator.translate(filter)).toEqual({ tags: { $in: ['tag1', 'tag2'] } });
     });
 
     it('simulates $all using $and + $in', () => {
-      const filter = { tags: { $all: ['tag1', 'tag2'] } };
+      const filter: PineconeVectorFilter = { tags: { $all: ['tag1', 'tag2'] } };
       expect(translator.translate(filter)).toEqual({
         $and: [{ tags: { $in: ['tag1'] } }, { tags: { $in: ['tag2'] } }],
       });
@@ -127,7 +128,7 @@ describe('PineconeFilterTranslator', () => {
   // Logical Operators
   describe('logical operators', () => {
     it('handles logical operators', () => {
-      const filter = {
+      const filter: PineconeVectorFilter = {
         $or: [{ status: 'active' }, { age: { $gt: 25 } }],
       };
       expect(translator.translate(filter)).toEqual({
@@ -136,7 +137,7 @@ describe('PineconeFilterTranslator', () => {
     });
 
     it('handles nested logical operators', () => {
-      const filter = {
+      const filter: PineconeVectorFilter = {
         $and: [
           { status: 'active' },
           {
@@ -170,7 +171,7 @@ describe('PineconeFilterTranslator', () => {
     });
 
     it('handles complex nested conditions', () => {
-      const filter = {
+      const filter: PineconeVectorFilter = {
         $or: [
           { age: { $gt: 25 } },
           {
@@ -205,7 +206,7 @@ describe('PineconeFilterTranslator', () => {
     });
 
     it('preserves empty objects as exact match conditions', () => {
-      const filter = {
+      const filter: PineconeVectorFilter = {
         metadata: {},
         'user.profile': {},
       };
@@ -217,7 +218,7 @@ describe('PineconeFilterTranslator', () => {
     });
 
     it('handles empty objects in logical operators', () => {
-      const filter = {
+      const filter: PineconeVectorFilter = {
         $or: [{}, { status: 'active' }],
       };
 
@@ -241,7 +242,7 @@ describe('PineconeFilterTranslator', () => {
     });
 
     it('handles empty objects in comparison operators', () => {
-      const filter = {
+      const filter: PineconeVectorFilter = {
         metadata: { $eq: {} },
       };
 
@@ -251,7 +252,7 @@ describe('PineconeFilterTranslator', () => {
     });
 
     it('handles empty objects in array operators', () => {
-      const filter = {
+      const filter: PineconeVectorFilter = {
         tags: { $in: [{}] },
       };
 
@@ -367,7 +368,7 @@ describe('PineconeFilterTranslator', () => {
       });
 
       it('throws error for unsupported logical operators', () => {
-        const invalidFilters = [
+        const invalidFilters: any = [
           {
             $not: { field: 'value' },
           },
@@ -389,13 +390,13 @@ describe('PineconeFilterTranslator', () => {
     });
 
     it('ensure all operator filters are supported', () => {
-      const supportedFilters = [
+      const supportedFilters: PineconeVectorFilter[] = [
         { field: { $eq: 'value' } },
         { field: { $ne: 'value' } },
-        { field: { $gt: 'value' } },
-        { field: { $gte: 'value' } },
-        { field: { $lt: 'value' } },
-        { field: { $lte: 'value' } },
+        { field: { $gt: 10 } },
+        { field: { $gte: 10 } },
+        { field: { $lt: 10 } },
+        { field: { $lte: 10 } },
         { field: { $in: ['value'] } },
         { $and: [{ field: { $eq: 'value' } }] },
         { $or: [{ field: { $eq: 'value' } }] },
@@ -431,7 +432,7 @@ describe('PineconeFilterTranslator', () => {
     });
 
     it('throws error for invalid operator values', () => {
-      const filter = { tags: { $all: 'not-an-array' } };
+      const filter: any = { tags: { $all: 'not-an-array' } };
       expect(() => translator.translate(filter)).toThrow();
     });
     it('throws error for regex operators', () => {
@@ -439,7 +440,7 @@ describe('PineconeFilterTranslator', () => {
       expect(() => translator.translate(filter)).toThrow();
     });
     it('throws error for non-logical operators at top level', () => {
-      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
+      const invalidFilters: any = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
 
       invalidFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);

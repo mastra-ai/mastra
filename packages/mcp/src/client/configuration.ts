@@ -1,7 +1,7 @@
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { Prompt, Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
+import type { ElicitRequest, ElicitResult, Prompt, Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 import equal from 'fast-deep-equal';
 import { v5 as uuidv5 } from 'uuid';
 import { InternalMastraMCPClient } from './client';
@@ -63,6 +63,26 @@ To fix this you have three different options:
     mcpClientInstances.set(this.id, this);
     this.addToInstanceCache();
     return this;
+  }
+  public get elicitation() {
+    this.addToInstanceCache();
+    return {
+      onRequest: async (serverName: string, handler: (request: ElicitRequest['params']) => Promise<ElicitResult>) => {
+        try {
+          const internalClient = await this.getConnectedClientForServer(serverName);
+          return internalClient.elicitation.onRequest(handler);
+        } catch (err) {
+          throw new MastraError({
+            id: 'MCP_CLIENT_ON_REQUEST_ELICITATION_FAILED',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              serverName,
+            }
+          }, err);
+        }
+      }
+    }
   }
 
   public get resources() {
@@ -356,7 +376,7 @@ To fix this you have three different options:
     const existingClient = this.mcpClientsById.get(name);
 
     this.logger.debug(`getConnectedClient ${name} exists: ${exists}`);
-    
+
     if (exists) {
       // This is just to satisfy Typescript since technically you could have this.mcpClientsById.set('someKey', undefined);
       // Should never reach this point basically we always create a new MastraMCPClient instance when we add to the Map.

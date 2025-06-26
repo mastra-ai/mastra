@@ -15,7 +15,7 @@ export interface WorkflowGraphProps {
   workflowId: string;
   isLoading?: boolean;
   workflow?: GetWorkflowResponse;
-  onShowTrace: ({ runId, stepName }: { runId: string; stepName: string }) => void;
+  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
 }
 
 export function WorkflowGraph({ workflowId, onShowTrace, workflow, isLoading }: WorkflowGraphProps) {
