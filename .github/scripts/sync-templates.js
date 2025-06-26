@@ -20,21 +20,25 @@ const PROVIDERS = {
     model: 'gpt-4o',
     package: '@ai-sdk/openai',
     apiKey: 'OPENAI_API_KEY',
+    name: 'OpenAI',
   },
   anthropic: {
     model: 'claude-3-5-sonnet-20240620',
     package: '@ai-sdk/anthropic',
     apiKey: 'ANTHROPIC_API_KEY',
+    name: 'Anthropic',
   },
   google: {
-    model: 'gemini-1.5-pro-latest',
+    model: 'gemini-2.5-pro',
     package: '@ai-sdk/google',
     apiKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
+    name: 'Google',
   },
   groq: {
     model: 'llama-3.3-70b-versatile',
     package: '@ai-sdk/groq',
     apiKey: 'GROQ_API_KEY',
+    name: 'Groq',
   },
 };
 
@@ -151,9 +155,10 @@ async function pushToRepo(repoName) {
 
     // setup different branches
     // TODO make more dynamic
-    for (const [provider, { model: defaultModel, package: providerPackage, apiKey: providerApiKey }] of Object.entries(
-      PROVIDERS,
-    )) {
+    for (const [
+      provider,
+      { model: defaultModel, package: providerPackage, apiKey: providerApiKey, name: providerName },
+    ] of Object.entries(PROVIDERS)) {
       const files = ['./src/mastra/workflows/index.ts', './src/mastra/agents/index.ts'];
       // move to new branch
       execSync(`git checkout main && git switch -c ${provider}`, { stdio: 'inherit', cwd: tempDir });
@@ -192,6 +197,13 @@ async function pushToRepo(repoName) {
       envExample = envExample.replace('OPENAI_API_KEY', providerApiKey);
       envExample = envExample + `\nMODEL=${defaultModel}`;
       await writeFile(envExamplePath, envExample);
+
+      //update llm provider in README.md
+      console.log(`Updating README.md for ${provider}`);
+      const readmePath = path.join(tempDir, 'README.md');
+      let readme = await readFile(readmePath, 'utf-8');
+      readme = readme.replace('OpenAI', providerName);
+      await writeFile(readmePath, readme);
 
       // push branch
       execSync(

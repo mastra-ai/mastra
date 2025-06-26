@@ -1856,4 +1856,47 @@ describe('MessageList', () => {
       ]);
     });
   });
+
+  describe('JSON content parsing regression', () => {
+    it('should handle the exact bug scenario: user calls JSON.stringify but content stays as string', () => {
+      const list = new MessageList({ threadId: 'test', resourceId: 'test' });
+
+      const inputData = {
+        linkedinUrl: 'https://www.linkedin.com/in/ex/',
+        enrichmentType: 'people',
+      };
+
+      const messageWithStringContent = {
+        role: 'user' as const,
+        content: JSON.stringify(inputData),
+      };
+
+      // This should work fine and the content should remain as a string
+      expect(() => list.add(messageWithStringContent, 'user')).not.toThrow();
+
+      // Verify the content remains as a JSON string (not parsed back to object)
+      const messages = list.get.all.v2();
+      expect(messages.length).toBe(1);
+      expect(messages[0].content.content).toBe(JSON.stringify(inputData)); // Should stay as string
+      expect(typeof messages[0].content.content).toBe('string'); // Should be a string, not an object
+    });
+
+    it('should not parse regular JSON string content back to objects', () => {
+      const list = new MessageList({ threadId: 'test', resourceId: 'test' });
+
+      // User sends a JSON string as content (valid use case)
+      const messageWithJSONString = {
+        role: 'user' as const,
+        content: '{"data": "value", "number": 42}',
+      };
+
+      // This should work and the content should remain as a string
+      expect(() => list.add(messageWithJSONString, 'user')).not.toThrow();
+
+      // The content should stay as a string, not be parsed to an object
+      const messages = list.get.all.v2();
+      expect(messages[0].content.content).toBe('{"data": "value", "number": 42}'); // Should stay as string
+      expect(typeof messages[0].content.content).toBe('string'); // Should be a string, not an object
+    });
+  });
 });
