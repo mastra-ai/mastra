@@ -1,4 +1,4 @@
-import type { AssistantContent, CoreMessage, EmbeddingModel, LanguageModelV1, ToolContent, UserContent } from 'ai';
+import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
 
 export type { MastraMessageV2 } from '../agent';
 import type { ZodObject } from 'zod';
@@ -6,9 +6,10 @@ import type { RuntimeContext } from '../runtime-context';
 import type { MastraStorage } from '../storage';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
+import type { MastraLanguageModel, DynamicArgument } from '../agent/types';
 
 export type { Message as AiMessageType } from 'ai';
-export type { MastraLanguageModel, DynamicArgument } from '../agent/types';
+export type { MastraLanguageModel, DynamicArgument };
 
 // Types for the memory system
 export type MastraMessageV1 = {
@@ -81,7 +82,7 @@ export type MemoryConfig = {
     generateTitle?:
       | boolean
       | {
-          model: LanguageModelV1 | ((ctx: RuntimeContext) => LanguageModelV1 | Promise<LanguageModelV1>);
+          model: DynamicArgument<MastraLanguageModel>;
         };
   };
 };
