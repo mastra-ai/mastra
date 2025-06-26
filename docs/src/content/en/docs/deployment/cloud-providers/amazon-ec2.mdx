@@ -14,7 +14,7 @@ Deploy your Mastra applications to Amazon EC2 (Elastic Cloud Compute).
   This guide assumes your Mastra application has been created using the default
   `npx create-mastra@latest` command.
   For more information on how to create a new Mastra application,
-  refer to our [getting started guide](./../../getting-started/installation.mdx)
+  refer to our [getting started guide](/docs/getting-started/installation)
 </Callout>
 
 ### Setting up EC2
@@ -27,7 +27,7 @@ Navigate to the [AWS Management Console](https://aws.amazon.com/console/) and si
 
 #### Navigate to EC2
 
-Head over to **All services** on your left panel. Under **Compute**, click on **EC2**.
+Head over to **All services** in the left side navigation. Under **Compute**, click on **EC2**.
 
 #### Launch a virtual server instance
 
@@ -66,7 +66,7 @@ Once you have access to your EC2 instance (either via SSH or browser), follow th
 
 You can now connect to your Mastra server from your client application using a `MastraClient` from the `@mastra/client-js` package.
 
-Refer to the [`MastraClient` documentation](../../client-js/overview.mdx) for more information.
+Refer to the [`MastraClient` documentation](/docs/client-js/overview) for more information.
 
 ```typescript copy showLineNumbers
 import { MastraClient } from "@mastra/client-js";
@@ -75,3 +75,7 @@ const mastraClient = new MastraClient({
   baseUrl: "https://<your-domain-name>",
 });
 ```
+
+## Next Steps
+
+- Read more about the [Mastra Client SDK](/docs/client-js/overview)
