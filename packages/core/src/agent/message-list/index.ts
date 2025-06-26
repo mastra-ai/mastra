@@ -368,7 +368,7 @@ ${JSON.stringify(message, null, 2)}`,
         !this.newResponseMessages.has(messageV2) &&
         !this.newUserMessages.has(messageV2) &&
         !this.memoryMessages.has(messageV2) &&
-        messageSource === 'user'
+        messageSource === 'response'
       ) {
         this.updatedResponseMessages.add(messageV2);
       }
