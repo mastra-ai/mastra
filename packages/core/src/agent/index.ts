@@ -438,13 +438,22 @@ export class Agent<
    * @param options Options for getting the LLM
    * @returns A promise that resolves to the LLM instance
    */
-  public getLLM({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
-    | MastraLLMBase
-    | Promise<MastraLLMBase> {
-    const model = this.getModel({ runtimeContext });
+  public getLLM({
+    runtimeContext = new RuntimeContext(),
+    model,
+  }: {
+    runtimeContext?: RuntimeContext;
+    model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel>;
+  } = {}): MastraLLMBase | Promise<MastraLLMBase> {
+    // If model is provided, resolve it; otherwise use the agent's model
+    const modelToUse = model
+      ? typeof model === 'function'
+        ? model({ runtimeContext })
+        : model
+      : this.getModel({ runtimeContext });
 
-    return resolveMaybePromise(model, model => {
-      const llm = new MastraLLM({ model, mastra: this.#mastra });
+    return resolveMaybePromise(modelToUse, resolvedModel => {
+      const llm = new MastraLLM({ model: resolvedModel, mastra: this.#mastra });
 
       // Apply stored primitives if available
       if (this.#primitives) {
@@ -546,12 +555,14 @@ export class Agent<
   async generateTitleFromUserMessage({
     message,
     runtimeContext = new RuntimeContext(),
+    model,
   }: {
     message: string | MessageInput;
     runtimeContext?: RuntimeContext;
+    model?: DynamicArgument<MastraLanguageModel>;
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
-    const llm = await this.getLLM({ runtimeContext });
+    const llm = await this.getLLM({ runtimeContext, model });
 
     const normMessage = new MessageList().add(message, 'user').get.all.ui().at(-1);
     if (!normMessage) {
@@ -604,22 +615,29 @@ export class Agent<
     return userMessages.at(-1);
   }
 
-  async genTitle(userMessage: string | MessageInput | undefined, runtimeContext: RuntimeContext) {
-    let title = `New Thread ${new Date().toISOString()}`;
+  async genTitle(
+    userMessage: string | MessageInput | undefined,
+    runtimeContext: RuntimeContext,
+    model?: DynamicArgument<MastraLanguageModel>,
+  ) {
     try {
       if (userMessage) {
         const normMessage = new MessageList().add(userMessage, 'user').get.all.ui().at(-1);
         if (normMessage) {
-          title = await this.generateTitleFromUserMessage({
+          return await this.generateTitleFromUserMessage({
             message: normMessage,
             runtimeContext,
+            model,
           });
         }
       }
+      // If no user message, return a default title for new threads
+      return `New Thread ${new Date().toISOString()}`;
     } catch (e) {
       this.logger.error('Error generating title:', e);
+      // Return undefined on error so existing title is preserved
+      return undefined;
     }
-    return title;
   }
 
   /* @deprecated use agent.getMemory() and query memory directly */
@@ -1390,9 +1408,14 @@ export class Agent<
 
               const config = memory.getMergedThreadConfig(memoryConfig);
               const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
+
+              const { shouldGenerate, model: titleModel } = this.resolveTitleGenerationConfig(
+                config?.threads?.generateTitle,
+              );
+
               const title =
-                config?.threads?.generateTitle && userMessage
-                  ? await this.genTitle(userMessage, runtimeContext)
+                shouldGenerate && userMessage
+                  ? await this.genTitle(userMessage, runtimeContext, titleModel)
                   : undefined;
               if (!title) {
                 return;
@@ -2044,5 +2067,29 @@ export class Agent<
   toStep(): Step<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
     const x = agentToStep(this);
     return new Step(x);
+  }
+
+  /**
+   * Resolves the configuration for title generation.
+   * @private
+   */
+  private resolveTitleGenerationConfig(
+    generateTitleConfig: boolean | { model: DynamicArgument<MastraLanguageModel> } | undefined,
+  ): {
+    shouldGenerate: boolean;
+    model?: DynamicArgument<MastraLanguageModel>;
+  } {
+    if (typeof generateTitleConfig === 'boolean') {
+      return { shouldGenerate: generateTitleConfig };
+    }
+
+    if (typeof generateTitleConfig === 'object' && generateTitleConfig !== null) {
+      return {
+        shouldGenerate: true,
+        model: generateTitleConfig.model,
+      };
+    }
+
+    return { shouldGenerate: false };
   }
 }
