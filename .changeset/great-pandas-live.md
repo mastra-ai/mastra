@@ -1,11 +1,10 @@
 ---
 '@mastra/playground-ui': patch
 '@mastra/client-js': patch
-'@mastra/deployer': patch
-'@mastra/server': patch
 '@mastra/core': patch
+'@mastra/inngest': patch
 'mastra': patch
 'create-mastra': patch
 ---
 
-Fix tool streaming in agent network
+Use workflow stream in playground instead of watch

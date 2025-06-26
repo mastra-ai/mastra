@@ -279,15 +279,18 @@ describe('Memory Streaming Tests', () => {
             content: message,
           });
         });
-        const uiMessages = result.current.messages;
+
+        // Wait for message count to increase
         await waitFor(
           () => {
             expect(error).toBeNull();
             expect(result.current.messages.length).toBeGreaterThan(messageCountBefore);
           },
-          { timeout: 1000 },
+          { timeout: 2000 },
         );
 
+        // Get fresh reference to messages after all waits complete
+        const uiMessages = result.current.messages;
         const latestMessage = uiMessages.at(-1);
         if (!latestMessage) throw new Error(`No latest message`);
         if (

@@ -66,13 +66,15 @@ export class CoreToolBuilder extends MastraBase {
       typeof tool.id === 'string' &&
       tool.id.includes('.')
     ) {
+      const parameters = this.getParameters();
+      const outputSchema = this.getOutputSchema();
       return {
         type: 'provider-defined' as const,
         id: tool.id,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters: convertZodSchemaToAISDKSchema(this.getParameters()),
-        outputSchema: convertZodSchemaToAISDKSchema(this.getOutputSchema()),
+        parameters: convertZodSchemaToAISDKSchema(parameters),
+        ...(outputSchema ? { outputSchema: convertZodSchemaToAISDKSchema(outputSchema) } : {}),
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
