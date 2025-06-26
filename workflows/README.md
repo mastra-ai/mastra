@@ -28,12 +28,12 @@ import { PinoLogger } from '@mastra/loggers';
 import { Inngest } from 'inngest';
 import { z } from 'zod';
 
-const { createWorkflow, createStep } = init(
-  new Inngest({
-    id: 'mastra',
-    baseUrl: `http://localhost:8288`, // if using local dev server
-  }),
-);
+const inngest = new Inngest({
+  id: 'mastra',
+  baseUrl: `http://localhost:8288`, // if using local dev server
+});
+
+const { createWorkflow, createStep } = init(inngest);
 
 const incrementStep = createStep({
   id: 'increment',
