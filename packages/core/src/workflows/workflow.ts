@@ -1085,7 +1085,7 @@ export class Workflow<
 
     const run = resume?.steps?.length ? this.createRun({ runId: resume.runId }) : this.createRun();
     const unwatchV2 = run.watch(event => {
-      emitter.emit('nested-watch-v2', event);
+      emitter.emit('nested-watch-v2', { event, workflowId: this.id });
     }, 'watch-v2');
     const unwatch = run.watch(event => {
       emitter.emit('nested-watch', { event, workflowId: this.id, runId: run.runId, isResume: !!resume?.steps?.length });
@@ -1396,20 +1396,31 @@ export class Run<
       }
     };
 
+    const nestedWatchV2Cb = ({
+      event,
+      workflowId,
+    }: {
+      event: { type: string; payload: { id: string } & Record<string, unknown> };
+      workflowId: string;
+    }) => {
+      this.emitter.emit('watch-v2', {
+        ...event,
+        payload: { ...event.payload, id: `${workflowId}.${event.payload.id}` },
+      });
+    };
+
     if (type === 'watch') {
       this.emitter.on('watch', watchCb);
       this.emitter.on('nested-watch', nestedWatchCb);
     } else if (type === 'watch-v2') {
       this.emitter.on('watch-v2', cb);
-      this.emitter.on('nested-watch-v2', (event: WatchEvent) => {
-        this.emitter.emit('watch-v2', event);
-      });
+      this.emitter.on('nested-watch-v2', nestedWatchV2Cb);
     }
 
     return () => {
       if (type === 'watch-v2') {
         this.emitter.off('watch-v2', cb);
-        this.emitter.off('nested-watch-v2', nestedWatchCb);
+        this.emitter.off('nested-watch-v2', nestedWatchV2Cb);
       } else {
         this.emitter.off('watch', watchCb);
         this.emitter.off('nested-watch', nestedWatchCb);
