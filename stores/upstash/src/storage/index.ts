@@ -1388,7 +1388,7 @@ export class UpstashStore extends MastraStorage {
 
   async getWorkflowRuns(
     {
-      namespace,
+      namespace = 'workflows',
       workflowName,
       fromDate,
       toDate,
@@ -1418,7 +1418,12 @@ export class UpstashStore extends MastraStorage {
       } else if (workflowName) {
         pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName }) + ':*';
       } else if (resourceId) {
-        pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: '*', run_id: '*', resourceId });
+        pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, {
+          namespace,
+          workflow_name: '*',
+          run_id: '*',
+          resourceId,
+        });
       }
       const keys = await this.scanKeys(pattern);
 
