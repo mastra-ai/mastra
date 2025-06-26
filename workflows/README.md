@@ -75,7 +75,7 @@ const finalStep = createStep({
   },
 });
 
-const workflow = createWorkflow({
+const incrementWorkflow = createWorkflow({
   id: 'increment-workflow',
   inputSchema: z.object({
     value: z.number(),
