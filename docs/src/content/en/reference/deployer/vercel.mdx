@@ -7,10 +7,14 @@ description: "Documentation for the VercelDeployer class, which deploys Mastra a
 
 The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/deployer) class with Vercel specific functionality.
 
-## Usage
+## Usage example
 
-```typescript copy
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
-new VercelDeployer()
+export const mastra = new Mastra({
+  // ...
+  deployer: new VercelDeployer()
+});
 ```

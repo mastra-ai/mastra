@@ -7,12 +7,15 @@ description: "Documentation for the CloudflareDeployer class, which deploys Mast
 
 The `CloudflareDeployer` class handles deployment of standalone Mastra applications to Cloudflare Workers. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/deployer) class with Cloudflare specific functionality.
 
-## Usage
+## Usage example
 
-```typescript copy
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
- new CloudflareDeployer({
+export const mastra = new Mastra({
+  // ...
+  deployer: new CloudflareDeployer({
     scope: "your-account-id",
     projectName: "your-project-name",
     routes: [
@@ -40,7 +43,8 @@ import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
         id: "namespace-id",
       },
     ],
-  })
+  }),
+});
 ```
 
 ## Parameters
