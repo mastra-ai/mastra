@@ -506,7 +506,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         payload: {
           id: step.id,
           ...execResults,
-          // output: execResults.output,
         },
       });
     } else {
@@ -515,8 +514,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         payload: {
           id: step.id,
           ...execResults,
-          // status: execResults.status,
-          // output: execResults.output,
         },
       });
 
