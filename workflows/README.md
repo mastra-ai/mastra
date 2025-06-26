@@ -23,9 +23,9 @@ docker run --rm -p 8288:8288 \
 ### Example
 
 ```ts
-import { init } from '@mastra/inngest';
+import { init, serve as inngestServe } from '@mastra/inngest';
 import { PinoLogger } from '@mastra/loggers';
-import { Inngest, serve as inngestServe } from 'inngest';
+import { Inngest } from 'inngest';
 import { z } from 'zod';
 
 const { createWorkflow, createStep } = init(
