@@ -1072,7 +1072,20 @@ export class PostgresStore extends MastraStorage {
       const rows = await this.db.manyOrNone(dataQuery, [...queryParams, ...excludeIds, perPage, currentOffset]);
       messages.push(...(rows || []));
 
-      const list = new MessageList().add(messages, 'memory');
+      // Parse content back to objects if they were stringified during storage
+      const messagesWithParsedContent = messages.map(message => {
+        if (typeof message.content === 'string') {
+          try {
+            return { ...message, content: JSON.parse(message.content) };
+          } catch {
+            // If parsing fails, leave as string (V1 message)
+            return message;
+          }
+        }
+        return message;
+      });
+
+      const list = new MessageList().add(messagesWithParsedContent, 'memory');
       const messagesToReturn = format === `v2` ? list.get.all.v2() : list.get.all.v1();
 
       return {
@@ -1180,7 +1193,20 @@ export class PostgresStore extends MastraStorage {
         await Promise.all([...messageInserts, threadUpdate]);
       });
 
-      const list = new MessageList().add(messages, 'memory');
+      // Parse content back to objects if they were stringified during storage
+      const messagesWithParsedContent = messages.map(message => {
+        if (typeof message.content === 'string') {
+          try {
+            return { ...message, content: JSON.parse(message.content) };
+          } catch {
+            // If parsing fails, leave as string (V1 message)
+            return message;
+          }
+        }
+        return message;
+      });
+
+      const list = new MessageList().add(messagesWithParsedContent, 'memory');
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {

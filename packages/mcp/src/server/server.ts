@@ -1335,7 +1335,7 @@ export class MCPServer extends MCPServerBase {
     executionContext?: { messages?: any[]; toolCallId?: string },
   ): Promise<any> {
     const tool = this.convertedTools[toolId];
-    let validatedArgs: any;
+    let validatedArgs = args;
     try {
       if (!tool) {
         this.logger.warn(`ExecuteTool: Unknown tool '${toolId}' requested on MCPServer '${this.name}'.`);

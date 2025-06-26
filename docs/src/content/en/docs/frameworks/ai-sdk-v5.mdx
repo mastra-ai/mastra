@@ -47,7 +47,35 @@ export const mastra = new Mastra({
 });
 ```
 
-**Dependencies**: You will need to upgrade all AI SDK dependencies to use the new v5 beta versions in your backend when you bump to the Mastra `ai-v5` prerelease tag. In most cases this will only involve bumping your model provider packages. For example: `npm i @ai-sdk/openai@2.0.0-beta.1` - refer to the [AI SDK v5 documentation](https://v5.ai-sdk.dev/docs/migration-guides/migration-guide-5-0) for more info. Some model providers do not yet have V5 versions (Openrouter for example).
+#### Dependencies
+
+You will need to upgrade all AI SDK dependencies to use the new v5 beta versions in your backend when you bump to the Mastra `ai-v5` prerelease tag.
+
+In most cases this will only involve bumping your model provider packages. For example: `npm i @ai-sdk/openai@2.0.0-beta.1` - refer to the [AI SDK v5 documentation](https://v5.ai-sdk.dev/docs/migration-guides/migration-guide-5-0) for more info. Some model providers do not yet have V5 versions (Openrouter for example).
+
+Also note that you need to bump all your Mastra dependencies to the new `ai-v5` tag, and you must upgrade `zod` to the latest version if you have it installed.
+
+#### Using Stream Compatibility Manually
+
+If you have a frontend that calls Mastra agents in an endpoint, you can wrap the new `response.toUIMessageStreamResponse()` manually.
+
+```ts
+import { mastra } from "@/src/mastra";
+import { createV4CompatibleResponse } from "@mastra/core/agent";
+
+const myAgent = mastra.getAgent("weatherAgent");
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const stream = await myAgent.stream(messages);
+
+  return createV4CompatibleResponse(stream.toUIMessageStreamResponse().body!);
+}
+```
+
+### Using Mastra Playground
+
+Currently playground is still an AI SDK v4 frontend. For now you need to set `aiSdkCompat: 'v4'` for it to work.
+We'll handle this automatically for you soon.
 
 ### Frontend Upgrade
 
