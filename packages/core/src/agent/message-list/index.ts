@@ -57,6 +57,7 @@ export class MessageList {
   private newUserMessages = new Set<MastraMessageV2>();
   private newResponseMessages = new Set<MastraMessageV2>();
   private userContextMessages = new Set<MastraMessageV2>();
+  private updatedResponseMessages = new Set<MastraMessageV2>();
 
   private generateMessageId?: IDGenerator;
 
@@ -133,10 +134,14 @@ export class MessageList {
     v2: () => this.messages.filter(m => this.newResponseMessages.has(m)),
   };
   public drainUnsavedMessages(): MastraMessageV2[] {
-    const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
+    const messages = this.messages.filter(
+      m => this.newUserMessages.has(m) || this.newResponseMessages.has(m) || this.updatedResponseMessages.has(m),
+    );
     this.newUserMessages.clear();
     this.newResponseMessages.clear();
-    return messages;
+    const unsavedMessages = [...messages, ...Array.from(this.updatedResponseMessages)];
+    this.updatedResponseMessages.clear();
+    return unsavedMessages;
   }
   public getSystemMessages(tag?: string): CoreMessage[] {
     if (tag) {
@@ -373,6 +378,14 @@ ${JSON.stringify(message, null, 2)}`,
       // message3.parts: [{type: "text", text: "the weather in x is y"}]
       shouldAppendToLastAssistantMessageParts
     ) {
+      if (
+        !this.newResponseMessages.has(messageV2) &&
+        !this.newUserMessages.has(messageV2) &&
+        !this.memoryMessages.has(messageV2) &&
+        messageSource === 'user'
+      ) {
+        this.updatedResponseMessages.add(messageV2);
+      }
       latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
 
       for (const [index, part] of messageV2.content.parts.entries()) {
