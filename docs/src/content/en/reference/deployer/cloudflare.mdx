@@ -12,7 +12,35 @@ The `CloudflareDeployer` class handles deployment of standalone Mastra applicati
 ```typescript copy
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
-new CloudflareDeployer({}),
+ new CloudflareDeployer({
+    scope: "your-account-id",
+    projectName: "your-project-name",
+    routes: [
+      {
+        pattern: "example.com/*",
+        zone_name: "example.com",
+        custom_domain: true,
+      },
+    ],
+    workerNamespace: "your-namespace",
+    auth: {
+      apiToken: "your-api-token",
+      apiEmail: "your-email",
+    },
+    d1Databases: [
+      {
+        binding: "binding-name",
+        database_name: "database-name",
+        database_id: "database-id",
+      },
+    ],
+    kvNamespaces: [
+      {
+        binding: "binding-name",
+        id: "namespace-id",
+      },
+    ],
+  })
 ```
 
 ## Parameters
