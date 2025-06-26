@@ -47,27 +47,39 @@ describe('PostgresStore', () => {
   });
 
   describe('Public Fields Access', () => {
+    let testDB: PostgresStore;
+    beforeAll(async () => {
+      testDB = new PostgresStore(TEST_CONFIG);
+    });
+    afterAll(async () => {
+      try {
+        await testDB.close();
+      } catch {}
+      store = new PostgresStore(TEST_CONFIG);
+      await store.init();
+    });
+
     it('should expose db field as public', () => {
-      expect(store.db).toBeDefined();
-      expect(typeof store.db).toBe('object');
-      expect(store.db.query).toBeDefined();
-      expect(typeof store.db.query).toBe('function');
+      expect(testDB.db).toBeDefined();
+      expect(typeof testDB.db).toBe('object');
+      expect(testDB.db.query).toBeDefined();
+      expect(typeof testDB.db.query).toBe('function');
     });
 
     it('should expose pgp field as public', () => {
-      expect(store.pgp).toBeDefined();
-      expect(typeof store.pgp).toBe('function');
-      expect(store.pgp.end).toBeDefined();
-      expect(typeof store.pgp.end).toBe('function');
+      expect(testDB.pgp).toBeDefined();
+      expect(typeof testDB.pgp).toBe('function');
+      expect(testDB.pgp.end).toBeDefined();
+      expect(typeof testDB.pgp.end).toBe('function');
     });
 
     it('should allow direct database queries via public db field', async () => {
-      const result = await store.db.one('SELECT 1 as test');
+      const result = await testDB.db.one('SELECT 1 as test');
       expect(result.test).toBe(1);
     });
 
     it('should allow access to pgp utilities via public pgp field', () => {
-      const helpers = store.pgp.helpers;
+      const helpers = testDB.pgp.helpers;
       expect(helpers).toBeDefined();
       expect(helpers.insert).toBeDefined();
       expect(helpers.update).toBeDefined();
@@ -75,14 +87,17 @@ describe('PostgresStore', () => {
 
     it('should maintain connection state through public db field', async () => {
       // Test multiple queries to ensure connection state
-      const result1 = await store.db.one('SELECT NOW() as timestamp1');
-      const result2 = await store.db.one('SELECT NOW() as timestamp2');
-      
+      const result1 = await testDB.db.one('SELECT NOW() as timestamp1');
+      const result2 = await testDB.db.one('SELECT NOW() as timestamp2');
+
       expect(result1.timestamp1).toBeDefined();
       expect(result2.timestamp2).toBeDefined();
-      expect(new Date(result2.timestamp2).getTime()).toBeGreaterThanOrEqual(
-        new Date(result1.timestamp1).getTime()
-      );
+      expect(new Date(result2.timestamp2).getTime()).toBeGreaterThanOrEqual(new Date(result1.timestamp1).getTime());
+    });
+
+    it('should throw error when pool is used after disconnect', async () => {
+      await testDB.close();
+      expect(testDB.db.connect()).rejects.toThrow();
     });
   });
 

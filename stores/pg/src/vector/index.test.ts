@@ -16,15 +16,33 @@ describe('PgVector', () => {
   });
 
   describe('Public Fields Access', () => {
+    let testDB: PgVector;
+    beforeAll(async () => {
+      testDB = new PgVector({ connectionString });
+    });
+    afterAll(async () => {
+      try {
+        await testDB.disconnect();
+      } catch {}
+    });
     it('should expose pool field as public', () => {
-      expect(vectorDB.pool).toBeDefined();
-      expect(typeof vectorDB.pool).toBe('object');
-      expect(vectorDB.pool.connect).toBeDefined();
-      expect(typeof vectorDB.pool.connect).toBe('function');
+      expect(testDB.pool).toBeDefined();
+      expect(typeof testDB.pool).toBe('object');
+      expect(testDB.pool.connect).toBeDefined();
+      expect(typeof testDB.pool.connect).toBe('function');
+      expect(testDB.pool).toBeInstanceOf(pg.Pool);
+    });
+
+    it('pool provides a working client connection', async () => {
+      const pool = testDB.pool;
+      const client = await pool.connect();
+      expect(typeof client.query).toBe('function');
+      expect(typeof client.release).toBe('function');
+      client.release();
     });
 
     it('should allow direct database connections via public pool field', async () => {
-      const client = await vectorDB.pool.connect();
+      const client = await testDB.pool.connect();
       try {
         const result = await client.query('SELECT 1 as test');
         expect(result.rows[0].test).toBe(1);
@@ -34,23 +52,23 @@ describe('PgVector', () => {
     });
 
     it('should provide access to pool configuration via public pool field', () => {
-      expect(vectorDB.pool.options).toBeDefined();
-      expect(vectorDB.pool.options.connectionString).toBe(connectionString);
-      expect(vectorDB.pool.options.max).toBeDefined();
-      expect(vectorDB.pool.options.idleTimeoutMillis).toBeDefined();
+      expect(testDB.pool.options).toBeDefined();
+      expect(testDB.pool.options.connectionString).toBe(connectionString);
+      expect(testDB.pool.options.max).toBeDefined();
+      expect(testDB.pool.options.idleTimeoutMillis).toBeDefined();
     });
 
     it('should allow pool monitoring via public pool field', () => {
-      expect(vectorDB.pool.totalCount).toBeDefined();
-      expect(vectorDB.pool.idleCount).toBeDefined();
-      expect(vectorDB.pool.waitingCount).toBeDefined();
-      expect(typeof vectorDB.pool.totalCount).toBe('number');
-      expect(typeof vectorDB.pool.idleCount).toBe('number');
-      expect(typeof vectorDB.pool.waitingCount).toBe('number');
+      expect(testDB.pool.totalCount).toBeDefined();
+      expect(testDB.pool.idleCount).toBeDefined();
+      expect(testDB.pool.waitingCount).toBeDefined();
+      expect(typeof testDB.pool.totalCount).toBe('number');
+      expect(typeof testDB.pool.idleCount).toBe('number');
+      expect(typeof testDB.pool.waitingCount).toBe('number');
     });
 
     it('should allow executing raw SQL via public pool field', async () => {
-      const client = await vectorDB.pool.connect();
+      const client = await testDB.pool.connect();
       try {
         // Test a simple vector-related query
         const result = await client.query('SELECT version()');
@@ -62,19 +80,71 @@ describe('PgVector', () => {
     });
 
     it('should maintain proper connection lifecycle via public pool field', async () => {
-      const initialIdleCount = vectorDB.pool.idleCount;
-      const initialTotalCount = vectorDB.pool.totalCount;
+      const initialIdleCount = testDB.pool.idleCount;
+      const initialTotalCount = testDB.pool.totalCount;
 
-      const client = await vectorDB.pool.connect();
-      
+      const client = await testDB.pool.connect();
+
       // After connecting, total count should be >= initial, idle count should be less
-      expect(vectorDB.pool.totalCount).toBeGreaterThanOrEqual(initialTotalCount);
-      expect(vectorDB.pool.idleCount).toBeLessThanOrEqual(initialIdleCount);
-      
+      expect(testDB.pool.totalCount).toBeGreaterThanOrEqual(initialTotalCount);
+      expect(testDB.pool.idleCount).toBeLessThanOrEqual(initialIdleCount);
+
       client.release();
-      
+
       // After releasing, idle count should return to at least initial value
-      expect(vectorDB.pool.idleCount).toBeGreaterThanOrEqual(initialIdleCount);
+      expect(testDB.pool.idleCount).toBeGreaterThanOrEqual(initialIdleCount);
+    });
+
+    it('allows performing a transaction', async () => {
+      const client = await testDB.pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows } = await client.query('SELECT 2 as value');
+        expect(rows[0].value).toBe(2);
+        await client.query('COMMIT');
+      } finally {
+        client.release();
+      }
+    });
+    it('releases client on query error', async () => {
+      const client = await testDB.pool.connect();
+      try {
+        await expect(client.query('SELECT * FROM not_a_real_table')).rejects.toThrow();
+      } finally {
+        client.release();
+      }
+    });
+
+    it('can use getPool() to query metadata for filter options (user scenario)', async () => {
+      // Insert vectors with metadata
+      await testDB.createIndex({ indexName: 'filter_test', dimension: 2 });
+      await testDB.upsert({
+        indexName: 'filter_test',
+        vectors: [
+          [0.1, 0.2],
+          [0.3, 0.4],
+          [0.5, 0.6],
+        ],
+        metadata: [
+          { category: 'A', color: 'red' },
+          { category: 'B', color: 'blue' },
+          { category: 'A', color: 'green' },
+        ],
+        ids: ['id1', 'id2', 'id3'],
+      });
+      // Use the pool to query unique categories
+      const { tableName } = testDB['getTableName']('filter_test');
+      const res = await testDB.pool.query(
+        `SELECT DISTINCT metadata->>'category' AS category FROM ${tableName} ORDER BY category`,
+      );
+      expect(res.rows.map(r => r.category).sort()).toEqual(['A', 'B']);
+      // Clean up
+      await testDB.deleteIndex({ indexName: 'filter_test' });
+    });
+
+    it('should throw error when pool is used after disconnect', async () => {
+      await testDB.disconnect();
+      expect(testDB.pool.connect()).rejects.toThrow();
     });
   });
 
