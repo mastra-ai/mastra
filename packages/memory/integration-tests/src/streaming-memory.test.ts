@@ -289,7 +289,6 @@ describe('Memory Streaming Tests', () => {
           { timeout: 2000 },
         );
 
-
         // Get fresh reference to messages after all waits complete
         const uiMessages = result.current.messages;
         const latestMessage = uiMessages.at(-1);
