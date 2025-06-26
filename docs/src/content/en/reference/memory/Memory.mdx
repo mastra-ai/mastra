@@ -62,7 +62,7 @@ const memory = new Memory({
       generateTitle: true, // Enable title generation using agent's model
       // Or use a different model for title generation
       // generateTitle: {
-      //   model: openai("gpt-3.5-turbo"), // Use cheaper model for titles
+      //   model: openai("gpt-4.1-nano"), // Use cheaper model for titles
       // },
     },
   },
@@ -120,7 +120,7 @@ const memory = new Memory({
   options: {
     threads: {
       generateTitle: {
-        model: openai("gpt-3.5-turbo"), // Cheaper model for titles
+        model: openai("gpt-4.1-nano"), // Cheaper model for titles
       },
     },
   },
@@ -145,8 +145,8 @@ const memory = new Memory({
           // Use different models based on context
           const userTier = ctx.get("userTier");
           return userTier === "premium" 
-            ? openai("gpt-4o-mini")
-            : openai("gpt-3.5-turbo");
+            ? openai("gpt-4.1")
+            : openai("gpt-4.1-nano");
         },
       },
     },
