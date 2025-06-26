@@ -438,13 +438,22 @@ export class Agent<
    * @param options Options for getting the LLM
    * @returns A promise that resolves to the LLM instance
    */
-  public getLLM({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
-    | MastraLLMBase
-    | Promise<MastraLLMBase> {
-    const model = this.getModel({ runtimeContext });
+  public getLLM({
+    runtimeContext = new RuntimeContext(),
+    model,
+  }: {
+    runtimeContext?: RuntimeContext;
+    model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel>;
+  } = {}): MastraLLMBase | Promise<MastraLLMBase> {
+    // If model is provided, resolve it; otherwise use the agent's model
+    const modelToUse = model
+      ? typeof model === 'function'
+        ? model({ runtimeContext })
+        : model
+      : this.getModel({ runtimeContext });
 
-    return resolveMaybePromise(model, model => {
-      const llm = new MastraLLM({ model, mastra: this.#mastra });
+    return resolveMaybePromise(modelToUse, resolvedModel => {
+      const llm = new MastraLLM({ model: resolvedModel, mastra: this.#mastra });
 
       // Apply stored primitives if available
       if (this.#primitives) {
@@ -553,24 +562,7 @@ export class Agent<
     model?: DynamicArgument<MastraLanguageModel>;
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
-    let llm;
-    if (model) {
-      // Use the provided model for title generation
-      const resolvedModel = typeof model === 'function' ? await model({ runtimeContext }) : model;
-      llm = new MastraLLM({ model: resolvedModel, mastra: this.#mastra });
-
-      // Apply stored primitives if available
-      if (this.#primitives) {
-        llm.__registerPrimitives(this.#primitives);
-      }
-
-      if (this.#mastra) {
-        llm.__registerMastra(this.#mastra);
-      }
-    } else {
-      // Use the agent's default model
-      llm = await this.getLLM({ runtimeContext });
-    }
+    const llm = await this.getLLM({ runtimeContext, model });
 
     const normMessage = new MessageList().add(message, 'user').get.all.ui().at(-1);
     if (!normMessage) {
