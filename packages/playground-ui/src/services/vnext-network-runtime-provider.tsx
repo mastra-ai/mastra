@@ -102,7 +102,6 @@ export function VNextMastraNetworkRuntimeProvider({
           }
           if (message.role === 'assistant') {
             const id = uuid();
-            const formattedMessageId = uuid();
             const parts = message.parts;
             const routingStep = parts?.[2];
             const responseStep = parts?.slice(3);
@@ -111,13 +110,23 @@ export function VNextMastraNetworkRuntimeProvider({
             const resourceStepId = routingDecision?.resourceType === 'agent' ? 'agent-step' : 'workflow-step';
 
             let finalResponse = responseStep ?? [];
+            console.log('finalResponse===', finalResponse);
             let runId = '';
 
-            let runResult = {};
+            let runResults: { runResult: any; runId: string; id: string }[] = [];
 
             if (resourceStepId === 'workflow-step') {
               const parsedResult = JSON.parse(responseStep?.[0]?.text ?? '{}') ?? {};
-              runResult = parsedResult?.runResult ?? {};
+              // const parsedResult = JSON.parse(responseStep?.[0]?.text ?? '{}') ?? {};
+              // runResult = parsedResult?.runResult ?? {};
+
+              runResults = finalResponse?.map(response => {
+                const parsedResult = JSON.parse(response?.text ?? '{}') ?? {};
+                return { runResult: parsedResult?.runResult ?? {}, runId: parsedResult?.runId ?? '', id: uuid() };
+              });
+
+              console.log('runResults===', runResults);
+
               runId = parsedResult?.runId ?? '';
             }
 
@@ -167,7 +176,7 @@ export function VNextMastraNetworkRuntimeProvider({
                   ],
                 },
                 ...finalResponse.map(
-                  response =>
+                  (response, index) =>
                     ({
                       role: 'assistant',
                       content: [
@@ -175,7 +184,7 @@ export function VNextMastraNetworkRuntimeProvider({
                       ],
                       metadata: {
                         custom: {
-                          id: formattedMessageId,
+                          id: runResults?.[index]?.id,
                         },
                       },
                     }) as ThreadMessageLike,
@@ -184,7 +193,9 @@ export function VNextMastraNetworkRuntimeProvider({
             });
 
             if (resourceStepId === 'workflow-step') {
-              run(JSON.stringify(runResult), formattedMessageId);
+              for (const runResult of runResults) {
+                run(JSON.stringify(runResult?.runResult), runResult?.id);
+              }
             }
           }
         }
