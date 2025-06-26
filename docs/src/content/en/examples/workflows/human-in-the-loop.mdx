@@ -106,11 +106,7 @@ const humanInputStep = createStep({
   }),
   execute: async ({ inputData, resumeData, suspend, getInitData }) => {
     if (!resumeData?.selection) {
-      await suspend({ suggestions: inputData?.suggestions });
-      return {
-        selection: "",
-        vacationDescription: inputData?.vacationDescription,
-      };
+      return suspend({ suggestions: inputData?.suggestions });
     }
 
     return {
@@ -212,7 +208,7 @@ import { select } from "@inquirer/prompts";
 import { humanInputStep } from "./workflows/human-in-the-loop-workflow";
 
 const workflow = mastra.getWorkflow("travelAgentWorkflow");
-const run = workflow.createRun({});
+const run = await workflow.createRunAsync();
 
 // Start the workflow with initial vacation description
 const result = await run.start({

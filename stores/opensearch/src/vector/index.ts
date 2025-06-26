@@ -11,9 +11,9 @@ import type {
 } from '@mastra/core';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { MastraVector } from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
 import { OpenSearchFilterTranslator } from './filter';
+import type { OpenSearchVectorFilter } from './filter';
 
 const METRIC_MAPPING = {
   cosine: 'cosinesimil',
@@ -27,7 +27,9 @@ const REVERSE_METRIC_MAPPING = {
   innerproduct: 'dotproduct',
 } as const;
 
-export class OpenSearchVector extends MastraVector {
+type OpenSearchVectorParams = QueryVectorParams<OpenSearchVectorFilter>;
+
+export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
   private client: OpenSearchClient;
 
   /**
@@ -243,7 +245,7 @@ export class OpenSearchVector extends MastraVector {
     filter,
     topK = 10,
     includeVector = false,
-  }: QueryVectorParams): Promise<QueryResult[]> {
+  }: OpenSearchVectorParams): Promise<QueryResult[]> {
     try {
       const translatedFilter = this.transformFilter(filter);
 
@@ -300,10 +302,10 @@ export class OpenSearchVector extends MastraVector {
   /**
    * Transforms the filter to the OpenSearch DSL.
    *
-   * @param {VectorFilter} filter - The filter to transform.
+   * @param {OpenSearchVectorFilter} filter - The filter to transform.
    * @returns {Record<string, any>} The transformed filter.
    */
-  private transformFilter(filter?: VectorFilter) {
+  private transformFilter(filter?: OpenSearchVectorFilter): any {
     const translator = new OpenSearchFilterTranslator();
     return translator.translate(filter);
   }

@@ -1,6 +1,7 @@
 import { MastraBase } from '@mastra/core/base';
 
 import type { RuntimeContext } from '@mastra/core/di';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import { isZodType } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -13,6 +14,8 @@ import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/p
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type {
   ClientCapabilities,
+  ElicitRequest,
+  ElicitResult,
   GetPromptResult,
   ListPromptsResult,
   LoggingLevel,
@@ -27,12 +30,14 @@ import {
   ListPromptsResultSchema,
   GetPromptResultSchema,
   PromptListChangedNotificationSchema,
+  ElicitRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { z } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import type { JSONSchema } from 'zod-from-json-schema';
+import { ElicitationClientActions } from './elicitationActions';
 import { PromptClientActions } from './promptActions';
 import { ResourceClientActions } from './resourceActions';
 
@@ -49,6 +54,9 @@ export interface LogMessage {
 }
 
 export type LogHandler = (logMessage: LogMessage) => void;
+
+// Elicitation handler type
+export type ElicitationHandler = (request: ElicitRequest['params']) => Promise<ElicitResult>;
 
 // Base options common to all server definitions
 type BaseServerOptions = {
@@ -129,7 +137,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private currentOperationContext: RuntimeContext | null = null;
   public readonly resources: ResourceClientActions;
   public readonly prompts: PromptClientActions;
-
+  public readonly elicitation: ElicitationClientActions;
   constructor({
     name,
     version = '1.0.0',
@@ -144,21 +152,25 @@ export class InternalMastraMCPClient extends MastraBase {
     this.enableServerLogs = server.enableServerLogs ?? true;
     this.serverConfig = server;
 
+    const clientCapabilities = { ...capabilities, elicitation: {} };
+
     this.client = new Client(
       {
         name,
         version,
       },
       {
-        capabilities,
+        capabilities: clientCapabilities,
       },
     );
 
     // Set up log message capturing
     this.setupLogging();
 
+
     this.resources = new ResourceClientActions({ client: this, logger: this.logger });
     this.prompts = new PromptClientActions({ client: this, logger: this.logger });
+    this.elicitation = new ElicitationClientActions({ client: this, logger: this.logger });
   }
 
   /**
@@ -449,6 +461,14 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
+  setElicitationRequestHandler(handler: ElicitationHandler): void {
+    this.log('debug', 'Setting elicitation request handler');
+    this.client.setRequestHandler(ElicitRequestSchema, async (request) => {
+      this.log('debug', `Received elicitation request: ${request.params.message}`);
+      return handler(request.params);
+    });
+  }
+
   private convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema,
   ): z.ZodType {
@@ -475,7 +495,48 @@ export class InternalMastraMCPClient extends MastraBase {
         originalJsonSchema: inputSchema,
       });
 
-      throw new Error(errorDetails);
+      throw new MastraError({
+        id: 'MCP_TOOL_INPUT_SCHEMA_CONVERSION_FAILED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        details: { error: errorDetails ?? 'Unknown error' },
+      });
+    }
+  }
+
+  private convertOutputSchema(
+    outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'] | JSONSchema,
+  ): z.ZodType | undefined {
+    if (!outputSchema) return
+    if (isZodType(outputSchema)) {
+      return outputSchema;
+    }
+
+    try {
+      return convertJsonSchemaToZod(outputSchema as JSONSchema);
+    } catch (error: unknown) {
+      let errorDetails: string | undefined;
+      if (error instanceof Error) {
+        errorDetails = error.stack;
+      } else {
+        // Attempt to stringify, fallback to String()
+        try {
+          errorDetails = JSON.stringify(error);
+        } catch {
+          errorDetails = String(error);
+        }
+      }
+      this.log('error', 'Failed to convert JSON schema to Zod schema using zodFromJsonSchema', {
+        error: errorDetails,
+        originalJsonSchema: outputSchema,
+      });
+
+      throw new MastraError({
+        id: 'MCP_TOOL_OUTPUT_SCHEMA_CONVERSION_FAILED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.USER,
+        details: { error: errorDetails ?? 'Unknown error' },
+      });
     }
   }
 
@@ -490,6 +551,7 @@ export class InternalMastraMCPClient extends MastraBase {
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
           inputSchema: this.convertInputSchema(tool.inputSchema),
+          outputSchema: this.convertOutputSchema(tool.outputSchema),
           execute: async ({ context, runtimeContext }: { context: any; runtimeContext?: RuntimeContext | null }) => {
             const previousContext = this.currentOperationContext;
             this.currentOperationContext = runtimeContext || null; // Set current context
@@ -505,6 +567,7 @@ export class InternalMastraMCPClient extends MastraBase {
                   timeout: this.timeout,
                 },
               );
+
               this.log('debug', `Tool executed successfully: ${tool.name}`);
               return res;
             } catch (e) {

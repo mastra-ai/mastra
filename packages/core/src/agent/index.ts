@@ -1228,7 +1228,7 @@ export class Agent<
           });
         }
 
-        let [memoryMessages, memorySystemMessage, userContextMessage] =
+        let [memoryMessages, memorySystemMessage] =
           thread.id && memory
             ? await Promise.all([
                 memory
@@ -1241,7 +1241,6 @@ export class Agent<
                   })
                   .then(r => r.messagesV2),
                 memory.getSystemMessage({ threadId: threadObject.id, memoryConfig }),
-                memory.getUserContextMessage({ threadId: threadObject.id }),
               ])
             : [[], null, null];
 
@@ -1269,10 +1268,6 @@ export class Agent<
           messageList.addSystem(memorySystemMessage, 'memory');
         }
 
-        if (userContextMessage) {
-          messageList.add(userContextMessage, 'context');
-        }
-
         messageList
           .add(
             memoryMessages.filter(m => m.threadId === threadObject.id), // filter out messages from other threads. those are added to system message above
@@ -1282,8 +1277,7 @@ export class Agent<
           .add(messages, 'user');
 
         const systemMessage =
-          messageList
-            .getSystemMessages()
+          [...messageList.getSystemMessages(), ...messageList.getSystemMessages('memory')]
             ?.map(m => m.content)
             ?.join(`\n`) ?? undefined;
 
@@ -1301,7 +1295,6 @@ export class Agent<
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
           .add(context || [], 'context')
-          .add(userContextMessage || [], 'context')
           .add(processedMemoryMessages, 'memory')
           .add(messageList.get.input.v2(), 'user')
           .get.all.prompt();
@@ -1354,7 +1347,19 @@ export class Agent<
           threadId,
         });
         const memory = this.getMemory();
-        const thread = threadAfter || (threadId ? await memory?.getThreadById({ threadId }) : undefined);
+        const messageListResponses = new MessageList({ threadId, resourceId })
+          .add(result.response.messages, 'response')
+          .get.all.core();
+
+        const usedWorkingMemory = messageListResponses?.some(
+          m => m.role === 'tool' && m?.content?.some(c => c?.toolName === 'updateWorkingMemory'),
+        );
+        // working memory updates the thread, so we need to get the latest thread if we used it
+        const thread = usedWorkingMemory
+          ? threadId
+            ? await memory?.getThreadById({ threadId })
+            : undefined
+          : threadAfter;
 
         if (memory && resourceId && thread) {
           try {
@@ -1547,7 +1552,7 @@ export class Agent<
         messages: messageObjects,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.({ ...result, runId });
         },
         maxSteps: maxSteps,
         runId,
@@ -1586,7 +1591,7 @@ export class Agent<
         messages: messageObjects,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.({ ...result, runId });
         },
         maxSteps,
         runId,
@@ -1620,7 +1625,7 @@ export class Agent<
       tools: convertedTools,
       structuredOutput: output,
       onStepFinish: (result: any) => {
-        return onStepFinish?.(result);
+        return onStepFinish?.({ ...result, runId });
       },
       maxSteps,
       runId,
@@ -1751,7 +1756,7 @@ export class Agent<
         temperature,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.({ ...result, runId });
         },
         onFinish: async (result: any) => {
           try {
@@ -1771,7 +1776,7 @@ export class Agent<
               runId,
             });
           }
-          await onFinish?.(result);
+          await onFinish?.({ ...result, runId });
         },
         maxSteps,
         runId,
@@ -1797,7 +1802,7 @@ export class Agent<
         temperature,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.({ ...result, runId });
         },
         onFinish: async (result: any) => {
           try {
@@ -1817,7 +1822,7 @@ export class Agent<
               runId,
             });
           }
-          await onFinish?.(result);
+          await onFinish?.({ ...result, runId });
         },
         maxSteps,
         runId,
@@ -1841,7 +1846,7 @@ export class Agent<
       temperature,
       structuredOutput: output,
       onStepFinish: (result: any) => {
-        return onStepFinish?.(result);
+        return onStepFinish?.({ ...result, runId });
       },
       onFinish: async (result: any) => {
         try {
@@ -1861,7 +1866,7 @@ export class Agent<
             runId,
           });
         }
-        await onFinish?.(result);
+        await onFinish?.({ ...result, runId });
       },
       runId,
       toolChoice,

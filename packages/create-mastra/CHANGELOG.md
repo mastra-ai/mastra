@@ -1,5 +1,38 @@
 # create-mastra
 
+## 0.10.7
+
+### Patch Changes
+
+- a344ac7: Fix tool streaming in agent network
+
+## 0.10.7-alpha.0
+
+### Patch Changes
+
+- a344ac7: Fix tool streaming in agent network
+
+## 0.10.6
+
+### Patch Changes
+
+- 5d74aab: vNext network in playground
+- 9102d89: Fix final output not showing on playground for previously suspended steps
+- 21ffb97: Make dynamic form handle schema better
+- f9b4350: fix icons not showing on all agents
+
+## 0.10.6-alpha.3
+
+### Patch Changes
+
+- f9b4350: fix icons not showing on all agents
+
+## 0.10.6-alpha.2
+
+### Patch Changes
+
+- 5d74aab: vNext network in playground
+
 ## 0.10.6-alpha.1
 
 ### Patch Changes

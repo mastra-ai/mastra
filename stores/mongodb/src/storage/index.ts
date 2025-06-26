@@ -462,7 +462,15 @@ export class MongoDBStore extends MastraStorage {
       const threadsCollection = await this.getCollection(TABLE_THREADS);
 
       await Promise.all([
-        collection.insertMany(messagesToInsert),
+        collection.bulkWrite(
+          messagesToInsert.map(msg => ({
+            updateOne: {
+              filter: { id: msg.id },
+              update: { $set: msg },
+              upsert: true,
+            },
+          })),
+        ),
         threadsCollection.updateOne({ id: threadId }, { $set: { updatedAt: new Date() } }),
       ]);
 

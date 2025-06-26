@@ -5,6 +5,8 @@ import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
+const defaultTimeout = 3 * 60 * 1000;
+
 let maxRetries = 5;
 function retryWithTimeout(fn, timeout, name, retryCount = 0) {
   const timeoutPromise = new Promise((_, reject) => {
@@ -53,7 +55,7 @@ export async function prepareMonorepo(monorepoDir, glob) {
   let shelvedChanges = false;
 
   try {
-    const gitStatus = execSync('git status --porcelain', {
+    const gitStatus = await execAsync('git status --porcelain', {
       cwd: monorepoDir,
       encoding: 'utf8',
     });
@@ -79,7 +81,6 @@ export async function prepareMonorepo(monorepoDir, glob) {
 
       for (const file of packageFiles) {
         const content = readFileSync(join(monorepoDir, file), 'utf8');
-        const updated = content.replace(/"workspace:\^"/g, '"workspace:*"');
 
         const parsed = JSON.parse(content);
         if (parsed?.peerDependencies?.['@mastra/core']) {
@@ -97,7 +98,7 @@ export async function prepareMonorepo(monorepoDir, glob) {
           stdio: ['inherit', 'inherit', 'inherit'],
         });
       },
-      10000,
+      defaultTimeout,
       'pnpm changeset pre exit',
     );
 
@@ -108,7 +109,7 @@ export async function prepareMonorepo(monorepoDir, glob) {
           stdio: ['inherit', 'inherit', 'inherit'],
         });
       },
-      10000,
+      defaultTimeout,
       'pnpm changeset version --snapshot create-mastra-e2e-test',
     );
   } catch (error) {

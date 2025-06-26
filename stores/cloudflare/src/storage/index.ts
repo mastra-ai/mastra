@@ -1137,25 +1137,27 @@ export class CloudflareStore extends MastraStorage {
 
     try {
       // Validate message structure and ensure dates
-      const validatedMessages = messages.map((message, index) => {
-        const errors: string[] = [];
-        if (!message.id) errors.push('id is required');
-        if (!message.threadId) errors.push('threadId is required');
-        if (!message.content) errors.push('content is required');
-        if (!message.role) errors.push('role is required');
-        if (!message.createdAt) errors.push('createdAt is required');
+      const validatedMessages = messages
+        .map((message, index) => {
+          const errors: string[] = [];
+          if (!message.id) errors.push('id is required');
+          if (!message.threadId) errors.push('threadId is required');
+          if (!message.content) errors.push('content is required');
+          if (!message.role) errors.push('role is required');
+          if (!message.createdAt) errors.push('createdAt is required');
 
-        if (errors.length > 0) {
-          throw new Error(`Invalid message at index ${index}: ${errors.join(', ')}`);
-        }
+          if (errors.length > 0) {
+            throw new Error(`Invalid message at index ${index}: ${errors.join(', ')}`);
+          }
 
-        return {
-          ...message,
-          createdAt: this.ensureDate(message.createdAt)!,
-          type: message.type || 'v2',
-          _index: index,
-        };
-      });
+          return {
+            ...message,
+            createdAt: this.ensureDate(message.createdAt)!,
+            type: message.type || 'v2',
+            _index: index,
+          };
+        })
+        .filter(m => !!m);
 
       // Group messages by thread for batch processing
       const messagesByThread = validatedMessages.reduce((acc, message) => {
