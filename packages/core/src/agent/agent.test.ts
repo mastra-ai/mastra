@@ -20,6 +20,66 @@ import { Agent } from './index';
 
 config();
 
+class MockMemory extends MastraMemory {
+  threads: Record<string, StorageThreadType> = {};
+
+  constructor() {
+    super({ name: 'mock' });
+    Object.defineProperty(this, 'storage', {
+      get: () => ({
+        init: async () => {},
+        getThreadById: this.getThreadById.bind(this),
+        saveThread: async ({ thread }: { thread: StorageThreadType }) => {
+          return this.saveThread({ thread });
+        },
+      }),
+    });
+    this._hasOwnStorage = true;
+  }
+
+  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+    return this.threads[threadId] || null;
+  }
+
+  async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
+    const newThread = { ...thread, updatedAt: new Date() };
+    if (!newThread.createdAt) {
+      newThread.createdAt = new Date();
+    }
+    this.threads[thread.id] = newThread;
+    return this.threads[thread.id];
+  }
+
+  async rememberMessages() {
+    return { messages: [], messagesV2: [] };
+  }
+  async getThreadsByResourceId() {
+    return [];
+  }
+  async saveMessages() {
+    return [];
+  }
+  async query() {
+    return { messages: [], uiMessages: [] };
+  }
+  async deleteThread(threadId: string) {
+    delete this.threads[threadId];
+  }
+
+  // Add missing method implementations
+  async getWorkingMemory() {
+    return null;
+  }
+
+  async getWorkingMemoryTemplate() {
+    return null;
+  }
+
+  getMergedThreadConfig(config?: MemoryConfig) {
+    return config || {};
+  }
+}
+
 const mockFindUser = vi.fn().mockImplementation(async data => {
   const list = [
     { name: 'Dero Israel', email: 'dero@mail.com' },
@@ -584,6 +644,371 @@ describe('agent', () => {
     expect(userMsg?.content).toEqual([{ type: 'text', text: 'Hello' }]); // convertToCoreMessages makes text content an array
   });
 
+  it('should use custom model for title generation when provided in generateTitle config', async () => {
+    // Track which model was used for title generation
+    let titleModelUsed = false;
+    let agentModelUsed = false;
+
+    // Create a mock model for the agent's main model
+    const agentModel = new MockLanguageModelV1({
+      doGenerate: async () => {
+        agentModelUsed = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: `Agent model response`,
+        };
+      },
+    });
+
+    // Create a different mock model for title generation
+    const titleModel = new MockLanguageModelV1({
+      doGenerate: async () => {
+        titleModelUsed = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 5, completionTokens: 10 },
+          text: `Custom Title Model Response`,
+        };
+      },
+    });
+
+    // Create memory with generateTitle config using custom model
+    const mockMemory = new MockMemory();
+
+    // Override getMergedThreadConfig to return our test config
+    mockMemory.getMergedThreadConfig = () => {
+      return {
+        threads: {
+          generateTitle: {
+            model: titleModel,
+          },
+        },
+      };
+    };
+
+    const agent = new Agent({
+      name: 'title-test-agent',
+      instructions: 'test agent for title generation',
+      model: agentModel,
+      memory: mockMemory,
+    });
+
+    // Generate a response that will trigger title generation
+    await agent.generate('What is the weather like today?', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-1',
+          title: 'New Thread 2024-01-01T00:00:00.000Z', // Starts with "New Thread" to trigger title generation
+        },
+      },
+    });
+
+    // The agent's main model should have been used for the response
+    expect(agentModelUsed).toBe(true);
+
+    // Give some time for the async title generation to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // The custom title model should have been used for title generation
+    expect(titleModelUsed).toBe(true);
+
+    // Verify the thread was created
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+    expect(thread).toBeDefined();
+    expect(thread?.resourceId).toBe('user-1');
+    expect(thread?.title).toBe('Custom Title Model Response');
+  });
+
+  it('should support dynamic model selection for title generation', async () => {
+    let usedModelName = '';
+
+    // Create two different models
+    const premiumModel = new MockLanguageModelV1({
+      doGenerate: async () => {
+        usedModelName = 'premium';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 5, completionTokens: 10 },
+          text: `Premium Title`,
+        };
+      },
+    });
+
+    const standardModel = new MockLanguageModelV1({
+      doGenerate: async () => {
+        usedModelName = 'standard';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 5, completionTokens: 10 },
+          text: `Standard Title`,
+        };
+      },
+    });
+
+    const mockMemory = new MockMemory();
+
+    // Override getMergedThreadConfig to return dynamic model selection
+    mockMemory.getMergedThreadConfig = () => {
+      return {
+        threads: {
+          generateTitle: {
+            model: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
+              const userTier = runtimeContext.get('userTier');
+              return userTier === 'premium' ? premiumModel : standardModel;
+            },
+          },
+        },
+      };
+    };
+
+    const agent = new Agent({
+      name: 'dynamic-title-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    // Generate with premium context
+    const runtimeContext = new RuntimeContext();
+    runtimeContext.set('userTier', 'premium');
+
+    await agent.generate('Test message', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-premium',
+          title: 'New Thread 2024-01-01T00:00:00.000Z',
+        },
+      },
+      runtimeContext,
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(usedModelName).toBe('premium');
+
+    // Reset and test with standard tier
+    usedModelName = '';
+    const standardContext = new RuntimeContext();
+    standardContext.set('userTier', 'standard');
+
+    await agent.generate('Test message', {
+      memory: {
+        resource: 'user-2',
+        thread: {
+          id: 'thread-standard',
+          title: 'New Thread 2024-01-01T00:00:00.000Z',
+        },
+      },
+      runtimeContext: standardContext,
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(usedModelName).toBe('standard');
+  });
+
+  it('should handle boolean generateTitle config for backward compatibility', async () => {
+    let titleGenerationCallCount = 0;
+    let agentCallCount = 0;
+
+    const mockMemory = new MockMemory();
+
+    // Test with generateTitle: true
+    mockMemory.getMergedThreadConfig = () => {
+      return {
+        threads: {
+          generateTitle: true,
+        },
+      };
+    };
+
+    const agent = new Agent({
+      name: 'boolean-title-agent',
+      instructions: 'test agent',
+      model: new MockLanguageModelV1({
+        doGenerate: async options => {
+          // Check if this is for title generation based on the prompt
+          const messages = options.prompt;
+          const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+          if (isForTitle) {
+            titleGenerationCallCount++;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 5, completionTokens: 10 },
+              text: `Generated Title`,
+            };
+          } else {
+            agentCallCount++;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 10, completionTokens: 20 },
+              text: `Agent Response`,
+            };
+          }
+        },
+      }),
+      memory: mockMemory,
+    });
+
+    await agent.generate('Test message', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-bool',
+          title: 'New Thread 2024-01-01T00:00:00.000Z',
+        },
+      },
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(titleGenerationCallCount).toBe(1);
+
+    // Test with generateTitle: false
+    titleGenerationCallCount = 0;
+    agentCallCount = 0;
+    mockMemory.getMergedThreadConfig = () => {
+      return {
+        threads: {
+          generateTitle: false,
+        },
+      };
+    };
+
+    await agent.generate('Test message', {
+      memory: {
+        resource: 'user-2',
+        thread: {
+          id: 'thread-bool-false',
+          title: 'New Thread 2024-01-01T00:00:00.000Z',
+        },
+      },
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(titleGenerationCallCount).toBe(0); // No title generation should happen
+    expect(agentCallCount).toBe(1); // But main agent should still be called
+  });
+
+  it('should handle errors in title generation gracefully', async () => {
+    const mockMemory = new MockMemory();
+
+    // Pre-create the thread with the expected title
+    const originalTitle = 'New Thread 2024-01-01T00:00:00.000Z';
+    await mockMemory.saveThread({
+      thread: {
+        id: 'thread-error',
+        title: originalTitle,
+        resourceId: 'user-1',
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      },
+    });
+
+    mockMemory.getMergedThreadConfig = () => {
+      return {
+        threads: {
+          generateTitle: {
+            model: new MockLanguageModelV1({
+              doGenerate: async () => {
+                throw new Error('Title generation failed');
+              },
+            }),
+          },
+        },
+      };
+    };
+
+    const agent = new Agent({
+      name: 'error-title-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    // This should not throw, title generation happens async
+    await agent.generate('Test message', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-error',
+          title: originalTitle,
+        },
+      },
+    });
+
+    // Give time for async title generation
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Thread should still exist with the original title (preserved when generation fails)
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-error' });
+    expect(thread).toBeDefined();
+    expect(thread?.title).toBe(originalTitle);
+  });
+
+  it('should not generate title when config is undefined or null', async () => {
+    let titleGenerationCallCount = 0;
+    let agentCallCount = 0;
+    const mockMemory = new MockMemory();
+
+    // Test with undefined config
+    mockMemory.getMergedThreadConfig = () => {
+      return {};
+    };
+
+    const agent = new Agent({
+      name: 'undefined-config-agent',
+      instructions: 'test agent',
+      model: new MockLanguageModelV1({
+        doGenerate: async options => {
+          // Check if this is for title generation based on the prompt
+          const messages = options.prompt;
+          const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+          if (isForTitle) {
+            titleGenerationCallCount++;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 5, completionTokens: 10 },
+              text: `Should not be called`,
+            };
+          } else {
+            agentCallCount++;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 10, completionTokens: 20 },
+              text: `Agent Response`,
+            };
+          }
+        },
+      }),
+      memory: mockMemory,
+    });
+
+    await agent.generate('Test message', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-undefined',
+          title: 'New Thread 2024-01-01T00:00:00.000Z',
+        },
+      },
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(titleGenerationCallCount).toBe(0); // No title generation should happen
+    expect(agentCallCount).toBe(1); // But main agent should still be called
+  });
+
   describe('voice capabilities', () => {
     class MockVoice extends MastraVoice {
       async speak(): Promise<NodeJS.ReadableStream> {
@@ -845,58 +1270,6 @@ describe('agent', () => {
 });
 
 describe('agent memory with metadata', () => {
-  class MockMemory extends MastraMemory {
-    threads: Record<string, StorageThreadType> = {};
-
-    constructor() {
-      super({ name: 'mock' });
-      Object.defineProperty(this, 'storage', {
-        get: () => ({
-          init: async () => {},
-          getThreadById: this.getThreadById.bind(this),
-          saveThread: async ({ thread }: { thread: StorageThreadType }) => {
-            return this.saveThread({ thread });
-          },
-        }),
-      });
-      this._hasOwnStorage = true;
-    }
-
-    async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-      return this.threads[threadId] || null;
-    }
-
-    async saveThread({
-      thread,
-    }: {
-      thread: StorageThreadType;
-      memoryConfig?: MemoryConfig;
-    }): Promise<StorageThreadType> {
-      const newThread = { ...thread, updatedAt: new Date() };
-      if (!newThread.createdAt) {
-        newThread.createdAt = new Date();
-      }
-      this.threads[thread.id] = newThread;
-      return this.threads[thread.id];
-    }
-
-    async rememberMessages() {
-      return { messages: [], messagesV2: [] };
-    }
-    async getThreadsByResourceId() {
-      return [];
-    }
-    async saveMessages() {
-      return [];
-    }
-    async query() {
-      return { messages: [], uiMessages: [] };
-    }
-    async deleteThread(threadId: string) {
-      delete this.threads[threadId];
-    }
-  }
-
   let dummyModel;
   beforeEach(() => {
     dummyModel = new MockLanguageModelV1({
