@@ -831,13 +831,11 @@ describe('agent', () => {
       name: 'boolean-title-agent',
       instructions: 'test agent',
       model: new MockLanguageModelV1({
-        doGenerate: async (options) => {
+        doGenerate: async options => {
           // Check if this is for title generation based on the prompt
           const messages = options.prompt;
-          const isForTitle = messages.some((msg: any) => 
-            msg.content?.includes?.('you will generate a short title')
-          );
-          
+          const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
           if (isForTitle) {
             titleGenerationCallCount++;
             return {
@@ -969,13 +967,11 @@ describe('agent', () => {
       name: 'undefined-config-agent',
       instructions: 'test agent',
       model: new MockLanguageModelV1({
-        doGenerate: async (options) => {
+        doGenerate: async options => {
           // Check if this is for title generation based on the prompt
           const messages = options.prompt;
-          const isForTitle = messages.some((msg: any) => 
-            msg.content?.includes?.('you will generate a short title')
-          );
-          
+          const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
           if (isForTitle) {
             titleGenerationCallCount++;
             return {
