@@ -274,7 +274,7 @@ Configuration options for memory management:
               type: "boolean | { model: LanguageModelV1 | ((ctx: RuntimeContext) => LanguageModelV1 | Promise<LanguageModelV1>) }",
               isOptional: true,
               description:
-                "Controls automatic thread title generation from the user's first message. Can be a boolean to enable/disable using the agent's model, or an object with a custom model for title generation (useful for cost optimization).",
+                "Controls automatic thread title generation from the user's first message. Can be a boolean to enable/disable using the agent's model, or an object with a custom model for title generation (useful for cost optimization). Example: { model: openai('gpt-4.1-nano') }",
             },
           ],
         },
