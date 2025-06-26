@@ -75,6 +75,7 @@ import {
   getVNextNetworksHandler,
   streamGenerateVNextNetworkHandler,
   loopVNextNetworkHandler,
+  loopStreamVNextNetworkHandler,
 } from './handlers/vNextNetwork';
 import { getListenerHandler, getSpeakersHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
@@ -584,10 +585,65 @@ ${err.stack.split('\n').slice(1).join('\n')}
   );
 
   app.post(
+    '/api/networks/v-next/:networkId/loop-stream',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Stream a v-next network loop',
+      tags: ['vNextNetworks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                message: {
+                  type: 'string',
+                  description: 'Message for the v-next network',
+                },
+                threadId: {
+                  type: 'string',
+                  description: 'Thread Id of the conversation',
+                },
+                resourceId: {
+                  type: 'string',
+                  description: 'Resource Id of the conversation',
+                },
+                maxIterations: {
+                  type: 'number',
+                  description: 'Maximum number of iterations to run',
+                },
+              },
+              required: ['message'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Streamed response',
+        },
+        404: {
+          description: 'v-next Network not found',
+        },
+      },
+    }),
+    loopStreamVNextNetworkHandler,
+  );
+
+  app.post(
     '/api/networks/v-next/:networkId/stream',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Generate a response from a v-next network',
+      description: 'Stream a response from a v-next network',
       tags: ['vNextNetworks'],
       parameters: [
         {
@@ -624,7 +680,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
       responses: {
         200: {
-          description: 'Generated response',
+          description: 'Streamed response',
         },
         404: {
           description: 'v-next Network not found',

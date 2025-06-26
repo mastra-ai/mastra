@@ -7,13 +7,14 @@ import {
   AppendMessage,
   AssistantRuntimeProvider,
 } from '@assistant-ui/react';
-import { useState, ReactNode, useEffect, useRef } from 'react';
+import { useState, ReactNode, useEffect, useRef, useContext } from 'react';
 
 import { ChatProps } from '@/types';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useVNextNetworkChat } from '@/services/vnext-network-chat-provider';
 import { useMessages } from './vnext-message-provider';
 import { formatJSON } from '@/lib/formatting';
+import { NetworkContext } from '@/domains/networks';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -40,6 +41,7 @@ export function VNextMastraNetworkRuntimeProvider({
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
 
   const { handleStep, state, setState } = useVNextNetworkChat();
+  const { chatWithLoop, maxIterations } = useContext(NetworkContext);
   const id = runIdRef.current;
   const currentState = id ? state[id] : undefined;
 
@@ -200,55 +202,181 @@ export function VNextMastraNetworkRuntimeProvider({
     setIsRunning(true);
 
     try {
-      await network.stream(
-        {
-          message: input,
-          threadId,
-          resourceId: networkId,
-        },
-        record => {
-          if (runIdRef.current) {
-            if ((record as any).type === 'tool-call-delta') {
-              appendToLastMessage((record as any).argsTextDelta);
-            } else if ((record as any).type === 'tool-call-streaming-start') {
-              setMessages(msgs => [...msgs, { role: 'assistant', content: [{ type: 'text', text: '' }] }]);
-              setTimeout(() => {
-                refreshThreadList?.();
-              }, 500);
-              return;
-            } else {
-              handleStep(runIdRef.current, record);
-            }
-          } else if ((record as any).type === 'start') {
-            const id = uuid();
-            runIdRef.current = id;
+      if (chatWithLoop) {
+        const run = async (result: string, messageId: string) => {
+          const formatted = await formatJSON(result);
 
-            setMessages(currentConversation => {
-              return [
-                ...currentConversation,
-                {
-                  role: 'assistant',
-                  metadata: {
-                    custom: {
-                      id,
-                    },
-                  },
-                  content: [
-                    {
-                      type: 'text',
-                      text: 'start',
-                    },
-                  ],
-                },
-              ];
+          const finalResponse = `\`\`\`json\n${formatted}\`\`\``;
+
+          setMessages(currentConversation => {
+            return currentConversation.map(message => {
+              if (message.metadata?.custom?.id === messageId) {
+                return { ...message, content: [{ type: 'text', text: finalResponse }] };
+              }
+              return message;
             });
-          }
+          });
+        };
 
-          setTimeout(() => {
-            refreshThreadList?.();
-          }, 500);
-        },
-      );
+        let isAgentNetworkOuterWorkflowCompleted = false;
+
+        await network.loopStream(
+          {
+            message: input,
+            threadId,
+            resourceId: networkId,
+            maxIterations,
+          },
+          async (record: any) => {
+            if (
+              (record as any).type === 'step-start' &&
+              (record as any).payload?.id === 'Agent-Network-Outer-Workflow'
+            ) {
+              const id = uuid();
+              runIdRef.current = id;
+
+              setMessages(currentConversation => {
+                return [
+                  ...currentConversation,
+                  {
+                    role: 'assistant',
+                    metadata: {
+                      custom: {
+                        id,
+                      },
+                    },
+                    content: [
+                      {
+                        type: 'text',
+                        text: 'start',
+                      },
+                    ],
+                  },
+                ];
+              });
+            } else if (runIdRef.current) {
+              if ((record as any).type === 'tool-call-delta') {
+                appendToLastMessage((record as any).argsTextDelta);
+              } else if ((record as any).type === 'tool-call-streaming-start') {
+                setMessages(msgs => [...msgs, { role: 'assistant', content: [{ type: 'text', text: '' }] }]);
+                setTimeout(() => {
+                  refreshThreadList?.();
+                }, 500);
+                return;
+              } else {
+                if (
+                  (record as any).type === 'step-finish' &&
+                  (record as any).payload?.id === 'Agent-Network-Outer-Workflow'
+                ) {
+                  if (!isAgentNetworkOuterWorkflowCompleted) {
+                    handleStep(runIdRef.current, { ...record, type: 'finish' });
+                    runIdRef.current = undefined;
+                  }
+                } else if ((record as any).type === 'step-result' && (record as any).payload?.id === 'workflow-step') {
+                  handleStep(runIdRef.current, record);
+                  const parsedResult = JSON.parse(record?.payload?.output?.result ?? '{}') ?? {};
+                  const runResult = parsedResult?.runResult ?? {};
+                  const formatedOutputId = uuid();
+
+                  setMessages(msgs => [
+                    ...msgs,
+                    {
+                      role: 'assistant',
+                      content: [
+                        {
+                          type: 'text',
+                          text: '',
+                        },
+                      ],
+                      metadata: {
+                        custom: {
+                          id: formatedOutputId,
+                        },
+                      },
+                    },
+                  ]);
+
+                  run(JSON.stringify(runResult), formatedOutputId);
+                } else if (
+                  record.payload?.id === 'Agent-Network-Outer-Workflow' ||
+                  record.payload?.id === 'finish-step'
+                ) {
+                  if (record.type === 'step-result' && record.payload?.id === 'Agent-Network-Outer-Workflow') {
+                    isAgentNetworkOuterWorkflowCompleted = record?.payload?.output?.isComplete;
+                  }
+                } else {
+                  handleStep(runIdRef.current, record);
+                }
+              }
+            }
+
+            if (record.type === 'step-result' && record.payload?.id === 'final-step') {
+              setMessages(msgs => [
+                ...msgs,
+                { role: 'assistant', content: [{ type: 'text', text: record.payload?.output?.result }] },
+              ]);
+            }
+
+            if (record.type === 'step-finish' && record.payload?.id === 'final-step') {
+              runIdRef.current = undefined;
+            }
+
+            setTimeout(() => {
+              refreshThreadList?.();
+            }, 500);
+          },
+        );
+      } else {
+        await network.stream(
+          {
+            message: input,
+            threadId,
+            resourceId: networkId,
+          },
+          (record: any) => {
+            if (runIdRef.current) {
+              if ((record as any).type === 'tool-call-delta') {
+                appendToLastMessage((record as any).argsTextDelta);
+              } else if ((record as any).type === 'tool-call-streaming-start') {
+                setMessages(msgs => [...msgs, { role: 'assistant', content: [{ type: 'text', text: '' }] }]);
+                setTimeout(() => {
+                  refreshThreadList?.();
+                }, 500);
+                return;
+              } else {
+                handleStep(runIdRef.current, record);
+              }
+            } else if ((record as any).type === 'start') {
+              const id = uuid();
+              runIdRef.current = id;
+
+              setMessages(currentConversation => {
+                return [
+                  ...currentConversation,
+                  {
+                    role: 'assistant',
+                    metadata: {
+                      custom: {
+                        id,
+                      },
+                    },
+                    content: [
+                      {
+                        type: 'text',
+                        text: 'start',
+                      },
+                    ],
+                  },
+                ];
+              });
+            }
+
+            setTimeout(() => {
+              refreshThreadList?.();
+            }, 500);
+          },
+        );
+      }
 
       setIsRunning(false);
     } catch (error) {

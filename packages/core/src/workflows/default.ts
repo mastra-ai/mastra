@@ -370,8 +370,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     const stepInfo = {
       ...stepResults[step.id],
-      payload: prevOutput,
-      ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : {}),
+      ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
       ...(startTime ? { startedAt: startTime } : {}),
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
     };
@@ -403,6 +402,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       type: 'step-start',
       payload: {
         id: step.id,
+        ...stepInfo,
+        status: 'running',
       },
     });
 
@@ -536,7 +537,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         type: 'step-suspended',
         payload: {
           id: step.id,
-          output: execResults.output,
+          ...execResults,
         },
       });
     } else {
@@ -544,8 +545,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         type: 'step-result',
         payload: {
           id: step.id,
-          status: execResults.status,
-          output: execResults.output,
+          ...execResults,
         },
       });
 
@@ -1122,6 +1122,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         type: 'step-waiting',
         payload: {
           id: entry.id,
+          payload: prevOutput,
+          startedAt,
+          status: 'waiting',
         },
       });
       await this.persistStepUpdate({
@@ -1184,6 +1187,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         type: 'step-waiting',
         payload: {
           id: entry.id,
+          payload: prevOutput,
+          startedAt,
+          status: 'waiting',
         },
       });
 
@@ -1248,6 +1254,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         type: 'step-waiting',
         payload: {
           id: entry.step.id,
+          payload: prevOutput,
+          startedAt,
+          status: 'waiting',
         },
       });
 

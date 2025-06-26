@@ -1,9 +1,10 @@
 import { client } from '@/lib/client';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { useDebouncedCallback } from 'use-debounce';
 import { LegacyWorkflowRunResult, WorkflowWatchResult } from '@mastra/client-js';
+import { WorkflowRunStatus } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
 
 export type ExtendedLegacyWorkflowRunResult = LegacyWorkflowRunResult & {
   sanitizedOutput?: string | null;
@@ -233,6 +234,233 @@ export const useWatchWorkflow = () => {
   return {
     watchWorkflow,
     watchResult,
+  };
+};
+
+export const useStreamWorkflow = () => {
+  const [streamResult, setStreamResult] = useState<WorkflowWatchResult>({} as WorkflowWatchResult);
+  const [isStreaming, setIsStreaming] = useState(false);
+
+  const streamWorkflow = useMutation({
+    mutationFn: async ({
+      workflowId,
+      runId,
+      inputData,
+      runtimeContext: playgroundRuntimeContext,
+    }: {
+      workflowId: string;
+      runId: string;
+      inputData: Record<string, unknown>;
+      runtimeContext: Record<string, unknown>;
+    }) => {
+      setIsStreaming(true);
+      setStreamResult({} as WorkflowWatchResult);
+      const runtimeContext = new RuntimeContext();
+      Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
+        runtimeContext.set(key as keyof RuntimeContext, value);
+      });
+      const workflow = client.getWorkflow(workflowId);
+      const stream = await workflow.stream({ runId, inputData, runtimeContext });
+
+      if (!stream) throw new Error('No stream returned');
+
+      // Get a reader from the ReadableStream
+      const reader = stream.getReader();
+
+      try {
+        let status = '' as WorkflowRunStatus;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value.type === 'start') {
+            setStreamResult((prev: WorkflowWatchResult) => ({
+              ...prev,
+              runId: value.payload.runId,
+              eventTimestamp: new Date(),
+              payload: {
+                ...(prev?.payload || {}),
+                workflowState: {
+                  ...(prev?.payload?.workflowState || {}),
+                  status: 'running',
+                },
+              },
+            }));
+          }
+
+          if (value.type === 'step-start') {
+            setIsStreaming(true);
+            setStreamResult((prev: WorkflowWatchResult) => {
+              const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
+              return {
+                ...prev,
+                payload: {
+                  ...prev.payload,
+                  currentStep: {
+                    id: value.payload.id,
+                    ...value.payload,
+                  },
+                  workflowState: {
+                    ...prev.payload.workflowState,
+                    steps: {
+                      ...prev.payload.workflowState.steps,
+                      [value.payload.id]: {
+                        ...(current || {}),
+                        ...value.payload,
+                      },
+                    },
+                  },
+                },
+                eventTimestamp: new Date(),
+              };
+            });
+          }
+
+          if (value.type === 'step-suspended') {
+            setStreamResult((prev: WorkflowWatchResult) => {
+              const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
+              return {
+                ...prev,
+                payload: {
+                  ...prev.payload,
+                  currentStep: {
+                    id: value.payload.id,
+                    ...(prev?.payload?.currentStep || {}),
+                    ...value.payload,
+                  },
+                  workflowState: {
+                    ...prev.payload.workflowState,
+                    status: 'suspended',
+                    steps: {
+                      ...prev.payload.workflowState.steps,
+                      [value.payload.id]: {
+                        ...(current || {}),
+                        ...value.payload,
+                      },
+                    },
+                  },
+                },
+                eventTimestamp: new Date(),
+              };
+            });
+            setIsStreaming(false);
+          }
+
+          if (value.type === 'step-waiting') {
+            setStreamResult((prev: WorkflowWatchResult) => {
+              const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
+              return {
+                ...prev,
+                payload: {
+                  ...prev.payload,
+                  currentStep: {
+                    id: value.payload.id,
+                    ...(prev?.payload?.currentStep || {}),
+                    ...value.payload,
+                  },
+                  workflowState: {
+                    ...prev.payload.workflowState,
+                    status: 'waiting',
+                    steps: {
+                      ...prev.payload.workflowState.steps,
+                      [value.payload.id]: {
+                        ...current,
+                        ...value.payload,
+                      },
+                    },
+                  },
+                },
+                eventTimestamp: new Date(),
+              };
+            });
+          }
+
+          if (value.type === 'step-result') {
+            status = value.payload.status;
+            setStreamResult((prev: WorkflowWatchResult) => {
+              const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
+              const { output: valueOutput, ...rest } = value.payload;
+
+              const output =
+                valueOutput && Object.keys(valueOutput).length > 0
+                  ? Object.entries(valueOutput).reduce(
+                      (_acc, [_key, _value]) => {
+                        const val = _value as { type: string; data: unknown };
+                        _acc[_key] =
+                          val.type?.toLowerCase() === 'buffer' ? { type: 'Buffer', data: `[...buffered data]` } : val;
+                        return _acc;
+                      },
+                      {} as Record<string, unknown>,
+                    )
+                  : valueOutput || undefined;
+              return {
+                ...prev,
+                payload: {
+                  ...prev.payload,
+                  currentStep: {
+                    id: value.payload.id,
+                    ...(prev?.payload?.currentStep || {}),
+                    ...rest,
+                    output,
+                  },
+                  workflowState: {
+                    ...prev.payload.workflowState,
+                    status: 'running',
+                    steps: {
+                      ...prev.payload.workflowState.steps,
+                      [value.payload.id]: {
+                        ...current,
+                        ...rest,
+                        output,
+                      },
+                    },
+                  },
+                },
+                eventTimestamp: new Date(),
+              };
+            });
+          }
+
+          if (value.type === 'step-finish') {
+            setStreamResult((prev: WorkflowWatchResult) => {
+              return {
+                ...prev,
+                payload: {
+                  ...prev.payload,
+                  currentStep: undefined,
+                },
+                eventTimestamp: new Date(),
+              };
+            });
+          }
+
+          if (value.type === 'finish') {
+            setStreamResult((prev: WorkflowWatchResult) => {
+              return {
+                ...prev,
+                payload: {
+                  ...prev.payload,
+                  currentStep: undefined,
+                  workflowState: {
+                    ...prev.payload.workflowState,
+                    status,
+                  },
+                },
+                eventTimestamp: new Date(),
+              };
+            });
+          }
+        }
+      } finally {
+        setIsStreaming(false);
+        reader.releaseLock();
+      }
+    },
+  });
+
+  return {
+    streamWorkflow,
+    streamResult,
+    isStreaming,
   };
 };
 

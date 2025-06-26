@@ -1,5 +1,31 @@
 # @mastra/dane
 
+## 0.0.29
+
+### Patch Changes
+
+- Updated dependencies [b8f16b2]
+- Updated dependencies [3e04487]
+- Updated dependencies [a344ac7]
+- Updated dependencies [dc4ca0a]
+  - @mastra/core@0.10.8
+
+## 0.0.29-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [b8f16b2]
+- Updated dependencies [3e04487]
+- Updated dependencies [dc4ca0a]
+  - @mastra/core@0.10.8-alpha.1
+
+## 0.0.29-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [a344ac7]
+  - @mastra/core@0.10.8-alpha.0
+
 ## 0.0.28
 
 ### Patch Changes

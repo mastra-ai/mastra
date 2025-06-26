@@ -72,6 +72,7 @@ export class MessageList {
   }
 
   public add(messages: string | string[] | MessageInput | MessageInput[], messageSource: MessageSource) {
+    if (!messages) return this;
     for (const message of Array.isArray(messages) ? messages : [messages]) {
       this.addOne(
         typeof message === `string`
@@ -297,20 +298,6 @@ messageSource: ${messageSource}
 
 ${JSON.stringify(message, null, 2)}`,
       );
-    }
-    // Some storage providers store this as a json string and some others as an object. Make sure it's always an object here.
-    if (typeof (message as MastraMessageV2)?.content?.content === 'string') {
-      try {
-        (message as MastraMessageV2).content.content = JSON.parse((message as MastraMessageV2).content.content!);
-      } catch {
-        /* ignore */
-      }
-    } else if (typeof message?.content === 'string') {
-      try {
-        message.content = JSON.parse(message.content);
-      } catch {
-        /* ignore */
-      }
     }
 
     const messageV2 = this.inputToMastraMessageV2(message, messageSource);
