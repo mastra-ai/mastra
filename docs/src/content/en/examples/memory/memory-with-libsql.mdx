@@ -64,11 +64,6 @@ const customMemory = new Memory({
       topK: 3,
       messageRange: 2,
     },
-    threads: {
-      generateTitle: {
-        model: openai("gpt-3.5-turbo"), // Use cheaper model for titles
-      },
-    },
   },
 });
 
@@ -128,7 +123,6 @@ The example shows:
 
 1. Setting up LibSQL storage with vector search capabilities
 2. Configuring memory options for message history and semantic search
-3. Enabling automatic thread title generation with a cost-optimized model
-4. Creating an agent with memory integration
-5. Using semantic search to find relevant messages in conversation history
-6. Including context around matched messages using `messageRange`
+3. Creating an agent with memory integration
+4. Using semantic search to find relevant messages in conversation history
+5. Including context around matched messages using `messageRange`
