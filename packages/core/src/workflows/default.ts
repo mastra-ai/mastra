@@ -447,7 +447,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         } else if (bailed) {
           execResults = { status: 'bailed', output: bailed.payload, endedAt: Date.now() };
         } else {
-          console.log('step result===', result);
           execResults = { status: 'success', output: result, endedAt: Date.now() };
         }
 
