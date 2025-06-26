@@ -1031,23 +1031,27 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
-      workflowName: this.id,
-      runId: runIdToUse,
-      snapshot: {
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse);
+
+    if (!workflowSnapshotInStorage) {
+      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+        workflowName: this.id,
         runId: runIdToUse,
-        status: 'pending',
-        value: {},
-        context: {},
-        activePaths: [],
-        serializedStepGraph: this.serializedStepGraph,
-        suspendedPaths: {},
-        result: undefined,
-        error: undefined,
-        // @ts-ignore
-        timestamp: Date.now(),
-      },
-    });
+        snapshot: {
+          runId: runIdToUse,
+          status: 'pending',
+          value: {},
+          context: {},
+          activePaths: [],
+          serializedStepGraph: this.serializedStepGraph,
+          suspendedPaths: {},
+          result: undefined,
+          error: undefined,
+          // @ts-ignore
+          timestamp: Date.now(),
+        },
+      });
+    }
 
     return run;
   }
@@ -1301,7 +1305,9 @@ export class Run<
       runtimeContext: runtimeContext ?? new RuntimeContext(),
     });
 
-    this.cleanup?.();
+    if (result.status !== 'suspended') {
+      this.cleanup?.();
+    }
 
     return result;
   }

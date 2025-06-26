@@ -74,68 +74,74 @@ describe('Workflow', () => {
       const executionResult = await getWorkflowState();
 
       expect(watchData.length).toBe(8);
-      expect(watchData).toMatchInlineSnapshot(`
-        [
-          {
-            "payload": {
-              "runId": "test-run-id",
-            },
-            "type": "start",
+      expect(watchData).toMatchObject([
+        {
+          payload: {
+            runId: 'test-run-id',
           },
-          {
-            "payload": {
-              "id": "step1",
-            },
-            "type": "step-start",
+          type: 'start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            payload: {},
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "step1",
-              "output": {
-                "result": "success1",
-              },
-              "status": "success",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            output: {
+              result: 'success1',
             },
-            "type": "step-result",
+            endedAt: expect.any(Number),
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "step1",
-              "metadata": {},
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step1',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'step2',
+            payload: {
+              result: 'success1',
             },
-            "type": "step-finish",
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "step2",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step2',
+            output: {
+              result: 'success2',
             },
-            "type": "step-start",
+            endedAt: expect.any(Number),
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "step2",
-              "output": {
-                "result": "success2",
-              },
-              "status": "success",
-            },
-            "type": "step-result",
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step2',
+            metadata: {},
           },
-          {
-            "payload": {
-              "id": "step2",
-              "metadata": {},
-            },
-            "type": "step-finish",
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            runId: 'test-run-id',
           },
-          {
-            "payload": {
-              "runId": "test-run-id",
-            },
-            "type": "finish",
-          },
-        ]
-      `);
+          type: 'finish',
+        },
+      ]);
       // Verify execution completed successfully
       expect(executionResult.steps.step1).toEqual({
         status: 'success',
@@ -404,168 +410,193 @@ describe('Workflow', () => {
         values.push(value);
       }
 
-      expect(values).toMatchInlineSnapshot(`
-        [
-          {
-            "payload": {
-              "runId": "test-run-id",
-            },
-            "type": "start",
+      expect(values).toMatchObject([
+        {
+          payload: {
+            runId: 'test-run-id',
           },
-          {
-            "payload": {
-              "id": "start",
+          type: 'start',
+        },
+        {
+          payload: {
+            id: 'start',
+            payload: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
             },
-            "type": "step-start",
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "start",
-              "output": {
-                "prompt1": "Capital of France, just the name",
-                "prompt2": "Capital of UK, just the name",
-              },
-              "status": "success",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'start',
+            output: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
             },
-            "type": "step-result",
+            endedAt: expect.any(Number),
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "start",
-              "metadata": {},
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'start',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'mapping_mock-uuid-1',
+            payload: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
             },
-            "type": "step-finish",
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "mapping_mock-uuid-1",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'mapping_mock-uuid-1',
+            endedAt: expect.any(Number),
+            output: {
+              prompt: 'Capital of France, just the name',
             },
-            "type": "step-start",
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "mapping_mock-uuid-1",
-              "output": {
-                "prompt": "Capital of France, just the name",
-              },
-              "status": "success",
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'mapping_mock-uuid-1',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'test-agent-1',
+            payload: {
+              prompt: 'Capital of France, just the name',
             },
-            "type": "step-result",
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "mapping_mock-uuid-1",
-              "metadata": {},
+          type: 'step-start',
+        },
+        {
+          args: {
+            prompt: 'Capital of France, just the name',
+          },
+          name: 'test-agent-1',
+          type: 'tool-call-streaming-start',
+        },
+        {
+          args: {
+            prompt: 'Capital of France, just the name',
+          },
+          argsTextDelta: 'Paris',
+          name: 'test-agent-1',
+          type: 'tool-call-delta',
+        },
+        {
+          payload: {
+            id: 'test-agent-1',
+            output: {
+              text: 'Paris',
             },
-            "type": "step-finish",
+            endedAt: expect.any(Number),
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "test-agent-1",
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'test-agent-1',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'mapping_mock-uuid-2',
+            payload: {
+              text: 'Paris',
             },
-            "type": "step-start",
+            startedAt: expect.any(Number),
           },
-          {
-            "args": {
-              "prompt": "Capital of France, just the name",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'mapping_mock-uuid-2',
+            endedAt: expect.any(Number),
+            output: {
+              prompt: 'Capital of UK, just the name',
             },
-            "name": "test-agent-1",
-            "type": "tool-call-streaming-start",
+            status: 'success',
           },
-          {
-            "args": {
-              "prompt": "Capital of France, just the name",
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'mapping_mock-uuid-2',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'test-agent-2',
+            payload: {
+              prompt: 'Capital of UK, just the name',
             },
-            "argsTextDelta": "Paris",
-            "name": "test-agent-1",
-            "type": "tool-call-delta",
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "test-agent-1",
-              "output": {
-                "text": "Paris",
-              },
-              "status": "success",
+          type: 'step-start',
+        },
+        {
+          args: {
+            prompt: 'Capital of UK, just the name',
+          },
+          name: 'test-agent-2',
+          type: 'tool-call-streaming-start',
+        },
+        {
+          args: {
+            prompt: 'Capital of UK, just the name',
+          },
+          argsTextDelta: 'London',
+          name: 'test-agent-2',
+          type: 'tool-call-delta',
+        },
+        {
+          payload: {
+            id: 'test-agent-2',
+            endedAt: expect.any(Number),
+            output: {
+              text: 'London',
             },
-            "type": "step-result",
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "test-agent-1",
-              "metadata": {},
-            },
-            "type": "step-finish",
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'test-agent-2',
+            metadata: {},
           },
-          {
-            "payload": {
-              "id": "mapping_mock-uuid-2",
-            },
-            "type": "step-start",
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            runId: 'test-run-id',
           },
-          {
-            "payload": {
-              "id": "mapping_mock-uuid-2",
-              "output": {
-                "prompt": "Capital of UK, just the name",
-              },
-              "status": "success",
-            },
-            "type": "step-result",
-          },
-          {
-            "payload": {
-              "id": "mapping_mock-uuid-2",
-              "metadata": {},
-            },
-            "type": "step-finish",
-          },
-          {
-            "payload": {
-              "id": "test-agent-2",
-            },
-            "type": "step-start",
-          },
-          {
-            "args": {
-              "prompt": "Capital of UK, just the name",
-            },
-            "name": "test-agent-2",
-            "type": "tool-call-streaming-start",
-          },
-          {
-            "args": {
-              "prompt": "Capital of UK, just the name",
-            },
-            "argsTextDelta": "London",
-            "name": "test-agent-2",
-            "type": "tool-call-delta",
-          },
-          {
-            "payload": {
-              "id": "test-agent-2",
-              "output": {
-                "text": "London",
-              },
-              "status": "success",
-            },
-            "type": "step-result",
-          },
-          {
-            "payload": {
-              "id": "test-agent-2",
-              "metadata": {},
-            },
-            "type": "step-finish",
-          },
-          {
-            "payload": {
-              "runId": "test-run-id",
-            },
-            "type": "finish",
-          },
-        ]
-      `);
+          type: 'finish',
+        },
+      ]);
     });
 
     it('should handle sleep waiting flow', async () => {
@@ -3893,68 +3924,74 @@ describe('Workflow', () => {
         values.push(value);
       }
 
-      expect(values).toMatchInlineSnapshot(`
-        [
-          {
-            "payload": {
-              "runId": "mock-uuid-1",
-            },
-            "type": "start",
+      expect(values).toMatchObject([
+        {
+          payload: {
+            runId: 'mock-uuid-1',
           },
-          {
-            "payload": {
-              "id": "step1",
-            },
-            "type": "step-start",
+          type: 'start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            payload: {},
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "step1",
-              "output": {
-                "name": "step1",
-              },
-              "status": "success",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            endedAt: expect.any(Number),
+            output: {
+              name: 'step1',
             },
-            "type": "step-result",
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "step1",
-              "metadata": {},
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step1',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'random-tool',
+            payload: {
+              name: 'step1',
             },
-            "type": "step-finish",
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "random-tool",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'random-tool',
+            endedAt: expect.any(Number),
+            output: {
+              name: 'step1',
             },
-            "type": "step-start",
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "random-tool",
-              "output": {
-                "name": "step1",
-              },
-              "status": "success",
-            },
-            "type": "step-result",
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'random-tool',
+            metadata: {},
           },
-          {
-            "payload": {
-              "id": "random-tool",
-              "metadata": {},
-            },
-            "type": "step-finish",
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            runId: 'mock-uuid-1',
           },
-          {
-            "payload": {
-              "runId": "mock-uuid-1",
-            },
-            "type": "finish",
-          },
-        ]
-      `);
+          type: 'finish',
+        },
+      ]);
 
       const result = await getWorkflowState();
 

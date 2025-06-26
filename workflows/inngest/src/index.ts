@@ -147,7 +147,9 @@ export class InngestRun<
       result.error = new Error(result.error);
     }
 
-    this.cleanup?.();
+    if (result.status !== 'suspended') {
+      this.cleanup?.();
+    }
     return result;
   }
 
@@ -432,23 +434,27 @@ export class InngestWorkflow<
 
     this.runs.set(runIdToUse, run);
 
-    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
-      workflowName: this.id,
-      runId: runIdToUse,
-      snapshot: {
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse);
+
+    if (!workflowSnapshotInStorage) {
+      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+        workflowName: this.id,
         runId: runIdToUse,
-        status: 'pending',
-        value: {},
-        context: {},
-        activePaths: [],
-        serializedStepGraph: this.serializedStepGraph,
-        suspendedPaths: {},
-        result: undefined,
-        error: undefined,
-        // @ts-ignore
-        timestamp: Date.now(),
-      },
-    });
+        snapshot: {
+          runId: runIdToUse,
+          status: 'pending',
+          value: {},
+          context: {},
+          activePaths: [],
+          serializedStepGraph: this.serializedStepGraph,
+          suspendedPaths: {},
+          result: undefined,
+          error: undefined,
+          // @ts-ignore
+          timestamp: Date.now(),
+        },
+      });
+    }
 
     return run;
   }
@@ -1016,6 +1022,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           type: 'step-start',
           payload: {
             id: step.id,
+            status: 'running',
           },
         });
 
@@ -1091,6 +1098,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               payload: {
                 id: step.id,
                 status: 'failed',
+                error: result?.error,
+                payload: prevOutput,
               },
             });
 
@@ -1128,6 +1137,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 type: 'step-suspended',
                 payload: {
                   id: step.id,
+                  status: 'suspended',
                 },
               });
 
@@ -1185,6 +1195,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               },
             },
             eventTimestamp: Date.now(),
+          });
+
+          await emitter.emit('watch-v2', {
+            type: 'step-result',
+            payload: {
+              id: step.id,
+              status: 'success',
+              output: result?.result,
+            },
           });
 
           await emitter.emit('watch-v2', {
@@ -1307,8 +1326,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           type: 'step-suspended',
           payload: {
             id: step.id,
-            status: execResults.status,
-            output: execResults.status === 'success' ? execResults?.output : undefined,
+            ...execResults,
           },
         });
       } else {
@@ -1316,8 +1334,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           type: 'step-result',
           payload: {
             id: step.id,
-            status: execResults.status,
-            output: execResults.status === 'success' ? execResults?.output : undefined,
+            ...execResults,
           },
         });
 

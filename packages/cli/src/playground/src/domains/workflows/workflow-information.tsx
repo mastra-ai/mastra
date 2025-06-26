@@ -8,9 +8,8 @@ import {
   useLegacyWorkflow,
   useWorkflow,
   useExecuteWorkflow,
-  useWatchWorkflow,
   useResumeWorkflow,
-  ExtendedWorkflowWatchResult,
+  useStreamWorkflow,
 } from '@/hooks/use-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -26,9 +25,9 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, !isLegacy);
   const { isLoading: isRunsLoading, data: runs } = useWorkflowRuns({ workflowId });
   const { data: legacyWorkflow, isLoading: isLegacyWorkflowLoading } = useLegacyWorkflow(workflowId, !!isLegacy);
-  const { createWorkflowRun, startWorkflowRun } = useExecuteWorkflow();
-  const { watchWorkflow, watchResult } = useWatchWorkflow();
+  const { createWorkflowRun } = useExecuteWorkflow();
   const { resumeWorkflow } = useResumeWorkflow();
+  const { streamWorkflow, streamResult, isStreaming } = useStreamWorkflow();
 
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
@@ -107,11 +106,10 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
                       workflow={workflow}
                       isLoading={isWorkflowLoading}
                       createWorkflowRun={createWorkflowRun.mutateAsync}
-                      startWorkflowRun={startWorkflowRun.mutateAsync}
+                      streamWorkflow={streamWorkflow.mutateAsync}
                       resumeWorkflow={resumeWorkflow.mutateAsync}
-                      watchWorkflow={watchWorkflow.mutateAsync}
-                      watchResult={watchResult}
-                      isWatchingWorkflow={watchWorkflow.isPending}
+                      streamResult={streamResult}
+                      isStreamingWorkflow={isStreaming}
                       isResumingWorkflow={resumeWorkflow.isPending}
                     />
                   )}
