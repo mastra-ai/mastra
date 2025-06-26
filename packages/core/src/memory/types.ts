@@ -2,11 +2,10 @@ import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserCo
 
 export type { MastraMessageV2 } from '../agent';
 import type { ZodObject } from 'zod';
-import type { RuntimeContext } from '../runtime-context';
+import type { MastraLanguageModel, DynamicArgument } from '../agent/types';
 import type { MastraStorage } from '../storage';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
-import type { MastraLanguageModel, DynamicArgument } from '../agent/types';
 
 export type { Message as AiMessageType } from 'ai';
 export type { MastraLanguageModel, DynamicArgument };
