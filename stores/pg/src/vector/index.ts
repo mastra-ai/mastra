@@ -817,6 +817,15 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   /**
+   * Returns the internal pg.Pool instance used by PgVector.
+   * Advanced: Use this if you need to run direct queries using the same pool (e.g., for metadata-only queries).
+   * @returns The pg.Pool instance
+   */
+  public getPool(): pg.Pool {
+    return this.pool;
+  }
+
+  /**
    * Updates a vector by its ID with the provided vector and/or metadata.
    * @param indexName - The name of the index containing the vector.
    * @param id - The ID of the vector to update.

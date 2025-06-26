@@ -467,6 +467,27 @@ await pgVector.buildIndex("my_vectors", "cosine", {
 });
 ```
 
+### getPool()
+
+Exposes the internal `pg.Pool` instance.
+
+For advanced use cases, such as running direct SQL queries for metadata filters or other custom operations, use this method to ensure all queries share the same connection pool. 
+This avoids connection timeouts and resource contention when performing additional queries alongside vector operations.
+
+```typescript copy
+const pool = pgVector.getPool();
+const client = await pool.connect();
+try {
+  // Example: Fetch unique values from a metadata field
+  const res = await client.query(
+    `SELECT DISTINCT metadata->>'category' AS category FROM my_vectors ORDER BY category`
+  );
+  console.log(res.rows); // [{ category: 'A' }, { category: 'B' }]
+} finally {
+  client.release();
+}
+```
+
 ## Response Types
 
 Query results are returned in this format:

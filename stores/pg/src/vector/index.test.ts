@@ -33,6 +33,81 @@ describe('PgVector', () => {
     });
   });
 
+  // Advanced/Utility Methods
+  describe('Advanced/Utility Methods', () => {
+    it('getPool() returns the internal pg.Pool instance', () => {
+      const pool = vectorDB.getPool();
+      expect(pool).toBeInstanceOf(pg.Pool);
+    });
+    it('getPool() provides a working client connection', async () => {
+      const pool = vectorDB.getPool();
+      const client = await pool.connect();
+      expect(typeof client.query).toBe('function');
+      expect(typeof client.release).toBe('function');
+      client.release();
+    });
+    it('allows running a direct SQL query', async () => {
+      const pool = vectorDB.getPool();
+      const res = await pool.query('SELECT 1 as result');
+      expect(res.rows[0].result).toBe(1);
+    });
+    it('allows performing a transaction', async () => {
+      const pool = vectorDB.getPool();
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows } = await client.query('SELECT 2 as value');
+        expect(rows[0].value).toBe(2);
+        await client.query('COMMIT');
+      } finally {
+        client.release();
+      }
+    });
+    it('releases client on query error', async () => {
+      const pool = vectorDB.getPool();
+      const client = await pool.connect();
+      try {
+        await expect(client.query('SELECT * FROM not_a_real_table')).rejects.toThrow();
+      } finally {
+        client.release();
+      }
+    });
+    it('exposes pool statistics', () => {
+      const pool = vectorDB.getPool();
+      expect(typeof pool.totalCount).toBe('number');
+      expect(typeof pool.idleCount).toBe('number');
+      expect(typeof pool.waitingCount).toBe('number');
+    });
+
+    it('can use getPool() to query metadata for filter options (user scenario)', async () => {
+      // Insert vectors with metadata
+      await vectorDB.createIndex({ indexName: 'filter_test', dimension: 2 });
+      await vectorDB.upsert({
+        indexName: 'filter_test',
+        vectors: [
+          [0.1, 0.2],
+          [0.3, 0.4],
+          [0.5, 0.6],
+        ],
+        metadata: [
+          { category: 'A', color: 'red' },
+          { category: 'B', color: 'blue' },
+          { category: 'A', color: 'green' },
+        ],
+        ids: ['id1', 'id2', 'id3'],
+      });
+      // Use the pool to query unique categories
+      const pool = vectorDB.getPool();
+      const { tableName } = vectorDB['getTableName']('filter_test');
+      const res = await pool.query(
+        `SELECT DISTINCT metadata->>'category' AS category FROM ${tableName} ORDER BY category`,
+      );
+      expect(res.rows.map(r => r.category).sort()).toEqual(['A', 'B']);
+      // Clean up
+      await vectorDB.deleteIndex({ indexName: 'filter_test' });
+    });
+  });
+
   // Index Management Tests
   describe('Index Management', () => {
     describe('createIndex', () => {
