@@ -628,22 +628,24 @@ export class Agent<
     runtimeContext: RuntimeContext,
     model?: DynamicArgument<MastraLanguageModel>,
   ) {
-    let title = `New Thread ${new Date().toISOString()}`;
     try {
       if (userMessage) {
         const normMessage = new MessageList().add(userMessage, 'user').get.all.ui().at(-1);
         if (normMessage) {
-          title = await this.generateTitleFromUserMessage({
+          return await this.generateTitleFromUserMessage({
             message: normMessage,
             runtimeContext,
             model,
           });
         }
       }
+      // If no user message, return a default title for new threads
+      return `New Thread ${new Date().toISOString()}`;
     } catch (e) {
       this.logger.error('Error generating title:', e);
+      // Return undefined on error so existing title is preserved
+      return undefined;
     }
-    return title;
   }
 
   /* @deprecated use agent.getMemory() and query memory directly */

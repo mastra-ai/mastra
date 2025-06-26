@@ -947,7 +947,7 @@ describe('agent', () => {
     // Give time for async title generation
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Thread should still exist but with original title (unchanged due to error)
+    // Thread should still exist with the original title (preserved when generation fails)
     const thread = await mockMemory.getThreadById({ threadId: 'thread-error' });
     expect(thread).toBeDefined();
     expect(thread?.title).toBe(originalTitle);
