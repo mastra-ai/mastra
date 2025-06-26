@@ -35,24 +35,33 @@ describe('PgVector', () => {
 
   // Advanced/Utility Methods
   describe('Advanced/Utility Methods', () => {
+    let testDB: PgVector;
+    beforeAll(async () => {
+      testDB = new PgVector({ connectionString });
+    });
+    afterAll(async () => {
+      try {
+        await testDB.disconnect();
+      } catch {}
+    });
     it('getPool() returns the internal pg.Pool instance', () => {
-      const pool = vectorDB.getPool();
+      const pool = testDB.getPool();
       expect(pool).toBeInstanceOf(pg.Pool);
     });
     it('getPool() provides a working client connection', async () => {
-      const pool = vectorDB.getPool();
+      const pool = testDB.getPool();
       const client = await pool.connect();
       expect(typeof client.query).toBe('function');
       expect(typeof client.release).toBe('function');
       client.release();
     });
     it('allows running a direct SQL query', async () => {
-      const pool = vectorDB.getPool();
+      const pool = testDB.getPool();
       const res = await pool.query('SELECT 1 as result');
       expect(res.rows[0].result).toBe(1);
     });
     it('allows performing a transaction', async () => {
-      const pool = vectorDB.getPool();
+      const pool = testDB.getPool();
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
@@ -64,7 +73,7 @@ describe('PgVector', () => {
       }
     });
     it('releases client on query error', async () => {
-      const pool = vectorDB.getPool();
+      const pool = testDB.getPool();
       const client = await pool.connect();
       try {
         await expect(client.query('SELECT * FROM not_a_real_table')).rejects.toThrow();
@@ -73,7 +82,7 @@ describe('PgVector', () => {
       }
     });
     it('exposes pool statistics', () => {
-      const pool = vectorDB.getPool();
+      const pool = testDB.getPool();
       expect(typeof pool.totalCount).toBe('number');
       expect(typeof pool.idleCount).toBe('number');
       expect(typeof pool.waitingCount).toBe('number');
@@ -81,8 +90,8 @@ describe('PgVector', () => {
 
     it('can use getPool() to query metadata for filter options (user scenario)', async () => {
       // Insert vectors with metadata
-      await vectorDB.createIndex({ indexName: 'filter_test', dimension: 2 });
-      await vectorDB.upsert({
+      await testDB.createIndex({ indexName: 'filter_test', dimension: 2 });
+      await testDB.upsert({
         indexName: 'filter_test',
         vectors: [
           [0.1, 0.2],
@@ -97,14 +106,21 @@ describe('PgVector', () => {
         ids: ['id1', 'id2', 'id3'],
       });
       // Use the pool to query unique categories
-      const pool = vectorDB.getPool();
-      const { tableName } = vectorDB['getTableName']('filter_test');
+      const pool = testDB.getPool();
+      const { tableName } = testDB['getTableName']('filter_test');
       const res = await pool.query(
         `SELECT DISTINCT metadata->>'category' AS category FROM ${tableName} ORDER BY category`,
       );
       expect(res.rows.map(r => r.category).sort()).toEqual(['A', 'B']);
       // Clean up
-      await vectorDB.deleteIndex({ indexName: 'filter_test' });
+      await testDB.deleteIndex({ indexName: 'filter_test' });
+    });
+
+    it('getPool() after disconnect', async () => {
+      await testDB.disconnect();
+      const pool = testDB.getPool();
+      expect(pool).toBeInstanceOf(pg.Pool);
+      expect(pool.connect()).rejects.toThrow();
     });
   });
 
