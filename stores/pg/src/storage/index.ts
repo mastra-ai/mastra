@@ -45,8 +45,8 @@ export type PostgresConfig = {
 );
 
 export class PostgresStore extends MastraStorage {
-  private db: pgPromise.IDatabase<{}>;
-  private pgp: pgPromise.IMain;
+  public db: pgPromise.IDatabase<{}>;
+  public pgp: pgPromise.IMain;
   private schema?: string;
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;

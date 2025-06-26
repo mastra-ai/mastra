@@ -57,7 +57,7 @@ interface PgDefineIndexParams {
 }
 
 export class PgVector extends MastraVector<PGVectorFilter> {
-  private pool: pg.Pool;
+  public pool: pg.Pool;
   private describeIndexCache: Map<string, PGIndexStats> = new Map();
   private createdIndexes = new Map<string, number>();
   private mutexesByName = new Map<string, Mutex>();
