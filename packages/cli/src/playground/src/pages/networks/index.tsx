@@ -32,6 +32,7 @@ function Networks() {
       routingModel: network.routingModel.modelId,
       agentsSize: network.agents.length,
       workflowsSize: network.workflows.length,
+      toolsSize: network.tools.length,
       isVNext: true,
     })) ?? []),
   ];

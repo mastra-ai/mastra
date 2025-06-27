@@ -3,7 +3,7 @@ import { Brain, ChevronDown, RefreshCw } from 'lucide-react';
 import { Agent } from '@/components/ui/agent-logo';
 import { GetNetworkResponse, GetVNextNetworkResponse } from '@mastra/client-js';
 import { useContext } from 'react';
-import { NetworkContext, Txt, WorkflowIcon } from '@mastra/playground-ui';
+import { NetworkContext, ToolsIcon, Txt, WorkflowIcon } from '@mastra/playground-ui';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -48,16 +48,28 @@ export function NetworkDetails({ network, isVNext }: NetworkDetailsProps) {
         </div>
 
         {isVNext && (
-          <div>
-            <h3 className="text-sm font-medium text-mastra-el-5 mb-1">Workflows</h3>
-            <div className="flex items-center gap-2">
-              <WorkflowIcon />
-              <Badge variant="outline" className="text-xs">
-                {(network as GetVNextNetworkResponse).workflows?.length || 0} workflow
-                {(network as GetVNextNetworkResponse).workflows?.length === 1 ? '' : 's'}
-              </Badge>
+          <>
+            <div>
+              <h3 className="text-sm font-medium text-mastra-el-5 mb-1">Workflows</h3>
+              <div className="flex items-center gap-2">
+                <WorkflowIcon />
+                <Badge variant="outline" className="text-xs">
+                  {(network as GetVNextNetworkResponse).workflows?.length || 0} workflow
+                  {(network as GetVNextNetworkResponse).workflows?.length === 1 ? '' : 's'}
+                </Badge>
+              </div>
             </div>
-          </div>
+            <div>
+              <h3 className="text-sm font-medium text-mastra-el-5 mb-1">Tools</h3>
+              <div className="flex items-center gap-2">
+                <ToolsIcon />
+                <Badge variant="outline" className="text-xs">
+                  {(network as GetVNextNetworkResponse).tools?.length || 0} tool
+                  {(network as GetVNextNetworkResponse).tools?.length === 1 ? '' : 's'}
+                </Badge>
+              </div>
+            </div>
+          </>
         )}
 
         <div>

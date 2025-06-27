@@ -108,7 +108,7 @@ const StepEntry = ({ stepId, step, runId }: { stepId: any; step: any; runId?: st
 
   if (stepId === 'workflow-step' || stepId === 'Agent-Network-Outer-Workflow.workflow-step') {
     const parsedResult = JSON.parse(stepResult?.output?.result ?? '{}') ?? {};
-    if (!parsedResult?.runResult) {
+    if (!parsedResult?.runResult && stepResult?.status === 'success') {
       stepResult = {
         ...stepResult,
         status: 'failed',
