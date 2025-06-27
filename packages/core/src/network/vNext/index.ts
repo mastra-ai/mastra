@@ -872,7 +872,7 @@ export class NewAgentNetwork extends MastraBase {
               id: randomUUID() as string,
               type: 'text',
               role: 'assistant',
-              content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
+              content: { parts: [{ type: 'text', text: JSON.stringify(finalResult) }], format: 2 },
               createdAt: new Date(),
               threadId: initData.threadId || runId,
               resourceId: initData.threadResourceId || this.name,
