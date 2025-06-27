@@ -318,6 +318,11 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/deployment/deployment",
+        destination: "/docs/deployment/serverless-platforms",
+        permanent: true,
+      },
+      {
         source: "/docs/deployment/client",
         destination: "/docs/client-js/overview",
         permanent: true,
