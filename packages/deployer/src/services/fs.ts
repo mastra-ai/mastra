@@ -49,6 +49,21 @@ export class FileService {
     throw new Error('Missing required file, checked the following paths: ' + files.join(', '));
   }
 
+  /**
+   * Returns the first existing file from the provided array, or undefined if none exist
+   * @param files array of file paths to check
+   * @returns the first existing file path or undefined
+   */
+  public getFirstExistingFileOrUndefined(files: string[]): string | undefined {
+    for (const f of files) {
+      if (fs.existsSync(f)) {
+        return f;
+      }
+    }
+
+    return undefined;
+  }
+
   public replaceValuesInFile({
     filePath,
     replacements,
