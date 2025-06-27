@@ -2,6 +2,7 @@ import type { StorageColumn } from './types';
 
 export const TABLE_WORKFLOW_SNAPSHOT = 'mastra_workflow_snapshot';
 export const TABLE_EVALS = 'mastra_evals';
+export const TABLE_EVALS_V2 = 'mastra_evals_v2';
 export const TABLE_MESSAGES = 'mastra_messages';
 export const TABLE_THREADS = 'mastra_threads';
 export const TABLE_TRACES = 'mastra_traces';
@@ -14,6 +15,70 @@ export type TABLE_NAMES =
   | typeof TABLE_THREADS
   | typeof TABLE_TRACES
   | typeof TABLE_RESOURCES;
+
+export const EVALS_V2_SCHEMA = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  name: {
+    type: 'text',
+  },
+  traceId: {
+    type: 'text',
+  },
+  runId: {
+    type: 'text',
+  },
+  evaluator: {
+    type: 'jsonb',
+  },
+  result: {
+    type: 'jsonb',
+  },
+  metadata: {
+    type: 'jsonb',
+  },
+  input: {
+    type: 'jsonb', // MESSAGE INPUT
+  },
+  output: {
+    type: 'jsonb', // MESSAGE OUTPUT
+  },
+  additionalContext: {
+    type: 'jsonb', // DATA FROM THE CONTEXT PARAM ON AN AGENT
+    nullable: true,
+  },
+  runtimeContext: {
+    type: 'jsonb', // THE EVALUATE RUNTIME CONTEXT FOR THE RUN
+    nullable: true,
+  },
+  /**
+   * Things you can evaluate
+   */
+  entityType: {
+    type: 'text', // WORKFLOW, AGENT, TOOL, STEP, NETWORK
+    nullable: true,
+  },
+  entity: {
+    type: 'jsonb', // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP, NETWORK
+    nullable: true,
+  },
+  source: {
+    type: 'text',
+  },
+  resourceId: {
+    type: 'text',
+    nullable: true,
+  },
+  threadId: {
+    type: 'text',
+    nullable: true,
+  },
+  createdAt: {
+    type: 'timestamp',
+  },
+  updatedAt: {
+    type: 'timestamp',
+  },
+};
 
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
