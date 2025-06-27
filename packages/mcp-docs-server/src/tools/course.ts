@@ -452,7 +452,7 @@ export const startMastraCourse = {
   name: 'startMastraCourse',
   description:
     'Starts the Mastra Course. If the user is not registered, they will be prompted to register first. Otherwise, it will start at the first lesson or pick up where they last left off. ALWAYS ask the user for their email address if they are not registered. DO NOT assume their email address, they must confirm their email and that they want to register.',
-  parameters: z.object({
+  inputSchema: z.object({
     email: z.string().email().optional().describe('Email address for registration if not already registered. '),
   }),
   execute: async (args: { email?: string }) => {
@@ -582,7 +582,7 @@ export const startMastraCourse = {
 export const getMastraCourseStatus = {
   name: 'getMastraCourseStatus',
   description: 'Gets the current status of the Mastra Course, including which lessons and steps have been completed',
-  parameters: z.object({}),
+  inputSchema: z.object({}),
   execute: async (_args: Record<string, never>) => {
     try {
       // Check if the user is registered
@@ -674,7 +674,7 @@ export const startMastraCourseLesson = {
   name: 'startMastraCourseLesson',
   description:
     'Starts a specific lesson in the Mastra Course. If the lesson has been started before, it will resume from the first incomplete step',
-  parameters: _courseLessonSchema,
+  inputSchema: _courseLessonSchema,
   execute: async (args: z.infer<typeof _courseLessonSchema>) => {
     try {
       // Check if the user is registered
@@ -737,7 +737,7 @@ export const nextMastraCourseStep = {
   name: 'nextMastraCourseStep',
   description:
     'Advances to the next step in the current Mastra Course lesson. If all steps in the current lesson are completed, it will move to the next lesson',
-  parameters: z.object({}),
+  inputSchema: z.object({}),
   execute: async (_args: Record<string, never>) => {
     try {
       // Check if the user is registered
@@ -836,7 +836,7 @@ export const clearMastraCourseHistory = {
   name: 'clearMastraCourseHistory',
   description:
     'Clears all Mastra Course progress history and starts over from the beginning. This action cannot be undone',
-  parameters: _confirmationSchema,
+  inputSchema: _confirmationSchema,
   execute: async (args: z.infer<typeof _confirmationSchema>) => {
     try {
       // Check if the user is registered

@@ -72,10 +72,10 @@
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.1-alpha.0",
-    "ai": "^4.0.0"
+    "ai": "5.0.0-beta.1"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "latest",
+    "@ai-sdk/openai": "2.0.0-beta.1",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
@@ -83,7 +83,7 @@
     "@types/fs-extra": "^11.0.4",
     "@types/sentiment": "^5.0.4",
     "@types/string-similarity": "^4.0.2",
-    "ai": "^4.3.16",
+    "ai": "5.0.0-beta.1",
     "dotenv": "^16.5.0",
     "eslint": "^9.29.0",
     "tsup": "^8.5.0",

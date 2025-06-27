@@ -1,7 +1,7 @@
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { experimental_customProvider } from 'ai';
+import { experimental_customProvider, type EmbeddingModel as AIEmbeddingModel } from 'ai';
 import { FlagEmbedding, EmbeddingModel } from 'fastembed';
 
 async function getModelCachePath() {
@@ -37,7 +37,7 @@ async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' |
 const fastEmbedProvider = experimental_customProvider({
   textEmbeddingModels: {
     'bge-small-en-v1.5': {
-      specificationVersion: 'v1',
+      specificationVersion: 'v2',
       provider: 'fastembed',
       modelId: 'bge-small-en-v1.5',
       maxEmbeddingsPerCall: 256,
@@ -47,7 +47,7 @@ const fastEmbedProvider = experimental_customProvider({
       },
     },
     'bge-base-en-v1.5': {
-      specificationVersion: 'v1',
+      specificationVersion: 'v2',
       provider: 'fastembed',
       modelId: 'bge-base-en-v1.5',
       maxEmbeddingsPerCall: 256,
@@ -62,4 +62,7 @@ const fastEmbedProvider = experimental_customProvider({
 export const fastembed = Object.assign(fastEmbedProvider.textEmbeddingModel(`bge-small-en-v1.5`), {
   small: fastEmbedProvider.textEmbeddingModel(`bge-small-en-v1.5`),
   base: fastEmbedProvider.textEmbeddingModel(`bge-base-en-v1.5`),
-});
+}) as {
+  small: AIEmbeddingModel<string>;
+  base: AIEmbeddingModel<string>;
+} & AIEmbeddingModel<string>;

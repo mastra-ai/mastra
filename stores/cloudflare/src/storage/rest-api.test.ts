@@ -413,10 +413,11 @@ describe.skip('CloudflareStore REST API', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
+      const now = new Date();
       const messages = [
-        createSampleMessageV1({ threadId: thread.id, content: 'First' }),
-        createSampleMessageV1({ threadId: thread.id, content: 'Second' }),
-        createSampleMessageV1({ threadId: thread.id, content: 'Third' }),
+        createSampleMessageV1({ threadId: thread.id, content: 'First', createdAt: new Date(now.getTime()) }),
+        createSampleMessageV1({ threadId: thread.id, content: 'Second', createdAt: new Date(now.getTime() + 1000) }),
+        createSampleMessageV1({ threadId: thread.id, content: 'Third', createdAt: new Date(now.getTime() + 2000) }),
       ];
 
       await store.saveMessages({ messages });

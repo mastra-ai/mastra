@@ -326,48 +326,57 @@ describe('PostgresStore', () => {
       const thread3 = createSampleThread({ id: 'thread-three' });
       await store.saveThread({ thread: thread3 });
 
+      const now = new Date();
       const messages: MastraMessageV2[] = [
         createSampleMessageV2({
           threadId: 'thread-one',
           content: { content: 'First' },
           resourceId: 'cross-thread-resource',
+          createdAt: new Date(now.getTime()),
         }),
         createSampleMessageV2({
           threadId: 'thread-one',
           content: { content: 'Second' },
           resourceId: 'cross-thread-resource',
+          createdAt: new Date(now.getTime() + 1000),
         }),
         createSampleMessageV2({
           threadId: 'thread-one',
           content: { content: 'Third' },
           resourceId: 'cross-thread-resource',
+          createdAt: new Date(now.getTime() + 2000),
         }),
 
         createSampleMessageV2({
           threadId: 'thread-two',
           content: { content: 'Fourth' },
           resourceId: 'cross-thread-resource',
+          createdAt: new Date(now.getTime() + 3000),
         }),
         createSampleMessageV2({
           threadId: 'thread-two',
           content: { content: 'Fifth' },
           resourceId: 'cross-thread-resource',
+          createdAt: new Date(now.getTime() + 4000),
         }),
         createSampleMessageV2({
           threadId: 'thread-two',
           content: { content: 'Sixth' },
           resourceId: 'cross-thread-resource',
+          createdAt: new Date(now.getTime() + 5000),
         }),
 
         createSampleMessageV2({
           threadId: 'thread-three',
           content: { content: 'Seventh' },
           resourceId: 'other-resource',
+          createdAt: new Date(now.getTime() + 6000),
         }),
         createSampleMessageV2({
           threadId: 'thread-three',
           content: { content: 'Eighth' },
           resourceId: 'other-resource',
+          createdAt: new Date(now.getTime() + 7000),
         }),
       ];
 
@@ -1889,48 +1898,57 @@ describe('PostgresStore', () => {
         const thread3 = createSampleThread({ id: 'thread-three' });
         await store.saveThread({ thread: thread3 });
 
+        const now = new Date();
         const messages: MastraMessageV2[] = [
           createSampleMessageV2({
             threadId: 'thread-one',
             content: { content: 'First' },
             resourceId: 'cross-thread-resource',
+            createdAt: new Date(now.getTime()),
           }),
           createSampleMessageV2({
             threadId: 'thread-one',
             content: { content: 'Second' },
             resourceId: 'cross-thread-resource',
+            createdAt: new Date(now.getTime() + 1000),
           }),
           createSampleMessageV2({
             threadId: 'thread-one',
             content: { content: 'Third' },
             resourceId: 'cross-thread-resource',
+            createdAt: new Date(now.getTime() + 2000),
           }),
 
           createSampleMessageV2({
             threadId: 'thread-two',
             content: { content: 'Fourth' },
             resourceId: 'cross-thread-resource',
+            createdAt: new Date(now.getTime() + 3000),
           }),
           createSampleMessageV2({
             threadId: 'thread-two',
             content: { content: 'Fifth' },
             resourceId: 'cross-thread-resource',
+            createdAt: new Date(now.getTime() + 4000),
           }),
           createSampleMessageV2({
             threadId: 'thread-two',
             content: { content: 'Sixth' },
             resourceId: 'cross-thread-resource',
+            createdAt: new Date(now.getTime() + 5000),
           }),
 
           createSampleMessageV2({
             threadId: 'thread-three',
             content: { content: 'Seventh' },
             resourceId: 'other-resource',
+            createdAt: new Date(now.getTime() + 6000),
           }),
           createSampleMessageV2({
             threadId: 'thread-three',
             content: { content: 'Eighth' },
             resourceId: 'other-resource',
+            createdAt: new Date(now.getTime() + 7000),
           }),
         ];
 

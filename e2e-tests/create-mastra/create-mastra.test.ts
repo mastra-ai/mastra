@@ -111,6 +111,7 @@ describe('create mastra', () => {
               "provider": "openai.chat",
               "tools": {
                 "weatherTool": {
+                  "__isMastraTool": true,
                   "description": "Get current weather for a location",
                   "id": "get-weather",
                   "inputSchema": "{"json":{"type":"object","properties":{"location":{"type":"string","description":"City name"}},"required":["location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",

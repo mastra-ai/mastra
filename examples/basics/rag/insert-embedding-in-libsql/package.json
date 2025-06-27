@@ -6,7 +6,7 @@
     "start": "pnpx tsx --env-file=.env index.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "latest",
+    "@ai-sdk/openai": "2.0.0-beta.1",
     "@mastra/rag": "latest",
     "@mastra/core": "latest",
     "ai": "latest"

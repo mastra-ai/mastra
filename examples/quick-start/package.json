@@ -19,7 +19,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
     "@ai-sdk/groq": "latest",
-    "@ai-sdk/openai": "latest",
+    "@ai-sdk/openai": "2.0.0-beta.1",
     "@mastra/core": "latest",
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",

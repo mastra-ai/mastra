@@ -46,7 +46,11 @@ function generateRecords(count: number): MessageRecord[] {
 function generateMessageRecords(count: number, threadId?: string): MastraMessageV2[] {
   return Array.from({ length: count }, (_, index) => ({
     id: (index + 1).toString(),
-    content: { format: 2, parts: [{ type: 'text', text: `Test message ${index + 1}` }] },
+    content: {
+      content: `Test message ${index + 1}`,
+      format: 2,
+      parts: [{ type: 'text', text: `Test message ${index + 1}` }],
+    },
     role: 'user',
     createdAt: new Date(),
     threadId: threadId ?? `12333d567-e89b-12d3-a456-${(426614174000 + index).toString()}`,

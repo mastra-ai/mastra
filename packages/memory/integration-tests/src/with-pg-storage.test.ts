@@ -13,7 +13,8 @@ if (!process.env.DB_URL) {
   console.warn('DB_URL not set, using default local PostgreSQL connection');
 }
 
-const connectionString = process.env.DB_URL || 'postgres://postgres:password@localhost:5434/mastra';
+// Force the correct port to avoid connection issues
+const connectionString = 'postgres://postgres:password@localhost:5434/mastra';
 
 const parseConnectionString = (url: string) => {
   const parsedUrl = new URL(url);

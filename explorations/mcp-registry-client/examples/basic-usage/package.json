@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"dependencies": {
-		"@ai-sdk/openai": "^1.1.15",
+		"@ai-sdk/openai": "2.0.0-beta.1",
 		"@mastra/core": "workspace:*",
 		"@mastra/mcp-configuration": "workspace:*",
 		"@mcp/registry": "workspace:*",
