@@ -727,7 +727,7 @@ export class NewAgentNetwork extends MastraBase {
           ...toolData,
         });
         const run = wf.createRun();
-        const { stream } = run.stream({
+        const { stream, getWorkflowState } = run.stream({
           inputData: input,
           runtimeContext: runtimeContextToUse,
         });
@@ -778,6 +778,11 @@ export class NewAgentNetwork extends MastraBase {
           runId: run.runId,
           runResult,
         });
+
+        const workflowState = await getWorkflowState();
+        if (workflowState.status === 'failed') {
+          throw workflowState.error;
+        }
 
         const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
         const initData = await getInitData();
