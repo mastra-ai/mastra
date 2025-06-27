@@ -25,12 +25,17 @@ export const VNextNetworkChatProvider = ({ children }: { children: ReactNode }) 
   const { chatWithLoop } = useContext(NetworkContext);
 
   const handleStep = (uuid: string, record: Record<string, any>) => {
-    const addFinishStep = chatWithLoop && record.type === 'step-finish' && record.payload?.id === 'final-step';
-    const id = record?.type === 'finish' ? 'finish' : record.type === 'start' ? 'start' : record.payload?.id;
-    if (id.includes('mapping_')) return;
+    const addFinishStep =
+      (chatWithLoop && record.type === 'step-finish' && record.payload?.id === 'final-step') || record.type === 'error';
+    let id = record?.type === 'finish' ? 'finish' : record.type === 'start' ? 'start' : record.payload?.id;
+
+    if (id?.includes('mapping_')) return;
 
     setState(prevState => {
       const current = prevState[uuid];
+      if (record.type === 'error') {
+        id = current?.executionSteps?.[current?.executionSteps.length - 1];
+      }
       const currentMetadata = current?.steps?.[id]?.metadata;
 
       let startTime = currentMetadata?.startTime;
@@ -40,13 +45,9 @@ export const VNextNetworkChatProvider = ({ children }: { children: ReactNode }) 
         startTime = Date.now();
       }
 
-      if (record.type === 'step-finish') {
+      if (record.type === 'step-finish' || record.type === 'error') {
         endTime = Date.now();
       }
-
-      // const newPayload = chatWithLoop
-      //   ? { ...(state[uuid]?.steps?.[id]?.[record.type] || {}), ...record.payload }
-      //   : record.payload;
 
       return {
         ...prevState,
@@ -60,7 +61,7 @@ export const VNextNetworkChatProvider = ({ children }: { children: ReactNode }) 
             ...current?.steps,
             [id]: {
               ...(current?.steps?.[id] || {}),
-              [record.type]: record.payload,
+              [record.type]: record.payload || record?.error,
               metadata: {
                 startTime,
                 endTime,

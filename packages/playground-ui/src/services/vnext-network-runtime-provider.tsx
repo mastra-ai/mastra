@@ -61,13 +61,15 @@ export function VNextMastraNetworkRuntimeProvider({
 
     const run = async () => {
       const parsedResult = JSON.parse(workflowStepResult?.output?.result ?? '{}') ?? {};
-      const runResult = parsedResult?.runResult ?? {};
-      const formatted = await formatJSON(JSON.stringify(runResult));
+      if (parsedResult?.runResult) {
+        const runResult = parsedResult?.runResult ?? {};
+        const formatted = await formatJSON(JSON.stringify(runResult));
 
-      setMessages(msgs => [
-        ...msgs,
-        { role: 'assistant', content: [{ type: 'text', text: `\`\`\`json\n${formatted}\`\`\`` }] },
-      ]);
+        setMessages(msgs => [
+          ...msgs,
+          { role: 'assistant', content: [{ type: 'text', text: `\`\`\`json\n${formatted}\`\`\`` }] },
+        ]);
+      }
     };
 
     run();
@@ -121,6 +123,7 @@ export function VNextMastraNetworkRuntimeProvider({
                 const resourceStepId = routingDecision?.resourceType === 'agent' ? 'agent-step' : 'workflow-step';
 
                 let finalResponse = responseStep?.text ?? '';
+
                 let runId = '';
 
                 let runResult = {};
@@ -165,6 +168,9 @@ export function VNextMastraNetworkRuntimeProvider({
                   finalResult = taskCompleteDecision?.finalResult;
                 }
 
+                const routingStepFailed =
+                  resourceStepId === 'workflow-step' ? Object.keys(runResult).length === 0 : !finalResponse;
+
                 setState(currentState => {
                   return {
                     ...currentState,
@@ -176,7 +182,8 @@ export function VNextMastraNetworkRuntimeProvider({
                         'routing-step': {
                           'step-result': {
                             output: routingDecision,
-                            status: 'success',
+                            status: routingDecision ? 'success' : 'failed',
+                            ...(routingDecision ? {} : { error: 'Something went wrong' }),
                           },
                         },
                         [resourceStepId]: {
@@ -184,7 +191,8 @@ export function VNextMastraNetworkRuntimeProvider({
                             output: {
                               resourceId: routingDecision?.resourceId,
                             },
-                            status: 'success',
+                            status: routingStepFailed ? 'failed' : 'success',
+                            ...(routingStepFailed ? { error: 'Something went wrong' } : {}),
                           },
                         },
                         finish: {},
@@ -245,7 +253,7 @@ export function VNextMastraNetworkRuntimeProvider({
                   ];
                 });
 
-                if (resourceStepId === 'workflow-step') {
+                if (resourceStepId === 'workflow-step' && !routingStepFailed) {
                   run(JSON.stringify(runResult), formattedMessageId);
                 }
               }
@@ -270,6 +278,9 @@ export function VNextMastraNetworkRuntimeProvider({
                 runId = parsedResult?.runId ?? '';
               }
 
+              const routingStepFailed =
+                resourceStepId === 'workflow-step' ? Object.keys(runResult).length === 0 : !finalResponse;
+
               setState(currentState => {
                 return {
                   ...currentState,
@@ -281,7 +292,8 @@ export function VNextMastraNetworkRuntimeProvider({
                       'routing-step': {
                         'step-result': {
                           output: routingDecision,
-                          status: 'success',
+                          status: routingDecision ? 'success' : 'failed',
+                          ...(routingDecision ? {} : { error: 'Something went wrong' }),
                         },
                       },
                       [resourceStepId]: {
@@ -289,7 +301,8 @@ export function VNextMastraNetworkRuntimeProvider({
                           output: {
                             resourceId: routingDecision?.resourceId,
                           },
-                          status: 'success',
+                          status: routingStepFailed ? 'failed' : 'success',
+                          ...(routingStepFailed ? { error: 'Something went wrong' } : {}),
                         },
                       },
                       finish: {},
@@ -327,7 +340,7 @@ export function VNextMastraNetworkRuntimeProvider({
                 ];
               });
 
-              if (resourceStepId === 'workflow-step') {
+              if (resourceStepId === 'workflow-step' && !routingStepFailed) {
                 run(JSON.stringify(runResult), formattedMessageId);
               }
             }
@@ -378,6 +391,7 @@ export function VNextMastraNetworkRuntimeProvider({
             maxIterations,
           },
           async (record: any) => {
+            console.log('record in loopStream===', record);
             if (
               (record as any).type === 'step-start' &&
               (record as any).payload?.id === 'Agent-Network-Outer-Workflow'
@@ -486,6 +500,7 @@ export function VNextMastraNetworkRuntimeProvider({
             resourceId: networkId,
           },
           (record: any) => {
+            console.log('record in stream===', record);
             if (runIdRef.current) {
               if ((record as any).type === 'tool-call-delta') {
                 appendToLastMessage((record as any).argsTextDelta);
