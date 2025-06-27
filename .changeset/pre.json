@@ -70,5 +70,15 @@
     "@mastra/voice-speechify": "0.10.4",
     "@mastra/inngest": "0.11.0"
   },
-  "changesets": []
+  "changesets": [
+    "curly-camels-rush",
+    "deep-hotels-laugh",
+    "forty-ways-wait",
+    "free-poems-itch",
+    "fresh-bears-tease",
+    "great-pandas-live",
+    "quiet-lands-wink",
+    "swift-buses-wonder",
+    "thirty-experts-sing"
+  ]
 }

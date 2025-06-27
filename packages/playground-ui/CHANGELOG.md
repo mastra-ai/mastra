@@ -1,5 +1,21 @@
 # @mastra/playground-ui
 
+## 5.1.9-alpha.0
+
+### Patch Changes
+
+- 7e801dd: [MASTRA-4118] fixes issue with agent network loopStream where subsequent messages aren't present in playground on refresh
+- 1760a1c: Use workflow stream in playground instead of watch
+- ac369c6: Show resume data on workflow graph
+- Updated dependencies [7e801dd]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [7e801dd]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9-alpha.0
+  - @mastra/client-js@0.10.8-alpha.0
+
 ## 5.1.8
 
 ### Patch Changes

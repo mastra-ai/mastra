@@ -1,5 +1,18 @@
 # @mastra/deployer-netlify
 
+## 0.11.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [7e801dd]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [7e801dd]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9-alpha.0
+  - @mastra/deployer@0.10.9-alpha.0
+
 ## 0.11.1
 
 ### Patch Changes

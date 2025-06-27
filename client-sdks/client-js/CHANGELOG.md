@@ -1,5 +1,18 @@
 # @mastra/client-js
 
+## 0.10.8-alpha.0
+
+### Patch Changes
+
+- 1760a1c: Use workflow stream in playground instead of watch
+- 7e801dd: Add tools to network api response
+- Updated dependencies [7e801dd]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9-alpha.0
+
 ## 0.10.7
 
 ### Patch Changes
