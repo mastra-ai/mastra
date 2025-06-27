@@ -231,7 +231,7 @@ export class MCPServer extends MCPServerBase {
     });
 
     // Call tool handler
-    serverInstance.setRequestHandler(CallToolRequestSchema, async request => {
+    serverInstance.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       const startTime = Date.now();
       try {
         const tool = this.convertedTools[request.params.name] as MCPTool;
@@ -272,6 +272,7 @@ export class MCPServer extends MCPServerBase {
           messages: [],
           toolCallId: '',
           elicitation: sessionElicitation,
+          extra,
         });
 
         this.logger.debug(`CallTool: Tool '${request.params.name}' executed successfully with result:`, result);
