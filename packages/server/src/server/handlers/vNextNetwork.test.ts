@@ -137,7 +137,6 @@ describe('VNextNetwork Handlers', () => {
             { name: 'agent1', provider: llm.getProvider(), modelId: llm.getModelId() },
             { name: 'agent2', provider: llm.getProvider(), modelId: llm.getModelId() },
           ],
-          tools: [],
           workflows: [
             {
               name: 'workflow1',
@@ -183,7 +182,6 @@ describe('VNextNetwork Handlers', () => {
           { name: 'agent1', provider: llm.getProvider(), modelId: llm.getModelId() },
           { name: 'agent2', provider: llm.getProvider(), modelId: llm.getModelId() },
         ],
-        tools: [],
         workflows: [
           {
             name: 'workflow1',
