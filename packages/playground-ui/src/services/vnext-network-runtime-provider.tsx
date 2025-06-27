@@ -51,16 +51,21 @@ export function VNextMastraNetworkRuntimeProvider({
     if (!hasFinished) return;
 
     const workflowStep = currentState?.steps?.['workflow-step'];
-    if (!workflowStep) return;
+    const toolStep = currentState?.steps?.['toolStep'];
+    if (!workflowStep && !toolStep) return;
 
     const workflowStepResult = workflowStep?.['step-result'];
-    if (!workflowStepResult) return;
+    const toolStepResult = toolStep?.['step-result'];
+    if (!workflowStepResult && !toolStepResult) return;
 
     const workflowStepResultOutput = workflowStepResult?.output;
-    if (!workflowStepResultOutput) return;
+    const toolStepResultOutput = toolStepResult?.output;
+    if (!workflowStepResultOutput && !toolStepResultOutput) return;
 
     const run = async () => {
-      const parsedResult = JSON.parse(workflowStepResult?.output?.result ?? '{}') ?? {};
+      const parsedResult = workflowStepResult
+        ? (JSON.parse(workflowStepResult?.output?.result ?? '{}') ?? {})
+        : { runResult: toolStepResultOutput?.result ?? {} };
       if (parsedResult?.runResult) {
         const runResult = parsedResult?.runResult ?? {};
         const formatted = await formatJSON(JSON.stringify(runResult));
@@ -120,7 +125,15 @@ export function VNextMastraNetworkRuntimeProvider({
 
                 const taskCompleteDecision = JSON.parse(taskCompleteStep?.text ?? '{}');
 
-                const resourceStepId = routingDecision?.resourceType === 'agent' ? 'agent-step' : 'workflow-step';
+                let resourceStepId = routingDecision?.resourceType === 'agent' ? 'agent-step' : '';
+
+                if (routingDecision?.resourceType === 'tool') {
+                  resourceStepId = 'toolStep';
+                }
+
+                if (routingDecision?.resourceType === 'workflow') {
+                  resourceStepId = 'workflow-step';
+                }
 
                 let finalResponse = responseStep?.text ?? '';
 
@@ -131,9 +144,10 @@ export function VNextMastraNetworkRuntimeProvider({
                 let finalStep = null;
                 let finalResult = '';
 
-                if (resourceStepId === 'workflow-step') {
+                if (resourceStepId === 'workflow-step' || resourceStepId === 'toolStep') {
                   const parsedResult = JSON.parse(responseStep?.text ?? '{}') ?? {};
-                  runResult = parsedResult?.runResult ?? {};
+                  runResult =
+                    resourceStepId === 'workflow-step' ? (parsedResult?.runResult ?? {}) : (parsedResult ?? {});
                   runId = parsedResult?.runId ?? '';
                 }
 
@@ -169,7 +183,9 @@ export function VNextMastraNetworkRuntimeProvider({
                 }
 
                 const routingStepFailed =
-                  resourceStepId === 'workflow-step' ? Object.keys(runResult).length === 0 : !finalResponse;
+                  resourceStepId === 'workflow-step' || resourceStepId === 'toolStep'
+                    ? Object.keys(runResult).length === 0
+                    : !finalResponse;
 
                 setState(currentState => {
                   return {
@@ -190,6 +206,7 @@ export function VNextMastraNetworkRuntimeProvider({
                           'step-result': {
                             output: {
                               resourceId: routingDecision?.resourceId,
+                              result: responseStep?.text ?? '',
                             },
                             status: routingStepFailed ? 'failed' : 'success',
                             ...(routingStepFailed ? { error: 'Something went wrong' } : {}),
@@ -221,7 +238,13 @@ export function VNextMastraNetworkRuntimeProvider({
                     },
                     {
                       role: 'assistant',
-                      content: [{ type: 'text', text: resourceStepId === 'workflow-step' ? '' : finalResponse }],
+                      content: [
+                        {
+                          type: 'text',
+                          text:
+                            resourceStepId === 'workflow-step' || resourceStepId === 'toolStep' ? '' : finalResponse,
+                        },
+                      ],
                       metadata: {
                         custom: {
                           id: formattedMessageId,
@@ -253,7 +276,7 @@ export function VNextMastraNetworkRuntimeProvider({
                   ];
                 });
 
-                if (resourceStepId === 'workflow-step' && !routingStepFailed) {
+                if ((resourceStepId === 'workflow-step' || resourceStepId === 'toolStep') && !routingStepFailed) {
                   run(JSON.stringify(runResult), formattedMessageId);
                 }
               }
@@ -265,21 +288,29 @@ export function VNextMastraNetworkRuntimeProvider({
               const responseStep = parts?.[3];
               const routingDecision = JSON.parse(routingStep?.text ?? '{}');
 
-              const resourceStepId = routingDecision?.resourceType === 'agent' ? 'agent-step' : 'workflow-step';
+              let resourceStepId = routingDecision?.resourceType === 'agent' ? 'agent-step' : '';
+              if (routingDecision?.resourceType === 'tool') {
+                resourceStepId = 'toolStep';
+              }
+              if (routingDecision?.resourceType === 'workflow') {
+                resourceStepId = 'workflow-step';
+              }
 
               let finalResponse = responseStep?.text ?? '';
               let runId = '';
 
               let runResult = {};
 
-              if (resourceStepId === 'workflow-step') {
+              if (resourceStepId === 'workflow-step' || resourceStepId === 'toolStep') {
                 const parsedResult = JSON.parse(responseStep?.text ?? '{}') ?? {};
-                runResult = parsedResult?.runResult ?? {};
+                runResult = resourceStepId === 'workflow-step' ? (parsedResult?.runResult ?? {}) : (parsedResult ?? {});
                 runId = parsedResult?.runId ?? '';
               }
 
               const routingStepFailed =
-                resourceStepId === 'workflow-step' ? Object.keys(runResult).length === 0 : !finalResponse;
+                resourceStepId === 'workflow-step' || resourceStepId === 'toolStep'
+                  ? Object.keys(runResult).length === 0
+                  : !finalResponse;
 
               setState(currentState => {
                 return {
@@ -300,6 +331,7 @@ export function VNextMastraNetworkRuntimeProvider({
                         'step-result': {
                           output: {
                             resourceId: routingDecision?.resourceId,
+                            result: responseStep?.text ?? '',
                           },
                           status: routingStepFailed ? 'failed' : 'success',
                           ...(routingStepFailed ? { error: 'Something went wrong' } : {}),
@@ -330,7 +362,12 @@ export function VNextMastraNetworkRuntimeProvider({
                   },
                   {
                     role: 'assistant',
-                    content: [{ type: 'text', text: resourceStepId === 'workflow-step' ? '' : finalResponse }],
+                    content: [
+                      {
+                        type: 'text',
+                        text: resourceStepId === 'workflow-step' || resourceStepId === 'toolStep' ? '' : finalResponse,
+                      },
+                    ],
                     metadata: {
                       custom: {
                         id: formattedMessageId,
@@ -340,7 +377,7 @@ export function VNextMastraNetworkRuntimeProvider({
                 ];
               });
 
-              if (resourceStepId === 'workflow-step' && !routingStepFailed) {
+              if ((resourceStepId === 'workflow-step' || resourceStepId === 'toolStep') && !routingStepFailed) {
                 run(JSON.stringify(runResult), formattedMessageId);
               }
             }
@@ -391,7 +428,6 @@ export function VNextMastraNetworkRuntimeProvider({
             maxIterations,
           },
           async (record: any) => {
-            console.log('record in loopStream===', record);
             if (
               (record as any).type === 'step-start' &&
               (record as any).payload?.id === 'Agent-Network-Outer-Workflow'
@@ -436,9 +472,17 @@ export function VNextMastraNetworkRuntimeProvider({
                     handleStep(runIdRef.current, { ...record, type: 'finish' });
                     runIdRef.current = undefined;
                   }
-                } else if ((record as any).type === 'step-result' && (record as any).payload?.id === 'workflow-step') {
+                } else if (
+                  (record as any).type === 'step-result' &&
+                  ((record as any).payload?.id === 'Agent-Network-Outer-Workflow.workflow-step' ||
+                    (record as any).payload?.id === 'Agent-Network-Outer-Workflow.toolStep')
+                ) {
                   handleStep(runIdRef.current, record);
-                  const parsedResult = JSON.parse(record?.payload?.output?.result ?? '{}') ?? {};
+                  const result = record?.payload?.output?.result;
+                  const parsedResult =
+                    typeof result === 'string'
+                      ? (JSON.parse(record?.payload?.output?.result ?? '{}') ?? {})
+                      : { runResult: result };
                   const runResult = parsedResult?.runResult ?? {};
                   const formatedOutputId = uuid();
 
@@ -500,7 +544,6 @@ export function VNextMastraNetworkRuntimeProvider({
             resourceId: networkId,
           },
           (record: any) => {
-            console.log('record in stream===', record);
             if (runIdRef.current) {
               if ((record as any).type === 'tool-call-delta') {
                 appendToLastMessage((record as any).argsTextDelta);

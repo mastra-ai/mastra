@@ -22,6 +22,8 @@ const LabelMappings = {
   'Agent-Network-Outer-Workflow.agent-step': 'Agent execution',
   'workflow-step': 'Workflow execution',
   'Agent-Network-Outer-Workflow.workflow-step': 'Workflow execution',
+  toolStep: 'Tool execution',
+  'Agent-Network-Outer-Workflow.toolStep': 'Tool execution',
   'final-step': 'Task completed',
 };
 
@@ -186,6 +188,22 @@ const StepEntry = ({ stepId, step, runId }: { stepId: any; step: any; runId?: st
       )}
 
       {(stepId === 'agent-step' || stepId === 'Agent-Network-Outer-Workflow.agent-step') &&
+        (stepError || stepResult?.error) &&
+        expanded && (
+          <div className="bg-surface1 p-3 space-y-4">
+            <div>
+              <Txt variant="ui-sm" className="text-icon3 font-medium">
+                Error
+              </Txt>
+
+              <Txt variant="ui-sm" className="text-icon6">
+                {stepError?.data?.error?.message || stepResult?.error || 'N/A'}
+              </Txt>
+            </div>
+          </div>
+        )}
+
+      {(stepId === 'toolStep' || stepId === 'Agent-Network-Outer-Workflow.toolStep') &&
         (stepError || stepResult?.error) &&
         expanded && (
           <div className="bg-surface1 p-3 space-y-4">
