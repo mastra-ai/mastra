@@ -16,9 +16,12 @@ import { useWorkflow } from '@/hooks/use-workflows';
 import { useMessage } from '@assistant-ui/react';
 
 const LabelMappings = {
+  'Agent-Network-Outer-Workflow.routing-step': 'Decision making process',
   'routing-step': 'Decision making process',
   'agent-step': 'Agent execution',
+  'Agent-Network-Outer-Workflow.agent-step': 'Agent execution',
   'workflow-step': 'Workflow execution',
+  'Agent-Network-Outer-Workflow.workflow-step': 'Workflow execution',
   'final-step': 'Task completed',
 };
 
@@ -32,7 +35,9 @@ export const StepDropdown = () => {
   if (!id) return <div>Something is wrong</div>;
   const currentState = state[id];
 
-  const latestStepId = currentState.executionSteps[currentState.executionSteps.length - 1];
+  const latestStepId = currentState.executionSteps
+    ? currentState.executionSteps?.[currentState.executionSteps.length - 1]
+    : '';
   const hasFinished = latestStepId === 'finish';
 
   return (
@@ -71,7 +76,7 @@ const Steps = ({ id }: { id: string }) => {
   return (
     <ol className="flex flex-col gap-px rounded-lg overflow-hidden">
       {currentState.executionSteps
-        .filter(stepId => stepId !== 'start')
+        ?.filter(stepId => stepId !== 'start')
         .map((stepId: any, index: number) => (
           <StepEntry key={index} stepId={stepId} step={currentState.steps[stepId] || {}} runId={currentState.runId} />
         ))}
@@ -109,7 +114,7 @@ const StepEntry = ({ stepId, step, runId }: { stepId: any; step: any; runId?: st
         {step.metadata?.startTime && <StepClock step={step} />}
       </button>
 
-      {stepId === 'routing-step' && expanded && (
+      {(stepId === 'routing-step' || stepId === 'Agent-Network-Outer-Workflow.routing-step') && expanded && (
         <div className="bg-surface1 p-3 space-y-4">
           <div>
             <Txt variant="ui-sm" className="text-icon3 font-medium">

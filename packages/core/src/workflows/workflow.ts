@@ -1405,7 +1405,7 @@ export class Run<
     }) => {
       this.emitter.emit('watch-v2', {
         ...event,
-        payload: { ...event.payload, id: `${workflowId}.${event.payload.id}` },
+        ...(event.payload?.id ? { payload: { ...event.payload, id: `${workflowId}.${event.payload.id}` } } : {}),
       });
     };
 
