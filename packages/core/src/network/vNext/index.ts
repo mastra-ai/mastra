@@ -727,7 +727,7 @@ export class NewAgentNetwork extends MastraBase {
           ...toolData,
         });
         const run = wf.createRun();
-        const { stream } = run.stream({
+        const { stream, getWorkflowState } = run.stream({
           inputData: input,
           runtimeContext: runtimeContextToUse,
         });
@@ -773,10 +773,18 @@ export class NewAgentNetwork extends MastraBase {
           }
         }
 
+        let runSuccess = true;
         const runResult = await streamPromise.promise;
+
+        const workflowState = await getWorkflowState();
+        if (workflowState.status === 'failed') {
+          runSuccess = false;
+        }
+
         const finalResult = JSON.stringify({
           runId: run.runId,
           runResult,
+          runSuccess,
         });
 
         const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
@@ -864,7 +872,7 @@ export class NewAgentNetwork extends MastraBase {
               id: randomUUID() as string,
               type: 'text',
               role: 'assistant',
-              content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
+              content: { parts: [{ type: 'text', text: JSON.stringify(finalResult) }], format: 2 },
               createdAt: new Date(),
               threadId: initData.threadId || runId,
               resourceId: initData.threadResourceId || this.name,

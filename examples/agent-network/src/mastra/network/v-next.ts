@@ -7,6 +7,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { z } from 'zod';
 import { weatherAgent } from '../agents';
+import { weatherTool } from '../tools';
 
 const memory = new Memory({
   storage: new LibSQLStore({
@@ -94,7 +95,10 @@ export const v_nextNetwork = new NewAgentNetwork({
   agents: {
     agent1,
     agent2,
-    weatherAgent,
+    // weatherAgent,
+  },
+  tools: {
+    weatherTool,
   },
   workflows: {
     workflow1,
