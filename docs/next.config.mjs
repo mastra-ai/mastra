@@ -387,16 +387,7 @@ export default withGT(
         destination: "/docs/workflows/overview",
         permanent: true,
       },
-      {
-        source: "/docs/workflows/index",
-        destination: "/docs/workflows/overview",
-        permanent: true,
-      },
-      {
-        source: "/docs/voice",
-        destination: "/docs/voice/overview",
-        permanent: true,
-      },
+
       {
         source: "/docs/reference/memory/memory-processors",
         destination: "/docs/memory/memory-processors",
@@ -971,13 +962,6 @@ export default withGT(
       {
         source: "/:locale/reference/rag/vector-search",
         destination: "/:locale/examples/rag/query/hybrid-vector-search",
-        permanent: true,
-      },
-
-      // redirect overview pages
-      {
-        source: "/:locale/docs/frameworks/agentic-uis",
-        destination: "/:locale/docs/frameworks/agentic-uis/ai-sdk",
         permanent: true,
       },
     ],
