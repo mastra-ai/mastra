@@ -21,7 +21,7 @@ export const VNextNetworkChat = ({
 }) => {
   return (
     <MessagesProvider key={threadId}>
-      <VNextNetworkChatProvider networkId={networkId} key={threadId}>
+      <VNextNetworkChatProvider key={threadId}>
         <VNextMastraNetworkRuntimeProvider
           key={threadId}
           networkId={networkId}

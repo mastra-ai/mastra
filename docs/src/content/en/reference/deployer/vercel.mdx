@@ -5,63 +5,16 @@ description: "Documentation for the VercelDeployer class, which deploys Mastra a
 
 # VercelDeployer
 
-The VercelDeployer deploys standalone Mastra applications to Vercel, handling configuration, environment variable synchronization, and deployment processes. It extends the abstract Deployer class to provide Vercel-specific deployment functionality.
+The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/deployer) class with Vercel specific functionality.
 
-## Installation
-
-```bash copy
-npm install @mastra/deployer-vercel@latest
-```
-
-## Usage Example
+## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   // ...
   deployer: new VercelDeployer()
 });
 ```
-
-## Lint Mastra Project
-
-Lint your Mastra project to make sure it's fine to build
-
-```bash
-npx mastra lint
-```
-
-## Build Mastra Project
-
-To build your Mastra project for Vercel deployment:
-
-```bash
-npx mastra build
-```
-
-The build process generates the following output structure in the `.vercel/output` directory:
-
-```
-.vercel/output/functions/index.func
-└── index.mjs       # Application entry point
-```
-
-## Deployment Options
-
-After building, you can deploy your Mastra application to Vercel using any of these methods:
-
-1. **Vercel CLI**: Deploy directly using Vercel's official CLI tool
-
-   - Install the CLI: `npm install -g vercel`
-   - Deploy to preview environment: `vercel --prebuilt`
-   - For production deployment: `vercel --prod --prebuilt`
-
-2. **Vercel Dashboard**: Connect your Git repository or drag-and-drop the build output through the Vercel dashboard
-
-> You can also run `vercel dev` in your project directory to test your Mastra application locally. (Make sure you configured your dev command to `mastra dev`)
-
-## Platform Documentation
-
-- [Vercel](https://vercel.com/docs)

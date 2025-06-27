@@ -267,6 +267,7 @@ export class NewAgentNetwork extends MastraBase {
           If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.
           When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.
           When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.
+          When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.
 
           Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.
         `;
@@ -351,9 +352,13 @@ export class NewAgentNetwork extends MastraBase {
     {
       runtimeContext,
       maxIterations,
+      threadId,
+      resourceId,
     }: {
       runtimeContext?: RuntimeContext;
       maxIterations?: number;
+      threadId?: string;
+      resourceId?: string;
     },
   ) {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
@@ -379,10 +384,21 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         iteration: z.number(),
         task: z.string(),
+        resourceId: z.string(),
         resourceType: RESOURCE_TYPES,
+        result: z.string().optional(),
+        threadId: z.string().optional(),
+        threadResourceId: z.string().optional(),
+        isOneOff: z.boolean(),
       }),
       outputSchema: z.object({
-        text: z.string(),
+        task: z.string(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
+        prompt: z.string(),
+        result: z.string(),
+        isComplete: z.boolean().optional(),
+        completionReason: z.string().optional(),
         iteration: z.number(),
       }),
     })
@@ -394,11 +410,31 @@ export class NewAgentNetwork extends MastraBase {
 
     const run = mainWorkflow.createRun();
 
+    const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
+    await memory?.saveMessages({
+      messages: [
+        {
+          id: randomUUID() as string,
+          type: 'text',
+          role: 'user',
+          content: { parts: [{ type: 'text', text: message }], format: 2 },
+          createdAt: new Date(),
+          threadId: threadId || run.runId,
+          resourceId: resourceId || this.name,
+        },
+      ] as MastraMessageV2[],
+      format: 'v2',
+    });
+
     return run.stream({
       inputData: {
         task: message,
+        resourceId: '',
         resourceType: 'none',
         iteration: 0,
+        threadResourceId: resourceId,
+        threadId,
+        isOneOff: false,
       },
     });
   }
@@ -593,12 +629,11 @@ export class NewAgentNetwork extends MastraBase {
             case 'step-start':
             case 'step-finish':
             case 'finish':
-              break;
-
             case 'tool-call':
             case 'tool-result':
             case 'tool-call-streaming-start':
             case 'tool-call-delta':
+              break;
             case 'source':
             case 'file':
             default:
@@ -898,8 +933,13 @@ export class NewAgentNetwork extends MastraBase {
         isComplete: z.boolean().optional(),
         completionReason: z.string().optional(),
         iteration: z.number(),
+        threadId: z.string().optional(),
+        threadResourceId: z.string().optional(),
+        isOneOff: z.boolean(),
       }),
-    })
+    });
+
+    networkWorkflow
       .then(routingStep)
       .branch([
         [async ({ inputData }) => !inputData.isComplete && inputData.resourceType === 'agent', agentStep],
@@ -935,6 +975,18 @@ export class NewAgentNetwork extends MastraBase {
         iteration: {
           step: [routingStep, agentStep, workflowStep, toolStep],
           path: 'iteration',
+        },
+        isOneOff: {
+          initData: networkWorkflow,
+          path: 'isOneOff',
+        },
+        threadId: {
+          initData: networkWorkflow,
+          path: 'threadId',
+        },
+        threadResourceId: {
+          initData: networkWorkflow,
+          path: 'threadResourceId',
         },
       })
       .commit();

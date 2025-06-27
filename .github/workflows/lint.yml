@@ -287,3 +287,52 @@ jobs:
       - name: Test
         working-directory: ./e2e-tests/commonjs
         run: pnpm test
+
+  e2e-kitchen-sink:
+    name: E2E kitchen-sink
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Run on main repository or for trusted bot PRs
+    if: ${{ github.repository == 'mastra-ai/mastra' }} && ${{ !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+
+    permissions:
+      pull-requests: read
+
+    needs: prebuild
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.1
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install e2e test dependencies
+        working-directory: ./e2e-tests/kitchen-sink
+        run: pnpm install --ignore-workspace
+
+      - name: Install Playwright browsers
+        working-directory: ./e2e-tests/kitchen-sink
+        run: pnpm test:e2e:setup
+
+      - name: Test
+        working-directory: ./e2e-tests/kitchen-sink
+        run: pnpm test:e2e

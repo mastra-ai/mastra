@@ -25,7 +25,7 @@ export const NetworkLayout = ({ children, isVNext }: { children: React.ReactNode
           </HeaderTitle>
         </Header>
       ) : (
-        <NetworkHeader networkName={networkToUse?.name} networkId={networkId!} />
+        <NetworkHeader networkName={networkToUse?.name!} networkId={networkId!} />
       )}
       {children}
     </MainContentLayout>

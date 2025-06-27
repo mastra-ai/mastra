@@ -45,7 +45,7 @@ export function NetworkInformation({ networkId, isVNext }: { networkId: string; 
       </TabsList>
       <div className="overflow-y-auto">
         <TabsContent value="details">
-          <NetworkDetails network={networkToUse} />
+          <NetworkDetails network={networkToUse} isVNext={isVNext} />
         </TabsContent>
         <TabsContent value="agents">
           <NetworkAgents network={networkToUse} />
@@ -56,7 +56,7 @@ export function NetworkInformation({ networkId, isVNext }: { networkId: string; 
           </TabsContent>
         ) : null}
         <TabsContent value="endpoints">
-          <NetworkEndpoints networkId={networkId} />
+          <NetworkEndpoints networkId={networkId} isVNext={isVNext} />
         </TabsContent>
       </div>
     </Tabs>
