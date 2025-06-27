@@ -773,16 +773,19 @@ export class NewAgentNetwork extends MastraBase {
           }
         }
 
+        let runSuccess = true;
         const runResult = await streamPromise.promise;
-        const finalResult = JSON.stringify({
-          runId: run.runId,
-          runResult,
-        });
 
         const workflowState = await getWorkflowState();
         if (workflowState.status === 'failed') {
-          throw workflowState.error;
+          runSuccess = false;
         }
+
+        const finalResult = JSON.stringify({
+          runId: run.runId,
+          runResult,
+          runSuccess,
+        });
 
         const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
         const initData = await getInitData();
