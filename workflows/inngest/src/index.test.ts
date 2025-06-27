@@ -5965,68 +5965,76 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
 
       expect(watchData.length).toBe(8);
-      expect(watchData).toMatchInlineSnapshot(`
-        [
-          {
-            "payload": {
-              "runId": "test-run-id",
-            },
-            "type": "start",
+      expect(watchData).toMatchObject([
+        {
+          payload: {
+            runId: 'test-run-id',
           },
-          {
-            "payload": {
-              "id": "step1",
-            },
-            "type": "step-start",
+          type: 'start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            status: 'running',
           },
-          {
-            "payload": {
-              "id": "step1",
-              "output": {
-                "result": "success1",
-              },
-              "status": "success",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            endedAt: expect.any(Number),
+            startedAt: expect.any(Number),
+            payload: {},
+            output: {
+              result: 'success1',
             },
-            "type": "step-result",
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "step1",
-              "metadata": {},
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step1',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'step2',
+            status: 'running',
+          },
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step2',
+            endedAt: expect.any(Number),
+            startedAt: expect.any(Number),
+            payload: {
+              result: 'success1',
             },
-            "type": "step-finish",
-          },
-          {
-            "payload": {
-              "id": "step2",
+            output: {
+              result: 'success2',
             },
-            "type": "step-start",
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "step2",
-              "output": {
-                "result": "success2",
-              },
-              "status": "success",
-            },
-            "type": "step-result",
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step2',
+            metadata: {},
           },
-          {
-            "payload": {
-              "id": "step2",
-              "metadata": {},
-            },
-            "type": "step-finish",
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            runId: 'test-run-id',
           },
-          {
-            "payload": {
-              "runId": "test-run-id",
-            },
-            "type": "finish",
-          },
-        ]
-      `);
+          type: 'finish',
+        },
+      ]);
       // Verify execution completed successfully
       expect(executionResult.steps.step1).toMatchObject({
         status: 'success',

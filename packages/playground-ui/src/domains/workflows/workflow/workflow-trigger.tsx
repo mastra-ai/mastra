@@ -12,14 +12,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
-import { ExtendedWorkflowWatchResult } from '@/hooks/use-workflows';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { toast } from 'sonner';
 import { usePlaygroundStore } from '@/store/playground-store';
 import { Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
 
-import { GetWorkflowResponse } from '@mastra/client-js';
+import { GetWorkflowResponse, WorkflowWatchResult } from '@mastra/client-js';
 import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
@@ -40,15 +39,16 @@ interface WorkflowTriggerProps {
   createWorkflowRun: ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => Promise<{
     runId: string;
   }>;
-  startWorkflowRun: ({
+  isStreamingWorkflow: boolean;
+  streamWorkflow: ({
     workflowId,
     runId,
-    input,
+    inputData,
     runtimeContext,
   }: {
     workflowId: string;
     runId: string;
-    input: Record<string, unknown>;
+    inputData: Record<string, unknown>;
     runtimeContext: Record<string, unknown>;
   }) => Promise<void>;
   resumeWorkflow: ({
@@ -66,9 +66,7 @@ interface WorkflowTriggerProps {
   }) => Promise<{
     message: string;
   }>;
-  watchWorkflow: ({ workflowId, runId }: { workflowId: string; runId: string }) => Promise<void>;
-  watchResult: ExtendedWorkflowWatchResult | null;
-  isWatchingWorkflow: boolean;
+  streamResult: WorkflowWatchResult | null;
   isResumingWorkflow: boolean;
 }
 
@@ -78,11 +76,10 @@ export function WorkflowTrigger({
   workflow,
   isLoading,
   createWorkflowRun,
-  startWorkflowRun,
   resumeWorkflow,
-  watchWorkflow,
-  watchResult,
-  isWatchingWorkflow,
+  streamWorkflow,
+  isStreamingWorkflow,
+  streamResult,
   isResumingWorkflow,
 }: WorkflowTriggerProps) {
   const { runtimeContext } = usePlaygroundStore();
@@ -103,9 +100,7 @@ export function WorkflowTrigger({
 
       setRunId?.(runId);
 
-      watchWorkflow({ workflowId, runId });
-
-      startWorkflowRun({ workflowId, runId, input: data, runtimeContext });
+      streamWorkflow({ workflowId, runId, inputData: data, runtimeContext });
     } catch (err) {
       setIsRunning(false);
       toast.error('Error executing workflow');
@@ -119,8 +114,6 @@ export function WorkflowTrigger({
 
     const { runId } = await createWorkflowRun({ workflowId, prevRunId });
 
-    watchWorkflow({ workflowId, runId });
-
     await resumeWorkflow({
       step: stepId,
       runId,
@@ -130,16 +123,16 @@ export function WorkflowTrigger({
     });
   };
 
-  const watchResultToUse = result ?? watchResult;
+  const streamResultToUse = result ?? streamResult;
 
   useEffect(() => {
-    setIsRunning(isWatchingWorkflow);
-  }, [isWatchingWorkflow]);
+    setIsRunning(isStreamingWorkflow);
+  }, [isStreamingWorkflow]);
 
   useEffect(() => {
-    if (!watchResultToUse?.payload?.workflowState?.steps || !result?.runId) return;
+    if (!streamResultToUse?.payload?.workflowState?.steps || !result?.runId) return;
 
-    const suspended = Object.entries(watchResultToUse.payload.workflowState.steps)
+    const suspended = Object.entries(streamResultToUse.payload.workflowState.steps)
       .filter(([_, { status }]) => status === 'suspended')
       .map(([stepId, { payload }]) => ({
         stepId,
@@ -148,13 +141,13 @@ export function WorkflowTrigger({
         isLoading: false,
       }));
     setSuspendedSteps(suspended);
-  }, [watchResultToUse, result]);
+  }, [streamResultToUse, result]);
 
   useEffect(() => {
-    if (watchResult) {
-      setResult(watchResult);
+    if (streamResult) {
+      setResult(streamResult);
     }
-  }, [watchResult]);
+  }, [streamResult]);
 
   if (isLoading) {
     return (
@@ -172,12 +165,11 @@ export function WorkflowTrigger({
   const isSuspendedSteps = suspendedSteps.length > 0;
 
   const zodInputSchema = triggerSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema))) : null;
-  const { sanitizedOutput, ...restResult } = result || {};
 
   return (
     <div className="h-full pt-3 pb-12">
       <div className="space-y-4 px-5 pb-5 border-b-sm border-border1">
-        {(isResumingWorkflow || (isSuspendedSteps && isWatchingWorkflow)) && (
+        {(isResumingWorkflow || (isSuspendedSteps && isStreamingWorkflow)) && (
           <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b-sm border-border1">
             <Icon>
               <Loader2 className="animate-spin text-icon6" />
@@ -192,7 +184,7 @@ export function WorkflowTrigger({
               <DynamicForm
                 schema={zodInputSchema}
                 defaultValues={payload}
-                isSubmitLoading={isWatchingWorkflow}
+                isSubmitLoading={isStreamingWorkflow}
                 submitButtonLabel="Run"
                 onSubmit={data => {
                   setPayload(data);
@@ -218,7 +210,7 @@ export function WorkflowTrigger({
           </>
         )}
 
-        {!isWatchingWorkflow &&
+        {!isStreamingWorkflow &&
           isSuspendedSteps &&
           suspendedSteps?.map(step => {
             const stepDefinition = workflow.steps[step.stepId];
@@ -259,7 +251,7 @@ export function WorkflowTrigger({
       </div>
       {result && (
         <div className="p-5 border-b-sm border-border1">
-          <WorkflowJsonDialog result={restResult} />
+          <WorkflowJsonDialog result={result} />
         </div>
       )}
     </div>
@@ -267,12 +259,12 @@ export function WorkflowTrigger({
 }
 
 interface WorkflowResultSectionProps {
-  result: ExtendedWorkflowWatchResult;
+  result: WorkflowWatchResult;
   workflow: GetWorkflowResponse;
 }
 
 const WorkflowResultSection = ({ result, workflow }: WorkflowResultSectionProps) => {
-  const workflowState = result.payload.workflowState as ExtendedWorkflowWatchResult['payload']['workflowState'] & {
+  const workflowState = result.payload.workflowState as WorkflowWatchResult['payload']['workflowState'] & {
     result: unknown | null;
   };
 

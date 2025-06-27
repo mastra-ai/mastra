@@ -15,7 +15,7 @@ import { WorkflowConditionNode } from './workflow-condition-node';
 import { DefaultNode, WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowAfterNode } from './workflow-after-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
-import { WorkflowNestedNode } from './workflow-nested-node';
+import { NestedNode, WorkflowNestedNode } from './workflow-nested-node';
 import { ZoomSlider } from './zoom-slider';
 
 import { useCurrentRun } from '../context/use-current-run';
@@ -38,7 +38,7 @@ export function WorkflowGraphInner({ workflow, onShowTrace }: WorkflowGraphInner
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
-    'nested-node': WorkflowNestedNode,
+    'nested-node': (props: NodeProps<NestedNode>) => <WorkflowNestedNode onShowTrace={onShowTrace} {...props} />,
   };
 
   return (
