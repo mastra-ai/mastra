@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.10.9-alpha.0
+
+### Patch Changes
+
+- 7e801dd: [MASTRA-4118] fixes issue with agent network loopStream where subsequent messages aren't present in playground on refresh
+- 7aa70a4: Use the right step id for nested workflow steps in watch-v2
+- 764f86a: Introduces the runCount property in the execution parameters for the steps execute function
+- 1760a1c: Use workflow stream in playground instead of watch
+- 6320a61: Allow passing model to generateTitle to override default model selection.
+
 ## 0.10.8
 
 ### Patch Changes

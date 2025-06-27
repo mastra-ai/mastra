@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.10.8-alpha.0
+
+### Patch Changes
+
+- 7e801dd: [MASTRA-4118] fixes issue with agent network loopStream where subsequent messages aren't present in playground on refresh
+- 1760a1c: Use workflow stream in playground instead of watch
+- ac369c6: Show resume data on workflow graph
+
 ## 0.10.7
 
 ### Patch Changes
