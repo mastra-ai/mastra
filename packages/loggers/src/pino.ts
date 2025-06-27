@@ -38,9 +38,7 @@ export class PinoLogger extends MastraLogger {
       {
         name: options.name || 'app',
         level: options.level || LogLevel.INFO,
-        formatters: options.formatters ?? {
-          level: (label: string) => ({ level: Number(label) }),
-        },
+        formatters: options.formatters,
       },
       options.overrideDefaultTransports
         ? options?.transports?.default
