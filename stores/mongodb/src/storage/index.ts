@@ -1,6 +1,6 @@
-import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
-import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
+import { MessageList } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type {
@@ -22,8 +22,9 @@ import {
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import type { Db, MongoClientOptions } from 'mongodb';
-import { MongoClient } from 'mongodb';
+import type { Collection } from 'mongodb';
+import { MongoDBConnector } from './MongoDBConnector';
+import type { MongoDBConfig } from './types';
 
 function safelyParseJSON(jsonString: string): any {
   try {
@@ -33,33 +34,16 @@ function safelyParseJSON(jsonString: string): any {
   }
 }
 
-export interface MongoDBConfig {
-  url: string;
-  dbName: string;
-  options?: MongoClientOptions;
-}
-
 export class MongoDBStore extends MastraStorage {
-  #isConnected = false;
-  #client: MongoClient;
-  #db: Db | undefined;
-  readonly #dbName: string;
+  #connector: MongoDBConnector;
 
   constructor(config: MongoDBConfig) {
     super({ name: 'MongoDBStore' });
-    this.#isConnected = false;
 
     try {
-      if (!config.url?.trim().length) {
-        throw new Error(
-          'MongoDBStore: url must be provided and cannot be empty. Passing an empty string may cause fallback to local MongoDB defaults.',
-        );
-      }
-
-      if (!config.dbName?.trim().length) {
-        throw new Error(
-          'MongoDBStore: dbName must be provided and cannot be empty. Passing an empty string may cause fallback to local MongoDB defaults.',
-        );
+      if ('connectorHandler' in config) {
+        this.#connector = MongoDBConnector.fromConnectionHandler(config.connectorHandler);
+        return;
       }
     } catch (error) {
       throw new MastraError(
@@ -67,30 +51,33 @@ export class MongoDBStore extends MastraStorage {
           id: 'STORAGE_MONGODB_STORE_CONSTRUCTOR_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { url: config.url, dbName: config.dbName },
+          details: { connectionHandler: true },
         },
         error,
       );
     }
 
-    this.#dbName = config.dbName;
-    this.#client = new MongoClient(config.url, config.options);
-  }
-
-  private async getConnection(): Promise<Db> {
-    if (this.#isConnected) {
-      return this.#db!;
+    try {
+      this.#connector = MongoDBConnector.fromDatabaseConfig({
+        options: config.options,
+        url: config.url,
+        dbName: config.dbName,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_CONSTRUCTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { url: config?.url, dbName: config?.dbName },
+        },
+        error,
+      );
     }
-
-    await this.#client.connect();
-    this.#db = this.#client.db(this.#dbName);
-    this.#isConnected = true;
-    return this.#db;
   }
 
-  private async getCollection(collectionName: string) {
-    const db = await this.getConnection();
-    return db.collection(collectionName);
+  private getCollection(collectionName: string): Promise<Collection> {
+    return this.#connector.getCollection(collectionName);
   }
 
   async createTable(): Promise<void> {
@@ -919,7 +906,7 @@ export class MongoDBStore extends MastraStorage {
 
   async close(): Promise<void> {
     try {
-      await this.#client.close();
+      await this.#connector.close();
     } catch (error) {
       throw new MastraError(
         {
