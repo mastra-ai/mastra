@@ -504,6 +504,21 @@ try {
 - Adjust parameters like `lists` and `m` based on dataset size and query requirements.
 - Rebuild indexes periodically to maintain efficiency, especially after significant data changes.
 
+## Direct Pool Access
+
+The `PgVector` class exposes its underlying PostgreSQL connection pool as a public field:
+
+```typescript
+pgVector.pool // instance of pg.Pool
+```
+
+This enables advanced usage such as running direct SQL queries, managing transactions, or monitoring pool state. When using the pool directly:
+- You are responsible for releasing clients (`client.release()`) after use.
+- The pool remains accessible after calling `disconnect()`, but new queries will fail.
+- Direct access bypasses any validation or transaction logic provided by PgVector methods.
+
+This design supports advanced use cases but requires careful resource management by the user.
+
 ## Related
 
 - [Metadata Filters](./metadata-filters)
