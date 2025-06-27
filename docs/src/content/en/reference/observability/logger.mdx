@@ -116,7 +116,6 @@ const sentryStream = await pinoSentry({
     _experiments: {
       enableLogs: true,
       beforeSendLog: (log) => {
-        console.log('beforeSendLog', {log})
         return log
       },
     },
