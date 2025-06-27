@@ -112,7 +112,7 @@ import pinoSentry from 'pino-sentry-transport';
 
 const sentryStream = await pinoSentry({
   sentry: {
-    dsn: 'https://c9511f0d57a24887efab1e17aaf15993@o515228.ingest.us.sentry.io/4509564877144069',
+    dsn: 'YOUR_SENTRY_DSN',
     _experiments: {
       enableLogs: true,
       beforeSendLog: (log) => {
