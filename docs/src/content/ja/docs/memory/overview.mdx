@@ -78,6 +78,36 @@ const response = await myMemoryAgent.stream("Hello, my name is Alice.", {
 
 **重要:** これらのIDがなければ、メモリーが適切に設定されていても、エージェントはメモリーを使用しません。プレイグラウンドではこれが自動的に処理されますが、アプリケーションでメモリーを使用する場合は自分でIDを追加する必要があります。
 
+### スレッドタイトルの自動生成
+
+Mastraは、ユーザーの最初のメッセージを基に、会話スレッドの意味のあるタイトルを自動的に生成できます。これにより、アプリケーションのUIで会話を整理したり、識別したりすることが容易になります。
+
+```typescript {3-7}
+const memory = new Memory({
+  options: {
+    threads: {
+      generateTitle: true, // 自動タイトル生成を有効化
+    },
+  },
+});
+```
+
+デフォルトでは、タイトル生成にエージェントと同じモデルが使用されます。コストを最適化するために、タイトル生成専用の低コストなモデルを指定することも可能です。
+
+```typescript {5-7}
+const memory = new Memory({
+  options: {
+    threads: {
+      generateTitle: {
+        model: openai("gpt-4.1-nano"), // Use cheaper model for titles
+      },
+    },
+  },
+});
+```
+
+タイトル生成はエージェントの応答後に非同期で実行されるため、レスポンス速度には影響しません。詳細や例については、[設定リファレンス](../../reference/memory/Memory.mdx#%E3%82%B9%E3%83%AC%E3%83%83%E3%83%89%E3%82%BF%E3%82%A4%E3%83%88%E3%83%AB%E3%81%AE%E7%94%9F%E6%88%90)を参照してください。
+
 ## 会話履歴
 
 デフォルトでは、`Memory`インスタンスは現在のMemoryスレッドからの[最新40メッセージ](../../reference/memory/Memory.mdx)を各新規リクエストに含めます。これにより、エージェントに即時の会話コンテキストが提供されます。

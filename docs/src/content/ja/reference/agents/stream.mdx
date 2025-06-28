@@ -247,13 +247,13 @@ interface Message {
       description: "スレッド固有のメモリ設定。",
       properties: [
         {
-          type: "boolean",
+          type: "boolean | object",
           parameters: [
             {
               name: "generateTitle",
-              type: "boolean",
+              type: "boolean | { model: MastraLanguageModel | ((ctx: RuntimeContext) => MastraLanguageModel | Promise<MastraLanguageModel>) }",
               isOptional: true,
-              description: "新しいスレッドのタイトルを自動生成するかどうか。",
+              description: "新しいスレッドのタイトルを自動生成するかどうか。Boolean値で指定した場合は、エージェントが使用しているモデルによる生成が有効／無効になります。コスト最適化のために、別のモデルを指定する場合はオブジェクト形式で指定できます。例：{ model: openai('gpt-4.1-nano') }",
             },
           ],
         },
