@@ -21,13 +21,37 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
     inputSchema,
     outputSchema,
     execute: async ({ context, mastra, runtimeContext }) => {
-      const indexName: string = runtimeContext.get('indexName') ?? options.indexName;
-      const vectorStoreName: string = runtimeContext.get('vectorStoreName') ?? options.vectorStoreName;
-      const includeVectors: boolean = runtimeContext.get('includeVectors') ?? options.includeVectors ?? false;
-      const includeSources: boolean = runtimeContext.get('includeSources') ?? options.includeSources ?? true;
-      const reranker: RerankConfig = runtimeContext.get('reranker') ?? options.reranker;
-      const databaseConfig = runtimeContext.get('databaseConfig') ?? options.databaseConfig;
-      const model: EmbeddingModel<string> = runtimeContext.get('model') ?? options.model;
+      const indexName: string =
+        runtimeContext.get('indexName') ??
+        (typeof options.indexName === 'function' ? await options.indexName({ runtimeContext }) : options.indexName);
+      const vectorStoreName: string =
+        runtimeContext.get('vectorStoreName') ??
+        (typeof options.vectorStoreName === 'function'
+          ? await options.vectorStoreName({ runtimeContext })
+          : options.vectorStoreName);
+      const includeVectors: boolean =
+        runtimeContext.get('includeVectors') ??
+        (typeof options.includeVectors === 'function'
+          ? await options.includeVectors({ runtimeContext })
+          : options.includeVectors) ??
+        false;
+      const includeSources: boolean =
+        runtimeContext.get('includeSources') ??
+        (typeof options.includeSources === 'function'
+          ? await options.includeSources({ runtimeContext })
+          : options.includeSources) ??
+        true;
+      const reranker: RerankConfig =
+        runtimeContext.get('reranker') ??
+        (typeof options.reranker === 'function' ? await options.reranker({ runtimeContext }) : options.reranker);
+      const databaseConfig =
+        runtimeContext.get('databaseConfig') ??
+        (typeof options.databaseConfig === 'function'
+          ? await options.databaseConfig({ runtimeContext })
+          : options.databaseConfig);
+      const model: EmbeddingModel<string> =
+        runtimeContext.get('model') ??
+        (typeof options.model === 'function' ? await options.model({ runtimeContext }) : options.model);
 
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
