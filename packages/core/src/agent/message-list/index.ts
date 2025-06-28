@@ -340,12 +340,14 @@ ${JSON.stringify(message, null, 2)}`,
       latestMessage?.role === 'assistant' &&
       messageV2.role === 'assistant' &&
       latestMessage.threadId === messageV2.threadId;
+    // If neither the latest message or the new message is a memory message, merge them together
+    const shouldMergeNewMessages =
+      latestMessage && !this.memoryMessages.has(latestMessage) && messageSource !== 'memory';
     const shouldAppendToLastAssistantMessageParts =
       shouldAppendToLastAssistantMessage &&
       newMessageFirstPartType &&
       ((newMessageFirstPartType === `tool-invocation` && latestMessagePartType !== `text`) ||
-        (newMessageFirstPartType === latestMessagePartType &&
-          (!this.memoryMessages.has(latestMessage) || messageSource === 'memory')));
+        (newMessageFirstPartType === latestMessagePartType && shouldMergeNewMessages));
 
     if (
       // backwards compat check!
