@@ -441,6 +441,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       });
     } else if (audioData instanceof Int16Array) {
       try {
+        this.sendEvent('input_audio_buffer.append', { audio: this.int16ArrayToBase64(audioData), event_id: eventId });
         this.sendEvent('input_audio_buffer.append', { audio: audioData, event_id: eventId });
       } catch (err) {
         this.emit('error', err);
