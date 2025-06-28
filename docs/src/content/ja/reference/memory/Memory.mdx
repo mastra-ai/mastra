@@ -56,6 +56,15 @@ const memory = new Memory({
 - Last Name:
 `,
     },
+
+    // Thread configuration
+    threads: {
+      generateTitle: true, // Enable title generation using agent's model
+      // Or use a different model for title generation
+      // generateTitle: {
+      //   model: openai("gpt-4.1-nano"), // Use cheaper model for titles
+      // },
+    },
   },
 });
 
@@ -90,6 +99,67 @@ const memory = new Memory({
 ```
 
 テンプレートが提供されない場合、Memoryクラスはユーザーの詳細、設定、目標、およびその他のコンテキスト情報をMarkdown形式で含むデフォルトのテンプレートを使用します。詳細な使用例とベストプラクティスについては、[ワーキングメモリガイド](/docs/memory/working-memory.mdx#designing-effective-templates)を参照してください。
+
+### スレッドタイトルの生成
+
+`generateTitle` 機能は、ユーザーの最初のメッセージに基づいて会話スレッドに意味のあるタイトルを自動生成します。これにより、アプリケーション内で会話を整理・識別しやすくなります。
+
+#### 基本的な使用例
+
+```typescript copy showLineNumbers
+const memory = new Memory({
+  options: {
+    threads: {
+      generateTitle: true, // Use the agent's model for title generation
+    },
+  },
+});
+```
+
+#### コスト最適化のためのカスタムモデルの指定
+
+メインの会話に高品質なモデルを使いながら、タイトル生成用に別の（一般的には安価な）モデルを指定することができます。
+
+```typescript copy showLineNumbers
+import { openai } from "@ai-sdk/openai";
+
+const memory = new Memory({
+  options: {
+    threads: {
+      generateTitle: {
+        model: openai("gpt-4.1-nano"), // Cheaper model for titles
+      },
+    },
+  },
+});
+
+const agent = new Agent({
+  model: openai("gpt-4o"), // High-quality model for main conversation
+  memory,
+});
+```
+
+#### 動的なモデル選択
+
+ランタイムのコンテキストに基づいて、モデルを動的に決定する関数を指定することも可能です。
+
+```typescript copy showLineNumbers
+const memory = new Memory({
+  options: {
+    threads: {
+      generateTitle: {
+        model: (ctx: RuntimeContext) => {
+          // Use different models based on context
+          const userTier = ctx.get("userTier");
+          return userTier === "premium" 
+            ? openai("gpt-4.1")
+            : openai("gpt-4.1-nano");
+        },
+      },
+    },
+  },
+});
+```
 
 ### embedder
 
@@ -213,9 +283,9 @@ Mastraは[Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)を�
     },
     {
       name: "threads",
-      type: "{ generateTitle?: boolean }",
+      type: "{ generateTitle?: boolean | { model: MastraLanguageModel | ((ctx: RuntimeContext) => MastraLanguageModel | Promise<MastraLanguageModel>) } }",
       description:
-        "メモリスレッド作成に関する設定。`generateTitle`を設定すると、ユーザーの最初のメッセージからLLMの要約によってthread.titleが生成されます。",
+        "メモリスレッド作成に関する設定。`generateTitle`を設定すると、ユーザーの最初のメッセージからLLMの要約によってthread.titleが生成されます。ブール値を指定するとエージェントが使用しているモデルによる生成を有効／無効にできます。また、オブジェクトを指定してタイトル生成用のカスタムモデルを設定することも可能です（コスト最適化に役立ちます）。例: { generateTitle: { model: openai('gpt-4.1-nano') } }",
       isOptional: true,
       defaultValue: "{ generateTitle: true }",
     },
