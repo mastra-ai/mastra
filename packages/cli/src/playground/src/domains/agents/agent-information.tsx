@@ -4,9 +4,7 @@ import { AgentDetails } from './agent-details';
 import { AgentEndpoints } from './agent-endpoints';
 import { AgentLogs } from './agent-logs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge, MemoryIcon, Txt } from '@mastra/playground-ui';
-import { AgentIcon } from '@mastra/playground-ui';
-import { Icon } from '@mastra/playground-ui';
+import { Badge, MemoryIcon, Txt, AgentIcon, Icon, AgentPanel } from '@mastra/playground-ui';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { CopyIcon } from 'lucide-react';
 import { Link } from 'react-router';
@@ -14,15 +12,19 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { providerMapToIcon } from './table.columns';
 import { AgentOverview } from './agent-overview';
 import { useMemory } from '@/hooks/use-memory';
+import { useNewUI } from '@/hooks/use-new-ui';
 
 export function AgentInformation({ agentId }: { agentId: string }) {
   const { agent, isLoading } = useAgent(agentId);
   const { memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { handleCopy } = useCopyToClipboard({ text: agentId });
+  const newUIEnabled = useNewUI();
 
   const providerIcon = providerMapToIcon[(agent?.provider || 'openai.chat') as keyof typeof providerMapToIcon];
 
-  return (
+  return newUIEnabled ? (
+    <AgentPanel agent={agent} memory={memory} />
+  ) : (
     <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto border-l-sm border-border1">
       <div className="p-5 border-b-sm border-border1">
         <div className="text-icon6 flex items-center gap-2 min-w-0">

@@ -2,13 +2,23 @@ import { v4 as uuid } from '@lukeed/uuid';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { Threads, ThreadList, ThreadItem, ThreadLink, Icon, ThreadDeleteButton, Txt } from '@mastra/playground-ui';
+import {
+  Threads,
+  ThreadList,
+  ThreadItem,
+  ThreadLink,
+  Icon,
+  ThreadDeleteButton,
+  Txt,
+  AgentHistory,
+} from '@mastra/playground-ui';
 import { AlertDialog } from '@/components/ui/alert-dialog';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { useDeleteThread } from '@/hooks/use-memory';
 import { StorageThreadType } from '@mastra/core';
+import { useNewUI } from '@/hooks/use-new-ui';
 
 const formatDay = (date: Date) => {
   const options: Intl.DateTimeFormatOptions = {
@@ -35,6 +45,7 @@ export function AgentSidebar({
 }) {
   const { deleteThread } = useDeleteThread();
   const navigate = useNavigate();
+  const newUIEnabled = useNewUI();
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -63,7 +74,17 @@ export function AgentSidebar({
 
   const reverseThreads = [...(threads || [])].reverse();
 
-  return (
+  return newUIEnabled ? (
+    <AgentHistory
+      agentId={agentId}
+      linkComponent={Link}
+      threadId={threadId}
+      threads={reverseThreads}
+      onDelete={setDeleteId}
+      onDeleteConfirm={handleDelete}
+      threadToDelete={deleteId}
+    />
+  ) : (
     <div className="overflow-y-auto h-full w-full">
       <Threads>
         <ThreadList>

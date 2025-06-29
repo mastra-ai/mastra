@@ -9,15 +9,25 @@ import {
   Icon,
   MainContentLayout,
   MainContentContent,
+  MainLayout,
+  MainContent,
+  MainHeader,
+  MainHeaderTitle,
+  MainList,
+  getProviderIcon,
 } from '@mastra/playground-ui';
+
+import { Link } from 'react-router';
 
 import { useAgents } from '@/hooks/use-agents';
 import { agentsTableColumns } from '@/domains/agents/table.columns';
 import { useNavigate } from 'react-router';
+import { useNewUI } from '@/hooks/use-new-ui';
 
 function Agents() {
   const navigate = useNavigate();
   const { agents, isLoading } = useAgents();
+  const newUIEnabled = useNewUI();
 
   const agentListData = Object.entries(agents).map(([key, agent]) => ({
     id: key,
@@ -27,15 +37,50 @@ function Agents() {
     modelId: agent?.modelId,
   }));
 
-  if (isLoading) return null;
+  const hasAgents = agentListData.length > 0;
 
-  return (
+  const agentListItems = agentListData.map(agent => {
+    const providerIcon = getProviderIcon(agent.provider) || null;
+
+    return {
+      id: agent.id,
+      icon: <AgentIcon />,
+      name: agent.name,
+      to: `/agents/${agent.id}/chat`,
+      description: agent.description,
+      columns: [
+        <>
+          {providerIcon}
+          {agent?.modelId}
+        </>,
+      ],
+    };
+  });
+
+  const agentListColumns = [{ key: 'model', label: 'Model', minWidth: '10rem', maxWidth: '15rem' }];
+
+  return newUIEnabled ? (
+    <MainLayout>
+      <MainHeader>
+        <MainHeaderTitle>Agents</MainHeaderTitle>
+      </MainHeader>
+      <MainContent>
+        <MainList
+          items={agentListItems}
+          linkComponent={Link}
+          columns={agentListColumns}
+          emptyStateFor="agents"
+          isLoading={isLoading}
+        />
+      </MainContent>
+    </MainLayout>
+  ) : (
     <MainContentLayout>
       <Header>
         <HeaderTitle>Agents</HeaderTitle>
       </Header>
 
-      {agentListData.length === 0 ? (
+      {!hasAgents ? (
         <MainContentContent isCentered={true}>
           <EmptyState
             iconSlot={<AgentCoinIcon />}

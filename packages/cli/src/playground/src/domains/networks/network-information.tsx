@@ -3,6 +3,8 @@ import { useNetwork, useVNextNetwork } from '@/hooks/use-networks';
 import { NetworkDetails } from './network-details';
 import { NetworkAgents } from './network-agents';
 import { NetworkEndpoints } from './network-endpoints';
+import { useNewUI } from '@/hooks/use-new-ui';
+import { NetworkPanel } from '@mastra/playground-ui';
 import { NetworkWorkflows } from './network-workflows';
 import { GetVNextNetworkResponse } from '@mastra/client-js';
 import { NetworkTools } from './network-tools';
@@ -10,6 +12,7 @@ import { NetworkTools } from './network-tools';
 export function NetworkInformation({ networkId, isVNext }: { networkId: string; isVNext?: boolean }) {
   const { network, isLoading } = useNetwork(networkId, !isVNext);
   const { vNextNetwork, isLoading: isVNextNetworkLoading } = useVNextNetwork(networkId, isVNext);
+  const newUIEnabled = useNewUI();
 
   const networkToUse = isVNext ? vNextNetwork : network;
   const isLoadingToUse = isVNext ? isVNextNetworkLoading : isLoading;
@@ -18,7 +21,9 @@ export function NetworkInformation({ networkId, isVNext }: { networkId: string; 
     return null;
   }
 
-  return (
+  return newUIEnabled ? (
+    <NetworkPanel network={network} />
+  ) : (
     <Tabs defaultValue="details" className="overflow-y-auto grid grid-rows-[auto_1fr] h-full">
       <TabsList className="flex shrink-0 border-b">
         <TabsTrigger value="details" className="group">

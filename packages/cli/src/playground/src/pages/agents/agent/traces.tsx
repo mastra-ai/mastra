@@ -5,11 +5,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 import { useAgent } from '@/hooks/use-agents';
 import { useTraces } from '@/domains/traces/hooks/use-traces';
+import { useNewUI } from '@/hooks/use-new-ui';
 
 function AgentTracesPage() {
   const { agentId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { traces, firstCallLoading, error } = useTraces(agent?.name || '');
+  const newUIEnabled = useNewUI();
 
   if (isAgentLoading || firstCallLoading) {
     return (
@@ -19,7 +21,13 @@ function AgentTracesPage() {
     );
   }
 
-  return <AgentTraces traces={traces || []} error={error} className="h-[calc(100vh-40px)]" />;
+  return (
+    <AgentTraces
+      traces={traces || []}
+      error={error}
+      className={!newUIEnabled ? 'h-[calc(100vh-40px)] border border-red-500' : ''}
+    />
+  );
 }
 
 export default AgentTracesPage;
