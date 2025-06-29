@@ -57,3 +57,73 @@ logger.error("An error occurred"); // Logged as ERROR
 />
 
 **Note:** Some loggers require a `BaseLogMessage` object (with `message`, `destinationPath`, `type` fields). For instance, the `File` and `Upstash` loggers need structured messages.
+
+## File Transport (Structured Logs)
+
+```typescript showLineNumbers copy
+import { FileTransport } from "@mastra/loggers/file";
+
+const fileLogger = new PinoLogger({
+  name: "Mastra",
+  transports: { file: new FileTransport({ path: "test-dir/test.log" }) },
+  level: "warn",
+});
+
+fileLogger.warn("Low disk space", {
+  destinationPath: "system",
+  type: "WORKFLOW",
+});
+```
+
+## Upstash Logger (Remote Log Drain)
+
+```typescript showLineNumbers copy
+import { UpstashTransport } from "@mastra/loggers/upstash";
+
+const logger = new PinoLogger({
+  name: "Mastra",
+  transports: {
+    upstash: new UpstashTransport({
+      listName: "production-logs",
+      upstashUrl: process.env.UPSTASH_URL!,
+      upstashToken: process.env.UPSTASH_TOKEN!,
+    }),
+  },
+  level: "info",
+});
+
+logger.info({
+  message: "User signed in",
+  destinationPath: "auth",
+  type: "AGENT",
+  runId: "run_123",
+});
+```
+
+## Custom Transport
+
+You can create custom transports using the `createCustomTransport` utility to integrate with any logging service or stream.
+
+### Example: Sentry Integration
+
+```typescript showLineNumbers copy
+import { createCustomTransport } from "@mastra/core/loggers";
+import pinoSentry from 'pino-sentry-transport';
+
+const sentryStream = await pinoSentry({
+  sentry: {
+    dsn: 'YOUR_SENTRY_DSN',
+    _experiments: {
+      enableLogs: true,
+    },
+  },
+});
+
+const customTransport = createCustomTransport(sentryStream);
+
+const logger = new PinoLogger({
+  name: "Mastra",
+  transports: { sentry: customTransport },
+  level: "info",
+});
+```
