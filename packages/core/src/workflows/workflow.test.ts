@@ -2433,6 +2433,54 @@ describe('Workflow', () => {
       expect(result.steps['step2']).toBeUndefined();
     });
 
+    it('should be able to abort workflow execution immediately', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { result: 'step2: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1, step2],
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const run = await workflow.createRunAsync();
+      const p = run.start({ inputData: { value: 'test' } });
+
+      await run.cancel();
+
+      const result = await p;
+
+      expect(result.status).toBe('canceled');
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'step1: test' },
+        payload: { value: 'test' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toBeUndefined();
+    });
+
     it('should be able to abort workflow execution during a step', async () => {
       const step1 = createStep({
         id: 'step1',
