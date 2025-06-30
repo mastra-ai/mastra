@@ -27,8 +27,8 @@ function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
     };
 
     if (step.component === 'WORKFLOW' && step.steps) {
-      const moreSteps = getSteps(step.steps, fullKey) || {};
-      acc = { ...acc, ...moreSteps };
+      const nestedSteps = getSteps(step.steps, fullKey) || {};
+      acc = { ...acc, ...nestedSteps };
     }
 
     return acc;
