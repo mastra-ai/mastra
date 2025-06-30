@@ -272,6 +272,7 @@ export const useStreamWorkflow = () => {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
+          console.log('value===', value);
           if (value.type === 'start') {
             setStreamResult((prev: WorkflowWatchResult) => ({
               ...prev,
@@ -578,4 +579,15 @@ export const useResumeWorkflow = () => {
     resumeLegacyWorkflow,
     resumeWorkflow,
   };
+};
+
+export const useCancelWorkflowRun = () => {
+  const cancelWorkflowRun = useMutation({
+    mutationFn: async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
+      const response = await client.getWorkflow(workflowId).cancelRun(runId);
+      return response;
+    },
+  });
+
+  return cancelWorkflowRun;
 };
