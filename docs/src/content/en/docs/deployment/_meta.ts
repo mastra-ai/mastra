@@ -1,7 +1,7 @@
 const meta = {
   overview: "Overview",
   server: "With a Server",
-  deployment: "Serverless Platforms",
+  "serverless-platforms": "Serverless Platforms",
   "cloud-providers": "Cloud Providers",
   "web-framework": "With a Web Framework",
   middleware: "Middleware",

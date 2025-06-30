@@ -26,82 +26,6 @@ interface NewAgentNetworkConfig {
 
 const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool', 'none']);
 
-// getInstructions() {
-
-//     return `
-
-//             ## Available Specialized Agents
-//             You can call these agents using the "transmit" tool:
-//             ${agentList}
-
-//             ## How to Use the "transmit" Tool
-
-//             The "transmit" tool allows you to call one or more specialized agents.
-
-//             ### Single Agent Call
-//             To call a single agent, use this format:
-//             \`\`\`json
-//             {
-//               "actions": [
-//                 {
-//                   "agent": "agent_name",
-//                   "input": "detailed instructions for the agent"
-//                 }
-//               ]
-//             }
-//             \`\`\`
-
-//             ### Multiple Parallel Agent Calls
-//             To call multiple agents in parallel, use this format:
-//             \`\`\`json
-//             {
-//               "actions": [
-//                 {
-//                   "agent": "first_agent_name",
-//                   "input": "detailed instructions for the first agent"
-//                 },
-//                 {
-//                   "agent": "second_agent_name",
-//                   "input": "detailed instructions for the second agent"
-//                 }
-//               ]
-//             }
-//             \`\`\`
-
-//             ## Context Sharing
-
-//             When calling an agent, you can choose to include the output from previous agents in the context.
-//             This allows the agent to take into account the results from previous steps.
-
-//             To include context, add the "includeHistory" field to the action and set it to true:
-//             \`\`\`json
-//             {
-//               "actions": [
-//                 {
-//                   "agent": "agent_name",
-//                   "input": "detailed instructions for the agent",
-//                   "includeHistory": true
-//                 }
-//               ]
-//             }
-//             \`\`\`
-
-//             ## Best Practices
-//             1. Break down complex tasks into smaller steps
-//             2. Choose the most appropriate agent for each step
-//             3. Provide clear, detailed instructions to each agent
-//             4. Synthesize the results from multiple agents when needed
-//             5. Provide a final summary or answer to the user
-
-//             ## Workflow
-//             1. Analyze the user's request
-//             2. Identify which specialized agent(s) can help
-//             3. Call the appropriate agent(s) using the transmit tool
-//             4. Review the agent's response
-//             5. Either call more agents or provide a final answer
-//         `;
-// }
-
 export class NewAgentNetwork extends MastraBase {
   id: string;
   name: string;
@@ -267,6 +191,7 @@ export class NewAgentNetwork extends MastraBase {
           If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.
           When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.
           When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.
+          When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.
 
           Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.
         `;
@@ -351,9 +276,13 @@ export class NewAgentNetwork extends MastraBase {
     {
       runtimeContext,
       maxIterations,
+      threadId,
+      resourceId,
     }: {
       runtimeContext?: RuntimeContext;
       maxIterations?: number;
+      threadId?: string;
+      resourceId?: string;
     },
   ) {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
@@ -379,10 +308,22 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         iteration: z.number(),
         task: z.string(),
+        resourceId: z.string(),
         resourceType: RESOURCE_TYPES,
+        result: z.string().optional(),
+        threadId: z.string().optional(),
+        threadResourceId: z.string().optional(),
+        isOneOff: z.boolean(),
+        verboseIntrospection: z.boolean(),
       }),
       outputSchema: z.object({
-        text: z.string(),
+        task: z.string(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
+        prompt: z.string(),
+        result: z.string(),
+        isComplete: z.boolean().optional(),
+        completionReason: z.string().optional(),
         iteration: z.number(),
       }),
     })
@@ -394,11 +335,32 @@ export class NewAgentNetwork extends MastraBase {
 
     const run = mainWorkflow.createRun();
 
+    const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
+    await memory?.saveMessages({
+      messages: [
+        {
+          id: randomUUID() as string,
+          type: 'text',
+          role: 'user',
+          content: { parts: [{ type: 'text', text: message }], format: 2 },
+          createdAt: new Date(),
+          threadId: threadId || run.runId,
+          resourceId: resourceId || this.name,
+        },
+      ] as MastraMessageV2[],
+      format: 'v2',
+    });
+
     return run.stream({
       inputData: {
         task: message,
+        resourceId: '',
         resourceType: 'none',
         iteration: 0,
+        threadResourceId: resourceId,
+        threadId,
+        isOneOff: false,
+        verboseIntrospection: true,
       },
     });
   }
@@ -419,6 +381,7 @@ export class NewAgentNetwork extends MastraBase {
         threadId: z.string().optional(),
         threadResourceId: z.string().optional(),
         isOneOff: z.boolean(),
+        verboseIntrospection: z.boolean(),
       }),
       outputSchema: z.object({
         task: z.string(),
@@ -481,7 +444,7 @@ export class NewAgentNetwork extends MastraBase {
             {
               role: 'assistant',
               content: `
-                    ${inputData.isOneOff ? 'You are executing just one primitive based on the user task' : 'You will be calling just *one* primitive at a time to accomplish the user task'}
+                    ${inputData.isOneOff ? 'You are executing just one primitive based on the user task. Make sure to pick the primitive that is the best suited to accomplish the whole task. Primitives that execute only part of the task should be avoided.' : 'You will be calling just *one* primitive at a time to accomplish the user task, every call to you is one decision in the process of accomplishing the user task. Make sure to pick primitives that are the best suited to accomplish the whole task. Completeness is the highest priority.'}
 
                     The user has given you the following task: 
                     ${inputData.task}
@@ -496,6 +459,8 @@ export class NewAgentNetwork extends MastraBase {
                         "prompt": string,
                         "selectionReason": string
                     }
+
+                    The 'selectionReason' property should explain why you picked the primitive${inputData.verboseIntrospection ? ', as well as why the other primitives were not picked.' : '.'}
                     `,
             },
           ],
@@ -593,12 +558,11 @@ export class NewAgentNetwork extends MastraBase {
             case 'step-start':
             case 'step-finish':
             case 'finish':
-              break;
-
             case 'tool-call':
             case 'tool-result':
             case 'tool-call-streaming-start':
             case 'tool-call-delta':
+              break;
             case 'source':
             case 'file':
             default:
@@ -692,7 +656,7 @@ export class NewAgentNetwork extends MastraBase {
           ...toolData,
         });
         const run = wf.createRun();
-        const { stream } = run.stream({
+        const { stream, getWorkflowState } = run.stream({
           inputData: input,
           runtimeContext: runtimeContextToUse,
         });
@@ -738,10 +702,18 @@ export class NewAgentNetwork extends MastraBase {
           }
         }
 
+        let runSuccess = true;
         const runResult = await streamPromise.promise;
+
+        const workflowState = await getWorkflowState();
+        if (workflowState.status === 'failed') {
+          runSuccess = false;
+        }
+
         const finalResult = JSON.stringify({
           runId: run.runId,
           runResult,
+          runSuccess,
         });
 
         const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
@@ -829,7 +801,7 @@ export class NewAgentNetwork extends MastraBase {
               id: randomUUID() as string,
               type: 'text',
               role: 'assistant',
-              content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
+              content: { parts: [{ type: 'text', text: JSON.stringify(finalResult) }], format: 2 },
               createdAt: new Date(),
               threadId: initData.threadId || runId,
               resourceId: initData.threadResourceId || this.name,
@@ -888,6 +860,7 @@ export class NewAgentNetwork extends MastraBase {
         threadId: z.string().optional(),
         threadResourceId: z.string().optional(),
         isOneOff: z.boolean(),
+        verboseIntrospection: z.boolean(),
       }),
       outputSchema: z.object({
         task: z.string(),
@@ -898,8 +871,13 @@ export class NewAgentNetwork extends MastraBase {
         isComplete: z.boolean().optional(),
         completionReason: z.string().optional(),
         iteration: z.number(),
+        threadId: z.string().optional(),
+        threadResourceId: z.string().optional(),
+        isOneOff: z.boolean(),
       }),
-    })
+    });
+
+    networkWorkflow
       .then(routingStep)
       .branch([
         [async ({ inputData }) => !inputData.isComplete && inputData.resourceType === 'agent', agentStep],
@@ -935,6 +913,18 @@ export class NewAgentNetwork extends MastraBase {
         iteration: {
           step: [routingStep, agentStep, workflowStep, toolStep],
           path: 'iteration',
+        },
+        isOneOff: {
+          initData: networkWorkflow,
+          path: 'isOneOff',
+        },
+        threadId: {
+          initData: networkWorkflow,
+          path: 'threadId',
+        },
+        threadResourceId: {
+          initData: networkWorkflow,
+          path: 'threadResourceId',
         },
       })
       .commit();
@@ -978,6 +968,7 @@ export class NewAgentNetwork extends MastraBase {
         threadId,
         threadResourceId: resourceId,
         isOneOff: true,
+        verboseIntrospection: true,
       },
     });
 
@@ -1033,6 +1024,7 @@ export class NewAgentNetwork extends MastraBase {
         threadResourceId: resourceId,
         threadId,
         isOneOff: true,
+        verboseIntrospection: true,
       },
     });
   }

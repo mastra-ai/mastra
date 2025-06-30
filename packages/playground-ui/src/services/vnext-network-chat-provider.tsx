@@ -1,3 +1,4 @@
+import { NetworkContext } from '@/domains/networks';
 import React, { createContext, useContext, ReactNode, useState } from 'react';
 
 //the whole workflow execution state.
@@ -18,15 +19,23 @@ type VNextNetworkChatContextType = {
 
 const VNextNetworkChatContext = createContext<VNextNetworkChatContextType | undefined>(undefined);
 
-export const VNextNetworkChatProvider = ({ children, networkId }: { children: ReactNode; networkId: string }) => {
+export const VNextNetworkChatProvider = ({ children }: { children: ReactNode }) => {
   const [state, setState] = useState<State>({});
 
+  const { chatWithLoop } = useContext(NetworkContext);
+
   const handleStep = (uuid: string, record: Record<string, any>) => {
-    const id = record?.type === 'finish' ? 'finish' : record.type === 'start' ? 'start' : record.payload?.id;
-    if (id.includes('mapping_')) return;
+    const addFinishStep =
+      (chatWithLoop && record.type === 'step-finish' && record.payload?.id === 'final-step') || record.type === 'error';
+    let id = record?.type === 'finish' ? 'finish' : record.type === 'start' ? 'start' : record.payload?.id;
+
+    if (id?.includes('mapping_')) return;
 
     setState(prevState => {
       const current = prevState[uuid];
+      if (record.type === 'error') {
+        id = current?.executionSteps?.[current?.executionSteps.length - 1];
+      }
       const currentMetadata = current?.steps?.[id]?.metadata;
 
       let startTime = currentMetadata?.startTime;
@@ -36,7 +45,7 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
         startTime = Date.now();
       }
 
-      if (record.type === 'step-finish') {
+      if (record.type === 'step-finish' || record.type === 'error') {
         endTime = Date.now();
       }
 
@@ -45,12 +54,14 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
         [uuid]: {
           ...current,
           runId: current?.runId || record?.payload?.runId,
-          executionSteps: current?.steps?.[id] ? current?.executionSteps : [...(current?.executionSteps || []), id],
+          executionSteps: current?.steps?.[id]
+            ? [...current?.executionSteps, ...(addFinishStep ? ['finish'] : [])]
+            : [...(current?.executionSteps || []), id],
           steps: {
             ...current?.steps,
             [id]: {
               ...(current?.steps?.[id] || {}),
-              [record.type]: record.payload,
+              [record.type]: record.payload || record?.error,
               metadata: {
                 startTime,
                 endTime,

@@ -5,95 +5,16 @@ description: "Documentation for the NetlifyDeployer class, which deploys Mastra 
 
 # NetlifyDeployer
 
-The NetlifyDeployer deploys standalone Mastra applications to Netlify Functions, handling site creation, configuration, and deployment processes. It extends the abstract Deployer class to provide Netlify-specific deployment functionality.
+The `NetlifyDeployer` class handles deployment of standalone Mastra applications to Netlify. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/deployer) class with Netlify specific functionality.
 
-## Installation
-
-```bash copy
-npm install @mastra/deployer-netlify@latest
-```
-
-## Usage Example
+## Usage example
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   // ...
   deployer: new NetlifyDeployer()
 });
 ```
-
-## Lint Mastra Project
-
-Lint your Mastra project to make sure it's fine to build
-
-```bash
-npx mastra lint
-```
-
-## Build Mastra Project
-
-To build your Mastra project for Netlify deployment:
-
-```bash
-npx mastra build
-```
-
-The build process generates the following output structure in the `.mastra/output` directory:
-
-```
-.netlify/
-├── v1/
-    └── functions/
-    │   └── api/
-    │       └── index.mjs    # Application entry point
-    │ config.json            # Netlify configuration
-```
-
-### Netlify Configuration
-
-The NetlifyDeployer automatically generates a `config.json` configuration file in `.netlify/v1` with the following settings:
-
-```json
-{
-  "redirects": [
-    {
-      "force": true,
-      "from": "/*",
-      "to": "/.netlify/functions/api/:splat",
-      "status": 200
-    }
-  ]
-}
-```
-
-## Deployment Options
-
-After building, you can deploy your Mastra application `.mastra/output` to Netlify using any of these methods:
-
-1. **Netlify CLI**: Deploy directly using Netlify's official CLI tool
-
-   - Install the CLI: `npm install -g netlify-cli`
-   - Deploy with functions directory specified: `netlify deploy`
-   - For production deployment add `--prod` flag: `netlify deploy --prod`
-
-2. **Netlify Dashboard**: Connect your Git repository or drag-and-drop the build output through the Netlify dashboard
-
-  When connecting a Mastra project Git repository to Netlify, use these recommended build settings since Netlify resolves paths relative to the project root:
-
-   ```bash
-   # Build command
-   npm run build
-   ```
-
-
-
-3. **Netlify Dev**: Run your Mastra application locally with Netlify's development environment
-
-> You can also run `netlify dev` in your project root to test your Mastra application locally.
-
-## Platform Documentation
-
-- [Netlify](https://docs.netlify.com/)

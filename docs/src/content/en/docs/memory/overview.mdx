@@ -82,6 +82,36 @@ const response = await myMemoryAgent.stream("Hello, my name is Alice.", {
 
 **Important:** without these ID's your agent will not use memory, even if memory is properly configured. The playground handles this for you, but you need to add ID's yourself when using memory in your application.
 
+### Thread Title Generation
+
+Mastra can automatically generate meaningful titles for conversation threads based on the user's first message. This helps organize and identify conversations in your application UI.
+
+```typescript {3-7}
+const memory = new Memory({
+  options: {
+    threads: {
+      generateTitle: true, // Enable automatic title generation
+    },
+  },
+});
+```
+
+By default, title generation uses the same model as your agent. For cost optimization, you can specify a cheaper model specifically for title generation:
+
+```typescript {5-7}
+const memory = new Memory({
+  options: {
+    threads: {
+      generateTitle: {
+        model: openai("gpt-4.1-nano"), // Use cheaper model for titles
+      },
+    },
+  },
+});
+```
+
+Title generation happens asynchronously after the agent responds, so it doesn't impact response time. See the [full configuration reference](../../reference/memory/Memory.mdx#thread-title-generation) for more details and examples.
+
 ## Conversation History
 
 By default, the `Memory` instance includes the [last 10 messages](../../reference/memory/Memory.mdx) from the current Memory thread in each new request. This provides the agent with immediate conversational context.

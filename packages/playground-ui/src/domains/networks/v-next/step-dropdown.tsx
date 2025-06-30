@@ -16,9 +16,15 @@ import { useWorkflow } from '@/hooks/use-workflows';
 import { useMessage } from '@assistant-ui/react';
 
 const LabelMappings = {
+  'Agent-Network-Outer-Workflow.routing-step': 'Decision making process',
   'routing-step': 'Decision making process',
   'agent-step': 'Agent execution',
+  'Agent-Network-Outer-Workflow.agent-step': 'Agent execution',
   'workflow-step': 'Workflow execution',
+  'Agent-Network-Outer-Workflow.workflow-step': 'Workflow execution',
+  toolStep: 'Tool execution',
+  'Agent-Network-Outer-Workflow.toolStep': 'Tool execution',
+  'final-step': 'Task completed',
 };
 
 export const StepDropdown = () => {
@@ -31,18 +37,35 @@ export const StepDropdown = () => {
   if (!id) return <div>Something is wrong</div>;
   const currentState = state[id];
 
-  const latestStepId = currentState.executionSteps[currentState.executionSteps.length - 1];
+  const latestStepId = currentState.executionSteps
+    ? currentState.executionSteps?.[currentState.executionSteps.length - 1]
+    : '';
   const hasFinished = latestStepId === 'finish';
 
+  const failed = Object.values(currentState?.steps || {}).some(
+    step => step?.['error'] || step?.['step-result']?.status === 'failed',
+  );
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 mb-2">
       <Button onClick={() => setIsExpanded(!isExpanded)}>
         {hasFinished ? (
           <>
-            <Icon>
-              <CheckIcon className="text-accent1" />
-            </Icon>
-            Done
+            {failed ? (
+              <>
+                <Icon>
+                  <CrossIcon className="text-accent2" />
+                </Icon>
+                Failed
+              </>
+            ) : (
+              <>
+                <Icon>
+                  <CheckIcon className="text-accent1" />
+                </Icon>
+                Done
+              </>
+            )}
           </>
         ) : (
           <>
@@ -70,9 +93,9 @@ const Steps = ({ id }: { id: string }) => {
   return (
     <ol className="flex flex-col gap-px rounded-lg overflow-hidden">
       {currentState.executionSteps
-        .filter(stepId => stepId !== 'start')
+        ?.filter(stepId => stepId !== 'start')
         .map((stepId: any, index: number) => (
-          <StepEntry key={index} stepId={stepId} step={currentState.steps[stepId]} runId={currentState.runId} />
+          <StepEntry key={index} stepId={stepId} step={currentState.steps[stepId] || {}} runId={currentState.runId} />
         ))}
     </ol>
   );
@@ -80,7 +103,27 @@ const Steps = ({ id }: { id: string }) => {
 
 const StepEntry = ({ stepId, step, runId }: { stepId: any; step: any; runId?: string }) => {
   const [expanded, setExpanded] = useState(false);
-  const stepResult = step['step-result'];
+  let stepResult = step['step-result'];
+  const stepError = step['error'];
+
+  if (stepId === 'workflow-step' || stepId === 'Agent-Network-Outer-Workflow.workflow-step') {
+    const parsedResult = JSON.parse(stepResult?.output?.result ?? '{}') ?? {};
+    if (!parsedResult?.runResult && stepResult?.status === 'success') {
+      stepResult = {
+        ...stepResult,
+        status: 'failed',
+        error: 'Something went wrong',
+      };
+    }
+  }
+
+  if (stepError) {
+    stepResult = {
+      ...stepResult,
+      status: 'failed',
+      error: stepError?.data?.error?.message,
+    };
+  }
 
   if (stepId === 'finish') {
     return (
@@ -108,7 +151,7 @@ const StepEntry = ({ stepId, step, runId }: { stepId: any; step: any; runId?: st
         {step.metadata?.startTime && <StepClock step={step} />}
       </button>
 
-      {stepId === 'routing-step' && expanded && (
+      {(stepId === 'routing-step' || stepId === 'Agent-Network-Outer-Workflow.routing-step') && expanded && (
         <div className="bg-surface1 p-3 space-y-4">
           <div>
             <Txt variant="ui-sm" className="text-icon3 font-medium">
@@ -129,10 +172,79 @@ const StepEntry = ({ stepId, step, runId }: { stepId: any; step: any; runId?: st
               {stepResult?.output?.resourceId || 'N/A'}
             </Txt>
           </div>
+
+          {stepResult?.error ? (
+            <div>
+              <Txt variant="ui-sm" className="text-icon3 font-medium">
+                Error
+              </Txt>
+
+              <Txt variant="ui-sm" className="text-icon6">
+                {stepResult?.error || 'N/A'}
+              </Txt>
+            </div>
+          ) : null}
         </div>
       )}
 
-      {stepId === 'workflow-step' && stepResult?.output?.resourceId ? (
+      {(stepId === 'agent-step' || stepId === 'Agent-Network-Outer-Workflow.agent-step') &&
+        (stepError || stepResult?.error) &&
+        expanded && (
+          <div className="bg-surface1 p-3 space-y-4">
+            <div>
+              <Txt variant="ui-sm" className="text-icon3 font-medium">
+                Error
+              </Txt>
+
+              <Txt variant="ui-sm" className="text-icon6">
+                {stepError?.message || stepError?.data?.error?.message || stepResult?.error || 'N/A'}
+              </Txt>
+            </div>
+          </div>
+        )}
+
+      {(stepId === 'toolStep' || stepId === 'Agent-Network-Outer-Workflow.toolStep') &&
+        (stepError || stepResult?.error) &&
+        expanded && (
+          <div className="bg-surface1 p-3 space-y-4">
+            <div>
+              <Txt variant="ui-sm" className="text-icon3 font-medium">
+                Error
+              </Txt>
+
+              <Txt variant="ui-sm" className="text-icon6">
+                {stepError?.message || stepError?.data?.error?.message || stepResult?.error || 'N/A'}
+              </Txt>
+            </div>
+          </div>
+        )}
+
+      {stepId === 'final-step' && expanded && (
+        <div className="bg-surface1 p-3 space-y-4">
+          <div>
+            <Txt variant="ui-sm" className="text-icon3 font-medium">
+              Task:
+            </Txt>
+
+            <Txt variant="ui-sm" className="text-icon6">
+              {stepResult?.output?.task || 'N/A'}
+            </Txt>
+          </div>
+
+          <div>
+            <Txt variant="ui-sm" className="text-icon3 font-medium">
+              Number of iterations:
+            </Txt>
+
+            <Txt variant="ui-sm" className="text-icon6">
+              {stepResult?.output?.iteration || 'N/A'}
+            </Txt>
+          </div>
+        </div>
+      )}
+
+      {(stepId === 'workflow-step' || stepId === 'Agent-Network-Outer-Workflow.workflow-step') &&
+      stepResult?.output?.resourceId ? (
         <WorkflowStepResultDialog
           open={expanded}
           onOpenChange={setExpanded}
@@ -172,8 +284,8 @@ const WorkflowStepResultDialog = ({ open, onOpenChange, workflowId, runId }: Wor
   );
 };
 
-const StatusIcon = ({ status }: { status: 'error' | 'success' | 'loading' }) => {
-  if (status === 'error') {
+const StatusIcon = ({ status }: { status: 'failed' | 'success' | 'loading' }) => {
+  if (status === 'failed') {
     return (
       <Icon>
         <CrossIcon className="text-accent2" />

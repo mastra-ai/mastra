@@ -100,7 +100,7 @@ async function main() {
     owner: OWNER,
     repo: REPO,
     issue_number: Number(ISSUE_NUMBER),
-    labels: [result.product_area],
+    labels: [result.product_area, 'status: needs triage'],
   });
 
   await octokit.rest.issues.addAssignees({
