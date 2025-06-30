@@ -1349,12 +1349,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       execResults = { ...execResults, ...stepInfo };
     }
 
-    if (abortController?.signal?.aborted) {
-      execResults = { ...execResults, status: 'canceled' };
-    }
-
     if (entry.type === 'step' || entry.type === 'waitForEvent' || entry.type === 'loop' || entry.type === 'foreach') {
       stepResults[entry.step.id] = execResults;
+    }
+
+    if (abortController?.signal?.aborted) {
+      execResults = { ...execResults, status: 'canceled' };
     }
 
     await this.persistStepUpdate({
