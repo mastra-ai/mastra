@@ -1,4 +1,4 @@
-import { AgentIcon, Badge, Cell, DataTableProps, EntryCell } from '@mastra/playground-ui';
+import { AgentIcon, Badge, Cell, DataTableProps, EntryCell, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
 import { Link } from 'react-router';
 import { Users, Brain } from 'lucide-react';
 
@@ -9,6 +9,7 @@ type NetworksTableDataProps = {
   agentsSize: number;
   routingModel: string;
   workflowsSize?: number;
+  toolsSize?: number;
   isVNext?: boolean;
 };
 
@@ -48,7 +49,16 @@ export const networksTableColumns: DataTableProps<NetworksTableDataProps, unknow
     header: 'Workflows',
     cell: ({ row }) => (
       <Cell>
-        <Badge icon={<Users />}>{row.original.workflowsSize}</Badge>
+        <Badge icon={<WorkflowIcon />}>{row.original.workflowsSize}</Badge>
+      </Cell>
+    ),
+  },
+  {
+    id: 'tools',
+    header: 'Tools',
+    cell: ({ row }) => (
+      <Cell>
+        <Badge icon={<ToolsIcon />}>{row.original.toolsSize}</Badge>
       </Cell>
     ),
   },

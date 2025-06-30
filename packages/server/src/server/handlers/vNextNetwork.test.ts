@@ -145,6 +145,7 @@ describe('VNextNetwork Handlers', () => {
               outputSchema: expect.any(String),
             },
           ],
+          tools: [],
           routingModel: { provider: llm.getProvider(), modelId: llm.getModelId() },
         },
       ]);
@@ -189,6 +190,7 @@ describe('VNextNetwork Handlers', () => {
             outputSchema: expect.any(String),
           },
         ],
+        tools: [],
         routingModel: { provider: llm.getProvider(), modelId: llm.getModelId() },
       });
     });

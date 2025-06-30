@@ -24,11 +24,20 @@ export async function getVNextNetworksHandler({
         const routingLLM = await routingAgent.getLLM({ runtimeContext });
         const agents = await network.getAgents({ runtimeContext });
         const workflows = await network.getWorkflows({ runtimeContext });
+        const tools = await network.getTools({ runtimeContext });
         const networkInstruction = await network.getInstructions({ runtimeContext });
         return {
           id: network.id,
           name: network.name,
           instructions: networkInstruction,
+          tools: await Promise.all(
+            Object.values(tools).map(async tool => {
+              return {
+                id: tool.id,
+                description: tool.description,
+              };
+            }),
+          ),
           agents: await Promise.all(
             Object.values(agents).map(async agent => {
               const llm = await agent.getLLM({ runtimeContext });
@@ -79,6 +88,7 @@ export async function getVNextNetworkByIdHandler({
     const routingLLM = await routingAgent.getLLM({ runtimeContext });
     const agents = await network.getAgents({ runtimeContext });
     const workflows = await network.getWorkflows({ runtimeContext });
+    const tools = await network.getTools({ runtimeContext });
     const networkInstruction = await network.getInstructions({ runtimeContext });
     const serializedNetwork = {
       id: network.id,
@@ -101,6 +111,14 @@ export async function getVNextNetworkByIdHandler({
             description: workflow.description,
             inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
             outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
+          };
+        }),
+      ),
+      tools: await Promise.all(
+        Object.values(tools).map(async tool => {
+          return {
+            id: tool.id,
+            description: tool.description,
           };
         }),
       ),

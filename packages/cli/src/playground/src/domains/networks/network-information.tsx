@@ -5,6 +5,7 @@ import { NetworkAgents } from './network-agents';
 import { NetworkEndpoints } from './network-endpoints';
 import { NetworkWorkflows } from './network-workflows';
 import { GetVNextNetworkResponse } from '@mastra/client-js';
+import { NetworkTools } from './network-tools';
 
 export function NetworkInformation({ networkId, isVNext }: { networkId: string; isVNext?: boolean }) {
   const { network, isLoading } = useNetwork(networkId, !isVNext);
@@ -31,11 +32,18 @@ export function NetworkInformation({ networkId, isVNext }: { networkId: string; 
           </p>
         </TabsTrigger>
         {isVNext ? (
-          <TabsTrigger value="workflows" className="group">
-            <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-              Workflows
-            </p>
-          </TabsTrigger>
+          <>
+            <TabsTrigger value="workflows" className="group">
+              <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
+                Workflows
+              </p>
+            </TabsTrigger>
+            <TabsTrigger value="tools" className="group">
+              <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
+                Tools
+              </p>
+            </TabsTrigger>
+          </>
         ) : null}
         <TabsTrigger value="endpoints" className="group">
           <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
@@ -51,9 +59,14 @@ export function NetworkInformation({ networkId, isVNext }: { networkId: string; 
           <NetworkAgents network={networkToUse} />
         </TabsContent>
         {isVNext ? (
-          <TabsContent value="workflows">
-            <NetworkWorkflows network={networkToUse as GetVNextNetworkResponse} />
-          </TabsContent>
+          <>
+            <TabsContent value="workflows">
+              <NetworkWorkflows network={networkToUse as GetVNextNetworkResponse} />
+            </TabsContent>
+            <TabsContent value="tools">
+              <NetworkTools network={networkToUse as GetVNextNetworkResponse} />
+            </TabsContent>
+          </>
         ) : null}
         <TabsContent value="endpoints">
           <NetworkEndpoints networkId={networkId} isVNext={isVNext} />

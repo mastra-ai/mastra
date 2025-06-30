@@ -311,6 +311,11 @@ header nav:nth-child(2) {
   }
 }
 
+/* Hack for Tabs / Nextra auto-inserted h3s */
+div[role="tabpanel"] > h3:first-child {
+  display: none;
+}
+
 /*****Main Content******/
 
 aside {
