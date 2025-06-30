@@ -81,12 +81,7 @@ export function VNextMastraNetworkRuntimeProvider({
   }, [currentState]);
 
   useEffect(() => {
-    // const hasNewInitialMessages = initialMessages && initialMessages?.length > messages?.length;
-    if (
-      messages.length === 0 ||
-      currentThreadId !== threadId
-      // (hasNewInitialMessages && currentThreadId === threadId)
-    ) {
+    if (messages.length === 0 || currentThreadId !== threadId) {
       const run = async (result: string, messageId: string) => {
         const formatted = await formatJSON(result);
 
