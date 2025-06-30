@@ -1,29 +1,69 @@
 import { Slider } from '@/components/ui/slider';
 
-import { AgentContext, Button, Icon, Txt } from '@mastra/playground-ui';
-import { useContext } from 'react';
 import { Label } from '@/components/ui/label';
 
-import { RefreshCw } from 'lucide-react';
+import { Check, RefreshCw } from 'lucide-react';
 
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+
 import { Entry } from '@/components/ui/entry';
-
-import { GetAgentResponse } from '@mastra/client-js';
+import { useAgentSettings } from '../context/agent-context';
+import { Button } from '@/ds/components/Button/Button';
+import { Icon } from '@/ds/icons/Icon';
+import { Txt } from '@/ds/components/Txt/Txt';
+import { ModelSettings } from '@/types';
 import { AgentAdvancedSettings } from './agent-advanced-settings';
+import Spinner from '@/components/ui/spinner';
+import { InfoIcon } from '@/ds/icons';
 
-export interface AgentDetailsProps {
-  agent: GetAgentResponse;
+export interface AgentModelSettingsProps {
+  isSaving?: boolean;
+  onSave?: ({
+    generationType,
+    modelSettings,
+  }: {
+    generationType: 'stream' | 'generation';
+    modelSettings: ModelSettings;
+  }) => Promise<void>;
 }
 
-export function AgentDetails({ agent }: AgentDetailsProps) {
-  const { modelSettings, setModelSettings, chatWithGenerate, setChatWithGenerate, resetModelSettings } =
-    useContext(AgentContext);
+export function AgentModelSettings({ onSave, isSaving }: AgentModelSettingsProps) {
+  const {
+    modelSettings,
+    setModelSettings,
+    chatWithGenerate,
+    setChatWithGenerate,
+    resetModelSettings,
+    isFormDirty,
+    onResetFormDirty,
+  } = useAgentSettings();
 
-  const workflowsArray = Object.entries(agent?.workflows ?? {});
+  const handleSave = async () => {
+    if (onSave) {
+      await onSave({ generationType: chatWithGenerate ? 'generation' : 'stream', modelSettings });
+      onResetFormDirty();
+    }
+  };
 
   return (
     <div className="px-5 text-xs py-2 pb-4">
+      {isFormDirty && Boolean(onSave) && (
+        <div className="p-2 bg-surface4 rounded-lg mb-4 flex gap-2">
+          <Icon className="mt-1">
+            <InfoIcon />
+          </Icon>
+          <div>
+            <Txt as="p" variant="ui-md" className="text-icon3">
+              You have unsaved changes
+            </Txt>
+            <Txt as="p" variant="ui-sm" className="text-icon6">
+              These settings are for testing only. Once you finish testing, remember to save the settings to make them
+              permanent.
+            </Txt>
+          </div>
+        </div>
+      )}
+
       <section className="space-y-7">
         <Entry label="Chat Method">
           <RadioGroup
@@ -89,31 +129,20 @@ export function AgentDetails({ agent }: AgentDetailsProps) {
         <AgentAdvancedSettings />
       </section>
 
-      <Button onClick={() => resetModelSettings()}>
-        <Icon>
-          <RefreshCw />
-        </Icon>
-        Reset
-      </Button>
-
-      {workflowsArray?.length ? (
-        <div className="grid grid-cols-[100px_1fr] gap-2">
-          <p className="text-mastra-el-3">Workflows</p>
-          <div className="flex flex-col gap-2 text-mastra-el-5">
-            {workflowsArray.map(([workflowKey, workflow]) => (
-              <span
-                key={workflowKey}
-                onClick={() => {
-                  // navigate(`/workflows/${workflowKey}/graph`);
-                }}
-                className="no-underline"
-              >
-                {workflow.name}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      <div className="flex flex-col gap-2">
+        {onSave && (
+          <Button onClick={handleSave} variant="light" className="w-full" size="lg" disabled={isSaving}>
+            <Icon>{isSaving ? <Spinner /> : <Check />}</Icon>
+            Save
+          </Button>
+        )}
+        <Button onClick={() => resetModelSettings()} variant="light" className="w-full" size="lg">
+          <Icon>
+            <RefreshCw />
+          </Icon>
+          Reset
+        </Button>
+      </div>
     </div>
   );
 }
