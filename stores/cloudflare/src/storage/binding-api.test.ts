@@ -41,7 +41,7 @@ vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 const mf = new Miniflare({
   script: 'export default {};',
   modules: true,
-  kvNamespaces: [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES],
+  kvNamespaces: [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES, TABLE_RESOURCES],
 });
 
 const TEST_CONFIG: CloudflareWorkersConfig = {
@@ -74,7 +74,14 @@ describe('CloudflareStore Workers Binding', () => {
   // Helper to clean up KV data between tests
   const cleanupKVData = async () => {
     // List and delete all keys in each namespace
-    const tables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES] as TABLE_NAMES[];
+    const tables = [
+      TABLE_THREADS,
+      TABLE_MESSAGES,
+      TABLE_WORKFLOW_SNAPSHOT,
+      TABLE_EVALS,
+      TABLE_TRACES,
+      TABLE_RESOURCES,
+    ] as TABLE_NAMES[];
 
     for (const table of tables) {
       try {
