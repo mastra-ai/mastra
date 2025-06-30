@@ -11,18 +11,28 @@ const generateSuggestionsStep = createStep({
     suggestions: z.array(z.string()),
     vacationDescription: z.string(),
   }),
-  execute: async ({ inputData, mastra }) => {
+  execute: async ({ inputData, mastra, abortSignal, abort }) => {
     if (!mastra) {
       throw new Error('Mastra is not initialized');
     }
 
     const { vacationDescription } = inputData;
-    const result = await mastra.getAgent('summaryTravelAgent').generate([
+    const result = await mastra.getAgent('summaryTravelAgent').generate(
+      [
+        {
+          role: 'user',
+          content: vacationDescription,
+        },
+      ],
       {
-        role: 'user',
-        content: vacationDescription,
+        abortSignal,
       },
-    ]);
+    );
+
+    if (abortSignal.aborted) {
+      return abort();
+    }
+
     console.log(result.text);
     return { suggestions: JSON.parse(result.text), vacationDescription };
   },
