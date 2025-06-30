@@ -69,7 +69,7 @@ export const examplesTool = {
     Without a specific example name, lists all available examples. 
     With an example name, returns the full source code of that example.
     You can also use keywords from the user query to find relevant examples, but prioritize example names.`,
-  parameters: examplesInputSchema,
+  inputSchema: examplesInputSchema,
   execute: async (args: ExamplesInput) => {
     void logger.debug('Executing mastraExamples tool', { example: args.example });
     try {

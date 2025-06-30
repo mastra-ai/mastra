@@ -1,11 +1,10 @@
-import type { LanguageModelV1 } from 'ai';
 import type { ZodTypeAny } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { SchemaCompatLayer, isArr, isObj, isOptional, isString, isUnion } from '../schema-compatibility';
-import type { StringCheckType } from '../schema-compatibility';
+import type { SchemaCompatModel, StringCheckType } from '../schema-compatibility';
 
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
-  constructor(model: LanguageModelV1) {
+  constructor(model: SchemaCompatModel) {
     super(model);
   }
 
@@ -15,8 +14,9 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
 
   shouldApply(): boolean {
     if (
-      !this.getModel().supportsStructuredOutputs &&
-      (this.getModel().provider.includes(`openai`) || this.getModel().modelId.includes(`openai`))
+      // !this.getModel().supportsStructuredOutputs && // <- TODO: this no longer exists, do we need it?
+      this.getModel().provider.includes(`openai`) ||
+      this.getModel().modelId.includes(`openai`)
     ) {
       return true;
     }

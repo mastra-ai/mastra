@@ -188,7 +188,7 @@ export const docsTool = {
     Ex. if you see \`import { X } from "@mastra/$PACKAGE_NAME"\` in an example, show an install command. 
     Always install latest tag, not alpha unless requested. If you scaffold a new project it may be in a subdir.
     When displaying results, always mention which file path contains the information (e.g., 'Found in "path/to/file.mdx"') so users know where this documentation lives.`,
-  parameters: docsInputSchema,
+  inputSchema: docsInputSchema,
   execute: async (args: DocsInput) => {
     void logger.debug('Executing mastraDocs tool', { args });
     try {

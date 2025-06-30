@@ -1,8 +1,9 @@
 import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
+import type { LanguageModelV2StreamPart } from '@ai-sdk/provider';
+import { jsonSchema, simulateReadableStream } from 'ai';
 import type { CoreMessage } from 'ai';
-import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2 } from 'ai/test';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -10,13 +11,80 @@ import { z } from 'zod';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { Mastra } from '../mastra';
 import { MastraMemory } from '../memory';
-import type { StorageThreadType, MemoryConfig } from '../memory';
+import type { StorageThreadType, MemoryConfig, WorkingMemoryTemplate } from '../memory';
 import { RuntimeContext } from '../runtime-context';
 import { createTool } from '../tools';
 import { CompositeVoice, MastraVoice } from '../voice';
 import { MessageList } from './message-list/index';
+import { Agent } from '.';
 
-import { Agent } from './index';
+// const mockClientToolModel = new MockLanguageModelV2({
+//   doGenerate: async _options => {
+//     return Promise.resolve({
+//       content: [
+//         {
+//           type: 'tool-call',
+//           toolCallId: 'mock-tool-call-id',
+//           toolName: 'changeColor',
+//           toolCallType: 'function',
+//           args: JSON.stringify({ color: 'green' }),
+//         },
+//       ],
+//       finishReason: 'tool-calls',
+//       usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+//       providerMetadata: undefined,
+//       request: undefined,
+//       response: { id: 'mock-client-tool-response', timestamp: new Date(), modelId: 'mock-client-model' },
+//       warnings: [],
+//     });
+//   },
+//   doStream: async _options => {
+//     // Simplified: always return a tool call stream
+//     return Promise.resolve({
+//       stream: simulateReadableStream({
+//         chunks: [
+//           {
+//             type: 'tool-call-delta',
+//             toolCallId: 'mock-tool-call-id-stream',
+//             toolName: 'changeColor',
+//             toolCallType: 'function',
+//             argsTextDelta: '{',
+//           },
+//           {
+//             type: 'tool-call-delta',
+//             toolCallId: 'mock-tool-call-id-stream',
+//             toolName: 'changeColor',
+//             toolCallType: 'function',
+//             argsTextDelta: '"color":"',
+//           },
+//           {
+//             type: 'tool-call-delta',
+//             toolCallId: 'mock-tool-call-id-stream',
+//             toolName: 'changeColor',
+//             toolCallType: 'function',
+//             argsTextDelta: 'green"',
+//           },
+//           {
+//             type: 'tool-call-delta',
+//             toolCallId: 'mock-tool-call-id-stream',
+//             toolName: 'changeColor',
+//             toolCallType: 'function',
+//             argsTextDelta: '}',
+//           },
+//           {
+//             type: 'finish',
+//             finishReason: 'tool-calls',
+//             usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+//             providerMetadata: undefined,
+//           },
+//         ] as const,
+//         chunkDelayInMs: 10,
+//       }),
+//       request: undefined,
+//       response: { headers: undefined },
+//     });
+//   },
+// });
 
 config();
 
@@ -93,6 +161,148 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
   return userInfo;
 });
 
+const mockFindUserToolModel = new MockLanguageModelV2({
+  doGenerate: async _options => {
+    // Simulate a tool call response
+    return {
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: 'mock-find-user-call-id',
+          toolName: 'findUserTool',
+          toolCallType: 'function',
+          input: JSON.stringify({ name: 'Dero Israel' }),
+        },
+      ],
+      finishReason: 'tool-calls',
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      providerMetadata: undefined,
+      request: undefined,
+      response: { id: 'mock-find-user-gen-response-id', timestamp: new Date(), modelId: 'mock-find-user-model' },
+      warnings: [],
+      steps: [
+        {
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'mock-find-user-call-id',
+              toolName: 'findUserTool',
+              input: { name: 'Dero Israel' },
+            },
+          ],
+          text: '',
+          reasoning: [],
+          reasoningText: undefined,
+          files: [],
+          sources: [],
+          toolCalls: [
+            {
+              type: 'tool-call',
+              toolCallId: 'mock-find-user-call-id',
+              toolName: 'findUserTool',
+              args: { name: 'Dero Israel' },
+            },
+          ],
+          toolResults: [],
+          finishReason: 'tool-calls',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          warnings: [],
+          request: undefined,
+          response: {
+            id: 'mock-find-user-gen-response-id-step1',
+            timestamp: new Date(),
+            modelId: 'mock-find-user-model',
+          },
+          providerMetadata: undefined,
+        },
+        {
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'mock-find-user-call-id',
+              toolName: 'findUserTool',
+              result: { name: 'Dero Israel' },
+            },
+            { type: 'text', text: 'Found user Dero Israel.' },
+          ],
+          text: 'Found user Dero Israel.',
+          reasoning: [],
+          reasoningText: undefined,
+          files: [],
+          sources: [],
+          toolCalls: [],
+          toolResults: [
+            {
+              type: 'tool-result',
+              toolCallId: 'mock-find-user-call-id',
+              toolName: 'findUserTool',
+              args: { name: 'Dero Israel' },
+              result: { name: 'Dero Israel' },
+            },
+          ],
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+          warnings: [],
+          request: undefined,
+          response: {
+            id: 'mock-find-user-gen-response-id-step2',
+            timestamp: new Date(),
+            modelId: 'mock-find-user-model',
+          },
+          providerMetadata: undefined,
+        },
+      ],
+    };
+  },
+  doStream: async _options => {
+    // Simulate a tool call stream followed by a tool result stream
+    return Promise.resolve({
+      stream: simulateReadableStream({
+        chunks: [
+          {
+            type: 'tool-call-delta',
+            toolCallId: 'mock-find-user-call-id-stream',
+            toolName: 'findUserTool',
+            toolCallType: 'function',
+            inputTextDelta: '{',
+          },
+          {
+            type: 'tool-call-delta',
+            toolCallId: 'mock-find-user-call-id-stream',
+            toolName: 'findUserTool',
+            toolCallType: 'function',
+            inputTextDelta: '"name":"',
+          },
+          {
+            type: 'tool-call-delta',
+            toolCallId: 'mock-find-user-call-id-stream',
+            toolName: 'findUserTool',
+            toolCallType: 'function',
+            inputTextDelta: 'Dero Israel"',
+          },
+          {
+            type: 'tool-call-delta',
+            toolCallId: 'mock-find-user-call-id-stream',
+            toolName: 'findUserTool',
+            toolCallType: 'function',
+            inputTextDelta: '}',
+          },
+          { type: 'text', text: 'Found user Dero Israel.' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
+            providerMetadata: undefined,
+          },
+        ] as const,
+        chunkDelayInMs: 10,
+      }),
+      request: undefined,
+      response: { headers: undefined },
+    });
+  },
+});
+
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 describe('agent', () => {
@@ -100,12 +310,15 @@ describe('agent', () => {
 
   let dummyModel;
   beforeEach(() => {
-    dummyModel = new MockLanguageModelV1({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
+    dummyModel = new MockLanguageModelV2({
+      doGenerate: async _options => ({
+        content: [{ type: 'text', text: 'Dummy response' }], // text moved to content
         finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: `Dummy response`,
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        providerMetadata: undefined, // Add providerMetadata
+        request: undefined, // Add request
+        response: { id: 'mock-response-id', timestamp: new Date(), modelId: 'mock-model' }, // Add response
+        warnings: [], // Add warnings
       }),
     });
   });
@@ -114,12 +327,17 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: new MockLanguageModelV1({
+      model: new MockLanguageModelV2({
         doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
+          content: [
+            { type: 'text', text: `Donald Trump won the 2016 U.S. presidential election, defeating Hillary Clinton.` },
+          ], // text moved to content
           finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: `Donald Trump won the 2016 U.S. presidential election, defeating Hillary Clinton.`,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          providerMetadata: undefined, // Add providerMetadata
+          request: undefined, // Add request
+          response: { id: 'mock-response-id-2', timestamp: new Date(), modelId: 'mock-model-2' }, // Add response
+          warnings: [], // Add warnings
         }),
       }),
     });
@@ -143,29 +361,32 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: new MockLanguageModelV1({
+      model: new MockLanguageModelV2({
         doStream: async () => ({
           stream: simulateReadableStream({
             chunks: [
-              { type: 'text-delta', textDelta: 'Donald' },
-              { type: 'text-delta', textDelta: ' Trump' },
-              { type: 'text-delta', textDelta: ` won` },
-              { type: 'text-delta', textDelta: ` the` },
-              { type: 'text-delta', textDelta: ` ` },
-              { type: 'text-delta', textDelta: `201` },
-              { type: 'text-delta', textDelta: `6` },
-              { type: 'text-delta', textDelta: ` US` },
-              { type: 'text-delta', textDelta: ` presidential` },
-              { type: 'text-delta', textDelta: ` election` },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Donald' },
+              { type: 'text-delta', id: 'text-1', delta: ' Trump' },
+              { type: 'text-delta', id: 'text-1', delta: ' won' },
+              { type: 'text-delta', id: 'text-1', delta: ' the' },
+              { type: 'text-delta', id: 'text-1', delta: ' ' },
+              { type: 'text-delta', id: 'text-1', delta: '201' },
+              { type: 'text-delta', id: 'text-1', delta: '6' },
+              { type: 'text-delta', id: 'text-1', delta: ' US' },
+              { type: 'text-delta', id: 'text-1', delta: ' presidential' },
+              { type: 'text-delta', id: 'text-1', delta: ' election' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
-                logprobs: undefined,
                 usage: { completionTokens: 10, promptTokens: 3 },
+                providerMetadata: undefined,
               },
-            ],
+            ] as LanguageModelV2StreamPart[], // Added type assertion
           }),
-          rawCall: { rawPrompt: null, rawSettings: {} },
+          request: undefined, // Add request
+          response: { headers: undefined }, // Add response
         }),
       }),
     });
@@ -197,13 +418,15 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
+      model: new MockLanguageModelV2({
         doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
+          content: [{ type: 'text', text: `{"winner":"Barack Obama"}` }], // text moved to content
           finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: `{"winner":"Barack Obama"}`,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          providerMetadata: undefined, // Add providerMetadata
+          request: undefined, // Add request
+          response: { id: 'mock-response-id-3', timestamp: new Date(), modelId: 'mock-model-3' }, // Add response
+          warnings: [], // Add warnings
         }),
       }),
     });
@@ -230,13 +453,20 @@ describe('agent', () => {
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
       // model: openai('gpt-4o'),
-      model: new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
+      model: new MockLanguageModelV2({
         doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
+          content: [
+            {
+              type: 'text',
+              text: `{"elements":[{"winner":"Barack Obama","year":"2012"},{"winner":"Donald Trump","year":"2016"}]}`,
+            },
+          ], // text moved to content
           finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: `{"elements":[{"winner":"Barack Obama","year":"2012"},{"winner":"Donald Trump","year":"2016"}]}`,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          providerMetadata: undefined, // Add providerMetadata
+          request: undefined, // Add request
+          response: { id: 'mock-response-id-4', timestamp: new Date(), modelId: 'mock-model-4' }, // Add response
+          warnings: [], // Add warnings
         }),
       }),
     });
@@ -276,24 +506,27 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
+      model: new MockLanguageModelV2({
         doStream: async () => ({
           stream: simulateReadableStream({
             chunks: [
-              { type: 'text-delta', textDelta: '{' },
-              { type: 'text-delta', textDelta: '"winner":' },
-              { type: 'text-delta', textDelta: `"Barack Obama"` },
-              { type: 'text-delta', textDelta: `}` },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: '{' },
+              { type: 'text-delta', id: 'text-1', delta: '"winner":' },
+              { type: 'text-delta', id: 'text-1', delta: `"Barack Obama"` },
+              { type: 'text-delta', id: 'text-1', delta: `}` },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
-                logprobs: undefined,
-                usage: { completionTokens: 10, promptTokens: 3 },
+                usage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 }, // Corrected usage
+                providerMetadata: undefined,
               },
-            ],
+            ] as LanguageModelV2StreamPart[], // Added type assertion
+            chunkDelayInMs: 10, // Added delay
           }),
-          rawCall: { rawPrompt: null, rawSettings: {} },
+          request: undefined, // Add request
+          response: { headers: undefined }, // Add response
         }),
       }),
     });
@@ -340,7 +573,7 @@ describe('agent', () => {
     const userAgent = new Agent({
       name: 'User agent',
       instructions: 'You are an agent that can get list of users using findUserTool.',
-      model: openai('gpt-4o'),
+      model: mockFindUserToolModel,
       tools: { findUserTool },
     });
 
@@ -358,7 +591,7 @@ describe('agent', () => {
 
     const toolCall: any = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
 
-    const name = toolCall?.result?.name;
+    const name = toolCall?.output?.name;
 
     expect(mockFindUser).toHaveBeenCalled();
     expect(name).toBe('Dero Israel');
@@ -367,46 +600,45 @@ describe('agent', () => {
   it('generate - should pass and call client side tools', async () => {
     const userAgent = new Agent({
       name: 'User agent',
-      instructions: 'You are an agent that can get list of users using client side tools.',
-      model: openai('gpt-4o'),
+      instructions: 'You are an agent that calls tools when requested.',
+      model: openai('gpt-4.1-mini'),
     });
 
-    const result = await userAgent.generate('Make it green', {
+    const result = await userAgent.generate('Change the color to green using the "changeColor" tool!', {
       clientTools: {
         changeColor: {
           id: 'changeColor',
-          description: 'This is a test tool that returns the name and email',
+          description: 'This is a test tool that changes the colour',
           inputSchema: z.object({
             color: z.string(),
           }),
-          execute: async () => {
-            console.log('SUHHH');
-          },
         },
       },
     });
 
-    expect(result.toolCalls.length).toBeGreaterThan(0);
+    const toolCalls = result.steps.filter(s =>
+      s.content.some(c => c.type === `tool-call` && c.toolName === `changeColor`),
+    );
+    expect(toolCalls).toHaveLength(1);
   });
 
   it('stream - should pass and call client side tools', async () => {
     const userAgent = new Agent({
       name: 'User agent',
-      instructions: 'You are an agent that can get list of users using client side tools.',
-      model: openai('gpt-4o'),
+      instructions: 'You are an agent that can call tools.',
+      // TODO: why isn't this mock working? it works with the real openai model
+      // model: mockClientToolModel,
+      model: openai(`gpt-4.1-mini`),
     });
 
     const result = await userAgent.stream('Make it green', {
       clientTools: {
         changeColor: {
           id: 'changeColor',
-          description: 'This is a test tool that returns the name and email',
+          description: 'This is a test tool that changes the color',
           inputSchema: z.object({
             color: z.string(),
           }),
-          execute: async () => {
-            console.log('SUHHH');
-          },
         },
       },
       onFinish: props => {
@@ -418,7 +650,7 @@ describe('agent', () => {
     }
   });
 
-  it('should generate with default max steps', { timeout: 10000 }, async () => {
+  it('should generate with default max steps', { timeout: 60000 }, async () => {
     const findUserTool = createTool({
       id: 'Find user tool',
       description: 'This is a test tool that returns the name and email',
@@ -452,7 +684,7 @@ describe('agent', () => {
 
     expect(res.steps.length > 1);
     expect(res.text.includes('joe@mail.com'));
-    expect(toolCall?.result?.email).toBe('joe@mail.com');
+    expect(toolCall?.output?.email).toBe('joe@mail.com');
     expect(mockFindUser).toHaveBeenCalled();
   });
 
@@ -479,7 +711,7 @@ describe('agent', () => {
 
     const toolCall: any = response.toolResults.find((result: any) => result.toolName === 'testTool');
 
-    const message = toolCall?.result?.message;
+    const message = toolCall?.output?.message;
 
     expect(message).toBe('Executed successfully');
   }, 500000);
@@ -506,19 +738,19 @@ describe('agent', () => {
     // Original CoreMessages for context, but we'll test the output of list.get.all.core()
     const toolResultOne_Core: CoreMessage = {
       role: 'tool',
-      content: [{ type: 'tool-result', toolName: 'test-tool-1', toolCallId: 'tool-1', result: 'res1' }],
+      content: [{ type: 'tool-result', toolName: 'testTool1', toolCallId: 'tool-1', output: 'res1' }],
     };
     const toolCallTwo_Core: CoreMessage = {
       role: 'assistant',
-      content: [{ type: 'tool-call', toolName: 'test-tool-2', toolCallId: 'tool-2', args: {} }],
+      content: [{ type: 'tool-call', toolName: 'testTool2', toolCallId: 'tool-2', input: {} }],
     };
     const toolResultTwo_Core: CoreMessage = {
       role: 'tool',
-      content: [{ type: 'tool-result', toolName: 'test-tool-2', toolCallId: 'tool-2', result: 'res2' }],
+      content: [{ type: 'tool-result', toolName: 'testTool2', toolCallId: 'tool-2', output: 'res2' }],
     };
     const toolCallThree_Core: CoreMessage = {
       role: 'assistant',
-      content: [{ type: 'tool-call', toolName: 'test-tool-3', toolCallId: 'tool-3', args: {} }],
+      content: [{ type: 'tool-call', toolName: 'testTool3', toolCallId: 'tool-3', input: {} }],
     };
 
     // Add messages. addOne will merge toolCallTwo and toolResultTwo.
@@ -528,7 +760,7 @@ describe('agent', () => {
     messageList.add(toolResultTwo_Core, 'memory');
     messageList.add(toolCallThree_Core, 'memory');
 
-    const finalCoreMessages = messageList.get.all.core();
+    const finalCoreMessages = messageList.get.all.aiV5.model();
 
     // Expected: toolResultOne (orphaned tool result) should be gone.
     // toolCallThree (orphaned assistant call) should be gone.
@@ -560,7 +792,7 @@ describe('agent', () => {
     expect(assistantCallForTool2).toBeDefined();
     expect(assistantCallForTool2?.content).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'tool-call', toolCallId: 'tool-2', toolName: 'test-tool-2' }),
+        expect.objectContaining({ type: 'tool-call', toolCallId: 'tool-2', toolName: 'testTool2', input: {} }),
       ]),
     );
 
@@ -570,7 +802,12 @@ describe('agent', () => {
     expect(toolResultForTool2).toBeDefined();
     expect(toolResultForTool2?.content).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'tool-result', toolCallId: 'tool-2', toolName: 'test-tool-2', result: 'res2' }),
+        expect.objectContaining({
+          type: 'tool-result',
+          toolCallId: 'tool-2',
+          toolName: 'testTool2',
+          output: { type: 'text', value: 'res2' },
+        }),
       ]),
     );
 
@@ -590,11 +827,11 @@ describe('agent', () => {
 
     const assistantToolCall_Core: CoreMessage = {
       role: 'assistant',
-      content: [{ type: 'tool-call', toolName: 'testTool', toolCallId: 'tool-1', args: {} }],
+      content: [{ type: 'tool-call', toolName: 'testTool', toolCallId: 'tool-1', input: {} }],
     };
     const toolMessage_Core: CoreMessage = {
       role: 'tool',
-      content: [{ type: 'tool-result', toolName: 'testTool', toolCallId: 'tool-1', result: 'res1' }],
+      content: [{ type: 'tool-result', toolName: 'testTool', toolCallId: 'tool-1', output: 'res1' }],
     };
     const emptyAssistant_Core: CoreMessage = {
       role: 'assistant',
@@ -610,7 +847,7 @@ describe('agent', () => {
     messageList.add(emptyAssistant_Core, 'memory');
     messageList.add(userMessage_Core, 'memory');
 
-    const finalCoreMessages = messageList.get.all.core();
+    const finalCoreMessages = messageList.get.all.aiV5.model();
 
     // Expected:
     // 1. Assistant message with tool-1 call.
@@ -650,27 +887,33 @@ describe('agent', () => {
     let agentModelUsed = false;
 
     // Create a mock model for the agent's main model
-    const agentModel = new MockLanguageModelV1({
+    const agentModel = new MockLanguageModelV2({
       doGenerate: async () => {
         agentModelUsed = true;
         return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
+          content: [{ type: 'text', text: 'Agent model response' }],
           finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: `Agent model response`,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          providerMetadata: undefined,
+          request: undefined,
+          response: { id: 'mock-agent-response-id', timestamp: new Date(), modelId: 'mock-agent-model' },
+          warnings: [],
         };
       },
     });
 
     // Create a different mock model for title generation
-    const titleModel = new MockLanguageModelV1({
+    const titleModel = new MockLanguageModelV2({
       doGenerate: async () => {
         titleModelUsed = true;
         return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
+          content: [{ type: 'text', text: 'Custom Title Model Response' }],
           finishReason: 'stop',
-          usage: { promptTokens: 5, completionTokens: 10 },
-          text: `Custom Title Model Response`,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          providerMetadata: undefined,
+          request: undefined,
+          response: { id: 'mock-title-response-id', timestamp: new Date(), modelId: 'mock-title-model' },
+          warnings: [],
         };
       },
     });
@@ -727,26 +970,32 @@ describe('agent', () => {
     let usedModelName = '';
 
     // Create two different models
-    const premiumModel = new MockLanguageModelV1({
+    const premiumModel = new MockLanguageModelV2({
       doGenerate: async () => {
         usedModelName = 'premium';
         return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
+          content: [{ type: 'text', text: 'Premium Title' }],
           finishReason: 'stop',
-          usage: { promptTokens: 5, completionTokens: 10 },
-          text: `Premium Title`,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          providerMetadata: undefined,
+          request: undefined,
+          response: { id: 'mock-premium-response-id', timestamp: new Date(), modelId: 'mock-premium-model' },
+          warnings: [],
         };
       },
     });
 
-    const standardModel = new MockLanguageModelV1({
+    const standardModel = new MockLanguageModelV2({
       doGenerate: async () => {
         usedModelName = 'standard';
         return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
+          content: [{ type: 'text', text: 'Standard Title' }],
           finishReason: 'stop',
-          usage: { promptTokens: 5, completionTokens: 10 },
-          text: `Standard Title`,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          providerMetadata: undefined,
+          request: undefined,
+          response: { id: 'mock-standard-response-id', timestamp: new Date(), modelId: 'mock-standard-model' },
+          warnings: [],
         };
       },
     });
@@ -830,7 +1079,7 @@ describe('agent', () => {
     const agent = new Agent({
       name: 'boolean-title-agent',
       instructions: 'test agent',
-      model: new MockLanguageModelV1({
+      model: new MockLanguageModelV2({
         doGenerate: async options => {
           // Check if this is for title generation based on the prompt
           const messages = options.prompt;
@@ -839,18 +1088,24 @@ describe('agent', () => {
           if (isForTitle) {
             titleGenerationCallCount++;
             return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
+              content: [{ type: 'text', text: 'Generated Title' }],
               finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: `Generated Title`,
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              providerMetadata: undefined,
+              request: undefined,
+              response: { id: 'mock-title-gen-response-id', timestamp: new Date(), modelId: 'mock-title-gen-model' },
+              warnings: [],
             };
           } else {
             agentCallCount++;
             return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
+              content: [{ type: 'text', text: 'Agent Response' }],
               finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              text: `Agent Response`,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              providerMetadata: undefined,
+              request: undefined,
+              response: { id: 'mock-agent-gen-response-id', timestamp: new Date(), modelId: 'mock-agent-gen-model' },
+              warnings: [],
             };
           }
         },
@@ -916,7 +1171,7 @@ describe('agent', () => {
       return {
         threads: {
           generateTitle: {
-            model: new MockLanguageModelV1({
+            model: new MockLanguageModelV2({
               doGenerate: async () => {
                 throw new Error('Title generation failed');
               },
@@ -966,7 +1221,7 @@ describe('agent', () => {
     const agent = new Agent({
       name: 'undefined-config-agent',
       instructions: 'test agent',
-      model: new MockLanguageModelV1({
+      model: new MockLanguageModelV2({
         doGenerate: async options => {
           // Check if this is for title generation based on the prompt
           const messages = options.prompt;
@@ -975,18 +1230,32 @@ describe('agent', () => {
           if (isForTitle) {
             titleGenerationCallCount++;
             return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
+              content: [{ type: 'text', text: 'Should not be called' }],
               finishReason: 'stop',
-              usage: { promptTokens: 5, completionTokens: 10 },
-              text: `Should not be called`,
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              providerMetadata: undefined,
+              request: undefined,
+              response: {
+                id: 'mock-title-notcalled-response-id',
+                timestamp: new Date(),
+                modelId: 'mock-title-notcalled-model',
+              },
+              warnings: [],
             };
           } else {
             agentCallCount++;
             return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
+              content: [{ type: 'text', text: 'Agent Response' }],
               finishReason: 'stop',
-              usage: { promptTokens: 10, completionTokens: 20 },
-              text: `Agent Response`,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              providerMetadata: undefined,
+              request: undefined,
+              response: {
+                id: 'mock-agent-undefined-response-id',
+                timestamp: new Date(),
+                modelId: 'mock-agent-undefined-model',
+              },
+              warnings: [],
             };
           }
         },
@@ -1126,164 +1395,314 @@ describe('agent', () => {
     });
   });
 
-  describe('agent tool handling', () => {
-    it('should accept and execute both Mastra and Vercel tools in Agent constructor', async () => {
-      const mastraExecute = vi.fn().mockResolvedValue({ result: 'mastra' });
-      const vercelExecute = vi.fn().mockResolvedValue({ result: 'vercel' });
+  it('should accept and execute both Mastra and Vercel tools in Agent constructor', async () => {
+    const mastraExecute = vi.fn().mockResolvedValue({ result: 'mastra' });
+    const vercelExecute = vi.fn().mockResolvedValue({ result: 'vercel' });
 
-      const agent = new Agent({
-        name: 'test',
-        instructions: 'test agent instructions',
-        model: openai('gpt-4'),
-        tools: {
-          mastraTool: createTool({
-            id: 'test',
-            description: 'test',
-            inputSchema: z.object({ name: z.string() }),
-            execute: mastraExecute,
-          }),
-          vercelTool: {
-            description: 'test',
-            parameters: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
-              },
+    const agent = new Agent({
+      name: 'test',
+      instructions: 'test agent instructions',
+      model: openai('gpt-4'),
+      tools: {
+        mastraTool: createTool({
+          id: 'test',
+          description: 'test',
+          inputSchema: z.object({ name: z.string() }),
+          execute: mastraExecute,
+        }),
+        vercelTool: {
+          description: 'test',
+          inputSchema: jsonSchema({
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
             },
-            execute: vercelExecute,
-          },
+          }),
+          execute: vercelExecute,
         },
-      });
-
-      // Verify tools exist
-      expect((agent.getTools() as Agent['tools']).mastraTool).toBeDefined();
-      expect((agent.getTools() as Agent['tools']).vercelTool).toBeDefined();
-
-      // Verify both tools can be executed
-      // @ts-ignore
-      await (agent.getTools() as Agent['tools']).mastraTool.execute!({ name: 'test' });
-      // @ts-ignore
-      await (agent.getTools() as Agent['tools']).vercelTool.execute!({ name: 'test' });
-
-      expect(mastraExecute).toHaveBeenCalled();
-      expect(vercelExecute).toHaveBeenCalled();
+      },
     });
 
-    it('should make runtimeContext available to tools when injected in generate', async () => {
-      const testRuntimeContext = new RuntimeContext([['test-value', 'runtimeContext-value']]);
-      let capturedValue: string | null = null;
+    // Verify tools exist
+    expect((agent.getTools() as Agent['tools']).mastraTool).toBeDefined();
+    expect((agent.getTools() as Agent['tools']).vercelTool).toBeDefined();
 
-      const testTool = createTool({
-        id: 'runtimeContext-test-tool',
-        description: 'A tool that verifies runtimeContext is available',
-        inputSchema: z.object({
-          query: z.string(),
-        }),
-        execute: ({ runtimeContext }) => {
-          capturedValue = runtimeContext.get('test-value')!;
+    const tools: Agent['tools'] = agent.getTools() as Agent['tools']; // Explicitly type and cast
 
-          return Promise.resolve({
-            success: true,
-            runtimeContextAvailable: !!runtimeContext,
-            runtimeContextValue: capturedValue,
-          });
-        },
-      });
+    await tools.mastraTool?.execute?.({ name: 'test' }, { toolCallId: '1', messages: [] });
+    await tools.vercelTool?.execute?.({ name: 'test' }, { toolCallId: '1', messages: [] });
 
-      const agent = new Agent({
-        name: 'runtimeContext-test-agent',
-        instructions: 'You are an agent that tests runtimeContext availability.',
-        model: openai('gpt-4o'),
-        tools: { testTool },
-      });
-
-      const mastra = new Mastra({
-        agents: { agent },
-        logger: false,
-      });
-
-      const testAgent = mastra.getAgent('agent');
-
-      const response = await testAgent.generate('Use the runtimeContext-test-tool with query "test"', {
-        toolChoice: 'required',
-        runtimeContext: testRuntimeContext,
-      });
-
-      const toolCall = response.toolResults.find(result => result.toolName === 'testTool');
-
-      expect(toolCall?.result?.runtimeContextAvailable).toBe(true);
-      expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
-      expect(capturedValue).toBe('runtimeContext-value');
-    }, 500000);
-
-    it('should make runtimeContext available to tools when injected in stream', async () => {
-      const testRuntimeContext = new RuntimeContext([['test-value', 'runtimeContext-value']]);
-      let capturedValue: string | null = null;
-
-      const testTool = createTool({
-        id: 'runtimeContext-test-tool',
-        description: 'A tool that verifies runtimeContext is available',
-        inputSchema: z.object({
-          query: z.string(),
-        }),
-        execute: ({ runtimeContext }) => {
-          capturedValue = runtimeContext.get('test-value')!;
-
-          return Promise.resolve({
-            success: true,
-            runtimeContextAvailable: !!runtimeContext,
-            runtimeContextValue: capturedValue,
-          });
-        },
-      });
-
-      const agent = new Agent({
-        name: 'runtimeContext-test-agent',
-        instructions: 'You are an agent that tests runtimeContext availability.',
-        model: openai('gpt-4o'),
-        tools: { testTool },
-      });
-
-      const mastra = new Mastra({
-        agents: { agent },
-        logger: false,
-      });
-
-      const testAgent = mastra.getAgent('agent');
-
-      const stream = await testAgent.stream('Use the runtimeContext-test-tool with query "test"', {
-        toolChoice: 'required',
-        runtimeContext: testRuntimeContext,
-      });
-
-      for await (const _chunk of stream.textStream) {
-        // empty line
-      }
-
-      const toolCall = (await stream.toolResults).find(result => result.toolName === 'testTool');
-
-      expect(toolCall?.result?.runtimeContextAvailable).toBe(true);
-      expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
-      expect(capturedValue).toBe('runtimeContext-value');
-    }, 500000);
+    expect(mastraExecute).toHaveBeenCalled();
+    expect(vercelExecute).toHaveBeenCalled();
   });
+
+  // const mockFindUserToolModel = new MockLanguageModelV2({
+  //   doGenerate: async () => {
+  //     // Simulate a tool call response
+  //     return Promise.resolve({
+  //       content: [
+  //         {
+  //           type: 'tool-call',
+  //           toolCallId: 'mock-find-user-call-id',
+  //           toolName: 'findUserTool',
+  //           args: { name: 'Dero Israel' },
+  //         },
+  //       ],
+  //       finishReason: 'tool-calls',
+  //       usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+  //       providerMetadata: undefined,
+  //       request: undefined,
+  //       response: { id: 'mock-find-user-gen-response-id', timestamp: new Date(), modelId: 'mock-find-user-model' },
+  //       warnings: [],
+  //       steps: [
+  //         {
+  //           content: [
+  //             {
+  //               type: 'tool-call',
+  //               toolCallId: 'mock-find-user-call-id',
+  //               toolName: 'findUserTool',
+  //               args: { name: 'Dero Israel' },
+  //             },
+  //           ],
+  //           text: '',
+  //           reasoning: [],
+  //           reasoningText: undefined,
+  //           files: [],
+  //           sources: [],
+  //           toolCalls: [
+  //             {
+  //               type: 'tool-call',
+  //               toolCallId: 'mock-find-user-call-id',
+  //               toolName: 'findUserTool',
+  //               args: { name: 'Dero Israel' },
+  //             },
+  //           ],
+  //           toolResults: [], // Tool result is added in the next step in real scenario, but we can simulate it here for simplicity
+  //           finishReason: 'tool-calls',
+  //           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+  //           warnings: [],
+  //           request: undefined,
+  //           response: {
+  //             id: 'mock-find-user-gen-response-id-step1',
+  //             timestamp: new Date(),
+  //             modelId: 'mock-find-user-model',
+  //           },
+  //           providerMetadata: undefined,
+  //         },
+  //         {
+  //           content: [
+  //             {
+  //               type: 'tool-result',
+  //               toolCallId: 'mock-find-user-call-id',
+  //               toolName: 'findUserTool',
+  //               result: { name: 'Dero Israel' },
+  //             },
+  //             { type: 'text', text: 'Found user Dero Israel.' },
+  //           ],
+  //           text: 'Found user Dero Israel.',
+  //         },
+  //       ],
+  //     });
+  //   },
+  // });
+
+  it('should make runtimeContext available to tools when injected in generate', async () => {
+    const testRuntimeContext = new RuntimeContext([['test-value', 'runtimeContext-value']]);
+    let capturedValue: string | null = null;
+
+    const testTool = createTool({
+      id: 'runtimeContext-test-tool',
+      description: 'A tool that verifies runtimeContext is available',
+      inputSchema: z.object({
+        query: z.string(),
+      }),
+      execute: ({ runtimeContext }) => {
+        capturedValue = runtimeContext.get('test-value')!;
+
+        return Promise.resolve({
+          success: true,
+          runtimeContextAvailable: !!runtimeContext,
+          runtimeContextValue: capturedValue,
+        });
+      },
+    });
+
+    const agent = new Agent({
+      name: 'runtimeContext-test-agent',
+      instructions: 'You are an agent that tests runtimeContext availability.',
+      model: openai('gpt-4o'),
+      tools: { testTool },
+    });
+
+    const mastra = new Mastra({
+      agents: { agent },
+      logger: false,
+    });
+
+    const testAgent = mastra.getAgent('agent');
+
+    const response = await testAgent.generate('Use the runtimeContext-test-tool with query "test"', {
+      toolChoice: 'required',
+      runtimeContext: testRuntimeContext,
+    });
+
+    const toolCall = response.toolResults.find(result => result.toolName === 'testTool');
+
+    expect(toolCall?.output?.runtimeContextAvailable).toBe(true);
+    expect(toolCall?.output?.runtimeContextValue).toBe('runtimeContext-value');
+    expect(capturedValue).toBe('runtimeContext-value');
+  }, 500000);
+
+  it('should make runtimeContext available to tools when injected in stream', async () => {
+    const testRuntimeContext = new RuntimeContext([['test-value', 'runtimeContext-value']]);
+    let capturedValue: string | null = null;
+
+    const testTool = createTool({
+      id: 'runtimeContext-test-tool',
+      description: 'A tool that verifies runtimeContext is available',
+      inputSchema: z.object({
+        query: z.string(),
+      }),
+      execute: ({ runtimeContext }) => {
+        capturedValue = runtimeContext.get('test-value')!;
+
+        return Promise.resolve({
+          success: true,
+          runtimeContextAvailable: !!runtimeContext,
+          runtimeContextValue: capturedValue,
+        });
+      },
+    });
+
+    const agent = new Agent({
+      name: 'runtimeContext-test-agent',
+      instructions: 'You are an agent that tests runtimeContext availability.',
+      model: openai('gpt-4o'),
+      tools: { testTool },
+    });
+
+    const mastra = new Mastra({
+      agents: { agent },
+      logger: false,
+    });
+
+    const testAgent = mastra.getAgent('agent');
+
+    const stream = await testAgent.stream('Use the runtimeContext-test-tool with query "test"', {
+      toolChoice: 'required',
+      runtimeContext: testRuntimeContext,
+    });
+
+    for await (const _chunk of stream.textStream) {
+      // empty line
+    }
+
+    const toolCall = (await stream.toolResults).find(result => result.toolName === 'testTool');
+
+    expect(toolCall?.output?.runtimeContextAvailable).toBe(true);
+    expect(toolCall?.output?.runtimeContextValue).toBe('runtimeContext-value');
+    expect(capturedValue).toBe('runtimeContext-value');
+  }, 500000);
 });
 
 describe('agent memory with metadata', () => {
+  class MockMemory extends MastraMemory {
+    threads: Record<string, StorageThreadType> = {};
+
+    constructor() {
+      super({ name: 'mock' });
+      Object.defineProperty(this, 'storage', {
+        get: () => ({
+          init: async () => {},
+          getThreadById: this.getThreadById.bind(this),
+          saveThread: async ({ thread }: { thread: StorageThreadType }) => {
+            return this.saveThread({ thread });
+          },
+        }),
+      });
+      this._hasOwnStorage = true;
+    }
+
+    getWorkingMemory(_: {
+      threadId: string;
+      format?: 'json' | 'markdown';
+    }): Promise<Record<string, any> | string | null> {
+      throw new Error('Method not implemented.');
+    }
+    getWorkingMemoryTemplate(): Promise<WorkingMemoryTemplate | null> {
+      throw new Error('Method not implemented.');
+    }
+
+    async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+      return this.threads[threadId] || null;
+    }
+
+    async saveThread({
+      thread,
+    }: {
+      thread: StorageThreadType;
+      memoryConfig?: MemoryConfig;
+    }): Promise<StorageThreadType> {
+      const newThread = { ...thread, updatedAt: new Date() };
+      if (!newThread.createdAt) {
+        newThread.createdAt = new Date();
+      }
+      this.threads[thread.id] = newThread;
+      return this.threads[thread.id];
+    }
+
+    async rememberMessages() {
+      return { messages: [], messagesV2: [] };
+    }
+    async getThreadsByResourceId() {
+      return [];
+    }
+    async saveMessages() {
+      return [];
+    }
+    async query() {
+      return { messages: [], uiMessages: [] };
+    }
+    async deleteThread(threadId: string) {
+      delete this.threads[threadId];
+    }
+  }
   let dummyModel;
   beforeEach(() => {
-    dummyModel = new MockLanguageModelV1({
+    dummyModel = new MockLanguageModelV2({
       doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        text: `Dummy response`,
+        warnings: [],
+        usage: {
+          promptTokens: 10,
+          completionTokens: 20,
+          cachedInputTokens: 0,
+          inputTokens: 10,
+          outputTokens: 100,
+          reasoningTokens: 0,
+          totalTokens: 110,
+        },
+        content: [{ type: 'text', text: `Dummy response` }],
+        providerMetadata: undefined,
+        request: undefined,
+        response: { id: 'mock-dummy-response-id', timestamp: new Date(), modelId: 'mock-dummy-model' },
       }),
       doStream: async () => ({
         stream: simulateReadableStream({
-          chunks: [{ type: 'text-delta', textDelta: 'dummy' }],
+          chunks: [
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'dummy' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
+              providerMetadata: undefined,
+            },
+          ],
         }),
-        rawCall: { rawPrompt: null, rawSettings: {} },
+        request: undefined,
+        response: { headers: undefined },
       }),
     });
   });

@@ -67,7 +67,7 @@ export function MastraNetworkRuntimeProvider({
         presencePenalty,
         maxRetries,
         maxSteps,
-        maxTokens,
+        maxOutputTokens: maxTokens,
         temperature,
         topK,
         topP,

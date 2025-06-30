@@ -261,10 +261,14 @@ export async function getMessagesHandler({
   agentId,
   threadId,
   limit,
+  format,
+  clientSdkCompat,
   networkId,
   runtimeContext,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
   limit?: number;
+  format?: 'aiv4' | 'aiv5';
+  clientSdkCompat?: string;
 }) {
   if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
     throw new HTTPException(400, { message: 'Invalid limit: must be a positive integer' });
@@ -287,6 +291,23 @@ export async function getMessagesHandler({
       threadId: threadId!,
       ...(limit && { selectBy: { last: limit } }),
     });
+
+    // Determine format: explicit format parameter, auto-detection, or default to v5
+    let useV4Format = false;
+    if (format === 'aiv4') {
+      useV4Format = true;
+    } else if (format === 'aiv5') {
+      useV4Format = false;
+    } else {
+      // No explicit format - check for client header override first, then fall back to Mastra config
+      useV4Format = clientSdkCompat === 'v4' || mastra.getAiSdkCompatMode() === 'v4';
+    }
+
+    // Return appropriate format
+    if (useV4Format) {
+      return { messages: result.messages, uiMessages: result.uiMessagesV4 };
+    }
+
     return { messages: result.messages, uiMessages: result.uiMessages };
   } catch (error) {
     return handleError(error, 'Error getting messages');

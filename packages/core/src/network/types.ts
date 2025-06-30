@@ -1,9 +1,8 @@
-import type { LanguageModelV1 } from 'ai';
-import type { Agent } from '../agent';
+import type { Agent, MastraLanguageModel } from '../agent';
 
 export type AgentNetworkConfig = {
   name: string;
   agents: Agent[];
-  model: LanguageModelV1;
+  model: MastraLanguageModel;
   instructions: string;
 };

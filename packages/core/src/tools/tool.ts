@@ -15,6 +15,7 @@ export class Tool<
   outputSchema?: TSchemaOut;
   execute?: ToolAction<TSchemaIn, TSchemaOut, TContext>['execute'];
   mastra?: Mastra;
+  __isMastraTool: true = true;
 
   constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TContext>) {
     this.id = opts.id;
@@ -23,6 +24,7 @@ export class Tool<
     this.outputSchema = opts.outputSchema;
     this.execute = opts.execute;
     this.mastra = opts.mastra;
+    this.__isMastraTool = true;
   }
 }
 

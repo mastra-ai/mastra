@@ -4,11 +4,12 @@ import { z } from 'zod';
 
 export const updateWorkingMemoryTool = ({ format }: { format: WorkingMemoryFormat }): CoreTool => ({
   description: 'Update the working memory with new information',
-  parameters: z.object({
+  inputSchema: z.object({
     memory: z
       .string()
       .describe(`The ${format === 'json' ? 'JSON' : 'Markdown'} formatted working memory content to store`),
   }),
+  __isMastraTool: true,
   execute: async (params: any) => {
     const { context, threadId, memory, resourceId } = params;
     if (!threadId || !memory) {

@@ -6,7 +6,7 @@
     "start": "pnpx tsx index.ts"
   },
   "dependencies": {
-    "@ai-sdk/cohere": "latest",
+    "@ai-sdk/cohere": "2.0.0-beta.1",
     "@mastra/rag": "latest",
     "ai": "latest"
   },

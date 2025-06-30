@@ -58,7 +58,7 @@ export function createSuccessResponse<T>(id: number | string | null, result: T):
 
 export function convertToCoreMessage(message: Message): CoreMessage {
   return {
-    role: message.role === 'user' ? 'user' : 'assistant',
+    role: message.role === 'user' ? 'user' : ('assistant' as const),
     content: message.parts.map(msg => convertToCoreMessagePart(msg)),
   };
 }
@@ -74,7 +74,7 @@ function convertToCoreMessagePart(part: Part) {
       return {
         type: 'file',
         data: new URL(part.file.uri!),
-        mimeType: part.file.mimeType!,
+        mediaType: part.file.mimeType!,
       } as const;
     case 'data':
       throw new Error('Data parts are not supported in core messages');

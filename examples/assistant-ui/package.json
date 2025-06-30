@@ -8,7 +8,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@ai-sdk/openai": "latest",
+    "@ai-sdk/openai": "2.0.0-beta.1",
     "@assistant-ui/react": "0.7.85",
     "@assistant-ui/react-markdown": "^0.7.21",
     "@assistant-ui/react-ui": "^0.1.8",

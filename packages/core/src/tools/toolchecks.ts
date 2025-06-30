@@ -9,5 +9,5 @@ import type { VercelTool } from './types';
  */
 export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
   // Checks if this tool is not an instance of Tool
-  return !!(tool && !(tool instanceof Tool) && 'parameters' in tool);
+  return !!(tool && !(tool instanceof Tool) && !(`id` in tool));
 }

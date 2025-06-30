@@ -42,7 +42,7 @@ export type ElicitationActions = {
 export type MCPTool = {
   id?: InternalCoreTool['id'];
   description?: InternalCoreTool['description'];
-  parameters: InternalCoreTool['parameters'];
+  inputSchema: InternalCoreTool['inputSchema'];
   outputSchema?: InternalCoreTool['outputSchema'];
   // Patch type to include elicitation in execute options
   execute: (
