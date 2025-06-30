@@ -262,9 +262,9 @@ export function WorkflowTrigger({
               </Text>
               <div className="px-4 flex flex-col gap-4">
                 {Object.entries(workflowActivePaths)
-                  ?.filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
-                  ?.map(([stepId, { status, output }]) => {
-                    return <WorkflowStatus stepId={stepId} status={status} result={output ?? {}} />;
+                  .filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
+                  .map(([stepId, { status, output }]) => {
+                    return <WorkflowStatus key={stepId} stepId={stepId} status={status} result={output ?? {}} />;
                   })}
               </div>
             </div>
