@@ -22,6 +22,7 @@ import { GetWorkflowResponse, WorkflowWatchResult } from '@mastra/client-js';
 import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
+import { WorkflowStatus } from './workflow-status';
 
 interface SuspendedStep {
   stepId: string;
@@ -166,6 +167,9 @@ export function WorkflowTrigger({
 
   const zodInputSchema = triggerSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema))) : null;
 
+  const workflowActivePaths = streamResultToUse?.payload?.workflowState?.steps ?? {};
+  const hasWorkflowActivePaths = Object.values(workflowActivePaths).length > 0;
+
   return (
     <div className="h-full pt-3 pb-12">
       <div className="space-y-4 px-5 pb-5 border-b-sm border-border1">
@@ -248,7 +252,26 @@ export function WorkflowTrigger({
               </div>
             );
           })}
+
+        {hasWorkflowActivePaths && (
+          <>
+            <hr className="border-border1 border-sm my-5" />
+            <div className="flex flex-col gap-2">
+              <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
+                Status
+              </Text>
+              <div className="px-4 flex flex-col gap-4">
+                {Object.entries(workflowActivePaths)
+                  .filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
+                  .map(([stepId, { status, output }]) => {
+                    return <WorkflowStatus key={stepId} stepId={stepId} status={status} result={output ?? {}} />;
+                  })}
+              </div>
+            </div>
+          </>
+        )}
       </div>
+
       {result && (
         <div className="p-5 border-b-sm border-border1">
           <WorkflowJsonDialog result={result} />
