@@ -68,7 +68,7 @@ const planActivities = createStep({
   outputSchema: z.object({
     activities: z.string(),
   }),
-  execute: async ({ inputData, mastra, abortSignal }) => {
+  execute: async ({ inputData, mastra }) => {
     console.log('mastra', mastra);
     console.log('planActivities', inputData);
     const forecast = inputData;
@@ -86,17 +86,12 @@ const planActivities = createStep({
       throw new Error('Planning agent not found');
     }
 
-    const response = await agent.stream(
-      [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
+    const response = await agent.stream([
       {
-        abortSignal,
+        role: 'user',
+        content: prompt,
       },
-    );
+    ]);
 
     let activitiesText = '';
 
@@ -191,7 +186,7 @@ const sythesizeStep = createStep({
   outputSchema: z.object({
     activities: z.string(),
   }),
-  execute: async ({ inputData, mastra }) => {
+  execute: async ({ inputData, mastra, abortSignal, abort }) => {
     console.log('sythesizeStep', inputData);
     const indoorActivities = inputData?.['plan-indoor-activities-workflow'];
     const outdoorActivities = inputData?.['plan-activities'];
@@ -209,12 +204,21 @@ const sythesizeStep = createStep({
       throw new Error('Planning agent not found');
     }
 
-    const response = await agent.stream([
+    const response = await agent.stream(
+      [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
       {
-        role: 'user',
-        content: prompt,
+        abortSignal,
       },
-    ]);
+    );
+
+    if (abortSignal.aborted) {
+      return abort();
+    }
 
     let activitiesText = '';
 
