@@ -39,7 +39,7 @@ export async function getWorkflowsHandler({ mastra }: WorkflowContext) {
     }, {});
     return _workflows;
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error getting workflows' });
+    return handleError(error, 'Error getting workflows');
   }
 }
 
@@ -133,7 +133,7 @@ export async function getWorkflowByIdHandler({ mastra, workflowId }: WorkflowCon
       outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
     };
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error getting workflow' });
+    return handleError(error, 'Error getting workflow');
   }
 }
 
@@ -165,7 +165,7 @@ export async function getWorkflowRunByIdHandler({
 
     return run;
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error getting workflow run' });
+    return handleError(error, 'Error getting workflow run');
   }
 }
 
@@ -197,9 +197,7 @@ export async function getWorkflowRunExecutionResultHandler({
 
     return executionResult;
   } catch (error) {
-    throw new HTTPException(500, {
-      message: (error as Error)?.message || 'Error getting workflow run execution result',
-    });
+    return handleError(error, 'Error getting workflow run execution result');
   }
 }
 
@@ -223,7 +221,7 @@ export async function createWorkflowRunHandler({
 
     return { runId: run.runId };
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error creating workflow run' });
+    return handleError(error, 'Error creating workflow run');
   }
 }
 
@@ -255,7 +253,7 @@ export async function startAsyncWorkflowHandler({
     });
     return result;
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error executing workflow' });
+    return handleError(error, 'Error starting async workflow');
   }
 }
 
