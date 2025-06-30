@@ -272,7 +272,6 @@ export const useStreamWorkflow = () => {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          console.log('value===', value);
           if (value.type === 'start') {
             setStreamResult((prev: WorkflowWatchResult) => ({
               ...prev,
