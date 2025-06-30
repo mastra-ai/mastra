@@ -68,7 +68,7 @@ const planActivities = createStep({
   outputSchema: z.object({
     activities: z.string(),
   }),
-  execute: async ({ inputData, mastra }) => {
+  execute: async ({ inputData, mastra, abortSignal }) => {
     console.log('mastra', mastra);
     console.log('planActivities', inputData);
     const forecast = inputData;
@@ -86,12 +86,17 @@ const planActivities = createStep({
       throw new Error('Planning agent not found');
     }
 
-    const response = await agent.stream([
+    const response = await agent.stream(
+      [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
       {
-        role: 'user',
-        content: prompt,
+        abortSignal,
       },
-    ]);
+    );
 
     let activitiesText = '';
 
