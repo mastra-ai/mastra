@@ -81,11 +81,11 @@ export function VNextMastraNetworkRuntimeProvider({
   }, [currentState]);
 
   useEffect(() => {
-    const hasNewInitialMessages = initialMessages && initialMessages?.length > messages?.length;
+    // const hasNewInitialMessages = initialMessages && initialMessages?.length > messages?.length;
     if (
       messages.length === 0 ||
-      currentThreadId !== threadId ||
-      (hasNewInitialMessages && currentThreadId === threadId)
+      currentThreadId !== threadId
+      // (hasNewInitialMessages && currentThreadId === threadId)
     ) {
       const run = async (result: string, messageId: string) => {
         const formatted = await formatJSON(result);
@@ -104,7 +104,7 @@ export function VNextMastraNetworkRuntimeProvider({
 
       if (initialMessages && threadId && memory) {
         let userMessage = '';
-        let iteration = 2;
+        let iteration = 1;
         const formattedMessages: (
           | { role: 'user'; message: Message }
           | {
@@ -132,6 +132,7 @@ export function VNextMastraNetworkRuntimeProvider({
             let hasRoutingDecision = false;
             let hasTaskCompleteDecision = false;
             let directText = '';
+            let jsonStringResponse = '';
 
             for (const part of responseArray) {
               if (part.type === 'text' && part.text) {
@@ -139,10 +140,6 @@ export function VNextMastraNetworkRuntimeProvider({
 
                 // Routing decision: must have resourceId and resourceType
                 if (parsed?.resourceId && parsed?.resourceType) {
-                  if (assistantStep.routingDecision || assistantStep.finalResponse) {
-                    formattedMessages.push({ role: 'assistant', message: assistantStep });
-                    assistantStep = freshAssistantStep();
-                  }
                   hasRoutingDecision = true;
                   assistantStep.routingDecision = parsed;
                 }
@@ -151,17 +148,31 @@ export function VNextMastraNetworkRuntimeProvider({
                 if (typeof parsed?.isComplete === 'boolean') {
                   hasTaskCompleteDecision = true;
                   assistantStep.taskCompleteDecision = parsed;
+                  if (parsed?.isComplete) {
+                    assistantStep.finalResponse = parsed.finalResult;
+                    formattedMessages.push({ role: 'assistant', message: assistantStep });
+                    assistantStep = freshAssistantStep();
+                  }
                 }
 
                 // If not JSON, or not a routing/result/completion blob, treat as finalResponse
                 if (!parsed || (!parsed.resourceId && !parsed.runResult && typeof parsed.isComplete !== 'boolean')) {
                   directText = part.text;
                 }
+
+                if (parsed && !parsed.resourceId && typeof parsed.isComplete !== 'boolean') {
+                  jsonStringResponse = part.text;
+                }
               }
             }
 
             if (!hasRoutingDecision && !hasTaskCompleteDecision) {
-              assistantStep.finalResponse = directText;
+              assistantStep.finalResponse = directText || jsonStringResponse;
+
+              if (assistantStep.routingDecision || assistantStep.finalResponse) {
+                formattedMessages.push({ role: 'assistant', message: assistantStep });
+                assistantStep = freshAssistantStep();
+              }
             }
           }
           // If this is the last message, push any remaining assistantStep
@@ -173,6 +184,7 @@ export function VNextMastraNetworkRuntimeProvider({
         for (const formattedMessage of formattedMessages) {
           const { role, message } = formattedMessage;
           if (role === 'user') {
+            iteration = 1;
             userMessage = message.content;
             setMessages(currentConversation => {
               if (currentConversation.some(m => m.id === message.id)) {
@@ -239,66 +251,49 @@ export function VNextMastraNetworkRuntimeProvider({
             setState(currentState => {
               return {
                 ...currentState,
-                [id]: {
-                  executionSteps: ['start', 'routing-step', resourceStepId, 'finish'],
-                  runId,
-                  steps: {
-                    start: {},
-                    'routing-step': {
-                      'step-result': {
-                        output: routingDecision,
-                        status: routingDecision ? 'success' : 'failed',
-                        ...(routingDecision ? {} : { error: 'Something went wrong' }),
-                      },
-                    },
-                    [resourceStepId]: {
-                      'step-result': {
-                        output: {
-                          resourceId: routingDecision?.resourceId,
-                          result: finalResponse ?? '',
+
+                ...(finalStep
+                  ? { [finalStepId]: finalStep }
+                  : {
+                      [id]: {
+                        executionSteps: ['start', 'routing-step', resourceStepId, 'finish'],
+                        runId,
+                        steps: {
+                          start: {},
+                          'routing-step': {
+                            'step-result': {
+                              output: routingDecision,
+                              status: routingDecision ? 'success' : 'failed',
+                              ...(routingDecision ? {} : { error: 'Something went wrong' }),
+                            },
+                          },
+                          [resourceStepId]: {
+                            'step-result': {
+                              output: {
+                                resourceId: routingDecision?.resourceId,
+                                result: finalResponse ?? '',
+                              },
+                              status: routingStepFailed ? 'failed' : 'success',
+                              ...(routingStepFailed ? { error: 'Something went wrong' } : {}),
+                            },
+                          },
+                          finish: {},
                         },
-                        status: routingStepFailed ? 'failed' : 'success',
-                        ...(routingStepFailed ? { error: 'Something went wrong' } : {}),
                       },
-                    },
-                    finish: {},
-                  },
-                },
-                ...(finalStep ? { [finalStepId]: finalStep } : {}),
+                    }),
               };
             });
 
             setMessages(currentConversation => {
+              const assistantRoutingMessageExist = currentConversation.some(
+                message => message.metadata?.custom?.id === id,
+              );
+              const assistantResponseMessageExist = currentConversation.some(
+                message => message.metadata?.custom?.id === formattedMessageId,
+              );
               return [
                 ...currentConversation,
-                {
-                  role: 'assistant',
-                  metadata: {
-                    custom: {
-                      id,
-                    },
-                  },
-                  content: [
-                    {
-                      type: 'text',
-                      text: 'start',
-                    },
-                  ],
-                },
-                {
-                  role: 'assistant',
-                  content: [
-                    {
-                      type: 'text',
-                      text: resourceStepId === 'workflow-step' || resourceStepId === 'toolStep' ? '' : finalResponse,
-                    },
-                  ],
-                  metadata: {
-                    custom: {
-                      id: formattedMessageId,
-                    },
-                  },
-                },
+
                 ...(finalResult
                   ? ([
                       {
@@ -320,7 +315,47 @@ export function VNextMastraNetworkRuntimeProvider({
                         content: [{ type: 'text', text: finalResult }],
                       },
                     ] as ThreadMessageLike[])
-                  : []),
+                  : [
+                      ...(assistantRoutingMessageExist
+                        ? []
+                        : ([
+                            {
+                              role: 'assistant',
+                              metadata: {
+                                custom: {
+                                  id,
+                                },
+                              },
+                              content: [
+                                {
+                                  type: 'text',
+                                  text: 'start',
+                                },
+                              ],
+                            },
+                          ] as ThreadMessageLike[])),
+                      ...(assistantResponseMessageExist
+                        ? []
+                        : ([
+                            {
+                              role: 'assistant',
+                              content: [
+                                {
+                                  type: 'text',
+                                  text:
+                                    resourceStepId === 'workflow-step' || resourceStepId === 'toolStep'
+                                      ? ''
+                                      : finalResponse,
+                                },
+                              ],
+                              metadata: {
+                                custom: {
+                                  id: formattedMessageId,
+                                },
+                              },
+                            },
+                          ] as ThreadMessageLike[])),
+                    ]),
               ];
             });
 
