@@ -94,8 +94,14 @@ export class InngestRun<
     while (runs?.[0]?.status !== 'Completed' || runs?.[0]?.event_id !== eventId) {
       await new Promise(resolve => setTimeout(resolve, 1000));
       runs = await this.getRuns(eventId);
-      if (runs?.[0]?.status === 'Failed' || runs?.[0]?.status === 'Cancelled') {
+      if (runs?.[0]?.status === 'Failed') {
         throw new Error(`Function run ${runs?.[0]?.status}`);
+      } else if (runs?.[0]?.status === 'Cancelled') {
+        const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+          workflowName: this.workflowId,
+          runId: this.runId,
+        });
+        return { output: { result: { steps: snapshot?.context, status: 'canceled' } } };
       }
     }
     return runs?.[0];
@@ -115,6 +121,21 @@ export class InngestRun<
         runId: this.runId,
       },
     });
+
+    const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+    });
+    if (snapshot) {
+      await this.#mastra?.storage?.persistWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+        snapshot: {
+          ...snapshot,
+          status: 'canceled' as any,
+        },
+      });
+    }
   }
 
   async start({
@@ -473,8 +494,12 @@ export class InngestWorkflow<
       return this.function;
     }
     this.function = this.inngest.createFunction(
-      // @ts-ignore
-      { id: `workflow.${this.id}`, retries: this.retryConfig?.attempts ?? 0 },
+      {
+        id: `workflow.${this.id}`,
+        // @ts-ignore
+        retries: this.retryConfig?.attempts ?? 0,
+        cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+      },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
         let { inputData, runId, resume } = event.data;
@@ -987,13 +1012,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }: {
     step: Step<string, any, any>;
     stepResults: Record<string, StepResult<any, any, any, any>>;
-    executionContext: {
-      workflowId: string;
-      runId: string;
-      executionPath: number[];
-      suspendedPaths: Record<string, number[]>;
-      retryConfig: { attempts: number; delay: number };
-    };
+    executionContext: ExecutionContext;
     resume?: {
       steps: string[];
       resumePayload: any;
@@ -1271,6 +1290,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           engine: {
             step: this.inngestStep,
           },
+          abortSignal: executionContext.abortController.signal,
         });
         const endedAt = Date.now();
 
@@ -1477,13 +1497,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 suspend: async (_suspendPayload: any) => {},
                 bail: () => {},
                 abort: () => {
-                  executionContext.abortController?.abort();
+                  executionContext.abortController.abort();
                 },
                 [EMITTER_SYMBOL]: emitter,
                 engine: {
                   step: this.inngestStep,
                 },
-                abortSignal: executionContext?.abortController?.signal,
+                abortSignal: executionContext.abortController.signal,
               });
               return result ? index : null;
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
