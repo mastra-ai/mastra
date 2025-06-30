@@ -233,7 +233,7 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal }) => {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -261,6 +261,10 @@ export function createStep<
           },
           abortSignal,
         });
+
+        if (abortSignal.aborted) {
+          return abort();
+        }
 
         for await (const chunk of fullStream) {
           switch (chunk.type) {
