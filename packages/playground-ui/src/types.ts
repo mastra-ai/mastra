@@ -9,6 +9,24 @@ export interface Message {
   }>;
 }
 
+export interface AssistantMessage {
+  id: string;
+  formattedMessageId: string;
+  finalStepId: string;
+  routingDecision?: {
+    resourceId: string;
+    resourceType: string;
+    selectionReason: string;
+    prompt: string;
+  };
+  finalResponse: string;
+  taskCompleteDecision?: {
+    isComplete: boolean;
+    finalResult: string;
+    completionReason: string;
+  };
+}
+
 export interface ModelSettings {
   frequencyPenalty?: number;
   presencePenalty?: number;
