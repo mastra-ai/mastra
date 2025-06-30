@@ -358,6 +358,10 @@ export interface GetVNextNetworkResponse {
     inputSchema: string | undefined;
     outputSchema: string | undefined;
   }>;
+  tools: Array<{
+    id: string;
+    description: string;
+  }>;
 }
 
 export interface GenerateVNextNetworkResponse {

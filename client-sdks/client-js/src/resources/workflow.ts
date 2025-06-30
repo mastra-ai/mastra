@@ -267,7 +267,7 @@ export class Workflow extends BaseResource {
     }
 
     // Create a transform stream that processes the response body
-    const transformStream = new TransformStream<ArrayBuffer, WorkflowWatchResult>({
+    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
       start() {},
       async transform(chunk, controller) {
         try {

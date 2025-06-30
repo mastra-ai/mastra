@@ -41,7 +41,7 @@ export function WorkflowGraph({ workflowId, onShowTrace, workflow, isLoading }: 
   }
 
   return (
-    <WorkflowNestedGraphProvider key={snapshot?.runId ?? workflowId}>
+    <WorkflowNestedGraphProvider key={snapshot?.runId ?? workflowId} onShowTrace={onShowTrace}>
       <ReactFlowProvider>
         <WorkflowGraphInner
           workflow={snapshot?.serializedStepGraph ? { stepGraph: snapshot?.serializedStepGraph } : workflow}
