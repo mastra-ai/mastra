@@ -226,7 +226,7 @@ export function WorkflowTrigger({
               ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.resumeSchema)))
               : z.record(z.string(), z.any());
             return (
-              <div className="flex flex-col px-4">
+              <div className="flex flex-col px-4" key={step.stepId}>
                 <Text variant="secondary" className="text-mastra-el-3" size="xs">
                   {step.stepId}
                 </Text>
