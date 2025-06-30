@@ -129,7 +129,6 @@ interface BaseLogMessage {
 Both transports include robust error handling:
 
 - File Transport:
-
   - Validates file path existence
   - Handles stream errors
   - Graceful cleanup on destroy
