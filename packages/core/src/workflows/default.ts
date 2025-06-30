@@ -632,6 +632,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       execResults = { status: 'failed', error: hasFailed.result.error };
     } else if (hasSuspended) {
       execResults = { status: 'suspended', payload: hasSuspended.result.suspendPayload };
+    } else if (abortController?.signal?.aborted) {
+      execResults = { status: 'canceled' };
     } else {
       execResults = {
         status: 'success',
@@ -775,6 +777,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       execResults = { status: 'failed', error: hasFailed.result.error };
     } else if (hasSuspended) {
       execResults = { status: 'suspended', payload: hasSuspended.result.suspendPayload };
+    } else if (abortController?.signal?.aborted) {
+      execResults = { status: 'canceled' };
     } else {
       execResults = {
         status: 'success',
