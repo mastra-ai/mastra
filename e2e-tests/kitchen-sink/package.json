@@ -17,6 +17,7 @@
     "@types/node": "^20.19.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "@mastra/playground-ui": "workspace:*",
     "execa": "^9.5.2",
     "get-port": "^7.1.0",
     "globby": "^14.1.0",
