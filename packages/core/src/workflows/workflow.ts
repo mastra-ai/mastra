@@ -1279,11 +1279,11 @@ export class Run<
   /**
    * Cancels the workflow execution
    */
-  cancel() {
+  async cancel() {
     this.abortController?.abort();
   }
 
-  sendEvent(event: string, data: any) {
+  async sendEvent(event: string, data: any) {
     this.emitter.emit(`user-event-${event}`, data);
   }
 
