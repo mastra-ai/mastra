@@ -956,6 +956,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     resume,
     prevOutput,
     emitter,
+    abortController,
     runtimeContext,
   }: {
     workflowId: string;
@@ -969,6 +970,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     };
     prevOutput: any;
     emitter: Emitter;
+    abortController: AbortController;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     return super.executeStep({
@@ -980,6 +982,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       resume,
       prevOutput,
       emitter,
+      abortController,
       runtimeContext,
     });
   }
@@ -1008,6 +1011,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     resume,
     prevOutput,
     emitter,
+    abortController,
     runtimeContext,
   }: {
     step: Step<string, any, any>;
@@ -1020,6 +1024,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     };
     prevOutput: any;
     emitter: Emitter;
+    abortController: AbortController;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     const startedAt = await this.inngestStep.run(
@@ -1290,7 +1295,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           engine: {
             step: this.inngestStep,
           },
-          abortSignal: executionContext.abortController.signal,
+          abortSignal: abortController.signal,
         });
         const endedAt = Date.now();
 
@@ -1444,6 +1449,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     resume,
     executionContext,
     emitter,
+    abortController,
     runtimeContext,
   }: {
     workflowId: string;
@@ -1465,6 +1471,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: Emitter;
+    abortController: AbortController;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     let execResults: any;
@@ -1497,13 +1504,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 suspend: async (_suspendPayload: any) => {},
                 bail: () => {},
                 abort: () => {
-                  executionContext.abortController.abort();
+                  abortController.abort();
                 },
                 [EMITTER_SYMBOL]: emitter,
                 engine: {
                   step: this.inngestStep,
                 },
-                abortSignal: executionContext.abortController.signal,
+                abortSignal: abortController.signal,
               });
               return result ? index : null;
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1533,9 +1540,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
-            abortController: executionContext.abortController,
           },
           emitter,
+          abortController,
           runtimeContext,
         }),
       ),

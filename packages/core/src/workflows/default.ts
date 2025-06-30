@@ -19,7 +19,6 @@ export type ExecutionContext = {
     delay: number;
   };
   executionSpan: Span;
-  abortController: AbortController;
 };
 
 /**
@@ -203,8 +202,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: {},
             retryConfig: { attempts, delay },
             executionSpan: executionSpan as Span,
-            abortController: params.abortController,
           },
+          abortController: params.abortController,
           emitter: params.emitter,
           runtimeContext: params.runtimeContext,
         });
@@ -353,6 +352,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume,
     prevOutput,
     emitter,
+    abortController,
     runtimeContext,
   }: {
     workflowId: string;
@@ -366,6 +366,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     prevOutput: any;
     emitter: Emitter;
+    abortController: AbortController;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
@@ -469,7 +470,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             bailed = { payload: result };
           },
           abort: () => {
-            executionContext.abortController?.abort();
+            abortController?.abort();
           },
           resume: {
             steps: resume?.steps?.slice(1) || [],
@@ -479,7 +480,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           [EMITTER_SYMBOL]: emitter,
           engine: {},
-          abortSignal: executionContext.abortController?.signal,
+          abortSignal: abortController?.signal,
         });
 
         if (suspended) {
@@ -578,6 +579,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume,
     executionContext,
     emitter,
+    abortController,
     runtimeContext,
   }: {
     workflowId: string;
@@ -594,6 +596,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: Emitter;
+    abortController: AbortController;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     let execResults: any;
@@ -614,9 +617,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
-            abortController: executionContext.abortController,
           },
           emitter,
+          abortController,
           runtimeContext,
         }),
       ),
@@ -657,6 +660,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume,
     executionContext,
     emitter,
+    abortController,
     runtimeContext,
   }: {
     workflowId: string;
@@ -678,6 +682,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: Emitter;
+    abortController: AbortController;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     let execResults: any;
@@ -709,11 +714,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               suspend: async (_suspendPayload: any): Promise<any> => {},
               bail: () => {},
               abort: () => {
-                executionContext.abortController?.abort();
+                abortController?.abort();
               },
               [EMITTER_SYMBOL]: emitter,
               engine: {},
-              abortSignal: executionContext.abortController?.signal,
+              abortSignal: abortController?.signal,
             });
             return result ? index : null;
           } catch (e: unknown) {
@@ -755,9 +760,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
-            abortController: executionContext.abortController,
           },
           emitter,
+          abortController,
           runtimeContext,
         }),
       ),
@@ -796,6 +801,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume,
     executionContext,
     emitter,
+    abortController,
     runtimeContext,
   }: {
     workflowId: string;
@@ -817,6 +823,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: Emitter;
+    abortController: AbortController;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     const { step, condition } = entry;
@@ -833,6 +840,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume,
         prevOutput: (result as { output: any }).output,
         emitter,
+        abortController,
         runtimeContext,
       });
 
@@ -858,11 +866,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         suspend: async (_suspendPayload: any): Promise<any> => {},
         bail: () => {},
         abort: () => {
-          executionContext.abortController?.abort();
+          abortController?.abort();
         },
         [EMITTER_SYMBOL]: emitter,
         engine: {},
-        abortSignal: executionContext.abortController?.signal,
+        abortSignal: abortController?.signal,
       });
     } while (entry.loopType === 'dowhile' ? isTrue : !isTrue);
 
@@ -878,6 +886,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume,
     executionContext,
     emitter,
+    abortController,
     runtimeContext,
   }: {
     workflowId: string;
@@ -900,6 +909,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: Emitter;
+    abortController: AbortController;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     const { step, opts } = entry;
@@ -921,6 +931,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             resume,
             prevOutput: item,
             emitter,
+            abortController,
             runtimeContext,
           });
         }),
@@ -996,6 +1007,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume,
     executionContext,
     emitter,
+    abortController,
     runtimeContext,
   }: {
     workflowId: string;
@@ -1012,6 +1024,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: Emitter;
+    abortController: AbortController;
     runtimeContext: RuntimeContext;
   }): Promise<{
     result: StepResult<any, any, any, any>;
@@ -1032,6 +1045,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume,
         prevOutput,
         emitter,
+        abortController,
         runtimeContext,
       });
     } else if (resume?.resumePath?.length && (entry.type === 'parallel' || entry.type === 'conditional')) {
@@ -1051,9 +1065,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           suspendedPaths: executionContext.suspendedPaths,
           retryConfig: executionContext.retryConfig,
           executionSpan: executionContext.executionSpan,
-          abortController: executionContext.abortController,
         },
         emitter,
+        abortController,
         runtimeContext,
       });
     } else if (entry.type === 'parallel') {
@@ -1067,6 +1081,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume,
         executionContext,
         emitter,
+        abortController,
         runtimeContext,
       });
     } else if (entry.type === 'conditional') {
@@ -1081,6 +1096,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume,
         executionContext,
         emitter,
+        abortController,
         runtimeContext,
       });
     } else if (entry.type === 'loop') {
@@ -1094,6 +1110,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume,
         executionContext,
         emitter,
+        abortController,
         runtimeContext,
       });
     } else if (entry.type === 'foreach') {
@@ -1107,6 +1124,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume,
         executionContext,
         emitter,
+        abortController,
         runtimeContext,
       });
     } else if (entry.type === 'sleep') {
@@ -1312,6 +1330,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           prevOutput,
           emitter,
+          abortController,
           runtimeContext,
         });
       } catch (error) {
@@ -1330,7 +1349,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       execResults = { ...execResults, ...stepInfo };
     }
 
-    if (executionContext.abortController?.signal.aborted) {
+    if (abortController?.signal?.aborted) {
       execResults = { ...execResults, status: 'canceled' };
     }
 
