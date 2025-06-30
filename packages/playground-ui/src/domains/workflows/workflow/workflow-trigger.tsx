@@ -108,7 +108,9 @@ export function WorkflowTrigger({
     }
   };
 
-  const handleResumeWorkflow = async (step: SuspendedStep & { resumeData: any }) => {
+  const handleResumeWorkflow = async (
+    step: Omit<SuspendedStep, 'stepId'> & { resumeData: any; stepId: string | string[] },
+  ) => {
     if (!workflow) return;
 
     const { stepId, runId: prevRunId, resumeData } = step;
@@ -217,7 +219,9 @@ export function WorkflowTrigger({
         {!isStreamingWorkflow &&
           isSuspendedSteps &&
           suspendedSteps?.map(step => {
-            const stepDefinition = workflow.steps[step.stepId];
+            const stepDefinition = workflow.allSteps[step.stepId];
+            if (!stepDefinition || stepDefinition.isWorkflow) return null;
+
             const stepSchema = stepDefinition?.resumeSchema
               ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.resumeSchema)))
               : z.record(z.string(), z.any());
@@ -240,8 +244,9 @@ export function WorkflowTrigger({
                   isSubmitLoading={isResumingWorkflow}
                   submitButtonLabel="Resume"
                   onSubmit={data => {
+                    const stepIds = step.stepId?.split('.');
                     handleResumeWorkflow({
-                      stepId: step.stepId,
+                      stepId: stepIds,
                       runId: step.runId,
                       suspendPayload: step.suspendPayload,
                       resumeData: data,

@@ -112,6 +112,11 @@ export type SerializedStepFlowEntry =
       };
     };
 
+export type StepWithComponent = Step<string, any, any, any, any, any> & {
+  component?: string;
+  steps?: Record<string, StepWithComponent>;
+};
+
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
   step,
   path,
@@ -464,7 +469,7 @@ export class Workflow<
   public description?: string | undefined;
   public inputSchema: TInput;
   public outputSchema: TOutput;
-  public steps: Record<string, Step<string, any, any, any, any>>;
+  public steps: Record<string, StepWithComponent>;
   public stepDefs?: TSteps;
   protected stepFlow: StepFlowEntry[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
