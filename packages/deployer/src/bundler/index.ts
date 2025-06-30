@@ -352,7 +352,7 @@ export abstract class Bundler extends MastraBundler {
 
       await writeFile(
         join(bundleLocation, 'tools.mjs'),
-        `${toolImports}
+        `${toolImports.join('\n')}
 
 export const tools = [${toolsExports.join(', ')}]`,
       );
