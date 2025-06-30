@@ -1070,6 +1070,7 @@ export class Workflow<
     mastra,
     runtimeContext,
     abort,
+    abortSignal,
   }: {
     inputData: z.infer<TInput>;
     resumeData?: any;
@@ -1093,8 +1094,13 @@ export class Workflow<
     this.__registerMastra(mastra);
 
     const run = resume?.steps?.length ? this.createRun({ runId: resume.runId }) : this.createRun();
-    run.abortController?.signal.addEventListener('abort', () => {
+    const nestedAbortCb = () => {
       abort();
+    };
+    run.abortController?.signal.addEventListener('abort', nestedAbortCb);
+    abortSignal.addEventListener('abort', async () => {
+      run.abortController.signal.removeEventListener('abort', nestedAbortCb);
+      await run.cancel();
     });
 
     const unwatchV2 = run.watch(event => {
