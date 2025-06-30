@@ -20,6 +20,8 @@ import { AgentIcon, GithubIcon, Icon, McpServerIcon, ToolsIcon, WorkflowIcon } f
 
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 import clsx from 'clsx';
+import { cn } from '@/lib/utils';
+import { useNewUI } from '@/hooks/use-new-ui';
 
 export const LogoWithoutText = (props: { className: string }) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 21 21" fill="none">
@@ -152,43 +154,47 @@ export function AppSidebar() {
   const location = useLocation();
   const pathname = location.pathname;
 
+  const newUIEnabled = useNewUI();
+
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="w-full pl-1 pt-3 pb-0">
-        <div className="flex justify-between gap-2 items-center">
-          <span className="flex shrink-0">
-            {state === 'collapsed' ? (
-              <LogoWithoutText className="h-10 w-10 shrink-0 ml-1" />
-            ) : (
-              <span className="flex items-center gap-0.5 pl-1">
-                <LogoWithoutText className="h-10 w-10 shrink-0" />
-                <span className="font-serif text-sm">Mastra</span>
-              </span>
+      {!newUIEnabled && (
+        <SidebarHeader className="w-full pl-1 pt-3 pb-0">
+          <div className="flex justify-between gap-2 items-center">
+            <span className="flex shrink-0">
+              {state === 'collapsed' ? (
+                <LogoWithoutText className="h-10 w-10 shrink-0 ml-1" />
+              ) : (
+                <span className="flex items-center gap-0.5 pl-1">
+                  <LogoWithoutText className="h-10 w-10 shrink-0" />
+                  <span className="font-serif text-sm">Mastra</span>
+                </span>
+              )}
+            </span>
+
+            {state === 'expanded' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SidebarMenuButton onClick={() => toggleSidebar()} className="w-8 text-icon3">
+                    <ArrowLeftFromLine />
+                  </SidebarMenuButton>
+                </TooltipTrigger>
+                <TooltipContent className="bg-border1 font-sans text-icon6">Collapse sidebar</TooltipContent>
+              </Tooltip>
             )}
-          </span>
+          </div>
 
-          {state === 'expanded' && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <SidebarMenuButton onClick={() => toggleSidebar()} className="w-8 text-icon3">
-                  <ArrowLeftFromLine />
-                </SidebarMenuButton>
-              </TooltipTrigger>
-              <TooltipContent className="bg-border1 font-sans text-icon6">Collapse sidebar</TooltipContent>
-            </Tooltip>
+          {state === 'collapsed' && (
+            <SidebarMenuButton
+              onClick={() => toggleSidebar()}
+              tooltip="Expand sidebar"
+              className="w-8 text-icon3 ml-2 absolute mt-[52px] p-1"
+            >
+              <ArrowLeftFromLine className="rotate-180" />
+            </SidebarMenuButton>
           )}
-        </div>
-
-        {state === 'collapsed' && (
-          <SidebarMenuButton
-            onClick={() => toggleSidebar()}
-            tooltip="Expand sidebar"
-            className="w-8 text-icon3 ml-2 absolute mt-[52px] p-1"
-          >
-            <ArrowLeftFromLine className="rotate-180" />
-          </SidebarMenuButton>
-        )}
-      </SidebarHeader>
+        </SidebarHeader>
+      )}
 
       <SidebarContent className={clsx('p-1 transition-transform', state === 'collapsed' && 'translate-y-10')}>
         <SidebarGroup>
@@ -253,6 +259,24 @@ export function AppSidebar() {
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+
+              {newUIEnabled && (
+                <div className="flex w-full items-center justify-between border-t-sm border-border1 mt-2 pt-2 ">
+                  {state !== 'collapsed' && (
+                    <span className="pl-2 text-[0.}8rem] font-normal text-[#939393]">Collapse</span>
+                  )}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <SidebarMenuButton onClick={() => toggleSidebar()} className="w-8 text-icon3 ">
+                        <ArrowLeftFromLine className={cn({ 'rotate-180': state === 'collapsed' })} />
+                      </SidebarMenuButton>
+                    </TooltipTrigger>
+                    <TooltipContent className="bg-border1 font-sans text-icon6">
+                      {state !== 'collapsed' ? 'Collapse' : 'Expand'} sidebar
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

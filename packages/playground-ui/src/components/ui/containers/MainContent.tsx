@@ -9,13 +9,8 @@ export function MainContentLayout({
   className?: string;
   style?: React.CSSProperties;
 }) {
-  const devStyleRequested = devUIStyleRequested('MainContentLayout');
-
   return (
-    <main
-      className={cn(`grid grid-rows-[auto_1fr] h-full items-start content-start`, className)}
-      style={{ ...style, ...(devStyleRequested ? { border: '3px dotted red' } : {}) }}
-    >
+    <main className={cn(`grid grid-rows-[auto_1fr] h-full items-start content-start`, className)} style={{ ...style }}>
       {children}
     </main>
   );
@@ -39,8 +34,6 @@ export function MainContentContent({
   // used when the left column is a service column (e.g. agent history nav)
   hasLeftServiceColumn?: boolean;
 }) {
-  const devStyleRequested = devUIStyleRequested('MainContentContent');
-
   return (
     <div
       className={cn(
@@ -55,26 +48,9 @@ export function MainContentContent({
         },
         className,
       )}
-      style={{ ...style, ...(devStyleRequested ? { border: '3px dotted orange' } : {}) }}
+      style={{ ...style }}
     >
       {children}
     </div>
   );
-}
-
-function devUIStyleRequested(name: string) {
-  try {
-    const raw = localStorage.getItem('add-dev-style-to-components');
-    if (!raw) return false;
-
-    const components = raw
-      .split(',')
-      .map(c => c.trim())
-      .filter(Boolean); // remove empty strings
-
-    return components.includes(name);
-  } catch (error) {
-    console.error('Error reading or parsing localStorage:', error);
-    return false;
-  }
 }

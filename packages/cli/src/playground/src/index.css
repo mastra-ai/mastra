@@ -28,6 +28,10 @@
   --geist-mono: 'GeistMonoVF', monospace;
 }
 
+.entry-list-item {
+  @apply border border-red-500 bg-red-100 text-red-900;
+}
+
 /* width */
 ::-webkit-scrollbar {
   width: 5px;
@@ -91,7 +95,7 @@
     --top-bar-height: 40px;
   }
   .dark {
-    --background: 0 0% 3.92% 1;
+    --background: 0 0% 0% 1;
     --foreground: 0 0% 98%;
     --card: 240 10% 3.9%;
     --card-foreground: 0 0% 98%;
@@ -136,7 +140,7 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-surface1 text-foreground;
   }
   html {
     scrollbar-color: var(--color-thumb) var(--color-track);

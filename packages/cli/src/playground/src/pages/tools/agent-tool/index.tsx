@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { parse } from 'superjson';
 import { z } from 'zod';
+import { useNewUI } from '@/hooks/use-new-ui';
 
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
 
@@ -17,12 +18,17 @@ import {
   usePlaygroundStore,
   Txt,
   MainContentLayout,
+  MainLayout,
+  MainHeader,
+  MainNavbar,
+  MainContent,
   MainContentContent,
 } from '@mastra/playground-ui';
 
 const AgentTool = () => {
   const { toolId, agentId } = useParams();
   const { runtimeContext: playgroundRuntimeContext } = usePlaygroundStore();
+  const newUIEnabled = useNewUI();
 
   const { mutateAsync: executeTool, isPending: isExecutingTool } = useExecuteTool();
   const [result, setResult] = useState<any>(null);
@@ -49,7 +55,39 @@ const AgentTool = () => {
 
   const shouldShowEmpty = !agent || !tool;
 
-  return (
+  return newUIEnabled ? (
+    <MainLayout>
+      <MainHeader>
+        <MainNavbar
+          linkComponent={Link}
+          breadcrumbItems={[
+            { label: 'Agents', to: '/agents' },
+            { label: agent?.name || '', to: `/agents/${agentId}/chat` },
+            { label: toolId || '', to: `/agents/${agentId}/tools/${toolId}`, isCurrent: true },
+          ]}
+        />
+      </MainHeader>
+
+      <MainContent variant="forTool">
+        {isAgentLoading ? null : shouldShowEmpty ? (
+          <div className="py-12 text-center px-6">
+            <Txt variant="header-md" className="text-icon3">
+              Agent or tool not found
+            </Txt>
+          </div>
+        ) : (
+          <ToolExecutor
+            executionResult={result}
+            isExecutingTool={isExecutingTool}
+            zodInputSchema={zodInputSchema}
+            handleExecuteTool={handleExecuteTool}
+            toolDescription={tool.description}
+            toolId={tool.id}
+          />
+        )}
+      </MainContent>
+    </MainLayout>
+  ) : (
     <MainContentLayout>
       <Header>
         <Breadcrumb>
@@ -65,22 +103,24 @@ const AgentTool = () => {
         </Breadcrumb>
       </Header>
 
-      {isAgentLoading ? null : shouldShowEmpty ? (
-        <div className="py-12 text-center px-6">
-          <Txt variant="header-md" className="text-icon3">
-            Agent or tool not found
-          </Txt>
-        </div>
-      ) : (
-        <ToolExecutor
-          executionResult={result}
-          isExecutingTool={isExecutingTool}
-          zodInputSchema={zodInputSchema}
-          handleExecuteTool={handleExecuteTool}
-          toolDescription={tool.description}
-          toolId={tool.id}
-        />
-      )}
+      <MainContentContent hasLeftServiceColumn={true} className="relative">
+        {isAgentLoading ? null : shouldShowEmpty ? (
+          <div className="py-12 text-center px-6">
+            <Txt variant="header-md" className="text-icon3">
+              Agent or tool not found
+            </Txt>
+          </div>
+        ) : (
+          <ToolExecutor
+            executionResult={result}
+            isExecutingTool={isExecutingTool}
+            zodInputSchema={zodInputSchema}
+            handleExecuteTool={handleExecuteTool}
+            toolDescription={tool.description}
+            toolId={tool.id}
+          />
+        )}
+      </MainContentContent>
     </MainContentLayout>
   );
 };

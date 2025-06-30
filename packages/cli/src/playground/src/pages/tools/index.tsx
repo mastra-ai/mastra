@@ -18,6 +18,12 @@ import {
   Button,
   MainContentLayout,
   MainContentContent,
+  MainLayout,
+  MainContent,
+  MainHeader,
+  MainHeaderTitle,
+  MainList,
+  StackOfElements,
 } from '@mastra/playground-ui';
 import { Link } from 'react-router';
 import { startTransition, useMemo, useRef, useState } from 'react';
@@ -25,6 +31,7 @@ import { GetAgentResponse } from '@mastra/client-js';
 import { SearchIcon } from 'lucide-react';
 import { useTools } from '@/hooks/use-all-tools';
 import { Tool } from '@mastra/core/tools';
+import { useNewUI } from '@/hooks/use-new-ui';
 
 interface ToolWithAgents {
   id: string;
@@ -83,6 +90,7 @@ const Tools = () => {
 const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) => {
   const [filteredTools, setFilteredTools] = useState<ToolWithAgents[]>(toolsWithAgents);
   const [value, setValue] = useState('');
+  const newUIEnabled = useNewUI();
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -104,13 +112,54 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
     });
   };
 
-  if (filteredTools.length === 0 && !value) {
-    return (
-      <MainContentLayout>
-        <Header>
-          <HeaderTitle>Tools</HeaderTitle>
-        </Header>
+  const agentListColumns = [{ key: 'agents', label: 'Agents', minWidth: '5rem' }];
 
+  const toolListItems = filteredTools.map(tool => {
+    const agents = (tool.agents || []).map(agent => {
+      return (
+        <Link to={'/'}>
+          <AgentIcon />
+          {agent.name}
+        </Link>
+      );
+    });
+
+    return {
+      id: tool.id,
+      icon: <ToolsIcon />,
+      name: tool.id,
+      to: tool.agents.length > 0 ? `/tools/${tool.agents[0].id}/${tool.id}` : `/tools`,
+      description: tool.description,
+      columns: [tool.agents.length],
+      collapsible: (
+        <StackOfElements title="Used with agents:" variant="mainListCollapsible">
+          {agents}
+        </StackOfElements>
+      ),
+    };
+  });
+
+  return newUIEnabled ? (
+    <MainLayout>
+      <MainHeader>
+        <MainHeaderTitle>Tools</MainHeaderTitle>
+      </MainHeader>
+      <MainContent>
+        <MainList
+          items={toolListItems}
+          linkComponent={Link}
+          columns={agentListColumns}
+          emptyStateFor="tools"
+          withCollapsible={true}
+        />
+      </MainContent>
+    </MainLayout>
+  ) : (
+    <MainContentLayout>
+      <Header>
+        <HeaderTitle>Tools</HeaderTitle>
+      </Header>
+      {filteredTools.length === 0 && !value ? (
         <MainContentContent isCentered={true}>
           <EmptyState
             iconSlot={<ToolCoinIcon />}
@@ -133,43 +182,35 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
             }
           />
         </MainContentContent>
-      </MainContentLayout>
-    );
-  }
+      ) : (
+        <MainContentContent className="max-w-5xl mx-auto px-4 pt-4">
+          <div className="px-4 flex items-center gap-2 rounded-lg bg-surface5 focus-within:ring-2 focus-within:ring-accent3">
+            <Icon>
+              <SearchIcon />
+            </Icon>
 
-  return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>Tools</HeaderTitle>
-      </Header>
+            <input
+              type="text"
+              placeholder="Search for a tool"
+              className="w-full py-2 bg-transparent text-icon3 focus:text-icon6 placeholder:text-icon3 outline-none"
+              value={value}
+              onChange={handleSearch}
+            />
+          </div>
 
-      <MainContentContent className="max-w-5xl mx-auto px-4 pt-4">
-        <div className="px-4 flex items-center gap-2 rounded-lg bg-surface5 focus-within:ring-2 focus-within:ring-accent3">
-          <Icon>
-            <SearchIcon />
-          </Icon>
+          {filteredTools.length === 0 && (
+            <Txt as="p" className="text-icon3 py-2">
+              No tools found matching your search.
+            </Txt>
+          )}
 
-          <input
-            type="text"
-            placeholder="Search for a tool"
-            className="w-full py-2 bg-transparent text-icon3 focus:text-icon6 placeholder:text-icon3 outline-none"
-            value={value}
-            onChange={handleSearch}
-          />
-        </div>
-
-        {filteredTools.length === 0 && (
-          <Txt as="p" className="text-icon3 py-2">
-            No tools found matching your search.
-          </Txt>
-        )}
-
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 max-w-5xl mx-auto  py-8">
-          {filteredTools.map(tool => (
-            <ToolEntity key={tool.id} tool={tool} />
-          ))}
-        </div>
-      </MainContentContent>
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 max-w-5xl mx-auto  py-8">
+            {filteredTools.map(tool => (
+              <ToolEntity key={tool.id} tool={tool} />
+            ))}
+          </div>
+        </MainContentContent>
+      )}
     </MainContentLayout>
   );
 };

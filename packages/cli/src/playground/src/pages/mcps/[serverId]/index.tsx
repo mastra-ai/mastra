@@ -25,22 +25,57 @@ import {
   EntityIcon,
   MainContentLayout,
   MainContentContent,
+  MainLayout,
+  MainHeader,
+  MainNavbar,
+  MainContent,
+  McpsPanel,
+  McpsSidebar,
 } from '@mastra/playground-ui';
 import clsx from 'clsx';
 import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
+import { useNewUI } from '@/hooks/use-new-ui';
 
 export const McpServerPage = () => {
   const { serverId } = useParams();
   const { servers: mcpServers, isLoading } = useMCPServers();
-
+  const newUIEnabled = useNewUI();
   const server = mcpServers?.find(server => server.id === serverId);
+  const { tools } = useMCPServerTools(server || null);
 
   const effectiveBaseUrl = client.options.baseUrl || 'http://localhost:4111';
   const sseUrl = `${effectiveBaseUrl}/api/mcp/${serverId}/sse`;
   const httpStreamUrl = `${effectiveBaseUrl}/api/mcp/${serverId}/mcp`;
 
-  return (
+  const toolListItems = Object.keys(tools || {}).map(toolId => {
+    const tool = tools[toolId];
+    return {
+      id: toolId,
+      name: tool.id,
+      description: tool.description,
+      icon: ToolIconMap[tool.toolType || 'tool'],
+      to: `/mcps/${serverId}/tools/${toolId}`,
+    };
+  });
+
+  return newUIEnabled ? (
+    <MainLayout>
+      <MainHeader>
+        <MainNavbar
+          linkComponent={Link}
+          breadcrumbItems={[
+            { label: 'MCP Servers', to: '/mcps' },
+            { label: server?.name || '', to: `/agents/${serverId}`, isCurrent: true },
+          ]}
+        />
+      </MainHeader>
+      <MainContent variant="forMcpsServer">
+        <McpsPanel server={server} sseUrl={sseUrl} httpStreamUrl={httpStreamUrl} />
+        <McpsSidebar linkComponent={Link} tools={toolListItems} />
+      </MainContent>
+    </MainLayout>
+  ) : (
     <MainContentLayout>
       <Header>
         <Breadcrumb>
