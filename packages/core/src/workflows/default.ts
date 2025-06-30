@@ -19,6 +19,7 @@ export type ExecutionContext = {
     delay: number;
   };
   executionSpan: Span;
+  abortController: AbortController;
 };
 
 /**
@@ -156,6 +157,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       delay?: number;
     };
     runtimeContext: RuntimeContext;
+    abortController: AbortController;
   }): Promise<TOutput> {
     const { workflowId, runId, graph, input, resume, retryConfig } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
@@ -201,6 +203,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: {},
             retryConfig: { attempts, delay },
             executionSpan: executionSpan as Span,
+            abortController: params.abortController,
           },
           emitter: params.emitter,
           runtimeContext: params.runtimeContext,
@@ -465,6 +468,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           bail: (result: any) => {
             bailed = { payload: result };
           },
+          abort: () => {
+            executionContext.abortController?.abort();
+          },
           resume: {
             steps: resume?.steps?.slice(1) || [],
             resumePayload: resume?.resumePayload,
@@ -473,6 +479,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           [EMITTER_SYMBOL]: emitter,
           engine: {},
+          abortSignal: executionContext.abortController?.signal,
         });
 
         if (suspended) {
@@ -607,6 +614,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
+            abortController: executionContext.abortController,
           },
           emitter,
           runtimeContext,
@@ -700,8 +708,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               // TODO: this function shouldn't have suspend probably?
               suspend: async (_suspendPayload: any): Promise<any> => {},
               bail: () => {},
+              abort: () => {
+                executionContext.abortController?.abort();
+              },
               [EMITTER_SYMBOL]: emitter,
               engine: {},
+              abortSignal: executionContext.abortController?.signal,
             });
             return result ? index : null;
           } catch (e: unknown) {
@@ -743,6 +755,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
+            abortController: executionContext.abortController,
           },
           emitter,
           runtimeContext,
@@ -844,8 +857,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
         suspend: async (_suspendPayload: any): Promise<any> => {},
         bail: () => {},
+        abort: () => {
+          executionContext.abortController?.abort();
+        },
         [EMITTER_SYMBOL]: emitter,
         engine: {},
+        abortSignal: executionContext.abortController?.signal,
       });
     } while (entry.loopType === 'dowhile' ? isTrue : !isTrue);
 
@@ -1034,6 +1051,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           suspendedPaths: executionContext.suspendedPaths,
           retryConfig: executionContext.retryConfig,
           executionSpan: executionContext.executionSpan,
+          abortController: executionContext.abortController,
         },
         emitter,
         runtimeContext,
@@ -1310,6 +1328,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       };
 
       execResults = { ...execResults, ...stepInfo };
+    }
+
+    if (executionContext.abortController?.signal.aborted) {
+      execResults = { ...execResults, status: 'canceled' };
     }
 
     if (entry.type === 'step' || entry.type === 'waitForEvent' || entry.type === 'loop' || entry.type === 'foreach') {

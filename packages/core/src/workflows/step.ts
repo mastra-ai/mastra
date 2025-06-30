@@ -22,12 +22,14 @@ export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSche
   // TODO: should this be a schema you can define on the step?
   suspend(suspendPayload: TSuspendSchema): Promise<any>;
   bail(result: any): any;
+  abort(): any;
   resume?: {
     steps: string[];
     resumePayload: any;
   };
   [EMITTER_SYMBOL]: Emitter;
   engine: EngineType;
+  abortSignal: AbortSignal;
 }) => Promise<TStepOutput>;
 
 // Define a Step interface
