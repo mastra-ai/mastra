@@ -2,7 +2,7 @@ import type { Mastra, SerializedStepFlowEntry } from '..';
 import { MastraBase } from '../base';
 import type { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
-import type { StepResult } from './types';
+import type { Emitter, StepResult } from './types';
 import type { StepFlowEntry } from '.';
 
 /**
@@ -46,11 +46,12 @@ export abstract class ExecutionEngine extends MastraBase {
       resumePayload: any;
       resumePath: number[];
     };
-    emitter: { emit: (event: string, data: any) => Promise<void> };
+    emitter: Emitter;
     runtimeContext: RuntimeContext;
     retryConfig?: {
       attempts?: number;
       delay?: number;
     };
+    abortController: AbortController;
   }): Promise<TOutput>;
 }

@@ -316,7 +316,7 @@ import { mastra } from "./";
 
 // GitHub repository to generate documentation for
 const ghRepoUrl = "https://github.com/mastra-ai/mastra";
-const run = mastra.getWorkflow("readmeGeneratorWorkflow").createRun();
+const run = await mastra.getWorkflow("readmeGeneratorWorkflow").createRunAsync();
 
 // Start the workflow with the repository URL as input
 const res = await run.start({ inputData: { repoUrl: ghRepoUrl } });

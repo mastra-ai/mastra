@@ -1,5 +1,278 @@
 # mastra
 
+## 0.10.8
+
+### Patch Changes
+
+- a344ac7: Fix tool streaming in agent network
+- Updated dependencies [b8f16b2]
+- Updated dependencies [3e04487]
+- Updated dependencies [a344ac7]
+- Updated dependencies [dc4ca0a]
+  - @mastra/core@0.10.8
+  - @mastra/deployer@0.10.8
+
+## 0.10.8-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [b8f16b2]
+- Updated dependencies [3e04487]
+- Updated dependencies [dc4ca0a]
+  - @mastra/core@0.10.8-alpha.1
+  - @mastra/deployer@0.10.8-alpha.1
+
+## 0.10.8-alpha.0
+
+### Patch Changes
+
+- a344ac7: Fix tool streaming in agent network
+- Updated dependencies [a344ac7]
+  - @mastra/deployer@0.10.8-alpha.0
+  - @mastra/core@0.10.8-alpha.0
+
+## 0.10.7
+
+### Patch Changes
+
+- 5d74aab: vNext network in playground
+- 9102d89: Fix final output not showing on playground for previously suspended steps
+- 17903a3: Remove install step from dev for telemetry
+- 8e1b6e9: dependencies updates:
+  - Updated dependency [`zod@^3.25.67` ↗︎](https://www.npmjs.com/package/zod/v/3.25.67) (from `^3.25.57`, in `dependencies`)
+- 21ffb97: Make dynamic form handle schema better
+- be3d5a3: Remove recharts and ramada (unused deps)
+- f9b4350: fix icons not showing on all agents
+- Updated dependencies [8e1b6e9]
+- Updated dependencies [36cd0f1]
+- Updated dependencies [2eab82b]
+- Updated dependencies [ee93d96]
+- Updated dependencies [c00039d]
+- Updated dependencies [15e9d26]
+- Updated dependencies [d1baedb]
+- Updated dependencies [d8f2d19]
+- Updated dependencies [9bf1d55]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [914684e]
+- Updated dependencies [07d6d88]
+- Updated dependencies [9d52b17]
+- Updated dependencies [2097952]
+- Updated dependencies [792c4c0]
+- Updated dependencies [5d74aab]
+- Updated dependencies [5d74aab]
+- Updated dependencies [17903a3]
+- Updated dependencies [a8b194f]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [502fe05]
+- Updated dependencies [144eb0b]
+- Updated dependencies [8ba1b51]
+- Updated dependencies [10a4f10]
+- Updated dependencies [4efcfa0]
+- Updated dependencies [0e17048]
+- Updated dependencies [dc93062]
+  - @mastra/deployer@0.10.7
+  - @mastra/mcp@0.10.5
+  - @mastra/core@0.10.7
+
+## 0.10.7-alpha.5
+
+### Patch Changes
+
+- f9b4350: fix icons not showing on all agents
+  - @mastra/core@0.10.7-alpha.5
+  - @mastra/deployer@0.10.7-alpha.5
+
+## 0.10.7-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [a8b194f]
+- Updated dependencies [dc93062]
+  - @mastra/core@0.10.7-alpha.4
+  - @mastra/mcp@0.10.5-alpha.2
+  - @mastra/deployer@0.10.7-alpha.4
+
+## 0.10.7-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [792c4c0]
+- Updated dependencies [502fe05]
+- Updated dependencies [10a4f10]
+- Updated dependencies [4efcfa0]
+  - @mastra/core@0.10.7-alpha.3
+  - @mastra/deployer@0.10.7-alpha.3
+
+## 0.10.7-alpha.2
+
+### Patch Changes
+
+- 5d74aab: vNext network in playground
+- 17903a3: Remove install step from dev for telemetry
+- 8e1b6e9: dependencies updates:
+  - Updated dependency [`zod@^3.25.67` ↗︎](https://www.npmjs.com/package/zod/v/3.25.67) (from `^3.25.57`, in `dependencies`)
+- be3d5a3: Remove recharts and ramada (unused deps)
+- Updated dependencies [8e1b6e9]
+- Updated dependencies [36cd0f1]
+- Updated dependencies [2eab82b]
+- Updated dependencies [ee93d96]
+- Updated dependencies [c00039d]
+- Updated dependencies [15e9d26]
+- Updated dependencies [9bf1d55]
+- Updated dependencies [914684e]
+- Updated dependencies [07d6d88]
+- Updated dependencies [5d74aab]
+- Updated dependencies [5d74aab]
+- Updated dependencies [17903a3]
+- Updated dependencies [144eb0b]
+  - @mastra/deployer@0.10.7-alpha.2
+  - @mastra/mcp@0.10.5-alpha.1
+  - @mastra/core@0.10.7-alpha.2
+
+## 0.10.7-alpha.1
+
+### Patch Changes
+
+- 21ffb97: Make dynamic form handle schema better
+- Updated dependencies [d1baedb]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [2097952]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [0e17048]
+  - @mastra/core@0.10.7-alpha.1
+  - @mastra/mcp@0.10.5-alpha.0
+  - @mastra/deployer@0.10.7-alpha.1
+
+## 0.10.7-alpha.0
+
+### Patch Changes
+
+- 9102d89: Fix final output not showing on playground for previously suspended steps
+- Updated dependencies [d8f2d19]
+- Updated dependencies [9d52b17]
+- Updated dependencies [8ba1b51]
+  - @mastra/core@0.10.7-alpha.0
+  - @mastra/deployer@0.10.7-alpha.0
+
+## 0.10.6
+
+### Patch Changes
+
+- 02560d4: lift evals fetching to the playground package instead
+- 084f6aa: Add logs to circular dependency to warn people when starting server might break
+- b29c802: Remove open browser
+- 5f2aa3e: Move workflow hooks to playground
+- 4051477: dependencies updates:
+  - Updated dependency [`@clack/prompts@^0.11.0` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/0.11.0) (from `^0.8.2`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/instrumentation@^0.202.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/instrumentation/v/0.202.0) (from `^0.57.2`, in `dependencies`)
+  - Updated dependency [`posthog-node@4.18.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/4.18.0) (from `4.16.0`, in `dependencies`)
+  - Updated dependency [`yocto-spinner@^0.2.3` ↗︎](https://www.npmjs.com/package/yocto-spinner/v/0.2.3) (from `^0.1.2`, in `dependencies`)
+  - Added dependency [`open@^10.1.2` ↗︎](https://www.npmjs.com/package/open/v/10.1.2) (to `dependencies`)
+- b40f365: dependencies updates:
+  - Updated dependency [`@clack/prompts@^0.11.0` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/0.11.0) (from `^0.8.2`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/instrumentation@^0.202.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/instrumentation/v/0.202.0) (from `^0.57.2`, in `dependencies`)
+  - Updated dependency [`posthog-node@4.18.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/4.18.0) (from `4.16.0`, in `dependencies`)
+  - Updated dependency [`yocto-spinner@^0.2.3` ↗︎](https://www.npmjs.com/package/yocto-spinner/v/0.2.3) (from `^0.1.2`, in `dependencies`)
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`execa@^9.6.0` ↗︎](https://www.npmjs.com/package/execa/v/9.6.0) (from `^9.5.2`, in `dependencies`)
+  - Updated dependency [`json-schema-to-zod@^2.6.1` ↗︎](https://www.npmjs.com/package/json-schema-to-zod/v/2.6.1) (from `^2.6.0`, in `dependencies`)
+  - Updated dependency [`shell-quote@^1.8.3` ↗︎](https://www.npmjs.com/package/shell-quote/v/1.8.3) (from `^1.8.2`, in `dependencies`)
+  - Updated dependency [`strip-json-comments@^5.0.2` ↗︎](https://www.npmjs.com/package/strip-json-comments/v/5.0.2) (from `^5.0.1`, in `dependencies`)
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+- 143b4e4: Fix globbing of tools to only capture js/ts files
+- 44ba52d: Add proper error message when installation of mastra fails
+- 311132e: move useWorkflow to playground instead of playground-ui
+- 3270d9d: Fix runtime context being undefined
+- 906f992: CLI error log
+- 53d3c37: Get workflows from an agent if not found from Mastra instance #5083
+- fc677d7: For final result for a workflow
+- 47e7029: Add open browser functionality when running mastra dev
+- Updated dependencies [63f6b7d]
+- Updated dependencies [4051477]
+- Updated dependencies [2d12edd]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [c28ed65]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [12a95fc]
+- Updated dependencies [79b9909]
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+- Updated dependencies [d70c420]
+- Updated dependencies [ee9af57]
+- Updated dependencies [ec7f824]
+- Updated dependencies [36f1c36]
+- Updated dependencies [084f6aa]
+- Updated dependencies [2a16996]
+- Updated dependencies [10d352e]
+- Updated dependencies [9589624]
+- Updated dependencies [bd1674f]
+- Updated dependencies [69f76f7]
+- Updated dependencies [3270d9d]
+- Updated dependencies [53d3c37]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6
+  - @mastra/deployer@0.10.6
+  - @mastra/mcp@0.10.4
+
+## 0.10.6-alpha.7
+
+### Patch Changes
+
+- b29c802: Remove open browser
+- Updated dependencies [bd1674f]
+- Updated dependencies [69f76f7]
+  - @mastra/mcp@0.10.4-alpha.1
+  - @mastra/deployer@0.10.6-alpha.5
+
+## 0.10.6-alpha.6
+
+### Patch Changes
+
+- 5f2aa3e: Move workflow hooks to playground
+- Updated dependencies [12a95fc]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+  - @mastra/core@0.10.6-alpha.5
+  - @mastra/deployer@0.10.6-alpha.5
+
+## 0.10.6-alpha.5
+
+### Patch Changes
+
+- 084f6aa: Add logs to circular dependency to warn people when starting server might break
+- Updated dependencies [79b9909]
+- Updated dependencies [084f6aa]
+- Updated dependencies [9589624]
+  - @mastra/deployer@0.10.6-alpha.4
+  - @mastra/core@0.10.6-alpha.4
+
+## 0.10.6-alpha.4
+
+### Patch Changes
+
+- 4051477: dependencies updates:
+  - Updated dependency [`@clack/prompts@^0.11.0` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/0.11.0) (from `^0.8.2`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/instrumentation@^0.202.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/instrumentation/v/0.202.0) (from `^0.57.2`, in `dependencies`)
+  - Updated dependency [`posthog-node@4.18.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/4.18.0) (from `4.16.0`, in `dependencies`)
+  - Updated dependency [`yocto-spinner@^0.2.3` ↗︎](https://www.npmjs.com/package/yocto-spinner/v/0.2.3) (from `^0.1.2`, in `dependencies`)
+  - Added dependency [`open@^10.1.2` ↗︎](https://www.npmjs.com/package/open/v/10.1.2) (to `dependencies`)
+- b40f365: dependencies updates:
+  - Updated dependency [`@clack/prompts@^0.11.0` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/0.11.0) (from `^0.8.2`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/instrumentation@^0.202.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/instrumentation/v/0.202.0) (from `^0.57.2`, in `dependencies`)
+  - Updated dependency [`posthog-node@4.18.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/4.18.0) (from `4.16.0`, in `dependencies`)
+  - Updated dependency [`yocto-spinner@^0.2.3` ↗︎](https://www.npmjs.com/package/yocto-spinner/v/0.2.3) (from `^0.1.2`, in `dependencies`)
+- Updated dependencies [4051477]
+- Updated dependencies [c28ed65]
+- Updated dependencies [d70c420]
+- Updated dependencies [2a16996]
+  - @mastra/deployer@0.10.6-alpha.3
+  - @mastra/core@0.10.6-alpha.3
+
 ## 0.10.6-alpha.3
 
 ### Patch Changes

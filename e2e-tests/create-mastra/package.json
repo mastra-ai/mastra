@@ -12,7 +12,7 @@
     "get-port": "^7.1.0",
     "globby": "^14.1.0",
     "npm-cli-login": "^1.0.0",
-    "verdaccio": "^6.1.2",
+    "verdaccio": "^6.1.4",
     "verdaccio-auth-memory": "^10.2.2",
     "vitest": "^3.2.3"
   },

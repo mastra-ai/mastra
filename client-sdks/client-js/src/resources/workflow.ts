@@ -151,6 +151,17 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * Cancels a specific workflow run by its ID
+   * @param runId - The ID of the workflow run to cancel
+   * @returns Promise containing a success message
+   */
+  cancelRun(runId: string): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  /**
    * Creates a new workflow run
    * @param params - Optional object containing the optional runId
    * @returns Promise containing the runId of the created run
@@ -237,9 +248,9 @@ export class Workflow extends BaseResource {
   }
 
   /**
-   * Starts a vNext workflow run and returns a stream
+   * Starts a workflow run and returns a stream
    * @param params - Object containing the optional runId, inputData and runtimeContext
-   * @returns Promise containing the vNext workflow execution results
+   * @returns Promise containing the workflow execution results
    */
   async stream(params: { runId?: string; inputData: Record<string, any>; runtimeContext?: RuntimeContext }) {
     const searchParams = new URLSearchParams();
@@ -267,7 +278,7 @@ export class Workflow extends BaseResource {
     }
 
     // Create a transform stream that processes the response body
-    const transformStream = new TransformStream<ArrayBuffer, WorkflowWatchResult>({
+    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
       start() {},
       async transform(chunk, controller) {
         try {

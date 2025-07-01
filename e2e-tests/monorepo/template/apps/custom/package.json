@@ -17,7 +17,7 @@
     "@mastra/core": "monorepo-test",
     "@inner/inner-tools": "workspace:*",
     "lodash": "^4.17.21",
-    "zod": "^3.25.56"
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "mastra": "monorepo-test"

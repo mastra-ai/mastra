@@ -369,15 +369,27 @@ async function validateOutput(
  * This helps identify which dependencies need to be externalized vs bundled.
  */
 export async function analyzeBundle(
-  entry: string,
+  entries: string[],
   mastraEntry: string,
   outputDir: string,
   platform: 'node' | 'browser',
   logger: IMastraLogger,
 ) {
-  const isVirtualFile = entry.includes('\n') || !existsSync(entry);
+  const depsToOptimize = new Map<string, string[]>();
+  for (const entry of entries) {
+    const isVirtualFile = entry.includes('\n') || !existsSync(entry);
+    const analyzeResult = await analyze(entry, mastraEntry, isVirtualFile, platform, logger);
 
-  const depsToOptimize = await analyze(entry, mastraEntry, isVirtualFile, platform, logger);
+    for (const [dep, exports] of analyzeResult.entries()) {
+      if (depsToOptimize.has(dep)) {
+        // Merge with existing exports if dependency already exists
+        const existingExports = depsToOptimize.get(dep)!;
+        depsToOptimize.set(dep, [...new Set([...existingExports, ...exports])]);
+      } else {
+        depsToOptimize.set(dep, exports);
+      }
+    }
+  }
   const customExternals = (await getBundlerOptions(mastraEntry, outputDir))?.externals;
 
   const { output, reverseVirtualReferenceMap, usedExternals } = await bundleExternals(

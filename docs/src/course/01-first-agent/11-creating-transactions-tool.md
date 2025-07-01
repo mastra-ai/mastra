@@ -1,11 +1,13 @@
 # Creating the getTransactions Tool
 
-Let's create a tool that fetches transaction data from a Google Sheet. We'll add this to your `tools/index.ts` file.
+Let's create a tool that fetches transaction data from a Google Sheet. We'll create a new file called `tools/get-transactions-tool.ts`.
 
-First, make sure you have the necessary imports:
+First, create the new tool file at src/mastra/tools/get-transactions-tool.ts
+
+Now add the necessary imports:
 
 ```typescript
-import { createTool } from "@mastra/core";
+import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 ```
 
@@ -27,7 +29,7 @@ export const getTransactionsTool = createTool({
 const getTransactions = async () => {
   // This URL points to a public Google Sheet with transaction data
   const url =
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vTQWaCzJAFsF4owWRHQRLo4G0-ERv31c74OOZFnqLiTLaP7NweoiX7IXvzQud2H6bdUPnIqZEA485Ux/pubhtml?gid=0&single=true";
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vTQWaCzJAFsF4owWRHQRLo4G0-ERv31c74OOZFnqLiTLaP7NweoiX7IXvzQud2H6bdUPnIqZEA485Ux/pub?gid=0&single=true&output=csv";
   const response = await fetch(url);
   const data = await response.text();
   return {

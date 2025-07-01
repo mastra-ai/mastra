@@ -8,6 +8,7 @@ export type Step = {
   status: 'running' | 'success' | 'failed' | 'suspended';
   output?: any;
   input?: any;
+  resumeData?: any;
 };
 
 type UseCurrentRunReturnType = {
@@ -30,6 +31,7 @@ export const useCurrentRun = (): UseCurrentRunReturnType => {
         status: value.status,
         output: value.output,
         input: value.payload,
+        resumeData: value.resumePayload,
       },
     };
   }, {});

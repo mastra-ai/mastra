@@ -60,14 +60,22 @@ export class DevBundler extends Bundler {
     await this.writeInstrumentationFile(outputDir);
     await this.writePackageJson(outputDir, new Map(), {});
 
-    this.logger.info('Installing dependencies');
-    await this.installDependencies(outputDirectory);
-    this.logger.info('Done installing dependencies');
-
     const copyPublic = this.copyPublic.bind(this);
+
     const watcher = await createWatcher(
       {
         ...inputOptions,
+        logLevel: inputOptions.logLevel === 'silent' ? 'warn' : inputOptions.logLevel,
+        onwarn: warning => {
+          if (warning.code === 'CIRCULAR_DEPENDENCY') {
+            if (warning.ids?.[0]?.includes('node_modules')) {
+              return;
+            }
+
+            this.logger.warn(`Circular dependency found:
+\t${warning.message.replace('Circular dependency: ', '')}`);
+          }
+        },
         plugins: [
           // @ts-ignore - types are good
           // eslint-disable-next-line @typescript-eslint/no-misused-promises

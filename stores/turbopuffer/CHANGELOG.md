@@ -1,5 +1,82 @@
 # @mastra/turbopuffer
 
+## 0.11.0
+
+### Minor Changes
+
+- 8a3bfd2: Update peerdeps to latest core
+
+### Patch Changes
+
+- 0e17048: Throw mastra errors in storage packages
+- Updated dependencies [15e9d26]
+- Updated dependencies [d1baedb]
+- Updated dependencies [d8f2d19]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [07d6d88]
+- Updated dependencies [9d52b17]
+- Updated dependencies [2097952]
+- Updated dependencies [792c4c0]
+- Updated dependencies [5d74aab]
+- Updated dependencies [a8b194f]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [502fe05]
+- Updated dependencies [144eb0b]
+- Updated dependencies [8ba1b51]
+- Updated dependencies [4efcfa0]
+- Updated dependencies [0e17048]
+  - @mastra/core@0.10.7
+
+## 0.11.0-alpha.1
+
+### Minor Changes
+
+- 8a3bfd2: Update peerdeps to latest core
+
+### Patch Changes
+
+- Updated dependencies [792c4c0]
+- Updated dependencies [502fe05]
+- Updated dependencies [4efcfa0]
+  - @mastra/core@0.10.7-alpha.3
+
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- 0e17048: Throw mastra errors in storage packages
+- Updated dependencies [d1baedb]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [2097952]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [0e17048]
+  - @mastra/core@0.10.7-alpha.1
+
+## 0.10.3
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`@turbopuffer/turbopuffer@^0.6.17` ↗︎](https://www.npmjs.com/package/@turbopuffer/turbopuffer/v/0.6.17) (from `^0.6.4`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [12a95fc]
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+- Updated dependencies [d70c420]
+- Updated dependencies [ee9af57]
+- Updated dependencies [36f1c36]
+- Updated dependencies [2a16996]
+- Updated dependencies [10d352e]
+- Updated dependencies [9589624]
+- Updated dependencies [53d3c37]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6
+
 ## 0.10.3-alpha.0
 
 ### Patch Changes

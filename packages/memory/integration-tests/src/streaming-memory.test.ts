@@ -113,8 +113,7 @@ describe('Memory Streaming Tests', () => {
     const { messages } = await agent.getMemory()!.query({ threadId });
 
     expect(messages).toHaveLength(2);
-    // Removing user context message from customIds length
-    expect(messages.length).toBe(customIds.length - 1);
+    expect(messages.length).toBe(customIds.length);
     for (const message of messages) {
       if (!(`id` in message)) {
         throw new Error(`Expected message.id`);
@@ -280,15 +279,18 @@ describe('Memory Streaming Tests', () => {
             content: message,
           });
         });
-        const uiMessages = result.current.messages;
+
+        // Wait for message count to increase
         await waitFor(
           () => {
             expect(error).toBeNull();
             expect(result.current.messages.length).toBeGreaterThan(messageCountBefore);
           },
-          { timeout: 1000 },
+          { timeout: 2000 },
         );
 
+        // Get fresh reference to messages after all waits complete
+        const uiMessages = result.current.messages;
         const latestMessage = uiMessages.at(-1);
         if (!latestMessage) throw new Error(`No latest message`);
         if (

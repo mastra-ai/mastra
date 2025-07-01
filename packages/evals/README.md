@@ -17,34 +17,29 @@ npm install @mastra/evals
 ### LLM-Based Metrics
 
 1. **Answer Relevancy**
-
    - Evaluates how well an answer addresses the input question
    - Considers uncertainty weighting for more nuanced scoring
    - Returns detailed reasoning for scores
 
 2. **Bias Detection**
-
    - Identifies potential biases in model outputs
    - Analyzes opinions and statements for bias indicators
    - Provides explanations for detected biases
    - Configurable scoring scale
 
 3. **Context Precision & Relevancy**
-
    - Assesses how well responses use provided context
    - Evaluates accuracy of context usage
    - Measures relevance of context to the response
    - Analyzes context positioning in responses
 
 4. **Faithfulness**
-
    - Verifies that responses are faithful to provided context
    - Detects hallucinations or fabricated information
    - Evaluates claims against provided context
    - Provides detailed analysis of faithfulness breaches
 
 5. **Prompt Alignment**
-
    - Measures how well responses follow given instructions
    - Evaluates adherence to multiple instruction criteria
    - Provides per-instruction scoring
@@ -59,14 +54,12 @@ npm install @mastra/evals
 ### NLP-Based Metrics
 
 1. **Completeness**
-
    - Analyzes structural completeness of responses
    - Identifies missing elements from input requirements
    - Provides detailed element coverage analysis
    - Tracks input-output element ratios
 
 2. **Content Similarity**
-
    - Measures text similarity between inputs and outputs
    - Configurable for case and whitespace sensitivity
    - Returns normalized similarity scores

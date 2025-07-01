@@ -238,7 +238,7 @@ export const cityCoordinatesTool = createTool({
 
     const workflow = mastra?.getWorkflow("cityStringWorkflow");
 
-    const run = workflow?.createRun();
+    const run = await workflow?.createRunAsync();
 
     const { result } = await run?.start({
       inputData: {

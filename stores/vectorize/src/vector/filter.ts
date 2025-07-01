@@ -1,7 +1,26 @@
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
-import type { VectorFilter, FieldCondition, OperatorSupport } from '@mastra/core/vector/filter';
+import type {
+  VectorFilter,
+  OperatorSupport,
+  OperatorValueMap,
+  LogicalOperatorValueMap,
+  BlacklistedRootOperators,
+} from '@mastra/core/vector/filter';
 
-export class VectorizeFilterTranslator extends BaseFilterTranslator {
+type VectorizeOperatorValueMap = Omit<OperatorValueMap, '$regex' | '$options' | '$exists' | '$elemMatch' | '$all'>;
+
+type VectorizeLogicalOperatorValueMap = Omit<LogicalOperatorValueMap, '$nor' | '$not' | '$and' | '$or'>;
+
+type VectorizeBlacklistedRootOperators = BlacklistedRootOperators | '$nor' | '$not' | '$and' | '$or';
+
+export type VectorizeVectorFilter = VectorFilter<
+  keyof VectorizeOperatorValueMap,
+  VectorizeOperatorValueMap,
+  VectorizeLogicalOperatorValueMap,
+  VectorizeBlacklistedRootOperators
+>;
+
+export class VectorizeFilterTranslator extends BaseFilterTranslator<VectorizeVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
@@ -13,13 +32,13 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator {
     };
   }
 
-  translate(filter?: VectorFilter): VectorFilter {
+  translate(filter?: VectorizeVectorFilter): VectorizeVectorFilter {
     if (this.isEmpty(filter)) return filter;
     this.validateFilter(filter);
     return this.translateNode(filter);
   }
 
-  private translateNode(node: VectorFilter | FieldCondition, currentPath: string = ''): any {
+  private translateNode(node: VectorizeVectorFilter, currentPath: string = ''): any {
     if (this.isRegex(node)) {
       throw new Error('Regex is not supported in Vectorize');
     }

@@ -1,0 +1,385 @@
+---
+title: "MCP Server: Building a Notes MCP Server | Mastra Guide"
+description: "A step-by-step guide to creating a fully-featured MCP (Model Context Protocol) server for managing notes using the Mastra framework."
+---
+
+import { FileTree, Steps } from "nextra/components";
+
+# MCP Server Guide: Building a Notes MCP Server
+
+In this guide, you'll learn how to build a complete MCP (Model Context Protocol) server from scratch. This server will manage a collection of markdown notes, exposing tools to create and read them, and providing intelligent prompts to assist with note-taking.
+
+## Prerequisites
+
+- Node.js installed
+- A basic understanding of TypeScript
+
+---
+
+## The Plan
+
+We will build a `notes` server that can:
+1.  **List and Read Notes**: Allow clients to browse and view markdown files stored on the server.
+2.  **Write Notes**: Provide a tool for creating or updating notes.
+3.  **Offer Smart Prompts**: Generate contextual prompts, like creating a daily note template or summarizing existing content.
+
+<Steps>
+## Initialize a Mastra Project
+
+First, create a new Mastra project using the `create-mastra` CLI.
+
+```bash copy
+npx create-mastra@latest
+```
+
+Follow the prompts. When it's done, navigate into your new project directory.
+
+```bash copy
+cd "<your-project-name>"
+```
+
+The default scaffold includes agent, tools and workflow examples. Since we're focusing on an MCP server, let's clean up the project.
+
+```bash copy
+rm -rf src/mastra/agents src/mastra/workflows src/mastra/tools/weather-tool.ts
+```
+
+Let's also remove the components from those files that were registered in the Mastra instance at `src/mastra/index.ts`.
+Our file should now look like this:
+
+```typescript copy showLineNumbers filename="src/mastra/index.ts" {1-14}
+import { Mastra } from '@mastra/core/mastra';
+import { PinoLogger } from '@mastra/loggers';
+import { LibSQLStore } from '@mastra/libsql';
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    url: ":memory:",
+  }),
+  logger: new PinoLogger({
+    name: 'Mastra',
+    level: 'info',
+  }),
+});
+```
+
+
+## Set Up the Directory Structure
+
+Create a dedicated directory for your MCP server's logic and a `notes` directory for your notes:
+
+```bash copy
+mkdir notes src/mastra/mcp
+```
+
+Create the following files:
+
+```bash copy
+touch src/mastra/mcp/{server,resources,prompts}.ts
+```
+- `server.ts`: Will contain the main MCP server configuration.
+- `resources.ts`: Will handle listing and reading note files.
+- `prompts.ts`: Will contain the logic for our smart prompts.
+
+The resulting directory structure should look like this:
+
+<FileTree>
+  <FileTree.Folder name="<your-project-name>" defaultOpen>
+    <FileTree.Folder name="notes" defaultOpen />
+    <FileTree.Folder name="src" defaultOpen>
+      <FileTree.Folder name="mastra" defaultOpen>
+        <FileTree.File name="index.ts" />
+        <FileTree.Folder name="mcp" defaultOpen>
+          <FileTree.File name="server.ts" />
+          <FileTree.File name="resources.ts" />
+          <FileTree.File name="prompts.ts" />
+        </FileTree.Folder>
+        <FileTree.Folder name="tools" defaultOpen />
+      </FileTree.Folder>
+    </FileTree.Folder>
+  </FileTree.Folder>
+</FileTree>
+
+## Create and Register the MCP Server
+
+Before we proceed, we need to install the `@mastra/mcp` package.
+
+```bash copy
+npm install @mastra/mcp
+```
+
+Now, let's define the MCP server instance in `src/mastra/mcp/server.ts`:
+
+```typescript copy showLineNumbers filename="src/mastra/mcp/server.ts" {1-7}
+import { MCPServer } from "@mastra/mcp";
+
+export const notes = new MCPServer({
+    name: "notes",
+    version: "0.1.0",
+    // we will add more configuration here later
+});
+```
+
+Now register this MCP server in your Mastra instance at `src/mastra/index.ts`. The key `notes` is the public identifier for your MCP server:
+
+```typescript copy showLineNumbers filename="src/mastra/index.ts" {4,15-17}
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from '@mastra/loggers';
+import { LibSQLStore } from '@mastra/libsql';
+import { notes } from "./mcp/server";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    url: ":memory:",
+  }),
+  logger: new PinoLogger({
+    name: 'Mastra',
+    level: 'info',
+  }),
+  mcpServers: {
+    notes,
+  },
+})
+```
+
+## Implement and Register Resource Handlers
+
+Resource handlers allow clients to discover and read the content your server manages.
+Let's implement handlers in `src/mastra/mcp/resources.ts` to work with markdown files in the `notes` directory:
+
+```typescript copy showLineNumbers filename="src/mastra/mcp/resources.ts" {1-51}
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from 'url';
+import type { MCPServerResources, Resource } from "@mastra/mcp";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const NOTES_DIR = path.resolve(__dirname, "../../notes"); // relative to the default output directory
+
+const listNoteFiles = async (): Promise<Resource[]> => {
+  try {
+    await fs.mkdir(NOTES_DIR, { recursive: true });
+    const files = await fs.readdir(NOTES_DIR);
+    return files
+      .filter(file => file.endsWith('.md'))
+      .map(file => {
+        const title = file.replace(".md", "");
+        return {
+          uri: `notes://${title}`,
+          name: title,
+          description: `A note about ${title}`,
+          mime_type: "text/markdown",
+        };
+      });
+  } catch (error) {
+    console.error("Error listing note resources:", error);
+    return [];
+  }
+};
+
+const readNoteFile = async (uri: string): Promise<string | null> => {
+  const title = uri.replace("notes://", "");
+  const notePath = path.join(NOTES_DIR, `${title}.md`);
+  try {
+    return await fs.readFile(notePath, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.error(`Error reading resource ${uri}:`, error);
+    }
+    return null;
+  }
+};
+
+export const resourceHandlers: MCPServerResources = {
+  listResources: listNoteFiles,
+  getResourceContent: async ({ uri }: { uri: string }) => {
+    const content = await readNoteFile(uri);
+    if (content === null) return { text: "" };
+    return { text: content };
+  },
+};
+```
+
+Now register these resource handlers in `src/mastra/mcp/server.ts`:
+
+```typescript copy showLineNumbers filename="src/mastra/mcp/server.ts" {2,7}
+import { MCPServer } from "@mastra/mcp";
+import { resourceHandlers } from "./resources";
+
+export const notes = new MCPServer({
+    name: "notes",
+    version: "0.1.0",
+    resources: resourceHandlers,
+});
+```
+
+## Implement and Register a Tool
+
+Tools are the actions your server can perform. Let's create a `write` tool.
+First, define the tool in `src/mastra/tools/write-note.ts`:
+
+```typescript copy showLineNumbers filename="src/mastra/tools/write-note.ts" {1-30}
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+import { fileURLToPath } from "url";
+import path from "node:path";
+import fs from "fs/promises";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const NOTES_DIR = path.resolve(__dirname, "../../notes");
+
+export const writeNoteTool = createTool({
+  id: "write",
+  description: "Write a new note or overwrite an existing one.",
+  inputSchema: z.object({
+    title: z.string().nonempty().describe("The title of the note. This will be the filename."),
+    content: z.string().nonempty().describe("The markdown content of the note."),
+  }),
+  outputSchema: z.string().nonempty(),
+  execute: async ({ context }) => {
+    try {
+      const { title, content } = context;
+      const filePath = path.join(NOTES_DIR, `${title}.md`);
+      await fs.mkdir(NOTES_DIR, { recursive: true });
+      await fs.writeFile(filePath, content, "utf-8");
+      return `Successfully wrote to note \"${title}\".`;
+    } catch (error: any) {
+      return `Error writing note: ${error.message}`;
+    }
+  },
+});
+```
+
+Now register this tool in `src/mastra/mcp/server.ts`:
+
+```typescript copy showLineNumbers filename="src/mastra/mcp/server.ts" {3,9-11}
+import { MCPServer } from "@mastra/mcp";
+import { resourceHandlers } from "./resources";
+import { writeNoteTool } from "../tools/write-note";
+
+export const notes = new MCPServer({
+    name: "notes",
+    version: "0.1.0",
+    resources: resourceHandlers,
+    tools: {
+      write: writeNoteTool,
+    },
+});
+```
+
+## Implement and Register Prompts
+
+Prompt handlers provide ready-to-use prompts for clients. Let's implement three: one for a daily note, one to summarize a note, and one to brainstorm ideas. This requires a few markdown-parsing libraries.
+
+```bash copy
+npm i unified remark-parse gray-matter @types/unist
+```
+
+Now let's implement the prompts in `src/mastra/mcp/prompts.ts`:
+
+```typescript copy showLineNumbers filename="src/mastra/mcp/prompts.ts" {1-61}
+import type { MCPServerPrompts } from "@mastra/mcp";
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
+import matter from 'gray-matter';
+import type { Node } from 'unist';
+
+const prompts = [
+  { name: "new_daily_note", description: "Create a new daily note.", version: "1.0.0" },
+  { name: "summarize_note", description: "Give me a TL;DR of the note.", version: "1.0.0" },
+  { name: "brainstorm_ideas", description: "Brainstorm new ideas based on a note.", version: "1.0.0" }
+];
+
+function stringifyNode(node: Node): string {
+  if ('value' in node && typeof node.value === 'string') return node.value;
+  if ('children' in node && Array.isArray(node.children)) return node.children.map(stringifyNode).join('');
+  return '';
+}
+
+export async function analyzeMarkdown(md: string) {
+  const { content } = matter(md);
+  const tree = unified().use(remarkParse).parse(content);
+  const headings: string[] = [];
+  const wordCounts: Record<string, number> = {};
+  let currentHeading = 'untitled';
+  wordCounts[currentHeading] = 0;
+  tree.children.forEach((node) => {
+    if (node.type === 'heading' && node.depth === 2) {
+      currentHeading = stringifyNode(node);
+      headings.push(currentHeading);
+      wordCounts[currentHeading] = 0;
+    } else {
+      const textContent = stringifyNode(node);
+      if (textContent.trim()) {
+        wordCounts[currentHeading] = (wordCounts[currentHeading] || 0) + textContent.split(/\\s+/).length;
+      }
+    }
+  });
+  return { headings, wordCounts };
+}
+
+const getPromptMessages: MCPServerPrompts['getPromptMessages'] = async ({ name, args }) => {
+  switch (name) {
+    case "new_daily_note":
+      const today = new Date().toISOString().split('T')[0];
+      return [{ role: "user", content: { type: "text", text: `Create a new note titled \"${today}\" with sections: \"## Tasks\", \"## Meetings\", \"## Notes\".` } }];
+    case "summarize_note":
+      if (!args?.noteContent) throw new Error("No content provided");
+      const metaSum = await analyzeMarkdown(args.noteContent as string);
+      return [{ role: "user", content: { type: "text", text: `Summarize each section in ≤ 3 bullets.\\n\\n### Outline\\n${metaSum.headings.map(h => `- ${h} (${metaSum.wordCounts[h] || 0} words)`).join("\\n")}`.trim() } }];
+    case "brainstorm_ideas":
+      if (!args?.noteContent) throw new Error("No content provided");
+      const metaBrain = await analyzeMarkdown(args.noteContent as string);
+      return [{ role: "user", content: { type: "text", text: `Brainstorm 3 ideas for underdeveloped sections below ${args?.topic ? `on ${args.topic}` : '.'}\\n\\nUnderdeveloped sections:\\n${metaBrain.headings.length ? metaBrain.headings.map(h => `- ${h}`).join("\\n") : "- (none, pick any)"}` } }];
+    default: throw new Error(`Prompt \"${name}\" not found`);
+  }
+};
+
+export const promptHandlers: MCPServerPrompts = {
+  listPrompts: async () => prompts,
+  getPromptMessages,
+};
+```
+
+Now register these prompt handlers in `src/mastra/mcp/server.ts`:
+
+```typescript copy showLineNumbers filename="src/mastra/mcp/server.ts"  {4,10}
+import { MCPServer } from "@mastra/mcp";
+import { resourceHandlers } from "./resources";
+import { writeNoteTool } from "../tools/write-note";
+import { promptHandlers } from "./prompts";
+
+export const notesServer = new MCPServer({
+  name: "notes",
+  version: "0.1.0",
+  resources: resourceHandlers,
+  prompts: promptHandlers,
+  tools: {
+    write: writeNoteTool,
+  },
+});
+```
+
+## Run the Server
+
+We can now run the development server:
+
+```bash copy
+npm run dev
+```
+
+Navigate to the Mastra playground (typically at `http://localhost:4111`).
+In the "MCP Servers" section, you'll find your `notes` server.
+You can use the playground to:
+- Get the endpoints for your MCP server.
+- Get client configurations for MCP Clients like Cursor and Windsurf.
+- See a list of and test the tools available to the MCP server.
+</Steps>
+
+## Next Steps
+
+You can now use this MCP server with any MCP Client. For example, you can use it with Cursor or Windsurf to manage notes.

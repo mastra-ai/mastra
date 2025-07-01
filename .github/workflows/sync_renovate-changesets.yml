@@ -48,14 +48,10 @@ jobs:
         with:
           run_install: false
 
-      - name: Create pnpm store
-        run: pnpm store path
-
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
           node-version: 20.19.1
-          cache: 'pnpm'
 
       - name: Check for package.json changes in examples and e2e-tests
         id: check-examples

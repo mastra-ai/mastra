@@ -1130,7 +1130,7 @@ describe('LibSQLVector', () => {
           vectorDB.query({
             indexName,
             queryVector: [1, 0, 0],
-            filter: { price: { $invalid: 100 } },
+            filter: { price: { $invalid: 100 } } as any,
           }),
         ).rejects.toThrow('Unsupported operator: $invalid');
       });
@@ -1358,16 +1358,6 @@ describe('LibSQLVector', () => {
 
           expect(firstCondition && secondCondition).toBe(true);
         });
-      });
-
-      it('should throw error for invalid operator', async () => {
-        await expect(
-          vectorDB.query({
-            indexName,
-            queryVector: [1, 0, 0],
-            filter: { price: { $invalid: 100 } },
-          }),
-        ).rejects.toThrow('Unsupported operator: $invalid');
       });
 
       it('should handle multiple logical operators at root level', async () => {
