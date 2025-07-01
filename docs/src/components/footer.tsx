@@ -68,7 +68,7 @@ export const Footer = () => {
         className="flex z-30  mx-auto bg-[#fafafa] dark:bg-transparent border-[var(--light-border-muted)]  dark:border-t-[var(--border)]  relative w-full border-t-[0.5px] flex-col items-center pt-8 lg:pt-[5rem] pb-24 md:pb-32 footer data-[state=false]:mt-8 "
       >
         <div className="flex max-w-(--nextra-content-width) pl-[max(env(safe-area-inset-left),1.5rem)] pr-[max(env(safe-area-inset-right),1.5rem)] flex-col lg:flex-row gap-16 lg:gap-0 w-full justify-between">
-          <div>
+          <div className="dark:text-white">
             <Logo />
             <div className="md:hidden pt-10">
               <label

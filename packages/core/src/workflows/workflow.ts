@@ -112,6 +112,11 @@ export type SerializedStepFlowEntry =
       };
     };
 
+export type StepWithComponent = Step<string, any, any, any, any, any> & {
+  component?: string;
+  steps?: Record<string, StepWithComponent>;
+};
+
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
   step,
   path,
@@ -233,7 +238,7 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext }) => {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -259,7 +264,12 @@ export function createStep<
           onFinish: result => {
             streamPromise.resolve(result.text);
           },
+          abortSignal,
         });
+
+        if (abortSignal.aborted) {
+          return abort();
+        }
 
         for await (const chunk of fullStream) {
           switch (chunk.type) {
@@ -464,7 +474,7 @@ export class Workflow<
   public description?: string | undefined;
   public inputSchema: TInput;
   public outputSchema: TOutput;
-  public steps: Record<string, Step<string, any, any, any, any>>;
+  public steps: Record<string, StepWithComponent>;
   public stepDefs?: TSteps;
   protected stepFlow: StepFlowEntry[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
@@ -1064,6 +1074,8 @@ export class Workflow<
     [EMITTER_SYMBOL]: emitter,
     mastra,
     runtimeContext,
+    abort,
+    abortSignal,
   }: {
     inputData: z.infer<TInput>;
     resumeData?: any;
@@ -1080,10 +1092,22 @@ export class Workflow<
     mastra: Mastra;
     runtimeContext?: RuntimeContext;
     engine: DefaultEngineType;
+    abortSignal: AbortSignal;
+    bail: (result: any) => any;
+    abort: () => any;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
     const run = resume?.steps?.length ? this.createRun({ runId: resume.runId }) : this.createRun();
+    const nestedAbortCb = () => {
+      abort();
+    };
+    run.abortController?.signal.addEventListener('abort', nestedAbortCb);
+    abortSignal.addEventListener('abort', async () => {
+      run.abortController.signal.removeEventListener('abort', nestedAbortCb);
+      await run.cancel();
+    });
+
     const unwatchV2 = run.watch(event => {
       emitter.emit('nested-watch-v2', { event, workflowId: this.id });
     }, 'watch-v2');
@@ -1195,6 +1219,7 @@ export class Run<
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
 > {
+  public abortController: AbortController;
   protected emitter: EventEmitter;
   /**
    * Unique identifier for this workflow
@@ -1263,9 +1288,17 @@ export class Run<
     this.emitter = new EventEmitter();
     this.retryConfig = params.retryConfig;
     this.cleanup = params.cleanup;
+    this.abortController = new AbortController();
   }
 
-  sendEvent(event: string, data: any) {
+  /**
+   * Cancels the workflow execution
+   */
+  async cancel() {
+    this.abortController?.abort();
+  }
+
+  async sendEvent(event: string, data: any) {
     this.emitter.emit(`user-event-${event}`, data);
   }
 
@@ -1303,6 +1336,7 @@ export class Run<
       },
       retryConfig: this.retryConfig,
       runtimeContext: runtimeContext ?? new RuntimeContext(),
+      abortController: this.abortController,
     });
 
     if (result.status !== 'suspended') {
@@ -1475,6 +1509,7 @@ export class Run<
           },
         },
         runtimeContext: params.runtimeContext ?? new RuntimeContext(),
+        abortController: this.abortController,
       })
       .then(result => {
         if (result.status !== 'suspended') {

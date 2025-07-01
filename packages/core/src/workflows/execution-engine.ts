@@ -52,5 +52,6 @@ export abstract class ExecutionEngine extends MastraBase {
       attempts?: number;
       delay?: number;
     };
+    abortController: AbortController;
   }): Promise<TOutput>;
 }

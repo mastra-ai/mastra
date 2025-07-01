@@ -14,7 +14,8 @@ const require = createRequire(import.meta.url);
 export default async function setup() {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const rootDir = join(__dirname, '..', '..');
-  const teardown = await prepareMonorepo(rootDir, globby);
+  const tag = 'kitchen-sink-e2e-test';
+  const teardown = await prepareMonorepo(rootDir, globby, tag);
 
   const verdaccioPath = require.resolve('verdaccio/bin/verdaccio');
   const port = await getPort();
@@ -25,11 +26,9 @@ export default async function setup() {
 
   console.log('[Setup] Registry started at ', registry.toString());
 
-  const tag = 'kitchen-sink-e2e-test';
-
   console.log('[Setup] Publishing packages');
 
-  const packages = ['mastra', '@mastra/loggers'];
+  const packages = ['mastra', '@mastra/loggers', '@mastra/playground-ui'];
   const publishFilterArgs = packages.map(p => [`--filter="${p}^..."`, `--filter="${p}"`]).flat();
 
   publishPackages(publishFilterArgs, tag, rootDir, registry);

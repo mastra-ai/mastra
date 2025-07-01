@@ -1,6 +1,6 @@
 import { Txt } from '@/ds/components/Txt';
 import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
-import { CirclePause, Loader2 } from 'lucide-react';
+import { CirclePause, HourglassIcon, Loader2 } from 'lucide-react';
 import { WorkflowCard } from './workflow-card';
 import { SyntaxHighlighter } from '@/components/syntax-highlighter';
 import { CopyButton } from '@/components/ui/copy-button';
@@ -19,7 +19,8 @@ export const WorkflowStatus = ({ stepId, status, result }: WorkflowStatusProps) 
           <Icon>
             {status === 'success' && <CheckIcon className="text-accent1" />}
             {status === 'failed' && <CrossIcon className="text-accent2" />}
-            {status === 'suspended' && <CirclePause className="text-icon3" />}
+            {status === 'suspended' && <CirclePause className="text-accent3" />}
+            {status === 'waiting' && <HourglassIcon className="text-accent5" />}
             {status === 'running' && <Loader2 className="text-icon3 animate-spin" />}
           </Icon>
           <Txt as="span" variant="ui-lg" className="text-icon6 font-medium">
