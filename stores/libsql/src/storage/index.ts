@@ -555,7 +555,10 @@ export class LibSQLStore extends MastraStorage {
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: `Thread ${id} not found`,
-        details: { threadId: id },
+        details: {
+          status: 404,
+          threadId: id,
+        },
       });
     }
 

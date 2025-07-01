@@ -50,6 +50,6 @@
     "superjson": "^2.2.2",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^2.1.9"
+    "vitest": "^3.2.3"
   }
 }
