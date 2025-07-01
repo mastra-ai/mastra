@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Button } from "./ui/button";
+import { Button } from "../ui/button";
 
 import { useFeatureFlagEnabled } from "posthog-js/react";
 import { T } from "gt-next/client";

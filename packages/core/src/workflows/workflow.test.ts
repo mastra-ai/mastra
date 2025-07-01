@@ -641,7 +641,7 @@ describe('Workflow', () => {
 
       const executionResult = await getWorkflowState();
 
-      expect(watchData.length).toBe(9);
+      expect(watchData.length).toBe(11);
       expect(watchData).toMatchObject([
         {
           payload: {
@@ -652,6 +652,9 @@ describe('Workflow', () => {
         {
           payload: {
             id: 'step1',
+            startedAt: expect.any(Number),
+            status: 'running',
+            payload: {},
           },
           type: 'step-start',
         },
@@ -661,6 +664,7 @@ describe('Workflow', () => {
             output: {
               result: 'success1',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
           type: 'step-result',
@@ -673,12 +677,43 @@ describe('Workflow', () => {
           type: 'step-finish',
         },
         {
-          payload: {},
+          payload: {
+            id: 'sleep_mock-uuid-1',
+            startedAt: expect.any(Number),
+            status: 'waiting',
+            payload: {
+              result: 'success1',
+            },
+          },
           type: 'step-waiting',
         },
         {
           payload: {
+            id: 'sleep_mock-uuid-1',
+            endedAt: expect.any(Number),
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'success1',
+            },
+          },
+          type: 'step-result',
+        },
+        {
+          type: 'step-finish',
+          payload: {
+            id: 'sleep_mock-uuid-1',
+            metadata: {},
+          },
+        },
+        {
+          payload: {
             id: 'step2',
+            payload: {
+              result: 'success1',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -688,6 +723,7 @@ describe('Workflow', () => {
             output: {
               result: 'success2',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
           type: 'step-result',
@@ -2379,6 +2415,177 @@ describe('Workflow', () => {
       });
 
       expect(endTime - startTime).toBeGreaterThan(900);
+    });
+  });
+
+  describe('abort', () => {
+    it('should be able to abort workflow execution in between steps', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { result: 'step2: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1, step2],
+      });
+
+      workflow.then(step1).sleep(1000).then(step2).commit();
+
+      const run = await workflow.createRunAsync();
+      const p = run.start({ inputData: { value: 'test' } });
+
+      setTimeout(() => {
+        run.cancel();
+      }, 300);
+
+      const result = await p;
+
+      expect(result.status).toBe('canceled');
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'step1: test' },
+        payload: { value: 'test' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toBeUndefined();
+    });
+
+    it('should be able to abort workflow execution immediately', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { result: 'step2: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1, step2],
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const run = await workflow.createRunAsync();
+      const p = run.start({ inputData: { value: 'test' } });
+
+      await run.cancel();
+
+      const result = await p;
+
+      expect(result.status).toBe('canceled');
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'step1: test' },
+        payload: { value: 'test' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toBeUndefined();
+    });
+
+    it('should be able to abort workflow execution during a step', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData, abortSignal, abort }) => {
+          const timeout: Promise<string> = new Promise((resolve, _reject) => {
+            const ref = setTimeout(() => {
+              resolve('step2: ' + inputData.result);
+            }, 1000);
+
+            abortSignal.addEventListener('abort', () => {
+              resolve('');
+              clearTimeout(ref);
+            });
+          });
+
+          const result = await timeout;
+          if (abortSignal.aborted) {
+            return abort();
+          }
+          return { result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1, step2],
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const run = await workflow.createRunAsync();
+      const p = run.start({ inputData: { value: 'test' } });
+
+      setTimeout(() => {
+        run.cancel();
+      }, 300);
+
+      const result = await p;
+
+      expect(result.status).toBe('canceled');
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'step1: test' },
+        payload: { value: 'test' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      // expect(result.steps['step2']).toEqual({
+      //   status: 'success',
+      //   payload: { result: 'step1: test' },
+      //   output: undefined,
+      //   startedAt: expect.any(Number),
+      //   endedAt: expect.any(Number),
+      // });
     });
   });
 
