@@ -33,13 +33,17 @@ export type InngestEngineType = {
 
 export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest }): ReturnType<typeof inngestServe> {
   const wfs = mastra.getWorkflows();
-  const functions = Object.values(wfs).flatMap(wf => {
-    if (wf instanceof InngestWorkflow) {
-      wf.__registerMastra(mastra);
-      return wf.getFunctions();
-    }
-    return [];
-  });
+  const functions = Array.from(
+    new Set(
+      Object.values(wfs).flatMap(wf => {
+        if (wf instanceof InngestWorkflow) {
+          wf.__registerMastra(mastra);
+          return wf.getFunctions();
+        }
+        return [];
+      })
+    )
+  );
   return inngestServe({
     client: inngest,
     functions,

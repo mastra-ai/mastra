@@ -187,7 +187,7 @@ export abstract class MastraMemory extends MastraBase {
    * @param messages The messages to process
    * @returns The processed messages
    */
-  private applyProcessors(
+  protected applyProcessors(
     messages: CoreMessage[],
     opts: {
       processors?: MemoryProcessor[];
