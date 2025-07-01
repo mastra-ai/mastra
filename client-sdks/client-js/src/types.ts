@@ -140,6 +140,17 @@ export interface GetWorkflowResponse {
       suspendSchema: string;
     };
   };
+  allSteps: {
+    [key: string]: {
+      id: string;
+      description: string;
+      inputSchema: string;
+      outputSchema: string;
+      resumeSchema: string;
+      suspendSchema: string;
+      isWorkflow: boolean;
+    };
+  };
   stepGraph: Workflow['serializedStepGraph'];
   inputSchema: string;
   outputSchema: string;
@@ -357,6 +368,10 @@ export interface GetVNextNetworkResponse {
     description: string;
     inputSchema: string | undefined;
     outputSchema: string | undefined;
+  }>;
+  tools: Array<{
+    id: string;
+    description: string;
   }>;
 }
 

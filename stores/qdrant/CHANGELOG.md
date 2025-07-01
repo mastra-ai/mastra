@@ -1349,7 +1349,6 @@
 ### Minor Changes
 
 - c87eb4e: Move Qdrant package from `@mastra/vector-qdrant` to `@mastra/qdrant`.
-
   - Move package to `stores/qdrant`
   - Reorganize source files into `src/vector`
   - Add deprecation notice to old package
@@ -1683,7 +1682,6 @@
 ### Minor Changes
 
 - c87eb4e: Move Qdrant package from `@mastra/vector-qdrant` to `@mastra/qdrant`.
-
   - Move package to `stores/qdrant`
   - Reorganize source files into `src/vector`
   - Add deprecation notice to old package

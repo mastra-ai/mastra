@@ -7,7 +7,6 @@ The storage package provides a flexible and extensible storage system for Mastra
 ### Core Components
 
 1. **Base Storage Class (`MastraStorage`)**
-
    - Abstract base class defining the storage interface
    - Handles table initialization and management
    - Provides common storage operations for all implementations
@@ -23,19 +22,16 @@ The storage package provides a flexible and extensible storage system for Mastra
 The storage system manages four primary tables:
 
 1. **Workflow Snapshots** (`workflow_snapshot`)
-
    - Stores workflow state and execution data
    - Uses composite primary key (workflow_name, run_id)
    - Supports JSON serialization for complex state objects
 
 2. **Messages** (`messages`)
-
    - Stores conversation messages
    - Links messages to threads via thread_id
    - Maintains message order via createdAt timestamp
 
 3. **Threads** (`threads`)
-
    - Manages conversation threads
    - Supports metadata storage
    - Tracks creation and update timestamps

@@ -1577,7 +1577,6 @@
 ### Minor Changes
 
 - c87eb4e: Combine PostgreSQL packages into `@mastra/pg`.
-
   - Move and combine packages to `stores/pg`
   - Reorganize source files into `src/vector` and `src/store`
   - Add deprecation notices to old packages
@@ -1911,7 +1910,6 @@
 ### Minor Changes
 
 - c87eb4e: Combine PostgreSQL packages into `@mastra/pg`.
-
   - Move and combine packages to `stores/pg`
   - Reorganize source files into `src/vector` and `src/store`
   - Add deprecation notices to old packages
