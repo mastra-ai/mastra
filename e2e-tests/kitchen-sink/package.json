@@ -18,6 +18,13 @@
     "execa": "^9.5.2",
     "get-port": "^7.1.0",
     "globby": "^14.1.0",
+    "playwright": "^1.53.0",
+    "tsx": "^4.20.3",
+    "verdaccio": "^6.1.2",
+    "verdaccio-auth-memory": "^10.2.2",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
     "npm-cli-login": "^1.0.0",
     "playwright": "^1.53.1",
     "react": "^19.1.0",
@@ -25,7 +32,7 @@
     "tsx": "^4.20.3",
     "verdaccio": "^6.1.2",
     "verdaccio-auth-memory": "^10.2.2",
-    "vitest": "^3.2.2"
+    "vitest": "^3.2.4"
   },
   "pnpm": {
     "overrides": {
