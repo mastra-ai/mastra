@@ -39,12 +39,25 @@ export class AgentVoice extends BaseResource {
   }
 
   /**
-   * Convert text to speech using the agent's voice provider
-   * @param text - Text to convert to speech
-   * @param options - Optional provider-specific options for speech generation
-   * @returns Promise containing the audio data
+   * Converts text to speech using the agent's voice provider.
+   *
+   * @template TSpeakOptions Provider-specific options type (default: Record<string, any>).
+   * You can import and use types from your provider package for full type safety, e.g.:
+   *   import { OpenAISpeakOptions } from 'voice/openai'
+   *   agent.voice.speak<OpenAISpeakOptions>('Hello', { voice: 'alloy', ... })
+   *
+   * @param text The text to be converted to speech.
+   * @param options Provider-specific options for speech generation.
+   * @returns Promise that resolves with the audio data.
+   *
+   * @example
+   * import { OpenAISpeakOptions } from 'voice/openai'
+   * await agent.voice.speak<OpenAISpeakOptions>('Hello', { voice: 'alloy', response_format: 'mp3' })
    */
-  async speak(text: string, options?: { speaker?: string; [key: string]: any }): Promise<Response> {
+  async speak<TSpeakOptions extends Record<string, any> = Record<string, any>>(
+    text: string,
+    options?: TSpeakOptions,
+  ): Promise<Response> {
     return this.request<Response>(`/api/agents/${this.agentId}/voice/speak`, {
       method: 'POST',
       headers: {
@@ -56,12 +69,25 @@ export class AgentVoice extends BaseResource {
   }
 
   /**
-   * Convert speech to text using the agent's voice provider
-   * @param audio - Audio data to transcribe
-   * @param options - Optional provider-specific options
-   * @returns Promise containing the transcribed text
+   * Convert speech to text using the agent's voice provider.
+   *
+   * @template TListenOptions Provider-specific options type (default: Record<string, any>).
+   * You can import and use types from your provider package for full type safety, e.g.:
+   *   import { OpenAIListenOptions } from 'voice/openai'
+   *   agent.voice.listen<OpenAIListenOptions>(audioBlob, { model: 'whisper-1', ... })
+   *
+   * @param audio Audio data to transcribe.
+   * @param options Optional provider-specific options.
+   * @returns Promise containing the transcribed text.
+   *
+   * @example
+   * import { OpenAIListenOptions } from 'voice/openai'
+   * await agent.voice.listen<OpenAIListenOptions>(audioBlob, { model: 'whisper-1' })
    */
-  listen(audio: Blob, options?: Record<string, any>): Promise<{ text: string }> {
+  async listen<TListenOptions extends Record<string, any> = Record<string, any>>(
+    audio: Blob,
+    options?: TListenOptions,
+  ): Promise<{ text: string }> {
     const formData = new FormData();
     formData.append('audio', audio);
 

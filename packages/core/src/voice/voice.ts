@@ -12,21 +12,32 @@ export interface VoiceEventMap {
   [key: string]: unknown;
 }
 
-interface BuiltInModelConfig {
-  name: string;
+export interface VoiceModelConfig<T = unknown> {
+  model?: string;
   apiKey?: string;
+  options?: T;
 }
 
+export type SpeakOptions<
+  T = Record<string, unknown>,
+  TSpeaker extends string | undefined = string | undefined,
+  TFiletype extends string | undefined = string | undefined,
+> = {
+  speaker?: TSpeaker;
+  filetype?: TFiletype;
+} & {
+  [K in keyof T]: T[K];
+};
+
+export type ListenOptions<T = Record<string, unknown>> = {
+  [K in keyof T]: T[K];
+};
+
 export interface VoiceConfig<T = unknown> {
-  listeningModel?: BuiltInModelConfig;
-  speechModel?: BuiltInModelConfig;
-  speaker?: string;
   name?: string;
-  realtimeConfig?: {
-    model?: string;
-    apiKey?: string;
-    options?: T;
-  };
+  speaker?: string;
+  listeningModel?: VoiceModelConfig<T>;
+  speechModel?: VoiceModelConfig<T>;
 }
 
 @InstrumentClass({
@@ -34,23 +45,17 @@ export interface VoiceConfig<T = unknown> {
   excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', '#log'],
 })
 export abstract class MastraVoice<
-  TOptions = unknown,
-  TSpeakOptions = unknown,
-  TListenOptions = unknown,
+  TSpeakOptions = SpeakOptions,
+  TListenOptions = ListenOptions,
   TTools extends ToolsInput = ToolsInput,
   TEventArgs extends VoiceEventMap = VoiceEventMap,
   TSpeakerMetadata = unknown,
 > extends MastraBase {
-  protected listeningModel?: BuiltInModelConfig;
-  protected speechModel?: BuiltInModelConfig;
+  protected listeningModel?: VoiceModelConfig;
+  protected speechModel?: VoiceModelConfig;
   protected speaker?: string;
-  protected realtimeConfig?: {
-    model?: string;
-    apiKey?: string;
-    options?: TOptions;
-  };
 
-  constructor({ listeningModel, speechModel, speaker, realtimeConfig, name }: VoiceConfig<TOptions> = {}) {
+  constructor({ name, speaker, speechModel, listeningModel }: VoiceConfig) {
     super({
       component: 'VOICE',
       name,
@@ -58,7 +63,6 @@ export abstract class MastraVoice<
     this.listeningModel = listeningModel;
     this.speechModel = speechModel;
     this.speaker = speaker;
-    this.realtimeConfig = realtimeConfig;
   }
 
   traced<T extends Function>(method: T, methodName: string): T {
@@ -66,46 +70,34 @@ export abstract class MastraVoice<
       this.telemetry?.traceMethod(method, {
         spanName: `voice.${methodName}`,
         attributes: {
-          'voice.type': this.speechModel?.name || this.listeningModel?.name || 'unknown',
+          'voice.type': this.speechModel?.model || this.listeningModel?.model || 'unknown',
         },
       }) ?? method
     );
   }
 
   /**
-   * Convert text to speech
-   * @param input Text or text stream to convert to speech
-   * @param options Speech options including speaker and provider-specific options
-   * @returns Audio stream
+   * Converts text or a stream into speech audio.
+   *
+   * @param input Text string or readable stream to be synthesized into speech.
+   * @param options Synthesis options, including speaker, file type, and provider-specific parameters.
+   * @returns A readable audio stream, or void if operating in real-time mode.
    */
-  /**
-   * Convert text to speech
-   * @param input Text or text stream to convert to speech
-   * @param options Speech options including speaker and provider-specific options
-   * @returns Audio stream or void if in chat mode
-   */
-  abstract speak(
+  abstract speak<T extends TSpeakOptions = TSpeakOptions>(
     input: string | NodeJS.ReadableStream,
-    options?: {
-      speaker?: string;
-    } & TSpeakOptions,
+    options?: T,
   ): Promise<NodeJS.ReadableStream | void>;
 
   /**
    * Convert speech to text
-   * @param audioStream Audio stream to transcribe
-   * @param options Provider-specific transcription options
-   * @returns Text or text stream
-   */
-  /**
-   * Convert speech to text
+   * @template TOptions Provider-specific options type (default: TListenOptions)
    * @param audioStream Audio stream to transcribe
    * @param options Provider-specific transcription options
    * @returns Text, text stream, or void if in chat mode
    */
-  abstract listen(
+  abstract listen<T extends TListenOptions = TListenOptions>(
     audioStream: NodeJS.ReadableStream | unknown, // Allow other audio input types for OpenAI realtime API
-    options?: TListenOptions,
+    options?: T,
   ): Promise<string | NodeJS.ReadableStream | void>;
 
   updateConfig(_options: Record<string, unknown>): void {
