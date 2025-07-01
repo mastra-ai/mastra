@@ -1,6 +1,6 @@
 import { deepMerge } from '@mastra/core';
 import type { CoreTool, MastraMessageV1 } from '@mastra/core';
-import { MessageList } from '@mastra/core/agent';
+import { MessageList, Message } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
@@ -458,7 +458,7 @@ export class Memory extends MastraMemory {
     // Then strip working memory tags from all messages
     const updatedMessages = messages
       .map(m => {
-        if (MessageList.isMastraMessageV1(m)) {
+        if (Message.isMastraMessageV1(m)) {
           return this.updateMessageToHideWorkingMemory(m);
         }
         // add this to prevent "error saving undefined in the db" if a project is on an earlier storage version but new memory/storage
@@ -480,7 +480,7 @@ export class Memory extends MastraMemory {
         updatedMessages.map(async message => {
           let textForEmbedding: string | null = null;
 
-          if (MessageList.isMastraMessageV2(message)) {
+          if (Message.isMastraMessageV2(message)) {
             if (
               message.content.content &&
               typeof message.content.content === 'string' &&
@@ -496,7 +496,7 @@ export class Memory extends MastraMemory {
                 .trim();
               if (joined) textForEmbedding = joined;
             }
-          } else if (MessageList.isMastraMessageV1(message)) {
+          } else if (Message.isMastraMessageV1(message)) {
             if (message.content && typeof message.content === 'string' && message.content.trim() !== '') {
               textForEmbedding = message.content;
             } else if (message.content && Array.isArray(message.content) && message.content.length > 0) {
