@@ -79,9 +79,8 @@ export function AgentSidebar({
           </ThreadItem>
 
           {reverseThreads.length === 0 && (
-            <Txt as="p" variant="ui-sm" className="text-icon3 py-3 px-5">
-              Your conversations will appear here
-              <br /> once you start chatting!
+            <Txt as="p" variant="ui-sm" className="text-icon3 py-3 px-5 max-w-[12rem]">
+              Your conversations will appear here once you start chatting!
             </Txt>
           )}
 
@@ -91,7 +90,7 @@ export function AgentSidebar({
             return (
               <ThreadItem isActive={isActive} key={thread.id}>
                 <ThreadLink as={Link} to={`/agents/${agentId}/chat/${thread.id}`}>
-                  <span className="text-muted-foreground">Chat from</span>
+                  <ThreadTitle title={thread.title} />
                   <span>{formatDay(thread.createdAt)}</span>
                 </ThreadLink>
 
@@ -118,4 +117,21 @@ export function AgentSidebar({
       </AlertDialog>
     </div>
   );
+}
+
+function isDefaultThreadName(name: string): boolean {
+  const defaultPattern = /^New Thread \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
+  return defaultPattern.test(name);
+}
+
+function ThreadTitle({ title }: { title?: string }) {
+  if (!title) {
+    return null;
+  }
+
+  if (isDefaultThreadName(title)) {
+    return <span className="text-muted-foreground">Chat from</span>;
+  }
+
+  return <span className="truncate max-w-[14rem]">{title}</span>;
 }

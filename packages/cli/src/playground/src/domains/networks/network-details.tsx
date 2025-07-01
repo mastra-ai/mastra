@@ -3,15 +3,14 @@ import { Brain, ChevronDown, RefreshCw } from 'lucide-react';
 import { Agent } from '@/components/ui/agent-logo';
 import { GetNetworkResponse, GetVNextNetworkResponse } from '@mastra/client-js';
 import { useContext } from 'react';
-import { NetworkContext, ToolsIcon, Txt, WorkflowIcon } from '@mastra/playground-ui';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Entry } from '@/components/ui/entry';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+
+import { RadioGroup, RadioGroupItem, Entry, NetworkContext, ToolsIcon, Txt, WorkflowIcon } from '@mastra/playground-ui';
 
 type NetworkDetailsProps = {
   network: GetNetworkResponse | GetVNextNetworkResponse;

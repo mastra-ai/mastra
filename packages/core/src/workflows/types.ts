@@ -124,7 +124,7 @@ export type StreamEvent =
       id: string;
     };
 
-export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending';
+export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
 
 export type WatchEvent = {
   type: 'watch';
