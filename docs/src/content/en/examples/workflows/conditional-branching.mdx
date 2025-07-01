@@ -345,7 +345,7 @@ Here, we'll get the activity planning workflow from the mastra instance, then cr
 import { mastra } from "./";
 
 const workflow = mastra.getWorkflow("activityPlanningWorkflow");
-const run = workflow.createRun();
+const run = await workflow.createRunAsync();
 
 // Start the workflow with a city
 // This will fetch weather and plan activities based on conditions

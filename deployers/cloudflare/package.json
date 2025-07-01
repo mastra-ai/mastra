@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.10.7-alpha.1",
+  "version": "0.10.8",
   "description": "",
   "type": "module",
   "files": [
@@ -44,9 +44,9 @@
     "@babel/core": "^7.27.4",
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
-    "cloudflare": "^4.3.0",
+    "cloudflare": "^4.4.1",
     "rollup": "^4.43.0",
-    "zod": "^3.25.57"
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

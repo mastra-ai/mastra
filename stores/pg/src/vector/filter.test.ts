@@ -54,7 +54,7 @@ describe('PGFilterTranslator', () => {
         translator.translate({
           nested: {
             field: 'value',
-          },
+          } as any,
         }),
       ).toEqual({
         'nested.field': { $eq: 'value' },
@@ -634,7 +634,7 @@ describe('PGFilterTranslator', () => {
 
     it('throws error for $not if not an object', () => {
       expect(() => translator.translate({ $not: 'value' })).toThrow();
-      expect(() => translator.translate({ $not: [{ field: 'value' }] })).toThrow();
+      expect(() => translator.translate({ $not: [{ field: 'value' }] } as any)).toThrow();
     });
     it('throws error for $not if empty', () => {
       expect(() => translator.translate({ $not: {} })).toThrow();
@@ -645,21 +645,21 @@ describe('PGFilterTranslator', () => {
       // $and cannot be used in field conditions
       expect(() =>
         translator.translate({
-          field: { $and: [{ $eq: 'value1' }, { $eq: 'value2' }] },
+          field: { $and: [{ $eq: 'value1' }, { $eq: 'value2' }] } as any,
         }),
       ).toThrow();
 
       // $or cannot be used in field conditions
       expect(() =>
         translator.translate({
-          field: { $or: [{ $eq: 'value1' }, { $eq: 'value2' }] },
+          field: { $or: [{ $eq: 'value1' }, { $eq: 'value2' }] } as any,
         }),
       ).toThrow();
 
       // $nor cannot be used in field conditions
       expect(() =>
         translator.translate({
-          field: { $nor: [{ $eq: 'value1' }, { $eq: 'value2' }] },
+          field: { $nor: [{ $eq: 'value1' }, { $eq: 'value2' }] } as any,
         }),
       ).toThrow();
     });
@@ -710,7 +710,7 @@ describe('PGFilterTranslator', () => {
             $gt: {
               $or: [{ subfield: 'value1' }, { subfield: 'value2' }],
             },
-          },
+          } as any,
         }),
       ).toThrow();
 
@@ -721,7 +721,7 @@ describe('PGFilterTranslator', () => {
             $in: [
               {
                 $and: [{ subfield: 'value1' }, { subfield: 'value2' }],
-              },
+              } as any,
             ],
           },
         }),
@@ -730,7 +730,7 @@ describe('PGFilterTranslator', () => {
 
     it('validates $not operator structure', () => {
       // $not must be an object
-      expect(() => translator.translate({ field: { $not: 'value' } })).toThrow();
+      expect(() => translator.translate({ field: { $not: 'value' } } as any)).toThrow();
       expect(() => translator.translate({ field: { $not: ['value'] } })).toThrow();
       expect(() => translator.translate({ $not: 'value' })).toThrow();
       expect(() => translator.translate({ $not: ['value'] })).toThrow();
@@ -790,7 +790,7 @@ describe('PGFilterTranslator', () => {
     });
 
     it('throws error for non-logical operators at top level', () => {
-      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
+      const invalidFilters: any = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $eq: true }];
 
       invalidFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);
@@ -808,13 +808,13 @@ describe('PGFilterTranslator', () => {
       // Should throw for non-object values
       expect(() =>
         translator.translate({
-          field: { $elemMatch: 'value' },
+          field: { $elemMatch: 'value' } as any,
         }),
       ).toThrow('$elemMatch requires an object with conditions');
 
       expect(() =>
         translator.translate({
-          field: { $elemMatch: ['value'] },
+          field: { $elemMatch: ['value'] } as any,
         }),
       ).toThrow('$elemMatch requires an object with conditions');
     });
@@ -917,7 +917,7 @@ describe('PGFilterTranslator', () => {
         translator.translate({
           nested: {
             field: { $regex: 'pattern', $options: 'i' },
-          },
+          } as any,
         }),
       ).toEqual({
         'nested.field': { $regex: '(?i)pattern' },

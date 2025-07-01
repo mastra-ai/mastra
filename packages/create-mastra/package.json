@@ -1,6 +1,6 @@
 {
   "name": "create-mastra",
-  "version": "0.10.6-alpha.1",
+  "version": "0.10.7",
   "description": "Create Mastra apps with one command",
   "license": "Elastic-2.0",
   "type": "module",
@@ -47,7 +47,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@rollup/plugin-commonjs": "^28.0.5",
+    "@rollup/plugin-commonjs": "^28.0.6",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@types/fs-extra": "^11.0.4",
@@ -57,7 +57,7 @@
     "mastra": "workspace:^",
     "rollup": "^4.42.0",
     "rollup-plugin-esbuild": "^6.2.1",
-    "rollup-plugin-node-externals": "^8.0.0",
+    "rollup-plugin-node-externals": "^8.0.1",
     "typescript": "^5.8.3"
   },
   "engines": {

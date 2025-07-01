@@ -132,7 +132,7 @@ Here, we'll get the increment workflow from the mastra instance, then create a r
 import { mastra } from "./";
 
 const workflow = mastra.getWorkflow("incrementWorkflow");
-const run = workflow.createRun();
+const run = await workflow.createRunAsync();
 
 // Start the workflow with initial value 0
 // This will increment until reaching 10

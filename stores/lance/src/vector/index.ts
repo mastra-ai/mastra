@@ -15,7 +15,7 @@ import type {
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 import { MastraVector } from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
+import type { LanceVectorFilter } from './filter';
 import { LanceFilterTranslator } from './filter';
 import type { IndexConfig } from './types';
 
@@ -33,13 +33,13 @@ interface LanceUpsertVectorParams extends UpsertVectorParams {
   tableName: string;
 }
 
-interface LanceQueryVectorParams extends QueryVectorParams {
+interface LanceQueryVectorParams extends QueryVectorParams<LanceVectorFilter> {
   tableName: string;
   columns?: string[];
   includeAllColumns?: boolean;
 }
 
-export class LanceVectorStore extends MastraVector {
+export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
   private lanceClient!: Connection;
 
   /**
@@ -204,7 +204,7 @@ export class LanceVectorStore extends MastraVector {
     }
   }
 
-  private filterTranslator(filter: VectorFilter): string {
+  private filterTranslator(filter: LanceVectorFilter): string {
     // Add metadata_ prefix to filter keys if they don't already have it
     const processFilterKeys = (filterObj: Record<string, any>): Record<string, any> => {
       const result: Record<string, any> = {};

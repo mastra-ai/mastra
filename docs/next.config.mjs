@@ -318,6 +318,11 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/deployment/deployment",
+        destination: "/docs/deployment/serverless-platforms",
+        permanent: true,
+      },
+      {
         source: "/docs/deployment/client",
         destination: "/docs/client-js/overview",
         permanent: true,
@@ -966,6 +971,13 @@ export default withGT(
       {
         source: "/:locale/reference/rag/vector-search",
         destination: "/:locale/examples/rag/query/hybrid-vector-search",
+        permanent: true,
+      },
+
+      // redirect overview pages
+      {
+        source: "/:locale/docs/frameworks/agentic-uis",
+        destination: "/:locale/docs/frameworks/agentic-uis/ai-sdk",
         permanent: true,
       },
     ],

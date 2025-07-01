@@ -24,7 +24,11 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
 
     if (!isWebContainer()) {
       const instrumentation = import.meta.resolve('@opentelemetry/instrumentation/hook.mjs');
-      commands.push('--import=./instrumentation.mjs', `--import=${instrumentation}`);
+      commands.push(
+        `--import=${import.meta.resolve('mastra/telemetry-loader')}`,
+        '--import=./instrumentation.mjs',
+        `--import=${instrumentation}`,
+      );
     }
 
     commands.push('index.mjs');

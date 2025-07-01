@@ -157,12 +157,12 @@ With the Mastra Dev Server running you can run the workflow from the Mastra Play
 
 #### Command line
 
-Create a run instance of any Mastra workflow using `createRun` and `start`:
+Create a run instance of any Mastra workflow using `createRunAsync` and `start`:
 
 ```typescript {3,5} filename="src/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
-const run = mastra.getWorkflow("testWorkflow").createRun();
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 const result = await run.start({
   inputData: {
@@ -172,7 +172,7 @@ const result = await run.start({
 
 console.log(JSON.stringify(result, null, 2));
 ```
-> see [createRun](/reference/workflows/create-run) and [start](/reference/workflows/start) for more information.
+> see [createRunAsync](/reference/workflows/create-run-async) and [start](/reference/workflows/start) for more information.
 
 To trigger this workflow, run the following:
 
@@ -182,6 +182,74 @@ npx tsx src/test-workflow.ts
 
 </Steps>
 
+#### Run Workflow Results
+
+The result of running a workflow using either `start()` or `resume()` will look like one of the following, depending on the outcome.
+
+##### Status success
+
+```json
+{
+  "status": "success",
+  "steps": {
+    // ...
+    "step-1": {
+      // ...
+      "status": "success",
+    }
+  },
+  "result": {
+    "output": "London + step-1"
+  }
+}
+```
+
+- **status**: Shows the final state of the workflow execution, either: `success`, `suspended`, or `error`
+- **steps**: Lists each step in the workflow, including inputs and outputs
+- **status**: Shows the outcome of each individual step
+- **result**: Includes the final output of the workflow, typed according to the `outputSchema`
+
+
+##### Status suspended
+
+```json
+{
+  "status": "suspended",
+  "steps": {
+    // ...
+    "step-1": {
+      // ...
+      "status": "suspended",
+    }
+  },
+  "suspended": [
+    [
+      "step-1"
+    ]
+  ]
+}
+```
+
+- **suspended**: An optional array listing any steps currently awaiting input before continuing
+
+##### Status failed
+
+```json
+{
+  "status": "failed",
+  "steps": {
+    // ...
+    "step-1": {
+      // ...
+      "status": "failed",
+      "error": "Test error",
+    }
+  },
+  "error": "Test error"
+}
+```
+- **error**: An optional field that includes the error message if the workflow fails
+
 ### Stream Workflow
 
 Similar to the run method shown above, workflows can also be streamed:
@@ -189,7 +257,7 @@ Similar to the run method shown above, workflows can also be streamed:
 ```typescript {5} filename="src/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
-const run = mastra.getWorkflow("testWorkflow").createRun();
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 const result = await run.stream({
   inputData: {
@@ -211,7 +279,7 @@ A workflow can also be watched, allowing you to inspect each event that is emitt
 ```typescript {5} filename="src/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
-const run = mastra.getWorkflow("testWorkflow").createRun();
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
 run.watch((event) => {
   console.log(event);

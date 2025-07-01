@@ -323,7 +323,7 @@ describe('Unit Testing CouchbaseVector', () => {
       expect(mockGetIndexFn).toHaveResolved();
 
       expect(stats.dimension).toBe(dimension);
-      expect(stats.metric).toBe('euclidean'); // similiarity(=="l2_norm") is mapped to euclidean in couchbase
+      expect(stats.metric).toBe('euclidean'); // similarity(=="l2_norm") is mapped to euclidean in couchbase
       expect(typeof stats.count).toBe('number');
     }, 50000);
 

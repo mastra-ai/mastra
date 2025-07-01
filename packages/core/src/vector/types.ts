@@ -32,11 +32,11 @@ export interface CreateIndexParams {
   metric?: 'cosine' | 'euclidean' | 'dotproduct';
 }
 
-export interface QueryVectorParams {
+export interface QueryVectorParams<Filter = VectorFilter> {
   indexName: string;
   queryVector: number[];
   topK?: number;
-  filter?: VectorFilter;
+  filter?: Filter;
   includeVector?: boolean;
 }
 

@@ -55,7 +55,7 @@ Each tab includes detailed column information with types, constraints, and examp
 The data types include Messages, Threads, Workflows, Eval Datasets, and Traces.
 */}
 
-<Tabs items={['Messages', 'Threads', 'Workflows', 'Eval Datasets', 'Traces']}>
+<Tabs items={['Messages', 'Threads', 'Resources', 'Workflows', 'Eval Datasets', 'Traces']}>
   <Tabs.Tab>
 Stores conversation messages and their metadata. Each message belongs to a thread and contains the actual content along with metadata about the sender role and message type.
 
@@ -211,6 +211,55 @@ Groups related messages together and associates them with a resource. Contains m
     }
   ]}
 />
+
+</Tabs.Tab>
+  <Tabs.Tab>
+Stores user-specific data for resource-scoped working memory. Each resource represents a user or entity, allowing working memory to persist across all conversation threads for that user.
+
+<br />
+<SchemaTable
+  columns={[
+    {
+      name: "id",
+      type: "text",
+      description: "Resource identifier (user or entity ID) - same as resourceId used in threads and agent calls",
+      constraints: [
+        { type: "primaryKey" },
+        { type: "nullable", value: false }
+      ]
+    },
+    {
+      name: "workingMemory",
+      type: "text",
+      description: "Persistent working memory data as Markdown text. Contains user profile, preferences, and contextual information that persists across conversation threads.",
+      constraints: [{ type: "nullable", value: true }]
+    },
+    {
+      name: "metadata",
+      type: "jsonb",
+      description: "Additional resource metadata as JSON. Example:",
+      example: {
+        preferences: { language: "en", timezone: "UTC" },
+        tags: ["premium", "beta-user"]
+      },
+      constraints: [{ type: "nullable", value: true }]
+    },
+    {
+      name: "createdAt",
+      type: "timestamp",
+      description: "When the resource record was first created",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "updatedAt",
+      type: "timestamp",
+      description: "When the working memory was last updated",
+      constraints: [{ type: "nullable", value: false }]
+    }
+  ]}
+/>
+
+**Note**: This table is only created and used by storage adapters that support resource-scoped working memory (LibSQL, PostgreSQL, Upstash). Other storage adapters will provide helpful error messages if resource-scoped memory is attempted.
 
 </Tabs.Tab>
   <Tabs.Tab>

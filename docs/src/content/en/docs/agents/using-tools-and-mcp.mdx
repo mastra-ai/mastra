@@ -75,8 +75,6 @@ Once you have a server you want to use with your agent, import the Mastra `MCPCl
 
 ```typescript filename="src/mastra/mcp.ts" {1,7-16}
 import { MCPClient } from "@mastra/mcp";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 
 // Configure MCPClient to connect to your server(s)
 export const mcp = new MCPClient({
@@ -96,7 +94,10 @@ export const mcp = new MCPClient({
 Then connect your agent to the server tools:
 
 ```typescript filename="src/mastra/agents/mcpAgent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 import { mcp } from "../mcp";
+
 // Create an agent and add tools from the MCP client
 const agent = new Agent({
   name: "Agent with MCP Tools",

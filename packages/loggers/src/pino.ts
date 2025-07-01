@@ -16,6 +16,7 @@ export class PinoLogger extends MastraLogger {
       level?: LogLevel;
       transports?: TransportMap;
       overrideDefaultTransports?: boolean;
+      formatters?: pino.LoggerOptions['formatters'];
     } = {},
   ) {
     super(options);
@@ -37,9 +38,7 @@ export class PinoLogger extends MastraLogger {
       {
         name: options.name || 'app',
         level: options.level || LogLevel.INFO,
-        formatters: {
-          level: (label: string) => ({ level: label }),
-        },
+        formatters: options.formatters,
       },
       options.overrideDefaultTransports
         ? options?.transports?.default

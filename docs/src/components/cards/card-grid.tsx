@@ -3,9 +3,7 @@ import Link from "next/link";
 
 export const CardGrid = ({ children }: { children: React.ReactNode }) => {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 content-stretch gap-4 py-4">
-      {children}
-    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 py-4">{children}</div>
   );
 };
 
@@ -19,16 +17,13 @@ export const CardGridItem = ({
   href: string;
 }) => {
   return (
-    <div className="relative isolate">
-      <Card className="h-full">
-        <Link href={href}>
-          <span className="absolute inset-0 z-10" />
-          <CardHeader>
-            <CardTitle>{title}</CardTitle>
-          </CardHeader>
-        </Link>
-        <CardContent>{description}</CardContent>
-      </Card>
-    </div>
+    <Card className="h-full shadow-none dark:border-[var(--border)] border-[var(--light-border-muted)]">
+      <Link href={href}>
+        <CardHeader>
+          <CardTitle className="text-lg">{title}</CardTitle>
+        </CardHeader>
+      </Link>
+      <CardContent className="text-sm">{description}</CardContent>
+    </Card>
   );
 };

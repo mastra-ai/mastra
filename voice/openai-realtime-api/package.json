@@ -40,7 +40,7 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^2.1.9",
-    "zod": "^3.25.57"
+    "zod": "^3.25.67"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.0-alpha.0",
