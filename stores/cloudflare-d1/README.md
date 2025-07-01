@@ -63,7 +63,7 @@ const store = new D1Store({
   client: {
     query: ({ sql, params }) => {
       // do something
-    }
+    },
   },
   tablePrefix: 'mastra_', // optional
 });
