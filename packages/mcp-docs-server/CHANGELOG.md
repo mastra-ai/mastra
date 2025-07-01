@@ -1,5 +1,28 @@
 # @mastra/mcp-docs-server
 
+## 0.13.3
+
+### Patch Changes
+
+- 07c7e7e: Slimmed down the number of tokens in each code example by removing extra keys from package.json files and adding an mcp docs config file into code examples to intentionally exclude some files - for ex the agent-network example went from 1300 LOC to 300
+- f043a63: Update transaction tool to use csv format
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9
+
 ## 0.13.3-alpha.0
 
 ### Patch Changes
