@@ -676,18 +676,20 @@ export class Agent extends BaseResource {
                 // write the tool result part to the stream
                 const writer = writable.getWriter();
 
-                await writer.write(
-                  new TextEncoder().encode(
-                    'a:' +
-                      JSON.stringify({
-                        toolCallId: toolCall.toolCallId,
-                        result,
-                      }) +
-                      '\n',
-                  ),
-                );
-
-                writer.releaseLock();
+                try {
+                  await writer.write(
+                    new TextEncoder().encode(
+                      'a:' +
+                        JSON.stringify({
+                          toolCallId: toolCall.toolCallId,
+                          result,
+                        }) +
+                        '\n',
+                    ),
+                  );
+                } finally {
+                  writer.releaseLock();
+                }
 
                 // Convert messages to the correct format for the recursive call
                 const originalMessages = processedParams.messages;
