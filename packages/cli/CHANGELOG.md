@@ -1,5 +1,44 @@
 # mastra
 
+## 0.10.9-alpha.0
+
+### Patch Changes
+
+- 4e06e3f: timing not displayed correctly in traces
+- 7e801dd: [MASTRA-4118] fixes issue with agent network loopStream where subsequent messages aren't present in playground on refresh
+- d093c1e: Update example workflow to use existing weather agent
+- a606c75: show right suspend schema for nested workflow on playground
+- 1cbdfd0: update create-mastra gemini model to 2.5
+- 1760a1c: Use workflow stream in playground instead of watch
+- 038e5ae: Add cancel workflow run
+- ac369c6: Show resume data on workflow graph
+- 91c43b4: Use process.execPath for node in dev
+- 976a62b: remove persistence capabilities in model settings components
+- 4e809ad: Visualizations for .sleep()/.sleepUntil()/.waitForEvent()
+- f78f399: Make AgentModelSettings shareable between cloud and playground
+- 57929df: agent network display
+- Updated dependencies [9dda1ac]
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [6f87544]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [81a1b3b]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [7e801dd]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9-alpha.0
+  - @mastra/deployer@0.10.9-alpha.0
+
 ## 0.10.8
 
 ### Patch Changes
