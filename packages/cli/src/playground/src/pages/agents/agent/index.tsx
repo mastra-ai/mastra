@@ -1,4 +1,4 @@
-import { AgentProvider, AgentChat as Chat, MainContentContent } from '@mastra/playground-ui';
+import { AgentSettingsProvider, AgentChat as Chat, MainContentContent } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
@@ -43,7 +43,7 @@ function Agent() {
   const withSidebar = Boolean(memory?.result);
 
   return (
-    <AgentProvider
+    <AgentSettingsProvider
       agentId={agentId!}
       defaultGenerateOptions={agent?.defaultGenerateOptions}
       defaultStreamOptions={agent?.defaultStreamOptions}
@@ -67,7 +67,7 @@ function Agent() {
 
         <AgentInformation agentId={agentId!} />
       </MainContentContent>
-    </AgentProvider>
+    </AgentSettingsProvider>
   );
 }
 

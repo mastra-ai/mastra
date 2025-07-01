@@ -42,6 +42,14 @@ In your Cloudflare dashboard, navigate to **Profile** > **API Tokens**, then sel
 
 > To learn how to create a Cloudflare API token, see [Create API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/) in the Cloudflare docs.
 
+## Continuous integration
+In the Cloudflare dashboard, navigate to **Workers** > **Import a repository**. After importing your Mastra project's Git repository, create an application and configure the build settings with:
+
+- **Build command**: `npm run build`
+- **Deploy command**: `cd .mastra/output && npx wrangler deploy`
+
+- **Build command**: `npm run build` (optional)
+
 ## Manual deployment
 
 Manual deployments are also possible using the [Cloudflare Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/). With the Wrangler CLI installed run the following from your project root to deploy your application.
@@ -51,6 +59,21 @@ npm run build && wrangler deploy --config .mastra/output/wrangler.json
 ```
 
 > You can also run `wrangler dev --config .mastra/output/wrangler.json` from your project root to test your Mastra application locally.
+
+## Cloudflare secrets
+
+To add secrets to your Cloudflare Workers application, use the Wrangler CLI. Secrets are environment variables that are encrypted and stored securely.
+
+
+For example, to add an API key:
+
+```bash copy
+npx wrangler secret put OPENAI_API_KEY
+```
+
+When prompted, enter the secret value. The secret will be encrypted and stored securely in your Cloudflare account.
+
+> For more details on managing secrets, see [Environment Variables and Secrets](https://developers.cloudflare.com/workers/configuration/secrets/) in the Cloudflare documentation.
 
 ## Build output
 

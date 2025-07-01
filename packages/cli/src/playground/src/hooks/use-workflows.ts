@@ -579,3 +579,19 @@ export const useResumeWorkflow = () => {
     resumeWorkflow,
   };
 };
+
+export const useCancelWorkflowRun = () => {
+  const cancelWorkflowRun = useMutation({
+    mutationFn: async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
+      try {
+        const response = await client.getWorkflow(workflowId).cancelRun(runId);
+        return response;
+      } catch (error) {
+        console.error('Error canceling workflow run:', error);
+        throw error;
+      }
+    },
+  });
+
+  return cancelWorkflowRun;
+};

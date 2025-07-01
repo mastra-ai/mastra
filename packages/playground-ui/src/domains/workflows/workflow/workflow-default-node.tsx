@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { CircleDashed, Loader2, PauseIcon } from 'lucide-react';
+import { CircleDashed, HourglassIcon, Loader2, PauseIcon } from 'lucide-react';
 import { useCurrentRun } from '../context/use-current-run';
 import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
@@ -16,6 +16,9 @@ export type DefaultNode = Node<
     withoutTopHandle?: boolean;
     withoutBottomHandle?: boolean;
     mapConfig?: string;
+    event?: string;
+    duration?: number;
+    date?: Date;
   },
   'default-node'
 >;
@@ -31,7 +34,7 @@ export function WorkflowDefaultNode({
   parentWorkflowName,
 }: NodeProps<DefaultNode> & WorkflowDefaultNodeProps) {
   const { steps, isRunning, runId } = useCurrentRun();
-  const { label, description, withoutTopHandle, withoutBottomHandle, mapConfig } = data;
+  const { label, description, withoutTopHandle, withoutBottomHandle, mapConfig, event, duration, date } = data;
 
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
 
@@ -46,6 +49,8 @@ export function WorkflowDefaultNode({
           'bg-surface3 rounded-lg w-[274px] border-sm border-border1 pt-2',
           step?.status === 'success' && 'ring-2 ring-accent1',
           step?.status === 'failed' && 'ring-2 ring-accent2',
+          step?.status === 'suspended' && 'ring-2 ring-accent3',
+          step?.status === 'waiting' && 'ring-2 ring-accent5',
         )}
       >
         <div className={cn('flex items-center gap-2 px-3', !description && 'pb-2')}>
@@ -53,7 +58,8 @@ export function WorkflowDefaultNode({
             <Icon>
               {step?.status === 'failed' && <CrossIcon className="text-accent2" />}
               {step?.status === 'success' && <CheckIcon className="text-accent1" />}
-              {step?.status === 'suspended' && <PauseIcon className="text-icon3" />}
+              {step?.status === 'suspended' && <PauseIcon className="text-accent3" />}
+              {step?.status === 'waiting' && <HourglassIcon className="text-accent5" />}
               {step?.status === 'running' && <Loader2 className="text-icon6 animate-spin" />}
               {!step && <CircleDashed className="text-icon2" />}
             </Icon>
@@ -66,6 +72,23 @@ export function WorkflowDefaultNode({
         {description && (
           <Txt variant="ui-sm" className="text-icon3 px-3 pb-2">
             {description}
+          </Txt>
+        )}
+
+        {event && (
+          <Txt variant="ui-sm" className="text-icon3 px-3 pb-2">
+            waits for event: <strong>{event}</strong>
+          </Txt>
+        )}
+        {duration && (
+          <Txt variant="ui-sm" className="text-icon3 px-3 pb-2">
+            sleeps for <strong>{duration}ms</strong>
+          </Txt>
+        )}
+
+        {date && (
+          <Txt variant="ui-sm" className="text-icon3 px-3 pb-2">
+            sleeps until <strong>{new Date(date).toLocaleString()}</strong>
           </Txt>
         )}
 

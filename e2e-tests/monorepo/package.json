@@ -13,7 +13,7 @@
     "vitest": "^3.2.3"
   },
   "scripts": {
-    "test": "vitest"
+    "test": "vitest run"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
