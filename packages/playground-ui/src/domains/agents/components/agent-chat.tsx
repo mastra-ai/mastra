@@ -2,8 +2,7 @@ import { Thread } from '@/components/assistant-ui/thread';
 
 import { MastraRuntimeProvider } from '@/services/mastra-runtime-provider';
 import { ChatProps } from '@/types';
-import { useContext } from 'react';
-import { AgentContext } from './context/agent-context';
+import { useAgentSettings } from '../context/agent-context';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 export const AgentChat = ({
@@ -15,7 +14,7 @@ export const AgentChat = ({
   refreshThreadList,
   showFileSupport,
 }: ChatProps) => {
-  const { modelSettings, chatWithGenerate } = useContext(AgentContext);
+  const { modelSettings, chatWithGenerate } = useAgentSettings();
   const { runtimeContext } = usePlaygroundStore();
   return (
     <MastraRuntimeProvider
