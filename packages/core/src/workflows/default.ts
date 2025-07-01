@@ -1196,6 +1196,42 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
       execResults = { ...stepInfo, status: 'success', output: prevOutput };
       stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
+      await emitter.emit('watch', {
+        type: 'watch',
+        payload: {
+          currentStep: {
+            id: entry.id,
+            ...execResults,
+          },
+          workflowState: {
+            status: 'running',
+            steps: {
+              ...stepResults,
+              [entry.id]: {
+                ...execResults,
+              },
+            },
+            result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: Date.now(),
+      });
+      await emitter.emit('watch-v2', {
+        type: 'step-result',
+        payload: {
+          id: entry.id,
+          ...execResults,
+        },
+      });
+
+      await emitter.emit('watch-v2', {
+        type: 'step-finish',
+        payload: {
+          id: entry.id,
+          metadata: {},
+        },
+      });
     } else if (entry.type === 'sleepUntil') {
       const startedAt = Date.now();
       await emitter.emit('watch', {
@@ -1262,6 +1298,43 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
       execResults = { ...stepInfo, status: 'success', output: prevOutput };
       stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
+
+      await emitter.emit('watch', {
+        type: 'watch',
+        payload: {
+          currentStep: {
+            id: entry.id,
+            ...execResults,
+          },
+          workflowState: {
+            status: 'running',
+            steps: {
+              ...stepResults,
+              [entry.id]: {
+                ...execResults,
+              },
+            },
+            result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: Date.now(),
+      });
+      await emitter.emit('watch-v2', {
+        type: 'step-result',
+        payload: {
+          id: entry.id,
+          ...execResults,
+        },
+      });
+
+      await emitter.emit('watch-v2', {
+        type: 'step-finish',
+        payload: {
+          id: entry.id,
+          metadata: {},
+        },
+      });
     } else if (entry.type === 'waitForEvent') {
       const startedAt = Date.now();
       let eventData: any;
