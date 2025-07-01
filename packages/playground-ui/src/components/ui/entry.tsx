@@ -1,4 +1,4 @@
-import { Txt } from '@mastra/playground-ui';
+import { Txt } from '@/ds/components/Txt/Txt';
 import { ReactNode } from 'react';
 
 export interface EntryProps {
