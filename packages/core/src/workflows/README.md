@@ -562,7 +562,6 @@ export type WorkflowResult<...> =
 ### Result Properties Explained
 
 1. **status**: Indicates the final state of the workflow execution
-
    - `'success'`: Workflow completed successfully
    - `'failed'`: Workflow encountered an error
    - `'suspended'`: Workflow is paused waiting for user input
@@ -572,7 +571,6 @@ export type WorkflowResult<...> =
 3. **suspended**: Optional array of step IDs that are currently suspended. Only present when `status` is `'suspended'`
 
 4. **steps**: A record containing the results of all executed steps
-
    - Keys are step IDs
    - Values are `StepResult` objects containing the step's output
    - Type-safe based on each step's `outputSchema`
