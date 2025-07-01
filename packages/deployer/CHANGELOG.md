@@ -1,5 +1,38 @@
 # @mastra/deployer
 
+## 0.10.9
+
+### Patch Changes
+
+- 9dda1ac: dependencies updates:
+  - Updated dependency [`hono@^4.8.3` ↗︎](https://www.npmjs.com/package/hono/v/4.8.3) (from `^4.7.11`, in `dependencies`)
+- 038e5ae: Add cancel workflow run
+- 6f87544: Added support for individual tool calling in cloudflare
+
+  We're now bundling tools differently to make it compatible with other node runtimes
+
+- 81a1b3b: Update peerdeps
+- 7e801dd: Add tools to network api response
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [81a1b3b]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [7e801dd]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9
+  - @mastra/server@0.10.9
+
 ## 0.10.9-alpha.0
 
 ### Patch Changes
