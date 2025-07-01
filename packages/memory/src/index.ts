@@ -40,7 +40,7 @@ export class Memory extends MastraMemory {
     this.checkStorageFeatureSupport(mergedConfig);
   }
 
-  private async validateThreadIsOwnedByResource(threadId: string, resourceId: string) {
+  protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string) {
     const thread = await this.storage.getThreadById({ threadId });
     if (!thread) {
       throw new Error(`No thread found with id ${threadId}`);
@@ -52,7 +52,7 @@ export class Memory extends MastraMemory {
     }
   }
 
-  private checkStorageFeatureSupport(config: MemoryConfig) {
+  protected checkStorageFeatureSupport(config: MemoryConfig) {
     if (
       typeof config.semanticRecall === `object` &&
       config.semanticRecall.scope === `resource` &&
@@ -359,7 +359,7 @@ export class Memory extends MastraMemory {
     }
   }
 
-  private chunkText(text: string, tokenSize = 4096) {
+  protected chunkText(text: string, tokenSize = 4096) {
     // Convert token size to character size with some buffer
     const charSize = tokenSize * CHARS_PER_TOKEN;
     const chunks: string[] = [];
@@ -401,7 +401,7 @@ export class Memory extends MastraMemory {
     }
   >();
   private firstEmbed: Promise<any> | undefined;
-  private async embedMessageContent(content: string) {
+  protected async embedMessageContent(content: string) {
     // use fast xxhash for lower memory usage. if we cache by content string we will store all messages in memory for the life of the process
     const key = (await this.hasher).h32(content);
     const cached = this.embeddingCache.get(key);
@@ -720,7 +720,7 @@ export class Memory extends MastraMemory {
 - **Projects**: 
 `;
 
-  private getWorkingMemoryToolInstruction({
+  protected getWorkingMemoryToolInstruction({
     template,
     data,
   }: {
