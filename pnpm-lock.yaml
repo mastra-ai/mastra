@@ -508,7 +508,7 @@ importers:
         specifier: ^29.5.14
         version: 29.5.14
       '@types/lodash':
-        specifier: ^4.17.17
+        specifier: ^4.17.19
         version: 4.17.19
       '@types/node':
         specifier: ^20.17.57
@@ -572,7 +572,7 @@ importers:
         specifier: ^29.5.14
         version: 29.5.14
       '@types/lodash':
-        specifier: ^4.17.17
+        specifier: ^4.17.19
         version: 4.17.19
       '@types/node':
         specifier: ^20.17.57
@@ -673,7 +673,7 @@ importers:
         specifier: ^29.5.14
         version: 29.5.14
       '@types/lodash':
-        specifier: ^4.17.17
+        specifier: ^4.17.19
         version: 4.17.19
       '@types/node':
         specifier: ^20.17.57
@@ -30205,7 +30205,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.10.0)
+      retry-axios: 2.6.0(axios@1.10.0(debug@4.4.1))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -33533,7 +33533,7 @@ snapshots:
       onetime: 7.0.0
       signal-exit: 4.1.0
 
-  retry-axios@2.6.0(axios@1.10.0):
+  retry-axios@2.6.0(axios@1.10.0(debug@4.4.1)):
     dependencies:
       axios: 1.10.0(debug@4.4.1)
 
