@@ -9,11 +9,12 @@ export function handleError(error: unknown, defaultMessage: string): Promise<Res
   const apiError = error as ApiError;
   throw new HTTPException((apiError.status || 500) as ContentfulStatusCode, {
     message: apiError.message || defaultMessage,
+    cause: apiError.cause,
   });
 }
 export function errorHandler(err: Error, c: Context): Response {
   if (err instanceof HTTPException) {
-    return c.json({ error: err.message }, err.status);
+    return c.json({ error: err.message, cause: err.cause, stack: err.stack }, err.status);
   }
 
   console.error(err);

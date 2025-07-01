@@ -8,5 +8,7 @@ export function handleError(error: unknown, defaultMessage: string): never {
 
   throw new HTTPException((apiError.status || 500) as StatusCode, {
     message: apiError.message || defaultMessage,
+    stack: apiError.stack,
+    cause: apiError.cause,
   });
 }
