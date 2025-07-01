@@ -168,7 +168,6 @@ export async function getAgentByIdHandler({
       defaultStreamOptions: defaultStreamOptions as any,
     };
   } catch (error) {
-    console.log('error', error);
     return handleError(error, 'Error getting agent');
   }
 }
