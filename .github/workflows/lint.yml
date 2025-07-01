@@ -194,7 +194,7 @@ jobs:
 
       - name: Test
         working-directory: ./e2e-tests/monorepo
-        run: pnpm test run
+        run: pnpm test
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
@@ -241,7 +241,7 @@ jobs:
 
       - name: Test
         working-directory: ./e2e-tests/create-mastra
-        run: pnpm test run
+        run: pnpm test
 
   e2e-commonjs:
     name: E2E CommonJS
@@ -286,7 +286,7 @@ jobs:
 
       - name: Test
         working-directory: ./e2e-tests/commonjs
-        run: pnpm test run
+        run: pnpm test
 
   e2e-kitchen-sink:
     name: E2E kitchen-sink
