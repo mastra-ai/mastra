@@ -6,7 +6,9 @@ import type { ApiError } from '../types';
 export function handleError(error: unknown, defaultMessage: string): never {
   const apiError = error as ApiError;
 
-  throw new HTTPException((apiError.status || 500) as StatusCode, {
+  const apiErrorStatus = apiError.status || apiError.details?.status || 500;
+
+  throw new HTTPException(apiErrorStatus as StatusCode, {
     message: apiError.message || defaultMessage,
   });
 }
