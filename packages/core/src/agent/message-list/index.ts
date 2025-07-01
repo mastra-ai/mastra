@@ -290,7 +290,13 @@ export class MessageList {
     };
   }
   private addOne(message: MessageInput, messageSource: MessageSource) {
-    if ((!(`content` in message) || !message.content) && (!(`parts` in message) || !message.parts)) {
+    if (
+      (!(`content` in message) ||
+        (!message.content &&
+          // allow empty strings
+          typeof message.content !== 'string')) &&
+      (!(`parts` in message) || !message.parts)
+    ) {
       throw new MastraError({
         id: 'INVALID_MESSAGE_CONTENT',
         domain: ErrorDomain.AGENT,
