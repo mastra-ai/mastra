@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { toast } from 'sonner';
-import { LegacyWorkflowRunResult, WorkflowWatchResult } from '@mastra/client-js';
+import { LegacyWorkflowRunResult, WorkflowWatchResult, GetWorkflowResponse } from '@mastra/client-js';
 import type { LegacyWorkflow } from '@mastra/core/workflows/legacy';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 
@@ -19,6 +19,44 @@ export type ExtendedWorkflowWatchResult = WorkflowWatchResult & {
     message: string;
     stack?: string;
   } | null;
+};
+
+export const useWorkflow = (workflowId: string) => {
+  const [workflow, setWorkflow] = useState<GetWorkflowResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const client = useMastraClient();
+
+  useEffect(() => {
+    const fetchWorkflow = async () => {
+      setIsLoading(true);
+      try {
+        if (!workflowId) {
+          setWorkflow(null);
+          setIsLoading(false);
+          return;
+        }
+        const res = await client.getWorkflow(workflowId).details();
+        if (!res) {
+          setWorkflow(null);
+          console.error('Error fetching workflow');
+          toast.error('Error fetching workflow');
+          return;
+        }
+        setWorkflow(res);
+      } catch (error) {
+        setWorkflow(null);
+        console.error('Error fetching workflow', error);
+        toast.error('Error fetching workflow');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchWorkflow();
+  }, [workflowId]);
+
+  return { workflow, isLoading };
 };
 
 export const useLegacyWorkflow = (workflowId: string) => {

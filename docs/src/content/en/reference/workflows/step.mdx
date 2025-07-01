@@ -35,6 +35,7 @@ const processOrder = createStep({
     getInitData,
     suspend,
     runtimeContext,
+    runCount
     runId,
   }) => {
     return {
@@ -90,7 +91,7 @@ const processOrder = createStep({
       type: "(params: ExecuteParams) => Promise<any>",
       description: "Async function containing step logic",
       required: true,
-    },
+    }
   ]}
 />
 
@@ -142,6 +143,12 @@ const processOrder = createStep({
       description:
         "Runtime context for dependency injection and contextual information.",
     },
+    {
+      name: "runCount",
+      type: "number",
+      description: "The run count for this specific step, it automatically increases each time the step runs",
+      isOptional: true,
+    }
   ]}
 />
 

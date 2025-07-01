@@ -1,5 +1,65 @@
 # @mastra/mem0
 
+## 0.1.4
+
+### Patch Changes
+
+- 955b315: dependencies updates:
+  - Updated dependency [`mem0ai@^2.1.31` ↗︎](https://www.npmjs.com/package/mem0ai/v/2.1.31) (from `^2.1.30`, in `dependencies`)
+- Updated dependencies [15e9d26]
+- Updated dependencies [d1baedb]
+- Updated dependencies [d8f2d19]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [07d6d88]
+- Updated dependencies [9d52b17]
+- Updated dependencies [2097952]
+- Updated dependencies [792c4c0]
+- Updated dependencies [5d74aab]
+- Updated dependencies [a8b194f]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [502fe05]
+- Updated dependencies [144eb0b]
+- Updated dependencies [8ba1b51]
+- Updated dependencies [4efcfa0]
+- Updated dependencies [0e17048]
+  - @mastra/core@0.10.7
+
+## 0.1.4-alpha.0
+
+### Patch Changes
+
+- 955b315: dependencies updates:
+  - Updated dependency [`mem0ai@^2.1.31` ↗︎](https://www.npmjs.com/package/mem0ai/v/2.1.31) (from `^2.1.30`, in `dependencies`)
+- Updated dependencies [15e9d26]
+- Updated dependencies [07d6d88]
+- Updated dependencies [5d74aab]
+- Updated dependencies [144eb0b]
+  - @mastra/core@0.10.7-alpha.2
+
+## 0.1.3
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`mem0ai@^2.1.30` ↗︎](https://www.npmjs.com/package/mem0ai/v/2.1.30) (from `^2.1.29`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [12a95fc]
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+- Updated dependencies [d70c420]
+- Updated dependencies [ee9af57]
+- Updated dependencies [36f1c36]
+- Updated dependencies [2a16996]
+- Updated dependencies [10d352e]
+- Updated dependencies [9589624]
+- Updated dependencies [53d3c37]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6
+
 ## 0.1.3-alpha.0
 
 ### Patch Changes

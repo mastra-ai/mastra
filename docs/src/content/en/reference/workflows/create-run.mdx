@@ -31,7 +31,7 @@ const mastra = new Mastra({
   },
 });
 
-const run = mastra.getWorkflow("myWorkflow").createRun();
+const run = await mastra.getWorkflow("myWorkflow").createRunAsync();
 ```
 
 ## Parameters

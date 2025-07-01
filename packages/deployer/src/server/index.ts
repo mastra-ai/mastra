@@ -69,8 +69,17 @@ import { rootHandler } from './handlers/root';
 import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
 import { createIndex, deleteIndex, describeIndex, listIndexes, queryVectors, upsertVectors } from './handlers/vector';
+import {
+  generateVNextNetworkHandler,
+  getVNextNetworkByIdHandler,
+  getVNextNetworksHandler,
+  streamGenerateVNextNetworkHandler,
+  loopVNextNetworkHandler,
+  loopStreamVNextNetworkHandler,
+} from './handlers/vNextNetwork';
 import { getListenerHandler, getSpeakersHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
+  cancelWorkflowRunHandler,
   createWorkflowRunHandler,
   getWorkflowByIdHandler,
   getWorkflowRunByIdHandler,
@@ -166,7 +175,6 @@ ${err.stack.split('\n').slice(1).join('\n')}
         try {
           const clonedReq = c.req.raw.clone();
           const body = (await clonedReq.json()) as { runtimeContext?: Record<string, any> };
-
           if (body.runtimeContext) {
             runtimeContext = new RuntimeContext(Object.entries(body.runtimeContext));
           }
@@ -441,6 +449,246 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     getAgentsHandler,
+  );
+
+  // VNext Network routes
+  app.get(
+    '/api/networks/v-next',
+    describeRoute({
+      description: 'Get all available v-next networks',
+      tags: ['vNextNetworks'],
+      responses: {
+        200: {
+          description: 'List of all v-next networks',
+        },
+      },
+    }),
+    getVNextNetworksHandler,
+  );
+
+  app.get(
+    '/api/networks/v-next/:networkId',
+    describeRoute({
+      description: 'Get v-next network by ID',
+      tags: ['vNextNetworks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'v-next Network details',
+        },
+        404: {
+          description: 'v-next Network not found',
+        },
+      },
+    }),
+    getVNextNetworkByIdHandler,
+  );
+
+  app.post(
+    '/api/networks/v-next/:networkId/generate',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from a v-next network',
+      tags: ['vNextNetworks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                message: {
+                  type: 'string',
+                  description: 'Message for the v-next network',
+                },
+                threadId: {
+                  type: 'string',
+                  description: 'Thread Id of the conversation',
+                },
+                resourceId: {
+                  type: 'string',
+                  description: 'Resource Id of the conversation',
+                },
+              },
+              required: ['message'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'v-next Network not found',
+        },
+      },
+    }),
+    generateVNextNetworkHandler,
+  );
+
+  app.post(
+    '/api/networks/v-next/:networkId/loop',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Loop a v-next network',
+      tags: ['vNextNetworks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                message: {
+                  type: 'string',
+                  description: 'Message for the v-next network',
+                },
+              },
+              required: ['message'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Looped response',
+        },
+        404: {
+          description: 'v-next Network not found',
+        },
+      },
+    }),
+    loopVNextNetworkHandler,
+  );
+
+  app.post(
+    '/api/networks/v-next/:networkId/loop-stream',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Stream a v-next network loop',
+      tags: ['vNextNetworks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                message: {
+                  type: 'string',
+                  description: 'Message for the v-next network',
+                },
+                threadId: {
+                  type: 'string',
+                  description: 'Thread Id of the conversation',
+                },
+                resourceId: {
+                  type: 'string',
+                  description: 'Resource Id of the conversation',
+                },
+                maxIterations: {
+                  type: 'number',
+                  description: 'Maximum number of iterations to run',
+                },
+              },
+              required: ['message'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Streamed response',
+        },
+        404: {
+          description: 'v-next Network not found',
+        },
+      },
+    }),
+    loopStreamVNextNetworkHandler,
+  );
+
+  app.post(
+    '/api/networks/v-next/:networkId/stream',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Stream a response from a v-next network',
+      tags: ['vNextNetworks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                message: {
+                  type: 'string',
+                  description: 'Message for the v-next network',
+                },
+                threadId: {
+                  type: 'string',
+                  description: 'Thread Id of the conversation',
+                },
+                resourceId: {
+                  type: 'string',
+                  description: 'Resource Id of the conversation',
+                },
+              },
+              required: ['message'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Streamed response',
+        },
+        404: {
+          description: 'v-next Network not found',
+        },
+      },
+    }),
+    streamGenerateVNextNetworkHandler,
   );
 
   // Network routes
@@ -1755,6 +2003,272 @@ ${err.stack.split('\n').slice(1).join('\n')}
     executeMcpServerToolHandler,
   );
 
+  // Network Memory routes
+  app.get(
+    '/api/memory/network/status',
+    describeRoute({
+      description: 'Get network memory status',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Memory status',
+        },
+      },
+    }),
+    getMemoryStatusHandler,
+  );
+
+  app.get(
+    '/api/memory/network/threads',
+    describeRoute({
+      description: 'Get all threads',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'resourceid',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of all threads',
+        },
+      },
+    }),
+    getThreadsHandler,
+  );
+
+  app.get(
+    '/api/memory/network/threads/:threadId',
+    describeRoute({
+      description: 'Get thread by ID',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Thread details',
+        },
+        404: {
+          description: 'Thread not found',
+        },
+      },
+    }),
+    getThreadByIdHandler,
+  );
+
+  app.get(
+    '/api/memory/network/threads/:threadId/messages',
+    describeRoute({
+      description: 'Get messages for a thread',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+          description: 'Limit the number of messages to retrieve (default: 40)',
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of messages',
+        },
+      },
+    }),
+    getMessagesHandler,
+  );
+
+  app.post(
+    '/api/memory/network/threads',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Create a new thread',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                metadata: { type: 'object' },
+                resourceId: { type: 'string' },
+                threadId: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Created thread',
+        },
+      },
+    }),
+    createThreadHandler,
+  );
+
+  app.patch(
+    '/api/memory/network/threads/:threadId',
+    describeRoute({
+      description: 'Update a thread',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { type: 'object' },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Updated thread',
+        },
+        404: {
+          description: 'Thread not found',
+        },
+      },
+    }),
+    updateThreadHandler,
+  );
+
+  app.delete(
+    '/api/memory/network/threads/:threadId',
+    describeRoute({
+      description: 'Delete a thread',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Thread deleted',
+        },
+        404: {
+          description: 'Thread not found',
+        },
+      },
+    }),
+    deleteThreadHandler,
+  );
+
+  app.post(
+    '/api/memory/network/save-messages',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Save messages',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messages: {
+                  type: 'array',
+                  items: { type: 'object' },
+                },
+              },
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Messages saved',
+        },
+      },
+    }),
+    saveMessagesHandler,
+  );
+
   // Memory routes
   app.get(
     '/api/memory/status',
@@ -2756,6 +3270,34 @@ ${err.stack.split('\n').slice(1).join('\n')}
     }),
     watchWorkflowHandler,
   );
+
+  app.post(
+    '/api/workflows/:workflowId/runs/:runId/cancel',
+    describeRoute({
+      description: 'Cancel a workflow run',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      tags: ['workflows'],
+      responses: {
+        200: {
+          description: 'workflow run cancelled',
+        },
+      },
+    }),
+    cancelWorkflowRunHandler,
+  );
   // Log routes
   app.get(
     '/api/logs',
@@ -3201,6 +3743,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
     app.get(
       '/openapi.json',
       openAPISpecs(app, {
+        includeEmptyPaths: true,
         documentation: {
           info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
         },
@@ -3209,15 +3752,33 @@ ${err.stack.split('\n').slice(1).join('\n')}
   }
 
   if (options?.isDev || server?.build?.swaggerUI) {
-    app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
+    app.get(
+      '/swagger-ui',
+      describeRoute({
+        hide: true,
+      }),
+      swaggerUI({ url: '/openapi.json' }),
+    );
   }
 
   if (options?.playground) {
     // SSE endpoint for refresh notifications
-    app.get('/refresh-events', handleClientsRefresh);
+    app.get(
+      '/refresh-events',
+      describeRoute({
+        hide: true,
+      }),
+      handleClientsRefresh,
+    );
 
     // Trigger refresh for all clients
-    app.post('/__refresh', handleTriggerClientsRefresh);
+    app.post(
+      '/__refresh',
+      describeRoute({
+        hide: true,
+      }),
+      handleTriggerClientsRefresh,
+    );
     // Playground routes - these should come after API routes
     // Serve assets with specific MIME types
     app.use('/assets/*', async (c, next) => {

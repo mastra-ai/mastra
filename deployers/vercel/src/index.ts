@@ -2,11 +2,12 @@ import { writeFileSync } from 'fs';
 import { join } from 'path';
 import process from 'process';
 import { Deployer } from '@mastra/deployer';
+import { move } from 'fs-extra/esm';
 
 export class VercelDeployer extends Deployer {
   constructor() {
     super({ name: 'VERCEL' });
-    this.outputDir = join(this.outputDir, '.vercel', 'output', 'functions', 'index.func');
+    this.outputDir = join('.vercel', 'output', 'functions', 'index.func');
   }
 
   async prepare(outputDirectory: string): Promise<void> {
@@ -112,6 +113,10 @@ export const HEAD = handle(app);
         2,
       ),
     );
+
+    await move(join(outputDirectory, '.vercel', 'output'), join(process.cwd(), '.vercel', 'output'), {
+      overwrite: true,
+    });
 
     return result;
   }

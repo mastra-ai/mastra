@@ -220,8 +220,8 @@ describe('Lance vector store tests', () => {
     });
 
     it('should throw error when no data is provided', async () => {
-      await expect(vectorDB.createTable(testTableName, [])).rejects.toThrow(
-        'Failed to create table: At least one record or a schema needs to be provided',
+      await expect(vectorDB.createTable(testTableName, [])).rejects.toThrowError(
+        /At least one record or a schema needs/,
       );
     });
 
@@ -434,7 +434,7 @@ describe('Lance vector store tests', () => {
             columns: ['id', 'vector', 'metadata'],
             queryVector: [0.1, 0.2, 0.3],
           }),
-        ).rejects.toThrow(`Failed to query vectors: Table '${nonExistentTable}' was not found`);
+        ).rejects.toThrowError(new RegExp(`Table '${nonExistentTable}'`));
       });
     });
 
