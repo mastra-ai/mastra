@@ -110,7 +110,7 @@ export async function prepareCodeExamples() {
       const totalLines = output.split('\n').length;
 
       // Skip if total lines would exceed limit
-      const limit = config.maxLines || 1000;
+      const limit = config.maxLines || 1500;
       if (totalLines > limit) {
         log(`Skipping ${dir.name}: ${totalLines} lines exceeds limit of ${limit}`);
         continue;
@@ -132,63 +132,24 @@ async function scanDirectory(
   ignorePatterns?: string[],
 ) {
   const entries = await fs.readdir(currentPath, { withFileTypes: true });
-  const depth = path.relative(basePath, currentPath).split(path.sep).filter(Boolean).length;
 
-  // Prioritize important files
-  const importantFiles = ['index.ts', 'mastra.ts', 'agent.ts', 'workflow.ts', 'tool.ts'];
-  const isImportantFile = (name: string) => importantFiles.some(f => name.endsWith(f));
-
-  // First pass: collect important files
   for (const entry of entries) {
     const fullPath = path.join(currentPath, entry.name);
     const relativePath = path.relative(basePath, fullPath);
 
-    // Skip if file matches ignore patterns
+    // Skip if file/directory matches ignore patterns
     if (shouldIgnoreFile(relativePath, ignorePatterns)) {
       continue;
     }
 
-    if (entry.isFile() && entry.name.endsWith('.ts') && isImportantFile(entry.name)) {
+    if (entry.isDirectory()) {
+      await scanDirectory(basePath, fullPath, files, ignorePatterns);
+    } else if (entry.isFile() && entry.name.endsWith('.ts')) {
       const content = await fs.readFile(fullPath, 'utf-8');
       files.push({
         path: relativePath,
         content,
       });
-    }
-  }
-
-  // Second pass: handle directories (limit depth to 2)
-  if (depth < 2) {
-    for (const entry of entries) {
-      const fullPath = path.join(currentPath, entry.name);
-      const relativePath = path.relative(basePath, fullPath);
-
-      // Skip if directory matches ignore patterns
-      if (entry.isDirectory() && !shouldIgnoreFile(relativePath, ignorePatterns)) {
-        await scanDirectory(basePath, fullPath, files, ignorePatterns);
-      }
-    }
-  }
-
-  // Third pass: add remaining .ts files if we still have room
-  for (const entry of entries) {
-    const fullPath = path.join(currentPath, entry.name);
-    const relativePath = path.relative(basePath, fullPath);
-
-    // Skip if file matches ignore patterns
-    if (shouldIgnoreFile(relativePath, ignorePatterns)) {
-      continue;
-    }
-
-    if (entry.isFile() && entry.name.endsWith('.ts') && !isImportantFile(entry.name)) {
-      // Check if we already added this file
-      if (!files.some(f => f.path === relativePath)) {
-        const content = await fs.readFile(fullPath, 'utf-8');
-        files.push({
-          path: relativePath,
-          content,
-        });
-      }
     }
   }
 }
