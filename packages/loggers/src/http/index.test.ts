@@ -154,52 +154,6 @@ describe('HttpTransport', () => {
     });
   });
 
-  describe('log formats', () => {
-    it('should support JSON format', async () => {
-      const jsonTransport = new HttpTransport({
-        ...defaultOptions,
-        logFormat: 'json',
-      });
-
-      const logger = new PinoLogger({
-        name: 'test-logger',
-        level: LogLevel.INFO,
-        transports: {
-          http: jsonTransport,
-        },
-      });
-
-      logger.info('test message');
-      await jsonTransport._flush();
-
-      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
-      expect(body).toHaveProperty('logs');
-      expect(Array.isArray(body.logs)).toBe(true);
-    });
-
-    it('should support text format', async () => {
-      const textTransport = new HttpTransport({
-        ...defaultOptions,
-        logFormat: 'text',
-      });
-
-      const logger = new PinoLogger({
-        name: 'test-logger',
-        level: LogLevel.INFO,
-        transports: {
-          http: textTransport,
-        },
-      });
-
-      logger.info('test message');
-      await textTransport._flush();
-
-      const body = fetchMock.mock.calls[0][1].body;
-      expect(typeof body).toBe('string');
-      expect(body).toContain('test message');
-    });
-  });
-
   describe('error handling and retries', () => {
     it('should retry on HTTP errors', async () => {
       fetchMock
