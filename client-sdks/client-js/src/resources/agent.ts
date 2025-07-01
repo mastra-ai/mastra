@@ -673,6 +673,24 @@ export class Agent extends BaseResource {
                   toolInvocation.result = result;
                 }
 
+                // write the tool result part to the stream
+                const writer = writable.getWriter();
+
+                try {
+                  await writer.write(
+                    new TextEncoder().encode(
+                      'a:' +
+                        JSON.stringify({
+                          toolCallId: toolCall.toolCallId,
+                          result,
+                        }) +
+                        '\n',
+                    ),
+                  );
+                } finally {
+                  writer.releaseLock();
+                }
+
                 // Convert messages to the correct format for the recursive call
                 const originalMessages = processedParams.messages;
                 const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
