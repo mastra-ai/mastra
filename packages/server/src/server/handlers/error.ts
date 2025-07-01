@@ -8,8 +8,6 @@ export function handleError(error: unknown, defaultMessage: string): never {
 
   const apiErrorStatus = apiError.status || apiError.details?.status || 500;
 
-  console.log(apiErrorStatus);
-
   throw new HTTPException(apiErrorStatus as StatusCode, {
     message: apiError.message || defaultMessage,
   });

@@ -32,7 +32,7 @@
     "tsx": "^4.20.3",
     "verdaccio": "^6.1.2",
     "verdaccio-auth-memory": "^10.2.2",
-    "vitest": "^3.2.2"
+    "vitest": "^3.2.4"
   },
   "pnpm": {
     "overrides": {
