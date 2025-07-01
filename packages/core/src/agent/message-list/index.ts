@@ -229,6 +229,12 @@ export class MessageList {
             contentType: part.mimeType,
             url: part.data,
           });
+        } else if (
+          part.type === 'tool-invocation' &&
+          (part.toolInvocation.state === 'call' || part.toolInvocation.state === 'partial-call')
+        ) {
+          // Filter out tool invocations with call or partial-call states
+          continue;
         } else {
           parts.push(part);
         }
@@ -257,7 +263,8 @@ export class MessageList {
         createdAt: m.createdAt,
         parts,
         reasoning: undefined,
-        toolInvocations: `toolInvocations` in m.content ? m.content.toolInvocations : undefined,
+        toolInvocations:
+          `toolInvocations` in m.content ? m.content.toolInvocations?.filter(t => t.state === 'result') : undefined,
       };
     }
 
