@@ -15,7 +15,6 @@ interface HttpTransportOptions {
   flushInterval?: number;
   timeout?: number;
   retryOptions?: RetryOptions;
-  logFormat?: 'json' | 'text';
 }
 
 export class HttpTransport extends LoggerTransport {
@@ -26,7 +25,6 @@ export class HttpTransport extends LoggerTransport {
   private flushInterval: number;
   private timeout: number;
   private retryOptions: Required<RetryOptions>;
-  private logFormat: 'json' | 'text';
   private logBuffer: BaseLogMessage[];
   private lastFlush: number;
   private flushIntervalId: NodeJS.Timeout;
@@ -52,7 +50,6 @@ export class HttpTransport extends LoggerTransport {
       retryDelay: options.retryOptions?.retryDelay || 1000,
       exponentialBackoff: options.retryOptions?.exponentialBackoff || true,
     };
-    this.logFormat = options.logFormat || 'json';
 
     this.logBuffer = [];
     this.lastFlush = Date.now();
@@ -70,10 +67,7 @@ export class HttpTransport extends LoggerTransport {
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     try {
-      const body =
-        this.logFormat === 'json'
-          ? JSON.stringify({ logs: data })
-          : data.map((log: BaseLogMessage) => JSON.stringify(log)).join('\n');
+      const body = JSON.stringify({ logs: data });
 
       const response = await fetch(this.url, {
         method: this.method,
