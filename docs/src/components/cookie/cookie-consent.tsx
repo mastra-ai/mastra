@@ -4,7 +4,7 @@
 import Script from "next/script";
 import { useState } from "react";
 import { CookieBanner } from "./cookie-banner";
-import HubspotTracker from "./hubspot-tracker";
+import HubspotTracker from "../hubspot-tracker";
 
 declare global {
   interface Window {
