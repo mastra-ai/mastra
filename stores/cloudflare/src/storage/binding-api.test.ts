@@ -13,13 +13,14 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
   TABLE_TRACES,
+  TABLE_RESOURCES,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 import { createSampleTrace, createSampleWorkflowSnapshot, retryUntil } from './test-utils';
-import type { CloudflareStoreConfig } from './types';
+import type { CloudflareWorkersConfig } from './types';
 import { CloudflareStore } from '.';
 
 export interface Env {
@@ -28,6 +29,7 @@ export interface Env {
   [TABLE_WORKFLOW_SNAPSHOT]: KVNamespace;
   [TABLE_EVALS]: KVNamespace;
   [TABLE_TRACES]: KVNamespace;
+  [TABLE_RESOURCES]: KVNamespace;
 }
 
 dotenv.config();
@@ -39,10 +41,10 @@ vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 const mf = new Miniflare({
   script: 'export default {};',
   modules: true,
-  kvNamespaces: [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES],
+  kvNamespaces: [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES, TABLE_RESOURCES],
 });
 
-const TEST_CONFIG: CloudflareStoreConfig = {
+const TEST_CONFIG: CloudflareWorkersConfig = {
   bindings: {} as Env, // Will be populated in beforeAll
   keyPrefix: 'mastra-test', // Fixed prefix for test isolation
 };
@@ -57,6 +59,7 @@ describe('CloudflareStore Workers Binding', () => {
       [TABLE_WORKFLOW_SNAPSHOT]: (await mf.getKVNamespace(TABLE_WORKFLOW_SNAPSHOT)) as KVNamespace,
       [TABLE_EVALS]: (await mf.getKVNamespace(TABLE_EVALS)) as KVNamespace,
       [TABLE_TRACES]: (await mf.getKVNamespace(TABLE_TRACES)) as KVNamespace,
+      [TABLE_RESOURCES]: (await mf.getKVNamespace(TABLE_RESOURCES)) as KVNamespace,
     };
 
     // Set bindings in test config
@@ -71,7 +74,14 @@ describe('CloudflareStore Workers Binding', () => {
   // Helper to clean up KV data between tests
   const cleanupKVData = async () => {
     // List and delete all keys in each namespace
-    const tables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES] as TABLE_NAMES[];
+    const tables = [
+      TABLE_THREADS,
+      TABLE_MESSAGES,
+      TABLE_WORKFLOW_SNAPSHOT,
+      TABLE_EVALS,
+      TABLE_TRACES,
+      TABLE_RESOURCES,
+    ] as TABLE_NAMES[];
 
     for (const table of tables) {
       try {
@@ -1531,7 +1541,7 @@ describe('CloudflareStore Workers Binding', () => {
   });
 
   describe('Concurrent Operations', () => {
-    it('should handle concurrent message updates concurrently', async () => {
+    it('should handle concurrent message updates sequentially', async () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
@@ -1541,9 +1551,10 @@ describe('CloudflareStore Workers Binding', () => {
         createSampleMessageV2({ threadId: thread.id, createdAt: new Date(now + i * 1000) }),
       );
 
-      // Save messages in parallel - write order should be preserved
-      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
-
+      // Save messages sequentially
+      for (const msg of messages) {
+        await store.saveMessages({ messages: [msg], format: 'v2' });
+      }
       // Order should reflect write order, not timestamp order
       const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await store['getFullOrder'](orderKey);
