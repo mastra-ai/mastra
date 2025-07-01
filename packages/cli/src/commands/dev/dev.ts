@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'child_process';
+import process from 'node:process';
 import { join } from 'path';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';
@@ -32,7 +33,7 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
     }
 
     commands.push('index.mjs');
-    currentServerProcess = execa('node', commands, {
+    currentServerProcess = execa(process.execPath, commands, {
       cwd: dotMastraPath,
       env: {
         NODE_ENV: 'production',
