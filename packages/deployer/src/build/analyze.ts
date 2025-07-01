@@ -104,6 +104,14 @@ async function analyze(
           if (id.startsWith('@mastra/server')) {
             return fileURLToPath(import.meta.resolve(id));
           }
+
+          // Tools is generated dependency, we don't want it to be handled by the bundler but instead read from disk at runtime
+          if (id === '#tools') {
+            return {
+              id: '#tools',
+              external: true,
+            };
+          }
         },
       } satisfies Plugin,
       json(),
@@ -142,11 +150,19 @@ async function analyze(
   }
 
   for (const o of output) {
-    if (o.type !== 'chunk' || o.dynamicImports.length === 0) {
+    if (o.type !== 'chunk') {
       continue;
     }
 
-    for (const dynamicImport of o.dynamicImports) {
+    // Tools is generated dependency, we don't want our analyzer to handle it
+    const dynamicImports = o.dynamicImports.filter(d => d !== '#tools');
+    if (!dynamicImports.length) {
+      continue;
+    }
+
+    console.log(dynamicImports);
+
+    for (const dynamicImport of dynamicImports) {
       if (!depsToOptimize.has(dynamicImport) && !isNodeBuiltin(dynamicImport)) {
         depsToOptimize.set(dynamicImport, ['*']);
       }

@@ -641,7 +641,7 @@ describe('Workflow', () => {
 
       const executionResult = await getWorkflowState();
 
-      expect(watchData.length).toBe(9);
+      expect(watchData.length).toBe(11);
       expect(watchData).toMatchObject([
         {
           payload: {
@@ -652,6 +652,9 @@ describe('Workflow', () => {
         {
           payload: {
             id: 'step1',
+            startedAt: expect.any(Number),
+            status: 'running',
+            payload: {},
           },
           type: 'step-start',
         },
@@ -661,6 +664,7 @@ describe('Workflow', () => {
             output: {
               result: 'success1',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
           type: 'step-result',
@@ -673,12 +677,43 @@ describe('Workflow', () => {
           type: 'step-finish',
         },
         {
-          payload: {},
+          payload: {
+            id: 'sleep_mock-uuid-1',
+            startedAt: expect.any(Number),
+            status: 'waiting',
+            payload: {
+              result: 'success1',
+            },
+          },
           type: 'step-waiting',
         },
         {
           payload: {
+            id: 'sleep_mock-uuid-1',
+            endedAt: expect.any(Number),
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'success1',
+            },
+          },
+          type: 'step-result',
+        },
+        {
+          type: 'step-finish',
+          payload: {
+            id: 'sleep_mock-uuid-1',
+            metadata: {},
+          },
+        },
+        {
+          payload: {
             id: 'step2',
+            payload: {
+              result: 'success1',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -688,6 +723,7 @@ describe('Workflow', () => {
             output: {
               result: 'success2',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
           type: 'step-result',
