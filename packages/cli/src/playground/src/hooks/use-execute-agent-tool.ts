@@ -23,10 +23,10 @@ export const useExecuteTool = () => {
         const response = await agent.executeTool(toolId, { data: input, runtimeContext });
 
         return response;
-      } catch (error) {
+      } catch (error: any) {
         toast.error('Error executing agent tool');
         console.error('Error executing tool:', error);
-        throw error;
+        return error?.message;
       }
     },
   });
