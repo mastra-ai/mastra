@@ -41,8 +41,8 @@ export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest })
           return wf.getFunctions();
         }
         return [];
-      })
-    )
+      }),
+    ),
   );
   return inngestServe({
     client: inngest,
