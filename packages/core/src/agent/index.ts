@@ -567,9 +567,9 @@ export class Agent<
     - do not use quotes or colons
     - the entire text you return will be used as the title`;
 
-   if (!instructions) {
-     return DEFAULT_TITLE_INSTRUCTIONS
-   }
+    if (!instructions) {
+      return DEFAULT_TITLE_INSTRUCTIONS;
+    }
 
     if (typeof instructions === 'string') {
       return instructions;
