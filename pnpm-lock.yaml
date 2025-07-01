@@ -2579,7 +2579,7 @@ importers:
         specifier: ^9.29.0
         version: 9.30.0(jiti@2.4.2)
       miniflare:
-        specifier: ^4.20250617.3
+        specifier: ^4.20250617.4
         version: 4.20250617.4
       tsup:
         specifier: ^8.5.0
@@ -2622,7 +2622,7 @@ importers:
         specifier: ^9.29.0
         version: 9.30.0(jiti@2.4.2)
       miniflare:
-        specifier: ^4.20250617.3
+        specifier: ^4.20250617.4
         version: 4.20250617.4
       tsup:
         specifier: ^8.5.0
