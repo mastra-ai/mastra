@@ -50,8 +50,6 @@ export function useAgentModelSettingsState({ agentId }: AgentModelSettingsStateP
   const resetAll = () => {
     setModelSettingsState(defaultModelSettings);
     setChatWithGenerate(false);
-
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
   };
 
   return {
