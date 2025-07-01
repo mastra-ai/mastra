@@ -591,3 +591,44 @@ export async function cancelWorkflowRunHandler({
     return handleError(error, 'Error canceling workflow run');
   }
 }
+
+export async function sendWorkflowRunEventHandler({
+  mastra,
+  workflowId,
+  runId,
+  event,
+  data,
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
+  event: string;
+  data: unknown;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to cancel workflow run' });
+    }
+
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const run = await workflow.getWorkflowRunById(runId);
+
+    if (!run) {
+      throw new HTTPException(404, { message: 'Workflow run not found' });
+    }
+
+    const _run = await workflow.createRunAsync({ runId });
+
+    await _run.sendEvent(event, data);
+
+    return { message: 'Workflow run event sent' };
+  } catch (error) {
+    return handleError(error, 'Error sending workflow run event');
+  }
+}

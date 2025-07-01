@@ -99,6 +99,8 @@ export function WorkflowDefaultNode({
           output={step?.output}
           error={step?.error}
           mapConfig={mapConfig}
+          event={step.status === 'waiting' ? event : undefined}
+          runId={runId}
           onShowTrace={runId && onShowTrace ? () => onShowTrace?.({ runId, stepName: fullLabel }) : undefined}
         />
       </div>

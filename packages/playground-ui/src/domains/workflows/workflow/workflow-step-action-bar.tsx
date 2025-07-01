@@ -12,6 +12,8 @@ export interface WorkflowStepActionBarProps {
   error?: any;
   stepName: string;
   mapConfig?: string;
+  event?: string;
+  runId?: string;
   onShowTrace?: () => void;
   onShowNestedGraph?: () => void;
 }
