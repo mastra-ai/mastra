@@ -8,7 +8,7 @@ import { fonts } from "../font/setup";
 import "../globals.css";
 
 import { PostHogProvider } from "@/analytics/posthog-provider";
-import { CookieConsent } from "@/components/cookie-consent";
+import { CookieConsent } from "@/components/cookie/cookie-consent";
 import { NextraLayout } from "@/components/nextra-layout";
 import { GTProvider } from "gt-next";
 import { CustomHead } from "@/components/custom-head";
@@ -64,7 +64,6 @@ export default async function RootLayout({
           <PostHogProvider>
             <NextraLayout stars={stars} locale={locale} pageMap={pageMap}>
               <NuqsAdapter>{children}</NuqsAdapter>
-              {/* {<DocsChat />} */}
             </NextraLayout>
           </PostHogProvider>
           <Toaster />

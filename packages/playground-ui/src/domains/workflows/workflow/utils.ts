@@ -492,12 +492,22 @@ const getStepNodeAndEdge = ({
 }): { nodes: Node[]; edges: Edge[]; nextPrevNodeIds: string[]; nextPrevStepIds: string[] } => {
   let nextNodeIds: string[] = [];
   let nextStepIds: string[] = [];
-  if (nextStepFlow?.type === 'step' || nextStepFlow?.type === 'foreach' || nextStepFlow?.type === 'loop') {
+  if (
+    nextStepFlow?.type === 'step' ||
+    nextStepFlow?.type === 'foreach' ||
+    nextStepFlow?.type === 'loop' ||
+    nextStepFlow?.type === 'waitForEvent'
+  ) {
     const nextStepId = allPrevNodeIds?.includes(nextStepFlow.step.id)
       ? `${nextStepFlow.step.id}-${yIndex + 1}`
       : nextStepFlow.step.id;
     nextNodeIds = [nextStepId];
     nextStepIds = [nextStepFlow.step.id];
+  }
+  if (nextStepFlow?.type === 'sleep' || nextStepFlow?.type === 'sleepUntil') {
+    const nextStepId = allPrevNodeIds?.includes(nextStepFlow.id) ? `${nextStepFlow.id}-${yIndex + 1}` : nextStepFlow.id;
+    nextNodeIds = [nextStepId];
+    nextStepIds = [nextStepFlow.id];
   }
   if (nextStepFlow?.type === 'parallel') {
     nextNodeIds =
@@ -513,7 +523,7 @@ const getStepNodeAndEdge = ({
     nextStepIds = nextStepFlow?.steps?.map(step => (step as { type: 'step'; step: { id: string } }).step.id) || [];
   }
 
-  if (stepFlow.type === 'step' || stepFlow.type === 'foreach') {
+  if (stepFlow.type === 'step' || stepFlow.type === 'foreach' || stepFlow.type === 'waitForEvent') {
     const hasGraph = stepFlow.step.component === 'WORKFLOW';
     const nodeId = allPrevNodeIds?.includes(stepFlow.step.id) ? `${stepFlow.step.id}-${yIndex}` : stepFlow.step.id;
     const nodes = [
@@ -546,6 +556,7 @@ const getStepNodeAndEdge = ({
           withoutBottomHandle: !nextNodeIds.length,
           stepGraph: hasGraph ? stepFlow.step.serializedStepFlow : undefined,
           mapConfig: stepFlow.step.mapConfig,
+          ...(stepFlow.type === 'waitForEvent' ? { event: stepFlow.event } : {}),
         },
       },
     ];
@@ -587,6 +598,79 @@ const getStepNodeAndEdge = ({
           }))),
     ];
     return { nodes, edges, nextPrevNodeIds: [nodeId], nextPrevStepIds: [stepFlow.step.id] };
+  }
+
+  if (stepFlow.type === 'sleep' || stepFlow.type === 'sleepUntil') {
+    const nodeId = allPrevNodeIds?.includes(stepFlow.id) ? `${stepFlow.id}-${yIndex}` : stepFlow.id;
+    const nodes = [
+      ...(condition
+        ? [
+            {
+              id: condition.id,
+              position: { x: xIndex * 300, y: yIndex * 100 },
+              type: 'condition-node',
+              data: {
+                label: condition.id,
+                previousStepId: prevStepIds[prevStepIds.length - 1],
+                nextStepId: stepFlow.id,
+                withoutTopHandle: false,
+                withoutBottomHandle: !nextNodeIds.length,
+                isLarge: true,
+                conditions: [{ type: 'when', fnString: condition.fn }],
+              },
+            },
+          ]
+        : []),
+      {
+        id: nodeId,
+        position: { x: xIndex * 300, y: (yIndex + (condition ? 1 : 0)) * 100 },
+        type: 'default-node',
+        data: {
+          label: stepFlow.id,
+          withoutTopHandle: condition ? false : !prevNodeIds.length,
+          withoutBottomHandle: !nextNodeIds.length,
+          ...(stepFlow.type === 'sleepUntil' ? { date: stepFlow.date } : { duration: stepFlow.duration }),
+        },
+      },
+    ];
+    const edges = [
+      ...(!prevNodeIds.length
+        ? []
+        : condition
+          ? [
+              ...prevNodeIds.map((prevNodeId, i) => ({
+                id: `e${prevNodeId}-${condition.id}`,
+                source: prevNodeId,
+                data: { previousStepId: prevStepIds[i], nextStepId: stepFlow.id },
+                target: condition.id,
+                ...defaultEdgeOptions,
+              })),
+              {
+                id: `e${condition.id}-${nodeId}`,
+                source: condition.id,
+                data: { previousStepId: prevStepIds[prevStepIds.length - 1], nextStepId: stepFlow.id },
+                target: nodeId,
+                ...defaultEdgeOptions,
+              },
+            ]
+          : prevNodeIds.map((prevNodeId, i) => ({
+              id: `e${prevNodeId}-${nodeId}`,
+              source: prevNodeId,
+              data: { previousStepId: prevStepIds[i], nextStepId: stepFlow.id },
+              target: nodeId,
+              ...defaultEdgeOptions,
+            }))),
+      ...(!nextNodeIds.length
+        ? []
+        : nextNodeIds.map((nextNodeId, i) => ({
+            id: `e${nodeId}-${nextNodeId}`,
+            source: nodeId,
+            data: { previousStepId: stepFlow.id, nextStepId: nextStepIds[i] },
+            target: nextNodeId,
+            ...defaultEdgeOptions,
+          }))),
+    ];
+    return { nodes, edges, nextPrevNodeIds: [nodeId], nextPrevStepIds: [stepFlow.id] };
   }
 
   if (stepFlow.type === 'loop') {

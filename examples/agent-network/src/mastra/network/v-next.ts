@@ -90,7 +90,7 @@ export const v_nextNetwork = new NewAgentNetwork({
   id: 'test-network',
   name: 'Test Network',
   instructions:
-    'You can research cities. You can also synthesize research material. You can also write a full report based on the researched material. You can also get weather information.',
+    'You can research cities. You can also synthesize research material. You can also write a full report based on the researched material. You can also get weather information. workflow1 is the best primitive for researching an *individual* city and it should always be used when running multiple primitives to accomplish a task.',
   model: anthropic('claude-3-5-sonnet-20240620'),
   agents: {
     agent1,
