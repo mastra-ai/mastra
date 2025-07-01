@@ -26,9 +26,6 @@ export const useExecuteTool = () => {
       } catch (error) {
         toast.error('Error executing agent tool');
         console.error('Error executing tool:', error);
-        if (error instanceof Error) {
-          return error?.message;
-        }
         throw error;
       }
     },
