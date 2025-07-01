@@ -13,6 +13,6 @@
     "vitest": "^3.2.4"
   },
   "scripts": {
-    "test": "vitest"
+    "test": "vitest run"
   }
 }
