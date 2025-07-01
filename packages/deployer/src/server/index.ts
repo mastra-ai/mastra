@@ -156,7 +156,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
     }
   });
 
-  app.onError(errorHandler);
+  app.onError((err, c) => errorHandler(options.isDev ?? false, err, c));
 
   // Add Mastra to context
   app.use('*', async function setContext(c, next) {
