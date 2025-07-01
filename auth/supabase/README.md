@@ -41,7 +41,6 @@ const mastra = new Mastra({
 The package can be configured in two ways:
 
 1. **Environment Variables**:
-
    - `SUPABASE_URL`: Your Supabase project URL
    - `SUPABASE_ANON_KEY`: Your Supabase anonymous key
 

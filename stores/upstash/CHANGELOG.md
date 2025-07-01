@@ -1530,7 +1530,6 @@
 ### Minor Changes
 
 - c87eb4e: Combine Upstash packages into `@mastra/upstash`.
-
   - Move and combine packages to `stores/upstash`
   - Reorganize source files into `src/vector` and `src/store`
   - Add deprecation notices to old packages
@@ -1864,7 +1863,6 @@
 ### Minor Changes
 
 - c87eb4e: Combine Upstash packages into `@mastra/upstash`.
-
   - Move and combine packages to `stores/upstash`
   - Reorganize source files into `src/vector` and `src/store`
   - Add deprecation notices to old packages

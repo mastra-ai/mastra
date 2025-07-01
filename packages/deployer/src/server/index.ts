@@ -79,6 +79,7 @@ import {
 } from './handlers/vNextNetwork';
 import { getListenerHandler, getSpeakersHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
+  cancelWorkflowRunHandler,
   createWorkflowRunHandler,
   getWorkflowByIdHandler,
   getWorkflowRunByIdHandler,
@@ -3268,6 +3269,34 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     watchWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/runs/:runId/cancel',
+    describeRoute({
+      description: 'Cancel a workflow run',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      tags: ['workflows'],
+      responses: {
+        200: {
+          description: 'workflow run cancelled',
+        },
+      },
+    }),
+    cancelWorkflowRunHandler,
   );
   // Log routes
   app.get(

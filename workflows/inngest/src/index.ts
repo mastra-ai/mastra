@@ -94,8 +94,14 @@ export class InngestRun<
     while (runs?.[0]?.status !== 'Completed' || runs?.[0]?.event_id !== eventId) {
       await new Promise(resolve => setTimeout(resolve, 1000));
       runs = await this.getRuns(eventId);
-      if (runs?.[0]?.status === 'Failed' || runs?.[0]?.status === 'Cancelled') {
+      if (runs?.[0]?.status === 'Failed') {
         throw new Error(`Function run ${runs?.[0]?.status}`);
+      } else if (runs?.[0]?.status === 'Cancelled') {
+        const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+          workflowName: this.workflowId,
+          runId: this.runId,
+        });
+        return { output: { result: { steps: snapshot?.context, status: 'canceled' } } };
       }
     }
     return runs?.[0];
@@ -106,6 +112,30 @@ export class InngestRun<
       name: `user-event-${event}`,
       data,
     });
+  }
+
+  async cancel() {
+    await this.inngest.send({
+      name: `cancel.workflow.${this.workflowId}`,
+      data: {
+        runId: this.runId,
+      },
+    });
+
+    const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+    });
+    if (snapshot) {
+      await this.#mastra?.storage?.persistWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+        snapshot: {
+          ...snapshot,
+          status: 'canceled' as any,
+        },
+      });
+    }
   }
 
   async start({
@@ -464,8 +494,12 @@ export class InngestWorkflow<
       return this.function;
     }
     this.function = this.inngest.createFunction(
-      // @ts-ignore
-      { id: `workflow.${this.id}`, retries: this.retryConfig?.attempts ?? 0 },
+      {
+        id: `workflow.${this.id}`,
+        // @ts-ignore
+        retries: this.retryConfig?.attempts ?? 0,
+        cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+      },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
         let { inputData, runId, resume } = event.data;
@@ -514,6 +548,7 @@ export class InngestWorkflow<
           retryConfig: this.retryConfig,
           runtimeContext: new RuntimeContext(), // TODO
           resume,
+          abortController: new AbortController(),
         });
 
         return { result, runId };
@@ -636,7 +671,7 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext }) => {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -662,7 +697,12 @@ export function createStep<
           onFinish: result => {
             streamPromise.resolve(result.text);
           },
+          abortSignal,
         });
+
+        if (abortSignal.aborted) {
+          return abort();
+        }
 
         for await (const chunk of fullStream) {
           switch (chunk.type) {
@@ -821,6 +861,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       delay?: number;
     };
     runtimeContext: RuntimeContext;
+    abortController: AbortController;
   }): Promise<TOutput> {
     await params.emitter.emit('watch-v2', {
       type: 'start',
@@ -920,6 +961,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     resume,
     prevOutput,
     emitter,
+    abortController,
     runtimeContext,
   }: {
     workflowId: string;
@@ -933,6 +975,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     };
     prevOutput: any;
     emitter: Emitter;
+    abortController: AbortController;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     return super.executeStep({
@@ -944,6 +987,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       resume,
       prevOutput,
       emitter,
+      abortController,
       runtimeContext,
     });
   }
@@ -972,17 +1016,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     resume,
     prevOutput,
     emitter,
+    abortController,
     runtimeContext,
   }: {
     step: Step<string, any, any>;
     stepResults: Record<string, StepResult<any, any, any, any>>;
-    executionContext: {
-      workflowId: string;
-      runId: string;
-      executionPath: number[];
-      suspendedPaths: Record<string, number[]>;
-      retryConfig: { attempts: number; delay: number };
-    };
+    executionContext: ExecutionContext;
     resume?: {
       steps: string[];
       resumePayload: any;
@@ -990,6 +1029,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     };
     prevOutput: any;
     emitter: Emitter;
+    abortController: AbortController;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     const startedAt = await this.inngestStep.run(
@@ -1260,6 +1300,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           engine: {
             step: this.inngestStep,
           },
+          abortSignal: abortController.signal,
         });
         const endedAt = Date.now();
 
@@ -1413,6 +1454,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     resume,
     executionContext,
     emitter,
+    abortController,
     runtimeContext,
   }: {
     workflowId: string;
@@ -1434,6 +1476,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     };
     executionContext: ExecutionContext;
     emitter: Emitter;
+    abortController: AbortController;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     let execResults: any;
@@ -1465,10 +1508,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 // TODO: this function shouldn't have suspend probably?
                 suspend: async (_suspendPayload: any) => {},
                 bail: () => {},
+                abort: () => {
+                  abortController.abort();
+                },
                 [EMITTER_SYMBOL]: emitter,
                 engine: {
                   step: this.inngestStep,
                 },
+                abortSignal: abortController.signal,
               });
               return result ? index : null;
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1500,6 +1547,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             executionSpan: executionContext.executionSpan,
           },
           emitter,
+          abortController,
           runtimeContext,
         }),
       ),
