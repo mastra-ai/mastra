@@ -1,7 +1,7 @@
 import { ReadableStream } from 'node:stream/web';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { WorkflowRuns } from '@mastra/core/storage';
-import type { Workflow, SerializedStepFlowEntry, WatchEvent } from '@mastra/core/workflows';
+import type { Workflow, SerializedStepFlowEntry, WatchEvent, StepWithComponent } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
@@ -11,6 +11,28 @@ import { handleError } from './error';
 interface WorkflowContext extends Context {
   workflowId?: string;
   runId?: string;
+}
+
+function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
+  return Object.entries(steps).reduce<any>((acc, [key, step]) => {
+    const fullKey = path ? `${path}.${key}` : key;
+    acc[fullKey] = {
+      id: step.id,
+      description: step.description,
+      inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
+      outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
+      resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
+      suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
+      isWorkflow: step.component === 'WORKFLOW',
+    };
+
+    if (step.component === 'WORKFLOW' && step.steps) {
+      const nestedSteps = getSteps(step.steps, fullKey) || {};
+      acc = { ...acc, ...nestedSteps };
+    }
+
+    return acc;
+  }, {});
 }
 
 export async function getWorkflowsHandler({ mastra }: WorkflowContext) {
@@ -31,6 +53,7 @@ export async function getWorkflowsHandler({ mastra }: WorkflowContext) {
           };
           return acc;
         }, {}),
+        allSteps: getSteps(workflow.steps) || {},
         stepGraph: workflow.serializedStepGraph,
         inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
         outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
@@ -96,7 +119,8 @@ async function getWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
 }
 
 export async function getWorkflowByIdHandler({ mastra, workflowId }: WorkflowContext): Promise<{
-  steps: SerializedStep[];
+  steps: Record<string, SerializedStep>;
+  allSteps: Record<string, SerializedStep>;
   name: string | undefined;
   description: string | undefined;
   stepGraph: SerializedStepFlowEntry[];
@@ -126,6 +150,7 @@ export async function getWorkflowByIdHandler({ mastra, workflowId }: WorkflowCon
         };
         return acc;
       }, {}),
+      allSteps: getSteps(workflow.steps) || {},
       name: workflow.name,
       description: workflow.description,
       stepGraph: workflow.serializedStepGraph,
