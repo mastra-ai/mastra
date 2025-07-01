@@ -23,7 +23,7 @@ import type {
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
-import type { Inngest, BaseContext } from 'inngest';
+import type { Inngest, BaseContext, InngestFunction, ServeHandlerOptions } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
 import { z } from 'zod';
 
@@ -32,7 +32,23 @@ export type InngestEngineType = {
 };
 
 export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest }): ReturnType<typeof inngestServe> {
+  return inngestServe(
+    buildInngestConfig({
+      client: inngest,
+      mastra,
+    }),
+  );
+}
+
+export interface MastraInngestServeHandlerOptions extends Omit<ServeHandlerOptions, 'functions'> {
+  functions?: readonly InngestFunction.Like[];
+  mastra: Mastra;
+}
+
+export const buildInngestConfig = (options: MastraInngestServeHandlerOptions): Parameters<typeof inngestServe>[0] => {
+  const { mastra, ...inngestOptions } = options;
   const wfs = mastra.getWorkflows();
+
   const functions = Object.values(wfs).flatMap(wf => {
     if (wf instanceof InngestWorkflow) {
       wf.__registerMastra(mastra);
@@ -40,11 +56,14 @@ export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest })
     }
     return [];
   });
-  return inngestServe({
-    client: inngest,
-    functions,
-  });
-}
+
+  const existingsFunctions = inngestOptions.functions || [];
+
+  return {
+    ...inngestOptions,
+    functions: [...functions, ...existingsFunctions],
+  };
+};
 
 export class InngestRun<
   TEngineType = InngestEngineType,
