@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { convertToCoreMessages } from 'ai';
 import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, ToolCallPart, ToolInvocation, UIMessage } from 'ai';
+import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { MastraMessageV1 } from '../../memory';
 import { isCoreMessage, isUiMessage } from '../../utils';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
@@ -296,15 +297,39 @@ export class MessageList {
     };
   }
   private addOne(message: MessageInput, messageSource: MessageSource) {
+    if (
+      (!(`content` in message) ||
+        (!message.content &&
+          // allow empty strings
+          typeof message.content !== 'string')) &&
+      (!(`parts` in message) || !message.parts)
+    ) {
+      throw new MastraError({
+        id: 'INVALID_MESSAGE_CONTENT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Message with role "${message.role}" must have either a 'content' property (string or array) or a 'parts' property (array) that is not empty, null, or undefined. Received message: ${JSON.stringify(message, null, 2)}`,
+        details: {
+          role: message.role as string,
+          messageSource,
+          hasContent: 'content' in message,
+          hasParts: 'parts' in message,
+        },
+      });
+    }
+
     if (message.role === `system` && MessageList.isVercelCoreMessage(message)) return this.addSystem(message);
     if (message.role === `system`) {
-      throw new Error(
-        `A non-CoreMessage system message was added - this is not supported as we didn't expect this could happen. Please open a Github issue and let us know what you did to get here. This is the non-CoreMessage system message we received:
-
-messageSource: ${messageSource}
-
-${JSON.stringify(message, null, 2)}`,
-      );
+      throw new MastraError({
+        id: 'INVALID_SYSTEM_MESSAGE_FORMAT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Invalid system message format. System messages must be CoreMessage format with 'role' and 'content' properties. The content should be a string or valid content array.`,
+        details: {
+          messageSource,
+          receivedMessage: JSON.stringify(message, null, 2),
+        },
+      });
     }
 
     const messageV2 = this.inputToMastraMessageV2(message, messageSource);
