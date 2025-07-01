@@ -2,15 +2,15 @@ import { Callout, Steps, Tabs } from "nextra/components";
 
 <Steps>
 
-##### Update the system
+### Update the system
 
-Update the system packages before installing any new packages.
+Update your system packages to ensure everything is current before installing new software.
 
 ```bash copy
 sudo apt update && sudo apt upgrade -y
 ```
 
-##### Install nginx
+### Install nginx
 
 ```bash copy
 sudo apt install nginx -y
@@ -30,31 +30,28 @@ This command checks if the `include /etc/nginx/sites-enabled/*;` directive exist
 
 ##### Remove nginx files if they exist
 
-Let's start by setting up an environment variable for the site name. In our example, we will use `mastra` as the site name.
+Set an environment variable for your site name. This example uses `mastra` as the site name.
 
 ```bash copy
 export SITE_NAME="mastra"
 ```
 
-Then we can remove the nginx files if they exist.
+Delete any existing Nginx configuration files, if present.
 
 ```bash copy
 sudo rm -f /etc/nginx/sites-available/$SITE_NAME
 sudo rm -f /etc/nginx/sites-enabled/$SITE_NAME
 ```
 
-##### Set up certbot for SSL
+### Set up certbot for SSL
 
-To set up certbot for SSL, let's start by stopping nginx temporarily.
+To set up Certbot for SSL, temporarily stop the Nginx server.
 
 ```bash copy
 sudo systemctl stop nginx
 ```
 
-Now we can obtain a certificate for our domain name.
-
-Let's start by setting up an environment variable for the domain name and email.
-Replace `<your-domain-name>` with your domain name and `<your-email>` with your email.
+To obtain a certificate for your domain, set the environment variables for your domain name and email address.
 
 ```bash copy
 export DOMAIN_NAME="<your-domain-name>"
@@ -66,7 +63,7 @@ sudo apt install certbot -y
 sudo certbot certonly --standalone -d $DOMAIN_NAME --non-interactive --agree-tos -m $EMAIL
 ```
 
-Finally, let's ensure that the SSL files exists or we generate them.
+Ensure that the SSL files exist, or generate them if they don't.
 
 ```bash copy
 if [ ! -f /etc/letsencrypt/options-ssl-nginx.conf ]; then
@@ -78,7 +75,9 @@ if [ ! -f /etc/letsencrypt/ssl-dhparams.pem ]; then
 fi
 ```
 
-##### Configure nginx
+### Configure nginx
+
+To ensure there's no issues with streaming, disable buffering, using **`proxy_buffering off;`** and **`proxy_set_header X-Accel-Buffering no;`**.
 
 ```bash copy
 sudo cat > /etc/nginx/sites-available/$SITE_NAME <<EOL
@@ -121,10 +120,6 @@ server {
 EOL
 ```
 
-<Callout>
-To ensure there's no issues with streaming, we need to disable buffering. That's why we have **`proxy_buffering off;`** and **`proxy_set_header X-Accel-Buffering no;`**.
-</Callout>
-
 Create a symbolic link to the site in the sites-enabled directory.
 
 ```bash copy
@@ -137,9 +132,9 @@ Restart nginx.
 sudo systemctl restart nginx
 ```
 
-##### Install nodejs
+### Install nodejs
 
-We need to install nodejs to run the Mastra application. We will do this using `nvm`.
+Install Node.js using `nvm` to run your Mastra application.
 
 ```bash copy
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
@@ -151,7 +146,7 @@ Once the installation is complete, you can verify the installation by running:
 nvm --version
 ```
 
-Now we can install the latest LTS version of nodejs.
+Install the latest LTS version of nodejs.
 
 ```bash copy
 nvm install --lts
@@ -163,7 +158,7 @@ Once the installation is complete, you can verify the installation by running:
 node --version
 ```
 
-##### Clone your Mastra application
+### Clone your Mastra application
 
 <Tabs items={["Public Repository", "Private Repository"]}>
 <Tabs.Tab>
@@ -183,39 +178,43 @@ git clone https://<your-username>:<your-personal-access-token>@github.com/<your-
 </Tabs.Tab>
 </Tabs>
 
-Navigate to the repository directory.
+Navigate to the repository directory:
 
 ```bash copy
 cd "<your-repository>"
 ```
 
-##### Install dependencies
+### Install dependencies
 
 ```bash copy
 npm install
 ```
 
-##### Set up environment variables
+### Set up environment variables
 
-Create a `.env` file and add your environment variables.
+Create a `.env` file and add your environment variables:
 
 ```bash copy
 touch .env
 ```
 
-Then edit `.env` and add your environment variables. Here's an example:
+Edit the `.env` file and add your environment variables:
 
 ```bash copy
 OPENAI_API_KEY=<your-openai-api-key>
 ```
 
-##### Build the application
+### Build the application
+
+To build the application use the following:
 
 ```bash copy
 npm run build
 ```
 
-##### Run the application
+### Run the application
+
+To run the application use the following:
 
 ```bash copy
 node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs

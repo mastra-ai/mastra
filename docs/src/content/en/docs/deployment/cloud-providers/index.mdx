@@ -1,15 +1,37 @@
 ---
 title: "Cloud Providers"
 description: "Deploy your Mastra applications to popular cloud providers."
-asIndexPage: true
 ---
 
-import { CardGrid, CardGridItem } from "@/components/cards/card-grid";
+# Cloud Providers
 
-## Cloud Providers
+Standalone Mastra applications can be deployed to many popular cloud providers including:
 
-Deploy your Mastra applicaitons to popular cloud providers.
+- [Digital Ocean](/docs/deployment/cloud-providers/digital-ocean)
 
-<CardGrid>
-  <CardGridItem title="Digital Ocean" description="Deploy your Mastra applications to Digital Ocean" href="./cloud-providers/digital-ocean" />
-</CardGrid>
+## LibSQLStore
+
+`LibSQLStore` writes to the local filesystem, which is not supported by some cloud providers due to their ephemeral nature. If you're deploying to a platform like Digital Ocean's App Platform, you **must remove** all usage of `LibSQLStore`.
+
+Specifically, ensure you've removed it from both `src/mastra/index.ts` and `src/mastra/agents/weather-agent.ts`:
+
+
+```diff filename="src/mastra/index.ts" showLineNumbers
+export const mastra = new Mastra({
+  // ...
+-  storage: new LibSQLStore({
+-    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+-    url: ":memory:",
+-  })
+});
+```
+
+``` diff filename="src/mastra/agents/weather-agent.ts" showLineNumbers
+export const weatherAgent = new Agent({
+  // ..
+-  memory: new Memory({
+-    storage: new LibSQLStore({
+-      url: "file:../mastra.db" // path is relative to the .mastra/output directory
+-    })
+-  })
+});
