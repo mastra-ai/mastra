@@ -567,17 +567,17 @@ export class Agent<
     - do not use quotes or colons
     - the entire text you return will be used as the title`;
 
-    if (instructions) {
-      if (typeof instructions === 'string') {
-        return instructions;
-      } else {
-        const result = instructions({ runtimeContext });
-        return resolveMaybePromise(result, resolvedInstructions => {
-          return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
-        });
-      }
+   if (!instructions) {
+     return DEFAULT_TITLE_INSTRUCTIONS
+   }
+
+    if (typeof instructions === 'string') {
+      return instructions;
     } else {
-      return DEFAULT_TITLE_INSTRUCTIONS;
+      const result = instructions({ runtimeContext });
+      return resolveMaybePromise(result, resolvedInstructions => {
+        return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
+      });
     }
   }
 
