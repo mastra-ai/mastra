@@ -33,7 +33,6 @@ This example demonstrates how to use Mastra's Tone Consistency metric to evaluat
 The Tone Consistency metric evaluates text in two modes:
 
 1. Comparison Mode:
-
    - Compares tone between input and output texts
    - Measures sentiment alignment
    - Identifies tone shifts
@@ -48,12 +47,10 @@ The Tone Consistency metric evaluates text in two modes:
 The example includes three scenarios:
 
 1. Consistent Positive Tone: Testing tone matching
-
    - Similar positive sentiment in both texts
    - Demonstrates high consistency score
 
 2. Tone Stability: Testing single text analysis
-
    - Multiple sentences with consistent tone
    - Shows internal tone stability
 
