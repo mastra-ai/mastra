@@ -42,6 +42,7 @@ export const WorkflowRunEventForm = ({ event, runId, onSendEvent }: WorkflowSend
       const result = await onSendEvent({ event, data, runId });
       toast.success(result.message);
     } catch (error) {
+      console.error('Error sending event', error);
       setError('Error sending event');
     } finally {
       setIsLoading(false);
