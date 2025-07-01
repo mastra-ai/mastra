@@ -7,7 +7,6 @@ const OUTPUT_DIR = fromPackageRoot('.docs/organized/code-examples');
 
 interface ExampleConfig {
   ignore?: string[];
-  include?: string[];
   maxLines?: number;
 }
 
