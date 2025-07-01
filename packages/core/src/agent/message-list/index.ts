@@ -295,7 +295,7 @@ export class MessageList {
         id: 'INVALID_MESSAGE_CONTENT',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Message with role "${message.role}" must have either a 'content' property (string or array) or a 'parts' property (array) that is not empty, null, or undefined.`,
+        text: `Message with role "${message.role}" must have either a 'content' property (string or array) or a 'parts' property (array) that is not empty, null, or undefined. Received message: ${JSON.stringify(message, null, 2)}`,
         details: {
           role: message.role as string,
           messageSource,
