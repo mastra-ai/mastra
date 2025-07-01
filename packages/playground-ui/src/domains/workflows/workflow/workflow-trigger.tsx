@@ -69,6 +69,10 @@ interface WorkflowTriggerProps {
   }>;
   streamResult: WorkflowWatchResult | null;
   isResumingWorkflow: boolean;
+  isCancellingWorkflowRun: boolean;
+  cancelWorkflowRun: ({ workflowId, runId }: { workflowId: string; runId: string }) => Promise<{
+    message: string;
+  }>;
 }
 
 export function WorkflowTrigger({
@@ -82,12 +86,16 @@ export function WorkflowTrigger({
   isStreamingWorkflow,
   streamResult,
   isResumingWorkflow,
+  isCancellingWorkflowRun,
+  cancelWorkflowRun,
 }: WorkflowTriggerProps) {
   const { runtimeContext } = usePlaygroundStore();
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
 
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [innerRunId, setInnerRunId] = useState<string>('');
+  const [cancelResponse, setCancelResponse] = useState<{ message: string } | null>(null);
   const triggerSchema = workflow?.inputSchema;
 
   const handleExecuteWorkflow = async (data: any) => {
@@ -95,11 +103,14 @@ export function WorkflowTrigger({
       if (!workflow) return;
       setIsRunning(true);
 
+      setCancelResponse(null);
+
       setResult(null);
 
       const { runId } = await createWorkflowRun({ workflowId });
 
       setRunId?.(runId);
+      setInnerRunId(runId);
 
       streamWorkflow({ workflowId, runId, inputData: data, runtimeContext });
     } catch (err) {
@@ -111,6 +122,7 @@ export function WorkflowTrigger({
   const handleResumeWorkflow = async (step: SuspendedStep & { resumeData: any }) => {
     if (!workflow) return;
 
+    setCancelResponse(null);
     const { stepId, runId: prevRunId, resumeData } = step;
 
     const { runId } = await createWorkflowRun({ workflowId, prevRunId });
@@ -122,6 +134,11 @@ export function WorkflowTrigger({
       workflowId,
       runtimeContext,
     });
+  };
+
+  const handleCancelWorkflowRun = async () => {
+    const response = await cancelWorkflowRun({ workflowId, runId: innerRunId });
+    setCancelResponse(response);
   };
 
   const streamResultToUse = result ?? streamResult;
@@ -173,6 +190,24 @@ export function WorkflowTrigger({
   return (
     <div className="h-full pt-3 pb-12">
       <div className="space-y-4 px-5 pb-5 border-b-sm border-border1">
+        {result?.runId && (
+          <Button
+            variant="light"
+            onClick={handleCancelWorkflowRun}
+            disabled={!!cancelResponse?.message || isCancellingWorkflowRun}
+          >
+            {isCancellingWorkflowRun ? (
+              <Icon>
+                <Loader2 className="animate-spin" />
+              </Icon>
+            ) : (
+              <Icon>
+                <CircleStopIcon />
+              </Icon>
+            )}
+            {cancelResponse?.message || 'Cancel Workflow Run'}
+          </Button>
+        )}
         {(isResumingWorkflow || (isSuspendedSteps && isStreamingWorkflow)) && (
           <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b-sm border-border1">
             <Icon>
@@ -393,5 +428,13 @@ const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => 
         </DialogPortal>
       </Dialog>
     </>
+  );
+};
+
+const CircleStopIcon = () => {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
+      <rect width="10" height="10" x="3" y="3" rx="2" />
+    </svg>
   );
 };
