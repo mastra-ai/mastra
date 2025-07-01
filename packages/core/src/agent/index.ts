@@ -1117,6 +1117,18 @@ export class Agent<
     };
   }
 
+  private async saveMessagePart(messageList: MessageList, memoryConfig?: MemoryConfig) {
+    const memory = this.getMemory();
+    const newMessages = messageList.drainUnsavedMessages();
+    if (newMessages.length > 0 && memory) {
+      console.log('saveMessagePart', newMessages);
+      await memory.saveMessages({
+        messages: newMessages,
+        memoryConfig,
+      });
+    }
+  }
+
   __primitive({
     instructions,
     messages,
@@ -1430,10 +1442,14 @@ export class Agent<
               });
             })();
 
-            await memory.saveMessages({
-              messages: messageList.drainUnsavedMessages(),
-              memoryConfig,
-            });
+            const messages = messageList.drainUnsavedMessages();
+            console.log('another save', JSON.stringify(messages, null, 2));
+            if (messages.length > 0) {
+              await memory.saveMessages({
+                messages,
+                memoryConfig,
+              });
+            }
           } catch (e) {
             if (e instanceof MastraError) {
               throw e;
@@ -1574,7 +1590,9 @@ export class Agent<
       const result = await llm.__text({
         messages: messageObjects,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
+        onStepFinish: async (result: any) => {
+          console.log('onStepFinish __text experimental_output', result);
+          await this.saveMessagePart(messageList, memoryConfig);
           return onStepFinish?.({ ...result, runId });
         },
         maxSteps: maxSteps,
@@ -1613,7 +1631,9 @@ export class Agent<
       const result = await llm.__text({
         messages: messageObjects,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
+        onStepFinish: async (result: any) => {
+          console.log('onStepFinish __text no output', result);
+          await this.saveMessagePart(messageList, memoryConfig);
           return onStepFinish?.({ ...result, runId });
         },
         maxSteps,
@@ -1647,7 +1667,9 @@ export class Agent<
       messages: messageObjects,
       tools: convertedTools,
       structuredOutput: output,
-      onStepFinish: (result: any) => {
+      onStepFinish: async (result: any) => {
+        console.log('onStepFinish __textObject', result);
+        await this.saveMessagePart(messageList, memoryConfig);
         return onStepFinish?.({ ...result, runId });
       },
       maxSteps,
@@ -1778,10 +1800,13 @@ export class Agent<
         messages: messageObjects,
         temperature,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
+        onStepFinish: async (result: any) => {
+          console.log('onStepFinish __stream experimental_output', result);
+          await this.saveMessagePart(messageList, memoryConfig);
           return onStepFinish?.({ ...result, runId });
         },
         onFinish: async (result: any) => {
+          console.log('onFinish __stream experimental_output', result);
           try {
             const outputText = result.text;
             await after({
@@ -1824,10 +1849,13 @@ export class Agent<
         messages: messageObjects,
         temperature,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
+        onStepFinish: async (result: any) => {
+          console.log('onStepFinish __stream no output', result);
+          await this.saveMessagePart(messageList, memoryConfig);
           return onStepFinish?.({ ...result, runId });
         },
         onFinish: async (result: any) => {
+          console.log('onFinish __stream no output', result);
           try {
             const outputText = result.text;
             await after({
@@ -1868,10 +1896,13 @@ export class Agent<
       tools: convertedTools,
       temperature,
       structuredOutput: output,
-      onStepFinish: (result: any) => {
+      onStepFinish: async (result: any) => {
+        console.log('onStepFinish __streamObject', result);
+        await this.saveMessagePart(messageList, memoryConfig);
         return onStepFinish?.({ ...result, runId });
       },
       onFinish: async (result: any) => {
+        console.log('onFinish __streamObject', result);
         try {
           const outputText = JSON.stringify(result.object);
           await after({

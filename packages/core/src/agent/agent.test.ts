@@ -10,18 +10,20 @@ import { z } from 'zod';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { Mastra } from '../mastra';
 import { MastraMemory } from '../memory';
-import type { StorageThreadType, MemoryConfig } from '../memory';
+import type { StorageThreadType, MemoryConfig, MastraMessageV1 } from '../memory';
 import { RuntimeContext } from '../runtime-context';
+import type { StorageGetMessagesArg } from '../storage';
 import { createTool } from '../tools';
 import { CompositeVoice, MastraVoice } from '../voice';
 import { MessageList } from './message-list/index';
-
+import type { MastraMessageV2 } from './types';
 import { Agent } from './index';
 
 config();
 
 class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
+  messages: (MastraMessageV1 | MastraMessageV2)[] = [];
 
   constructor() {
     super({ name: 'mock' });
@@ -32,6 +34,8 @@ class MockMemory extends MastraMemory {
         saveThread: async ({ thread }: { thread: StorageThreadType }) => {
           return this.saveThread({ thread });
         },
+        getMessages: this.getMessages.bind(this),
+        saveMessages: this.saveMessages.bind(this),
       }),
     });
     this._hasOwnStorage = true;
@@ -50,13 +54,40 @@ class MockMemory extends MastraMemory {
     return this.threads[thread.id];
   }
 
+  // Overloads for getMessages
+  async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  async getMessages(
+    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
+  ): Promise<MastraMessageV1[] | MastraMessageV2[]>;
+
+  // Implementation for getMessages
+  async getMessages({
+    threadId,
+    resourceId,
+    format = 'v1',
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    let results = this.messages;
+    if (threadId) results = results.filter(m => m.threadId === threadId);
+    if (resourceId) results = results.filter(m => m.resourceId === resourceId);
+    if (format === 'v2') return results as MastraMessageV2[];
+    return results as MastraMessageV1[];
+  }
+
+  // saveMessages for both v1 and v2
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
+  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    const { messages } = args as any;
+    this.messages.push(...messages);
+    return messages;
+  }
   async rememberMessages() {
     return { messages: [], messagesV2: [] };
   }
   async getThreadsByResourceId() {
-    return [];
-  }
-  async saveMessages() {
     return [];
   }
   async query() {
@@ -1427,5 +1458,293 @@ describe('agent memory with metadata', () => {
     expect(thread).toBeDefined();
     expect(thread?.id).toBe('thread-1');
     expect(thread?.resourceId).toBe('user-1');
+  });
+});
+
+describe('Agent saving messages', () => {
+  it('should not save any assistant message if agent stream is interrupted early with maxTokens and continuation', async () => {
+    const mockMemory = new MockMemory();
+
+    // Patch saveMessages to count calls if you want to assert on it
+    let saveCallCount = 0;
+    mockMemory.saveMessages = async function (...args) {
+      saveCallCount++;
+      return MockMemory.prototype.saveMessages.apply(this, args);
+    };
+
+    const errorTool = createTool({
+      id: 'errorTool',
+      description: 'Always throws an error.',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ output: z.string() }),
+      execute: async () => {
+        throw new Error('Tool failed!');
+      },
+    });
+
+    const agent = new Agent({
+      name: 'interrupt-agent',
+      instructions: 'Helpful agent with tools.',
+      model: openai('gpt-4o'),
+      memory: mockMemory,
+      tools: { errorTool },
+    });
+
+    const stream = await agent.stream('Please use the error tool.', {
+      threadId: 'thread-error',
+      resourceId: 'resource-error',
+      maxTokens: 10,
+      experimental_continueSteps: true,
+    });
+
+    try {
+      for await (const _part of stream.fullStream) {
+        // The stream should error after the tool call
+      }
+    } catch {}
+    expect(saveCallCount).toBe(1);
+
+    // After interruption, check what was saved
+    const messages = await mockMemory.getMessages({ threadId: 'thread-error', resourceId: 'resource-error' });
+    console.log('messages', JSON.stringify(messages, null, 2));
+    // Should not save any assistant message if interrupted before any part is finalized
+    expect(messages.filter(m => m.role === 'assistant').length).toBe(0);
+    // Optionally: expect user message to be saved
+    expect(messages.filter(m => m.role === 'user').length).toBeGreaterThan(0);
+    // Optionally: assert saveMessages was called only once (for user message)
+    // expect(saveCallCount).toBe(1);
+  });
+
+  it('should incrementally save messages across steps and tool calls', async () => {
+    const mockMemory = new MockMemory();
+    let saveCallCount = 0;
+    mockMemory.saveMessages = async function (...args) {
+      saveCallCount++;
+      return MockMemory.prototype.saveMessages.apply(this, args);
+    };
+
+    const echoTool = createTool({
+      id: 'echoTool',
+      description: 'Echoes the input string.',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ output: z.string() }),
+      execute: async ({ context }) => ({ output: context.input }),
+    });
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'If the user prompt contains "Echo:", always call the echoTool. Be verbose in your response.',
+      model: openai('gpt-4o'),
+      memory: mockMemory,
+      tools: { echoTool },
+    });
+
+    const stream = await agent.stream('Echo: Please echo this long message and explain why.', {
+      threadId: 'thread-echo',
+      resourceId: 'resource-echo',
+    });
+
+    for await (const _part of stream.fullStream) {
+    }
+
+    expect(saveCallCount).toBeGreaterThan(1);
+    const messages = await mockMemory.getMessages({ threadId: 'thread-echo', resourceId: 'resource-echo' });
+    expect(messages.length).toBeGreaterThan(0);
+  });
+
+  it('should incrementally save messages with multiple tools and multi-step streaming', async () => {
+    const mockMemory = new MockMemory();
+    let saveCallCount = 0;
+    mockMemory.saveMessages = async function (...args) {
+      saveCallCount++;
+      return MockMemory.prototype.saveMessages.apply(this, args);
+    };
+
+    const echoTool = createTool({
+      id: 'echoTool',
+      description: 'Echoes the input string.',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ output: z.string() }),
+      execute: async ({ context }) => ({ output: context.input }),
+    });
+
+    const uppercaseTool = createTool({
+      id: 'uppercaseTool',
+      description: 'Converts input to uppercase.',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ output: z.string() }),
+      execute: async ({ context }) => ({ output: context.input.toUpperCase() }),
+    });
+
+    const agent = new Agent({
+      name: 'test-agent-multi',
+      instructions: [
+        'If the user prompt contains "Echo:", call the echoTool.',
+        'If the user prompt contains "Uppercase:", call the uppercaseTool.',
+        'If both are present, call both tools and explain the results.',
+        'Be verbose in your response.',
+      ].join(' '),
+      model: openai('gpt-4o'),
+      memory: mockMemory,
+      tools: { echoTool, uppercaseTool },
+    });
+
+    const stream = await agent.stream(
+      'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
+      {
+        threadId: 'thread-multi',
+        resourceId: 'resource-multi',
+      },
+    );
+
+    for await (const _part of stream.fullStream) {
+    }
+
+    expect(saveCallCount).toBeGreaterThan(1);
+    const messages = await mockMemory.getMessages({ threadId: 'thread-multi', resourceId: 'resource-multi' });
+    expect(messages.length).toBeGreaterThan(0);
+  }, 500000);
+
+  it('should persist the full message after a successful run', async () => {
+    const mockMemory = new MockMemory();
+    const agentModel = new MockLanguageModelV1({
+      doStream: async _options => {
+        let count = 0;
+        const stream = new ReadableStream({
+          pull(controller) {
+            if (count < 10) {
+              controller.enqueue({
+                type: 'text-delta',
+                textDelta: `Dummy response ${count}`,
+                createdAt: new Date(Date.now() + count * 1000).toISOString(),
+              });
+              count++;
+            } else {
+              controller.close();
+            }
+          },
+        });
+        return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+      },
+    });
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'test',
+      model: agentModel,
+      memory: mockMemory,
+    });
+    const stream = await agent.stream('repeat tool calls', {
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+    });
+
+    for await (const _part of stream.fullStream) {
+    }
+
+    const messages = await mockMemory.getMessages({ threadId: 'thread-1', resourceId: 'resource-1', format: 'v2' });
+    // Check that the last message matches the expected final output
+    expect(messages[messages.length - 1]?.content?.parts?.some(p => p.text?.includes('Dummy response'))).toBe(true);
+  });
+
+  it('should only call saveMessages for the user message when no assistant parts are generated', async () => {
+    const mockMemory = new MockMemory();
+    let saveCallCount = 0;
+
+    mockMemory.saveMessages = async function (...args) {
+      saveCallCount++;
+      return MockMemory.prototype.saveMessages.apply(this, args);
+    };
+
+    // Model that never emits any parts
+    const agentModel = new MockLanguageModelV1({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [],
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+
+    const agent = new Agent({
+      name: 'no-progress-agent',
+      instructions: 'test',
+      model: agentModel,
+      memory: mockMemory,
+    });
+
+    const stream = await agent.stream('no progress', {
+      threadId: 'thread-2',
+      resourceId: 'resource-2',
+    });
+
+    for await (const _part of stream.fullStream) {
+      // Should not yield any parts
+    }
+
+    expect(saveCallCount).toBe(1);
+
+    const messages = await mockMemory.getMessages({ threadId: 'thread-2', resourceId: 'resource-2', format: 'v2' });
+    expect(messages.length).toBe(1);
+    expect(messages[0].role).toBe('user');
+    expect(messages[0].content.content).toBe('no progress');
+  });
+
+  it('should not save any message if interrupted before any part is emitted', async () => {
+    const mockMemory = new MockMemory();
+    let saveCallCount = 0;
+
+    mockMemory.saveMessages = async function (...args) {
+      saveCallCount++;
+      return MockMemory.prototype.saveMessages.apply(this, args);
+    };
+
+    // Model throws immediately before emitting any part
+    const agentModel = new MockLanguageModelV1({
+      doStream: async _options => {
+        const stream = new ReadableStream({
+          pull() {
+            throw new Error('Immediate interruption');
+          },
+        });
+        return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+      },
+    });
+
+    const agent = new Agent({
+      name: 'immediate-interrupt-agent',
+      instructions: 'test',
+      model: agentModel,
+      memory: mockMemory,
+    });
+
+    const stream = await agent.stream('interrupt before step', {
+      threadId: 'thread-3',
+      resourceId: 'resource-3',
+    });
+
+    try {
+      for await (const _part of stream.fullStream) {
+        // Should never yield
+      }
+    } catch (err) {
+      expect(err.message).toBe('Immediate interruption');
+    }
+
+    expect(saveCallCount).toBe(0);
+    const messages = await mockMemory.getMessages({ threadId: 'thread-3', resourceId: 'resource-3' });
+    expect(messages.length).toBe(0);
+  });
+
+  // FUTURE: Save queue/concurrency test (stub, implement after save queue is added)
+  it.skip('should serialize saves with a save queue under rapid step completion', async () => {
+    // This test is a placeholder for when a save queue is implemented.
+    // You would simulate rapid step completion and check that saves are queued, not run in parallel.
+    // Use a spy/mock to ensure saves do not overlap.
+  });
+
+  // OPTIONAL: drainUnsavedMessages test (stub, implement if/when buffering is used)
+  it.skip('should flush buffered parts via drainUnsavedMessages before persisting', async () => {
+    // This test is a placeholder for if you implement message part buffering and a drain method.
+    // Simulate buffering, call drain, and verify all parts are persisted.
   });
 });
