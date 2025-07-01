@@ -151,6 +151,17 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * Cancels a specific workflow run by its ID
+   * @param runId - The ID of the workflow run to cancel
+   * @returns Promise containing a success message
+   */
+  cancelRun(runId: string): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  /**
    * Creates a new workflow run
    * @param params - Optional object containing the optional runId
    * @returns Promise containing the runId of the created run

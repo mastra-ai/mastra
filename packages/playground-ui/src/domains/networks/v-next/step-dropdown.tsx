@@ -197,7 +197,7 @@ const StepEntry = ({ stepId, step, runId }: { stepId: any; step: any; runId?: st
               </Txt>
 
               <Txt variant="ui-sm" className="text-icon6">
-                {stepError?.data?.error?.message || stepResult?.error || 'N/A'}
+                {stepError?.message || stepError?.data?.error?.message || stepResult?.error || 'N/A'}
               </Txt>
             </div>
           </div>
@@ -213,7 +213,7 @@ const StepEntry = ({ stepId, step, runId }: { stepId: any; step: any; runId?: st
               </Txt>
 
               <Txt variant="ui-sm" className="text-icon6">
-                {stepError?.data?.error?.message || stepResult?.error || 'N/A'}
+                {stepError?.message || stepError?.data?.error?.message || stepResult?.error || 'N/A'}
               </Txt>
             </div>
           </div>

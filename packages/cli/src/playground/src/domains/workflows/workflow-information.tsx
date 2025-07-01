@@ -10,6 +10,7 @@ import {
   useExecuteWorkflow,
   useResumeWorkflow,
   useStreamWorkflow,
+  useCancelWorkflowRun,
 } from '@/hooks/use-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -28,6 +29,7 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
   const { createWorkflowRun } = useExecuteWorkflow();
   const { resumeWorkflow } = useResumeWorkflow();
   const { streamWorkflow, streamResult, isStreaming } = useStreamWorkflow();
+  const { mutateAsync: cancelWorkflowRun, isPending: isCancellingWorkflowRun } = useCancelWorkflowRun();
 
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
@@ -111,6 +113,8 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
                       streamResult={streamResult}
                       isStreamingWorkflow={isStreaming}
                       isResumingWorkflow={resumeWorkflow.isPending}
+                      isCancellingWorkflowRun={isCancellingWorkflowRun}
+                      cancelWorkflowRun={cancelWorkflowRun}
                     />
                   )}
                 </>
