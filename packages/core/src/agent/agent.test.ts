@@ -1462,13 +1462,13 @@ describe('agent memory with metadata', () => {
 });
 
 describe('Agent saving messages', () => {
-  it('should not save any assistant message if agent stream is interrupted early with maxTokens and continuation', async () => {
+  it('should rescue partial messages (including tool calls) if stream is aborted/interrupted', async () => {
     const mockMemory = new MockMemory();
-
-    // Patch saveMessages to count calls if you want to assert on it
     let saveCallCount = 0;
+    let savedMessages: any[] = [];
     mockMemory.saveMessages = async function (...args) {
       saveCallCount++;
+      savedMessages.push(...args[0].messages);
       return MockMemory.prototype.saveMessages.apply(this, args);
     };
 
@@ -1482,38 +1482,79 @@ describe('Agent saving messages', () => {
       },
     });
 
+    const echoTool = createTool({
+      id: 'echoTool',
+      description: 'Echoes the input string.',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ output: z.string() }),
+      execute: async ({ context }) => ({ output: context.input }),
+    });
+
     const agent = new Agent({
-      name: 'interrupt-agent',
-      instructions: 'Helpful agent with tools.',
+      name: 'partial-rescue-agent',
+      instructions:
+        'Call each tool in a separate step. Do not use parallel tool calls. Always wait for the result of one tool before calling the next.',
       model: openai('gpt-4o'),
       memory: mockMemory,
-      tools: { errorTool },
+      tools: { errorTool, echoTool },
     });
 
-    const stream = await agent.stream('Please use the error tool.', {
-      threadId: 'thread-error',
-      resourceId: 'resource-error',
-      maxTokens: 10,
-      experimental_continueSteps: true,
-    });
+    let stepCount = 0;
 
+    const stream = await agent.stream(
+      'Please echo this and then use the error tool. Be verbose and take multiple steps.',
+      {
+        threadId: 'thread-partial-rescue',
+        resourceId: 'resource-partial-rescue',
+        experimental_continueSteps: true,
+        onStepFinish: (result: any) => {
+          if (result.toolCalls && result.toolCalls.length > 1) {
+            throw new Error('Model attempted parallel tool calls; test requires sequential tool calls');
+          }
+          stepCount++;
+          if (stepCount === 2) {
+            throw new Error('Simulated error in onStepFinish');
+          }
+        },
+      },
+    );
+
+    let caught = false;
     try {
       for await (const _part of stream.fullStream) {
-        // The stream should error after the tool call
       }
-    } catch {}
-    expect(saveCallCount).toBe(1);
+    } catch (err) {
+      caught = true;
+      expect(err.message).toMatch(/Simulated error in onStepFinish/i);
+    }
+    expect(caught).toBe(true);
 
     // After interruption, check what was saved
-    const messages = await mockMemory.getMessages({ threadId: 'thread-error', resourceId: 'resource-error' });
-    console.log('messages', JSON.stringify(messages, null, 2));
-    // Should not save any assistant message if interrupted before any part is finalized
-    expect(messages.filter(m => m.role === 'assistant').length).toBe(0);
-    // Optionally: expect user message to be saved
-    expect(messages.filter(m => m.role === 'user').length).toBeGreaterThan(0);
-    // Optionally: assert saveMessages was called only once (for user message)
-    // expect(saveCallCount).toBe(1);
-  });
+    const messages = await mockMemory.getMessages({
+      threadId: 'thread-partial-rescue',
+      resourceId: 'resource-partial-rescue',
+    });
+    // User message should be saved
+    expect(messages.find(m => m.role === 'user')).toBeTruthy();
+    // At least one assistant message (could be partial) should be saved
+    expect(messages.find(m => m.role === 'assistant')).toBeTruthy();
+    // At least one tool call (echoTool or errorTool) should be saved if the model got that far
+    const assistantWithToolInvocation = messages.find(
+      m =>
+        m.role === 'assistant' &&
+        m.content &&
+        Array.isArray(m.content.parts) &&
+        m.content.parts.some(
+          part =>
+            part.type === 'tool-invocation' &&
+            part.toolInvocation &&
+            (part.toolInvocation.toolName === 'echoTool' || part.toolInvocation.toolName === 'errorTool'),
+        ),
+    );
+    expect(assistantWithToolInvocation).toBeTruthy();
+    // There should be at least two save calls (user and partial assistant/tool)
+    expect(saveCallCount).toBeGreaterThanOrEqual(2);
+  }, 500000);
 
   it('should incrementally save messages across steps and tool calls', async () => {
     const mockMemory = new MockMemory();
@@ -1735,16 +1776,82 @@ describe('Agent saving messages', () => {
     expect(messages.length).toBe(0);
   });
 
-  // FUTURE: Save queue/concurrency test (stub, implement after save queue is added)
-  it.skip('should serialize saves with a save queue under rapid step completion', async () => {
-    // This test is a placeholder for when a save queue is implemented.
-    // You would simulate rapid step completion and check that saves are queued, not run in parallel.
-    // Use a spy/mock to ensure saves do not overlap.
+  it('should serialize saves with a save queue under rapid step completion', async () => {
+    let concurrent = 0;
+    let maxConcurrent = 0;
+    let totalSaves = 0;
+    const mockMemory = new MockMemory();
+
+    // Spy on saveMessages to track concurrency
+    mockMemory.saveMessages = async function (...args) {
+      concurrent++;
+      maxConcurrent = Math.max(maxConcurrent, concurrent);
+      // Simulate a delay to increase the chance of overlap if not serialized
+      await new Promise(res => setTimeout(res, 30));
+      concurrent--;
+      totalSaves++;
+      return MockMemory.prototype.saveMessages.apply(this, args);
+    };
+
+    const agent = new Agent({
+      name: 'concurrency-test-agent',
+      instructions: 'test',
+      model: new MockLanguageModelV1(),
+      memory: mockMemory,
+    });
+
+    // Simulate rapid step completion by triggering multiple saves in quick succession
+    const messageList = new MessageList({ threadId: 'thread-concurrency', resourceId: 'resource-concurrency' });
+    const threadId = 'thread-concurrency';
+
+    // Add and trigger saves rapidly
+    const savePromises: Promise<void>[] = [];
+    for (let i = 0; i < 10; i++) {
+      messageList.add({ role: 'user', content: `message ${i}` }, 'user');
+      savePromises.push(agent['saveMessagePart'](messageList, threadId));
+    }
+    await Promise.all(savePromises);
+
+    // Assert that at no time were two saves running in parallel
+    expect(maxConcurrent).toBe(1);
+    // Assert all saves were eventually called
+    expect(totalSaves).toBeGreaterThan(0);
   });
 
-  // OPTIONAL: drainUnsavedMessages test (stub, implement if/when buffering is used)
-  it.skip('should flush buffered parts via drainUnsavedMessages before persisting', async () => {
-    // This test is a placeholder for if you implement message part buffering and a drain method.
-    // Simulate buffering, call drain, and verify all parts are persisted.
+  it('should flush buffered parts via drainUnsavedMessages before persisting', async () => {
+    const mockMemory = new MockMemory();
+    let savedMessages: any[] = [];
+
+    mockMemory.saveMessages = async function (...args) {
+      savedMessages.push(...args[0].messages);
+      return MockMemory.prototype.saveMessages.apply(this, args);
+    };
+
+    const messageList = new MessageList({ threadId: 'thread-drain', resourceId: 'resource-drain' });
+    const threadId = 'thread-drain';
+
+    // Simulate buffering messages (not yet persisted)
+    messageList.add({ role: 'user', content: 'Hello' }, 'user');
+    messageList.add({ role: 'assistant', content: 'Hi there!' }, 'response');
+    messageList.add({ role: 'user', content: 'How are you?' }, 'user');
+
+    // At this point, nothing should be saved
+    expect(savedMessages.length).toBe(0);
+
+    // Trigger save (which internally drains unsaved messages)
+    const agent = new Agent({
+      name: 'drain-test-agent',
+      instructions: 'test',
+      model: new MockLanguageModelV1(),
+      memory: mockMemory,
+    });
+
+    await agent['saveMessagePart'](messageList, threadId);
+
+    // All messages should be saved
+    expect(savedMessages.length).toBe(3);
+
+    // After draining, buffer should be empty
+    expect(messageList.drainUnsavedMessages().length).toBe(0);
   });
 });

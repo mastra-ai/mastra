@@ -112,6 +112,7 @@ export class Agent<
   metrics: TMetrics;
   evals: TMetrics;
   #voice: CompositeVoice;
+  private saveQueues: Map<string, Promise<void>> = new Map();
 
   constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
@@ -1117,15 +1118,63 @@ export class Agent<
     };
   }
 
-  private async saveMessagePart(messageList: MessageList, memoryConfig?: MemoryConfig) {
-    const memory = this.getMemory();
-    const newMessages = messageList.drainUnsavedMessages();
-    if (newMessages.length > 0 && memory) {
-      console.log('saveMessagePart', newMessages);
-      await memory.saveMessages({
-        messages: newMessages,
-        memoryConfig,
+  private enqueueSave(threadId: string, saveFn: () => Promise<void>) {
+    const prev = this.saveQueues.get(threadId) || Promise.resolve();
+    const next = prev
+      .then(saveFn)
+      .catch(() => {})
+      .then(() => {
+        // Remove queue if this was the last one
+        if (this.saveQueues.get(threadId) === next) {
+          this.saveQueues.delete(threadId);
+        }
       });
+    this.saveQueues.set(threadId, next);
+    return next;
+  }
+
+  private async saveMessagePart(messageList: MessageList, threadId?: string, memoryConfig?: MemoryConfig) {
+    if (!threadId) return;
+    return this.enqueueSave(threadId, async () => {
+      const memory = this.getMemory();
+      const newMessages = messageList.drainUnsavedMessages();
+      if (newMessages.length > 0 && memory) {
+        await memory.saveMessages({
+          messages: newMessages,
+          memoryConfig,
+        });
+      }
+    });
+  }
+
+  private async handleFinishStep({
+    result,
+    messageList,
+    pendingStepResult,
+    threadId,
+    memoryConfig,
+    runId,
+    onStepFinish,
+  }: {
+    result: any;
+    messageList: MessageList;
+    pendingStepResult: MessageList;
+    threadId?: string;
+    memoryConfig?: MemoryConfig;
+    runId?: string;
+    onStepFinish?: (result: any) => void | Promise<void>;
+  }) {
+    try {
+      pendingStepResult.add(result.response.messages, 'response');
+      await this.saveMessagePart(messageList, threadId, memoryConfig);
+      return onStepFinish?.({ ...result, runId });
+    } catch (e) {
+      this.logger.error('Error saving memory on step finish', {
+        error: e,
+        runId,
+      });
+      await this.saveMessagePart(pendingStepResult, threadId, memoryConfig);
+      throw e;
     }
   }
 
@@ -1199,12 +1248,15 @@ export class Agent<
           })
           .add(context || [], 'context');
 
+        const pendingStepResult = new MessageList({ threadId, resourceId });
+
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
           return {
             messageObjects: messageList.get.all.prompt(),
             convertedTools,
             messageList,
+            pendingStepResult,
           };
         }
         if (!threadId || !resourceId) {
@@ -1335,6 +1387,7 @@ export class Agent<
           messageList,
           // add old processed messages + new input messages
           messageObjects: processedList,
+          pendingStepResult,
         };
       },
       after: async ({
@@ -1345,6 +1398,7 @@ export class Agent<
         outputText,
         runId,
         messageList,
+        pendingStepResult,
       }: {
         runId: string;
         result: Record<string, any>;
@@ -1353,6 +1407,7 @@ export class Agent<
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
         messageList: MessageList;
+        pendingStepResult: MessageList;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -1442,15 +1497,9 @@ export class Agent<
               });
             })();
 
-            const messages = messageList.drainUnsavedMessages();
-            console.log('another save', JSON.stringify(messages, null, 2));
-            if (messages.length > 0) {
-              await memory.saveMessages({
-                messages,
-                memoryConfig,
-              });
-            }
+            await this.saveMessagePart(messageList, threadId, memoryConfig);
           } catch (e) {
+            await this.saveMessagePart(pendingStepResult, threadId, memoryConfig);
             if (e instanceof MastraError) {
               throw e;
             }
@@ -1582,7 +1631,7 @@ export class Agent<
       generateMessageId,
     });
 
-    const { thread, messageObjects, convertedTools, messageList } = await before();
+    const { thread, messageObjects, convertedTools, messageList, pendingStepResult } = await before();
 
     const threadId = thread?.id;
 
@@ -1591,9 +1640,15 @@ export class Agent<
         messages: messageObjects,
         tools: convertedTools,
         onStepFinish: async (result: any) => {
-          console.log('onStepFinish __text experimental_output', result);
-          await this.saveMessagePart(messageList, memoryConfig);
-          return onStepFinish?.({ ...result, runId });
+          await this.handleFinishStep({
+            result,
+            messageList,
+            pendingStepResult,
+            threadId,
+            memoryConfig,
+            runId,
+            onStepFinish,
+          });
         },
         maxSteps: maxSteps,
         runId,
@@ -1618,6 +1673,7 @@ export class Agent<
         outputText,
         runId,
         messageList,
+        pendingStepResult,
       });
 
       const newResult = result as any;
@@ -1632,9 +1688,15 @@ export class Agent<
         messages: messageObjects,
         tools: convertedTools,
         onStepFinish: async (result: any) => {
-          console.log('onStepFinish __text no output', result);
-          await this.saveMessagePart(messageList, memoryConfig);
-          return onStepFinish?.({ ...result, runId });
+          await this.handleFinishStep({
+            result,
+            messageList,
+            pendingStepResult,
+            threadId,
+            memoryConfig,
+            runId,
+            onStepFinish,
+          });
         },
         maxSteps,
         runId,
@@ -1658,6 +1720,7 @@ export class Agent<
         outputText,
         runId,
         messageList,
+        pendingStepResult,
       });
 
       return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1668,9 +1731,15 @@ export class Agent<
       tools: convertedTools,
       structuredOutput: output,
       onStepFinish: async (result: any) => {
-        console.log('onStepFinish __textObject', result);
-        await this.saveMessagePart(messageList, memoryConfig);
-        return onStepFinish?.({ ...result, runId });
+        await this.handleFinishStep({
+          result,
+          messageList,
+          pendingStepResult,
+          threadId,
+          memoryConfig,
+          runId,
+          onStepFinish,
+        });
       },
       maxSteps,
       runId,
@@ -1692,6 +1761,7 @@ export class Agent<
       outputText,
       runId,
       messageList,
+      pendingStepResult,
     });
 
     return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1787,7 +1857,7 @@ export class Agent<
       generateMessageId,
     });
 
-    const { thread, messageObjects, convertedTools, messageList } = await before();
+    const { thread, messageObjects, convertedTools, messageList, pendingStepResult } = await before();
 
     const threadId = thread?.id;
 
@@ -1801,12 +1871,17 @@ export class Agent<
         temperature,
         tools: convertedTools,
         onStepFinish: async (result: any) => {
-          console.log('onStepFinish __stream experimental_output', result);
-          await this.saveMessagePart(messageList, memoryConfig);
-          return onStepFinish?.({ ...result, runId });
+          await this.handleFinishStep({
+            result,
+            messageList,
+            pendingStepResult,
+            threadId,
+            memoryConfig,
+            runId,
+            onStepFinish,
+          });
         },
         onFinish: async (result: any) => {
-          console.log('onFinish __stream experimental_output', result);
           try {
             const outputText = result.text;
             await after({
@@ -1817,6 +1892,7 @@ export class Agent<
               outputText,
               runId,
               messageList,
+              pendingStepResult,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1850,12 +1926,17 @@ export class Agent<
         temperature,
         tools: convertedTools,
         onStepFinish: async (result: any) => {
-          console.log('onStepFinish __stream no output', result);
-          await this.saveMessagePart(messageList, memoryConfig);
-          return onStepFinish?.({ ...result, runId });
+          await this.handleFinishStep({
+            result,
+            messageList,
+            pendingStepResult,
+            threadId,
+            memoryConfig,
+            runId,
+            onStepFinish,
+          });
         },
         onFinish: async (result: any) => {
-          console.log('onFinish __stream no output', result);
           try {
             const outputText = result.text;
             await after({
@@ -1866,6 +1947,7 @@ export class Agent<
               outputText,
               runId,
               messageList,
+              pendingStepResult,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1897,12 +1979,17 @@ export class Agent<
       temperature,
       structuredOutput: output,
       onStepFinish: async (result: any) => {
-        console.log('onStepFinish __streamObject', result);
-        await this.saveMessagePart(messageList, memoryConfig);
-        return onStepFinish?.({ ...result, runId });
+        await this.handleFinishStep({
+          result,
+          messageList,
+          pendingStepResult,
+          threadId,
+          memoryConfig,
+          runId,
+          onStepFinish,
+        });
       },
       onFinish: async (result: any) => {
-        console.log('onFinish __streamObject', result);
         try {
           const outputText = JSON.stringify(result.object);
           await after({
@@ -1913,6 +2000,7 @@ export class Agent<
             outputText,
             runId,
             messageList,
+            pendingStepResult,
           });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
