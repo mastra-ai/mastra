@@ -3,7 +3,7 @@ import { LegacyWorkflowRunResult, WorkflowWatchResult } from '@mastra/client-js'
 import { WorkflowRunStatus } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { use, useState } from 'react';
+import { useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
 export type ExtendedLegacyWorkflowRunResult = LegacyWorkflowRunResult & {

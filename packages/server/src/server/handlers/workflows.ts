@@ -608,7 +608,7 @@ export async function sendWorkflowRunEventHandler({
     }
 
     if (!runId) {
-      throw new HTTPException(400, { message: 'runId required to cancel workflow run' });
+      throw new HTTPException(400, { message: 'runId required to send workflow run event' });
     }
 
     const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
