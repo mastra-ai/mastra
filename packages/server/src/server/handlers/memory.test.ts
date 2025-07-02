@@ -119,7 +119,7 @@ describe('Memory Handlers', () => {
         },
       });
       await expect(getThreadsHandler({ mastra, resourceId: 'test-resource', agentId: 'test-agent' })).rejects.toThrow(
-        new HTTPException(500, { message: 'Memory is not initialized' }),
+        new HTTPException(400, { message: 'Memory is not initialized' }),
       );
     });
 
@@ -174,7 +174,7 @@ describe('Memory Handlers', () => {
         },
       });
       await expect(getThreadByIdHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' })).rejects.toThrow(
-        new HTTPException(500, { message: 'Memory is not initialized' }),
+        new HTTPException(400, { message: 'Memory is not initialized' }),
       );
     });
 
@@ -227,7 +227,7 @@ describe('Memory Handlers', () => {
           agentId: 'test-agent',
           body: { messages: [] },
         }),
-      ).rejects.toThrow(new HTTPException(500, { message: 'Memory is not initialized' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
     });
 
     it('should throw error when messages are not provided', async () => {
@@ -309,7 +309,7 @@ describe('Memory Handlers', () => {
           mastra,
           body: { resourceId: 'test-resource' },
         }),
-      ).rejects.toThrow(new HTTPException(500, { message: 'Memory is not initialized' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
     });
 
     it('should throw error when resourceId is not provided', async () => {
@@ -378,7 +378,7 @@ describe('Memory Handlers', () => {
         },
       });
       await expect(getMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'testAgent' })).rejects.toThrow(
-        new HTTPException(500, { message: 'Memory is not initialized' }),
+        new HTTPException(400, { message: 'Memory is not initialized' }),
       );
     });
 

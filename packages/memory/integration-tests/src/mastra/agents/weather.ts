@@ -27,7 +27,7 @@ export const memory = new Memory({
 export const weatherAgent = new Agent({
   name: 'test',
   instructions:
-    'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. When asked for clipboard contents you also get that.',
+    'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. When asked for clipboard contents use the clipboard tool to get the clipboard contents.',
   model: openai('gpt-4o'),
   memory,
   tools: {
