@@ -1,5 +1,11 @@
 # @mastra/loggers
 
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- 25bf999: Implemented http transport
+
 ## 0.10.2
 
 ### Patch Changes
