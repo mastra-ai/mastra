@@ -26,7 +26,6 @@
     "lint:fix": "eslint ./src --fix"
   },
   "dependencies": {
-    "@mastra/core": "workspace:*",
     "weaviate-client": "^3.6.2"
   },
   "devDependencies": {
@@ -37,5 +36,8 @@
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "vitest": "^3.0.8"
+  },
+  "peerDependencies": {
+    "@mastra/core": "workspace:*"
   }
 }
