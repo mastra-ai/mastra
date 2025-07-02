@@ -1462,6 +1462,65 @@ describe('agent memory with metadata', () => {
 });
 
 describe('Agent save message parts', () => {
+  // Model that emits 10 parts
+  const dummyResponseModel = new MockLanguageModelV1({
+    doGenerate: async _options => ({
+      text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+      rawCall: { rawPrompt: null, rawSettings: {} },
+    }),
+    doStream: async _options => {
+      let count = 0;
+      const stream = new ReadableStream({
+        pull(controller) {
+          if (count < 10) {
+            controller.enqueue({
+              type: 'text-delta',
+              textDelta: `Dummy response ${count}`,
+              createdAt: new Date(Date.now() + count * 1000).toISOString(),
+            });
+            count++;
+          } else {
+            controller.close();
+          }
+        },
+      });
+      return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+    },
+  });
+
+  // Model never emits any parts
+  const emptyResponseModel = new MockLanguageModelV1({
+    doGenerate: async _options => ({
+      text: undefined,
+      finishReason: 'stop',
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      rawCall: { rawPrompt: null, rawSettings: {} },
+    }),
+    doStream: async () => ({
+      stream: simulateReadableStream({
+        chunks: [],
+      }),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+    }),
+  });
+
+  // Model throws immediately before emitting any part
+  const errorResponseModel = new MockLanguageModelV1({
+    doGenerate: async _options => {
+      throw new Error('Immediate interruption');
+    },
+    doStream: async _options => {
+      const stream = new ReadableStream({
+        pull() {
+          throw new Error('Immediate interruption');
+        },
+      });
+      return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+    },
+  });
+
   describe('generate', () => {
     it('should rescue partial messages (including tool calls) if generate is aborted/interrupted', async () => {
       const mockMemory = new MockMemory();
@@ -1643,18 +1702,10 @@ describe('Agent save message parts', () => {
 
     it('should persist the full message after a successful run', async () => {
       const mockMemory = new MockMemory();
-      const agentModel = new MockLanguageModelV1({
-        doGenerate: async _options => ({
-          text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        }),
-      });
       const agent = new Agent({
         name: 'test-agent-generate',
         instructions: 'test',
-        model: agentModel,
+        model: dummyResponseModel,
         memory: mockMemory,
       });
       await agent.generate('repeat tool calls', {
@@ -1684,20 +1735,10 @@ describe('Agent save message parts', () => {
         return MockMemory.prototype.saveMessages.apply(this, args);
       };
 
-      // Model that never emits any parts
-      const agentModel = new MockLanguageModelV1({
-        doGenerate: async _options => ({
-          text: undefined,
-          finishReason: 'stop',
-          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        }),
-      });
-
       const agent = new Agent({
         name: 'no-progress-agent-generate',
         instructions: 'test',
-        model: agentModel,
+        model: emptyResponseModel,
         memory: mockMemory,
       });
 
@@ -1727,17 +1768,10 @@ describe('Agent save message parts', () => {
         return MockMemory.prototype.saveMessages.apply(this, args);
       };
 
-      // Model throws immediately before emitting any part
-      const agentModel = new MockLanguageModelV1({
-        doGenerate: async _options => {
-          throw new Error('Immediate interruption');
-        },
-      });
-
       const agent = new Agent({
         name: 'immediate-interrupt-agent-generate',
         instructions: 'test',
-        model: agentModel,
+        model: errorResponseModel,
         memory: mockMemory,
       });
 
@@ -1946,30 +1980,10 @@ describe('Agent save message parts', () => {
 
     it('should persist the full message after a successful run', async () => {
       const mockMemory = new MockMemory();
-      const agentModel = new MockLanguageModelV1({
-        doStream: async _options => {
-          let count = 0;
-          const stream = new ReadableStream({
-            pull(controller) {
-              if (count < 10) {
-                controller.enqueue({
-                  type: 'text-delta',
-                  textDelta: `Dummy response ${count}`,
-                  createdAt: new Date(Date.now() + count * 1000).toISOString(),
-                });
-                count++;
-              } else {
-                controller.close();
-              }
-            },
-          });
-          return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-        },
-      });
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'test',
-        model: agentModel,
+        model: dummyResponseModel,
         memory: mockMemory,
       });
       const stream = await agent.stream('repeat tool calls', {
@@ -1998,20 +2012,10 @@ describe('Agent save message parts', () => {
         return MockMemory.prototype.saveMessages.apply(this, args);
       };
 
-      // Model that never emits any parts
-      const agentModel = new MockLanguageModelV1({
-        doStream: async () => ({
-          stream: simulateReadableStream({
-            chunks: [],
-          }),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        }),
-      });
-
       const agent = new Agent({
         name: 'no-progress-agent',
         instructions: 'test',
-        model: agentModel,
+        model: emptyResponseModel,
         memory: mockMemory,
       });
 
@@ -2041,22 +2045,10 @@ describe('Agent save message parts', () => {
         return MockMemory.prototype.saveMessages.apply(this, args);
       };
 
-      // Model throws immediately before emitting any part
-      const agentModel = new MockLanguageModelV1({
-        doStream: async _options => {
-          const stream = new ReadableStream({
-            pull() {
-              throw new Error('Immediate interruption');
-            },
-          });
-          return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
-        },
-      });
-
       const agent = new Agent({
         name: 'immediate-interrupt-agent',
         instructions: 'test',
-        model: agentModel,
+        model: errorResponseModel,
         memory: mockMemory,
       });
 
