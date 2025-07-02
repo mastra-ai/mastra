@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { openai } from '@ai-sdk/openai';
@@ -12,9 +11,8 @@ import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
 import { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
 import { $ } from 'execa';
-import getPort from 'get-port';
 import { Inngest } from 'inngest';
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { z } from 'zod';
 import { init, serve as inngestServe } from './index';
@@ -22,25 +20,15 @@ import { init, serve as inngestServe } from './index';
 interface LocalTestContext {
   inngestPort: number;
   handlerPort: number;
-  containerName: string;
 }
 
 describe('MastraInngestWorkflow', () => {
   beforeEach<LocalTestContext>(async ctx => {
-    const inngestPort = await getPort();
-    const handlerPort = await getPort();
-    const containerName = randomUUID();
-    await $`docker run --rm -d --name ${containerName} -p ${inngestPort}:${inngestPort} inngest/inngest:v1.5.10 inngest dev -p ${inngestPort} -u http://host.docker.internal:${handlerPort}/inngest/api`;
-
-    ctx.inngestPort = inngestPort;
-    ctx.handlerPort = handlerPort;
-    ctx.containerName = containerName;
+    ctx.inngestPort = 4000;
+    ctx.handlerPort = 4001;
+    await $`docker-compose restart`;
 
     vi.restoreAllMocks();
-  });
-
-  afterEach<LocalTestContext>(async ctx => {
-    await $`docker stop ${ctx.containerName}`;
   });
 
   describe.sequential('Basic Workflow Execution', () => {
@@ -110,10 +98,12 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
-      const run = await workflow.createRunAsync();
-      const result = await run.start({ inputData: { value: 'bail' } });
-
       await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const run = await workflow.createRunAsync();
+      console.log('running');
+      const result = await run.start({ inputData: { value: 'bail' } });
+      console.log('result', result);
 
       expect(result.steps['step1']).toEqual({
         status: 'success',
@@ -986,6 +976,8 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { inputData: 'test-input' } });
 
@@ -1072,6 +1064,7 @@ describe('MastraInngestWorkflow', () => {
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { inputValue: 'test-input' } });
@@ -1139,6 +1132,7 @@ describe('MastraInngestWorkflow', () => {
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const run = await workflow.createRunAsync();
       await run.start({ inputData: { inputData: 'test-input' } });
@@ -1214,6 +1208,7 @@ describe('MastraInngestWorkflow', () => {
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { cool: 'test-input' } });
@@ -1296,6 +1291,7 @@ describe('MastraInngestWorkflow', () => {
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const run = await workflow.createRunAsync();
       await run.start({ inputData: {} });
@@ -1399,6 +1395,7 @@ describe('MastraInngestWorkflow', () => {
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { status: 'success' } });
@@ -1475,6 +1472,7 @@ describe('MastraInngestWorkflow', () => {
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const run = await workflow.createRunAsync();
       let result: Awaited<ReturnType<typeof run.start>> | undefined = undefined;
@@ -1580,6 +1578,7 @@ describe('MastraInngestWorkflow', () => {
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { status: 'success' } });
@@ -1663,6 +1662,7 @@ describe('MastraInngestWorkflow', () => {
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: { count: 5 } });
@@ -4802,6 +4802,7 @@ describe('MastraInngestWorkflow', () => {
           fetch: app.fetch,
           port: (ctx as any).handlerPort,
         });
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -4961,6 +4962,7 @@ describe('MastraInngestWorkflow', () => {
           fetch: app.fetch,
           port: (ctx as any).handlerPort,
         });
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -5158,6 +5160,7 @@ describe('MastraInngestWorkflow', () => {
           fetch: app.fetch,
           port: (ctx as any).handlerPort,
         });
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 1 } });
@@ -5462,6 +5465,7 @@ describe('MastraInngestWorkflow', () => {
           fetch: app.fetch,
           port: (ctx as any).handlerPort,
         });
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         const run = await counterWorkflow.createRunAsync();
         const result = await run.start({ inputData: { startValue: 0 } });
@@ -5943,6 +5947,7 @@ describe('MastraInngestWorkflow', () => {
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ runtimeContext });
@@ -6068,6 +6073,7 @@ describe('MastraInngestWorkflow', () => {
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const run = await workflow.createRunAsync();
       const result = await run.start({});
@@ -6137,6 +6143,7 @@ describe('MastraInngestWorkflow', () => {
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -6144,7 +6151,7 @@ describe('MastraInngestWorkflow', () => {
         runId,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const { stream, getWorkflowState } = run.stream({ inputData: {} });
 
@@ -6157,7 +6164,7 @@ describe('MastraInngestWorkflow', () => {
 
       const executionResult = await getWorkflowState();
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       srv.close();
 
@@ -6308,6 +6315,7 @@ describe('MastraInngestWorkflow', () => {
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -6315,7 +6323,7 @@ describe('MastraInngestWorkflow', () => {
         runId,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const { stream, getWorkflowState } = run.stream({ inputData: {} });
 
@@ -6328,11 +6336,11 @@ describe('MastraInngestWorkflow', () => {
 
       const executionResult = await getWorkflowState();
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       srv.close();
 
-      expect(watchData.length).toBe(9);
+      expect(watchData.length).toBe(11);
       expect(watchData).toMatchObject([
         {
           payload: {
@@ -6343,6 +6351,9 @@ describe('MastraInngestWorkflow', () => {
         {
           payload: {
             id: 'step1',
+            startedAt: expect.any(Number),
+            status: 'running',
+            payload: {},
           },
           type: 'step-start',
         },
@@ -6352,6 +6363,7 @@ describe('MastraInngestWorkflow', () => {
             output: {
               result: 'success1',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
           type: 'step-result',
@@ -6364,12 +6376,43 @@ describe('MastraInngestWorkflow', () => {
           type: 'step-finish',
         },
         {
-          payload: {},
+          payload: {
+            id: expect.any(String),
+            startedAt: expect.any(Number),
+            status: 'waiting',
+            payload: {
+              result: 'success1',
+            },
+          },
           type: 'step-waiting',
         },
         {
           payload: {
+            id: expect.any(String),
+            endedAt: expect.any(Number),
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'success1',
+            },
+          },
+          type: 'step-result',
+        },
+        {
+          type: 'step-finish',
+          payload: {
+            id: expect.any(String),
+            metadata: {},
+          },
+        },
+        {
+          payload: {
             id: 'step2',
+            payload: {
+              result: 'success1',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -6379,6 +6422,7 @@ describe('MastraInngestWorkflow', () => {
             output: {
               result: 'success2',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
           type: 'step-result',
@@ -6397,6 +6441,7 @@ describe('MastraInngestWorkflow', () => {
           type: 'finish',
         },
       ]);
+
       // Verify execution completed successfully
       expect(executionResult.steps.step1).toMatchObject({
         status: 'success',
@@ -6473,6 +6518,7 @@ describe('MastraInngestWorkflow', () => {
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       });
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -6480,7 +6526,7 @@ describe('MastraInngestWorkflow', () => {
         runId,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const { stream, getWorkflowState } = run.stream({ inputData: {} });
 
@@ -6500,7 +6546,7 @@ describe('MastraInngestWorkflow', () => {
 
       const executionResult = await getWorkflowState();
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       srv.close();
 
@@ -6699,7 +6745,7 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const run = await promptEvalWorkflow.createRunAsync();
 
@@ -6888,7 +6934,7 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       const run = await workflow.createRunAsync({
         runId: 'test-run-id',

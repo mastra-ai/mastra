@@ -1067,6 +1067,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           payload: {
             id: step.id,
             status: 'running',
+            payload: prevOutput,
+            startedAt,
           },
         });
 
