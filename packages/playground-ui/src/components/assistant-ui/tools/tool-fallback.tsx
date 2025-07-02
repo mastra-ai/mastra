@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Icon, ToolsIcon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
-import { SyntaxHighlighter } from '../ui/syntax-highlighter';
+import { SyntaxHighlighter } from '../../ui/syntax-highlighter';
 
 export const ToolFallback: ToolCallContentPartComponent = ({ toolName, argsText, result }) => {
   const [isCollapsed, setIsCollapsed] = useState(true);

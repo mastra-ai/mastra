@@ -11,7 +11,7 @@ import type { Message } from '@/types';
 import { useFeatureFlagEnabled } from 'posthog-js/react';
 
 function Agent() {
-  const isCliShowMultiModal = useFeatureFlagEnabled('cli_ShowMultiModal');
+  const isCliShowMultiModal = true; //useFeatureFlagEnabled('cli_ShowMultiModal'); TODO FIX AT REVIEW TIME
 
   const { agentId, threadId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
@@ -43,11 +43,7 @@ function Agent() {
   const withSidebar = Boolean(memory?.result);
 
   return (
-    <AgentSettingsProvider
-      agentId={agentId!}
-      defaultGenerateOptions={agent?.defaultGenerateOptions}
-      defaultStreamOptions={agent?.defaultStreamOptions}
-    >
+    <AgentSettingsProvider agentId={agentId!}>
       <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
         {withSidebar && (
           <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
