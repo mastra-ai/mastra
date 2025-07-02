@@ -340,11 +340,22 @@ export abstract class Bundler extends MastraBundler {
       );
 
       await bundler.write();
-      const toolsInputOptions = Array.from(Object.keys(inputOptions.input || {}))
+      const toolImports: string[] = [];
+      const toolsExports: string[] = [];
+      Array.from(Object.keys(inputOptions.input || {}))
         .filter(key => key.startsWith('tools/'))
-        .map(key => `./${key}.mjs`);
+        .forEach((key, index) => {
+          const toolExport = `tool${index}`;
+          toolImports.push(`import * as ${toolExport} from './${key}.mjs';`);
+          toolsExports.push(toolExport);
+        });
 
-      await writeFile(join(bundleLocation, 'tools.mjs'), `export const tools = ${JSON.stringify(toolsInputOptions)};`);
+      await writeFile(
+        join(bundleLocation, 'tools.mjs'),
+        `${toolImports.join('\n')}
+
+export const tools = [${toolsExports.join(', ')}]`,
+      );
       this.logger.info('Bundling Mastra done');
 
       this.logger.info('Copying public files');

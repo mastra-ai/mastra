@@ -33,13 +33,17 @@ export type InngestEngineType = {
 
 export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest }): ReturnType<typeof inngestServe> {
   const wfs = mastra.getWorkflows();
-  const functions = Object.values(wfs).flatMap(wf => {
-    if (wf instanceof InngestWorkflow) {
-      wf.__registerMastra(mastra);
-      return wf.getFunctions();
-    }
-    return [];
-  });
+  const functions = Array.from(
+    new Set(
+      Object.values(wfs).flatMap(wf => {
+        if (wf instanceof InngestWorkflow) {
+          wf.__registerMastra(mastra);
+          return wf.getFunctions();
+        }
+        return [];
+      }),
+    ),
+  );
   return inngestServe({
     client: inngest,
     functions,
@@ -95,6 +99,7 @@ export class InngestRun<
       await new Promise(resolve => setTimeout(resolve, 1000));
       runs = await this.getRuns(eventId);
       if (runs?.[0]?.status === 'Failed') {
+        console.log('run', runs?.[0]);
         throw new Error(`Function run ${runs?.[0]?.status}`);
       } else if (runs?.[0]?.status === 'Cancelled') {
         const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
@@ -1063,6 +1068,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           payload: {
             id: step.id,
             status: 'running',
+            payload: prevOutput,
+            startedAt,
           },
         });
 

@@ -322,7 +322,6 @@ export async function streamGenerateHandler({
 
     return streamResponse;
   } catch (error) {
-    // @ts-expect-error TODO fix types
-    throw new HTTPException(error?.status ?? 500, { message: error?.message ?? 'Error streaming from agent' });
+    return handleError(error, 'error streaming agent response');
   }
 }

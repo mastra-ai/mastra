@@ -9,10 +9,14 @@ export function handleError(error: unknown, defaultMessage: string): Promise<Res
   const apiError = error as ApiError;
   throw new HTTPException((apiError.status || 500) as ContentfulStatusCode, {
     message: apiError.message || defaultMessage,
+    cause: apiError.cause,
   });
 }
-export function errorHandler(err: Error, c: Context): Response {
+export function errorHandler(err: Error, c: Context, isDev?: boolean): Response {
   if (err instanceof HTTPException) {
+    if (isDev) {
+      return c.json({ error: err.message, cause: err.cause, stack: err.stack }, err.status);
+    }
     return c.json({ error: err.message }, err.status);
   }
 

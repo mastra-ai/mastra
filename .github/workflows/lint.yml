@@ -333,6 +333,6 @@ jobs:
         working-directory: ./e2e-tests/kitchen-sink
         run: pnpm test:e2e:setup
 
-      - name: Test
+      - name: Test E2E
         working-directory: ./e2e-tests/kitchen-sink
         run: pnpm test:e2e

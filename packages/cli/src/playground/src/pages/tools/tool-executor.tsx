@@ -12,6 +12,7 @@ export interface ToolExecutorProps {
   zodInputSchema: ZodType;
   handleExecuteTool: (data: any) => void;
   executionResult: any;
+  errorString?: string;
   toolDescription: string;
   toolId: string;
   toolType?: MCPToolType;
@@ -22,6 +23,7 @@ const ToolExecutor = ({
   zodInputSchema,
   handleExecuteTool,
   executionResult: result,
+  errorString,
   toolDescription,
   toolId,
   toolType,
@@ -48,7 +50,7 @@ const ToolExecutor = ({
         <CopyButton content={code} tooltip="Copy JSON result to clipboard" />
       </div>
       <div className="p-5 h-full relative overflow-x-auto overflow-y-auto">
-        <CodeMirror value={code} editable={true} theme={theme} extensions={[jsonLanguage]} />
+        <CodeMirror value={errorString || code} editable={true} theme={theme} extensions={[jsonLanguage]} />
       </div>
     </MainContentContent>
   );

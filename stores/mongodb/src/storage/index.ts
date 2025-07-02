@@ -284,7 +284,7 @@ export class MongoDBStore extends MastraStorage {
         id: 'STORAGE_MONGODB_STORE_UPDATE_THREAD_NOT_FOUND',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
-        details: { threadId: id },
+        details: { threadId: id, status: 404 },
         text: `Thread ${id} not found`,
       });
     }

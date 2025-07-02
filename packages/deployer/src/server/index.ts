@@ -114,16 +114,8 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
   let tools: Record<string, any> = {};
   try {
-    const toolsPath = './tools.mjs';
-    const mastraToolsPaths = (await import(toolsPath)).tools;
-    const toolImports = mastraToolsPaths
-      ? await Promise.all(
-          // @ts-ignore
-          mastraToolsPaths.map(async toolPath => {
-            return import(toolPath);
-          }),
-        )
-      : [];
+    // @ts-expect-error Tools is generated dependency
+    const toolImports = (await import('#tools')).tools as Record<string, Function>[];
 
     tools = toolImports.reduce((acc, toolModule) => {
       Object.entries(toolModule).forEach(([key, tool]) => {
@@ -164,7 +156,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
     }
   });
 
-  app.onError(errorHandler);
+  app.onError((err, c) => errorHandler(err, c, options.isDev));
 
   // Add Mastra to context
   app.use('*', async function setContext(c, next) {
