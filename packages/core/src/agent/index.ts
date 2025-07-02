@@ -552,35 +552,6 @@ export class Agent<
     this.logger.debug(`[Agents:${this.name}] Tools set for agent ${this.name}`, { model: this.model, name: this.name });
   }
 
-  /**
-   * Resolves title generation instructions, handling both static strings and dynamic functions
-   * @private
-   */
-  private async resolveTitleInstructions(
-    runtimeContext: RuntimeContext,
-    instructions?: DynamicArgument<string>,
-  ): Promise<string> {
-    const DEFAULT_TITLE_INSTRUCTIONS = `
-    - you will generate a short title based on the first message a user begins a conversation with
-    - ensure it is not more than 80 characters long
-    - the title should be a summary of the user's message
-    - do not use quotes or colons
-    - the entire text you return will be used as the title`;
-
-    if (!instructions) {
-      return DEFAULT_TITLE_INSTRUCTIONS;
-    }
-
-    if (typeof instructions === 'string') {
-      return instructions;
-    } else {
-      const result = instructions({ runtimeContext });
-      return resolveMaybePromise(result, resolvedInstructions => {
-        return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
-      });
-    }
-  }
-
   async generateTitleFromUserMessage({
     message,
     runtimeContext = new RuntimeContext(),
@@ -2130,5 +2101,34 @@ export class Agent<
     }
 
     return { shouldGenerate: false };
+  }
+
+  /**
+   * Resolves title generation instructions, handling both static strings and dynamic functions
+   * @private
+   */
+  private async resolveTitleInstructions(
+    runtimeContext: RuntimeContext,
+    instructions?: DynamicArgument<string>,
+  ): Promise<string> {
+    const DEFAULT_TITLE_INSTRUCTIONS = `
+    - you will generate a short title based on the first message a user begins a conversation with
+    - ensure it is not more than 80 characters long
+    - the title should be a summary of the user's message
+    - do not use quotes or colons
+    - the entire text you return will be used as the title`;
+
+    if (!instructions) {
+      return DEFAULT_TITLE_INSTRUCTIONS;
+    }
+
+    if (typeof instructions === 'string') {
+      return instructions;
+    } else {
+      const result = instructions({ runtimeContext });
+      return resolveMaybePromise(result, resolvedInstructions => {
+        return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
+      });
+    }
   }
 }
