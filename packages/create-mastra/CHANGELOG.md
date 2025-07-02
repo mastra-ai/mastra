@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.9
+
+### Patch Changes
+
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+
 ## 0.10.9-alpha.0
 
 ### Patch Changes
