@@ -14,20 +14,13 @@ export const defaultModelSettings: ModelSettings = {
   topP: 1,
 };
 
-export function useAgentModelSettingsState({
-  initialModelSettings,
-  initialChatWithGenerate,
-  agentId,
-}: AgentModelSettingsStateProps) {
-  const [modelSettings, setModelSettingsState] = useState<ModelSettings | undefined>(initialModelSettings);
-  const [chatWithGenerate, setChatWithGenerateState] = useState<boolean>(initialChatWithGenerate ?? false);
+export function useAgentModelSettingsState({ agentId }: AgentModelSettingsStateProps) {
+  const [modelSettings, setModelSettingsState] = useState<ModelSettings | undefined>(undefined);
+  const [chatWithGenerate, setChatWithGenerateState] = useState<boolean>(false);
 
   const LOCAL_STORAGE_KEY = `mastra-agent-store-${agentId}`;
-  const hasInitialModelSettings = Boolean(initialModelSettings);
 
   useEffect(() => {
-    if (hasInitialModelSettings) return;
-
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (stored) {
@@ -41,7 +34,7 @@ export function useAgentModelSettingsState({
     }
 
     // Only run on mount or when initialSettings changes
-  }, [hasInitialModelSettings, LOCAL_STORAGE_KEY]);
+  }, [LOCAL_STORAGE_KEY]);
 
   useEffect(() => {
     if (modelSettings) {
@@ -55,15 +48,8 @@ export function useAgentModelSettingsState({
   const setChatWithGenerate = (chatWithGenerateValue: boolean) => setChatWithGenerateState(chatWithGenerateValue);
 
   const resetAll = () => {
-    if (initialModelSettings) {
-      setModelSettingsState(initialModelSettings);
-    } else {
-      setModelSettingsState(defaultModelSettings);
-    }
-
-    setChatWithGenerate(initialChatWithGenerate ?? false);
-
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    setModelSettingsState(defaultModelSettings);
+    setChatWithGenerate(false);
   };
 
   return {
