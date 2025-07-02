@@ -1,0 +1,3 @@
+{
+  "ignore": ["mastra/agents/**", "mastra/tools/**", "workflows/step*.ts"]
+}
