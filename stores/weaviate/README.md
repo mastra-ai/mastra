@@ -174,4 +174,3 @@ const regexFilter = { title: { $regex: '^Product.*' } };
 - [Weaviate Documentation](https://weaviate.io/developers/weaviate/client-libraries/typescript/typescript-v3)
 - [Weaviate API Reference](https://weaviate.io/developers/weaviate/api/rest)
 - [Mastra Core Documentation](https://docs.mastra.ai)
-
