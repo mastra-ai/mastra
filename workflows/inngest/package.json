@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -43,12 +43,12 @@
     "eslint": "^9.29.0",
     "execa": "^9.6.0",
     "get-port": "7.1.0",
-    "hono": "^4.7.11",
+    "hono": "^4.8.3",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^2.1.9"
+    "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.11.0-0"
+    "@mastra/core": ">=0.10.9-0 <0.11.0-0"
   }
 }

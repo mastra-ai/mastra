@@ -32,6 +32,9 @@ export const Button = ({ className, as, size = 'md', variant = 'default', ...pro
         variantClasses[variant],
         sizeClasses[size],
         className,
+        {
+          'cursor-not-allowed': props.disabled,
+        },
       )}
       {...props}
     />
