@@ -1495,6 +1495,7 @@ export class Agent<
                 );
               }
             }
+
             await Promise.all(promises);
           } catch (e) {
             await this.saveMessagePart(pendingStepResult, threadId, memoryConfig);
