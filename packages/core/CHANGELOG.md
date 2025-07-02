@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.10.10-alpha.0
+
+### Patch Changes
+
+- 4d3fbdf: Return tool error message rather than throw when a tool error happens for agent and tool playground page.
+
 ## 0.10.9
 
 ### Patch Changes

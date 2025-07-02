@@ -1,5 +1,14 @@
 # @mastra/playground-ui
 
+## 5.1.10-alpha.0
+
+### Patch Changes
+
+- 45f0dba: Display too-call finish reason error in playground
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10-alpha.0
+  - @mastra/client-js@0.10.9-alpha.0
+
 ## 5.1.9
 
 ### Patch Changes

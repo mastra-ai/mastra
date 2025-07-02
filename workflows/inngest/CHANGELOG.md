@@ -1,5 +1,13 @@
 # @mastra/inngest
 
+## 0.11.2-alpha.0
+
+### Patch Changes
+
+- 48d9738: Fix inngest sleep stream events
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10-alpha.0
+
 ## 0.11.1
 
 ### Patch Changes

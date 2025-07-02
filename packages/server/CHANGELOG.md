@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.10.10-alpha.0
+
+### Patch Changes
+
+- 6e13b80: Add error cause and stack trace to mastra server error handler
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10-alpha.0
+
 ## 0.10.9
 
 ### Patch Changes
