@@ -1129,8 +1129,7 @@ export class Agent<
       threadId,
       setTimeout(() => {
         this.enqueueSave(threadId, saveFn).catch(err => {
-          // Optionally log or handle the error
-          this.logger?.error?.('Error in debounced save', { err, threadId });
+          this.logger?.error?.('Error in debounceSave', { err, threadId });
         });
         this.saveDebounceTimers.delete(threadId);
       }, this.debounceMs),
@@ -1141,9 +1140,10 @@ export class Agent<
     const prev = this.saveQueues.get(threadId) || Promise.resolve();
     const next = prev
       .then(saveFn)
-      .catch(() => {})
+      .catch(err => {
+        this.logger?.error?.('Error in enqueueSave', { err, threadId });
+      })
       .then(() => {
-        // Remove queue if this was the last one
         if (this.saveQueues.get(threadId) === next) {
           this.saveQueues.delete(threadId);
         }
