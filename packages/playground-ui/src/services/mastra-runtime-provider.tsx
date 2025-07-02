@@ -259,6 +259,12 @@ export function MastraRuntimeProvider({
             { role: 'assistant', content: [] } as ThreadMessageLike,
           );
           setMessages(currentConversation => [...currentConversation, latestMessage]);
+          switch (generateResponse.finishReason) {
+            case 'tool-calls':
+              throw new Error('Generate finished with reason tool-calls, try increasing maxSteps');
+            default:
+              break;
+          }
         }
       } else {
         const response = await agent.stream({
@@ -419,6 +425,14 @@ export function MastraRuntimeProvider({
           onErrorPart(error) {
             throw new Error(error);
           },
+          onFinishMessagePart({ finishReason }) {
+            switch (finishReason) {
+              case 'tool-calls':
+                throw new Error('Stream finished with reason tool-calls, try increasing maxSteps');
+              default:
+                break;
+            }
+          },
         });
       }
 
@@ -431,7 +445,7 @@ export function MastraRuntimeProvider({
       setIsRunning(false);
       setMessages(currentConversation => [
         ...currentConversation,
-        { role: 'assistant', content: [{ type: 'text', text: `Error: ${error}` as string }] },
+        { role: 'assistant', content: [{ type: 'text', text: `${error}` as string }] },
       ]);
     }
   };
