@@ -23,6 +23,15 @@ const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
 };
 
+const handleFinishReason = (finishReason: string) => {
+  switch (finishReason) {
+    case 'tool-calls':
+      throw new Error('Stream finished with reason tool-calls, try increasing maxSteps');
+    default:
+      break;
+  }
+};
+
 const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreUserMessage>> => {
   const promises = attachments
     .filter(attachment => attachment.type === 'image' || attachment.type === 'document')
@@ -259,12 +268,7 @@ export function MastraRuntimeProvider({
             { role: 'assistant', content: [] } as ThreadMessageLike,
           );
           setMessages(currentConversation => [...currentConversation, latestMessage]);
-          switch (generateResponse.finishReason) {
-            case 'tool-calls':
-              throw new Error('Generate finished with reason tool-calls, try increasing maxSteps');
-            default:
-              break;
-          }
+          handleFinishReason(generateResponse.finishReason);
         }
       } else {
         const response = await agent.stream({
@@ -426,12 +430,7 @@ export function MastraRuntimeProvider({
             throw new Error(error);
           },
           onFinishMessagePart({ finishReason }) {
-            switch (finishReason) {
-              case 'tool-calls':
-                throw new Error('Stream finished with reason tool-calls, try increasing maxSteps');
-              default:
-                break;
-            }
+            handleFinishReason(finishReason);
           },
         });
       }
