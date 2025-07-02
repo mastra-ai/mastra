@@ -1467,12 +1467,11 @@ export class Agent<
               messageList.add(responseMessages, 'response');
             }
 
-            // renaming the thread doesn't need to block finishing the req
-            void (async () => {
-              if (!thread.title?.startsWith('New Thread')) {
-                return;
-              }
+            // Parallelize title generation and message saving
+            const promises: Promise<any>[] = [this.saveMessagePart(messageList, threadId, memoryConfig)];
 
+            // Add title generation to promises if needed
+            if (thread.title?.startsWith('New Thread')) {
               const config = memory.getMergedThreadConfig(memoryConfig);
               const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
 
@@ -1480,24 +1479,23 @@ export class Agent<
                 config?.threads?.generateTitle,
               );
 
-              const title =
-                shouldGenerate && userMessage
-                  ? await this.genTitle(userMessage, runtimeContext, titleModel)
-                  : undefined;
-              if (!title) {
-                return;
+              if (shouldGenerate && userMessage) {
+                promises.push(
+                  this.genTitle(userMessage, runtimeContext, titleModel).then(title => {
+                    if (title) {
+                      return memory.createThread({
+                        threadId: thread.id,
+                        resourceId,
+                        memoryConfig,
+                        title,
+                        metadata: thread.metadata,
+                      });
+                    }
+                  }),
+                );
               }
-
-              return memory.createThread({
-                threadId: thread.id,
-                resourceId,
-                memoryConfig,
-                title,
-                metadata: thread.metadata,
-              });
-            })();
-
-            await this.saveMessagePart(messageList, threadId, memoryConfig);
+            }
+            await Promise.all(promises);
           } catch (e) {
             await this.saveMessagePart(pendingStepResult, threadId, memoryConfig);
             if (e instanceof MastraError) {
