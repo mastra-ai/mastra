@@ -1,5 +1,12 @@
 # mastra
 
+## 0.10.10-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [25bf999]
+  - @mastra/loggers@0.10.3-alpha.0
+
 ## 0.10.10-alpha.1
 
 ### Patch Changes
