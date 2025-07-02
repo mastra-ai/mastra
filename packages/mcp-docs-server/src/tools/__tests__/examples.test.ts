@@ -1,4 +1,6 @@
+import fs from 'node:fs/promises';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { fromPackageRoot } from '../../utils.js';
 import { callTool, mcp } from './test-setup';
 
 describe('examplesTool', () => {
@@ -131,6 +133,62 @@ describe('examplesTool', () => {
     it('should demonstrate proper memory management patterns', async () => {
       const result = await callTool(tools.mastra_mastraExamples, { example: 'memory-with-context' });
       expect(result).toMatch(/memory/i);
+    });
+    it('should work when queryKeywords is an empty array', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, { queryKeywords: [] });
+      expect(result).toContain('Available code examples:');
+    });
+
+    it('should return the requested example when example name is valid', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, {
+        example: 'quick-start',
+        queryKeywords: ['quick', 'start'],
+      });
+      expect(result.toLowerCase()).toContain('quick');
+    });
+
+    it('should use queryKeywords to find relevant example when example name is invalid', async () => {
+      const result = await callTool(tools.mastra_mastraExamples, {
+        example: 'not-a-real-example',
+        queryKeywords: ['agent'],
+      });
+      // Should not throw, and should suggest or return content related to 'agent'
+      expect(result.toLowerCase()).toMatch(/agent/);
+    });
+
+    it('should have all expected examples in the .docs/organized/code-examples directory', async () => {
+      // Get the path to the examples directory
+      const docsExamplesDir = fromPackageRoot('.docs/organized/code-examples');
+
+      // Get all .md files from the docs examples directory
+      const docsExampleFiles = await fs.readdir(docsExamplesDir);
+      const docsExamples = docsExampleFiles
+        .filter(file => file.endsWith('.md'))
+        .map(file => file.replace('.md', ''))
+        .sort();
+
+      // Check that each source example has a corresponding docs file
+      // (unless it was skipped due to size limits)
+      const skippedExamples = ['dane', 'travel-app', 'yc-directory']; // Known large examples that are skipped
+
+      for (const skipped of skippedExamples) {
+        expect(docsExamples).not.toContain(skipped);
+      }
+
+      // Also verify that we have at least some expected examples
+      const expectedExamples = [
+        'quick-start',
+        'agent',
+        'agent-network',
+        'bird-checker-with-express',
+        'bird-checker-with-nextjs',
+        'memory-todo-agent',
+        'weather-agent',
+      ];
+
+      for (const example of expectedExamples) {
+        expect(docsExamples).toContain(example);
+      }
     });
   });
 });

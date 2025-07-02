@@ -1,11 +1,13 @@
 import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
+import type { NewAgentNetwork } from '../network/vNext';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -24,10 +26,12 @@ export interface Config<
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
+  TVNextNetworks extends Record<string, NewAgentNetwork> = Record<string, NewAgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
 > {
   agents?: TAgents;
   networks?: TNetworks;
+  vnext_networks?: TVNextNetworks;
   storage?: MastraStorage;
   vectors?: TVectors;
   logger?: TLogger | false;
@@ -66,6 +70,7 @@ export class Mastra<
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
+  TVNextNetworks extends Record<string, NewAgentNetwork> = Record<string, NewAgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
 > {
   #vectors?: TVectors;
@@ -83,6 +88,7 @@ export class Mastra<
   #storage?: MastraStorage;
   #memory?: MastraMemory;
   #networks?: TNetworks;
+  #vnext_networks?: TVNextNetworks;
   #server?: ServerConfig;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
@@ -108,7 +114,19 @@ export class Mastra<
     return this.#memory;
   }
 
-  constructor(config?: Config<TAgents, TLegacyWorkflows, TWorkflows, TVectors, TTTS, TLogger, TNetworks, TMCPServers>) {
+  constructor(
+    config?: Config<
+      TAgents,
+      TLegacyWorkflows,
+      TWorkflows,
+      TVectors,
+      TTTS,
+      TLogger,
+      TNetworks,
+      TVNextNetworks,
+      TMCPServers
+    >,
+  ) {
     // Store server middleware with default path
     if (config?.serverMiddleware) {
       this.#serverMiddleware = config.serverMiddleware.map(m => ({
@@ -185,6 +203,10 @@ export class Mastra<
       this.#networks = config.networks;
     }
 
+    if (config?.vnext_networks) {
+      this.#vnext_networks = config.vnext_networks;
+    }
+
     if (config?.mcpServers) {
       this.#mcpServers = config.mcpServers;
 
@@ -201,7 +223,11 @@ export class Mastra<
     }
 
     if (config && `memory` in config) {
-      throw new Error(`
+      const error = new MastraError({
+        id: 'MASTRA_CONSTRUCTOR_INVALID_MEMORY_CONFIG',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `
   Memory should be added to Agents, not to Mastra.
 
 Instead of:
@@ -209,7 +235,10 @@ Instead of:
 
 do:
   new Agent({ memory: new Memory() })
-`);
+`,
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
     if (config?.tts) {
@@ -234,7 +263,17 @@ do:
     if (config?.agents) {
       Object.entries(config.agents).forEach(([key, agent]) => {
         if (agents[key]) {
-          throw new Error(`Agent with name ID:${key} already exists`);
+          const error = new MastraError({
+            id: 'MASTRA_AGENT_REGISTRATION_DUPLICATE_ID',
+            domain: ErrorDomain.MASTRA,
+            category: ErrorCategory.USER,
+            text: `Agent with name ID:${key} already exists`,
+            details: {
+              agentId: key,
+            },
+          });
+          this.#logger?.trackException(error);
+          throw error;
         }
         agent.__registerMastra(this);
 
@@ -258,12 +297,21 @@ do:
     Networks
     */
     this.#networks = {} as TNetworks;
+    this.#vnext_networks = {} as TVNextNetworks;
 
     if (config?.networks) {
       Object.entries(config.networks).forEach(([key, network]) => {
         network.__registerMastra(this);
         // @ts-ignore
         this.#networks[key] = network;
+      });
+    }
+
+    if (config?.vnext_networks) {
+      Object.entries(config.vnext_networks).forEach(([key, network]) => {
+        network.__registerMastra(this);
+        // @ts-ignore
+        this.#vnext_networks[key] = network;
       });
     }
 
@@ -325,7 +373,19 @@ do:
   public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {
     const agent = this.#agents?.[name];
     if (!agent) {
-      throw new Error(`Agent with name ${String(name)} not found`);
+      const error = new MastraError({
+        id: 'MASTRA_GET_AGENT_BY_NAME_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Agent with name ${String(name)} not found`,
+        details: {
+          status: 404,
+          agentName: String(name),
+          agents: Object.keys(this.#agents ?? {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
     return this.#agents[name];
   }
@@ -337,7 +397,19 @@ do:
   public getVector<TVectorName extends keyof TVectors>(name: TVectorName): TVectors[TVectorName] {
     const vector = this.#vectors?.[name];
     if (!vector) {
-      throw new Error(`Vector with name ${String(name)} not found`);
+      const error = new MastraError({
+        id: 'MASTRA_GET_VECTOR_BY_NAME_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Vector with name ${String(name)} not found`,
+        details: {
+          status: 404,
+          vectorName: String(name),
+          vectors: Object.keys(this.#vectors ?? {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
     return vector;
   }
@@ -356,7 +428,19 @@ do:
   ): TLegacyWorkflows[TWorkflowId] {
     const workflow = this.#legacy_workflows?.[id];
     if (!workflow) {
-      throw new Error(`Workflow with ID ${String(id)} not found`);
+      const error = new MastraError({
+        id: 'MASTRA_GET_LEGACY_WORKFLOW_BY_ID_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Workflow with ID ${String(id)} not found`,
+        details: {
+          status: 404,
+          workflowId: String(id),
+          workflows: Object.keys(this.#legacy_workflows ?? {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
     if (serialized) {
@@ -372,7 +456,19 @@ do:
   ): TWorkflows[TWorkflowId] {
     const workflow = this.#workflows?.[id];
     if (!workflow) {
-      throw new Error(`Workflow with ID ${String(id)} not found`);
+      const error = new MastraError({
+        id: 'MASTRA_GET_WORKFLOW_BY_ID_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Workflow with ID ${String(id)} not found`,
+        details: {
+          status: 404,
+          workflowId: String(id),
+          workflows: Object.keys(this.#workflows ?? {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
     if (serialized) {
@@ -545,7 +641,14 @@ do:
     }
 
     if (!Array.isArray(serverMiddleware)) {
-      throw new Error(`Invalid middleware: expected a function or array, received ${typeof serverMiddleware}`);
+      const error = new MastraError({
+        id: 'MASTRA_SET_SERVER_MIDDLEWARE_INVALID_TYPE',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Invalid middleware: expected a function or array, received ${typeof serverMiddleware}`,
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
     this.#serverMiddleware = serverMiddleware.map(m => {
@@ -564,6 +667,10 @@ do:
 
   public getNetworks() {
     return Object.values(this.#networks || {});
+  }
+
+  public vnext_getNetworks() {
+    return Object.values(this.#vnext_networks || {});
   }
 
   public getServer() {
@@ -587,6 +694,11 @@ do:
     });
   }
 
+  public vnext_getNetwork(networkId: string): NewAgentNetwork | undefined {
+    const networks = this.vnext_getNetworks();
+    return networks.find(network => network.id === networkId);
+  }
+
   public async getLogsByRunId({
     runId,
     transportId,
@@ -607,11 +719,33 @@ do:
     perPage?: number;
   }) {
     if (!transportId) {
-      throw new Error('Transport ID is required');
+      const error = new MastraError({
+        id: 'MASTRA_GET_LOGS_BY_RUN_ID_MISSING_TRANSPORT',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Transport ID is required',
+        details: {
+          runId,
+          transportId,
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
     if (!this.#logger?.getLogsByRunId) {
-      throw new Error('Logger is not set');
+      const error = new MastraError({
+        id: 'MASTRA_GET_LOGS_BY_RUN_ID_LOGGER_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.SYSTEM,
+        text: 'Logger is not configured or does not support getLogsByRunId operation',
+        details: {
+          runId,
+          transportId,
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
     return await this.#logger.getLogsByRunId({
@@ -638,11 +772,30 @@ do:
     },
   ) {
     if (!transportId) {
-      throw new Error('Transport ID is required');
+      const error = new MastraError({
+        id: 'MASTRA_GET_LOGS_MISSING_TRANSPORT',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Transport ID is required',
+        details: {
+          transportId,
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
-    if (!this.#logger?.getLogs) {
-      throw new Error('Logger is not set');
+    if (!this.#logger) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_LOGS_LOGGER_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.SYSTEM,
+        text: 'Logger is not set',
+        details: {
+          transportId,
+        },
+      });
+      throw error;
     }
 
     return await this.#logger.getLogs(transportId, params);

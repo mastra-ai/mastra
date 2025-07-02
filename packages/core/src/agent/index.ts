@@ -8,6 +8,7 @@ import type {
   TextPart,
   UIMessage,
 } from 'ai';
+import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
@@ -31,6 +32,7 @@ import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import { MessageList } from './message-list';
+import type { MessageInput } from './message-list';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -40,6 +42,7 @@ import type {
   ToolsetsInput,
   ToolsInput,
   DynamicArgument,
+  AgentMemoryOption,
 } from './types';
 
 export { MessageList };
@@ -52,6 +55,19 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) 
   }
 
   return cb(value);
+}
+
+// Helper to resolve threadId from args (supports both new and old API)
+function resolveThreadIdFromArgs(args: {
+  memory?: AgentMemoryOption;
+  threadId?: string;
+}): (Partial<StorageThreadType> & { id: string }) | undefined {
+  if (args?.memory?.thread) {
+    if (typeof args.memory.thread === 'string') return { id: args.memory.thread };
+    if (typeof args.memory.thread === 'object' && args.memory.thread.id) return args.memory.thread;
+  }
+  if (args?.threadId) return { id: args.threadId };
+  return undefined;
 }
 
 @InstrumentClass({
@@ -89,8 +105,8 @@ export class Agent<
   #mastra?: Mastra;
   #memory?: MastraMemory;
   #workflows?: DynamicArgument<Record<string, Workflow>>;
-  #defaultGenerateOptions: AgentGenerateOptions;
-  #defaultStreamOptions: AgentStreamOptions;
+  #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
+  #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
   #tools: DynamicArgument<TTools>;
   /** @deprecated This property is deprecated. Use evals instead. */
   metrics: TMetrics;
@@ -290,12 +306,60 @@ export class Agent<
     return this.#description ?? '';
   }
 
-  public getDefaultGenerateOptions(): AgentGenerateOptions {
-    return this.#defaultGenerateOptions;
+  public getDefaultGenerateOptions({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): AgentGenerateOptions | Promise<AgentGenerateOptions> {
+    if (typeof this.#defaultGenerateOptions !== 'function') {
+      return this.#defaultGenerateOptions;
+    }
+
+    const result = this.#defaultGenerateOptions({ runtimeContext });
+    return resolveMaybePromise(result, options => {
+      if (!options) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_DEFAULT_GENERATE_OPTIONS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based default generate options returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      return options;
+    });
   }
 
-  public getDefaultStreamOptions(): AgentStreamOptions {
-    return this.#defaultStreamOptions;
+  public getDefaultStreamOptions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+    | AgentStreamOptions
+    | Promise<AgentStreamOptions> {
+    if (typeof this.#defaultStreamOptions !== 'function') {
+      return this.#defaultStreamOptions;
+    }
+
+    const result = this.#defaultStreamOptions({ runtimeContext });
+    return resolveMaybePromise(result, options => {
+      if (!options) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_DEFAULT_STREAM_OPTIONS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based default stream options returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      return options;
+    });
   }
 
   get tools() {
@@ -374,13 +438,22 @@ export class Agent<
    * @param options Options for getting the LLM
    * @returns A promise that resolves to the LLM instance
    */
-  public getLLM({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
-    | MastraLLMBase
-    | Promise<MastraLLMBase> {
-    const model = this.getModel({ runtimeContext });
+  public getLLM({
+    runtimeContext = new RuntimeContext(),
+    model,
+  }: {
+    runtimeContext?: RuntimeContext;
+    model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel>;
+  } = {}): MastraLLMBase | Promise<MastraLLMBase> {
+    // If model is provided, resolve it; otherwise use the agent's model
+    const modelToUse = model
+      ? typeof model === 'function'
+        ? model({ runtimeContext })
+        : model
+      : this.getModel({ runtimeContext });
 
-    return resolveMaybePromise(model, model => {
-      const llm = new MastraLLM({ model, mastra: this.#mastra });
+    return resolveMaybePromise(modelToUse, resolvedModel => {
+      const llm = new MastraLLM({ model: resolvedModel, mastra: this.#mastra });
 
       // Apply stored primitives if available
       if (this.#primitives) {
@@ -482,15 +555,22 @@ export class Agent<
   async generateTitleFromUserMessage({
     message,
     runtimeContext = new RuntimeContext(),
+    model,
   }: {
-    message: UIMessage;
+    message: string | MessageInput;
     runtimeContext?: RuntimeContext;
+    model?: DynamicArgument<MastraLanguageModel>;
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
-    const llm = await this.getLLM({ runtimeContext });
+    const llm = await this.getLLM({ runtimeContext, model });
+
+    const normMessage = new MessageList().add(message, 'user').get.all.ui().at(-1);
+    if (!normMessage) {
+      throw new Error(`Could not generate title from input ${JSON.stringify(message)}`);
+    }
 
     const partsToGen: TextPart[] = [];
-    for (const part of message.parts) {
+    for (const part of normMessage.parts) {
       if (part.type === `text`) {
         partsToGen.push(part);
       } else if (part.type === `source`) {
@@ -535,19 +615,29 @@ export class Agent<
     return userMessages.at(-1);
   }
 
-  async genTitle(userMessage: UIMessage | undefined, runtimeContext: RuntimeContext) {
-    let title = `New Thread ${new Date().toISOString()}`;
+  async genTitle(
+    userMessage: string | MessageInput | undefined,
+    runtimeContext: RuntimeContext,
+    model?: DynamicArgument<MastraLanguageModel>,
+  ) {
     try {
       if (userMessage) {
-        title = await this.generateTitleFromUserMessage({
-          message: userMessage,
-          runtimeContext,
-        });
+        const normMessage = new MessageList().add(userMessage, 'user').get.all.ui().at(-1);
+        if (normMessage) {
+          return await this.generateTitleFromUserMessage({
+            message: normMessage,
+            runtimeContext,
+            model,
+          });
+        }
       }
+      // If no user message, return a default title for new threads
+      return `New Thread ${new Date().toISOString()}`;
     } catch (e) {
-      console.error('Error generating title:', e);
+      this.logger.error('Error generating title:', e);
+      // Return undefined on error so existing title is preserved
+      return undefined;
     }
-    return title;
   }
 
   /* @deprecated use agent.getMemory() and query memory directly */
@@ -557,14 +647,18 @@ export class Agent<
     memoryConfig,
     resourceId,
     runId,
+    userMessages,
+    systemMessage,
     messageList = new MessageList({ threadId, resourceId }),
   }: {
     resourceId: string;
     threadId: string;
     thread?: StorageThreadType;
     memoryConfig?: MemoryConfig;
+    userMessages?: CoreMessage[];
+    systemMessage?: CoreMessage;
     runId?: string;
-    messageList: MessageList;
+    messageList?: MessageList;
   }) {
     const memory = this.getMemory();
     if (memory) {
@@ -573,7 +667,15 @@ export class Agent<
       if (!thread) {
         // If no thread, nothing to fetch from memory.
         // The messageList already contains the current user messages and system message.
-        return { threadId: threadId || '' };
+        return { threadId: threadId || '', messages: userMessages || [] };
+      }
+
+      if (userMessages && userMessages.length > 0) {
+        messageList.add(userMessages, 'memory');
+      }
+
+      if (systemMessage?.role === 'system') {
+        messageList.addSystem(systemMessage, 'memory');
       }
 
       const [memoryMessages, memorySystemMessage] =
@@ -603,12 +705,36 @@ export class Agent<
 
       messageList.add(memoryMessages, 'memory');
 
+      const systemMessages =
+        messageList
+          .getSystemMessages()
+          ?.map(m => m.content)
+          ?.join(`\n`) ?? undefined;
+
+      const newMessages = messageList.get.input.v1() as CoreMessage[];
+
+      const processedMemoryMessages = memory.processMessages({
+        // these will be processed
+        messages: messageList.get.remembered.v1() as CoreMessage[],
+        // these are here for inspecting but shouldn't be returned by the processor
+        // - ex TokenLimiter needs to measure all tokens even though it's only processing remembered messages
+        newMessages,
+        systemMessage: systemMessages,
+        memorySystemMessage: memorySystemMessage || undefined,
+      });
+
+      const returnList = new MessageList()
+        .addSystem(systemMessages)
+        .add(processedMemoryMessages, 'memory')
+        .add(newMessages, 'user');
+
       return {
         threadId: thread.id,
+        messages: returnList.get.all.prompt(),
       };
     }
 
-    return { threadId: threadId || '' };
+    return { threadId: threadId || '', messages: userMessages || [] };
   }
 
   private async getMemoryTools({
@@ -995,7 +1121,7 @@ export class Agent<
     instructions,
     messages,
     context,
-    threadId,
+    thread,
     memoryConfig,
     resourceId,
     runId,
@@ -1008,7 +1134,7 @@ export class Agent<
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
-    threadId?: string;
+    thread?: (Partial<StorageThreadType> & { id: string }) | undefined;
     memoryConfig?: MemoryConfig;
     context?: CoreMessage[];
     runId?: string;
@@ -1042,6 +1168,8 @@ export class Agent<
           hasMemory: !!this.getMemory(),
           hasResourceId: !!resourceId,
         });
+
+        const threadId = thread?.id;
 
         const convertedTools = await this.convertTools({
           toolsets,
@@ -1094,32 +1222,48 @@ export class Agent<
           },
         );
 
-        const thread =
-          (await memory.getThreadById({ threadId })) ??
-          (await memory.createThread({
+        let threadObject: StorageThreadType | undefined = undefined;
+        const existingThread = await memory.getThreadById({ threadId });
+        if (existingThread) {
+          if (
+            (!existingThread.metadata && thread.metadata) ||
+            (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
+          ) {
+            threadObject = await memory.saveThread({
+              thread: { ...existingThread, metadata: thread.metadata },
+              memoryConfig,
+            });
+          } else {
+            threadObject = existingThread;
+          }
+        } else {
+          threadObject = await memory.createThread({
             threadId,
-            resourceId,
+            metadata: thread.metadata,
+            title: thread.title,
             memoryConfig,
-          }));
+            resourceId,
+          });
+        }
 
         let [memoryMessages, memorySystemMessage] =
-          threadId && memory
+          thread.id && memory
             ? await Promise.all([
                 memory
                   .rememberMessages({
-                    threadId,
+                    threadId: threadObject.id,
                     resourceId,
                     config: memoryConfig,
                     // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
                     vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
                   })
                   .then(r => r.messagesV2),
-                memory.getSystemMessage({ threadId, memoryConfig }),
+                memory.getSystemMessage({ threadId: threadObject.id, memoryConfig }),
               ])
-            : [[], null];
+            : [[], null, null];
 
         this.logger.debug('Fetched messages from memory', {
-          threadId,
+          threadId: threadObject.id,
           runId,
           fetchedCount: memoryMessages.length,
         });
@@ -1127,7 +1271,7 @@ export class Agent<
         // So the agent doesn't get confused and start replying directly to messages
         // that were added via semanticRecall from a different conversation,
         // we need to pull those out and add to the system message.
-        const resultsFromOtherThreads = memoryMessages.filter(m => m.threadId !== threadId);
+        const resultsFromOtherThreads = memoryMessages.filter(m => m.threadId !== threadObject.id);
         if (resultsFromOtherThreads.length && !memorySystemMessage) {
           memorySystemMessage = ``;
         }
@@ -1144,15 +1288,14 @@ export class Agent<
 
         messageList
           .add(
-            memoryMessages.filter(m => m.threadId === threadId), // filter out messages from other threads. those are added to system message above
+            memoryMessages.filter(m => m.threadId === threadObject.id), // filter out messages from other threads. those are added to system message above
             'memory',
           )
           // add new user messages to the list AFTER remembered messages to make ordering more reliable
           .add(messages, 'user');
 
         const systemMessage =
-          messageList
-            .getSystemMessages()
+          [...messageList.getSystemMessages(), ...messageList.getSystemMessages('memory')]
             ?.map(m => m.content)
             ?.join(`\n`) ?? undefined;
 
@@ -1166,7 +1309,7 @@ export class Agent<
           memorySystemMessage: memorySystemMessage || undefined,
         });
 
-        const processedList = new MessageList({ threadId, resourceId })
+        const processedList = new MessageList({ threadId: threadObject.id, resourceId })
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
           .add(context || [], 'context')
@@ -1176,8 +1319,7 @@ export class Agent<
 
         return {
           convertedTools,
-          threadId,
-          thread,
+          thread: threadObject,
           messageList,
           // add old processed messages + new input messages
           messageObjects: processedList,
@@ -1223,7 +1365,19 @@ export class Agent<
           threadId,
         });
         const memory = this.getMemory();
-        const thread = threadAfter || (threadId ? await memory?.getThreadById({ threadId }) : undefined);
+        const messageListResponses = new MessageList({ threadId, resourceId })
+          .add(result.response.messages, 'response')
+          .get.all.core();
+
+        const usedWorkingMemory = messageListResponses?.some(
+          m => m.role === 'tool' && m?.content?.some(c => c?.toolName === 'updateWorkingMemory'),
+        );
+        // working memory updates the thread, so we need to get the latest thread if we used it
+        const thread = usedWorkingMemory
+          ? threadId
+            ? await memory?.getThreadById({ threadId })
+            : undefined
+          : threadAfter;
 
         if (memory && resourceId && thread) {
           try {
@@ -1246,35 +1400,41 @@ export class Agent<
               messageList.add(responseMessages, 'response');
             }
 
-            // renaming the thread doesn't need to block finishing the req
-            void (async () => {
-              if (!thread.title?.startsWith('New Thread')) {
-                return;
-              }
+            // Parallelize title generation and message saving
+            const promises: Promise<any>[] = [
+              memory.saveMessages({
+                messages: messageList.drainUnsavedMessages(),
+                memoryConfig,
+              }),
+            ];
 
+            // Add title generation to promises if needed
+            if (thread.title?.startsWith('New Thread')) {
               const config = memory.getMergedThreadConfig(memoryConfig);
               const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
-              const title =
-                config?.threads?.generateTitle && userMessage
-                  ? await this.genTitle(userMessage, runtimeContext)
-                  : undefined;
-              if (!title) {
-                return;
+
+              const { shouldGenerate, model: titleModel } = this.resolveTitleGenerationConfig(
+                config?.threads?.generateTitle,
+              );
+
+              if (shouldGenerate && userMessage) {
+                promises.push(
+                  this.genTitle(userMessage, runtimeContext, titleModel).then(title => {
+                    if (title) {
+                      return memory.createThread({
+                        threadId: thread.id,
+                        resourceId,
+                        memoryConfig,
+                        title,
+                        metadata: thread.metadata,
+                      });
+                    }
+                  }),
+                );
               }
+            }
 
-              return memory.createThread({
-                threadId: thread.id,
-                resourceId,
-                memoryConfig,
-                title,
-                metadata: thread.metadata,
-              });
-            })();
-
-            await memory.saveMessages({
-              messages: messageList.drainUnsavedMessages(),
-              memoryConfig,
-            });
+            await Promise.all(promises);
           } catch (e) {
             if (e instanceof MastraError) {
               throw e;
@@ -1362,10 +1522,13 @@ export class Agent<
     | GenerateTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | GenerateObjectResult<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
   > {
+    const defaultGenerateOptions = await this.getDefaultGenerateOptions({
+      runtimeContext: generateOptions.runtimeContext,
+    });
     const {
       context,
-      memoryOptions: memoryConfig,
-      resourceId,
+      memoryOptions: memoryConfigFromArgs,
+      resourceId: resourceIdFromArgs,
       maxSteps,
       onStepFinish,
       output,
@@ -1377,16 +1540,15 @@ export class Agent<
       telemetry,
       runtimeContext = new RuntimeContext(),
       ...args
-    }: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign(
-      {},
-      this.#defaultGenerateOptions,
-      generateOptions,
-    );
+    }: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, defaultGenerateOptions, generateOptions);
     const generateMessageId =
       `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
         ? (args.experimental_generateMessageId as IDGenerator)
         : undefined;
 
+    const threadFromArgs = resolveThreadIdFromArgs({ ...args, ...generateOptions });
+    const resourceId = args.memory?.resource || resourceIdFromArgs;
+    const memoryConfig = args.memory?.options || memoryConfigFromArgs;
     const runId = args.runId || randomUUID();
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
@@ -1395,7 +1557,7 @@ export class Agent<
       messages,
       instructions,
       context,
-      threadId: args.threadId,
+      thread: threadFromArgs,
       memoryConfig,
       resourceId,
       runId,
@@ -1405,14 +1567,16 @@ export class Agent<
       generateMessageId,
     });
 
-    const { threadId, thread, messageObjects, convertedTools, messageList } = await before();
+    const { thread, messageObjects, convertedTools, messageList } = await before();
+
+    const threadId = thread?.id;
 
     if (!output && experimental_output) {
       const result = await llm.__text({
         messages: messageObjects,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.({ ...result, runId });
         },
         maxSteps: maxSteps,
         runId,
@@ -1423,6 +1587,7 @@ export class Agent<
         resourceId,
         memory: this.getMemory(),
         runtimeContext,
+        telemetry,
         ...args,
       });
 
@@ -1450,7 +1615,7 @@ export class Agent<
         messages: messageObjects,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.({ ...result, runId });
         },
         maxSteps,
         runId,
@@ -1484,7 +1649,7 @@ export class Agent<
       tools: convertedTools,
       structuredOutput: output,
       onStepFinish: (result: any) => {
-        return onStepFinish?.(result);
+        return onStepFinish?.({ ...result, runId });
       },
       maxSteps,
       runId,
@@ -1556,10 +1721,11 @@ export class Agent<
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
   > {
+    const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions.runtimeContext });
     const {
       context,
-      memoryOptions: memoryConfig,
-      resourceId,
+      memoryOptions: memoryConfigFromArgs,
+      resourceId: resourceIdFromArgs,
       maxSteps,
       onFinish,
       onStepFinish,
@@ -1572,11 +1738,16 @@ export class Agent<
       telemetry,
       runtimeContext = new RuntimeContext(),
       ...args
-    }: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, this.#defaultStreamOptions, streamOptions);
+    }: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, defaultStreamOptions, streamOptions);
     const generateMessageId =
       `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
         ? (args.experimental_generateMessageId as IDGenerator)
         : undefined;
+
+    const threadFromArgs = resolveThreadIdFromArgs({ ...args, ...streamOptions });
+    const resourceId = args.memory?.resource || resourceIdFromArgs;
+    const memoryConfig = args.memory?.options || memoryConfigFromArgs;
+
     const runId = args.runId || randomUUID();
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
@@ -1585,7 +1756,7 @@ export class Agent<
       instructions,
       messages,
       context,
-      threadId: args.threadId,
+      thread: threadFromArgs,
       memoryConfig,
       resourceId,
       runId,
@@ -1595,7 +1766,9 @@ export class Agent<
       generateMessageId,
     });
 
-    const { threadId, thread, messageObjects, convertedTools, messageList } = await before();
+    const { thread, messageObjects, convertedTools, messageList } = await before();
+
+    const threadId = thread?.id;
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
@@ -1607,7 +1780,7 @@ export class Agent<
         temperature,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.({ ...result, runId });
         },
         onFinish: async (result: any) => {
           try {
@@ -1627,7 +1800,7 @@ export class Agent<
               runId,
             });
           }
-          await onFinish?.(result);
+          await onFinish?.({ ...result, runId });
         },
         maxSteps,
         runId,
@@ -1636,7 +1809,7 @@ export class Agent<
         telemetry,
         memory: this.getMemory(),
         runtimeContext,
-        threadId,
+        threadId: thread?.id,
         resourceId,
         ...args,
       });
@@ -1653,7 +1826,7 @@ export class Agent<
         temperature,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          return onStepFinish?.(result);
+          return onStepFinish?.({ ...result, runId });
         },
         onFinish: async (result: any) => {
           try {
@@ -1673,7 +1846,7 @@ export class Agent<
               runId,
             });
           }
-          await onFinish?.(result);
+          await onFinish?.({ ...result, runId });
         },
         maxSteps,
         runId,
@@ -1681,7 +1854,7 @@ export class Agent<
         telemetry,
         memory: this.getMemory(),
         runtimeContext,
-        threadId,
+        threadId: thread?.id,
         resourceId,
         ...args,
       }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1697,7 +1870,7 @@ export class Agent<
       temperature,
       structuredOutput: output,
       onStepFinish: (result: any) => {
-        return onStepFinish?.(result);
+        return onStepFinish?.({ ...result, runId });
       },
       onFinish: async (result: any) => {
         try {
@@ -1717,14 +1890,14 @@ export class Agent<
             runId,
           });
         }
-        await onFinish?.(result);
+        await onFinish?.({ ...result, runId });
       },
       runId,
       toolChoice,
       telemetry,
       memory: this.getMemory(),
       runtimeContext,
-      threadId,
+      threadId: thread?.id,
       resourceId,
       ...args,
     }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1895,5 +2068,29 @@ export class Agent<
   toStep(): Step<TAgentId, z.ZodObject<{ prompt: z.ZodString }>, z.ZodObject<{ text: z.ZodString }>, any> {
     const x = agentToStep(this);
     return new Step(x);
+  }
+
+  /**
+   * Resolves the configuration for title generation.
+   * @private
+   */
+  private resolveTitleGenerationConfig(
+    generateTitleConfig: boolean | { model: DynamicArgument<MastraLanguageModel> } | undefined,
+  ): {
+    shouldGenerate: boolean;
+    model?: DynamicArgument<MastraLanguageModel>;
+  } {
+    if (typeof generateTitleConfig === 'boolean') {
+      return { shouldGenerate: generateTitleConfig };
+    }
+
+    if (typeof generateTitleConfig === 'object' && generateTitleConfig !== null) {
+      return {
+        shouldGenerate: true,
+        model: generateTitleConfig.model,
+      };
+    }
+
+    return { shouldGenerate: false };
   }
 }

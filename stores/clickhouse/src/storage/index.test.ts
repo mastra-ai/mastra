@@ -4,8 +4,9 @@ import {
   createSampleThread,
   createSampleWorkflowSnapshot,
   checkWorkflowSnapshot,
+  createSampleMessageV2,
 } from '@internal/storage-test-utils';
-import type { MastraMessageV1, StorageColumn, WorkflowRunState } from '@mastra/core';
+import type { MastraMessageV1, MastraMessageV2, StorageColumn, WorkflowRunState } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
@@ -234,6 +235,83 @@ describe('ClickhouseStore', () => {
         // @ts-expect-error
         expect(msg.content[0].text).toBe(messages[idx].content[0].text);
       });
+    }, 10e3);
+
+    it('should upsert messages: duplicate id+threadId results in update, not duplicate row', async () => {
+      const thread = await createSampleThread({ resourceId: 'clickhouse-test' });
+      await store.saveThread({ thread });
+      const baseMessage = createSampleMessageV2({
+        threadId: thread.id,
+        createdAt: new Date(),
+        content: { content: 'Original' },
+        resourceId: 'clickhouse-test',
+      });
+
+      // Insert the message for the first time
+      await store.saveMessages({ messages: [baseMessage], format: 'v2' });
+
+      // Insert again with the same id and threadId but different content
+      const updatedMessage = {
+        ...createSampleMessageV2({
+          threadId: thread.id,
+          createdAt: new Date(),
+          content: { content: 'Updated' },
+          resourceId: 'clickhouse-test',
+        }),
+        id: baseMessage.id,
+      };
+      await store.saveMessages({ messages: [updatedMessage], format: 'v2' });
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Retrieve messages for the thread
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
+
+      // Only one message should exist for that id+threadId
+      expect(retrievedMessages.filter(m => m.id === baseMessage.id)).toHaveLength(1);
+
+      // The content should be the updated one
+      expect(retrievedMessages.find(m => m.id === baseMessage.id)?.content.content).toBe('Updated');
+    }, 10e3);
+
+    it('should upsert messages: duplicate id and different threadid', async () => {
+      const thread1 = await createSampleThread();
+      const thread2 = await createSampleThread();
+      await store.saveThread({ thread: thread1 });
+      await store.saveThread({ thread: thread2 });
+
+      const message = createSampleMessageV2({
+        threadId: thread1.id,
+        createdAt: new Date(),
+        content: { content: 'Thread1 Content' },
+        resourceId: thread1.resourceId,
+      });
+
+      // Insert message into thread1
+      await store.saveMessages({ messages: [message], format: 'v2' });
+
+      // Attempt to insert a message with the same id but different threadId
+      const conflictingMessage = {
+        ...createSampleMessageV2({
+          threadId: thread2.id,
+          createdAt: new Date(),
+          content: { content: 'Thread2 Content' },
+          resourceId: thread2.resourceId,
+        }),
+        id: message.id,
+      };
+
+      // Save should also save the message to the new thread
+      await store.saveMessages({ messages: [conflictingMessage], format: 'v2' });
+
+      // Retrieve messages for both threads
+      const thread1Messages = await store.getMessages({ threadId: thread1.id, format: 'v2' });
+      const thread2Messages = await store.getMessages({ threadId: thread2.id, format: 'v2' });
+
+      // Thread 1 should have the message with that id
+      expect(thread1Messages.find(m => m.id === message.id)?.content.content).toBe('Thread1 Content');
+
+      // Thread 2 should have the message with that id
+      expect(thread2Messages.find(m => m.id === message.id)?.content.content).toBe('Thread2 Content');
     }, 10e3);
 
     // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
@@ -1015,6 +1093,58 @@ describe('ClickhouseStore', () => {
           ifNotExists: ['jsonb_column'],
         }),
       ).resolves.not.toThrow();
+    });
+  });
+
+  describe('ClickhouseStore Double-nesting Prevention', () => {
+    beforeEach(async () => {
+      await store.clearTable({ tableName: TABLE_MESSAGES });
+      await store.clearTable({ tableName: TABLE_THREADS });
+    });
+
+    it('should handle stringified JSON content without double-nesting', async () => {
+      const threadData = createSampleThread();
+      const thread = await store.saveThread({ thread: threadData });
+
+      // Simulate user passing stringified JSON as message content (like the original bug report)
+      const stringifiedContent = JSON.stringify({ userInput: 'test data', metadata: { key: 'value' } });
+      const message: MastraMessageV2 = {
+        id: `msg-${randomUUID()}`,
+        role: 'user',
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: stringifiedContent }],
+          content: stringifiedContent, // This is the stringified JSON that user passed
+        },
+        createdAt: new Date(),
+      };
+
+      // Save the message - this should stringify the whole content object for storage
+      await store.saveMessages({ messages: [message], format: 'v2' });
+
+      // Retrieve the message - this is where double-nesting could occur
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
+      expect(retrievedMessages).toHaveLength(1);
+
+      const retrievedMessage = retrievedMessages[0] as MastraMessageV2;
+
+      // Check that content is properly structured as a V2 message
+      expect(typeof retrievedMessage.content).toBe('object');
+      expect(retrievedMessage.content.format).toBe(2);
+
+      // CRITICAL: The content.content should still be the original stringified JSON
+      // NOT double-nested like: { content: '{"format":2,"parts":[...],"content":"{\\"userInput\\":\\"test data\\"}"}' }
+      expect(retrievedMessage.content.content).toBe(stringifiedContent);
+
+      // Verify the content can be parsed as the original JSON
+      const parsedContent = JSON.parse(retrievedMessage.content.content as string);
+      expect(parsedContent).toEqual({ userInput: 'test data', metadata: { key: 'value' } });
+
+      // Additional check: ensure the message doesn't have the "Found unhandled message" structure
+      expect(retrievedMessage.content.parts).toBeDefined();
+      expect(Array.isArray(retrievedMessage.content.parts)).toBe(true);
     });
   });
 

@@ -24,6 +24,7 @@ export async function setupMonorepo(pathToStoreFiles, tag, pkgManager) {
     cwd: newPath,
     stdio: 'inherit',
     shell: true,
+    env: process.env,
   });
 
   console.log('building mastra...');
@@ -31,5 +32,6 @@ export async function setupMonorepo(pathToStoreFiles, tag, pkgManager) {
     cwd: join(newPath, 'apps', 'custom'),
     stdio: 'inherit',
     shell: true,
+    env: process.env,
   });
 }

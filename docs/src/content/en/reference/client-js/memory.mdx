@@ -79,6 +79,8 @@ Delete a thread and its messages:
 await thread.delete();
 ```
 
+
+
 ## Message Operations
 
 ### Save Messages
@@ -99,6 +101,18 @@ const savedMessages = await client.saveMessageToMemory({
   ],
   agentId: "agent-1",
 });
+```
+
+### Retrieve Thread Messages
+
+Get messages associated with a memory thread:
+
+```typescript
+// Get all messages in the thread
+const { messages } = await thread.getMessages();
+
+// Limit the number of messages retrieved
+const { messages } = await thread.getMessages({ limit: 10 });
 ```
 
 ### Get Memory Status

@@ -41,7 +41,7 @@ export async function getLegacyWorkflowsHandler({ mastra }: WorkflowContext) {
     }, {});
     return _workflows;
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error getting workflows' });
+    return handleError(error, 'error getting workflows');
   }
 }
 
@@ -77,7 +77,7 @@ export async function getLegacyWorkflowByIdHandler({ mastra, workflowId }: Workf
       }, {}),
     };
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error getting workflow' });
+    return handleError(error, 'error getting workflow by id');
   }
 }
 
@@ -125,7 +125,7 @@ export async function startAsyncLegacyWorkflowHandler({
     });
     return result;
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error executing workflow' });
+    return handleError(error, 'error starting workflow');
   }
 }
 
@@ -157,7 +157,7 @@ export async function getLegacyWorkflowRunHandler({
 
     return run;
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error getting workflow run' });
+    return handleError(error, 'error getting workflow run');
   }
 }
 
@@ -181,7 +181,7 @@ export async function createLegacyWorkflowRunHandler({
 
     return { runId: newRun.runId };
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error creating workflow run' });
+    return handleError(error, 'error creating workflow run');
   }
 }
 

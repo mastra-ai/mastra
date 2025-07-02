@@ -125,6 +125,34 @@ try {
 }
 ```
 
+### Get Workflow Run result
+
+Get the result of a workflow run:
+
+```typescript
+try  {
+  const workflow = client.getWorkflow("testWorkflow");
+
+  const run = await workflow.createRun();
+
+  // start the workflow run
+  const startResult = await workflow.start({
+    runId: run.runId,
+    inputData: {
+      city: "New York",
+    },
+  });
+
+  const result = await workflow.runExecutionResult(run.runId);
+
+  console.log(result);
+} catch (e) {
+  console.error(e);
+}
+```
+
+This is useful when dealing with long running workflows. You can use this to poll the result of the workflow run.
+
 ### Workflow run result
 
 A workflow run result yields the following:

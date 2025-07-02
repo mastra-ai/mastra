@@ -85,10 +85,10 @@ You can rename step outputs using the object syntax in `.map()`. In the example 
 ```typescript {3} showLineNumbers
   .then(step)
   .map({
-    details: {
+    details: mapVariable({
       step: step,
       path: "value"
-    }
+    })
   })
 ```
 
@@ -111,9 +111,9 @@ export const testWorkflow = createWorkflow({
 testWorkflow
   .then(cityCoordinatesStep)
   .map({
-    details: {
+    details: mapVariable({
       initData: testWorkflow,
       path: "value"
-    }
+    })
   })
 ```

@@ -13,8 +13,8 @@ describe('LanceFilterTranslator', () => {
   describe('basic operations', () => {
     it('handles empty filters', () => {
       expect(translator.translate({})).toEqual('');
-      expect(translator.translate(null as any)).toEqual('');
-      expect(translator.translate(undefined as any)).toEqual('');
+      expect(translator.translate(null)).toEqual('');
+      expect(translator.translate(undefined)).toEqual('');
     });
 
     it('translates equality operation', () => {
@@ -244,7 +244,7 @@ describe('LanceFilterTranslator', () => {
     });
 
     it('throws error for invalid operators at top level', () => {
-      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $like: '%pattern%' }];
+      const invalidFilters: any = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $like: '%pattern%' }];
 
       invalidFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);

@@ -5,9 +5,10 @@ export type Step = {
   error?: any;
   startedAt: number;
   endedAt?: number;
-  status: 'running' | 'success' | 'failed' | 'suspended';
+  status: 'running' | 'success' | 'failed' | 'suspended' | 'waiting';
   output?: any;
   input?: any;
+  resumeData?: any;
 };
 
 type UseCurrentRunReturnType = {
@@ -30,6 +31,7 @@ export const useCurrentRun = (): UseCurrentRunReturnType => {
         status: value.status,
         output: value.output,
         input: value.payload,
+        resumeData: value.resumePayload,
       },
     };
   }, {});

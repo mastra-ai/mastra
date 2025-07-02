@@ -104,7 +104,7 @@ export async function writeTelemetryConfig(
     format: 'es',
     entryFileNames: '[name].mjs',
   });
-
   const externals = output[0].imports.filter(x => !x.startsWith('./'));
+
   return { ...result, externalDependencies: externals };
 }

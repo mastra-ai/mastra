@@ -5,7 +5,7 @@ Unlike the previous MCP servers that use URLs, the Hacker News MCP server can be
 Let's update your MCP configuration in `src/mastra/agents/index.ts` to include the Hacker News server:
 
 ```typescript
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     zapier: {
       url: new URL(process.env.ZAPIER_MCP_URL || ""),

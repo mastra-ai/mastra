@@ -1,6 +1,6 @@
 services:
   mongodb-storage:
-    image: mongo:6.0.16
+    image: mongo:6.0.24
     container_name: 'mongodb-storage-test-db'
     ports:
       - '27017:27017'

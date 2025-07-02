@@ -1,6 +1,6 @@
 const meta = {
   "system-prompt": "Giving a System Prompt",
-  "agentic-workflows": "Agentic Workflows",
+  "workflow-as-tools": "Workflow as Tools",
   "using-a-tool": "Using a Tool",
   "hierarchical-multi-agent": "Hierarchical Multi-Agent System",
   "multi-agent-workflow": "Multi-Agent Workflow",

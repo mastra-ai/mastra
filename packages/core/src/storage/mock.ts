@@ -4,7 +4,15 @@ import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { Trace } from '../telemetry';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
-import type { EvalRow, PaginationInfo, StorageColumn, StorageGetMessagesArg, WorkflowRun, WorkflowRuns } from './types';
+import type {
+  EvalRow,
+  PaginationInfo,
+  StorageColumn,
+  StorageGetMessagesArg,
+  StorageResourceType,
+  WorkflowRun,
+  WorkflowRuns,
+} from './types';
 
 export class MockStore extends MastraStorage {
   private data: Record<TABLE_NAMES, Record<string, any>> = {
@@ -13,6 +21,7 @@ export class MockStore extends MastraStorage {
     mastra_messages: {},
     mastra_threads: {},
     mastra_traces: {},
+    mastra_resources: {},
   };
 
   constructor() {
@@ -108,6 +117,55 @@ export class MockStore extends MastraStorage {
     );
   }
 
+  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
+    this.logger.debug(`MockStore: getResourceById called for ${resourceId}`);
+    const resource = this.data.mastra_resources[resourceId];
+    return resource ? (resource as StorageResourceType) : null;
+  }
+
+  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    this.logger.debug(`MockStore: saveResource called for ${resource.id}`);
+    this.data.mastra_resources[resource.id] = JSON.parse(JSON.stringify(resource)); // simple clone
+    return resource;
+  }
+
+  async updateResource({
+    resourceId,
+    workingMemory,
+    metadata,
+  }: {
+    resourceId: string;
+    workingMemory?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<StorageResourceType> {
+    this.logger.debug(`MockStore: updateResource called for ${resourceId}`);
+    let resource = this.data.mastra_resources[resourceId];
+
+    if (!resource) {
+      // Create new resource if it doesn't exist
+      resource = {
+        id: resourceId,
+        workingMemory,
+        metadata: metadata || {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    } else {
+      resource = {
+        ...resource,
+        workingMemory: workingMemory !== undefined ? workingMemory : resource.workingMemory,
+        metadata: {
+          ...resource.metadata,
+          ...metadata,
+        },
+        updatedAt: new Date(),
+      };
+    }
+
+    this.data.mastra_resources[resourceId] = resource;
+    return resource;
+  }
+
   async getMessages<T extends MastraMessageV2[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
     this.logger.debug(`MockStore: getMessages called for thread ${threadId}`);
     // Mock implementation - filter messages by threadId
@@ -139,6 +197,12 @@ export class MockStore extends MastraStorage {
     const list = new MessageList().add(messages, 'memory');
     if (format === `v2`) return list.get.all.v2();
     return list.get.all.v1();
+  }
+
+  async updateMessages(args: { messages: Partial<MastraMessageV2> & { id: string }[] }): Promise<MastraMessageV2[]> {
+    this.logger.debug(`MockStore: updateMessages called with ${args.messages.length} messages`);
+    const messages = args.messages.map(m => this.data.mastra_messages[m.id]);
+    return messages;
   }
 
   async getTraces({

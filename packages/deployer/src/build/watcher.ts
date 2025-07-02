@@ -1,8 +1,8 @@
 import type { InputOptions, OutputOptions } from 'rollup';
 import { watch } from 'rollup';
-
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
+import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 
 export async function getInputOptions(entryFile: string, platform: 'node' | 'browser', env?: Record<string, string>) {
   const inputOptions = await getBundlerInputOptions(
@@ -24,6 +24,8 @@ export async function getInputOptions(entryFile: string, platform: 'node' | 'bro
     );
 
     inputOptions.plugins.push(aliasHono());
+    // fixes imports like lodash/fp/get
+    inputOptions.plugins.push(nodeModulesExtensionResolver());
   }
 
   return inputOptions;

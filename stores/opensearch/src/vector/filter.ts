@@ -1,30 +1,48 @@
-import type { FieldCondition, OperatorSupport, QueryOperator, VectorFilter } from '@mastra/core/vector/filter';
+import type {
+  BlacklistedRootOperators,
+  LogicalOperatorValueMap,
+  OperatorSupport,
+  OperatorValueMap,
+  QueryOperator,
+  VectorFilter,
+} from '@mastra/core/vector/filter';
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
 
+type OpenSearchOperatorValueMap = Omit<OperatorValueMap, '$options' | '$nor' | '$elemMatch'>;
+
+type OpenSearchLogicalOperatorValueMap = Omit<LogicalOperatorValueMap, '$nor'>;
+
+type OpenSearchBlacklisted = BlacklistedRootOperators | '$nor';
+
+export type OpenSearchVectorFilter = VectorFilter<
+  keyof OpenSearchOperatorValueMap,
+  OpenSearchOperatorValueMap,
+  OpenSearchLogicalOperatorValueMap,
+  OpenSearchBlacklisted
+>;
 /**
  * Translator for OpenSearch filter queries.
  * Maintains OpenSearch-compatible syntax while ensuring proper validation
  * and normalization of values.
  */
-export class OpenSearchFilterTranslator extends BaseFilterTranslator {
+export class OpenSearchFilterTranslator extends BaseFilterTranslator<OpenSearchVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
       logical: ['$and', '$or', '$not'],
       array: ['$in', '$nin', '$all'],
-      element: ['$exists'],
       regex: ['$regex'],
       custom: [],
     };
   }
 
-  translate(filter?: VectorFilter): VectorFilter {
+  translate(filter?: OpenSearchVectorFilter): OpenSearchVectorFilter {
     if (this.isEmpty(filter)) return undefined;
     this.validateFilter(filter);
     return this.translateNode(filter);
   }
 
-  private translateNode(node: VectorFilter | FieldCondition): any {
+  private translateNode(node: OpenSearchVectorFilter): any {
     // Handle primitive values and arrays
     if (this.isPrimitive(node) || Array.isArray(node)) {
       return node;

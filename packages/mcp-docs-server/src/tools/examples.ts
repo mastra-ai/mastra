@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { logger } from '../logger';
-import { fromPackageRoot } from '../utils';
+import { fromPackageRoot, getMatchingPaths } from '../utils';
 
 const examplesDir = fromPackageRoot('.docs/organized/code-examples');
 
@@ -24,7 +24,7 @@ async function listCodeExamples(): Promise<Array<{ name: string; path: string }>
 }
 
 // Helper function to read a code example
-async function readCodeExample(filename: string): Promise<string> {
+async function readCodeExample(filename: string, queryKeywords: string[]): Promise<string> {
   const filePath = path.join(examplesDir, filename);
   void logger.debug(`Reading example: ${filename}`);
 
@@ -34,7 +34,8 @@ async function readCodeExample(filename: string): Promise<string> {
   } catch {
     const examples = await listCodeExamples();
     const availableExamples = examples.map(ex => `- ${ex.name}`).join('\n');
-    return `Example "${filename}" not found.\n\nAvailable examples:\n${availableExamples}`;
+    const contentBasedSuggestions = await getMatchingPaths(filename, queryKeywords, examplesDir);
+    return `Example "${filename}" not found.\n\nAvailable examples:\n${availableExamples}\n\n${contentBasedSuggestions}`;
   }
 }
 
@@ -52,14 +53,22 @@ export const examplesInputSchema = z.object({
     .describe(
       'Name of the specific example to fetch. If not provided, lists all available examples.' + examplesListing,
     ),
+  queryKeywords: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Keywords from user query to use for matching examples. Each keyword should be a single word or short phrase; any whitespace-separated keywords will be split automatically.',
+    ),
 });
 
 export type ExamplesInput = z.infer<typeof examplesInputSchema>;
 
 export const examplesTool = {
   name: 'mastraExamples',
-  description:
-    'Get code examples from the Mastra.ai examples directory. Without a specific example name, lists all available examples. With an example name, returns the full source code of that example.',
+  description: `Get code examples from the Mastra.ai examples directory. 
+    Without a specific example name, lists all available examples. 
+    With an example name, returns the full source code of that example.
+    You can also use keywords from the user query to find relevant examples, but prioritize example names.`,
   parameters: examplesInputSchema,
   execute: async (args: ExamplesInput) => {
     void logger.debug('Executing mastraExamples tool', { example: args.example });
@@ -70,7 +79,7 @@ export const examplesTool = {
       }
 
       const filename = args.example.endsWith('.md') ? args.example : `${args.example}.md`;
-      const result = await readCodeExample(filename);
+      const result = await readCodeExample(filename, args.queryKeywords || []);
       return result;
     } catch (error) {
       void logger.error('Failed to execute mastraExamples tool', error);

@@ -2,7 +2,6 @@ packages:
   - "packages/*"
   - "deployers/*"
   - "stores/*"
-  - "speech/*"
   - "voice/*"
   - "workflows/*"
   - "client-sdks/*"

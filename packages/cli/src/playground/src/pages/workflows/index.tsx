@@ -16,16 +16,17 @@ import { useNavigate } from 'react-router';
 
 function Workflows() {
   const navigate = useNavigate();
-  const { workflows, legacyWorkflows, isLoading } = useWorkflows();
+  const { data, isLoading } = useWorkflows();
+  const [legacyWorkflows, workflows] = data ?? [];
 
-  const legacyWorkflowList = Object.entries(legacyWorkflows).map(([key, workflow]) => ({
+  const legacyWorkflowList = Object.entries(legacyWorkflows ?? {}).map(([key, workflow]) => ({
     id: key,
     name: workflow.name,
     stepsCount: Object.keys(workflow.steps)?.length,
     isLegacy: true,
   }));
 
-  const workflowList = Object.entries(workflows).map(([key, workflow]) => ({
+  const workflowList = Object.entries(workflows ?? {}).map(([key, workflow]) => ({
     id: key,
     name: workflow.name,
     stepsCount: Object.keys(workflow.steps ?? {})?.length,

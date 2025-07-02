@@ -51,3 +51,18 @@ export abstract class LoggerTransport extends Transform {
     return { logs: [], total: 0, page: _args?.page ?? 1, perPage: _args?.perPage ?? 100, hasMore: false };
   }
 }
+
+export const createCustomTransport = (
+  stream: Transform,
+  getLogs?: LoggerTransport['getLogs'],
+  getLogsByRunId?: LoggerTransport['getLogsByRunId'],
+) => {
+  let transport = stream as LoggerTransport;
+  if (getLogs) {
+    transport.getLogs = getLogs;
+  }
+  if (getLogsByRunId) {
+    transport.getLogsByRunId = getLogsByRunId;
+  }
+  return transport as LoggerTransport;
+};
