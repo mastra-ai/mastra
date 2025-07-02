@@ -43,7 +43,14 @@ interface VideoPlayerProps {
 }
 
 export const isYouTubeUrl = (url: string): boolean => {
-  return url.includes("youtube.com") || url.includes("youtu.be");
+  try {
+    const parsedUrl = new URL(url);
+    const allowedHosts = ["youtube.com", "www.youtube.com", "youtu.be"];
+    return allowedHosts.includes(parsedUrl.host);
+  } catch (e) {
+    // Invalid URL
+    return false;
+  }
 };
 
 export const getYouTubeEmbedUrl = (url: string): string => {
