@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "0.10.8",
+  "version": "0.10.9",
   "description": "",
   "type": "module",
   "files": [
@@ -52,7 +52,7 @@
   "author": "",
   "license": "Elastic-2.0",
   "peerDependencies": {
-    "@mastra/core": "^0.10.2-alpha.0",
+    "@mastra/core": ">=0.10.9-0 <0.11.0-0",
     "zod": "^3.0.0"
   },
   "devDependencies": {

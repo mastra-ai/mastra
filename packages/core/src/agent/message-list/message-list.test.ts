@@ -365,11 +365,21 @@ describe('MessageList', () => {
         messages,
         responseMessages: [{ ...msg2, id: randomUUID() }],
       });
-      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(
-        messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
-      );
+      // Filter out tool invocations with state="call" from expected UI messages
+      const expectedUIMessages = messages.map(m => {
+        if (m.role === 'assistant' && m.parts && m.toolInvocations) {
+          return {
+            ...m,
+            parts: m.parts.filter(p => !(p.type === 'tool-invocation' && p.toolInvocation.state === 'call')),
+            toolInvocations: m.toolInvocations.filter(t => t.state === 'result'),
+            createdAt: expect.any(Date),
+          };
+        }
+        return { ...m, createdAt: expect.any(Date) };
+      });
+      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(expectedUIMessages);
       list.add(messages, 'response');
-      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
+      expect(list.get.all.ui()).toEqual(expectedUIMessages);
 
       // msg3
       messages = appendResponseMessages({ messages, responseMessages: [{ id: randomUUID(), ...msg3 }] });
@@ -1897,6 +1907,312 @@ describe('MessageList', () => {
       const messages = list.get.all.v2();
       expect(messages[0].content.content).toBe('{"data": "value", "number": 42}'); // Should stay as string
       expect(typeof messages[0].content.content).toBe('string'); // Should be a string, not an object
+    });
+  });
+
+  describe('toUIMessage filtering', () => {
+    it('should filter out tool invocations with state="call" when converting to UIMessage', () => {
+      const messageWithCallState: MastraMessageV2 = {
+        id: 'msg-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'step-start' },
+            { type: 'text', text: 'Let me check that for you.' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-1',
+                toolName: 'getLuckyNumber',
+                args: {},
+              },
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'call',
+              toolCallId: 'call-1',
+              toolName: 'getLuckyNumber',
+              args: {},
+            },
+          ],
+        },
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+      };
+
+      const list = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+      list.add(messageWithCallState, 'response');
+
+      const uiMessages = list.get.all.ui();
+      expect(uiMessages.length).toBe(1);
+
+      const uiMessage = uiMessages[0];
+      expect(uiMessage.role).toBe('assistant');
+
+      // Check that the tool invocation with state="call" is filtered out from parts
+      const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
+      expect(toolInvocationParts.length).toBe(0);
+
+      // Check that text and step-start parts are preserved
+      expect(uiMessage.parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'Let me check that for you.' }]);
+
+      // Check that toolInvocations array is also filtered
+      expect(uiMessage.toolInvocations).toEqual([]);
+    });
+
+    it('should preserve tool invocations with state="result" when converting to UIMessage', () => {
+      const messageWithResultState: MastraMessageV2 = {
+        id: 'msg-2',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'step-start' },
+            { type: 'text', text: 'Your lucky number is:' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-2',
+                toolName: 'getLuckyNumber',
+                args: {},
+                result: 42,
+              },
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call-2',
+              toolName: 'getLuckyNumber',
+              args: {},
+              result: 42,
+            },
+          ],
+        },
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+      };
+
+      const list = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+      list.add(messageWithResultState, 'response');
+
+      const uiMessages = list.get.all.ui();
+      expect(uiMessages.length).toBe(1);
+
+      const uiMessage = uiMessages[0];
+
+      // Check that the tool invocation with state="result" is preserved
+      const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
+      expect(toolInvocationParts.length).toBe(1);
+      expect(toolInvocationParts[0]).toEqual({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call-2',
+          toolName: 'getLuckyNumber',
+          args: {},
+          result: 42,
+        },
+      });
+
+      // Check that toolInvocations array also has the result
+      expect(uiMessage.toolInvocations).toEqual([
+        {
+          state: 'result',
+          toolCallId: 'call-2',
+          toolName: 'getLuckyNumber',
+          args: {},
+          result: 42,
+        },
+      ]);
+    });
+
+    it('should filter out partial-call states and preserve only results', () => {
+      const messageWithMixedStates: MastraMessageV2 = {
+        id: 'msg-3',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'step-start' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'partial-call',
+                toolCallId: 'call-3',
+                toolName: 'searchTool',
+                args: { query: 'weather' },
+              },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-4',
+                toolName: 'calculateTool',
+                args: { x: 10, y: 20 },
+                result: 30,
+              },
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'partial-call',
+              toolCallId: 'call-3',
+              toolName: 'searchTool',
+              args: { query: 'weather' },
+            },
+            {
+              state: 'result',
+              toolCallId: 'call-4',
+              toolName: 'calculateTool',
+              args: { x: 10, y: 20 },
+              result: 30,
+            },
+          ],
+        },
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+      };
+
+      const list = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+      list.add(messageWithMixedStates, 'response');
+
+      const uiMessages = list.get.all.ui();
+      const uiMessage = uiMessages[0];
+
+      // Only the result state should be preserved
+      const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
+      expect(toolInvocationParts.length).toBe(1);
+      expect(toolInvocationParts[0].toolInvocation.state).toBe('result');
+      expect(toolInvocationParts[0].toolInvocation.toolCallId).toBe('call-4');
+
+      // toolInvocations array should also only have the result
+      expect(uiMessage.toolInvocations).toHaveLength(1);
+      expect(uiMessage.toolInvocations[0].state).toBe('result');
+      expect(uiMessage.toolInvocations[0].toolCallId).toBe('call-4');
+    });
+
+    it('should handle clientTool scenario - filter call states when querying from memory', () => {
+      // Simulate the scenario from GitHub issue #5016
+      // Test that tool invocations with "call" state are filtered when converting to UI messages
+
+      const list = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+
+      // Assistant message with tool invocation in "call" state (as saved in DB)
+      const assistantCallMessage: MastraMessageV2 = {
+        id: 'msg-assistant-1',
+        role: 'assistant',
+        createdAt: new Date('2024-01-01T10:00:00'),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'step-start' },
+            { type: 'text', text: 'Let me get your lucky number.' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-lucky-1',
+                toolName: 'getLuckyNumber',
+                args: {},
+              },
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'call',
+              toolCallId: 'call-lucky-1',
+              toolName: 'getLuckyNumber',
+              args: {},
+            },
+          ],
+        },
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+      };
+
+      // Add message as if loaded from memory/database
+      list.add(assistantCallMessage, 'memory');
+
+      // When converting to UI messages (what the client sees)
+      const uiMessages = list.get.all.ui();
+      expect(uiMessages.length).toBe(1);
+
+      const uiMessage = uiMessages[0];
+
+      // Tool invocations with "call" state should be filtered out from parts
+      const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
+      expect(toolInvocationParts.length).toBe(0); // Should be filtered out
+
+      // Only text and step-start parts should remain
+      expect(uiMessage.parts).toEqual([
+        { type: 'step-start' },
+        { type: 'text', text: 'Let me get your lucky number.' },
+      ]);
+
+      // toolInvocations array should be empty (filtered)
+      expect(uiMessage.toolInvocations).toEqual([]);
+
+      // Now test with a result state - should be preserved
+      const assistantResultMessage: MastraMessageV2 = {
+        id: 'msg-assistant-2',
+        role: 'assistant',
+        createdAt: new Date('2024-01-01T10:00:01'),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'step-start' },
+            { type: 'text', text: 'Your lucky number is:' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-lucky-2',
+                toolName: 'getLuckyNumber',
+                args: {},
+                result: 42,
+              },
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call-lucky-2',
+              toolName: 'getLuckyNumber',
+              args: {},
+              result: 42,
+            },
+          ],
+        },
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+      };
+
+      list.add(assistantResultMessage, 'memory');
+
+      const uiMessages2 = list.get.all.ui();
+      expect(uiMessages2.length).toBe(2);
+
+      const uiMessageWithResult = uiMessages2[1];
+
+      // Tool invocations with "result" state should be preserved
+      const resultToolParts = uiMessageWithResult.parts.filter(p => p.type === 'tool-invocation');
+      expect(resultToolParts.length).toBe(1);
+      expect(resultToolParts[0].toolInvocation.state).toBe('result');
+      expect(resultToolParts[0].toolInvocation.result).toBe(42);
+
+      // toolInvocations array should have the result
+      expect(uiMessageWithResult.toolInvocations).toHaveLength(1);
+      expect(uiMessageWithResult.toolInvocations[0].state).toBe('result');
+      expect(uiMessageWithResult.toolInvocations[0].result).toBe(42);
     });
   });
 });
