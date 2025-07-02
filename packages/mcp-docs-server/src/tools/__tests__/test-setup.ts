@@ -6,20 +6,25 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 
 // Load fixtures
-const blogListFixture = fs.readFileSync(path.join(__dirname, '../__fixtures__/blog-list-raw.txt'), 'utf-8');
-const blogPostFixture = fs.readFileSync(path.join(__dirname, '../__fixtures__/blog-post-raw.txt'), 'utf-8');
+const blogListFixture = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '../__fixtures__/blog-list-raw.json'), 'utf-8'),
+);
+const blogPostFixture = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '../__fixtures__/blog-post-raw.json'), 'utf-8'),
+);
+const emptyPostFixture = JSON.parse(fs.readFileSync(path.join(__dirname, '../__fixtures__/empty-post.json'), 'utf-8'));
 
 // Set up test Hono server
 const app = new Hono();
 
 // Mock blog list endpoint using fixture
-app.get('/blog', (c: Context) => {
-  return c.html(blogListFixture);
+app.get('/api/blog', (c: Context) => {
+  return c.json(blogListFixture);
 });
 
 // Mock specific blog post endpoint using fixture
-app.get('/blog/principles-of-ai-engineering', (c: Context) => {
-  return c.html(blogPostFixture);
+app.get('/api/blog/principles-of-ai-engineering', (c: Context) => {
+  return c.json(blogPostFixture);
 });
 
 app.get('/blog/rate-limited', (_c: Context) => {
@@ -30,9 +35,8 @@ app.get('/blog/rate-limited', (_c: Context) => {
   });
 });
 
-app.get('/blog/empty-post', (c: Context) => {
-  console.log('Empty post');
-  return c.html('<html><body></body></html>');
+app.get('/api/blog/empty-post', (c: Context) => {
+  return c.json(emptyPostFixture);
 });
 
 // Start the server
