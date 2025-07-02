@@ -20,7 +20,7 @@ describe('blog tool', () => {
     const result = await callTool(tools.mastra_mastraBlog, { url: '/api/blog' });
     expect(result).toContain('Mastra.ai Blog Posts:');
     expect(result).toContain(
-      `[Announcing our new book: Principles of Building AI agents](${baseUrl}/blog/principles-of-ai-engineering)(markdownUrl: ${baseUrl}/api/blog/principles-of-ai-engineering)`,
+      `[Announcing our new book: Principles of Building AI agents](${baseUrl}/blog/principles-of-ai-engineering) | [Markdown URL](${baseUrl}/api/blog/principles-of-ai-engineering)`,
     );
     expect(result).not.toContain('nav');
     expect(result).not.toContain('footer');
@@ -41,7 +41,9 @@ describe('blog tool', () => {
     const result = await callTool(tools.mastra_mastraBlog, { url: '/api/blog' });
     const escapedBaseUrl = baseUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     expect(result).toMatch(
-      new RegExp(`\\[.*\\]\\(${escapedBaseUrl}\\/blog\\/.*\\)\\(markdownUrl: ${escapedBaseUrl}\\/api\\/blog\\/.*\\)`),
+      new RegExp(
+        `\\[.*\\]\\(${escapedBaseUrl}\\/blog\\/.*\\) \\| \\[Markdown URL\\]\\(${escapedBaseUrl}\\/api\\/blog\\/.*\\)`,
+      ),
     );
   });
 

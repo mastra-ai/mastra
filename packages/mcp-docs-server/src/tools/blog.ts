@@ -20,7 +20,7 @@ async function fetchBlogPosts(): Promise<string> {
       const title = post.metadata.title;
       const href = post.slug;
       if (title && href) {
-        return `[${title}](${BLOG_BASE_URL}/blog/${href})(markdownUrl: ${BLOG_BASE_URL}/api/blog/${href})`;
+        return `[${title}](${BLOG_BASE_URL}/blog/${href}) | [Markdown URL](${BLOG_BASE_URL}/api/blog/${href})`;
       }
       return null;
     })
