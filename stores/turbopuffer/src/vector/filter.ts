@@ -1,6 +1,25 @@
-import type { FieldCondition, OperatorSupport, VectorFilter } from '@mastra/core/vector/filter';
+import type {
+  OperatorSupport,
+  VectorFilter,
+  OperatorValueMap,
+  LogicalOperatorValueMap,
+  BlacklistedRootOperators,
+} from '@mastra/core/vector/filter';
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
 import type { FilterCondition, FilterConnective, FilterOperator, Filters } from '@turbopuffer/turbopuffer';
+
+type TurbopufferOperatorValueMap = Omit<OperatorValueMap, '$regex' | '$options' | '$elemMatch'>;
+
+type TurbopufferLogicalOperatorValueMap = Omit<LogicalOperatorValueMap, '$nor' | '$not'>;
+
+type TurbopufferBlacklistedRootOperators = BlacklistedRootOperators | '$nor' | '$not';
+
+export type TurbopufferVectorFilter = VectorFilter<
+  keyof TurbopufferOperatorValueMap,
+  TurbopufferOperatorValueMap,
+  TurbopufferLogicalOperatorValueMap,
+  TurbopufferBlacklistedRootOperators
+>;
 
 /**
  * Translator for converting Mastra filters to Turbopuffer format
@@ -8,7 +27,7 @@ import type { FilterCondition, FilterConnective, FilterOperator, Filters } from 
  * Mastra filters: { field: { $gt: 10 } }
  * Turbopuffer filters: ["And", [["field", "Gt", 10]]]
  */
-export class TurbopufferFilterTranslator extends BaseFilterTranslator {
+export class TurbopufferFilterTranslator extends BaseFilterTranslator<TurbopufferVectorFilter, Filters | undefined> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
@@ -37,16 +56,16 @@ export class TurbopufferFilterTranslator extends BaseFilterTranslator {
   /**
    * Convert the Mastra filter to Turbopuffer format
    */
-  translate(filter?: VectorFilter): Filters | undefined {
+  translate(filter?: TurbopufferVectorFilter): Filters | undefined {
     if (this.isEmpty(filter)) {
       return undefined;
     }
 
     // Validate the filter structure before translating
-    this.validateFilter(filter as VectorFilter);
+    this.validateFilter(filter);
 
     // Translate the filter
-    const result = this.translateNode(filter as VectorFilter);
+    const result = this.translateNode(filter);
 
     // If we have a single condition (not a logical operator at the top level),
     // wrap it in an implicit AND to match Turbopuffer's expected format
@@ -60,7 +79,7 @@ export class TurbopufferFilterTranslator extends BaseFilterTranslator {
   /**
    * Recursively translate a filter node
    */
-  private translateNode(node: VectorFilter | FieldCondition): Filters | FilterCondition {
+  private translateNode(node: TurbopufferVectorFilter): Filters | FilterCondition {
     // Handle empty or null nodes
     if (node === null || node === undefined || Object.keys(node).length === 0) {
       return ['And', []];

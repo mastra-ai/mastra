@@ -62,7 +62,6 @@ const vectorQueryTool = createVectorQueryTool({
   indexName: "embeddings",
   model: openai.embedding("text-embedding-3-small"),
   enableFilter: true,
-  filterPrompt: PGVECTOR_PROMPT, // Use the prompt for your vector store
 });
 ```
 

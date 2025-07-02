@@ -378,7 +378,7 @@ describe('ChromaVector Integration Tests', () => {
           indexName: testIndexName,
           queryVector: [1, 0, 0],
           filter: {
-            tags: { $in: null },
+            tags: { $in: null } as any,
           },
         }),
       ).rejects.toThrow();
@@ -479,9 +479,9 @@ describe('ChromaVector Integration Tests', () => {
           indexName: testIndexName,
           queryVector: [1, 0, 0],
           filter: {
-            field1: { $in: 'not-array' },
-            field2: { $exists: 'not-boolean' },
-            field3: { $gt: 'not-number' },
+            field1: { $in: 'not-array' } as any,
+            field2: { $exists: 'not-boolean' } as any,
+            field3: { $gt: 'not-number' } as any,
           },
         }),
       ).rejects.toThrow();

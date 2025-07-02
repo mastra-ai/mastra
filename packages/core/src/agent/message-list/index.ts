@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { convertToCoreMessages } from 'ai';
-import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, ToolInvocation, UIMessage } from 'ai';
+import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, ToolCallPart, ToolInvocation, UIMessage } from 'ai';
+import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { MastraMessageV1 } from '../../memory';
 import { isCoreMessage, isUiMessage } from '../../utils';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
@@ -15,6 +16,7 @@ export type MastraMessageContentV2 = {
   toolInvocations?: UIMessage['toolInvocations'];
   reasoning?: UIMessage['reasoning'];
   annotations?: UIMessage['annotations'];
+  metadata?: Record<string, unknown>;
 };
 
 export type MastraMessageV2 = {
@@ -26,6 +28,16 @@ export type MastraMessageV2 = {
   resourceId?: string;
   type?: string;
 };
+
+function isToolCallMessage(message: CoreMessage): boolean {
+  if (message.role === 'tool') {
+    return true;
+  }
+  if (message.role === 'assistant' && Array.isArray(message.content)) {
+    return message.content.some((part): part is ToolCallPart => part.type === 'tool-call');
+  }
+  return false;
+}
 
 export type MessageInput = UIMessage | Message | MastraMessageV1 | CoreMessage | MastraMessageV2;
 type MessageSource = 'memory' | 'response' | 'user' | 'system' | 'context';
@@ -61,6 +73,7 @@ export class MessageList {
   }
 
   public add(messages: string | string[] | MessageInput | MessageInput[], messageSource: MessageSource) {
+    if (!messages) return this;
     for (const message of Array.isArray(messages) ? messages : [messages]) {
       this.addOne(
         typeof message === `string`
@@ -94,7 +107,15 @@ export class MessageList {
     ui: () => this.messages.map(MessageList.toUIMessage),
     core: () => this.convertToCoreMessages(this.all.ui()),
     prompt: () => {
-      return [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...this.all.core()];
+      const coreMessages = this.all.core();
+
+      // Some LLM providers will throw an error if the first message is a tool call.
+      while (coreMessages[0] && isToolCallMessage(coreMessages[0])) {
+        coreMessages.shift();
+      }
+
+      const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
+      return messages;
     },
   };
   private remembered = {
@@ -208,6 +229,12 @@ export class MessageList {
             contentType: part.mimeType,
             url: part.data,
           });
+        } else if (
+          part.type === 'tool-invocation' &&
+          (part.toolInvocation.state === 'call' || part.toolInvocation.state === 'partial-call')
+        ) {
+          // Filter out tool invocations with call or partial-call states
+          continue;
         } else {
           parts.push(part);
         }
@@ -236,7 +263,8 @@ export class MessageList {
         createdAt: m.createdAt,
         parts,
         reasoning: undefined,
-        toolInvocations: `toolInvocations` in m.content ? m.content.toolInvocations : undefined,
+        toolInvocations:
+          `toolInvocations` in m.content ? m.content.toolInvocations?.filter(t => t.state === 'result') : undefined,
       };
     }
 
@@ -269,15 +297,39 @@ export class MessageList {
     };
   }
   private addOne(message: MessageInput, messageSource: MessageSource) {
+    if (
+      (!(`content` in message) ||
+        (!message.content &&
+          // allow empty strings
+          typeof message.content !== 'string')) &&
+      (!(`parts` in message) || !message.parts)
+    ) {
+      throw new MastraError({
+        id: 'INVALID_MESSAGE_CONTENT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Message with role "${message.role}" must have either a 'content' property (string or array) or a 'parts' property (array) that is not empty, null, or undefined. Received message: ${JSON.stringify(message, null, 2)}`,
+        details: {
+          role: message.role as string,
+          messageSource,
+          hasContent: 'content' in message,
+          hasParts: 'parts' in message,
+        },
+      });
+    }
+
     if (message.role === `system` && MessageList.isVercelCoreMessage(message)) return this.addSystem(message);
     if (message.role === `system`) {
-      throw new Error(
-        `A non-CoreMessage system message was added - this is not supported as we didn't expect this could happen. Please open a Github issue and let us know what you did to get here. This is the non-CoreMessage system message we received:
-
-messageSource: ${messageSource}
-
-${JSON.stringify(message, null, 2)}`,
-      );
+      throw new MastraError({
+        id: 'INVALID_SYSTEM_MESSAGE_FORMAT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Invalid system message format. System messages must be CoreMessage format with 'role' and 'content' properties. The content should be a string or valid content array.`,
+        details: {
+          messageSource,
+          receivedMessage: JSON.stringify(message, null, 2),
+        },
+      });
     }
 
     const messageV2 = this.inputToMastraMessageV2(message, messageSource);
@@ -320,11 +372,14 @@ ${JSON.stringify(message, null, 2)}`,
       latestMessage?.role === 'assistant' &&
       messageV2.role === 'assistant' &&
       latestMessage.threadId === messageV2.threadId;
+    // If neither the latest message or the new message is a memory message, merge them together
+    const shouldMergeNewMessages =
+      latestMessage && !this.memoryMessages.has(latestMessage) && messageSource !== 'memory';
     const shouldAppendToLastAssistantMessageParts =
       shouldAppendToLastAssistantMessage &&
       newMessageFirstPartType &&
       ((newMessageFirstPartType === `tool-invocation` && latestMessagePartType !== `text`) ||
-        newMessageFirstPartType === latestMessagePartType);
+        (newMessageFirstPartType === latestMessagePartType && shouldMergeNewMessages));
 
     if (
       // backwards compat check!

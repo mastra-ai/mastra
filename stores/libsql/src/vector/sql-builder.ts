@@ -6,8 +6,8 @@ import type {
   ArrayOperator,
   ElementOperator,
   LogicalOperator,
-  VectorFilter,
 } from '@mastra/core/vector/filter';
+import type { LibSQLVectorFilter } from './filter';
 
 type OperatorType =
   | BasicOperator
@@ -372,7 +372,7 @@ function escapeLikePattern(str: string): string {
   return str.replace(/([%_\\])/g, '\\$1');
 }
 
-export function buildFilterQuery(filter: VectorFilter): FilterResult {
+export function buildFilterQuery(filter: LibSQLVectorFilter): FilterResult {
   if (!filter) {
     return { sql: '', values: [] };
   }
@@ -428,11 +428,11 @@ function buildCondition(key: string, value: any, parentPath: string): FilterResu
 
 function handleLogicalOperator(
   key: '$and' | '$or' | '$not' | '$nor',
-  value: VectorFilter[] | VectorFilter,
+  value: LibSQLVectorFilter[] | LibSQLVectorFilter,
   parentPath: string,
 ): FilterResult {
   // Handle empty conditions
-  if (!value || value.length === 0) {
+  if (!value || (Array.isArray(value) && value.length === 0)) {
     switch (key) {
       case '$and':
       case '$nor':
@@ -460,7 +460,7 @@ function handleLogicalOperator(
   const joinOperator = key === '$or' || key === '$nor' ? 'OR' : 'AND';
   const conditions = Array.isArray(value)
     ? value.map(f => {
-        const entries = Object.entries(f);
+        const entries = !!f ? Object.entries(f) : [];
         return entries.map(([k, v]) => buildCondition(k, v, key));
       })
     : [buildCondition(key, value, parentPath)];

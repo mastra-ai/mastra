@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { logger } from '../logger';
-import { fromPackageRoot } from '../utils';
+import { fromPackageRoot, getMatchingPaths } from '../utils';
 
 const docsBaseDir = fromPackageRoot('.docs/raw/');
 
@@ -35,7 +35,7 @@ async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files
 }
 
 // Helper function to read MDX files from a path
-async function readMdxContent(docPath: string): Promise<ReadMdxResult> {
+async function readMdxContent(docPath: string, queryKeywords: string[]): Promise<ReadMdxResult> {
   const fullPath = path.join(docsBaseDir, docPath);
   void logger.debug(`Reading MDX content from: ${fullPath}`);
 
@@ -68,7 +68,12 @@ async function readMdxContent(docPath: string): Promise<ReadMdxResult> {
         fileContents += `\n\n# ${file}\n\n${content}`;
       }
 
-      return { found: true, content: dirListing + fileContents };
+      // Add content-based suggestions when query keywords are provided and path is a directory
+      const contentBasedSuggestions = await getMatchingPaths(docPath, queryKeywords, docsBaseDir);
+
+      const suggestions = ['---', '', contentBasedSuggestions, ''].join('\n');
+
+      return { found: true, content: dirListing + fileContents + suggestions };
     }
 
     // If it's a file, just read it
@@ -156,22 +161,42 @@ export const docsInputSchema = z.object({
     .array(z.string())
     .min(1)
     .describe(`One or more documentation paths to fetch\nAvailable paths:\n${availablePaths}`),
+  queryKeywords: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Keywords from user query to use for matching documentation. Each keyword should be a single word or short phrase; any whitespace-separated keywords will be split automatically.',
+    ),
 });
 
 export type DocsInput = z.infer<typeof docsInputSchema>;
 
 export const docsTool = {
   name: 'mastraDocs',
-  description:
-    'Get Mastra.ai documentation. Request paths to explore the docs. References contain API docs. Other paths contain guides. The user doesn\'t know about files and directories. This is your internal knowledge the user can\'t read. If the user asks about a feature check general docs as well as reference docs for that feature. Ex: with evals check in evals/ and in reference/evals/. Provide code examples so the user understands. If you build a URL from the path, only paths ending in .mdx exist. Note that docs about MCP are currently in reference/tools/. IMPORTANT: Be concise with your answers. The user will ask for more info. If packages need to be installed, provide the pnpm command to install them. Ex. if you see `import { X } from "@mastra/$PACKAGE_NAME"` in an example, show an install command. Always install latest tag, not alpha unless requested. If you scaffold a new project it may be in a subdir',
+  description: `Get Mastra.ai documentation. 
+    Request paths to explore the docs. References contain API docs. 
+    Other paths contain guides. The user doesn\'t know about files and directories. 
+    You can also use keywords from the user query to find relevant documentation, but prioritize paths. 
+    This is your internal knowledge the user can\'t read. 
+    If the user asks about a feature check general docs as well as reference docs for that feature. 
+    Ex: with evals check in evals/ and in reference/evals/. 
+    Provide code examples so the user understands. 
+    If you build a URL from the path, only paths ending in .mdx exist. 
+    Note that docs about MCP are currently in reference/tools/. 
+    IMPORTANT: Be concise with your answers. The user will ask for more info. 
+    If packages need to be installed, provide the pnpm command to install them. 
+    Ex. if you see \`import { X } from "@mastra/$PACKAGE_NAME"\` in an example, show an install command. 
+    Always install latest tag, not alpha unless requested. If you scaffold a new project it may be in a subdir.
+    When displaying results, always mention which file path contains the information (e.g., 'Found in "path/to/file.mdx"') so users know where this documentation lives.`,
   parameters: docsInputSchema,
   execute: async (args: DocsInput) => {
     void logger.debug('Executing mastraDocs tool', { args });
     try {
+      const queryKeywords = args.queryKeywords ?? [];
       const results = await Promise.all(
         args.paths.map(async (path: string) => {
           try {
-            const result = await readMdxContent(path);
+            const result = await readMdxContent(path, queryKeywords);
             if (result.found) {
               return {
                 path,
@@ -179,11 +204,12 @@ export const docsTool = {
                 error: null,
               };
             }
-            const suggestions = await findNearestDirectory(path, availablePaths);
+            const directorySuggestions = await findNearestDirectory(path, availablePaths);
+            const contentBasedSuggestions = await getMatchingPaths(path, queryKeywords, docsBaseDir);
             return {
               path,
               content: null,
-              error: suggestions,
+              error: [directorySuggestions, contentBasedSuggestions].join('\n\n'),
             };
           } catch (error) {
             void logger.warning(`Failed to read content for path: ${path}`, error);

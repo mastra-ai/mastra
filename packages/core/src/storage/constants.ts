@@ -5,13 +5,15 @@ export const TABLE_EVALS = 'mastra_evals';
 export const TABLE_MESSAGES = 'mastra_messages';
 export const TABLE_THREADS = 'mastra_threads';
 export const TABLE_TRACES = 'mastra_traces';
+export const TABLE_RESOURCES = 'mastra_resources';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
   | typeof TABLE_EVALS
   | typeof TABLE_MESSAGES
   | typeof TABLE_THREADS
-  | typeof TABLE_TRACES;
+  | typeof TABLE_TRACES
+  | typeof TABLE_RESOURCES;
 
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
@@ -101,5 +103,12 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     startTime: { type: 'bigint', nullable: false },
     endTime: { type: 'bigint', nullable: false },
     createdAt: { type: 'timestamp', nullable: false },
+  },
+  [TABLE_RESOURCES]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    workingMemory: { type: 'text', nullable: true },
+    metadata: { type: 'jsonb', nullable: true },
+    createdAt: { type: 'timestamp', nullable: false },
+    updatedAt: { type: 'timestamp', nullable: false },
   },
 };

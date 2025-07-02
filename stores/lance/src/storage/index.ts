@@ -1,6 +1,8 @@
 import { connect } from '@lancedb/lancedb';
 import type { Connection, ConnectionOptions, SchemaLike, FieldLike } from '@lancedb/lancedb';
+import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType, TraceType } from '@mastra/core/memory';
 import {
   MastraStorage,
@@ -56,8 +58,28 @@ export class LanceStorage extends MastraStorage {
       instance.lanceClient = await connect(uri, options);
       return instance;
     } catch (e: any) {
-      throw new Error(`Failed to connect to LanceDB: ${e}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_CONNECT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to connect to LanceDB: ${e.message || e}`,
+          details: { uri, optionsProvided: !!options },
+        },
+        e,
+      );
     }
+  }
+
+  private getPrimaryKeys(tableName: TABLE_NAMES): string[] {
+    let primaryId: string[] = ['id'];
+    if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+      primaryId = ['workflow_name', 'run_id'];
+    } else if (tableName === TABLE_EVALS) {
+      primaryId = ['agent_name', 'metric_name', 'run_id'];
+    }
+
+    return primaryId;
   }
 
   /**
@@ -76,10 +98,40 @@ export class LanceStorage extends MastraStorage {
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
     try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Call LanceStorage.create() first.');
+      }
+      if (!tableName) {
+        throw new Error('tableName is required for createTable.');
+      }
+      if (!schema) {
+        throw new Error('schema is required for createTable.');
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_CREATE_TABLE_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+
+    try {
       const arrowSchema = this.translateSchema(schema);
       await this.lanceClient.createEmptyTable(tableName, arrowSchema);
     } catch (error: any) {
-      throw new Error(`Failed to create table: ${error}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_CREATE_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
@@ -130,14 +182,41 @@ export class LanceStorage extends MastraStorage {
    */
   async dropTable(tableName: TABLE_NAMES): Promise<void> {
     try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Call LanceStorage.create() first.');
+      }
+      if (!tableName) {
+        throw new Error('tableName is required for dropTable.');
+      }
+    } catch (validationError: any) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_DROP_TABLE_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: validationError.message,
+          details: { tableName },
+        },
+        validationError,
+      );
+    }
+
+    try {
       await this.lanceClient.dropTable(tableName);
     } catch (error: any) {
-      // Don't throw if the table doesn't exist
-      if (error.toString().includes('was not found')) {
+      if (error.toString().includes('was not found') || error.message?.includes('Table not found')) {
         this.logger.debug(`Table '${tableName}' does not exist, skipping drop`);
         return;
       }
-      throw new Error(`Failed to drop table: ${error}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_DROP_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
@@ -147,6 +226,26 @@ export class LanceStorage extends MastraStorage {
    * @returns Table schema
    */
   async getTableSchema(tableName: TABLE_NAMES): Promise<SchemaLike> {
+    try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Call LanceStorage.create() first.');
+      }
+      if (!tableName) {
+        throw new Error('tableName is required for getTableSchema.');
+      }
+    } catch (validationError: any) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_GET_TABLE_SCHEMA_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: validationError.message,
+          details: { tableName },
+        },
+        validationError,
+      );
+    }
+
     try {
       const table = await this.lanceClient.openTable(tableName);
       const rawSchema = await table.schema();
@@ -161,7 +260,15 @@ export class LanceStorage extends MastraStorage {
         },
       };
     } catch (error: any) {
-      throw new Error(`Failed to get table schema: ${error}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_GET_TABLE_SCHEMA_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
@@ -198,43 +305,114 @@ export class LanceStorage extends MastraStorage {
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
-    const table = await this.lanceClient.openTable(tableName);
-    const currentSchema = await table.schema();
-    const existingFields = new Set(currentSchema.fields.map((f: any) => f.name));
+    try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Call LanceStorage.create() first.');
+      }
+      if (!tableName) {
+        throw new Error('tableName is required for alterTable.');
+      }
+      if (!schema) {
+        throw new Error('schema is required for alterTable.');
+      }
+      if (!ifNotExists || ifNotExists.length === 0) {
+        this.logger.debug('No columns specified to add in alterTable, skipping.');
+        return;
+      }
+    } catch (validationError: any) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_ALTER_TABLE_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: validationError.message,
+          details: { tableName },
+        },
+        validationError,
+      );
+    }
 
-    const typeMap: Record<string, string> = {
-      text: 'string',
-      integer: 'int',
-      bigint: 'bigint',
-      timestamp: 'timestamp',
-      jsonb: 'string',
-      uuid: 'string',
-    };
+    try {
+      const table = await this.lanceClient.openTable(tableName);
+      const currentSchema = await table.schema();
+      const existingFields = new Set(currentSchema.fields.map((f: any) => f.name));
 
-    // Find columns to add
-    const columnsToAdd = ifNotExists
-      .filter(col => schema[col] && !existingFields.has(col))
-      .map(col => {
-        const colDef = schema[col];
-        return {
-          name: col,
-          valueSql: colDef?.nullable
-            ? `cast(NULL as ${typeMap[colDef.type ?? 'text']})`
-            : `cast(${this.getDefaultValue(colDef?.type ?? 'text')} as ${typeMap[colDef?.type ?? 'text']})`,
-        };
-      });
+      const typeMap: Record<string, string> = {
+        text: 'string',
+        integer: 'int',
+        bigint: 'bigint',
+        timestamp: 'timestamp',
+        jsonb: 'string',
+        uuid: 'string',
+      };
 
-    if (columnsToAdd.length > 0) {
-      await table.addColumns(columnsToAdd);
-      this.logger?.info?.(`Added columns [${columnsToAdd.map(c => c.name).join(', ')}] to table ${tableName}`);
+      // Find columns to add
+      const columnsToAdd = ifNotExists
+        .filter(col => schema[col] && !existingFields.has(col))
+        .map(col => {
+          const colDef = schema[col];
+          return {
+            name: col,
+            valueSql: colDef?.nullable
+              ? `cast(NULL as ${typeMap[colDef.type ?? 'text']})`
+              : `cast(${this.getDefaultValue(colDef?.type ?? 'text')} as ${typeMap[colDef?.type ?? 'text']})`,
+          };
+        });
+
+      if (columnsToAdd.length > 0) {
+        await table.addColumns(columnsToAdd);
+        this.logger?.info?.(`Added columns [${columnsToAdd.map(c => c.name).join(', ')}] to table ${tableName}`);
+      }
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_ALTER_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    const table = await this.lanceClient.openTable(tableName);
+    try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Call LanceStorage.create() first.');
+      }
+      if (!tableName) {
+        throw new Error('tableName is required for clearTable.');
+      }
+    } catch (validationError: any) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_CLEAR_TABLE_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: validationError.message,
+          details: { tableName },
+        },
+        validationError,
+      );
+    }
 
-    // delete function always takes a predicate as an argument, so we use '1=1' to delete all records because it is always true.
-    await table.delete('1=1');
+    try {
+      const table = await this.lanceClient.openTable(tableName);
+
+      // delete function always takes a predicate as an argument, so we use '1=1' to delete all records because it is always true.
+      await table.delete('1=1');
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_CLEAR_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -244,7 +422,32 @@ export class LanceStorage extends MastraStorage {
    */
   async insert({ tableName, record }: { tableName: string; record: Record<string, any> }): Promise<void> {
     try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Call LanceStorage.create() first.');
+      }
+      if (!tableName) {
+        throw new Error('tableName is required for insert.');
+      }
+      if (!record || Object.keys(record).length === 0) {
+        throw new Error('record is required and cannot be empty for insert.');
+      }
+    } catch (validationError: any) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_INSERT_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: validationError.message,
+          details: { tableName },
+        },
+        validationError,
+      );
+    }
+
+    try {
       const table = await this.lanceClient.openTable(tableName);
+
+      const primaryId = this.getPrimaryKeys(tableName as TABLE_NAMES);
 
       const processedRecord = { ...record };
 
@@ -259,9 +462,17 @@ export class LanceStorage extends MastraStorage {
         }
       }
 
-      await table.add([processedRecord], { mode: 'overwrite' });
+      await table.mergeInsert(primaryId).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([processedRecord]);
     } catch (error: any) {
-      throw new Error(`Failed to insert record: ${error}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
@@ -272,7 +483,32 @@ export class LanceStorage extends MastraStorage {
    */
   async batchInsert({ tableName, records }: { tableName: string; records: Record<string, any>[] }): Promise<void> {
     try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Call LanceStorage.create() first.');
+      }
+      if (!tableName) {
+        throw new Error('tableName is required for batchInsert.');
+      }
+      if (!records || records.length === 0) {
+        throw new Error('records array is required and cannot be empty for batchInsert.');
+      }
+    } catch (validationError: any) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_BATCH_INSERT_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: validationError.message,
+          details: { tableName },
+        },
+        validationError,
+      );
+    }
+
+    try {
       const table = await this.lanceClient.openTable(tableName);
+
+      const primaryId = this.getPrimaryKeys(tableName as TABLE_NAMES);
 
       const processedRecords = records.map(record => {
         const processedRecord = { ...record };
@@ -294,9 +530,17 @@ export class LanceStorage extends MastraStorage {
         return processedRecord;
       });
 
-      await table.add(processedRecords, { mode: 'overwrite' });
+      await table.mergeInsert(primaryId).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(processedRecords);
     } catch (error: any) {
-      throw new Error(`Failed to batch insert records: ${error}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_BATCH_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 
@@ -308,6 +552,29 @@ export class LanceStorage extends MastraStorage {
    * @returns The loaded record with proper type conversions, or null if not found
    */
   async load({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<any> {
+    try {
+      if (!this.lanceClient) {
+        throw new Error('LanceDB client not initialized. Call LanceStorage.create() first.');
+      }
+      if (!tableName) {
+        throw new Error('tableName is required for load.');
+      }
+      if (!keys || Object.keys(keys).length === 0) {
+        throw new Error('keys are required and cannot be empty for load.');
+      }
+    } catch (validationError: any) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_LOAD_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: validationError.message,
+          details: { tableName },
+        },
+        validationError,
+      );
+    }
+
     try {
       const table = await this.lanceClient.openTable(tableName);
       const tableSchema = await this.getTableSchema(tableName);
@@ -350,7 +617,17 @@ export class LanceStorage extends MastraStorage {
       // Process the result with type conversions
       return this.processResultWithTypeConversion(result[0], tableSchema);
     } catch (error: any) {
-      throw new Error(`Failed to load record: ${error}`);
+      // If it's already a MastraError (e.g. from validateKeyTypes if we change it later), rethrow
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_STORAGE_LOAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName, keyCount: Object.keys(keys).length, firstKey: Object.keys(keys)[0] ?? '' },
+        },
+        error,
+      );
     }
   }
 
@@ -456,7 +733,14 @@ export class LanceStorage extends MastraStorage {
     try {
       return this.load({ tableName: TABLE_THREADS, keys: { id: threadId } });
     } catch (error: any) {
-      throw new Error(`Failed to get thread by ID: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_GET_THREAD_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -472,7 +756,14 @@ export class LanceStorage extends MastraStorage {
         await this.getTableSchema(TABLE_THREADS),
       ) as StorageThreadType[];
     } catch (error: any) {
-      throw new Error(`Failed to get threads by resource ID: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -489,7 +780,14 @@ export class LanceStorage extends MastraStorage {
 
       return thread;
     } catch (error: any) {
-      throw new Error(`Failed to save thread: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_SAVE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -505,7 +803,7 @@ export class LanceStorage extends MastraStorage {
     try {
       const record = { id, title, metadata: JSON.stringify(metadata) };
       const table = await this.lanceClient.openTable(TABLE_THREADS);
-      await table.add([record], { mode: 'overwrite' });
+      await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([record]);
 
       const query = table.query().where(`id = '${id}'`);
 
@@ -515,7 +813,14 @@ export class LanceStorage extends MastraStorage {
         await this.getTableSchema(TABLE_THREADS),
       ) as StorageThreadType;
     } catch (error: any) {
-      throw new Error(`Failed to update thread: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_UPDATE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -524,7 +829,14 @@ export class LanceStorage extends MastraStorage {
       const table = await this.lanceClient.openTable(TABLE_THREADS);
       await table.delete(`id = '${threadId}'`);
     } catch (error: any) {
-      throw new Error(`Failed to delete thread: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_DELETE_THREAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -617,7 +929,7 @@ export class LanceStorage extends MastraStorage {
       if (threadConfig) {
         throw new Error('ThreadConfig is not supported by LanceDB storage');
       }
-
+      const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
       const table = await this.lanceClient.openTable(TABLE_MESSAGES);
       let query = table.query().where(`\`threadId\` = '${threadId}'`);
 
@@ -652,8 +964,8 @@ export class LanceStorage extends MastraStorage {
       }
 
       // If we're fetching the last N messages, take only the last N after sorting
-      if (selectBy?.last !== undefined && selectBy.last !== false) {
-        records = records.slice(-selectBy.last);
+      if (limit !== Number.MAX_SAFE_INTEGER) {
+        records = records.slice(-limit);
       }
 
       const messages = this.processResultWithTypeConversion(records, await this.getTableSchema(TABLE_MESSAGES));
@@ -674,7 +986,14 @@ export class LanceStorage extends MastraStorage {
       if (format === 'v2') return list.get.all.v2();
       return list.get.all.v1();
     } catch (error: any) {
-      throw new Error(`Failed to get messages: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_GET_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -701,12 +1020,20 @@ export class LanceStorage extends MastraStorage {
       }));
 
       const table = await this.lanceClient.openTable(TABLE_MESSAGES);
-      await table.add(transformedMessages, { mode: 'overwrite' });
+      await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(transformedMessages);
+
       const list = new MessageList().add(messages, 'memory');
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error: any) {
-      throw new Error(`Failed to save messages: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_SAVE_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -725,7 +1052,14 @@ export class LanceStorage extends MastraStorage {
 
       return trace;
     } catch (error: any) {
-      throw new Error(`Failed to save trace: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_SAVE_TRACE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -736,7 +1070,14 @@ export class LanceStorage extends MastraStorage {
       const records = await query.toArray();
       return this.processResultWithTypeConversion(records[0], await this.getTableSchema(TABLE_TRACES)) as TraceType;
     } catch (error: any) {
-      throw new Error(`Failed to get trace by ID: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_GET_TRACE_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -795,7 +1136,15 @@ export class LanceStorage extends MastraStorage {
         };
       }) as TraceType[];
     } catch (error: any) {
-      throw new Error(`Failed to get traces: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_GET_TRACES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { name: name ?? '', scope: scope ?? '' },
+        },
+        error,
+      );
     }
   }
 
@@ -818,7 +1167,14 @@ export class LanceStorage extends MastraStorage {
       await table.add(transformedEvals, { mode: 'append' });
       return evals;
     } catch (error: any) {
-      throw new Error(`Failed to save evals: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_SAVE_EVALS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -846,7 +1202,15 @@ export class LanceStorage extends MastraStorage {
         };
       }) as EvalRow[];
     } catch (error: any) {
-      throw new Error(`Failed to get evals by agent name: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_GET_EVALS_BY_AGENT_NAME_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentName },
+        },
+        error,
+      );
     }
   }
 
@@ -909,7 +1273,15 @@ export class LanceStorage extends MastraStorage {
         total: records.length,
       };
     } catch (error: any) {
-      throw new Error(`Failed to get workflow runs: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_GET_WORKFLOW_RUNS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { namespace: args?.namespace ?? '', workflowName: args?.workflowName ?? '' },
+        },
+        error,
+      );
     }
   }
 
@@ -937,7 +1309,15 @@ export class LanceStorage extends MastraStorage {
       const record = records[0];
       return this.parseWorkflowRun(record);
     } catch (error: any) {
-      throw new Error(`Failed to get workflow run by id: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: args.runId, workflowName: args.workflowName ?? '' },
+        },
+        error,
+      );
     }
   }
 
@@ -958,11 +1338,9 @@ export class LanceStorage extends MastraStorage {
       const records = await query.toArray();
       let createdAt: number;
       const now = Date.now();
-      let mode: 'append' | 'overwrite' = 'append';
 
       if (records.length > 0) {
         createdAt = records[0].createdAt ?? now;
-        mode = 'overwrite';
       } else {
         createdAt = now;
       }
@@ -975,9 +1353,21 @@ export class LanceStorage extends MastraStorage {
         updatedAt: now,
       };
 
-      await table.add([record], { mode });
+      await table
+        .mergeInsert(['workflow_name', 'run_id'])
+        .whenMatchedUpdateAll()
+        .whenNotMatchedInsertAll()
+        .execute([record]);
     } catch (error: any) {
-      throw new Error(`Failed to persist workflow snapshot: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
+        },
+        error,
+      );
     }
   }
   async loadWorkflowSnapshot({
@@ -993,12 +1383,27 @@ export class LanceStorage extends MastraStorage {
       const records = await query.toArray();
       return records.length > 0 ? JSON.parse(records[0].snapshot) : null;
     } catch (error: any) {
-      throw new Error(`Failed to load workflow snapshot: ${error}`);
+      throw new MastraError(
+        {
+          id: 'LANCE_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
+        },
+        error,
+      );
     }
   }
 
   async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
-    throw new Error('Method not implemented.');
+    throw new MastraError(
+      {
+        id: 'LANCE_STORE_GET_TRACES_PAGINATED_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+      },
+      'Method not implemented.',
+    );
   }
 
   async getThreadsByResourceIdPaginated(_args: {
@@ -1006,12 +1411,37 @@ export class LanceStorage extends MastraStorage {
     page?: number;
     perPage?: number;
   }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    throw new Error('Method not implemented.');
+    throw new MastraError(
+      {
+        id: 'LANCE_STORE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+      },
+      'Method not implemented.',
+    );
   }
 
   async getMessagesPaginated(
     _args: StorageGetMessagesArg,
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    throw new Error('Method not implemented.');
+    throw new MastraError(
+      {
+        id: 'LANCE_STORE_GET_MESSAGES_PAGINATED_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+      },
+      'Method not implemented.',
+    );
+  }
+
+  async updateMessages(_args: {
+    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
+  }): Promise<MastraMessageV2[]> {
+    this.logger.error('updateMessages is not yet implemented in LanceStore');
+    throw new Error('Method not implemented');
   }
 }

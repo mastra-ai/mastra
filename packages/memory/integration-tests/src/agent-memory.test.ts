@@ -1,16 +1,18 @@
 import { randomUUID } from 'node:crypto';
+import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import type { CoreMessage } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { memoryProcessorAgent, weatherAgent } from './mastra/agents/weather';
-import { weatherTool } from './mastra/tools/weather';
+import { weatherTool, weatherToolCity } from './mastra/tools/weather';
 
 describe('Agent Memory Tests', () => {
   const dbFile = 'file:mastra-agent.db';
@@ -332,7 +334,6 @@ describe('Agent.fetchMemory', () => {
       resourceId,
     });
 
-    // @ts-expect-error fetchMemory is deprecated and for internal use.
     const { messages } = await weatherAgent.fetchMemory({ threadId, resourceId });
 
     expect(messages).toBeDefined();
@@ -343,7 +344,7 @@ describe('Agent.fetchMemory', () => {
     const userMessage = messages.find(m => m.role === 'user');
     expect(userMessage).toBeDefined();
     if (!userMessage) return;
-    expect(userMessage.content).toEqual('Just a simple greeting to populate memory.');
+    expect(userMessage.content[0]).toEqual({ type: 'text', text: 'Just a simple greeting to populate memory.' });
 
     const assistantMessage = messages.find(m => m.role === 'assistant');
     expect(assistantMessage).toBeDefined();
@@ -357,7 +358,6 @@ describe('Agent.fetchMemory', () => {
 
     await memoryProcessorAgent.generate('What is the weather in London?', { threadId, resourceId });
 
-    // @ts-expect-error fetchMemory is deprecated and for internal use.
     const { messages } = await memoryProcessorAgent.fetchMemory({ threadId, resourceId });
 
     expect(messages).toBeDefined();
@@ -371,17 +371,57 @@ describe('Agent.fetchMemory', () => {
     const userMessage = messages.find(m => m.role === 'user');
     expect(userMessage).toBeDefined();
     if (!userMessage) return;
-    expect(userMessage.content).toEqual('What is the weather in London?');
+    expect(userMessage.content[0]).toEqual({ type: 'text', text: 'What is the weather in London?' });
   }, 30_000);
 
   it('should return nothing if thread does not exist', async () => {
     const threadId = randomUUID();
     const resourceId = 'fetch-memory-no-thread';
 
-    // @ts-expect-error fetchMemory is deprecated and for internal use.
     const result = await weatherAgent.fetchMemory({ threadId, resourceId });
 
-    expect(result.messages).toBeUndefined();
+    expect(result.messages).toEqual([]);
     expect(result.threadId).toBe(threadId);
+  });
+});
+
+describe('Agent memory test gemini', () => {
+  const memory = new Memory({
+    storage: new MockStore(),
+    options: {
+      threads: {
+        generateTitle: false,
+      },
+      lastMessages: 2,
+    },
+  });
+
+  const agent = new Agent({
+    name: 'gemini-agent',
+    instructions:
+      'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name.',
+    model: google.chat('gemini-2.5-flash-preview-05-20'),
+    memory,
+    tools: { get_weather: weatherToolCity },
+  });
+
+  const resource = 'weatherAgent-memory-test';
+  const thread = new Date().getTime().toString();
+
+  it('should not throw error when using gemini', async () => {
+    // generate two messages in the db
+    await agent.generate(`What's the weather in Tokyo?`, {
+      memory: { resource, thread },
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Will throw if the messages sent to the agent aren't cleaned up because a tool call message will be the first message sent to the agent
+    // Which some providers like gemini will not allow.
+    await expect(
+      agent.generate(`What's the weather in London?`, {
+        memory: { resource, thread },
+      }),
+    ).resolves.not.toThrow();
   });
 });

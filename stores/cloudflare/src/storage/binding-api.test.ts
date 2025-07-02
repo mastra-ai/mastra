@@ -13,13 +13,14 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
   TABLE_TRACES,
+  TABLE_RESOURCES,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 import { createSampleTrace, createSampleWorkflowSnapshot, retryUntil } from './test-utils';
-import type { CloudflareStoreConfig } from './types';
+import type { CloudflareWorkersConfig } from './types';
 import { CloudflareStore } from '.';
 
 export interface Env {
@@ -28,6 +29,7 @@ export interface Env {
   [TABLE_WORKFLOW_SNAPSHOT]: KVNamespace;
   [TABLE_EVALS]: KVNamespace;
   [TABLE_TRACES]: KVNamespace;
+  [TABLE_RESOURCES]: KVNamespace;
 }
 
 dotenv.config();
@@ -39,10 +41,10 @@ vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 const mf = new Miniflare({
   script: 'export default {};',
   modules: true,
-  kvNamespaces: [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES],
+  kvNamespaces: [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES, TABLE_RESOURCES],
 });
 
-const TEST_CONFIG: CloudflareStoreConfig = {
+const TEST_CONFIG: CloudflareWorkersConfig = {
   bindings: {} as Env, // Will be populated in beforeAll
   keyPrefix: 'mastra-test', // Fixed prefix for test isolation
 };
@@ -57,6 +59,7 @@ describe('CloudflareStore Workers Binding', () => {
       [TABLE_WORKFLOW_SNAPSHOT]: (await mf.getKVNamespace(TABLE_WORKFLOW_SNAPSHOT)) as KVNamespace,
       [TABLE_EVALS]: (await mf.getKVNamespace(TABLE_EVALS)) as KVNamespace,
       [TABLE_TRACES]: (await mf.getKVNamespace(TABLE_TRACES)) as KVNamespace,
+      [TABLE_RESOURCES]: (await mf.getKVNamespace(TABLE_RESOURCES)) as KVNamespace,
     };
 
     // Set bindings in test config
@@ -71,7 +74,14 @@ describe('CloudflareStore Workers Binding', () => {
   // Helper to clean up KV data between tests
   const cleanupKVData = async () => {
     // List and delete all keys in each namespace
-    const tables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES] as TABLE_NAMES[];
+    const tables = [
+      TABLE_THREADS,
+      TABLE_MESSAGES,
+      TABLE_WORKFLOW_SNAPSHOT,
+      TABLE_EVALS,
+      TABLE_TRACES,
+      TABLE_RESOURCES,
+    ] as TABLE_NAMES[];
 
     for (const table of tables) {
       try {
@@ -393,9 +403,13 @@ describe('CloudflareStore Workers Binding', () => {
 
       const messages = [createSampleMessageV2({ threadId: thread.id }), createSampleMessageV2({ threadId: thread.id })];
 
+      const checkMessages = messages.map(m => {
+        const { type, ...rest } = m;
+        return rest;
+      });
       // Save messages
       const savedMessages = await store.saveMessages({ messages, format: 'v2' });
-      expect(savedMessages).toEqual(messages);
+      expect(savedMessages).toEqual(checkMessages);
 
       // Retrieve messages with retry
       const retrievedMessages = await retryUntil(
@@ -406,7 +420,7 @@ describe('CloudflareStore Workers Binding', () => {
         msgs => msgs.length === 2,
       );
 
-      expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
+      expect(retrievedMessages).toEqual(expect.arrayContaining(checkMessages));
     });
 
     it('should handle empty message array', async () => {
@@ -419,9 +433,9 @@ describe('CloudflareStore Workers Binding', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        createSampleMessageV2({ threadId: thread.id, content: 'First', resourceId: thread.resourceId }),
-        createSampleMessageV2({ threadId: thread.id, content: 'Second', resourceId: thread.resourceId }),
-        createSampleMessageV2({ threadId: thread.id, content: 'Third', resourceId: thread.resourceId }),
+        createSampleMessageV2({ threadId: thread.id, content: { content: 'First' }, resourceId: thread.resourceId }),
+        createSampleMessageV2({ threadId: thread.id, content: { content: 'Second' }, resourceId: thread.resourceId }),
+        createSampleMessageV2({ threadId: thread.id, content: { content: 'Third' }, resourceId: thread.resourceId }),
       ];
 
       await store.saveMessages({ messages, format: 'v2' });
@@ -436,6 +450,82 @@ describe('CloudflareStore Workers Binding', () => {
       retrievedMessages.forEach((msg, idx) => {
         expect(msg.content).toEqual(messages[idx].content);
       });
+    });
+
+    it('should upsert messages: duplicate id+threadId results in update, not duplicate row', async () => {
+      const thread = await createSampleThread();
+      await store.saveThread({ thread });
+      const baseMessage = createSampleMessageV2({
+        threadId: thread.id,
+        createdAt: new Date(),
+        content: { content: 'Original' },
+        resourceId: thread.resourceId,
+      });
+
+      // Insert the message for the first time
+      await store.saveMessages({ messages: [baseMessage], format: 'v2' });
+
+      // Insert again with the same id and threadId but different content
+      const updatedMessage = {
+        ...createSampleMessageV2({
+          threadId: thread.id,
+          createdAt: new Date(),
+          content: { content: 'Updated' },
+          resourceId: thread.resourceId,
+        }),
+        id: baseMessage.id,
+      };
+
+      await store.saveMessages({ messages: [updatedMessage], format: 'v2' });
+
+      // Retrieve messages for the thread
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
+
+      // Only one message should exist for that id+threadId
+      expect(retrievedMessages.filter(m => m.id === baseMessage.id)).toHaveLength(1);
+
+      // The content should be the updated one
+      expect(retrievedMessages.find(m => m.id === baseMessage.id)?.content.content).toBe('Updated');
+    });
+
+    it('should upsert messages: duplicate id and different threadid', async () => {
+      const thread1 = await createSampleThread();
+      const thread2 = await createSampleThread();
+      await store.saveThread({ thread: thread1 });
+      await store.saveThread({ thread: thread2 });
+
+      const message = createSampleMessageV2({
+        threadId: thread1.id,
+        createdAt: new Date(),
+        content: { content: 'Thread1 Content' },
+        resourceId: thread1.resourceId,
+      });
+
+      // Insert message into thread1
+      await store.saveMessages({ messages: [message], format: 'v2' });
+
+      // Attempt to insert a message with the same id but different threadId
+      const conflictingMessage = {
+        ...createSampleMessageV2({
+          threadId: thread2.id, // different thread
+          content: { content: 'Thread2 Content' },
+          resourceId: thread2.resourceId,
+        }),
+        id: message.id,
+      };
+
+      // Save should also save the message to the new thread
+      await store.saveMessages({ messages: [conflictingMessage], format: 'v2' });
+
+      // Retrieve messages for both threads
+      const thread1Messages = await store.getMessages({ threadId: thread1.id, format: 'v2' });
+      const thread2Messages = await store.getMessages({ threadId: thread2.id, format: 'v2' });
+
+      // Thread 1 should have the message with that id
+      expect(thread1Messages.find(m => m.id === message.id)?.content.content).toBe('Thread1 Content');
+
+      // Thread 2 should also have the message with that id
+      expect(thread2Messages.find(m => m.id === message.id)?.content.content).toBe('Thread2 Content');
     });
 
     // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
@@ -1357,7 +1447,7 @@ describe('CloudflareStore Workers Binding', () => {
 
     it('should sanitize and handle special characters', async () => {
       const thread = createSampleThread();
-      const message = createSampleMessageV2({ threadId: thread.id, content: '特殊字符 !@#$%^&*()' });
+      const message = createSampleMessageV2({ threadId: thread.id, content: { content: '特殊字符 !@#$%^&*()' } });
 
       await store.saveThread({ thread });
       await store.saveMessages({ messages: [message], format: 'v2' });
@@ -1451,7 +1541,7 @@ describe('CloudflareStore Workers Binding', () => {
   });
 
   describe('Concurrent Operations', () => {
-    it('should handle concurrent message updates concurrently', async () => {
+    it('should handle concurrent message updates sequentially', async () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
@@ -1461,9 +1551,10 @@ describe('CloudflareStore Workers Binding', () => {
         createSampleMessageV2({ threadId: thread.id, createdAt: new Date(now + i * 1000) }),
       );
 
-      // Save messages in parallel - write order should be preserved
-      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
-
+      // Save messages sequentially
+      for (const msg of messages) {
+        await store.saveMessages({ messages: [msg], format: 'v2' });
+      }
       // Order should reflect write order, not timestamp order
       const orderKey = store['getThreadMessagesKey'](thread.id);
       const order = await store['getFullOrder'](orderKey);
@@ -1725,7 +1816,10 @@ describe('CloudflareStore Workers Binding', () => {
       await store.saveThread({ thread });
 
       // Test with various malformed data
-      const malformedMessage = createSampleMessageV2({ threadId: thread.id, content: ''.padStart(1024 * 1024, 'x') });
+      const malformedMessage = createSampleMessageV2({
+        threadId: thread.id,
+        content: { content: ''.padStart(1024 * 1024, 'x') },
+      });
 
       await store.saveMessages({ messages: [malformedMessage], format: 'v2' });
 

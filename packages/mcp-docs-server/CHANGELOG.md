@@ -1,5 +1,183 @@
 # @mastra/mcp-docs-server
 
+## 0.13.3
+
+### Patch Changes
+
+- 07c7e7e: Slimmed down the number of tokens in each code example by removing extra keys from package.json files and adding an mcp docs config file into code examples to intentionally exclude some files - for ex the agent-network example went from 1300 LOC to 300
+- f043a63: Update transaction tool to use csv format
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9
+
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- 07c7e7e: Slimmed down the number of tokens in each code example by removing extra keys from package.json files and adding an mcp docs config file into code examples to intentionally exclude some files - for ex the agent-network example went from 1300 LOC to 300
+- f043a63: Update transaction tool to use csv format
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9-alpha.0
+
+## 0.13.2
+
+### Patch Changes
+
+- 8e1b6e9: dependencies updates:
+  - Updated dependency [`zod@^3.25.67` ↗︎](https://www.npmjs.com/package/zod/v/3.25.67) (from `^3.25.57`, in `dependencies`)
+- ee93d96: dependencies updates:
+  - Updated dependency [`@modelcontextprotocol/sdk@^1.12.3` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/sdk/v/1.12.3) (from `^1.12.1`, in `dependencies`)
+- c00039d: dependencies updates:
+  - Updated dependency [`@modelcontextprotocol/sdk@^1.13.0` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/sdk/v/1.13.0) (from `^1.12.3`, in `dependencies`)
+- 07d6d88: Bump MCP SDK version and add tool output schema support to MCPServer and MCPClient
+- d2a783c: Minor lesson 1 course updates, added lesson 4 on workflows
+- Updated dependencies [ee93d96]
+- Updated dependencies [c00039d]
+- Updated dependencies [15e9d26]
+- Updated dependencies [d1baedb]
+- Updated dependencies [d8f2d19]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [07d6d88]
+- Updated dependencies [9d52b17]
+- Updated dependencies [2097952]
+- Updated dependencies [792c4c0]
+- Updated dependencies [5d74aab]
+- Updated dependencies [a8b194f]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [502fe05]
+- Updated dependencies [144eb0b]
+- Updated dependencies [8ba1b51]
+- Updated dependencies [4efcfa0]
+- Updated dependencies [0e17048]
+- Updated dependencies [dc93062]
+  - @mastra/mcp@0.10.5
+  - @mastra/core@0.10.7
+
+## 0.13.2-alpha.3
+
+### Patch Changes
+
+- d2a783c: Minor lesson 1 course updates, added lesson 4 on workflows
+
+## 0.13.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [a8b194f]
+- Updated dependencies [dc93062]
+  - @mastra/core@0.10.7-alpha.4
+  - @mastra/mcp@0.10.5-alpha.2
+
+## 0.13.2-alpha.1
+
+### Patch Changes
+
+- 8e1b6e9: dependencies updates:
+  - Updated dependency [`zod@^3.25.67` ↗︎](https://www.npmjs.com/package/zod/v/3.25.67) (from `^3.25.57`, in `dependencies`)
+- ee93d96: dependencies updates:
+  - Updated dependency [`@modelcontextprotocol/sdk@^1.12.3` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/sdk/v/1.12.3) (from `^1.12.1`, in `dependencies`)
+- c00039d: dependencies updates:
+  - Updated dependency [`@modelcontextprotocol/sdk@^1.13.0` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/sdk/v/1.13.0) (from `^1.12.3`, in `dependencies`)
+- 07d6d88: Bump MCP SDK version and add tool output schema support to MCPServer and MCPClient
+- Updated dependencies [ee93d96]
+- Updated dependencies [c00039d]
+- Updated dependencies [15e9d26]
+- Updated dependencies [07d6d88]
+- Updated dependencies [5d74aab]
+- Updated dependencies [144eb0b]
+  - @mastra/mcp@0.10.5-alpha.1
+  - @mastra/core@0.10.7-alpha.2
+
+## 0.13.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [d1baedb]
+- Updated dependencies [4d21bf2]
+- Updated dependencies [2097952]
+- Updated dependencies [4fb0cc2]
+- Updated dependencies [d2a7a31]
+- Updated dependencies [0e17048]
+  - @mastra/core@0.10.7-alpha.1
+  - @mastra/mcp@0.10.5-alpha.0
+
+## 0.13.1
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`@modelcontextprotocol/sdk@^1.12.1` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/sdk/v/1.12.1) (from `^1.9.0`, in `dependencies`)
+  - Updated dependency [`jsdom@^26.1.0` ↗︎](https://www.npmjs.com/package/jsdom/v/26.1.0) (from `^26.0.0`, in `dependencies`)
+  - Updated dependency [`turndown@^7.2.0` ↗︎](https://www.npmjs.com/package/turndown/v/7.2.0) (from `^7.1.2`, in `dependencies`)
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+- 57675ee: [MASTRA-3679] MCP Docs Server Content Based Matching and Ranking
+- Updated dependencies [63f6b7d]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [12a95fc]
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+- Updated dependencies [d70c420]
+- Updated dependencies [ee9af57]
+- Updated dependencies [36f1c36]
+- Updated dependencies [2a16996]
+- Updated dependencies [10d352e]
+- Updated dependencies [9589624]
+- Updated dependencies [bd1674f]
+- Updated dependencies [69f76f7]
+- Updated dependencies [53d3c37]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/core@0.10.6
+  - @mastra/mcp@0.10.4
+
+## 0.13.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [bd1674f]
+- Updated dependencies [69f76f7]
+  - @mastra/mcp@0.10.4-alpha.1
+
+## 0.13.1-alpha.1
+
+### Patch Changes
+
+- 57675ee: [MASTRA-3679] MCP Docs Server Content Based Matching and Ranking
+- Updated dependencies [12a95fc]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+  - @mastra/core@0.10.6-alpha.5
+
 ## 0.13.1-alpha.0
 
 ### Patch Changes

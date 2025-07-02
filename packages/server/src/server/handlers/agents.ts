@@ -24,6 +24,8 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
         const instructions = await agent.getInstructions({ runtimeContext });
         const tools = await agent.getTools({ runtimeContext });
         const llm = await agent.getLLM({ runtimeContext });
+        const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext });
+        const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext });
 
         const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
           const _tool = tool as any;
@@ -62,13 +64,15 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
           workflows: serializedAgentWorkflows,
           provider: llm?.getProvider(),
           modelId: llm?.getModelId(),
-          defaultGenerateOptions: agent.getDefaultGenerateOptions() as any,
-          defaultStreamOptions: agent.getDefaultStreamOptions() as any,
+          defaultGenerateOptions: defaultGenerateOptions as any,
+          defaultStreamOptions: defaultStreamOptions as any,
         };
       }),
     );
 
-    const serializedAgents = serializedAgentsMap.reduce<any>((acc, { id, ...rest }) => {
+    const serializedAgents = serializedAgentsMap.reduce<
+      Record<string, Omit<(typeof serializedAgentsMap)[number], 'id'>>
+    >((acc, { id, ...rest }) => {
       acc[id] = rest;
       return acc;
     }, {});
@@ -150,6 +154,8 @@ export async function getAgentByIdHandler({
 
     const instructions = await agent.getInstructions({ runtimeContext: proxyRuntimeContext });
     const llm = await agent.getLLM({ runtimeContext });
+    const defaultGenerateOptions = await agent.getDefaultGenerateOptions({ runtimeContext: proxyRuntimeContext });
+    const defaultStreamOptions = await agent.getDefaultStreamOptions({ runtimeContext: proxyRuntimeContext });
 
     return {
       name: agent.name,
@@ -158,8 +164,8 @@ export async function getAgentByIdHandler({
       workflows: serializedAgentWorkflows,
       provider: llm?.getProvider(),
       modelId: llm?.getModelId(),
-      defaultGenerateOptions: agent.getDefaultGenerateOptions() as any,
-      defaultStreamOptions: agent.getDefaultStreamOptions() as any,
+      defaultGenerateOptions: defaultGenerateOptions as any,
+      defaultStreamOptions: defaultStreamOptions as any,
     };
   } catch (error) {
     return handleError(error, 'Error getting agent');
@@ -212,6 +218,7 @@ export async function generateHandler({
   runtimeContext,
   agentId,
   body,
+  abortSignal,
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
@@ -220,6 +227,7 @@ export async function generateHandler({
     resourceid?: string;
     runtimeContext?: Record<string, unknown>;
   };
+  abortSignal?: AbortSignal;
 }) {
   try {
     const agent = mastra.getAgent(agentId);
@@ -244,6 +252,7 @@ export async function generateHandler({
       // @ts-expect-error TODO fix types
       resourceId: finalResourceId,
       runtimeContext: finalRuntimeContext,
+      signal: abortSignal,
     });
 
     return result;
@@ -257,6 +266,7 @@ export async function streamGenerateHandler({
   runtimeContext,
   agentId,
   body,
+  abortSignal,
 }: Context & {
   runtimeContext: RuntimeContext;
   agentId: string;
@@ -265,6 +275,7 @@ export async function streamGenerateHandler({
     resourceid?: string;
     runtimeContext?: string;
   };
+  abortSignal?: AbortSignal;
 }): Promise<Response | undefined> {
   try {
     const agent = mastra.getAgent(agentId);
@@ -289,6 +300,7 @@ export async function streamGenerateHandler({
       // @ts-expect-error TODO fix types
       resourceId: finalResourceId,
       runtimeContext: finalRuntimeContext,
+      signal: abortSignal,
     });
 
     const streamResponse = rest.output
@@ -310,7 +322,6 @@ export async function streamGenerateHandler({
 
     return streamResponse;
   } catch (error) {
-    // @ts-expect-error TODO fix types
-    throw new HTTPException(error?.status ?? 500, { message: error?.message ?? 'Error streaming from agent' });
+    return handleError(error, 'error streaming agent response');
   }
 }

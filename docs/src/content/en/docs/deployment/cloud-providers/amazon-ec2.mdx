@@ -1,0 +1,81 @@
+---
+title: "Amazon EC2"
+description: "Deploy your Mastra applications to Amazon EC2."
+---
+
+import { Callout, Steps } from "nextra/components";
+import ServerConfig from "@/components/content-blocks/server-config.mdx";
+
+## Amazon EC2
+
+Deploy your Mastra applications to Amazon EC2 (Elastic Cloud Compute).
+
+<Callout>
+  This guide assumes your Mastra application has been created using the default
+  `npx create-mastra@latest` command.
+  For more information on how to create a new Mastra application,
+  refer to our [getting started guide](/docs/getting-started/installation)
+</Callout>
+
+### Setting up EC2
+
+<Steps>
+
+#### Log into your AWS console
+
+Navigate to the [AWS Management Console](https://aws.amazon.com/console/) and sign in to your account.
+
+#### Navigate to EC2
+
+Head over to **All services** in the left side navigation. Under **Compute**, click on **EC2**.
+
+#### Launch a virtual server instance
+
+Click on **Launch instance** to create a new EC2 instance.
+
+#### Configure your instance details
+
+Add the following details for your instance:
+
+- **Name**: Give your instance a descriptive name
+- **Application and OS Images**: For this example, we'll use the **Amazon Linux** environment
+- **Instance type**: Select **t3.micro** (eligible for free tier)
+- **Key pair**: Select an existing key pair or create a new one for secure login
+- **Network settings**: Ensure to **allow HTTPS and HTTP traffic from the internet** by checking the appropriate boxes
+
+#### Launch your instance
+
+Review your configuration and click **Launch instance**.
+
+#### Connect to your instance
+
+You'll be redirected to a next steps page. You can connect to your instance either:
+
+- **Through the browser**: Click the **Connect** button for browser-based access
+- **Via SSH**: Use your key pair to SSH into the instance (instructions available when you click **Connect**)
+
+</Steps>
+
+### Server Configuration
+
+Once you have access to your EC2 instance (either via SSH or browser), follow these steps to set up your server environment:
+
+<ServerConfig />
+
+### Connect to your Mastra server
+
+You can now connect to your Mastra server from your client application using a `MastraClient` from the `@mastra/client-js` package.
+
+Refer to the [`MastraClient` documentation](/docs/client-js/overview) for more information.
+
+```typescript copy showLineNumbers
+import { MastraClient } from "@mastra/client-js";
+
+const mastraClient = new MastraClient({
+  baseUrl: "https://<your-domain-name>",
+});
+```
+
+## Next steps
+
+- [Mastra Client SDK](/docs/client-js/overview)

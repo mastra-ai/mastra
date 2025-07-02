@@ -2,11 +2,13 @@ import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserCo
 
 export type { MastraMessageV2 } from '../agent';
 import type { ZodObject } from 'zod';
+import type { MastraLanguageModel, DynamicArgument } from '../agent/types';
 import type { MastraStorage } from '../storage';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
 
 export type { Message as AiMessageType } from 'ai';
+export type { MastraLanguageModel, DynamicArgument };
 
 // Types for the memory system
 export type MastraMessageV1 = {
@@ -43,6 +45,7 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
 
 type BaseWorkingMemory = {
   enabled: boolean;
+  scope?: 'thread' | 'resource';
   /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
   use?: never;
 };
@@ -75,7 +78,11 @@ export type MemoryConfig = {
       };
   workingMemory?: WorkingMemory;
   threads?: {
-    generateTitle?: boolean;
+    generateTitle?:
+      | boolean
+      | {
+          model: DynamicArgument<MastraLanguageModel>;
+        };
   };
 };
 

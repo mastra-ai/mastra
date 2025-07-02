@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 
-import { WeaviateFilterTranslator } from './filter';
 import weaviate from 'weaviate-client';
 import type { FilterValue } from 'weaviate-client';
+import { WeaviateFilterTranslator } from './filter';
 
 describe('WeaviateFilterTranslator', async () => {
   const client = await weaviate.connectToLocal();
@@ -212,7 +212,7 @@ describe('WeaviateFilterTranslator', async () => {
     });
 
     it('should handle $geo operator', () => {
-      const filter = { location: { $geo: { lat: 40.71, lon: -74.01, radius: 1000 } } };
+      const filter = { location: { $geo: { latitude: 40.71, longitude: -74.01, radius: 1000 } } };
       const result = translator.translate(filter);
       expect(result).toEqual<FilterValue<any>>({
         operator: 'WithinGeoRange',

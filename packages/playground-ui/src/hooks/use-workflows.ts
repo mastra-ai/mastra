@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { toast } from 'sonner';
-import { LegacyWorkflowRunResult, WorkflowWatchResult } from '@mastra/client-js';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { LegacyWorkflowRunResult, WorkflowWatchResult, GetWorkflowResponse } from '@mastra/client-js';
 import type { LegacyWorkflow } from '@mastra/core/workflows/legacy';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 
@@ -22,43 +21,42 @@ export type ExtendedWorkflowWatchResult = WorkflowWatchResult & {
   } | null;
 };
 
-const sanitizeWorkflowWatchResult = (record: WorkflowWatchResult) => {
-  const formattedResults = Object.entries(record.payload.workflowState.steps || {}).reduce(
-    (acc, [key, value]) => {
-      let output = value.status === 'success' ? value.output : undefined;
-      if (output) {
-        output = Object.entries(output).reduce(
-          (_acc, [_key, _value]) => {
-            const val = _value as { type: string; data: unknown };
-            _acc[_key] = val.type?.toLowerCase() === 'buffer' ? { type: 'Buffer', data: `[...buffered data]` } : val;
-            return _acc;
-          },
-          {} as Record<string, any>,
-        );
-      }
-      acc[key] = { ...value, output };
-      return acc;
-    },
-    {} as Record<string, any>,
-  );
-  const sanitizedRecord: ExtendedWorkflowWatchResult = {
-    ...record,
-    sanitizedOutput: record
-      ? JSON.stringify(
-          {
-            ...record,
-            payload: {
-              ...record.payload,
-              workflowState: { ...record.payload.workflowState, steps: formattedResults },
-            },
-          },
-          null,
-          2,
-        ).slice(0, 50000) // Limit to 50KB
-      : null,
-  };
+export const useWorkflow = (workflowId: string) => {
+  const [workflow, setWorkflow] = useState<GetWorkflowResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  return sanitizedRecord;
+  const client = useMastraClient();
+
+  useEffect(() => {
+    const fetchWorkflow = async () => {
+      setIsLoading(true);
+      try {
+        if (!workflowId) {
+          setWorkflow(null);
+          setIsLoading(false);
+          return;
+        }
+        const res = await client.getWorkflow(workflowId).details();
+        if (!res) {
+          setWorkflow(null);
+          console.error('Error fetching workflow');
+          toast.error('Error fetching workflow');
+          return;
+        }
+        setWorkflow(res);
+      } catch (error) {
+        setWorkflow(null);
+        console.error('Error fetching workflow', error);
+        toast.error('Error fetching workflow');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchWorkflow();
+  }, [workflowId]);
+
+  return { workflow, isLoading };
 };
 
 export const useLegacyWorkflow = (workflowId: string) => {
@@ -128,17 +126,6 @@ export const useExecuteWorkflow = () => {
     }
   };
 
-  const createWorkflowRun = async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
-    try {
-      const workflow = client.getWorkflow(workflowId);
-      const { runId: newRunId } = await workflow.createRun({ runId: prevRunId });
-      return { runId: newRunId };
-    } catch (error) {
-      console.error('Error creating workflow run:', error);
-      throw error;
-    }
-  };
-
   const startLegacyWorkflowRun = async ({
     workflowId,
     runId,
@@ -157,71 +144,15 @@ export const useExecuteWorkflow = () => {
     }
   };
 
-  const startWorkflowRun = async ({
-    workflowId,
-    runId,
-    input,
-    runtimeContext: playgroundRuntimeContext,
-  }: {
-    workflowId: string;
-    runId: string;
-    input: any;
-    runtimeContext: Record<string, any>;
-  }) => {
-    try {
-      const runtimeContext = new RuntimeContext();
-      Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
-        runtimeContext.set(key, value);
-      });
-
-      const workflow = client.getWorkflow(workflowId);
-
-      await workflow.start({ runId, inputData: input || {}, runtimeContext });
-    } catch (error) {
-      console.error('Error starting workflow run:', error);
-      throw error;
-    }
-  };
-
-  const startAsyncWorkflowRun = async ({
-    workflowId,
-    runId,
-    input,
-    runtimeContext: playgroundRuntimeContext,
-  }: {
-    workflowId: string;
-    runId?: string;
-    input: any;
-    runtimeContext: Record<string, any>;
-  }) => {
-    try {
-      const runtimeContext = new RuntimeContext();
-      Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
-        runtimeContext.set(key, value);
-      });
-      const workflow = client.getWorkflow(workflowId);
-      const result = await workflow.startAsync({ runId, inputData: input || {}, runtimeContext });
-      return result;
-    } catch (error) {
-      console.error('Error starting workflow run:', error);
-      throw error;
-    }
-  };
-
   return {
-    startWorkflowRun,
-    createWorkflowRun,
     startLegacyWorkflowRun,
     createLegacyWorkflowRun,
-    startAsyncWorkflowRun,
   };
 };
 
 export const useWatchWorkflow = () => {
   const [isWatchingLegacyWorkflow, setIsWatchingLegacyWorkflow] = useState(false);
-  const [isWatchingWorkflow, setIsWatchingWorkflow] = useState(false);
   const [legacyWatchResult, setLegacyWatchResult] = useState<ExtendedLegacyWorkflowRunResult | null>(null);
-  const [watchResult, setWatchResult] = useState<ExtendedWorkflowWatchResult | null>(null);
   const client = useMastraClient();
 
   // Debounce the state update to prevent too frequent renders
@@ -280,51 +211,15 @@ export const useWatchWorkflow = () => {
     }
   };
 
-  // Debounce the state update to prevent too frequent renders
-  const debouncedSetWorkflowWatchResult = useDebouncedCallback((record: ExtendedWorkflowWatchResult) => {
-    const sanitizedRecord = sanitizeWorkflowWatchResult(record);
-    setWatchResult(sanitizedRecord);
-  }, 100);
-
-  const watchWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
-    try {
-      setIsWatchingWorkflow(true);
-
-      const workflow = client.getWorkflow(workflowId);
-
-      await workflow.watch({ runId }, record => {
-        try {
-          debouncedSetWorkflowWatchResult(record);
-        } catch (err) {
-          console.error('Error processing workflow record:', err);
-          // Set a minimal error state if processing fails
-          setWatchResult({
-            ...record,
-          });
-        }
-      });
-    } catch (error) {
-      console.error('Error watching workflow:', error);
-
-      throw error;
-    } finally {
-      setIsWatchingWorkflow(false);
-    }
-  };
-
   return {
     watchLegacyWorkflow,
     isWatchingLegacyWorkflow,
     legacyWatchResult,
-    watchWorkflow,
-    isWatchingWorkflow,
-    watchResult,
   };
 };
 
 export const useResumeWorkflow = () => {
   const [isResumingLegacyWorkflow, setIsResumingLegacyWorkflow] = useState(false);
-  const [isResumingWorkflow, setIsResumingWorkflow] = useState(false);
 
   const client = useMastraClient();
 
@@ -353,42 +248,8 @@ export const useResumeWorkflow = () => {
     }
   };
 
-  const resumeWorkflow = async ({
-    workflowId,
-    step,
-    runId,
-    resumeData,
-    runtimeContext: playgroundRuntimeContext,
-  }: {
-    workflowId: string;
-    step: string | string[];
-    runId: string;
-    resumeData: any;
-    runtimeContext: Record<string, any>;
-  }) => {
-    try {
-      setIsResumingWorkflow(true);
-
-      const runtimeContext = new RuntimeContext();
-      Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
-        runtimeContext.set(key, value);
-      });
-
-      const response = await client.getWorkflow(workflowId).resume({ step, runId, resumeData, runtimeContext });
-
-      return response;
-    } catch (error) {
-      console.error('Error resuming workflow:', error);
-      throw error;
-    } finally {
-      setIsResumingWorkflow(false);
-    }
-  };
-
   return {
     resumeLegacyWorkflow,
     isResumingLegacyWorkflow,
-    resumeWorkflow,
-    isResumingWorkflow,
   };
 };

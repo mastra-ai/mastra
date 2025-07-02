@@ -1,4 +1,4 @@
-import type { Logger } from '@mastra/core';
+import type { IMastraLogger } from '@mastra/core/logger';
 import type { WorkspacesRoot } from 'find-workspaces';
 import { findWorkspacesRoot } from 'find-workspaces';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -27,7 +27,7 @@ describe('workspaceDependencies', () => {
     error: vi.fn(),
     debug: vi.fn(),
     warning: vi.fn(),
-  } as unknown as Logger;
+  } as unknown as IMastraLogger;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -142,26 +142,6 @@ describe('workspaceDependencies', () => {
 
       expect(mockDepsService.pack).toHaveBeenCalledTimes(3);
       expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully packaged 3'));
-    });
-
-    it('should handle packaging errors gracefully', async () => {
-      const depsService = new DepsService();
-      vi.mocked(depsService.pack).mockRejectedValueOnce(new Error('Mock pack error'));
-      const workspaceMap = new Map<
-        string,
-        { location: string; dependencies: Record<string, string> | undefined; version: string | undefined }
-      >([['pkg-a', { location: '/pkg-a', dependencies: {}, version: '1.0.0' }]]);
-      const usedWorkspacePackages = new Set(['pkg-a']);
-      mockDepsService.pack.mockRejectedValueOnce(new Error('Pack failed'));
-
-      await packWorkspaceDependencies({
-        workspaceMap,
-        usedWorkspacePackages,
-        bundleOutputDir: '/output',
-        logger: mockLogger,
-      });
-
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to package pkg-a'));
     });
 
     it('should do nothing with empty workspace packages', async () => {

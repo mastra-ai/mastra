@@ -11,9 +11,17 @@ Let's create a comprehensive agent that utilizes conversation history, semantic 
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 // Create a comprehensive memory configuration
 const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "file:../../memory.db", // relative path from the `.mastra/output` directory
+  }),
+  vector: new LibSQLVector({
+    connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
+  }),
+  embedder: openai.embedding("text-embedding-3-small"),
   options: {
     // Conversation history configuration
     lastMessages: 20, // Include the last 20 messages in the context
@@ -30,7 +38,6 @@ const memory = new Memory({
     // Working memory configuration
     workingMemory: {
       enabled: true,
-      use: "tool-call",
       template: `
 # User Profile
 
