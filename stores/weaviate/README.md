@@ -1,6 +1,6 @@
 # @mastra/weaviate
 
-A vector store implementation for Weaviate using the official [Weaviate client](https://www.npmjs.com/package/weaviate-client) with added dimension validation, collection management, and document storage capabilities.
+A vector store implementation for Weaviate using the official [weaviate client](https://www.npmjs.com/package/weaviate-client) with comprehensive vector operations, advanced filtering, and multiple distance metrics.
 
 ## Installation
 
@@ -13,6 +13,10 @@ npm install @mastra/weaviate
 ```typescript
 import { WeaviateVector } from '@mastra/weaviate';
 
+// Local development (default connection)
+const weaviate = await WeaviateVector.use();
+
+// Production with custom configuration
 const weaviate = await WeaviateVector.use({
   httpHost: process.env.WEAVIATE_URL, // URL only, no http prefix
   httpPort: 443,
@@ -23,83 +27,150 @@ const weaviate = await WeaviateVector.use({
   authCredentials: new weaviate.ApiKey(process.env.WEAVIATE_API_KEY),
 });
 
-// Create a new collection
-await weaviate.createIndex({ indexName: 'myCollection', dimension });
+// Create a new collection with distance metric
+await weaviate.createIndex({
+  indexName: 'myCollection',
+  metric: 'cosine', // 'cosine', 'euclidean', or 'dotproduct'
+});
 
-// Add vectors with documents
-const testVectors = [
+// Add vectors with metadata
+const vectors = [
   [1.0, 0.0, 0.0],
   [0.0, 1.0, 0.0],
   [0.0, 0.0, 1.0],
 ];
 
-const testMetadata = [{ label: 'x' }, { label: 'y' }, { label: 'z' }];
-let vectorIds: string[];
+const metadata = [
+  { label: 'x', category: 'axis' },
+  { label: 'y', category: 'axis' },
+  { label: 'z', category: 'axis' },
+];
 
 const vectorIds = await weaviate.upsert({
-  indexName: testCollectionName,
-  vectors: testVectors,
-  metadata: testMetadata,
+  indexName: 'myCollection',
+  vectors,
+  metadata,
 });
 
-// Query vectors with document filtering
-const queryVector = [0.0, 1.0, 0.0];
-const filter = { label: 'y' };
-
-const results = await weaviate.query({ indexName: testCollectionName, queryVector, topK: 1, filter });
+// Query vectors with advanced filtering
+const results = await weaviate.query({
+  indexName: 'myCollection',
+  queryVector: [0.0, 1.0, 0.0],
+  topK: 5,
+  filter: {
+    $and: [{ category: 'axis' }, { label: { $in: ['x', 'y'] } }],
+  },
+  includeVector: true,
+});
 ```
 
 ## Configuration
 
-For both the open source version and cloud versions of weaviate, you need to provide the following configuration:
+### Connection Parameters
 
-- `httpHost`: URL of your Weaviate server
-- `httpPort`: Port of your Weaviate server
-- `grpcHost`: URL of your Weaviate server
-- `grpcPort`: Port of your Weaviate server
-- `grpcSecure`: Whether to use TLS for gRPC communication
-- `httpSecure`: Whether to use TLS for HTTP communication
+- `httpHost`: HTTP host for Weaviate connection
+- `httpPort`: HTTP port for Weaviate connection
+- `httpSecure`: Whether to use HTTPS for HTTP connections
+- `grpcHost`: gRPC host for Weaviate connection
+- `grpcPort`: gRPC port for Weaviate connection
+- `grpcSecure`: Whether to use secure gRPC connections
 
-Some optional configuration options are available are:
+### Optional Parameters
 
-- `authCredentials`: Authentication configuration
-- `timeout`: Request timeout in seconds
-- `headers`: Additional headers to include in requests
+- `authCredentials`: Authentication credentials (API key, OAuth, etc.)
+- `timeout`: Connection timeout in milliseconds
+- `headers`: Additional HTTP headers
 - `skipInitChecks`: Whether to skip initialization checks
 
 ## Features
 
-- Vector similarity search with the cosine distance metric
-- Document storage and retrieval
-- Document content filtering
-- Strict vector dimension validation
-- Collection-based organization
-- Metadata filtering support
-- Optional vector inclusion in query results
-- Automatic UUID generation for vectors
-- Built-in collection caching for performance
-- Built on top of [Weaviate client](https://www.npmjs.com/package/weaviate-client)
+- **Multiple Distance Metrics**: Cosine, Euclidean, and Dot Product similarity
+- **Advanced Filtering**: Complex queries with logical operators ($and, $or)
+- **Batch Processing**: Automatic batching of 500 vectors for optimal performance
+- **Comprehensive Operators**: Support for $eq, $ne, $gt, $gte, $lt, $lte, $in, $all, $length, $geo, $null, $regex
+- **Vector Operations**: Full CRUD operations for vectors and metadata
+- **Index Management**: Create, list, describe, and delete collections
+- **Performance Optimized**: Built-in caching and concurrent operations
+- **Type Safety**: Full TypeScript support with strong typing
 
-## Methods
+## Core Methods
 
-- `createIndex({ indexName, dimension })`: Create a new collection
-- `upsert({ indexName, vectors, metadata?, ids?, documents? })`: Add or update vectors with optional document storage
-- `query({ indexName, queryVector, topK?, filter?, includeVector?, documentFilter? })`: Search for similar vectors with optional document filtering
-- `listIndexes()`: List all collections
-- `describeIndex(indexName)`: Get collection statistics
-- `deleteIndex(indexName)`: Delete a collection
+### Index Management
 
-## Query Response Format
+- `createIndex({ indexName, metric })`: Create a new collection with specified distance metric
+- `listIndexes()`: List all available collections
+- `describeIndex({ indexName })`: Get collection statistics (dimension, count, metric)
+- `deleteIndex({ indexName })`: Delete a collection
 
-Query results include:
+### Vector Operations
 
-- `id`: Vector ID
-- `score`: Distance/similarity score
-- `metadata`: Associated metadata
-- `document`: Original document text (if stored)
-- `vector`: Original vector (if includeVector is true)
+- `upsert({ indexName, vectors, metadata?, ids? })`: Add or update vectors with metadata
+- `query({ indexName, queryVector, topK?, filter?, includeVector? })`: Search for similar vectors
+- `updateVector({ indexName, id, update })`: Update specific vector and/or metadata
+- `deleteVector({ indexName, id })`: Delete specific vector by ID
+
+## Advanced Filtering Examples
+
+### Basic Operators
+
+```typescript
+// Comparison operators
+const filter = {
+  price: { $gt: 100, $lt: 500 },
+  category: { $eq: 'electronics' },
+  rating: { $gte: 4.0 },
+};
+```
+
+### Logical Operators
+
+```typescript
+// Complex logical filtering
+const filter = {
+  $and: [
+    { category: { $in: ['tech', 'science'] } },
+    { $or: [{ price: { $lt: 100 } }, { featured: true }] },
+    { tags: { $all: ['popular', 'trending'] } },
+  ],
+};
+```
+
+### Special Operators
+
+```typescript
+// Array length filtering
+const lengthFilter = { tags: { $length: { $gte: 3 } } };
+
+// Geo-radius filtering
+const geoFilter = {
+  location: {
+    $geo: {
+      lat: 37.7749,
+      lon: -122.4194,
+      radius: 10000, // meters
+    },
+  },
+};
+
+// Regex pattern matching
+const regexFilter = { title: { $regex: '^Product.*' } };
+```
+
+## Distance Metrics
+
+- **cosine** (default): Best for normalized vectors and semantic similarity
+- **euclidean**: Best for absolute distance measurements
+- **dotproduct**: Best for sparse vectors and when vector magnitude matters
+
+## Performance Considerations
+
+- Vectors are automatically batched in groups of 500 for upsert operations
+- Concurrent operations are supported for better throughput
+- Use appropriate filters to reduce search space
+- Monitor collection statistics for performance optimization
 
 ## Related Links
 
 - [Weaviate Documentation](https://weaviate.io/developers/weaviate/client-libraries/typescript/typescript-v3)
 - [Weaviate API Reference](https://weaviate.io/developers/weaviate/api/rest)
+- [Mastra Core Documentation](https://docs.mastra.ai)

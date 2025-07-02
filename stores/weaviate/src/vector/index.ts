@@ -67,6 +67,9 @@ export class WeaviateVector extends MastraVector {
   }
 
   public createIndex({ indexName, metric = 'cosine' }: CreateIndexParams): Promise<void> {
+    if (!DISTANCE_MAPPING[metric]) {
+      throw new Error(`Unsupported metric: ${metric}. Supported metrics: ${Object.keys(DISTANCE_MAPPING).join(', ')}`);
+    }
     return this.client.collections
       .create({
         name: indexName,
@@ -117,8 +120,9 @@ export class WeaviateVector extends MastraVector {
     ]);
 
     const distance = config.vectorizers.default?.indexConfig.distance;
+    const dimension = anObj?.vectors.default?.length;
     return {
-      dimension: anObj?.vectors.default?.length || -1,
+      dimension: dimension || -1,
       count,
       metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance) as IndexStats['metric'],
     };
@@ -137,7 +141,7 @@ export class WeaviateVector extends MastraVector {
         properties: update.metadata,
       });
     } catch (error) {
-      console.error('Error inserting into Weaviate index:', error);
+      console.error('Error updating Weaviate vector:', error);
       throw error;
     }
   }

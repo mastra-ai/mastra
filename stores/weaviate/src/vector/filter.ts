@@ -81,7 +81,7 @@ export class WeaviateFilterTranslator extends BaseFilterTranslator {
   }
 
   private isVectorFilter(filter: any): filter is VectorFilter {
-    return typeof filter === 'object';
+    return typeof filter === 'object' && filter !== null && !Array.isArray(filter);
   }
 
   private translateLogical(operator: LogicalOperator, condition: VectorFilter[]): FilterValue<null> {
@@ -123,7 +123,6 @@ export class WeaviateFilterTranslator extends BaseFilterTranslator {
         default:
           throw new Error(`Unsupported operator ${key}`);
       }
-      throw new Error(`Unsupported operator ${key}`);
     }, this);
     return filterValues.length === 1 ? filterValues[0]! : Filters.and(...filterValues);
   }
@@ -155,12 +154,14 @@ export class WeaviateFilterTranslator extends BaseFilterTranslator {
         case '$lte':
           return this.filter.byProperty(field).lessOrEqual(value);
         case '$geo':
-          if (!value || !value.lat || !value.lon || !value.radius) {
+          if (!value || (!value.lat && !value.latitude) || (!value.lon && !value.longitude) || !value.radius) {
             throw new Error(`Invalid $geo filter: ${JSON.stringify(value)} value for field ${field}`);
           }
-          return this.filter
-            .byProperty(field)
-            .withinGeoRange({ latitude: value.lat, longitude: value.lon, distance: value.radius });
+          return this.filter.byProperty(field).withinGeoRange({
+            latitude: value.lat || value.latitude,
+            longitude: value.lon || value.longitude,
+            distance: value.radius,
+          });
         case '$null':
           return this.filter.byProperty(field).isNull(value);
         case '$all':

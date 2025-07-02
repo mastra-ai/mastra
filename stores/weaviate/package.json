@@ -26,8 +26,8 @@
     "lint:fix": "eslint ./src --fix"
   },
   "dependencies": {
-    "@mastra/core": "workspace:^",
-    "weaviate-client": "^3.4.1"
+    "@mastra/core": "workspace:*",
+    "weaviate-client": "^3.6.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

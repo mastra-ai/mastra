@@ -36,43 +36,47 @@ describe('WeaviateVector', () => {
   });
 
   describe('Weaviate-specific index Operations', () => {
+    const specificTestCollectionName = 'TestCollectionSpecific_' + Date.now();
     beforeAll(async () => {
-      weaviate = await WeaviateVector.use();
-      await weaviate.createIndex({ indexName: testCollectionName, dimension, metric: 'cosine' });
+      await weaviate.createIndex({ indexName: specificTestCollectionName, dimension, metric: 'cosine' });
       const vectors = [
         [1, 2, 3],
         [4, 5, 6],
       ];
-      await weaviate.upsert({ indexName: testCollectionName, vectors });
+      await weaviate.upsert({ indexName: specificTestCollectionName, vectors });
     });
 
     afterAll(async () => {
-      await weaviate.deleteIndex({ indexName: testCollectionName });
+      await weaviate.deleteIndex({ indexName: specificTestCollectionName });
     }, 50000);
 
     it('should return dimensions after inserting vectors', async () => {
-      const stats = await weaviate.describeIndex({ indexName: testCollectionName });
+      const stats = await weaviate.describeIndex({ indexName: specificTestCollectionName });
       expect(stats.dimension).toBe(dimension);
     }, 50000);
 
     it('should return score greater than 0 for dotproduct metric', async () => {
       const queryVector = [1, 2, 3];
-      const results: QueryResult[] = await weaviate.query({ indexName: testCollectionName, queryVector, topK: 1 });
+      const results: QueryResult[] = await weaviate.query({
+        indexName: specificTestCollectionName,
+        queryVector,
+        topK: 1,
+      });
       expect(results[0]?.score).toBeGreaterThan(0);
     }, 50000);
   });
 
   describe('Vector Operations', () => {
+    const vectorTestCollectionName = 'TestCollectionVector_' + Date.now();
     beforeAll(async () => {
-      weaviate = await WeaviateVector.use();
       await weaviate.createIndex({
-        indexName: testCollectionName,
+        indexName: vectorTestCollectionName,
         dimension,
       });
     });
 
     afterAll(async () => {
-      await weaviate.deleteIndex({ indexName: testCollectionName });
+      await weaviate.deleteIndex({ indexName: vectorTestCollectionName });
     }, 50000);
 
     const testVectors = [
@@ -85,7 +89,7 @@ describe('WeaviateVector', () => {
 
     it('should upsert vectors with metadata', async () => {
       vectorIds = await weaviate.upsert({
-        indexName: testCollectionName,
+        indexName: vectorTestCollectionName,
         vectors: testVectors,
         metadata: testMetadata,
       });
@@ -94,7 +98,7 @@ describe('WeaviateVector', () => {
 
     it('should query vectors and return nearest neighbors', async () => {
       const queryVector = [1.0, 0.1, 0.1];
-      const results = await weaviate.query({ indexName: testCollectionName, queryVector, topK: 3 });
+      const results = await weaviate.query({ indexName: vectorTestCollectionName, queryVector, topK: 3 });
 
       expect(results).toHaveLength(3);
       expect(results?.[0]?.score).toBeGreaterThan(0);
@@ -104,7 +108,7 @@ describe('WeaviateVector', () => {
     it('should query vectors and return vector in results', async () => {
       const queryVector = [1.0, 0.1, 0.1];
       const results = await weaviate.query({
-        indexName: testCollectionName,
+        indexName: vectorTestCollectionName,
         queryVector,
         topK: 3,
         includeVector: true,
@@ -121,7 +125,7 @@ describe('WeaviateVector', () => {
         label: 'y',
       };
 
-      const results = await weaviate.query({ indexName: testCollectionName, queryVector, topK: 1, filter });
+      const results = await weaviate.query({ indexName: vectorTestCollectionName, queryVector, topK: 1, filter });
 
       expect(results).toHaveLength(1);
       expect(results?.[0]?.metadata?.label).toBe('y');
@@ -129,6 +133,7 @@ describe('WeaviateVector', () => {
   });
 
   describe('Vector update operations', () => {
+    const updateTestCollectionName = 'TestCollectionUpdate_' + Date.now();
     const testVectors = [
       [1, 2, 3],
       [4, 5, 6],
@@ -136,15 +141,15 @@ describe('WeaviateVector', () => {
     ];
 
     beforeEach(async () => {
-      await weaviate.createIndex({ indexName: testCollectionName, dimension });
+      await weaviate.createIndex({ indexName: updateTestCollectionName, dimension });
     });
 
     afterEach(async () => {
-      await weaviate.deleteIndex({ indexName: testCollectionName });
+      await weaviate.deleteIndex({ indexName: updateTestCollectionName });
     });
 
     it('should update the vector by id', async () => {
-      const ids = await weaviate.upsert({ indexName: testCollectionName, vectors: testVectors });
+      const ids = await weaviate.upsert({ indexName: updateTestCollectionName, vectors: testVectors });
       expect(ids).toHaveLength(3);
 
       const idToBeUpdated = ids[0];
@@ -158,10 +163,10 @@ describe('WeaviateVector', () => {
         metadata: newMetaData,
       };
 
-      await weaviate.updateVector({ indexName: testCollectionName, id: idToBeUpdated, update });
+      await weaviate.updateVector({ indexName: updateTestCollectionName, id: idToBeUpdated, update });
 
       const results = await weaviate.query({
-        indexName: testCollectionName,
+        indexName: updateTestCollectionName,
         queryVector: newVector,
         topK: 2,
         includeVector: true,
@@ -173,7 +178,7 @@ describe('WeaviateVector', () => {
     });
 
     it('should only update the metadata by id', async () => {
-      const ids = await weaviate.upsert({ indexName: testCollectionName, vectors: testVectors });
+      const ids = await weaviate.upsert({ indexName: updateTestCollectionName, vectors: testVectors });
       expect(ids).toHaveLength(3);
 
       const idToBeUpdated = ids[0];
@@ -185,10 +190,10 @@ describe('WeaviateVector', () => {
         metadata: newMetaData,
       };
 
-      await weaviate.updateVector({ indexName: testCollectionName, id: idToBeUpdated, update });
+      await weaviate.updateVector({ indexName: updateTestCollectionName, id: idToBeUpdated, update });
 
       const results = await weaviate.query({
-        indexName: testCollectionName,
+        indexName: updateTestCollectionName,
         queryVector: testVectors[0],
         topK: 2,
         includeVector: true,
@@ -199,7 +204,7 @@ describe('WeaviateVector', () => {
     });
 
     it('should only update vector embeddings by id', async () => {
-      const ids = await weaviate.upsert({ indexName: testCollectionName, vectors: testVectors });
+      const ids = await weaviate.upsert({ indexName: updateTestCollectionName, vectors: testVectors });
       expect(ids).toHaveLength(3);
 
       const idToBeUpdated = ids[0];
@@ -209,10 +214,10 @@ describe('WeaviateVector', () => {
         vector: newVector,
       };
 
-      await weaviate.updateVector({ indexName: testCollectionName, id: idToBeUpdated, update });
+      await weaviate.updateVector({ indexName: updateTestCollectionName, id: idToBeUpdated, update });
 
       const results = await weaviate.query({
-        indexName: testCollectionName,
+        indexName: updateTestCollectionName,
         queryVector: newVector,
         topK: 2,
         includeVector: true,
@@ -221,8 +226,8 @@ describe('WeaviateVector', () => {
       expect(results[0]?.vector).toEqual(newVector);
     });
 
-    it('should throw exception when no updates are given', () => {
-      expect(weaviate.updateVector({ indexName: testCollectionName, id: 'id', update: {} })).rejects.toThrow(
+    it('should throw exception when no updates are given', async () => {
+      await expect(weaviate.updateVector({ indexName: testCollectionName, id: 'id', update: {} })).rejects.toThrow(
         'No updates provided',
       );
     });
@@ -252,6 +257,8 @@ describe('WeaviateVector', () => {
   });
 
   describe('Vector delete operations', () => {
+    const deleteTestCollectionName = 'TestCollectionUpdate_' + Date.now();
+
     const testVectors = [
       [1, 2, 3],
       [4, 5, 6],
@@ -259,22 +266,22 @@ describe('WeaviateVector', () => {
     ];
 
     beforeEach(async () => {
-      await weaviate.createIndex({ indexName: testCollectionName, dimension });
+      await weaviate.createIndex({ indexName: deleteTestCollectionName, dimension });
     });
 
     afterEach(async () => {
-      await weaviate.deleteIndex({ indexName: testCollectionName });
+      await weaviate.deleteIndex({ indexName: deleteTestCollectionName });
     });
 
     it('should delete the vector by id', async () => {
-      const ids = await weaviate.upsert({ indexName: testCollectionName, vectors: testVectors });
+      const ids = await weaviate.upsert({ indexName: deleteTestCollectionName, vectors: testVectors });
       expect(ids).toHaveLength(3);
       const idToBeDeleted = ids[0];
 
-      await weaviate.deleteVector({ indexName: testCollectionName, id: idToBeDeleted });
+      await weaviate.deleteVector({ indexName: deleteTestCollectionName, id: idToBeDeleted });
 
       const results = await weaviate.query({
-        indexName: testCollectionName,
+        indexName: deleteTestCollectionName,
         queryVector: [1.0, 0.0, 0.0],
         topK: 2,
       });
