@@ -35,6 +35,8 @@ export class Memory extends MastraMemory {
       },
     });
     this.threadConfig = mergedConfig;
+
+    this.checkStorageFeatureSupport(mergedConfig);
   }
 
   private async validateThreadIsOwnedByResource(threadId: string, resourceId: string) {
@@ -45,6 +47,18 @@ export class Memory extends MastraMemory {
     if (thread.resourceId !== resourceId) {
       throw new Error(
         `Thread with id ${threadId} is for resource with id ${thread.resourceId} but resource ${resourceId} was queried.`,
+      );
+    }
+  }
+
+  private checkStorageFeatureSupport(config: MemoryConfig) {
+    if (
+      typeof config.semanticRecall === `object` &&
+      config.semanticRecall.scope === `resource` &&
+      !this.storage.supports.selectByIncludeResourceScope
+    ) {
+      throw new Error(
+        `Memory error: Attached storage adapter "${this.storage.name || 'unknown'}" doesn't support semanticRecall: { scope: "resource" } yet and currently only supports per-thread semantic recall.`,
       );
     }
   }
@@ -74,6 +88,8 @@ export class Memory extends MastraMemory {
 
     const config = this.getMergedThreadConfig(threadConfig || {});
 
+    this.checkStorageFeatureSupport(config);
+
     const defaultRange = DEFAULT_MESSAGE_RANGE;
     const defaultTopK = DEFAULT_TOP_K;
 
@@ -88,7 +104,9 @@ export class Memory extends MastraMemory {
             messageRange: config?.semanticRecall?.messageRange ?? defaultRange,
           };
 
-    if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector && !!selectBy.vectorSearchString) {
+    const resourceScope = typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === `resource`;
+
+    if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector) {
       const { embeddings, dimension } = await this.embedMessageContent(selectBy.vectorSearchString!);
       const { indexName } = await this.createEmbeddingIndex(dimension);
 
@@ -105,9 +123,13 @@ export class Memory extends MastraMemory {
               indexName,
               queryVector: embedding,
               topK: vectorConfig.topK,
-              filter: {
-                thread_id: threadId,
-              },
+              filter: resourceScope
+                ? {
+                    resource_id: resourceId,
+                  }
+                : {
+                    thread_id: threadId,
+                  },
             })),
           );
         }),
@@ -117,6 +139,7 @@ export class Memory extends MastraMemory {
     // Get raw messages from storage
     const rawMessages = await this.storage.getMessages({
       threadId,
+      resourceId,
       format: 'v2',
       selectBy: {
         ...selectBy,
@@ -124,6 +147,7 @@ export class Memory extends MastraMemory {
           ? {
               include: vectorResults.map(r => ({
                 id: r.metadata?.message_id,
+                threadId: r.metadata?.thread_id,
                 withNextMessages:
                   typeof vectorConfig.messageRange === 'number'
                     ? vectorConfig.messageRange
@@ -188,6 +212,7 @@ export class Memory extends MastraMemory {
     }
 
     const messagesResult = await this.query({
+      resourceId,
       threadId,
       selectBy: {
         last: threadConfig.lastMessages,

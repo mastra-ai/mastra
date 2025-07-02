@@ -19,7 +19,7 @@ Each tab includes import statements, initialization code, and basic operations (
 The providers include Pg Vector, Pinecone, Qdrant, Chroma, Astra, LibSQL, Upstash, Cloudflare, MongoDB, OpenSearch, and Couchbase.
 */}
 
-<Tabs items={['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch', 'Couchbase']}>
+<Tabs items={['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch', 'Couchbase', 'LanceDB']}>
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
     import { MongoDBVector } from '@mastra/mongodb'
@@ -261,6 +261,30 @@ await store.upsert({
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
   ```
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { LanceVectorStore } from '@mastra/lance'
+
+  const store = await LanceVectorStore.create('/path/to/db')
+  
+  await store.createIndex({
+    tableName: "myVectors",
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+  
+  await store.upsert({
+    tableName: "myVectors",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+  ```
+
+  ### Using LanceDB
+  
+  LanceDB is an embedded vector database built on the Lance columnar format, suitable for local development or cloud deployment.
+  For detailed setup instructions and best practices, see the [official LanceDB documentation](https://lancedb.github.io/lancedb/).
 </Tabs.Tab>
 </Tabs>
 

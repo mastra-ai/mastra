@@ -19,6 +19,7 @@ These include:
 - form subscription
 - analytics
 - chatbot
+- algolia search
 
 Copy the Env file:
 
@@ -47,12 +48,17 @@ The docs will be served on `localhost:3000/docs`.
 
 ## Search
 
-Search is implemented with `pageFind` which indexes built `html` files. To get it to work, run:
+Search is implemented with Algolia. To set up search functionality:
 
-```bash
-npm run build
-npm run dev
-```
+1. Create an Algolia account and application
+2. Set up your environment variables in `.env.local`:
+   ```bash
+   NEXT_PUBLIC_ALGOLIA_APP_ID=your_app_id
+   NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY=your_search_key
+   ```
+3. Index your documentation content in Algolia
+
+For detailed setup instructions, see [ALGOLIA_SETUP.md](./ALGOLIA_SETUP.md).
 
 ## Making Changes
 

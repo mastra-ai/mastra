@@ -2,7 +2,7 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
-import { cn } from '../../lib/utils';
+import clsx from 'clsx';
 
 const inputVariants = cva(
   'flex w-full text-icon6 rounded-lg border bg-transparent shadow-sm focus-visible:ring-ring transition-colors focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50',
@@ -36,7 +36,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <input
         type={type}
-        className={cn(className, inputVariants({ variant, customSize, className }))}
+        className={clsx(className, inputVariants({ variant, customSize, className }))}
         data-testid={testId}
         ref={ref}
         {...props}

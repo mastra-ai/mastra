@@ -2,8 +2,6 @@ import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { Deployer } from '@mastra/deployer';
 import { DepsService } from '@mastra/deployer/services';
-import { execa } from 'execa';
-import { getOrCreateSite } from './helpers.js';
 
 export class NetlifyDeployer extends Deployer {
   protected scope: string;
@@ -53,31 +51,8 @@ to = "/.netlify/functions/api/:splat"
     });
   }
 
-  async deploy(outputDirectory: string): Promise<void> {
-    const site = await getOrCreateSite({ token: this.token, name: this.projectName || `mastra`, scope: this.scope });
-
-    // @ts-expect-error - seems to be fine
-    const p2 = execa(
-      'npx',
-      [
-        'netlify-cli',
-        'deploy',
-        '--site',
-        site.id,
-        '--auth',
-        this.token,
-        '--dir',
-        '.',
-        '--functions',
-        './netlify/functions',
-      ],
-      {
-        cwd: join(outputDirectory, this.outputDir),
-      },
-    );
-
-    p2.stdout.pipe(process.stdout);
-    await p2;
+  async deploy(): Promise<void> {
+    this.logger?.info('Deploying to Netlify failed. Please use the Netlify dashboard to deploy.');
   }
 
   async prepare(outputDirectory: string): Promise<void> {

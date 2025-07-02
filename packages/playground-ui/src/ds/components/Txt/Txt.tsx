@@ -8,6 +8,8 @@ export interface TxtProps extends React.HTMLAttributes<HTMLDivElement | HTMLLabe
   variant?: keyof typeof FontSizes;
   font?: 'mono';
   htmlFor?: string;
+  className?: string;
+  children?: React.ReactNode;
 }
 
 const variants = {

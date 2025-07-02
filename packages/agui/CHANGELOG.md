@@ -1,5 +1,19 @@
 # @mastra/agui
 
+## 1.0.3-alpha.0
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`@ai-sdk/ui-utils@^1.2.11` ↗︎](https://www.npmjs.com/package/@ai-sdk/ui-utils/v/1.2.11) (from `^1.1.19`, in `dependencies`)
+  - Updated dependency [`@copilotkit/runtime@^1.8.14` ↗︎](https://www.npmjs.com/package/@copilotkit/runtime/v/1.8.14) (from `^1.8.13`, in `dependencies`)
+  - Updated dependency [`hono@^4.7.11` ↗︎](https://www.npmjs.com/package/hono/v/4.7.11) (from `^4.5.1`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+
 ## 1.0.2
 
 ### Patch Changes

@@ -272,6 +272,21 @@ export class RecursiveCharacterTransformer extends TextTransformer {
           ' ',
           '',
         ];
+      case Language.LATEX:
+        return [
+          '\\\\part\\*?\\{',
+          '\\\\chapter\\*?\\{',
+          '\\\\section\\*?\\{',
+          '\\\\subsection\\*?\\{',
+          '\\\\subsubsection\\*?\\{',
+          '\\\\begin\\{.*?\\}',
+          '\\\\end\\{.*?\\}',
+          '\\\\[a-zA-Z]+\\{.*?\\}',
+          '\n\n',
+          '\n',
+          ' ',
+          '',
+        ];
       // ... (add other language cases following the same pattern)
       default:
         throw new Error(`Language ${language} is not supported! Please choose from ${Object.values(Language)}`);

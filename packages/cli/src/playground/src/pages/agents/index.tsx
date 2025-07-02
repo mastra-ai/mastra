@@ -1,4 +1,3 @@
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   AgentCoinIcon,
   AgentIcon,
@@ -8,6 +7,8 @@ import {
   Header,
   HeaderTitle,
   Icon,
+  MainContentLayout,
+  MainContentContent,
 } from '@mastra/playground-ui';
 
 import { useAgents } from '@/hooks/use-agents';
@@ -29,13 +30,13 @@ function Agents() {
   if (isLoading) return null;
 
   return (
-    <section className="overflow-hidden h-full">
+    <MainContentLayout>
       <Header>
         <HeaderTitle>Agents</HeaderTitle>
       </Header>
 
       {agentListData.length === 0 ? (
-        <div className="flex h-full items-center justify-center">
+        <MainContentContent isCentered={true}>
           <EmptyState
             iconSlot={<AgentCoinIcon />}
             titleSlot="Configure Agents"
@@ -56,17 +57,17 @@ function Agents() {
               </Button>
             }
           />
-        </div>
+        </MainContentContent>
       ) : (
-        <ScrollArea className="overflow-y-auto h-[calc(100vh-4rem)]">
+        <MainContentContent>
           <DataTable
             columns={agentsTableColumns}
             data={agentListData}
             onClick={row => navigate(`/agents/${row.id}/chat`)}
           />
-        </ScrollArea>
+        </MainContentContent>
       )}
-    </section>
+    </MainContentLayout>
   );
 }
 

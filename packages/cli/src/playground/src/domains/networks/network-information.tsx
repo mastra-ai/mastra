@@ -12,7 +12,7 @@ export function NetworkInformation({ networkId }: { networkId: string }) {
   }
 
   return (
-    <Tabs defaultValue="details">
+    <Tabs defaultValue="details" className="overflow-y-auto grid grid-rows-[auto_1fr] h-full">
       <TabsList className="flex shrink-0 border-b">
         <TabsTrigger value="details" className="group">
           <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
@@ -30,15 +30,17 @@ export function NetworkInformation({ networkId }: { networkId: string }) {
           </p>
         </TabsTrigger>
       </TabsList>
-      <TabsContent value="details">
-        <NetworkDetails network={network} />
-      </TabsContent>
-      <TabsContent value="agents">
-        <NetworkAgents network={network} />
-      </TabsContent>
-      <TabsContent value="endpoints">
-        <NetworkEndpoints networkId={networkId} />
-      </TabsContent>
+      <div className="overflow-y-auto">
+        <TabsContent value="details">
+          <NetworkDetails network={network} />
+        </TabsContent>
+        <TabsContent value="agents">
+          <NetworkAgents network={network} />
+        </TabsContent>
+        <TabsContent value="endpoints">
+          <NetworkEndpoints networkId={networkId} />
+        </TabsContent>
+      </div>
     </Tabs>
   );
 }

@@ -10,7 +10,7 @@ This example demonstrates how to build an Inngest workflow with Mastra.
 ## Setup
 
 ```sh copy
-npm install @mastra/inngest @mastra/core @mastra/deployer @hono/node-server @ai-sdk/openai
+npm install @mastra/inngest inngest @mastra/core @mastra/deployer @hono/node-server @ai-sdk/openai
 
 docker run --rm -p 8288:8288 \
   inngest/inngest \
@@ -33,34 +33,34 @@ const planningAgent = new Agent({
   model: openai("gpt-4o"),
   instructions: `
         You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
- 
+
         📅 [Day, Month Date, Year]
         ═══════════════════════════
- 
+
         🌡️ WEATHER SUMMARY
         • Conditions: [brief description]
         • Temperature: [X°C/Y°F to A°C/B°F]
         • Precipitation: [X% chance]
- 
+
         🌅 MORNING ACTIVITIES
         Outdoor:
         • [Activity Name] - [Brief description including specific location/route]
           Best timing: [specific time range]
           Note: [relevant weather consideration]
- 
+
         🌞 AFTERNOON ACTIVITIES
         Outdoor:
         • [Activity Name] - [Brief description including specific location/route]
           Best timing: [specific time range]
           Note: [relevant weather consideration]
- 
+
         🏠 INDOOR ALTERNATIVES
         • [Activity Name] - [Brief description including specific venue]
           Ideal for: [weather condition that would trigger this alternative]
- 
+
         ⚠️ SPECIAL CONSIDERATIONS
         • [Any relevant weather warnings, UV index, wind conditions, etc.]
- 
+
         Guidelines:
         - Suggest 2-3 time-specific outdoor activities per day
         - Include 1-2 indoor backup options
@@ -69,7 +69,7 @@ const planningAgent = new Agent({
         - Include specific venues, trails, or locations
         - Consider activity intensity based on temperature
         - Keep descriptions concise but informative
- 
+
         Maintain this exact formatting for consistency, using the emoji and section headers as shown.
       `,
 });
@@ -82,6 +82,8 @@ export { planningAgent };
 Define the activity planner workflow with 3 steps: one to fetch the weather via a network call, one to plan activities, and another to plan only indoor activities.
 
 ```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
+import { init } from "@mastra/inngest";
+import { Inngest } from "inngest";
 import { z } from "zod";
 
 const { createWorkflow, createStep } = init(

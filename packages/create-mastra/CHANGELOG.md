@@ -1,5 +1,44 @@
 # create-mastra
 
+## 0.10.5-alpha.0
+
+### Patch Changes
+
+- 02560d4: lift evals fetching to the playground package instead
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`execa@^9.6.0` ↗︎](https://www.npmjs.com/package/execa/v/9.6.0) (from `^9.5.2`, in `dependencies`)
+  - Updated dependency [`pino@^9.7.0` ↗︎](https://www.npmjs.com/package/pino/v/9.7.0) (from `^9.6.0`, in `dependencies`)
+  - Updated dependency [`posthog-node@^4.18.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/4.18.0) (from `^4.10.1`, in `dependencies`)
+- 311132e: move useWorkflow to playground instead of playground-ui
+- 53d3c37: Get workflows from an agent if not found from Mastra instance #5083
+
+## 0.10.4
+
+### Patch Changes
+
+- 1ba421d: fix the tools not showing on workflows attached to agents
+- 8725d02: Improve cli by reducing the amount of setups during interactive prompt
+- 13c97f9: Save run status, result and error in storage snapshot
+
+## 0.10.3
+
+### Patch Changes
+
+- e719504: don't start posthog when the browser is Brave
+- 8f60de4: fix workflow output when the schema is a primitive
+
+## 0.10.3-alpha.1
+
+### Patch Changes
+
+- e719504: don't start posthog when the browser is Brave
+
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- 8f60de4: fix workflow output when the schema is a primitive
+
 ## 0.10.2
 
 ### Patch Changes

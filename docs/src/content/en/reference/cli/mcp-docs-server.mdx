@@ -12,7 +12,7 @@ line or configured inside an MCP-aware IDE such as Cursor or Windsurf.
 ## Running from the CLI
 
 ```bash
-npx -y @mastra/mcp-docs-server@latest
+npx -y @mastra/mcp-docs-server
 ```
 
 The command above runs a stdio based MCP server. The process will keep
@@ -25,19 +25,19 @@ be pointed at the `@wong2/mcp-cli` package for exploration.
 Rebuild the docs before serving (useful if you've modified docs locally):
 
 ```bash
-REBUILD_DOCS_ON_START=true npx -y @mastra/mcp-docs-server@latest
+REBUILD_DOCS_ON_START=true npx -y @mastra/mcp-docs-server
 ```
 
 Enable verbose logging while experimenting:
 
 ```bash
-DEBUG=1 npx -y @mastra/mcp-docs-server@latest
+DEBUG=1 npx -y @mastra/mcp-docs-server
 ```
 
 Serve blog posts from a custom domain:
 
 ```bash
-BLOG_URL=https://my-blog.example npx -y @mastra/mcp-docs-server@latest
+BLOG_URL=https://my-blog.example npx -y @mastra/mcp-docs-server
 ```
 
 ## Environment variables

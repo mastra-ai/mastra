@@ -10,9 +10,7 @@ export const NetworkChat = ({ agentId, memory }: ChatProps) => {
 
   return (
     <MastraNetworkRuntimeProvider agentId={agentId} memory={memory} modelSettings={modelSettings}>
-      <div className="h-full pb-4">
-        <Thread ToolFallback={ToolFallback} />
-      </div>
+      <Thread ToolFallback={ToolFallback} />
     </MastraNetworkRuntimeProvider>
   );
 };

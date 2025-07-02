@@ -1,6 +1,7 @@
 import type { MastraMessageV2 } from '../agent';
 import { MastraBase } from '../base';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
+import type { Trace } from '../telemetry';
 import type { WorkflowRunState } from '../workflows';
 
 import {
@@ -12,7 +13,15 @@ import {
   TABLE_SCHEMAS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRun, WorkflowRuns } from './types';
+import type {
+  EvalRow,
+  PaginationInfo,
+  StorageColumn,
+  StorageGetMessagesArg,
+  StorageGetTracesArg,
+  WorkflowRun,
+  WorkflowRuns,
+} from './types';
 
 export abstract class MastraStorage extends MastraBase {
   /** @deprecated import from { TABLE_WORKFLOW_SNAPSHOT } '@mastra/core/storage' instead */
@@ -36,9 +45,68 @@ export abstract class MastraStorage extends MastraBase {
     });
   }
 
+  public get supports(): {
+    selectByIncludeResourceScope: boolean;
+  } {
+    return {
+      selectByIncludeResourceScope: false,
+    };
+  }
+
+  protected ensureDate(date: Date | string | undefined): Date | undefined {
+    if (!date) return undefined;
+    return date instanceof Date ? date : new Date(date);
+  }
+
+  protected serializeDate(date: Date | string | undefined): string | undefined {
+    if (!date) return undefined;
+    const dateObj = this.ensureDate(date);
+    return dateObj?.toISOString();
+  }
+
+  protected getSqlType(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'text':
+        return 'TEXT';
+      case 'timestamp':
+        return 'TIMESTAMP';
+      case 'integer':
+        return 'INTEGER';
+      case 'bigint':
+        return 'BIGINT';
+      case 'jsonb':
+        return 'JSONB';
+      default:
+        return 'TEXT';
+    }
+  }
+
+  protected getDefaultValue(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'text':
+      case 'uuid':
+        return "DEFAULT ''";
+      case 'timestamp':
+        return "DEFAULT '1970-01-01 00:00:00'";
+      case 'integer':
+      case 'bigint':
+        return 'DEFAULT 0';
+      case 'jsonb':
+        return "DEFAULT '{}'";
+      default:
+        return "DEFAULT ''";
+    }
+  }
+
   abstract createTable({ tableName }: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void>;
 
   abstract clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void>;
+
+  abstract alterTable(args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void>;
 
   abstract insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void>;
 
@@ -89,23 +157,7 @@ export abstract class MastraStorage extends MastraBase {
     args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
   ): Promise<MastraMessageV2[] | MastraMessageV1[]>;
 
-  abstract getTraces({
-    name,
-    scope,
-    page,
-    perPage,
-    attributes,
-    filters,
-  }: {
-    name?: string;
-    scope?: string;
-    page: number;
-    perPage: number;
-    attributes?: Record<string, string>;
-    filters?: Record<string, any>;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<any[]>;
+  abstract getTraces(args: StorageGetTracesArg): Promise<any[]>;
 
   async init(): Promise<void> {
     // to prevent race conditions, await any current init
@@ -141,6 +193,12 @@ export abstract class MastraStorage extends MastraBase {
     ]).then(() => true);
 
     await this.hasInitialized;
+
+    await this?.alterTable?.({
+      tableName: TABLE_MESSAGES,
+      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      ifNotExists: ['resourceId'],
+    });
   }
 
   async persistWorkflowSnapshot({
@@ -199,4 +257,16 @@ export abstract class MastraStorage extends MastraBase {
   }): Promise<WorkflowRuns>;
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
+
+  abstract getTracesPaginated(args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }>;
+
+  abstract getThreadsByResourceIdPaginated(args: {
+    resourceId: string;
+    page: number;
+    perPage: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
+
+  abstract getMessagesPaginated(
+    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }>;
 }

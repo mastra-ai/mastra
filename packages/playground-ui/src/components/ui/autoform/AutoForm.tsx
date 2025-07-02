@@ -32,15 +32,28 @@ export const ShadcnAutoFormFieldComponents = {
   date: DateField,
   select: SelectField,
   record: RecordField,
-} as const;
+};
 export type FieldTypes = keyof typeof ShadcnAutoFormFieldComponents;
 
-export function AutoForm<T extends Record<string, any>>({ uiComponents, formComponents, ...props }: AutoFormProps<T>) {
+export function AutoForm<T extends Record<string, any>>({
+  uiComponents,
+  formComponents,
+  readOnly,
+  ...props
+}: AutoFormProps<T> & { readOnly?: boolean }) {
   return (
     <BaseAutoForm
       {...props}
       uiComponents={{ ...ShadcnUIComponents, ...uiComponents }}
-      formComponents={{ ...ShadcnAutoFormFieldComponents, ...formComponents }}
+      formComponents={{
+        string: props => <StringField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
+        number: props => <NumberField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
+        boolean: props => <BooleanField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
+        date: props => <DateField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
+        select: props => <SelectField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
+        record: props => <RecordField {...props} inputProps={{ ...props.inputProps, readOnly }} />,
+        ...formComponents,
+      }}
     />
   );
 }

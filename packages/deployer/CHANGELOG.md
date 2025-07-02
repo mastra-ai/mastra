@@ -1,5 +1,163 @@
 # @mastra/deployer
 
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- 2d12edd: dependencies updates:
+  - Updated dependency [`rollup@^4.43.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.43.0) (from `^4.42.0`, in `dependencies`)
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`detect-libc@^2.0.4` ↗︎](https://www.npmjs.com/package/detect-libc/v/2.0.4) (from `^2.0.3`, in `dependencies`)
+  - Updated dependency [`esbuild@^0.25.5` ↗︎](https://www.npmjs.com/package/esbuild/v/0.25.5) (from `^0.25.1`, in `dependencies`)
+  - Updated dependency [`rollup@^4.42.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.42.0) (from `^4.41.1`, in `dependencies`)
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+- 36f1c36: MCP Client and Server streamable http fixes
+- 53d3c37: Get workflows from an agent if not found from Mastra instance #5083
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+  - @mastra/server@0.10.6-alpha.0
+
+## 0.10.5
+
+### Patch Changes
+
+- 8725d02: Remove swaggerUI and openAPI url when server starts
+- 105f872: Fix body already in use for POST requests
+- Updated dependencies [1ba421d]
+- Updated dependencies [13c97f9]
+  - @mastra/server@0.10.5
+  - @mastra/core@0.10.5
+
+## 0.10.4
+
+### Patch Changes
+
+- d1ed912: dependencies updates:
+  - Updated dependency [`dotenv@^16.5.0` ↗︎](https://www.npmjs.com/package/dotenv/v/16.5.0) (from `^16.4.7`, in `dependencies`)
+- f595975: dependencies updates:
+  - Updated dependency [`rollup@^4.41.1` ↗︎](https://www.npmjs.com/package/rollup/v/4.41.1) (from `^4.35.0`, in `dependencies`)
+- d90c49f: dependencies updates:
+  - Updated dependency [`@babel/core@^7.27.4` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.27.4) (from `^7.26.10`, in `dependencies`)
+  - Updated dependency [`@babel/helper-module-imports@^7.27.1` ↗︎](https://www.npmjs.com/package/@babel/helper-module-imports/v/7.27.1) (from `^7.25.9`, in `dependencies`)
+  - Updated dependency [`@rollup/plugin-node-resolve@^16.0.1` ↗︎](https://www.npmjs.com/package/@rollup/plugin-node-resolve/v/16.0.1) (from `^16.0.0`, in `dependencies`)
+  - Updated dependency [`hono@^4.7.11` ↗︎](https://www.npmjs.com/package/hono/v/4.7.11) (from `^4.7.4`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- afd9fda: Reset retry-count on code change and only retry if server actually is running
+
+  Fixes #4563
+
+- f1f1f1b: Add basic filtering capabilities to logs
+- 9597ee5: Hoist runtimeContext from POST request into middleware
+- 82090c1: Add pagination to logs
+- 69f6101: Add reason to tools import error on server start
+- 514fdde: Move opentelemetry deps to mastra output to remove @mastra/core dependency
+- bebd27c: Only apply <placeholder> text inside instructions in the playground ui
+- Updated dependencies [d1ed912]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [9597ee5]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [f1309d3]
+- Updated dependencies [bebd27c]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+  - @mastra/server@0.10.4
+
+## 0.10.4-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [925ab94]
+  - @mastra/core@0.10.4-alpha.3
+  - @mastra/server@0.10.4-alpha.3
+
+## 0.10.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4-alpha.2
+  - @mastra/server@0.10.4-alpha.2
+
+## 0.10.4-alpha.1
+
+### Patch Changes
+
+- d90c49f: dependencies updates:
+  - Updated dependency [`@babel/core@^7.27.4` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.27.4) (from `^7.26.10`, in `dependencies`)
+  - Updated dependency [`@babel/helper-module-imports@^7.27.1` ↗︎](https://www.npmjs.com/package/@babel/helper-module-imports/v/7.27.1) (from `^7.25.9`, in `dependencies`)
+  - Updated dependency [`@rollup/plugin-node-resolve@^16.0.1` ↗︎](https://www.npmjs.com/package/@rollup/plugin-node-resolve/v/16.0.1) (from `^16.0.0`, in `dependencies`)
+  - Updated dependency [`hono@^4.7.11` ↗︎](https://www.npmjs.com/package/hono/v/4.7.11) (from `^4.7.4`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 9597ee5: Hoist runtimeContext from POST request into middleware
+- 514fdde: Move opentelemetry deps to mastra output to remove @mastra/core dependency
+- bebd27c: Only apply <placeholder> text inside instructions in the playground ui
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [9597ee5]
+- Updated dependencies [f1309d3]
+- Updated dependencies [bebd27c]
+- Updated dependencies [f7f8293]
+  - @mastra/core@0.10.4-alpha.1
+  - @mastra/server@0.10.4-alpha.1
+
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- d1ed912: dependencies updates:
+  - Updated dependency [`dotenv@^16.5.0` ↗︎](https://www.npmjs.com/package/dotenv/v/16.5.0) (from `^16.4.7`, in `dependencies`)
+- f595975: dependencies updates:
+  - Updated dependency [`rollup@^4.41.1` ↗︎](https://www.npmjs.com/package/rollup/v/4.41.1) (from `^4.35.0`, in `dependencies`)
+- afd9fda: Reset retry-count on code change and only retry if server actually is running
+
+  Fixes #4563
+
+- f1f1f1b: Add basic filtering capabilities to logs
+- 82090c1: Add pagination to logs
+- 69f6101: Add reason to tools import error on server start
+- Updated dependencies [d1ed912]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [14a2566]
+  - @mastra/core@0.10.4-alpha.0
+  - @mastra/server@0.10.4-alpha.0
+
+## 0.10.3
+
+### Patch Changes
+
+- Updated dependencies [2b0fc7e]
+  - @mastra/core@0.10.3
+  - @mastra/server@0.10.3
+
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [2b0fc7e]
+  - @mastra/core@0.10.3-alpha.0
+  - @mastra/server@0.10.3-alpha.0
+
 ## 0.10.2
 
 ### Patch Changes

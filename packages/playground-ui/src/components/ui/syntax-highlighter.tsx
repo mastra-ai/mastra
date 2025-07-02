@@ -2,7 +2,9 @@ import { jsonLanguage } from '@codemirror/lang-json';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import CodeMirror from '@uiw/react-codemirror';
+import clsx from 'clsx';
 import { useMemo } from 'react';
+import { CopyButton } from './copy-button';
 
 export const useCodemirrorTheme = () => {
   return useMemo(
@@ -22,12 +24,13 @@ export const useCodemirrorTheme = () => {
   );
 };
 
-export const SyntaxHighlighter = ({ data }: { data: Record<string, unknown> }) => {
+export const SyntaxHighlighter = ({ data, className }: { data: Record<string, unknown>; className?: string }) => {
   const formattedCode = JSON.stringify(data, null, 2);
   const theme = useCodemirrorTheme();
 
   return (
-    <div className="rounded-md bg-[#1a1a1a] p-1 font-mono">
+    <div className={clsx('rounded-md bg-surface4 p-1 font-mono relative', className)}>
+      <CopyButton content={formattedCode} className="absolute top-2 right-2" />
       <CodeMirror value={formattedCode} theme={theme} extensions={[jsonLanguage]} />
     </div>
   );

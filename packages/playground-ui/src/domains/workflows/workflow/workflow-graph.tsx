@@ -1,6 +1,5 @@
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { useWorkflow } from '@/hooks/use-workflows';
 import '../../../index.css';
 
 import { lodashTitleCase } from '@/lib/string';
@@ -10,14 +9,16 @@ import { WorkflowGraphInner } from './workflow-graph-inner';
 import { WorkflowNestedGraphProvider } from '../context/workflow-nested-graph-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useContext } from 'react';
+import { GetWorkflowResponse } from '@mastra/client-js';
 
 export interface WorkflowGraphProps {
   workflowId: string;
+  isLoading?: boolean;
+  workflow?: GetWorkflowResponse;
   onShowTrace: ({ runId, stepName }: { runId: string; stepName: string }) => void;
 }
 
-export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
-  const { workflow, isLoading } = useWorkflow(workflowId);
+export function WorkflowGraph({ workflowId, onShowTrace, workflow, isLoading }: WorkflowGraphProps) {
   const { snapshot } = useContext(WorkflowRunContext);
 
   if (isLoading) {

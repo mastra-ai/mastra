@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "0.10.2",
+  "version": "0.10.4-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -68,26 +68,26 @@
     "keyword-extractor": "^0.0.28",
     "sentiment": "^5.0.2",
     "string-similarity": "^4.0.4",
-    "zod": "^3.24.3"
+    "zod": "^3.25.57"
   },
   "peerDependencies": {
-    "ai": "^4.0.0",
-    "@mastra/core": "^0.10.1-alpha.0"
+    "@mastra/core": "^0.10.1-alpha.0",
+    "ai": "^4.0.0"
   },
   "devDependencies": {
     "@ai-sdk/openai": "latest",
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.5",
+    "@mastra/core": "workspace:*",
+    "@microsoft/api-extractor": "^7.52.8",
     "@types/difflib": "^0.2.7",
     "@types/fs-extra": "^11.0.4",
     "@types/sentiment": "^5.0.4",
     "@types/string-similarity": "^4.0.2",
-    "ai": "^4.2.2",
-    "dotenv": "^16.4.7",
-    "eslint": "^9.23.0",
-    "tsup": "^8.4.0",
-    "typescript": "^5.8.2",
-    "vitest": "^3.1.2",
-    "@mastra/core": "workspace:*"
+    "ai": "^4.3.16",
+    "dotenv": "^16.5.0",
+    "eslint": "^9.28.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.3"
   }
 }

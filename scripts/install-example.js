@@ -114,6 +114,11 @@ for (const dep of linkedDeps) {
     depsToInstall.add(depDep);
   }
 }
+
+if (depsToInstall.has('@mastra/core')) {
+  depsToInstall.add('@mastra/schema-compat');
+}
+
 if (depsToInstall.size > 0) {
   console.log(
     'Installing dependencies:',

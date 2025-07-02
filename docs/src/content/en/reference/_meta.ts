@@ -17,7 +17,7 @@ const meta: Meta = {
   evals: "Evals",
   voice: "Voice",
   observability: "Observability",
-  "client-js": "Client SDK - JS",
+  "client-js": "Client SDK",
   deployer: "Deployer",
 };
 

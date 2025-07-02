@@ -1,6 +1,6 @@
 import { writeFile } from 'fs/promises';
 import { join } from 'path';
-import { Deployer, createChildProcessLogger } from '@mastra/deployer';
+import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import virtual from '@rollup/plugin-virtual';
 import { Cloudflare } from 'cloudflare';
@@ -192,26 +192,8 @@ process.versions.node = '${process.versions.node}';
     return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
   }
 
-  async deploy(outputDirectory: string): Promise<void> {
-    const cmd = this.workerNamespace
-      ? `npm exec -- wrangler@latest deploy --dispatch-namespace ${this.workerNamespace}`
-      : 'npm exec -- wrangler@latest deploy';
-
-    const cpLogger = createChildProcessLogger({
-      logger: this.logger,
-      root: join(outputDirectory, this.outputDir),
-    });
-
-    await cpLogger({
-      cmd,
-      args: [],
-      env: {
-        CLOUDFLARE_API_TOKEN: this.cloudflare!.apiToken!,
-        CLOUDFLARE_ACCOUNT_ID: this.scope,
-        ...this.env,
-        PATH: process.env.PATH!,
-      },
-    });
+  async deploy(): Promise<void> {
+    this.logger?.info('Deploying to Cloudflare failed. Please use the Cloudflare dashboard to deploy.');
   }
 
   async tagWorker({

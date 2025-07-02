@@ -1,4 +1,4 @@
-import { RuntimeContext } from '@mastra/core/di';
+import type { RuntimeContext } from '@mastra/core/di';
 import { isVercelTool } from '@mastra/core/tools';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import { stringify } from 'superjson';
@@ -68,11 +68,9 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
     toolId,
     data,
     runtimeContext,
-    runtimeContextFromRequest,
   }: Pick<ToolsContext, 'mastra' | 'toolId' | 'runId'> & {
     data?: unknown;
     runtimeContext: RuntimeContext;
-    runtimeContextFromRequest: Record<string, unknown>;
   }) => {
     try {
       if (!toolId) {
@@ -96,16 +94,11 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
         return result;
       }
 
-      const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
-        ...Array.from(runtimeContext.entries()),
-        ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
-      ]);
-
       const result = await tool.execute({
         context: data!,
         mastra,
         runId,
-        runtimeContext: finalRuntimeContext,
+        runtimeContext,
       });
       return result;
     } catch (error) {
@@ -120,12 +113,10 @@ export async function executeAgentToolHandler({
   toolId,
   data,
   runtimeContext,
-  runtimeContextFromRequest,
 }: Pick<ToolsContext, 'mastra' | 'toolId'> & {
   agentId?: string;
   data: any;
   runtimeContext: RuntimeContext;
-  runtimeContextFromRequest: Record<string, unknown>;
 }) {
   try {
     const agent = agentId ? mastra.getAgent(agentId) : null;
@@ -150,14 +141,9 @@ export async function executeAgentToolHandler({
     //   return result;
     // }
 
-    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
-      ...Array.from(runtimeContext.entries()),
-      ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
-    ]);
-
     const result = await tool.execute({
       context: data,
-      runtimeContext: finalRuntimeContext,
+      runtimeContext,
       mastra,
       runId: agentId,
     });

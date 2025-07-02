@@ -1,5 +1,92 @@
 # @mastra/libsql
 
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`@libsql/client@^0.15.9` ↗︎](https://www.npmjs.com/package/@libsql/client/v/0.15.9) (from `^0.15.8`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+
+## 0.10.2
+
+### Patch Changes
+
+- 5d3dc1e: dependencies updates:
+  - Updated dependency [`@libsql/client@^0.15.8` ↗︎](https://www.npmjs.com/package/@libsql/client/v/0.15.8) (from `^0.15.4`, in `dependencies`)
+- dffb67b: updated stores to add alter table and change tests
+- e0f9201: change how dedupe works for libsql and pg
+- 14a2566: Add pagination to libsql storage APIs
+- 48eddb9: update filter logic in Memory class to support semantic recall search scope
+- 66f4424: Update peerdeps
+- Updated dependencies [d1ed912]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [f1309d3]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+
+## 0.10.2-alpha.4
+
+### Patch Changes
+
+- 66f4424: Update peerdeps
+
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- e0f9201: change how dedupe works for libsql and pg
+- Updated dependencies [925ab94]
+  - @mastra/core@0.10.4-alpha.3
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- 48eddb9: update filter logic in Memory class to support semantic recall search scope
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4-alpha.2
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- dffb67b: updated stores to add alter table and change tests
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1309d3]
+- Updated dependencies [f7f8293]
+  - @mastra/core@0.10.4-alpha.1
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 5d3dc1e: dependencies updates:
+  - Updated dependency [`@libsql/client@^0.15.8` ↗︎](https://www.npmjs.com/package/@libsql/client/v/0.15.8) (from `^0.15.4`, in `dependencies`)
+- 14a2566: Add pagination to libsql storage APIs
+- Updated dependencies [d1ed912]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [14a2566]
+  - @mastra/core@0.10.4-alpha.0
+
 ## 0.10.1
 
 ### Patch Changes

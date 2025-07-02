@@ -21,7 +21,7 @@ export const useLogsByRunId = (runId: string) => {
     try {
       const res = await client.getLogForRun({ transportId, runId: runIdToUse });
       setLogs(
-        res.map(log => ({
+        res.logs.map(log => ({
           level: log.level,
           time: log.time,
           pid: log.pid,

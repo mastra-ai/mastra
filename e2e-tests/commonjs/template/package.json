@@ -16,10 +16,10 @@
     "@ai-sdk/openai": "^1.3.11",
     "@mastra/core": "commonjs-e2e-test",
     "@mastra/loggers": "commonjs-e2e-test",
-    "zod": "^3.24.3"
+    "zod": "^3.25.56"
   },
   "devDependencies": {
-    "@types/node": "^22.14.1",
+    "@types/node": "^22.15.29",
     "mastra": "commonjs-e2e-test",
     "typescript": "^5.8.3"
   }

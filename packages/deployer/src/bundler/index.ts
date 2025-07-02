@@ -65,7 +65,16 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
-    dependenciesMap.set('@opentelemetry/instrumentation', 'latest');
+    // add telemetry dependencies
+    dependenciesMap.set('@opentelemetry/core', '^2.0.1');
+    dependenciesMap.set('@opentelemetry/auto-instrumentations-node', '^0.59.0');
+    dependenciesMap.set('@opentelemetry/exporter-trace-otlp-grpc', '^0.201.0');
+    dependenciesMap.set('@opentelemetry/exporter-trace-otlp-http', '^0.201.0');
+    dependenciesMap.set('@opentelemetry/resources', '^2.0.1');
+    dependenciesMap.set('@opentelemetry/sdk-node', '^0.201.0');
+    dependenciesMap.set('@opentelemetry/sdk-trace-base', '^2.0.1');
+    dependenciesMap.set('@opentelemetry/semantic-conventions', '^1.33.0');
+    dependenciesMap.set('@opentelemetry/instrumentation', '^0.202.0');
 
     await writeFile(
       pkgPath,
@@ -77,7 +86,7 @@ export abstract class Bundler extends MastraBundler {
           type: 'module',
           main: 'index.mjs',
           scripts: {
-            start: 'node ./index.mjs',
+            start: 'node --import=./instrumentation.mjs --import=@opentelemetry/instrumentation/hook.mjs ./index.mjs',
           },
           author: 'Mastra',
           license: 'ISC',

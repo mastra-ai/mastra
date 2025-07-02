@@ -22,7 +22,7 @@ export class Mem0Utils {
       return {
         role: 'user',
         content: line,
-      };
+      } as const;
     });
   };
   

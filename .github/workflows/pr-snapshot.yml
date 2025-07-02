@@ -74,6 +74,8 @@ jobs:
           for file in $(find . -type f -name package.json -not -path "./node_modules/*" -not -path "./package.json"); do
             content="$(< "$file")"
             updated="$(echo "$content" | sed -E 's/"workspace:\^"/"workspace:*"/g')"
+            # Update workspace dependencies and peer dependencies
+            updated="$(echo "$updated" | sed 's/"@mastra\/\([^"]*\)":[[:space:]]"[^"]*"/"@mastra\/\1": "workspace:*"/g')"
             if [ "$content" != "$updated" ]; then
               echo "Updating $file"
               echo "$updated" > "$file"

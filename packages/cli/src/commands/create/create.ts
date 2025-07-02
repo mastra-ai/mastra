@@ -35,6 +35,8 @@ export const create = async (args: {
     await init({
       ...result,
       llmApiKey: result?.llmApiKey as string,
+      components: ['agents', 'tools', 'workflows'],
+      addExample: true,
     });
     postCreate({ projectName });
     return;

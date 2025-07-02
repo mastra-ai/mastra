@@ -1,5 +1,5 @@
 import { Tool } from './tool';
-import type { ToolToConvert } from './tool-compatibility/builder';
+import type { ToolToConvert } from './tool-builder/builder';
 import type { VercelTool } from './types';
 
 /**

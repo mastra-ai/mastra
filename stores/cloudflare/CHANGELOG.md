@@ -1,5 +1,77 @@
 # @mastra/cloudflare
 
+## 0.10.4
+
+### Patch Changes
+
+- 13c97f9: Save run status, result and error in storage snapshot
+- Updated dependencies [13c97f9]
+  - @mastra/core@0.10.5
+
+## 0.10.3
+
+### Patch Changes
+
+- a77827c: dependencies updates:
+  - Updated dependency [`cloudflare@^4.3.0` ↗︎](https://www.npmjs.com/package/cloudflare/v/4.3.0) (from `^4.1.0`, in `dependencies`)
+- dffb67b: updated stores to add alter table and change tests
+- 925ab94: added paginated functions to base class and added boilerplate and updated imports
+- 66f4424: Update peerdeps
+- Updated dependencies [d1ed912]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [f1309d3]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+
+## 0.10.3-alpha.3
+
+### Patch Changes
+
+- 66f4424: Update peerdeps
+
+## 0.10.3-alpha.2
+
+### Patch Changes
+
+- 925ab94: added paginated functions to base class and added boilerplate and updated imports
+- Updated dependencies [925ab94]
+  - @mastra/core@0.10.4-alpha.3
+
+## 0.10.3-alpha.1
+
+### Patch Changes
+
+- dffb67b: updated stores to add alter table and change tests
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1309d3]
+- Updated dependencies [f7f8293]
+  - @mastra/core@0.10.4-alpha.1
+
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- a77827c: dependencies updates:
+  - Updated dependency [`cloudflare@^4.3.0` ↗︎](https://www.npmjs.com/package/cloudflare/v/4.3.0) (from `^4.1.0`, in `dependencies`)
+- Updated dependencies [d1ed912]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [14a2566]
+  - @mastra/core@0.10.4-alpha.0
+
 ## 0.10.2
 
 ### Patch Changes

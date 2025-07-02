@@ -16,6 +16,7 @@ const meta = {
   observability: { title: "Observability" },
   evals: { title: "Evals" },
   frameworks: { title: "Frameworks" },
+  "client-js": { title: "Client SDK" },
   storage: { title: "Storage" },
   voice: { title: "Voice" },
   community: "Community",

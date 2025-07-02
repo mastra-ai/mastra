@@ -409,6 +409,87 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(contents[0]).toContain('Assistant says hello.');
         expect(contents[0]).toContain('This is a test.');
       });
+
+      it('should respect scope for semantic search', async () => {
+        // Create two threads within the same resource
+        const thread1 = await memory.saveThread({
+          thread: createTestThread('Search Scope Test Thread 1'),
+        });
+        const thread2 = await memory.saveThread({
+          thread: createTestThread('Search Scope Test Thread 2'),
+        });
+
+        // Add similar messages to both threads
+        const messagesThread1 = [
+          createTestMessage(thread1.id, 'The sky is blue today', 'user'),
+          createTestMessage(thread1.id, 'Yes, very clear skies', 'assistant'),
+        ];
+        const messagesThread2 = [
+          createTestMessage(thread2.id, 'Oceans are vast and blue', 'user'),
+          createTestMessage(thread2.id, 'Indeed, the deep blue sea', 'assistant'),
+        ];
+
+        await memory.saveMessages({ messages: messagesThread1 });
+        await memory.saveMessages({ messages: messagesThread2 });
+
+        const searchQuery = 'Tell me about the color blue';
+
+        // 1. Test default scope (thread)
+        const threadScopeResult = await memory.rememberMessages({
+          threadId: thread1.id,
+          resourceId, // resourceId is defined globally in this file
+          vectorMessageSearch: searchQuery,
+          config: {
+            lastMessages: 0,
+            semanticRecall: {
+              topK: 1,
+              messageRange: 1,
+              // scope: 'thread' // Default
+            },
+          },
+        });
+
+        // Should only find messages from thread1
+        expect(threadScopeResult.messages).toHaveLength(2);
+        expect(threadScopeResult.messages.map(m => m.threadId)).toEqual([thread1.id, thread1.id]);
+        expect(threadScopeResult.messages[0].content).toBe('The sky is blue today');
+        expect(threadScopeResult.messages[1].content).toBe('Yes, very clear skies');
+
+        // 2. Test resource scope
+        const resourceScopeResult = await memory.rememberMessages({
+          threadId: thread1.id, // Still need a threadId, but scope overrides
+          resourceId,
+          vectorMessageSearch: searchQuery,
+          config: {
+            lastMessages: 0,
+            semanticRecall: {
+              topK: 5, // Increase topK to potentially get both matches
+              messageRange: 2,
+              scope: 'resource',
+            },
+          },
+        });
+
+        // Should find messages from both thread1 and thread2 (ordered by similarity/creation)
+        // We expect 4 messages: the matched message + range (1) from thread1, and matched message + range (1) from thread2
+        expect(resourceScopeResult.messages).toHaveLength(4);
+        // Verify messages from both threads are present
+        expect(resourceScopeResult.messages.some(m => m.threadId === thread1.id)).toBe(true);
+        expect(resourceScopeResult.messages.some(m => m.threadId === thread2.id)).toBe(true);
+        // Check content to be reasonably sure we got the right ones (order might vary based on embedding similarity)
+        const contents = resourceScopeResult.messages.map(m => m.content);
+        expect(contents).toContain('The sky is blue today');
+        expect(contents).toContain('Yes, very clear skies');
+        expect(contents).toContain('Oceans are vast and blue');
+        expect(contents).toContain('Indeed, the deep blue sea');
+
+        // Ensure messages are still ordered chronologically overall
+        expect(
+          resourceScopeResult.messages.every(
+            (m, i) => i === 0 || m.createdAt >= resourceScopeResult.messages[i - 1].createdAt,
+          ),
+        ).toBe(true);
+      });
     });
 
     describe('Message Types and Roles', () => {

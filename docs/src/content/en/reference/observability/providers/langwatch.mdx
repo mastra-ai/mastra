@@ -13,7 +13,6 @@ To use LangWatch with Mastra, configure these environment variables:
 
 ```env
 LANGWATCH_API_KEY=your_api_key
-LANGWATCH_PROJECT_ID=your_project_id
 ```
 
 ## Implementation
@@ -27,13 +26,12 @@ import { LangWatchExporter } from "langwatch";
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "your-service-name",
+    serviceName: "ai", // this must be set to "ai" so that the LangWatchExporter thinks it's an AI SDK trace
     enabled: true,
     export: {
       type: "custom",
       exporter: new LangWatchExporter({
-        apiKey: process.env.LANGWATCH_API_KEY,
-        projectId: process.env.LANGWATCH_PROJECT_ID,
+        apiKey: process.env.LANGWATCH_API_KEY
       }),
     },
   },

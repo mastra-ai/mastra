@@ -1,4 +1,3 @@
-import * as child_process from 'child_process';
 import { readFileSync, writeFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import process from 'process';
@@ -208,39 +207,8 @@ export const HEAD = handle(app);
     return result;
   }
 
-  async deploy(outputDirectory: string): Promise<void> {
-    const envVars = await this.loadEnvVars();
-
-    // Create the command array with base arguments
-    const commandArgs = [
-      '--scope',
-      this.teamSlug,
-      '--cwd',
-      join(outputDirectory, this.outputDir),
-      '--token',
-      this.token,
-      'deploy',
-      '--yes',
-      ...(this.projectName ? ['--name', this.projectName] : []),
-    ];
-
-    // Run the Vercel deploy command
-    child_process.execSync(`npx vercel ${commandArgs.join(' ')}`, {
-      cwd: join(outputDirectory, this.outputDir),
-      env: {
-        PATH: process.env.PATH,
-      },
-      stdio: 'inherit',
-    });
-
-    this.logger.info('Deployment started on Vercel. You can wait for it to finish or exit this command.');
-
-    if (envVars.size > 0) {
-      // Sync environment variables for future deployments
-      await this.syncEnv(envVars, { outputDirectory });
-    } else {
-      this.logger.info('\nAdd your ENV vars to .env or your vercel dashboard.\n');
-    }
+  async deploy(): Promise<void> {
+    this.logger?.info('Deploying to Vercel failed. Please use the Vercel dashboard to deploy.');
   }
 
   async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {

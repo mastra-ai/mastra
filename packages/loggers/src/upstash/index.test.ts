@@ -173,12 +173,12 @@ describe('UpstashTransport', () => {
   describe('getLogs and getLogsByRunId', () => {
     it('should return empty array for getLogs', async () => {
       const logs = await transport.getLogs();
-      expect(logs).toEqual([]);
+      expect(logs).toEqual({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false });
     });
 
     it('should return empty array for getLogsByRunId', async () => {
       const logs = await transport.getLogsByRunId({ runId: 'test-run-id' });
-      expect(logs).toEqual([]);
+      expect(logs).toEqual({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false });
     });
   });
 });

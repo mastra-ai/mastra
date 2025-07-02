@@ -15,7 +15,7 @@ MacOS/Linux
   "mcpServers": {
     "mastra": {
       "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server@latest"]
+      "args": ["-y", "@mastra/mcp-docs-server"]
     }
   }
 }
@@ -28,7 +28,7 @@ Windows
   "mcpServers": {
     "mastra": {
       "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server@latest"]
+      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"]
     }
   }
 }
@@ -48,7 +48,7 @@ MacOS/Linux
   "mcpServers": {
     "mastra": {
       "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server@latest"]
+      "args": ["-y", "@mastra/mcp-docs-server"]
     }
   }
 }
@@ -61,7 +61,7 @@ Windows
   "mcpServers": {
     "mastra": {
       "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server@latest"]
+      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"]
     }
   }
 }
@@ -83,7 +83,7 @@ const mcp = new MCPClient({
   servers: {
     mastra: {
       command: 'npx',
-      args: ['-y', '@mastra/mcp-docs-server@latest'],
+      args: ['-y', '@mastra/mcp-docs-server'],
     },
   },
 });

@@ -5,7 +5,9 @@ description: "Build and deploy Mastra applications using platform-specific deplo
 
 # Serverless Deployment
 
-This guide covers deploying Mastra to Cloudflare Workers, Vercel, and Netlify using platform-specific deployers
+This guide covers deploying standalone Mastra applications to Cloudflare Workers, Vercel, and Netlify using platform-specific deployers.
+
+Deployers **aren't** required when integrating Mastra with a framework. See [Web Framework Integration](/docs/deployment/web-framework) for more information.
 
 For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/docs/deployment/server) guide.
 
@@ -18,6 +20,34 @@ Before you begin, ensure you have:
   - An account with your chosen platform
   - Required API keys or credentials
 
+## LibSQLStore
+
+`LibSQLStore` writes to the local filesystem, which is not supported in serverless environments due to their ephemeral nature. If you're deploying to a platform like Vercel, Netlify or Cloudflare, you **must remove** all usage of `LibSQLStore`.
+
+Specifically, ensure you've removed it from both `src/mastra/index.ts` and `src/mastra/agents/weather-agent.ts`:
+
+
+```diff filename="src/mastra/index.ts" showLineNumbers
+export const mastra = new Mastra({
+  // ...
+-  storage: new LibSQLStore({
+-    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+-    url: ":memory:",
+-  })
+});
+```
+
+``` diff filename="src/mastra/agents/weather-agent.ts" showLineNumbers
+export const weatherAgent = new Agent({
+  // ..
+-  memory: new Memory({
+-    storage: new LibSQLStore({
+-      url: "file:../mastra.db" // path is relative to the .mastra/output directory
+-    })
+-  })
+});
+```
+
 ## Serverless Platform Deployers
 
 Platform-specific deployers handle configuration and deployment for:
@@ -26,104 +56,3 @@ Platform-specific deployers handle configuration and deployment for:
 - **[Vercel](/reference/deployer/vercel)**
 - **[Netlify](/reference/deployer/netlify)**
 - **[Mastra Cloud](/docs/mastra-cloud/overview)** _(beta)_. You can join the [cloud waitlist](https://mastra.ai/cloud-beta) for early access.
-
-### Installing Deployers
-
-```bash copy
-# For Cloudflare
-npm install @mastra/deployer-cloudflare@latest
-
-# For Vercel
-npm install @mastra/deployer-vercel@latest
-
-# For Netlify
-npm install @mastra/deployer-netlify@latest
-```
-
-### Configuring Deployers
-
-Configure the deployer in your entry file:
-
-```typescript copy showLineNumbers
-import { Mastra } from "@mastra/core";
-import { PinoLogger } from "@mastra/loggers";
-import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
-
-export const mastra = new Mastra({
-  agents: {
-    /* your agents here */
-  },
-  logger: new PinoLogger({ name: "MyApp", level: "debug" }),
-  deployer: new CloudflareDeployer({
-    scope: "your-cloudflare-scope",
-    projectName: "your-project-name",
-    // See complete configuration options in the reference docs
-  }),
-});
-```
-
-### Deployer Configuration
-
-Each deployer has specific configuration options. Below are basic examples, but refer to the reference documentation for complete details.
-
-#### Cloudflare Deployer
-
-```typescript copy showLineNumbers
-new CloudflareDeployer({
-  scope: "your-cloudflare-account-id",
-  projectName: "your-project-name",
-  // For complete configuration options, see the reference documentation
-});
-```
-
-[View Cloudflare Deployer Reference →](/reference/deployer/cloudflare)
-
-#### Vercel Deployer
-
-```typescript copy showLineNumbers
-new VercelDeployer({
-  teamSlug: "your-vercel-team-slug",
-  projectName: "your-project-name",
-  token: "your-vercel-token",
-  // For complete configuration options, see the reference documentation
-});
-```
-
-[View Vercel Deployer Reference →](/reference/deployer/vercel)
-
-#### Netlify Deployer
-
-```typescript copy showLineNumbers
-new NetlifyDeployer({
-  scope: "your-netlify-team-slug",
-  projectName: "your-project-name",
-  token: "your-netlify-token",
-});
-```
-
-[View Netlify Deployer Reference →](/reference/deployer/netlify)
-
-## Environment Variables
-
-Required variables:
-
-1. Platform deployer variables (if using platform deployers):
-   - Platform credentials
-2. Agent API keys:
-   - `OPENAI_API_KEY`
-   - `ANTHROPIC_API_KEY`
-3. Server configuration (for universal deployment):
-   - `PORT`: HTTP server port (default: 3000)
-   - `HOST`: Server host (default: 0.0.0.0)
-
-## Build Mastra Project
-
-To build your Mastra project for your target platform run:
-
-```bash
-npx mastra build
-```
-
-When a Deployer is used, the build output is automatically prepared for the target platform.
-You can then deploy the build output `.mastra/output` via your platform's (Vercel, netlify, cloudfare e.t.c)
-CLI/UI.

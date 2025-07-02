@@ -129,6 +129,37 @@ if (resources.filesystem) {
 
 Each resource has a URI, name, description, and MIME type. The `getResources()` method handles errors gracefully - if a server fails or doesn't support resources, it will be omitted from the results.
 
+## Accessing MCP Prompts
+
+MCP servers can also expose prompts, which represent structured message templates or conversational context for agents.
+
+### Listing Prompts
+
+```typescript filename="src/mastra/prompts.ts"
+import { mcp } from "./mcp";
+
+// Get prompts from all connected MCP servers
+const prompts = await mcp.prompts.list();
+
+// Access prompts from a specific server
+if (prompts.weather) {
+  const prompt = prompts.weather.find(
+    (p) => p.name === "current"
+  );
+  console.log(`Prompt: ${prompt?.name}`);
+}
+```
+
+Each prompt has a name, description, and (optional) version.
+
+### Retrieving a Prompt and Its Messages
+
+```typescript filename="src/mastra/prompts.ts"
+const { prompt, messages } = await mcp.prompts.get({ serverName: "weather", name: "current" });
+console.log(prompt);    // { name: "current", version: "v1", ... }
+console.log(messages);  // [ { role: "assistant", content: { type: "text", text: "..." } }, ... ]
+```
+
 ## Exposing Agents as Tools via MCPServer
 
 In addition to using tools from MCP servers, your Mastra Agents themselves can be exposed as tools to any MCP-compatible client using Mastra's `MCPServer`.

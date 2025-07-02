@@ -1,5 +1,5 @@
 import { ChevronRight, RefreshCcwIcon, Search, SortAsc, SortDesc } from 'lucide-react';
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -7,36 +7,13 @@ import { CopyableContent } from '@/components/ui/copyable-content';
 import { FormattedDate } from '@/components/ui/formatted-date';
 import { Input } from '@/components/ui/input';
 import { ScoreIndicator } from '@/components/ui/score-indicator';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableHeader, TableHead, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { cn } from '@/lib/utils';
 
-import type { Evals } from '@/hooks/use-evals';
-import { useEvalsByAgentId } from '@/hooks/use-evals';
-
 import { AnimatePresence } from 'motion/react';
-
-type SortDirection = 'asc' | 'desc';
-
-type SortConfig = {
-  field: keyof GroupedEvals | 'timestamp' | 'score';
-  direction: SortDirection;
-};
-
-type AgentEvalsContextType = {
-  handleRefresh: () => void;
-  isLoading: boolean;
-};
-
-const AgentEvalsContext = createContext<AgentEvalsContextType>({ handleRefresh: () => {}, isLoading: true });
-
-type GroupedEvals = {
-  metricName: string;
-  averageScore: number;
-  evals: Evals[];
-};
+import { Evals, SortConfig, GroupedEvals } from '@/domains/evals/types';
 
 const scrollableContentClass = cn(
   'relative overflow-y-auto overflow-x-hidden invisible hover:visible focus:visible',
@@ -56,58 +33,56 @@ const tabIndicatorClass = cn(
 
 const tabContentClass = cn('data-[state=inactive]:mt-0 min-h-0 h-full grid grid-rows-[1fr]');
 
-export function AgentEvals({ agentId }: { agentId: string }) {
-  const [activeTab, setActiveTab] = useState<'live' | 'ci'>('live');
-  const {
-    evals: liveEvals,
-    isLoading: isLiveLoading,
-    refetchEvals: refetchLiveEvals,
-  } = useEvalsByAgentId(agentId, 'live');
-  const { evals: ciEvals, isLoading: isCiLoading, refetchEvals: refetchCiEvals } = useEvalsByAgentId(agentId, 'ci');
+export interface AgentEvalsProps {
+  liveEvals: Array<Evals>;
+  ciEvals: Array<Evals>;
 
-  const contextValue = {
-    handleRefresh,
-    isLoading: activeTab === 'live' ? isLiveLoading : isCiLoading,
-  };
+  onRefetchLiveEvals: () => void;
+  onRefetchCiEvals: () => void;
+}
+
+export function AgentEvals({ liveEvals, ciEvals, onRefetchLiveEvals, onRefetchCiEvals }: AgentEvalsProps) {
+  const [activeTab, setActiveTab] = useState<'live' | 'ci'>('live');
 
   function handleRefresh() {
-    if (activeTab === 'live') {
-      refetchLiveEvals();
-    } else {
-      refetchCiEvals();
-    }
+    if (activeTab === 'live') return onRefetchLiveEvals();
+
+    return onRefetchCiEvals();
   }
 
   return (
-    <AgentEvalsContext.Provider value={contextValue}>
-      <Tabs
-        value={activeTab}
-        onValueChange={value => setActiveTab(value as 'live' | 'ci')}
-        className="grid grid-rows-[auto_1fr] h-full min-h-0 pb-2"
-      >
-        <div className="border-b border-mastra-border/10">
-          <TabsList className="bg-transparent border-0 h-auto mx-4">
-            <TabsTrigger value="live" className={tabIndicatorClass}>
-              Live
-            </TabsTrigger>
-            <TabsTrigger value="ci" className={tabIndicatorClass}>
-              CI
-            </TabsTrigger>
-          </TabsList>
-        </div>
-        <TabsContent value="live" className={tabContentClass}>
-          <EvalTable evals={liveEvals} isCIMode={false} />
-        </TabsContent>
-        <TabsContent value="ci" className={tabContentClass}>
-          <EvalTable evals={ciEvals} isCIMode={true} />
-        </TabsContent>
-      </Tabs>
-    </AgentEvalsContext.Provider>
+    <Tabs
+      value={activeTab}
+      onValueChange={value => setActiveTab(value as 'live' | 'ci')}
+      className="grid grid-rows-[auto_1fr] h-full min-h-0 pb-2"
+    >
+      <div className="border-b border-mastra-border/10">
+        <TabsList className="bg-transparent border-0 h-auto mx-4">
+          <TabsTrigger value="live" className={tabIndicatorClass}>
+            Live
+          </TabsTrigger>
+          <TabsTrigger value="ci" className={tabIndicatorClass}>
+            CI
+          </TabsTrigger>
+        </TabsList>
+      </div>
+      <TabsContent value="live" className={tabContentClass}>
+        <EvalTable evals={liveEvals} isCIMode={false} onRefresh={handleRefresh} />
+      </TabsContent>
+      <TabsContent value="ci" className={tabContentClass}>
+        <EvalTable evals={ciEvals} isCIMode={true} onRefresh={handleRefresh} />
+      </TabsContent>
+    </Tabs>
   );
 }
 
-function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boolean }) {
-  const { handleRefresh, isLoading: isTableLoading } = useContext(AgentEvalsContext);
+interface EvalTableProps {
+  evals: Evals[];
+  isCIMode?: boolean;
+  onRefresh: () => void;
+}
+
+function EvalTable({ evals, isCIMode = false, onRefresh }: EvalTableProps) {
   const [expandedMetrics, setExpandedMetrics] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'metricName', direction: 'asc' });
@@ -128,12 +103,8 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
         <Badge variant="secondary" className="text-xs">
           {evals.length} Total Evaluations
         </Badge>
-        <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isTableLoading} className="h-9 w-9">
-          {isTableLoading ? (
-            <RefreshCcwIcon className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCcwIcon className="h-4 w-4" />
-          )}
+        <Button variant="ghost" size="icon" onClick={onRefresh} className="h-9 w-9">
+          <RefreshCcwIcon className="h-4 w-4" />
         </Button>
       </div>
 
@@ -157,27 +128,7 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
           </TableHeader>
           <TableBody className="border-b border-gray-6 relative">
             <AnimatePresence mode="wait" presenceAffectsLayout={false}>
-              {isTableLoading ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <TableRow key={i} className="border-b-gray-6 border-b-[0.1px] text-[0.8125rem]">
-                    <TableCell className="w-12 h-12">
-                      <Skeleton className="h-8 w-8 rounded-full" />
-                    </TableCell>
-                    <TableCell className="min-w-[200px] max-w-[30%]">
-                      <Skeleton className="h-4 w-3/4" />
-                    </TableCell>
-                    <TableCell className="flex-1">
-                      <Skeleton className="h-4 w-full" />
-                    </TableCell>
-                    <TableCell className="w-48">
-                      <Skeleton className="h-4 w-20" />
-                    </TableCell>
-                    <TableCell className="w-48">
-                      <Skeleton className="h-4 w-20" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : groupEvals(evals).length === 0 ? (
+              {groupEvals(evals).length === 0 ? (
                 <TableRow>
                   <TableCell className="h-12 w-16"></TableCell>
                   <TableCell colSpan={4} className="h-32 px-4 text-center text-mastra-el-3">

@@ -5,15 +5,22 @@ description: "Documentation for the CloudflareDeployer class, which deploys Mast
 
 # CloudflareDeployer
 
-The CloudflareDeployer deploys Mastra applications to Cloudflare Workers, handling configuration, environment variables, and route management. It extends the abstract Deployer class to provide Cloudflare-specific deployment functionality.
+The CloudflareDeployer deploys standalone Mastra applications to Cloudflare Workers, handling configuration, environment variables, and route management. It extends the abstract Deployer class to provide Cloudflare-specific deployment functionality.
+
+## Installation
+
+```bash copy
+npm install @mastra/deployer-cloudflare@latest
+```
 
 ## Usage Example
 
-```typescript
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 const mastra = new Mastra({
+  // ...
   deployer: new CloudflareDeployer({
     scope: "your-account-id",
     projectName: "your-project-name",
@@ -43,7 +50,6 @@ const mastra = new Mastra({
       },
     ],
   }),
-  // ... other Mastra configuration options
 });
 ```
 

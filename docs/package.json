@@ -10,10 +10,11 @@
     "build:stars": "tsx scripts/fetchStars.ts",
     "start": "next start",
     "lint": "next lint",
-    "postbuild": "next-sitemap --config next-sitemap.config.mjs && pagefind --site .next/server/app --output-path public/_pagefind"
+    "postbuild": "next-sitemap --config next-sitemap.config.mjs"
   },
   "dependencies": {
     "@agentwire/client": "^0.0.27",
+    "@algolia/client-search": "5.25.0",
     "@copilotkit/react-core": "1.8.10",
     "@copilotkit/react-ui": "1.8.10",
     "@copilotkit/runtime": "1.8.10",
@@ -27,6 +28,7 @@
     "@tailwindcss/postcss": "^4.0.17",
     "@tanstack/react-virtual": "^3.13.8",
     "@vercel/analytics": "^1.5.0",
+    "algoliasearch": "5.25.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "flags": "^3.2.0",
@@ -53,7 +55,6 @@
     "@types/react-dom": "^18",
     "eslint": "^9.23.0",
     "eslint-config-next": "^15.2.4",
-    "pagefind": "^1.3.0",
     "postcss": "^8.5.3",
     "tsx": "^4.19.2",
     "typescript": "^5.8.2"

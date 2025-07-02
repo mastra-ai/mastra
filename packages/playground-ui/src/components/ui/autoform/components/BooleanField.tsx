@@ -18,6 +18,7 @@ export const BooleanField: React.FC<AutoFormFieldProps> = ({ field, label, id, i
         inputProps.onChange(event);
       }}
       defaultChecked={field.default}
+      disabled={inputProps.disabled || inputProps.readOnly}
     />
     <Txt as="label" variant="ui-sm" className="text-icon3" htmlFor={id}>
       {label}

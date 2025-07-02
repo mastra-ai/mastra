@@ -1,5 +1,80 @@
 # @mastra/mongodb
 
+## 0.11.0-alpha.1
+
+### Minor Changes
+
+- 704d1ca: Thread Timestamp Auto-Update Enhancement
+  Added automatic thread updatedAt timestamp updates when messages are saved across all storage providers
+  Enhanced user experience: Threads now accurately reflect their latest activity with automatic timestamp updates when new messages are added
+  Universal implementation: Consistent behavior across all 7 storage backends (ClickHouse, Cloudflare D1, DynamoDB, MongoDB, PostgreSQL, Upstash, LibSQL)
+  Performance optimized: Updates execute in parallel with message saving operations for minimal performance impact
+  Backwards compatible: No breaking changes - existing code continues to work unchanged
+  Improved conversation ordering: Chat interfaces can now properly sort threads by actual last activity
+  This enhancement resolves the issue where active conversations appeared stale due to outdated thread timestamps, providing better conversation management and user experience in chat applications.
+
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`cloudflare@^4.3.0` ↗︎](https://www.npmjs.com/package/cloudflare/v/4.3.0) (from `^4.1.0`, in `dependencies`)
+  - Updated dependency [`mongodb@^6.17.0` ↗︎](https://www.npmjs.com/package/mongodb/v/6.17.0) (from `^6.15.0`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+
+## 0.10.3
+
+### Patch Changes
+
+- dffb67b: updated stores to add alter table and change tests
+- 925ab94: added paginated functions to base class and added boilerplate and updated imports
+- e030ea3: Added missing format compatibility to MongoDB getMessages() method
+- 66f4424: Update peerdeps
+- Updated dependencies [d1ed912]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [f1309d3]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+
+## 0.10.3-alpha.2
+
+### Patch Changes
+
+- 66f4424: Update peerdeps
+
+## 0.10.3-alpha.1
+
+### Patch Changes
+
+- 925ab94: added paginated functions to base class and added boilerplate and updated imports
+- Updated dependencies [925ab94]
+  - @mastra/core@0.10.4-alpha.3
+
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- dffb67b: updated stores to add alter table and change tests
+- e030ea3: Added missing format compatibility to MongoDB getMessages() method
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1309d3]
+- Updated dependencies [f7f8293]
+  - @mastra/core@0.10.4-alpha.1
+
 ## 0.10.2
 
 ### Patch Changes

@@ -3,13 +3,13 @@
 Now, let's create a basic MCP configuration in your agent file. Open your `src/mastra/agents/index.ts` file and add the following imports:
 
 ```typescript
-import { MCPConfiguration } from "@mastra/mcp";
+import { MCPClient } from "@mastra/mcp";
 ```
 
 Then, create a basic MCP configuration object:
 
 ```typescript
-const mcp = new MCPConfiguration({
+const mcp = new MCPClient({
   servers: {
     // We'll add servers in the next steps
   },

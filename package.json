@@ -3,15 +3,15 @@
   "version": "0.1.11",
   "type": "module",
   "devDependencies": {
-    "@changesets/cli": "^2.29.3",
-    "@types/node": "^20.17.24",
+    "@changesets/cli": "^2.29.4",
+    "@types/node": "^20.19.0",
     "husky": "^9.1.7",
-    "lint-staged": "^15.5.0",
+    "lint-staged": "^15.5.2",
     "npm-run-all2": "^7.0.2",
     "prettier": "^3.5.3",
-    "turbo": "^2.4.4",
-    "typescript": "^5.8.2",
-    "vitest": "^3.1.2"
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.3"
   },
   "scripts": {
     "ci:publish": "pnpm publish -r",
@@ -32,6 +32,7 @@
     "build:docs-mcp": "pnpm turbo build --filter ./packages/mcp-docs-server",
     "build:evals": "pnpm turbo build --filter ./packages/evals",
     "build:clients": "pnpm turbo build --filter \"./client-sdks/*\"",
+    "build:schema-compat": "pnpm turbo build --filter ./packages/schema-compat",
     "build:auth": "pnpm turbo build --filter \"./auth/*\" --filter \"./packages/auth\"",
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",
     "test": "vitest run",
@@ -39,13 +40,14 @@
     "test:watch:combined-stores": "pnpm --filter \"./stores/*\" test:watch",
     "test:auth": "pnpm --filter \"./auth/*\" test",
     "test:cli": "pnpm --filter ./packages/cli test",
-    "test:core": "pnpm --filter ./packages/core test --exclude \"./src/tools/tool-compatibility/**\"",
+    "test:core": "pnpm --filter ./packages/core test --exclude \"./src/tools/tool-builder/**\"",
     "test:mcp": "pnpm --filter ./packages/mcp test",
     "test:rag": "pnpm --filter ./packages/rag test",
     "test:clients": "pnpm --filter \"./client-sdks/*\" test",
     "test:combined-stores": "pnpm --filter \"./stores/*\" test",
     "test:memory": "pnpm --filter ./packages/memory test",
-    "test:tool-compatibility": "pnpm test packages/core/src/tools/tool-compatibility/**",
+    "test:tool-builder": "pnpm test packages/core/src/tools/tool-builder/**",
+    "test:schema-compat": "pnpm --filter ./packages/schema-compat test",
     "test:docs-mcp": "pnpm --filter ./packages/mcp-docs-server test",
     "test:evals": "pnpm --filter ./packages/evals test",
     "test:evals:nlp": "pnpm --filter ./packages/evals test src/metrics/nlp",
@@ -56,6 +58,7 @@
     "prettier:format": "prettier --write .",
     "prettier:format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck",
+    "format": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!./integrations/**/*\" --filter \"!@mastra/playground\" lint -- --fix",
     "dev:services:up": "docker compose -f .dev/docker-compose.yaml up -d",
     "dev:services:down": "docker compose -f .dev/docker-compose.yaml down",
     "setup": "pnpm install --ignore-scripts && pnpm run build:cli && pnpm install --shamefully-hoist"
@@ -70,7 +73,7 @@
   },
   "resolutions": {
     "typescript": "^5.8.3",
-    "@types/node": "^20.17.32"
+    "@types/node": "^20.17.57"
   },
   "license": "Elastic-2.0",
   "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39",

@@ -3,7 +3,16 @@
 Finally, let's enhance our memory configuration to make our agent even more helpful:
 
 ```typescript
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+
 const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "file:../../memory.db",
+  }),
+  vector: new LibSQLVector({
+    connectionUrl: "file:../../memory.db",
+  }),
+  embedder: openai.embedding("text-embedding-3-small"),
   options: {
     // Keep last 20 messages in context
     lastMessages: 20,
@@ -18,14 +27,14 @@ const memory = new Memory({
     // Enable working memory to remember user information
     workingMemory: {
       enabled: true,
-      template: `<user>
+      template: `
+      <user>
          <first_name></first_name>
          <username></username>
          <preferences></preferences>
          <interests></interests>
          <conversation_style></conversation_style>
        </user>`,
-      use: "tool-call",
     },
   },
 });
@@ -60,7 +69,7 @@ This enhanced memory configuration gives your agent more sophisticated memory ca
 
 1. **Conversation History**: The `lastMessages` option keeps the last 20 messages in context, allowing your agent to reference recent conversations.
 
-2. **Semantic Recall**: The `semanticRecall` option enables your agent to find relevant past conversations using semantic search, even if they happened a long time ago.
+2. **Semantic Recall**: The `semanticRecall` option enables your agent to find relevant past conversations using semantic search, even if they happened a long time ago. For `semanticRecall` to work, you need to have a vector store and an embedder configured
 
 3. **Working Memory**: The `workingMemory` option allows your agent to remember specific information about users, such as their preferences and interests, and use that information to provide more personalized responses.
 

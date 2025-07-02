@@ -5,12 +5,14 @@ import type {
   GenerateTextResult,
   StreamObjectResult,
   StreamTextResult,
+  TextPart,
   UIMessage,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
@@ -105,7 +107,18 @@ export class Agent<
     this.#description = config.description;
 
     if (!config.model) {
-      throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
+      const mastraError = new MastraError({
+        id: 'AGENT_CONSTRUCTOR_MODEL_REQUIRED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: config.name,
+        },
+        text: `LanguageModel is required to create an Agent. Please provide the 'model'.`,
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     this.model = config.model;
@@ -177,7 +190,18 @@ export class Agent<
 
   get voice() {
     if (typeof this.#instructions === 'function') {
-      throw new Error('Voice is not compatible when instructions are a function. Please use getVoice() instead.');
+      const mastraError = new MastraError({
+        id: 'AGENT_VOICE_INCOMPATIBLE_WITH_FUNCTION_INSTRUCTIONS',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'Voice is not compatible when instructions are a function. Please use getVoice() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     return this.#voice;
@@ -217,9 +241,18 @@ export class Agent<
     this.logger.warn('The instructions property is deprecated. Please use getInstructions() instead.');
 
     if (typeof this.#instructions === 'function') {
-      throw new Error(
-        'Instructions are not compatible when instructions are a function. Please use getInstructions() instead.',
-      );
+      const mastraError = new MastraError({
+        id: 'AGENT_INSTRUCTIONS_INCOMPATIBLE_WITH_FUNCTION_INSTRUCTIONS',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'Instructions are not compatible when instructions are a function. Please use getInstructions() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     return this.#instructions;
@@ -235,10 +268,18 @@ export class Agent<
     const result = this.#instructions({ runtimeContext });
     return resolveMaybePromise(result, instructions => {
       if (!instructions) {
-        this.logger.error(`[Agent:${this.name}] - Function-based instructions returned empty value`);
-        throw new Error(
-          'Instructions are required to use an Agent. The function-based instructions returned an empty value.',
-        );
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_INSTRUCTIONS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: 'Instructions are required to use an Agent. The function-based instructions returned an empty value.',
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       return instructions;
@@ -261,7 +302,18 @@ export class Agent<
     this.logger.warn('The tools property is deprecated. Please use getTools() instead.');
 
     if (typeof this.#tools === 'function') {
-      throw new Error('Tools are not compatible when tools are a function. Please use getTools() instead.');
+      const mastraError = new MastraError({
+        id: 'AGENT_GET_TOOLS_FUNCTION_INCOMPATIBLE_WITH_TOOL_FUNCTION_TYPE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'Tools are not compatible when tools are a function. Please use getTools() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     return ensureToolProperties(this.#tools) as TTools;
@@ -278,10 +330,18 @@ export class Agent<
 
     return resolveMaybePromise(result, tools => {
       if (!tools) {
-        this.logger.error(`[Agent:${this.name}] - Function-based tools returned empty value`);
-        throw new Error(
-          'Tools are required when using a function to provide them. The function returned an empty value.',
-        );
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_TOOLS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based tools returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       return ensureToolProperties(tools) as TTools;
@@ -292,7 +352,18 @@ export class Agent<
     this.logger.warn('The llm property is deprecated. Please use getLLM() instead.');
 
     if (typeof this.model === 'function') {
-      throw new Error('LLM is not compatible when model is a function. Please use getLLM() instead.');
+      const mastraError = new MastraError({
+        id: 'AGENT_LLM_GETTER_INCOMPATIBLE_WITH_FUNCTION_MODEL',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'LLM is not compatible when model is a function. Please use getLLM() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     return this.getLLM();
@@ -334,8 +405,18 @@ export class Agent<
     | Promise<MastraLanguageModel> {
     if (typeof this.model !== 'function') {
       if (!this.model) {
-        this.logger.error(`[Agent:${this.name}] - No model provided`);
-        throw new Error('Model is required to use an Agent.');
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - No model provided`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       return this.model;
@@ -344,8 +425,18 @@ export class Agent<
     const result = this.model({ runtimeContext });
     return resolveMaybePromise(result, model => {
       if (!model) {
-        this.logger.error(`[Agent:${this.name}] - Function-based model returned empty value`);
-        throw new Error('Model is required to use an Agent. The function-based model returned an empty value.');
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_MODEL_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based model returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       return model;
@@ -398,6 +489,23 @@ export class Agent<
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ runtimeContext });
 
+    const partsToGen: TextPart[] = [];
+    for (const part of message.parts) {
+      if (part.type === `text`) {
+        partsToGen.push(part);
+      } else if (part.type === `source`) {
+        partsToGen.push({
+          type: 'text',
+          text: `User added URL: ${part.source.url.substring(0, 100)}`,
+        });
+      } else if (part.type === `file`) {
+        partsToGen.push({
+          type: 'text',
+          text: `User added ${part.mimeType} file: ${part.data.substring(0, 100)}`,
+        });
+      }
+    }
+
     const { text } = await llm.__text<{ title: string }>({
       runtimeContext,
       messages: [
@@ -412,7 +520,7 @@ export class Agent<
         },
         {
           role: 'user',
-          content: JSON.stringify(message),
+          content: JSON.stringify(partsToGen),
         },
       ],
     });
@@ -456,8 +564,7 @@ export class Agent<
     thread?: StorageThreadType;
     memoryConfig?: MemoryConfig;
     runId?: string;
-    messageList: MessageList; // Added messageList type
-    // Removed userMessages, systemMessage, time, keyword
+    messageList: MessageList;
   }) {
     const memory = this.getMemory();
     if (memory) {
@@ -469,13 +576,6 @@ export class Agent<
         return { threadId: threadId || '' };
       }
 
-      // Get current user messages from the list for vector search and processMessages
-      // Assuming user messages are the last ones added after system/context.
-      // This might need refinement based on how messageList is populated before this call.
-      const allUIMessages = messageList.get.all.ui();
-      const currentUserMessages = allUIMessages.filter(m => m.role === 'user');
-      const lastUserMessageContent = currentUserMessages.at(-1)?.content ?? '';
-
       const [memoryMessages, memorySystemMessage] =
         threadId && memory
           ? await Promise.all([
@@ -484,7 +584,7 @@ export class Agent<
                   threadId,
                   resourceId,
                   config: memoryConfig,
-                  vectorMessageSearch: lastUserMessageContent,
+                  vectorMessageSearch: messageList.getLatestUserContent() || '',
                 })
                 .then(r => r.messagesV2),
               memory.getSystemMessage({ threadId, memoryConfig }),
@@ -566,13 +666,24 @@ export class Agent<
                           ) ?? undefined
                         );
                       } catch (err) {
-                        this.logger.error(`[Agent:${this.name}] - Failed memory tool execution`, {
-                          error: err,
-                          runId,
-                          threadId,
-                          resourceId,
-                        });
-                        throw err;
+                        const mastraError = new MastraError(
+                          {
+                            id: 'AGENT_MEMORY_TOOL_EXECUTION_FAILED',
+                            domain: ErrorDomain.AGENT,
+                            category: ErrorCategory.USER,
+                            details: {
+                              agentName: this.name,
+                              runId: runId || '',
+                              threadId: threadId || '',
+                              resourceId: resourceId || '',
+                            },
+                            text: `[Agent:${this.name}] - Failed memory tool execution`,
+                          },
+                          err,
+                        );
+                        this.logger.trackException(mastraError);
+                        this.logger.error(mastraError.toString());
+                        throw mastraError;
                       }
                     }
                   : undefined,
@@ -778,13 +889,24 @@ export class Agent<
                 });
                 return result;
               } catch (err) {
-                this.logger.error(`[Agent:${this.name}] - Failed workflow tool execution`, {
-                  error: err,
-                  runId,
-                  threadId,
-                  resourceId,
-                });
-                throw err;
+                const mastraError = new MastraError(
+                  {
+                    id: 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED',
+                    domain: ErrorDomain.AGENT,
+                    category: ErrorCategory.USER,
+                    details: {
+                      agentName: this.name,
+                      runId: runId || '',
+                      threadId: threadId || '',
+                      resourceId: resourceId || '',
+                    },
+                    text: `[Agent:${this.name}] - Failed workflow tool execution`,
+                  },
+                  err,
+                );
+                this.logger.trackException(mastraError);
+                this.logger.error(mastraError.toString());
+                throw mastraError;
               }
             },
           };
@@ -935,7 +1057,7 @@ export class Agent<
             role: 'system',
             content: instructions || `${this.instructions}.`,
           })
-          .add(context || [], 'user');
+          .add(context || [], 'context');
 
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
@@ -946,9 +1068,20 @@ export class Agent<
           };
         }
         if (!threadId || !resourceId) {
-          throw new Error(
-            `A resourceId must be provided when passing a threadId and using Memory. Saw threadId ${threadId} but resourceId is ${resourceId}`,
-          );
+          const mastraError = new MastraError({
+            id: 'AGENT_MEMORY_MISSING_RESOURCE_ID',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+              threadId: threadId || '',
+              resourceId: resourceId || '',
+            },
+            text: `A resourceId must be provided when passing a threadId and using Memory. Saw threadId ${threadId} but resourceId is ${resourceId}`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
         }
         const store = memory.constructor.name;
         this.logger.debug(
@@ -969,7 +1102,7 @@ export class Agent<
             memoryConfig,
           }));
 
-        const [memoryMessages, memorySystemMessage] =
+        let [memoryMessages, memorySystemMessage] =
           threadId && memory
             ? await Promise.all([
                 memory
@@ -977,9 +1110,10 @@ export class Agent<
                     threadId,
                     resourceId,
                     config: memoryConfig,
-                    vectorMessageSearch: messageList.getLatestUserContent() || '',
+                    // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
+                    vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
                   })
-                  .then(r => r.messages),
+                  .then(r => r.messagesV2),
                 memory.getSystemMessage({ threadId, memoryConfig }),
               ])
             : [[], null];
@@ -990,12 +1124,29 @@ export class Agent<
           fetchedCount: memoryMessages.length,
         });
 
+        // So the agent doesn't get confused and start replying directly to messages
+        // that were added via semanticRecall from a different conversation,
+        // we need to pull those out and add to the system message.
+        const resultsFromOtherThreads = memoryMessages.filter(m => m.threadId !== threadId);
+        if (resultsFromOtherThreads.length && !memorySystemMessage) {
+          memorySystemMessage = ``;
+        }
+        if (resultsFromOtherThreads.length) {
+          memorySystemMessage += `\nThe following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n${JSON.stringify(
+            // get v1 since they're closer to CoreMessages (which get sent to the LLM) but also include timestamps
+            new MessageList().add(resultsFromOtherThreads, 'memory').get.all.v1(),
+          )}\n<end_remembered_from_other_conversation>`;
+        }
+
         if (memorySystemMessage) {
           messageList.addSystem(memorySystemMessage, 'memory');
         }
 
         messageList
-          .add(memoryMessages, 'memory')
+          .add(
+            memoryMessages.filter(m => m.threadId === threadId), // filter out messages from other threads. those are added to system message above
+            'memory',
+          )
           // add new user messages to the list AFTER remembered messages to make ordering more reliable
           .add(messages, 'user');
 
@@ -1018,7 +1169,7 @@ export class Agent<
         const processedList = new MessageList({ threadId, resourceId })
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
-          .add(context || [], 'user')
+          .add(context || [], 'context')
           .add(processedMemoryMessages, 'memory')
           .add(messageList.get.input.v2(), 'user')
           .get.all.prompt();
@@ -1125,14 +1276,26 @@ export class Agent<
               memoryConfig,
             });
           } catch (e) {
-            const message = e instanceof Error ? e.message : JSON.stringify(e);
-            this.logger.error('Error saving response', {
-              error: message,
-              runId,
-              result: resToLog,
-              threadId,
-            });
-            throw e;
+            if (e instanceof MastraError) {
+              throw e;
+            }
+            const mastraError = new MastraError(
+              {
+                id: 'AGENT_MEMORY_PERSIST_RESPONSE_MESSAGES_FAILED',
+                domain: ErrorDomain.AGENT,
+                category: ErrorCategory.SYSTEM,
+                details: {
+                  agentName: this.name,
+                  runId: runId || '',
+                  threadId: threadId || '',
+                  result: JSON.stringify(resToLog),
+                },
+              },
+              e,
+            );
+            this.logger.trackException(mastraError);
+            this.logger.error(mastraError.toString());
+            throw mastraError;
           }
         }
 
@@ -1157,28 +1320,47 @@ export class Agent<
     };
   }
 
-  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+  async generate<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
-  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    args?: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
+  ): Promise<GenerateTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
+  async generate<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentGenerateOptions<Z> & { output?: Z; experimental_output?: never },
-  ): Promise<GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>>;
-  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    args?: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
+  ): Promise<GenerateObjectResult<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
+  async generate<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentGenerateOptions<Z> & { output?: never; experimental_output?: Z },
+    args?: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+      output?: never;
+      experimental_output?: EXPERIMENTAL_OUTPUT;
+    },
   ): Promise<
-    GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown> & {
-      object: Z extends ZodSchema ? z.infer<Z> : unknown;
+    GenerateTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown> & {
+      object: OUTPUT extends ZodSchema
+        ? z.infer<OUTPUT>
+        : EXPERIMENTAL_OUTPUT extends ZodSchema
+          ? z.infer<EXPERIMENTAL_OUTPUT>
+          : unknown;
     }
   >;
-  async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+  async generate<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    generateOptions: AgentGenerateOptions<Z> = {},
+    generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
-    | GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
-    | GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>
+    | GenerateTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+    | GenerateObjectResult<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
   > {
     const {
       context,
@@ -1195,7 +1377,11 @@ export class Agent<
       telemetry,
       runtimeContext = new RuntimeContext(),
       ...args
-    }: AgentGenerateOptions<Z> = Object.assign({}, this.#defaultGenerateOptions, generateOptions);
+    }: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign(
+      {},
+      this.#defaultGenerateOptions,
+      generateOptions,
+    );
     const generateMessageId =
       `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
         ? (args.experimental_generateMessageId as IDGenerator)
@@ -1256,7 +1442,7 @@ export class Agent<
 
       newResult.object = result.experimental_output;
 
-      return newResult as unknown as GenerateReturn<Z>;
+      return newResult as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
     }
 
     if (!output) {
@@ -1290,7 +1476,7 @@ export class Agent<
         messageList,
       });
 
-      return result as unknown as GenerateReturn<Z>;
+      return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
     }
 
     const result = await llm.__textObject({
@@ -1322,34 +1508,53 @@ export class Agent<
       messageList,
     });
 
-    return result as unknown as GenerateReturn<Z>;
+    return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
   }
 
-  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+  async stream<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: never },
-  ): Promise<StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>>;
-  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
+  ): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
+  async stream<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentStreamOptions<Z> & { output?: Z; experimental_output?: never },
-  ): Promise<StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>>;
-  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
+  ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>>;
+  async stream<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    args?: AgentStreamOptions<Z> & { output?: never; experimental_output?: Z },
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+      output?: never;
+      experimental_output?: EXPERIMENTAL_OUTPUT;
+    },
   ): Promise<
-    StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown> & {
+    StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown> & {
       partialObjectStream: StreamTextResult<
         any,
-        Z extends ZodSchema ? z.infer<Z> : unknown
+        OUTPUT extends ZodSchema
+          ? z.infer<OUTPUT>
+          : EXPERIMENTAL_OUTPUT extends ZodSchema
+            ? z.infer<EXPERIMENTAL_OUTPUT>
+            : unknown
       >['experimental_partialOutputStream'];
     }
   >;
-  async stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
+  async stream<
+    OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+    EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    streamOptions: AgentStreamOptions<Z> = {},
+    streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
-    | StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
-    | StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>
+    | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+    | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
   > {
     const {
       context,
@@ -1367,7 +1572,7 @@ export class Agent<
       telemetry,
       runtimeContext = new RuntimeContext(),
       ...args
-    }: AgentStreamOptions<Z> = Object.assign({}, this.#defaultStreamOptions, streamOptions);
+    }: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, this.#defaultStreamOptions, streamOptions);
     const generateMessageId =
       `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
         ? (args.experimental_generateMessageId as IDGenerator)
@@ -1431,12 +1636,14 @@ export class Agent<
         telemetry,
         memory: this.getMemory(),
         runtimeContext,
+        threadId,
+        resourceId,
         ...args,
       });
 
       const newStreamResult = streamResult as any;
       newStreamResult.partialObjectStream = streamResult.experimental_partialOutputStream;
-      return newStreamResult as unknown as StreamReturn<Z>;
+      return newStreamResult as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
     } else if (!output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
@@ -1474,8 +1681,10 @@ export class Agent<
         telemetry,
         memory: this.getMemory(),
         runtimeContext,
+        threadId,
+        resourceId,
         ...args,
-      }) as unknown as StreamReturn<Z>;
+      }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
     }
 
     this.logger.debug(`Starting agent ${this.name} llm streamObject call`, {
@@ -1515,8 +1724,10 @@ export class Agent<
       telemetry,
       memory: this.getMemory(),
       runtimeContext,
+      threadId,
+      resourceId,
       ...args,
-    }) as unknown as StreamReturn<Z>;
+    }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
   }
 
   /**
@@ -1534,18 +1745,45 @@ export class Agent<
     },
   ): Promise<NodeJS.ReadableStream | void> {
     if (!this.voice) {
-      throw new Error('No voice provider configured');
+      const mastraError = new MastraError({
+        id: 'AGENT_SPEAK_METHOD_VOICE_NOT_CONFIGURED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'No voice provider configured',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     this.logger.warn('Warning: agent.speak() is deprecated. Please use agent.voice.speak() instead.');
 
     try {
       return this.voice.speak(input, options);
-    } catch (e) {
-      this.logger.error('Error during agent speak', {
-        error: e,
-      });
-      throw e;
+    } catch (e: unknown) {
+      let err;
+      if (e instanceof MastraError) {
+        err = e;
+      } else {
+        err = new MastraError(
+          {
+            id: 'AGENT_SPEAK_METHOD_ERROR',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.UNKNOWN,
+            details: {
+              agentName: this.name,
+            },
+            text: 'Error during agent speak',
+          },
+          e,
+        );
+      }
+      this.logger.trackException(err);
+      this.logger.error(err.toString());
+      throw err;
     }
   }
 
@@ -1563,18 +1801,44 @@ export class Agent<
     },
   ): Promise<string | NodeJS.ReadableStream | void> {
     if (!this.voice) {
-      throw new Error('No voice provider configured');
+      const mastraError = new MastraError({
+        id: 'AGENT_LISTEN_METHOD_VOICE_NOT_CONFIGURED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'No voice provider configured',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
-
     this.logger.warn('Warning: agent.listen() is deprecated. Please use agent.voice.listen() instead');
 
     try {
       return this.voice.listen(audioStream, options);
-    } catch (e) {
-      this.logger.error('Error during agent listen', {
-        error: e,
-      });
-      throw e;
+    } catch (e: unknown) {
+      let err;
+      if (e instanceof MastraError) {
+        err = e;
+      } else {
+        err = new MastraError(
+          {
+            id: 'AGENT_LISTEN_METHOD_ERROR',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.UNKNOWN,
+            details: {
+              agentName: this.name,
+            },
+            text: 'Error during agent listen',
+          },
+          e,
+        );
+      }
+      this.logger.trackException(err);
+      this.logger.error(err.toString());
+      throw err;
     }
   }
 
@@ -1586,18 +1850,45 @@ export class Agent<
    */
   async getSpeakers() {
     if (!this.voice) {
-      throw new Error('No voice provider configured');
+      const mastraError = new MastraError({
+        id: 'AGENT_SPEAKERS_METHOD_VOICE_NOT_CONFIGURED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'No voice provider configured',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     this.logger.warn('Warning: agent.getSpeakers() is deprecated. Please use agent.voice.getSpeakers() instead.');
 
     try {
       return await this.voice.getSpeakers();
-    } catch (e) {
-      this.logger.error('Error during agent getSpeakers', {
-        error: e,
-      });
-      throw e;
+    } catch (e: unknown) {
+      let err;
+      if (e instanceof MastraError) {
+        err = e;
+      } else {
+        err = new MastraError(
+          {
+            id: 'AGENT_GET_SPEAKERS_METHOD_ERROR',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.UNKNOWN,
+            details: {
+              agentName: this.name,
+            },
+            text: 'Error during agent getSpeakers',
+          },
+          e,
+        );
+      }
+      this.logger.trackException(err);
+      this.logger.error(err.toString());
+      throw err;
     }
   }
 

@@ -20,8 +20,6 @@ import { Txt } from '@/ds/components/Txt';
 import { Icon, InfoIcon } from '@/ds/icons';
 import { useSpeechRecognition } from '@/hooks/use-speech-recognition';
 import { ComposerAttachments } from './attachment';
-import { useHasAttachments } from './use-has-attachments';
-import clsx from 'clsx';
 
 export interface ThreadProps {
   ToolFallback?: ToolCallContentPartComponent;
@@ -40,9 +38,10 @@ export const Thread = ({ ToolFallback, agentName, hasMemory, showFileSupport }: 
 
   return (
     <ThreadWrapper>
-      <ThreadPrimitive.Viewport className="py-10 overflow-y-auto scroll-smooth h-full" ref={areaRef} autoScroll={false}>
-        <div>
-          <ThreadWelcome agentName={agentName} />
+      <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
+        <ThreadWelcome agentName={agentName} />
+
+        <div className="max-w-[568px] w-full mx-auto px-4 pb-7">
           <ThreadPrimitive.Messages
             components={{
               UserMessage: UserMessage,
@@ -63,17 +62,8 @@ export const Thread = ({ ToolFallback, agentName, hasMemory, showFileSupport }: 
 };
 
 const ThreadWrapper = ({ children }: { children: React.ReactNode }) => {
-  const hasAttachments = useHasAttachments();
-
   return (
-    <ThreadPrimitive.Root
-      className={clsx(
-        'max-w-[568px] w-full mx-auto px-4',
-        hasAttachments ? 'h-[calc(100%-208px)]' : 'h-[calc(100%-112px)]',
-      )}
-    >
-      {children}
-    </ThreadPrimitive.Root>
+    <ThreadPrimitive.Root className="grid grid-rows-[1fr_auto] h-full overflow-y-auto">{children}</ThreadPrimitive.Root>
   );
 };
 
@@ -109,11 +99,13 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 
 const Composer: FC<{ hasMemory?: boolean; showFileSupport?: boolean }> = ({ hasMemory, showFileSupport }) => {
   return (
-    <div>
+    <div className="mx-4">
       <ComposerPrimitive.Root>
-        <ComposerAttachments />
+        <div className="max-w-[568px] w-full mx-auto px-2 py-3">
+          <ComposerAttachments />
+        </div>
 
-        <div className="w-full bg-surface3 rounded-lg border-sm border-border1 px-3 py-4 mt-auto h-[100px]">
+        <div className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-[568px] w-full mx-auto px-4">
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
               className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none"
@@ -131,8 +123,8 @@ const Composer: FC<{ hasMemory?: boolean; showFileSupport?: boolean }> = ({ hasM
       </ComposerPrimitive.Root>
 
       {!hasMemory && (
-        <Txt variant="ui-sm" className="text-icon3 flex items-center gap-2 pt-0.5">
-          <Icon>
+        <Txt variant="ui-sm" className="text-icon3 flex gap-2 pt-1 max-w-[568px] w-full mx-auto border-t items-start">
+          <Icon className="transform translate-y-[0.1rem]">
             <InfoIcon />
           </Icon>
           Memory is not enabled. The conversation will not be persisted.

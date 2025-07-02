@@ -7,15 +7,7 @@ import { Callout, Tabs } from 'nextra/components'
 
 # Model Providers
 
-Model providers are used to interact with different language models.
-
-[Vercel's AI SDK](https://sdk.vercel.ai) is one of the most popular Typescript AI libraries.
-The AI SDK offers model routing (a unified interface on top of OpenAI, Anthropic, etc), structured output, and tool calling.
-
-Mastra is compatible with the AI SDK to help teams build their proof-of-concepts into production-ready apps.
-When creating agents in Mastra, you can use any AI SDK-compatible model provider.
-
-Here's a minimal example of an agent using the OpenAI provider from the AI SDK:
+Model providers are used to interact with different language models. Mastra uses [Vercel's AI SDK](https://sdk.vercel.ai) as a model routing layer to provide a similar syntax for many models:
 
 ```typescript showLineNumbers copy {1,7} filename="src/mastra/agents/weather-agent.ts"
 import { openai } from "@ai-sdk/openai";
@@ -29,10 +21,6 @@ const agent = new Agent({
 
 const result = await agent.generate("What is the weather like?");
 ```
-
-<Callout>
-Mastra is built on top of the AI SDK and uses AI SDK-compatible model providers for model routing.
-</Callout>
 
 ## Types of AI SDK model providers
 

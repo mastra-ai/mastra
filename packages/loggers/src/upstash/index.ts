@@ -1,5 +1,5 @@
 import { LoggerTransport } from '@mastra/core/logger';
-import type { BaseLogMessage } from '@mastra/core/logger';
+import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 export class UpstashTransport extends LoggerTransport {
   upstashUrl: string;
@@ -143,36 +143,157 @@ export class UpstashTransport extends LoggerTransport {
     }
   }
 
-  async getLogs(): Promise<BaseLogMessage[]> {
+  async getLogs(params?: {
+    fromDate?: Date;
+    toDate?: Date;
+    logLevel?: LogLevel;
+    filters?: Record<string, any>;
+    returnPaginationResults?: boolean; // default true
+    page?: number;
+    perPage?: number;
+  }): Promise<{
+    logs: BaseLogMessage[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }> {
     try {
       // Get all logs from the list
       const command = ['LRANGE', this.listName, 0, -1];
       const response = await this.executeUpstashCommand(command);
 
-      // Parse the logs from JSON strings back to objects
-      return (
+      const logs =
         (response?.[0]?.result?.map((log: string) => {
           try {
+            // Parse the logs from JSON strings back to objects
             return JSON.parse(log);
           } catch {
             return {};
           }
-        }) as BaseLogMessage[]) || []
-      );
+        }) as BaseLogMessage[]) || [];
+
+      let filteredLogs = logs.filter(record => record !== null && typeof record === 'object');
+
+      const {
+        fromDate,
+        toDate,
+        logLevel,
+        filters,
+        returnPaginationResults: returnPaginationResultsInput,
+        page: pageInput,
+        perPage: perPageInput,
+      } = params || {};
+
+      const page = pageInput === 0 ? 1 : (pageInput ?? 1);
+      const perPage = perPageInput ?? 100;
+      const returnPaginationResults = returnPaginationResultsInput ?? true;
+
+      if (filters) {
+        filteredLogs = filteredLogs.filter(log =>
+          Object.entries(filters || {}).every(([key, value]) => log[key as keyof BaseLogMessage] === value),
+        );
+      }
+
+      if (logLevel) {
+        filteredLogs = filteredLogs.filter(log => log.level === logLevel);
+      }
+
+      if (fromDate) {
+        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() >= fromDate!.getTime());
+      }
+
+      if (toDate) {
+        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() <= toDate!.getTime());
+      }
+
+      if (!returnPaginationResults) {
+        return {
+          logs: filteredLogs,
+          total: filteredLogs.length,
+          page,
+          perPage: filteredLogs.length,
+          hasMore: false,
+        };
+      }
+
+      const total = filteredLogs.length;
+      const resolvedPerPage = perPage || 100;
+      const start = (page - 1) * resolvedPerPage;
+      const end = start + resolvedPerPage;
+      const paginatedLogs = filteredLogs.slice(start, end);
+      const hasMore = end < total;
+
+      return {
+        logs: paginatedLogs,
+        total,
+        page,
+        perPage: resolvedPerPage,
+        hasMore,
+      };
     } catch (error) {
       console.error('Error getting logs from Upstash:', error);
-      return [];
+      return {
+        logs: [],
+        total: 0,
+        page: params?.page ?? 1,
+        perPage: params?.perPage ?? 100,
+        hasMore: false,
+      };
     }
   }
 
-  async getLogsByRunId({ runId }: { runId: string }): Promise<BaseLogMessage[]> {
+  async getLogsByRunId({
+    runId,
+    fromDate,
+    toDate,
+    logLevel,
+    filters,
+    page: pageInput,
+    perPage: perPageInput,
+  }: {
+    runId: string;
+    fromDate?: Date;
+    toDate?: Date;
+    logLevel?: LogLevel;
+    filters?: Record<string, any>;
+    page?: number;
+    perPage?: number;
+  }): Promise<{
+    logs: BaseLogMessage[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }> {
     try {
-      const allLogs = await this.getLogs();
-      const logs = (allLogs?.filter((log: any) => log.runId === runId) || []) as BaseLogMessage[];
-      return logs;
+      const page = pageInput === 0 ? 1 : (pageInput ?? 1);
+      const perPage = perPageInput ?? 100;
+      const allLogs = await this.getLogs({ fromDate, toDate, logLevel, filters, returnPaginationResults: false });
+      const logs = (allLogs?.logs?.filter((log: any) => log.runId === runId) || []) as BaseLogMessage[];
+      const total = logs.length;
+      const resolvedPerPage = perPage || 100;
+      const start = (page - 1) * resolvedPerPage;
+      const end = start + resolvedPerPage;
+      const paginatedLogs = logs.slice(start, end);
+      const hasMore = end < total;
+
+      return {
+        logs: paginatedLogs,
+        total,
+        page,
+        perPage: resolvedPerPage,
+        hasMore,
+      };
     } catch (error) {
       console.error('Error getting logs by runId from Upstash:', error);
-      return [];
+      return {
+        logs: [],
+        total: 0,
+        page: pageInput ?? 1,
+        perPage: perPageInput ?? 100,
+        hasMore: false,
+      };
     }
   }
 }

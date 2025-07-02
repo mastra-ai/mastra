@@ -40,7 +40,6 @@ export class ResourceClientActions {
       this.logger.error(`Error getting resources from server ${this.client.name}`, {
         error: e instanceof Error ? e.message : String(e),
       });
-      console.log('errorheere', e)
       throw new Error(
         `Failed to fetch resources from server ${this.client.name}: ${e instanceof Error ? e.stack || e.message : String(e)}`,
       );
@@ -65,7 +64,6 @@ export class ResourceClientActions {
       }
     } catch (e: any) {
       // MCP Server might not support resources, so we return an empty array
-      console.log({ errorcooode: e.code })
       if (e.code === ErrorCode.MethodNotFound) {      
         return []
       }

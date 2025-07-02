@@ -81,219 +81,317 @@ describe('MCPClient', () => {
     weatherProcess.kill('SIGINT');
   });
 
-  it('should initialize with server configurations', () => {
-    expect(mcp['serverConfigs']).toEqual({
-      stockPrice: {
-        command: 'npx',
-        args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+  describe('Instance Management', () => {
+    it('should initialize with server configurations', () => {
+      expect(mcp['serverConfigs']).toEqual({
+        stockPrice: {
+          command: 'npx',
+          args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
         env: {
           FAKE_CREDS: 'test',
         },
-      },
-      weather: {
-        url: new URL(`http://localhost:${weatherServerPort}/sse`),
-      },
-    });
-  });
-
-  it('should get connected tools with namespaced tool names', async () => {
-    const connectedTools = await mcp.getTools();
-
-    // Each tool should be namespaced with its server name
-    expect(connectedTools).toHaveProperty('stockPrice_getStockPrice');
-    expect(connectedTools).toHaveProperty('weather_getWeather');
-  });
-
-  it('should get connected toolsets grouped by server', async () => {
-    const connectedToolsets = await mcp.getToolsets();
-
-    expect(connectedToolsets).toHaveProperty('stockPrice');
-    expect(connectedToolsets).toHaveProperty('weather');
-    expect(connectedToolsets.stockPrice).toHaveProperty('getStockPrice');
-    expect(connectedToolsets.weather).toHaveProperty('getWeather');
-  });
-
-  it('should get resources from connected MCP servers', async () => {
-    const resources = await mcp.resources.list();
-
-    expect(resources).toHaveProperty('weather');
-    expect(resources.weather).toBeDefined();
-    expect(resources.weather).toHaveLength(3);
-
-    // Verify that each expected resource exists with the correct structure
-    const weatherResources = resources.weather;
-    const currentWeather = weatherResources.find(r => r.uri === 'weather://current');
-    expect(currentWeather).toBeDefined();
-    expect(currentWeather).toMatchObject({
-      uri: 'weather://current',
-      name: 'Current Weather Data',
-      description: expect.any(String),
-      mimeType: 'application/json',
-    });
-
-    const forecast = weatherResources.find(r => r.uri === 'weather://forecast');
-    expect(forecast).toBeDefined();
-    expect(forecast).toMatchObject({
-      uri: 'weather://forecast',
-      name: 'Weather Forecast',
-      description: expect.any(String),
-      mimeType: 'application/json',
-    });
-
-    const historical = weatherResources.find(r => r.uri === 'weather://historical');
-    expect(historical).toBeDefined();
-    expect(historical).toMatchObject({
-      uri: 'weather://historical',
-      name: 'Historical Weather Data',
-      description: expect.any(String),
-      mimeType: 'application/json',
-    });
-  });
-
-  it('should list resource templates from connected MCP servers', async () => {
-    const templates = await mcp.resources.templates();
-    expect(templates).toHaveProperty('weather');
-    expect(templates.weather).toBeDefined();
-    expect(templates.weather.length).toBeGreaterThan(0);
-    const customForecastTemplate = templates.weather.find(
-      (t: ResourceTemplate) => t.uriTemplate === 'weather://custom/{city}/{days}',
-    );
-    expect(customForecastTemplate).toBeDefined();
-    expect(customForecastTemplate).toMatchObject({
-      uriTemplate: 'weather://custom/{city}/{days}',
-      name: 'Custom Weather Forecast',
-      description: expect.any(String),
-      mimeType: 'application/json',
-    });
-  });
-
-  it('should read a specific resource from a server', async () => {
-    const resourceContent = await mcp.resources.read('weather', 'weather://current');
-    expect(resourceContent).toBeDefined();
-    expect(resourceContent.contents).toBeInstanceOf(Array);
-    expect(resourceContent.contents.length).toBe(1);
-    const contentItem = resourceContent.contents[0];
-    expect(contentItem.uri).toBe('weather://current');
-    expect(contentItem.mimeType).toBe('application/json');
-    expect(contentItem.text).toBeDefined();
-    let parsedText: any = {};
-    if (contentItem.text && typeof contentItem.text === 'string') {
-      try {
-        parsedText = JSON.parse(contentItem.text);
-      } catch {
-        // If parsing fails, parsedText remains an empty object
-        // console.error("Failed to parse resource content text:", _e);
-      }
-    }
-    expect(parsedText).toHaveProperty('location');
-  });
-
-  it('should subscribe and unsubscribe from a resource on a specific server', async () => {
-    const serverName = 'weather';
-    const resourceUri = 'weather://current';
-
-    const subResult = await mcp.resources.subscribe(serverName, resourceUri);
-    expect(subResult).toEqual({});
-
-    const unsubResult = await mcp.resources.unsubscribe(serverName, resourceUri);
-    expect(unsubResult).toEqual({});
-  });
-
-  it('should receive resource updated notification from a specific server', async () => {
-    const serverName = 'weather';
-    const resourceUri = 'weather://current';
-    let notificationReceived = false;
-    let receivedUri = '';
-
-    await mcp.resources.list(); // Initial call to establish connection if needed
-    // Create the promise for the notification BEFORE subscribing
-    const resourceUpdatedPromise = new Promise<void>((resolve, reject) => {
-      mcp.resources.onUpdated(serverName, (params: { uri: string }) => {
-        if (params.uri === resourceUri) {
-          notificationReceived = true;
-          receivedUri = params.uri;
-          resolve();
-        } else {
-          console.log(`[Test LOG] Received update for ${params.uri}, waiting for ${resourceUri}`);
-        }
-      });
-      setTimeout(() => reject(new Error(`Timeout waiting for resourceUpdated notification for ${resourceUri}`)), 4500);
-    });
-
-    await mcp.resources.subscribe(serverName, resourceUri); // Ensure subscription is active
-
-    await expect(resourceUpdatedPromise).resolves.toBeUndefined(); // Wait for the notification
-
-    expect(notificationReceived).toBe(true);
-    expect(receivedUri).toBe(resourceUri);
-
-    await mcp.resources.unsubscribe(serverName, resourceUri); // Cleanup
-  }, 5000);
-
-  it('should receive resource list changed notification from a specific server', async () => {
-    const serverName = 'weather';
-    let notificationReceived = false;
-
-    await mcp.resources.list(); // Initial call to establish connection
-
-    const resourceListChangedPromise = new Promise<void>((resolve, reject) => {
-      mcp.resources.onListChanged(serverName, () => {
-        notificationReceived = true;
-        resolve();
-      });
-      setTimeout(() => reject(new Error('Timeout waiting for resourceListChanged notification')), 4500);
-    });
-
-    // In a real scenario, something would trigger the server to send this.
-    // For the test, we rely on the interval in weather.ts or a direct call if available.
-    // Adding a small delay or an explicit trigger if the fixture supported it would be more robust.
-    // For now, we assume the interval in weather.ts will eventually fire it.
-
-    await expect(resourceListChangedPromise).resolves.toBeUndefined(); // Wait for the notification
-
-    expect(notificationReceived).toBe(true);
-  });
-
-  it('should handle errors when getting resources', async () => {
-    const errorClient = new MCPClient({
-      id: 'error-test-client',
-      servers: {
+        },
         weather: {
           url: new URL(`http://localhost:${weatherServerPort}/sse`),
         },
-        nonexistentServer: {
-          command: 'nonexistent-command',
-          args: [],
-        },
-      },
+      });
     });
 
-    try {
-      const resources = await errorClient.resources.list();
+    it('should get connected tools with namespaced tool names', async () => {
+      const connectedTools = await mcp.getTools();
+
+      // Each tool should be namespaced with its server name
+      expect(connectedTools).toHaveProperty('stockPrice_getStockPrice');
+      expect(connectedTools).toHaveProperty('weather_getWeather');
+    });
+
+    it('should get connected toolsets grouped by server', async () => {
+      const connectedToolsets = await mcp.getToolsets();
+
+      expect(connectedToolsets).toHaveProperty('stockPrice');
+      expect(connectedToolsets).toHaveProperty('weather');
+      expect(connectedToolsets.stockPrice).toHaveProperty('getStockPrice');
+      expect(connectedToolsets.weather).toHaveProperty('getWeather');
+    });
+  });
+
+  describe('Resources', () => {
+    it('should get resources from connected MCP servers', async () => {
+      const resources = await mcp.resources.list();
 
       expect(resources).toHaveProperty('weather');
       expect(resources.weather).toBeDefined();
-      expect(resources.weather.length).toBeGreaterThan(0);
+      expect(resources.weather).toHaveLength(3);
 
-      expect(resources).not.toHaveProperty('nonexistentServer');
-    } finally {
-      await errorClient.disconnect();
-    }
-  });
+      // Verify that each expected resource exists with the correct structure
+      const weatherResources = resources.weather;
+      const currentWeather = weatherResources.find(r => r.uri === 'weather://current');
+      expect(currentWeather).toBeDefined();
+      expect(currentWeather).toMatchObject({
+        uri: 'weather://current',
+        name: 'Current Weather Data',
+        description: expect.any(String),
+        mimeType: 'application/json',
+      });
 
-  it('should handle connection errors gracefully', async () => {
-    const badConfig = new MCPClient({
-      servers: {
-        badServer: {
-          command: 'nonexistent-command',
-          args: [],
-        },
-      },
+      const forecast = weatherResources.find(r => r.uri === 'weather://forecast');
+      expect(forecast).toBeDefined();
+      expect(forecast).toMatchObject({
+        uri: 'weather://forecast',
+        name: 'Weather Forecast',
+        description: expect.any(String),
+        mimeType: 'application/json',
+      });
+
+      const historical = weatherResources.find(r => r.uri === 'weather://historical');
+      expect(historical).toBeDefined();
+      expect(historical).toMatchObject({
+        uri: 'weather://historical',
+        name: 'Historical Weather Data',
+        description: expect.any(String),
+        mimeType: 'application/json',
+      });
     });
 
-    await expect(badConfig.getTools()).rejects.toThrow();
-    await badConfig.disconnect();
-  });
+    it('should list resource templates from connected MCP servers', async () => {
+      const templates = await mcp.resources.templates();
+      expect(templates).toHaveProperty('weather');
+      expect(templates.weather).toBeDefined();
+      expect(templates.weather.length).toBeGreaterThan(0);
+      const customForecastTemplate = templates.weather.find(
+        (t: ResourceTemplate) => t.uriTemplate === 'weather://custom/{city}/{days}',
+      );
+      expect(customForecastTemplate).toBeDefined();
+      expect(customForecastTemplate).toMatchObject({
+        uriTemplate: 'weather://custom/{city}/{days}',
+        name: 'Custom Weather Forecast',
+        description: expect.any(String),
+        mimeType: 'application/json',
+      });
+    });
+
+    it('should read a specific resource from a server', async () => {
+      const resourceContent = await mcp.resources.read('weather', 'weather://current');
+      expect(resourceContent).toBeDefined();
+      expect(resourceContent.contents).toBeInstanceOf(Array);
+      expect(resourceContent.contents.length).toBe(1);
+      const contentItem = resourceContent.contents[0];
+      expect(contentItem.uri).toBe('weather://current');
+      expect(contentItem.mimeType).toBe('application/json');
+      expect(contentItem.text).toBeDefined();
+      let parsedText: any = {};
+      if (contentItem.text && typeof contentItem.text === 'string') {
+        try {
+          parsedText = JSON.parse(contentItem.text);
+        } catch {
+          // If parsing fails, parsedText remains an empty object
+          // console.error("Failed to parse resource content text:", _e);
+        }
+      }
+      expect(parsedText).toHaveProperty('location');
+    });
+
+    it('should subscribe and unsubscribe from a resource on a specific server', async () => {
+      const serverName = 'weather';
+      const resourceUri = 'weather://current';
+
+      const subResult = await mcp.resources.subscribe(serverName, resourceUri);
+      expect(subResult).toEqual({});
+
+      const unsubResult = await mcp.resources.unsubscribe(serverName, resourceUri);
+      expect(unsubResult).toEqual({});
+    });
+
+    it('should receive resource updated notification from a specific server', async () => {
+      const serverName = 'weather';
+      const resourceUri = 'weather://current';
+      let notificationReceived = false;
+      let receivedUri = '';
+
+      await mcp.resources.list(); // Initial call to establish connection if needed
+      // Create the promise for the notification BEFORE subscribing
+      const resourceUpdatedPromise = new Promise<void>((resolve, reject) => {
+        mcp.resources.onUpdated(serverName, (params: { uri: string }) => {
+          if (params.uri === resourceUri) {
+            notificationReceived = true;
+            receivedUri = params.uri;
+            resolve();
+          } else {
+            console.log(`[Test LOG] Received update for ${params.uri}, waiting for ${resourceUri}`);
+          }
+        });
+        setTimeout(() => reject(new Error(`Timeout waiting for resourceUpdated notification for ${resourceUri}`)), 4500);
+      });
+
+      await mcp.resources.subscribe(serverName, resourceUri); // Ensure subscription is active
+
+      await expect(resourceUpdatedPromise).resolves.toBeUndefined(); // Wait for the notification
+
+      expect(notificationReceived).toBe(true);
+      expect(receivedUri).toBe(resourceUri);
+
+      await mcp.resources.unsubscribe(serverName, resourceUri); // Cleanup
+    }, 5000);
+
+    it('should receive resource list changed notification from a specific server', async () => {
+      const serverName = 'weather';
+      let notificationReceived = false;
+
+      await mcp.resources.list(); // Initial call to establish connection
+
+      const resourceListChangedPromise = new Promise<void>((resolve, reject) => {
+        mcp.resources.onListChanged(serverName, () => {
+          notificationReceived = true;
+          resolve();
+        });
+        setTimeout(() => reject(new Error('Timeout waiting for resourceListChanged notification')), 4500);
+      });
+
+      // In a real scenario, something would trigger the server to send this.
+      // For the test, we rely on the interval in weather.ts or a direct call if available.
+      // Adding a small delay or an explicit trigger if the fixture supported it would be more robust.
+      // For now, we assume the interval in weather.ts will eventually fire it.
+
+      await expect(resourceListChangedPromise).resolves.toBeUndefined(); // Wait for the notification
+
+      expect(notificationReceived).toBe(true);
+    });
+
+    it('should handle errors when getting resources', async () => {
+      const errorClient = new MCPClient({
+        id: 'error-test-client',
+        servers: {
+          weather: {
+            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+          },
+          nonexistentServer: {
+            command: 'nonexistent-command',
+            args: [],
+          },
+        },
+      });
+
+      try {
+        const resources = await errorClient.resources.list();
+
+        expect(resources).toHaveProperty('weather');
+        expect(resources.weather).toBeDefined();
+        expect(resources.weather.length).toBeGreaterThan(0);
+
+        expect(resources).not.toHaveProperty('nonexistentServer');
+      } finally {
+        await errorClient.disconnect();
+      }
+    });
+  })
+
+  describe('Prompts', () => {
+    it('should get prompts from connected MCP servers', async () => {
+      const prompts = await mcp.prompts.list();
+
+      expect(prompts).toHaveProperty('weather');
+      expect(prompts['weather']).toBeDefined();
+      expect(prompts['weather']).toHaveLength(3);
+
+      // Verify that each expected resource exists with the correct structure
+      const promptResources = prompts['weather'];
+      const currentWeatherPrompt = promptResources.find(r => r.name === 'current');
+      expect(currentWeatherPrompt).toBeDefined();
+      expect(currentWeatherPrompt).toMatchObject({
+        name: 'current',
+        version: 'v1',
+        description: expect.any(String),
+        mimeType: 'application/json',
+      });
+
+      const forecast = promptResources.find(r => r.name === 'forecast');
+      expect(forecast).toBeDefined();
+      expect(forecast).toMatchObject({
+        name: 'forecast',
+        version: 'v1',
+        description: expect.any(String),
+        mimeType: 'application/json',
+      });
+
+      const historical = promptResources.find(r => r.name === 'historical');
+      expect(historical).toBeDefined();
+      expect(historical).toMatchObject({
+        name: 'historical',
+        version: 'v1',
+        description: expect.any(String),
+        mimeType: 'application/json',
+      });
+    });
+
+    it('should get a specific prompt from a server', async () => {
+      const {prompt, messages} = await mcp.prompts.get({serverName: 'weather', name: 'current'});
+      expect(prompt).toBeDefined();
+      expect(prompt).toMatchObject({
+        name: 'current',
+        version: 'v1',
+        description: expect.any(String),
+        mimeType: 'application/json',
+      });
+      expect(messages).toBeDefined();
+      const messageItem = messages[0];
+      let parsedText: any = {};
+      if (messageItem.content.text && typeof messageItem.content.text === 'string') {
+        try {
+          parsedText = JSON.parse(messageItem.content.text);
+        } catch {
+          // If parsing fails, parsedText remains an empty object
+          // console.error("Failed to parse resource content text:", _e);
+        }
+      }
+      expect(parsedText).toHaveProperty('location');
+    });
+
+    it('should receive prompt list changed notification from a specific server', async () => {
+      const serverName = 'weather';
+      let notificationReceived = false;
+
+      await mcp.prompts.list();
+
+      const promptListChangedPromise = new Promise<void>((resolve, reject) => {
+        mcp.prompts.onListChanged(serverName, () => {
+          notificationReceived = true;
+          resolve();
+        });
+        setTimeout(() => reject(new Error('Timeout waiting for promptListChanged notification')), 4500);
+      });
+
+      await expect(promptListChangedPromise).resolves.toBeUndefined();
+
+      expect(notificationReceived).toBe(true);
+    });
+
+    it('should handle errors when getting prompts', async () => {
+      const errorClient = new MCPClient({
+        id: 'error-test-client',
+        servers: {
+          weather: {
+            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+          },
+          nonexistentServer: {
+            command: 'nonexistent-command',
+            args: [],
+          },
+        },
+      });
+
+      try {
+        const prompts = await errorClient.prompts.list();
+
+        expect(prompts).toHaveProperty('weather');
+        expect(prompts['weather']).toBeDefined();
+        expect(prompts['weather'].length).toBeGreaterThan(0);
+
+        expect(prompts).not.toHaveProperty('nonexistentServer');
+      } finally {
+        await errorClient.disconnect();
+      }
+    });
+  })
 
   describe('Instance Management', () => {
     it('should allow multiple instances with different IDs', async () => {
@@ -478,6 +576,20 @@ describe('MCPClient', () => {
       // Quick server should timeout
       await expect(mixedConfig.getTools()).rejects.toThrow(/Request timed out/);
       await mixedConfig.disconnect();
+    });
+
+    it('should handle connection errors gracefully', async () => {
+      const badConfig = new MCPClient({
+        servers: {
+          badServer: {
+            command: 'nonexistent-command',
+            args: [],
+          },
+        },
+      });
+
+      await expect(badConfig.getTools()).rejects.toThrow();
+      await badConfig.disconnect();
     });
   });
 

@@ -13,6 +13,8 @@ import {
   EmptyState,
   AgentIcon,
   WorkflowIcon,
+  MainContentLayout,
+  MainContentContent,
 } from '@mastra/playground-ui';
 
 import { useMCPServers } from '@/hooks/use-mcp-servers';
@@ -21,7 +23,6 @@ import { client } from '@/lib/client';
 
 import { ServerInfo } from '@mastra/core/mcp';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const McpServerRow = ({ server }: { server: ServerInfo }) => {
@@ -105,13 +106,13 @@ const MCPs = () => {
   if (isLoading) return null;
 
   return (
-    <section className="overflow-hidden h-full">
+    <MainContentLayout>
       <Header>
         <HeaderTitle>MCP Servers</HeaderTitle>
       </Header>
 
       {mcpServers.length === 0 ? (
-        <div className="flex h-full items-center justify-center">
+        <MainContentContent isCentered={true}>
           <EmptyState
             iconSlot={<McpCoinIcon />}
             titleSlot="Configure MCP servers"
@@ -132,9 +133,9 @@ const MCPs = () => {
               </Button>
             }
           />
-        </div>
+        </MainContentContent>
       ) : (
-        <ScrollArea className="h-full">
+        <MainContentContent>
           <ul>
             {(mcpServers || []).map(server => (
               <li key={server.id}>
@@ -142,9 +143,9 @@ const MCPs = () => {
               </li>
             ))}
           </ul>
-        </ScrollArea>
+        </MainContentContent>
       )}
-    </section>
+    </MainContentLayout>
   );
 };
 

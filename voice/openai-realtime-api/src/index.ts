@@ -193,7 +193,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    *
    * @example
    * ```typescript
-   * voice.addInstuctions('You are a helpful assistant.');
+   * voice.addInstructions('You are a helpful assistant.');
    * ```
    */
   addInstructions(instructions?: string) {

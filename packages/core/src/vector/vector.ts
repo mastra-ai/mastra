@@ -1,4 +1,5 @@
 import { MastraBase } from '../base';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   CreateIndexParams,
   UpsertVectorParams,
@@ -41,9 +42,19 @@ export abstract class MastraVector extends MastraBase {
     try {
       info = await this.describeIndex({ indexName });
     } catch (infoError) {
-      const message = `Index "${indexName}" already exists, but failed to fetch index info for dimension check: ${infoError}`;
-      this.logger?.error(message);
-      throw new Error(message);
+      const mastraError = new MastraError(
+        {
+          id: 'VECTOR_VALIDATE_INDEX_FETCH_FAILED',
+          text: `Index "${indexName}" already exists, but failed to fetch index info for dimension check.`,
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.SYSTEM,
+          details: { indexName },
+        },
+        infoError,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
+      throw mastraError;
     }
     const existingDim = info?.dimension;
     const existingMetric = info?.metric;
@@ -57,13 +68,27 @@ export abstract class MastraVector extends MastraBase {
         );
       }
     } else if (info) {
-      const message = `Index "${indexName}" already exists with ${existingDim} dimensions, but ${dimension} dimensions were requested`;
-      this.logger?.error(message);
-      throw new Error(message);
+      const mastraError = new MastraError({
+        id: 'VECTOR_VALIDATE_INDEX_DIMENSION_MISMATCH',
+        text: `Index "${indexName}" already exists with ${existingDim} dimensions, but ${dimension} dimensions were requested`,
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName, existingDim, requestedDim: dimension },
+      });
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
+      throw mastraError;
     } else {
-      const message = `Index "${indexName}" already exists, but could not retrieve its dimensions for validation.`;
-      this.logger?.error(message);
-      throw new Error(message);
+      const mastraError = new MastraError({
+        id: 'VECTOR_VALIDATE_INDEX_NO_DIMENSION',
+        text: `Index "${indexName}" already exists, but could not retrieve its dimensions for validation.`,
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.SYSTEM,
+        details: { indexName },
+      });
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
+      throw mastraError;
     }
   }
 }

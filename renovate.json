@@ -95,14 +95,14 @@
       "matchFileNames": ["+(package.json)", "**/package.json"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["devDependencies"],
-      "matchPackageNames": ["vitest"],
+      "matchPackageNames": ["vitest", "@vitest/*"],
       "enabled": true
     },
     {
       "groupName": "Schema",
       "commitMessageTopic": "Schema",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["zod", "json-schema", "zod-to-json-schema"],
+      "matchPackageNames": ["zod", "json-schema", "zod-to-json-schema", "zod-from-json-schema"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
@@ -127,7 +127,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -141,6 +143,74 @@
       "dependencyDashboardApproval": true
     },
     {
+      "groupName": "Mastra agui",
+      "commitMessageTopic": "Mastra agui",
+      "matchFileNames": ["packages/agui/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra agui",
+      "commitMessageTopic": "Mastra agui",
+      "matchFileNames": ["packages/agui/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "groupName": "Mastra auth",
+      "commitMessageTopic": "Mastra auth",
+      "matchFileNames": ["packages/auth/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra auth",
+      "commitMessageTopic": "Mastra auth",
+      "matchFileNames": ["packages/auth/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
       "groupName": "mastra",
       "commitMessageTopic": "mastra",
       "matchFileNames": ["packages/cli/package.json"],
@@ -159,7 +229,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -191,7 +263,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -223,7 +297,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -255,7 +331,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -287,7 +365,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -319,7 +399,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -333,6 +415,40 @@
       "dependencyDashboardApproval": true
     },
     {
+      "groupName": "Mastra fastembed",
+      "commitMessageTopic": "Mastra fastembed",
+      "matchFileNames": ["packages/fastembed/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra fastembed",
+      "commitMessageTopic": "Mastra fastembed",
+      "matchFileNames": ["packages/fastembed/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
       "groupName": "Mastra loggers",
       "commitMessageTopic": "Mastra loggers",
       "matchFileNames": ["packages/loggers/package.json"],
@@ -351,7 +467,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -383,7 +501,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -415,7 +535,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -447,7 +569,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -479,7 +603,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -511,7 +637,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -543,7 +671,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -551,6 +681,40 @@
       "groupName": "Mastra rag",
       "commitMessageTopic": "Mastra rag",
       "matchFileNames": ["packages/rag/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "groupName": "Mastra schema-compat",
+      "commitMessageTopic": "Mastra schema-compat",
+      "matchFileNames": ["packages/schema-compat/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra schema-compat",
+      "commitMessageTopic": "Mastra schema-compat",
+      "matchFileNames": ["packages/schema-compat/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true,
@@ -575,7 +739,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -607,7 +773,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -639,7 +807,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -671,7 +841,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -703,7 +875,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -735,7 +909,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -767,7 +943,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -799,7 +977,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -831,7 +1011,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -863,7 +1045,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -895,7 +1079,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -909,6 +1095,40 @@
       "dependencyDashboardApproval": true
     },
     {
+      "groupName": "Mastra dynamodb",
+      "commitMessageTopic": "Mastra dynamodb",
+      "matchFileNames": ["stores/dynamodb/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra dynamodb",
+      "commitMessageTopic": "Mastra dynamodb",
+      "matchFileNames": ["stores/dynamodb/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
       "groupName": "Mastra libsql",
       "commitMessageTopic": "Mastra libsql",
       "matchFileNames": ["stores/libsql/package.json"],
@@ -927,7 +1147,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -959,7 +1181,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -973,6 +1197,40 @@
       "dependencyDashboardApproval": true
     },
     {
+      "groupName": "Mastra opensearch",
+      "commitMessageTopic": "Mastra opensearch",
+      "matchFileNames": ["stores/opensearch/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra opensearch",
+      "commitMessageTopic": "Mastra opensearch",
+      "matchFileNames": ["stores/opensearch/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
       "groupName": "Mastra pg",
       "commitMessageTopic": "Mastra pg",
       "matchFileNames": ["stores/pg/package.json"],
@@ -991,7 +1249,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1023,7 +1283,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1055,7 +1317,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1087,7 +1351,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1119,7 +1385,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1151,7 +1419,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1165,8 +1435,8 @@
       "dependencyDashboardApproval": true
     },
     {
-      "groupName": "Mastra speech-azure",
-      "commitMessageTopic": "Mastra speech-azure",
+      "groupName": "speech/azure",
+      "commitMessageTopic": "speech/azure",
       "matchFileNames": ["speech/azure/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1183,13 +1453,15 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
     {
-      "groupName": "Mastra speech-azure",
-      "commitMessageTopic": "Mastra speech-azure",
+      "groupName": "major-speech/azure",
+      "commitMessageTopic": "speech/azure",
       "matchFileNames": ["speech/azure/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1197,8 +1469,8 @@
       "dependencyDashboardApproval": true
     },
     {
-      "groupName": "Mastra speech-deepgram",
-      "commitMessageTopic": "Mastra speech-deepgram",
+      "groupName": "speech/deepgram",
+      "commitMessageTopic": "speech/deepgram",
       "matchFileNames": ["speech/deepgram/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1215,13 +1487,15 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
     {
-      "groupName": "Mastra speech-deepgram",
-      "commitMessageTopic": "Mastra speech-deepgram",
+      "groupName": "major-speech/deepgram",
+      "commitMessageTopic": "speech/deepgram",
       "matchFileNames": ["speech/deepgram/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1229,8 +1503,8 @@
       "dependencyDashboardApproval": true
     },
     {
-      "groupName": "Mastra speech-elevenlabs",
-      "commitMessageTopic": "Mastra speech-elevenlabs",
+      "groupName": "speech/elevenlabs",
+      "commitMessageTopic": "speech/elevenlabs",
       "matchFileNames": ["speech/elevenlabs/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1247,13 +1521,15 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
     {
-      "groupName": "Mastra speech-elevenlabs",
-      "commitMessageTopic": "Mastra speech-elevenlabs",
+      "groupName": "major-speech/elevenlabs",
+      "commitMessageTopic": "speech/elevenlabs",
       "matchFileNames": ["speech/elevenlabs/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1261,8 +1537,8 @@
       "dependencyDashboardApproval": true
     },
     {
-      "groupName": "Mastra speech-google",
-      "commitMessageTopic": "Mastra speech-google",
+      "groupName": "speech/google",
+      "commitMessageTopic": "speech/google",
       "matchFileNames": ["speech/google/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1279,13 +1555,15 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
     {
-      "groupName": "Mastra speech-google",
-      "commitMessageTopic": "Mastra speech-google",
+      "groupName": "major-speech/google",
+      "commitMessageTopic": "speech/google",
       "matchFileNames": ["speech/google/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1293,8 +1571,8 @@
       "dependencyDashboardApproval": true
     },
     {
-      "groupName": "Mastra speech-ibm",
-      "commitMessageTopic": "Mastra speech-ibm",
+      "groupName": "speech/ibm",
+      "commitMessageTopic": "speech/ibm",
       "matchFileNames": ["speech/ibm/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1311,13 +1589,15 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
     {
-      "groupName": "Mastra speech-ibm",
-      "commitMessageTopic": "Mastra speech-ibm",
+      "groupName": "major-speech/ibm",
+      "commitMessageTopic": "speech/ibm",
       "matchFileNames": ["speech/ibm/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1325,8 +1605,8 @@
       "dependencyDashboardApproval": true
     },
     {
-      "groupName": "Mastra speech-murf",
-      "commitMessageTopic": "Mastra speech-murf",
+      "groupName": "speech/murf",
+      "commitMessageTopic": "speech/murf",
       "matchFileNames": ["speech/murf/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1343,13 +1623,15 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
     {
-      "groupName": "Mastra speech-murf",
-      "commitMessageTopic": "Mastra speech-murf",
+      "groupName": "major-speech/murf",
+      "commitMessageTopic": "speech/murf",
       "matchFileNames": ["speech/murf/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1357,8 +1639,8 @@
       "dependencyDashboardApproval": true
     },
     {
-      "groupName": "Mastra speech-openai",
-      "commitMessageTopic": "Mastra speech-openai",
+      "groupName": "speech/openai",
+      "commitMessageTopic": "speech/openai",
       "matchFileNames": ["speech/openai/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1375,13 +1657,15 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
     {
-      "groupName": "Mastra speech-openai",
-      "commitMessageTopic": "Mastra speech-openai",
+      "groupName": "major-speech/openai",
+      "commitMessageTopic": "speech/openai",
       "matchFileNames": ["speech/openai/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1389,8 +1673,8 @@
       "dependencyDashboardApproval": true
     },
     {
-      "groupName": "Mastra speech-playai",
-      "commitMessageTopic": "Mastra speech-playai",
+      "groupName": "speech/playai",
+      "commitMessageTopic": "speech/playai",
       "matchFileNames": ["speech/playai/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1407,13 +1691,15 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
     {
-      "groupName": "Mastra speech-playai",
-      "commitMessageTopic": "Mastra speech-playai",
+      "groupName": "major-speech/playai",
+      "commitMessageTopic": "speech/playai",
       "matchFileNames": ["speech/playai/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1421,8 +1707,8 @@
       "dependencyDashboardApproval": true
     },
     {
-      "groupName": "Mastra speech-replicate",
-      "commitMessageTopic": "Mastra speech-replicate",
+      "groupName": "speech/replicate",
+      "commitMessageTopic": "speech/replicate",
       "matchFileNames": ["speech/replicate/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1439,13 +1725,15 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
     {
-      "groupName": "Mastra speech-replicate",
-      "commitMessageTopic": "Mastra speech-replicate",
+      "groupName": "major-speech/replicate",
+      "commitMessageTopic": "speech/replicate",
       "matchFileNames": ["speech/replicate/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1453,8 +1741,8 @@
       "dependencyDashboardApproval": true
     },
     {
-      "groupName": "Mastra speech-speechify",
-      "commitMessageTopic": "Mastra speech-speechify",
+      "groupName": "speech/speechify",
+      "commitMessageTopic": "speech/speechify",
       "matchFileNames": ["speech/speechify/package.json"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1471,13 +1759,15 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
     {
-      "groupName": "Mastra speech-speechify",
-      "commitMessageTopic": "Mastra speech-speechify",
+      "groupName": "major-speech/speechify",
+      "commitMessageTopic": "speech/speechify",
       "matchFileNames": ["speech/speechify/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -1503,7 +1793,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1535,7 +1827,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1567,7 +1861,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1599,7 +1895,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1631,7 +1929,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1663,7 +1963,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1695,7 +1997,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1727,7 +2031,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1759,7 +2065,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1791,7 +2099,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1823,7 +2133,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1837,6 +2149,40 @@
       "dependencyDashboardApproval": true
     },
     {
+      "groupName": "Mastra inngest",
+      "commitMessageTopic": "Mastra inngest",
+      "matchFileNames": ["workflows/inngest/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra inngest",
+      "commitMessageTopic": "Mastra inngest",
+      "matchFileNames": ["workflows/inngest/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
       "groupName": "Mastra client-js",
       "commitMessageTopic": "Mastra client-js",
       "matchFileNames": ["client-sdks/client-js/package.json"],
@@ -1855,7 +2201,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1887,7 +2235,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1919,7 +2269,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1951,7 +2303,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -1983,7 +2337,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2015,7 +2371,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2047,7 +2405,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2061,6 +2421,74 @@
       "dependencyDashboardApproval": true
     },
     {
+      "groupName": "Mastra agui",
+      "commitMessageTopic": "Mastra agui",
+      "matchFileNames": ["packages/agui/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra agui",
+      "commitMessageTopic": "Mastra agui",
+      "matchFileNames": ["packages/agui/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "groupName": "Mastra auth",
+      "commitMessageTopic": "Mastra auth",
+      "matchFileNames": ["packages/auth/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra auth",
+      "commitMessageTopic": "Mastra auth",
+      "matchFileNames": ["packages/auth/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
       "groupName": "mastra",
       "commitMessageTopic": "mastra",
       "matchFileNames": ["packages/cli/package.json"],
@@ -2079,7 +2507,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2111,7 +2541,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2143,7 +2575,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2175,7 +2609,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2207,7 +2643,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2239,7 +2677,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2253,6 +2693,40 @@
       "dependencyDashboardApproval": true
     },
     {
+      "groupName": "Mastra fastembed",
+      "commitMessageTopic": "Mastra fastembed",
+      "matchFileNames": ["packages/fastembed/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra fastembed",
+      "commitMessageTopic": "Mastra fastembed",
+      "matchFileNames": ["packages/fastembed/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
       "groupName": "Mastra loggers",
       "commitMessageTopic": "Mastra loggers",
       "matchFileNames": ["packages/loggers/package.json"],
@@ -2271,7 +2745,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2303,7 +2779,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2335,7 +2813,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2367,7 +2847,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2399,7 +2881,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2431,7 +2915,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2463,7 +2949,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2477,6 +2965,40 @@
       "dependencyDashboardApproval": true
     },
     {
+      "groupName": "Mastra schema-compat",
+      "commitMessageTopic": "Mastra schema-compat",
+      "matchFileNames": ["packages/schema-compat/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra schema-compat",
+      "commitMessageTopic": "Mastra schema-compat",
+      "matchFileNames": ["packages/schema-compat/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
       "groupName": "Mastra server",
       "commitMessageTopic": "Mastra server",
       "matchFileNames": ["packages/server/package.json"],
@@ -2495,7 +3017,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2527,7 +3051,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },
@@ -2535,6 +3061,176 @@
       "groupName": "Mastra cloud",
       "commitMessageTopic": "Mastra cloud",
       "matchFileNames": ["packages/cloud/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "groupName": "Mastra auth-auth0",
+      "commitMessageTopic": "Mastra auth-auth0",
+      "matchFileNames": ["auth/auth0/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra auth-auth0",
+      "commitMessageTopic": "Mastra auth-auth0",
+      "matchFileNames": ["auth/auth0/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "groupName": "Mastra auth-clerk",
+      "commitMessageTopic": "Mastra auth-clerk",
+      "matchFileNames": ["auth/clerk/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra auth-clerk",
+      "commitMessageTopic": "Mastra auth-clerk",
+      "matchFileNames": ["auth/clerk/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "groupName": "Mastra auth-firebase",
+      "commitMessageTopic": "Mastra auth-firebase",
+      "matchFileNames": ["auth/firebase/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra auth-firebase",
+      "commitMessageTopic": "Mastra auth-firebase",
+      "matchFileNames": ["auth/firebase/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "groupName": "Mastra auth-supabase",
+      "commitMessageTopic": "Mastra auth-supabase",
+      "matchFileNames": ["auth/supabase/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra auth-supabase",
+      "commitMessageTopic": "Mastra auth-supabase",
+      "matchFileNames": ["auth/supabase/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "groupName": "Mastra auth-workos",
+      "commitMessageTopic": "Mastra auth-workos",
+      "matchFileNames": ["auth/workos/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra auth-workos",
+      "commitMessageTopic": "Mastra auth-workos",
+      "matchFileNames": ["auth/workos/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true,
@@ -2559,7 +3255,9 @@
         "!dotenv",
         "!zod",
         "!json-schema",
-        "!zod-to-json-schema"
+        "!zod-to-json-schema",
+        "!zod-from-json-schema",
+        "!@vitest/*"
       ],
       "enabled": true
     },

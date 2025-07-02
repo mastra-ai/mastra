@@ -81,20 +81,23 @@ Stores conversation messages and their metadata. Each message belongs to a threa
       ]
     },
     {
+      name: "resourceId",
+      type: "uuidv4",
+      description: "ID of the resource that owns this message",
+      constraints: [
+        { type: "nullable", value: true }
+      ]
+    },
+    {
       name: "content",
       type: "text",
+      description: "JSON of the message content in V2 format. Example: `{ format: 2, parts: [...] }`",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "role",
       type: "text",
-      description: "Enum of `system | user | assistant | tool`",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "type",
-      type: "text",
-      description: "Enum of `text | tool-call | tool-result`",
+      description: "Enum of `user | assistant`",
       constraints: [{ type: "nullable", value: false }]
     },
     {
@@ -105,7 +108,60 @@ Stores conversation messages and their metadata. Each message belongs to a threa
     }
   ]}
 />
-  </Tabs.Tab>
+
+The message `content` column contains a JSON object conforming to the `MastraMessageContentV2` type, which is designed to align closely with the AI SDK `UIMessage` message shape.
+
+<SchemaTable
+  columns={[
+    {
+      name: "format",
+      type: "integer",
+      description: "Message format version (currently 2)",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "parts",
+      type: "array (JSON)",
+      description: "Array of message parts (text, tool-invocation, file, reasoning, etc.). The structure of items in this array varies by `type`.",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "experimental_attachments",
+      type: "array (JSON)",
+      description: "Optional array of file attachments",
+      constraints: [{ type: "nullable", value: true }]
+    },
+    {
+      name: "content",
+      type: "text",
+      description: "Optional main text content of the message",
+      constraints: [{ type: "nullable", value: true }]
+    },
+    {
+      name: "toolInvocations",
+      type: "array (JSON)",
+      description: "Optional array summarizing tool calls and results",
+      constraints: [{ type: "nullable", value: true }]
+    },
+    {
+      name: "reasoning",
+      type: "object (JSON)",
+      description: "Optional information about the reasoning process behind the assistant's response",
+      constraints: [{ type: "nullable", value: true }]
+    },
+    {
+      name: "annotations",
+      type: "object (JSON)",
+      description: "Optional additional metadata or annotations",
+      constraints: [{ type: "nullable", value: true }]
+    }
+  ]}
+/>
+
+
+
+</Tabs.Tab>
+
   <Tabs.Tab>
 Groups related messages together and associates them with a resource. Contains metadata about the conversation.
 
@@ -155,7 +211,8 @@ Groups related messages together and associates them with a resource. Contains m
     }
   ]}
 />
-  </Tabs.Tab>
+
+</Tabs.Tab>
   <Tabs.Tab>
 When `suspend` is called on a workflow, its state is saved in the following format. When `resume` is called, that state is rehydrated.
 
@@ -378,6 +435,18 @@ Captures OpenTelemetry traces for monitoring and debugging.
 />
   </Tabs.Tab>
 </Tabs>
+
+### Querying Messages
+
+Messages are stored in a V2 format internally, which is roughly equivalent to the AI SDK's `UIMessage` format. When querying messages using `getMessages`, you can specify the desired output format, defaulting to `v1` for backwards compatibility:
+
+```typescript copy
+// Get messages in the default V1 format (roughly equivalent to AI SDK's CoreMessage format)
+const messagesV1 = await mastra.getStorage().getMessages({ threadId: 'your-thread-id' });
+
+// Get messages in the V2 format (roughly equivalent to AI SDK's UIMessage format)
+const messagesV2 = await mastra.getStorage().getMessages({ threadId: 'your-thread-id', format: 'v2' });
+```
 
 ## Storage Providers
 

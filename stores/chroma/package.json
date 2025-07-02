@@ -1,6 +1,6 @@
 {
   "name": "@mastra/chroma",
-  "version": "0.10.1",
+  "version": "0.10.3-alpha.0",
   "description": "Chroma vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -26,19 +26,19 @@
   },
   "license": "MIT",
   "dependencies": {
-    "chromadb": "^2.2.0"
+    "chromadb": "^2.4.6"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.5",
-    "@types/node": "^20.17.27",
-    "eslint": "^9.23.0",
-    "tsup": "^8.4.0",
-    "typescript": "^5.8.2",
-    "vitest": "^3.1.2",
-    "@mastra/core": "workspace:*"
+    "@mastra/core": "workspace:*",
+    "@microsoft/api-extractor": "^7.52.8",
+    "@types/node": "^20.19.0",
+    "eslint": "^9.28.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.3"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.10.0-alpha.0"
+    "@mastra/core": ">=0.10.4-0 <0.11.0"
   }
 }

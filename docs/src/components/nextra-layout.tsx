@@ -52,7 +52,7 @@ export const NextraLayout = ({
       footer={footer}
       sidebar={{
         autoCollapse: true,
-        defaultMenuCollapseLevel: isReference ? 1 : 2,
+        defaultMenuCollapseLevel: isReference ? 1 : 3,
       }}
       i18n={[
         { locale: "en", name: "English" },

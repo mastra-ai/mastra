@@ -9,7 +9,7 @@ export interface WorkflowListProps {
 
 export function WorkflowList({ workflows, agentId }: WorkflowListProps) {
   return (
-    <ul>
+    <ul className="space-y-2">
       {workflows.map(workflow => (
         <li key={workflow.id}>
           <WorkflowEntity workflow={workflow} agentId={agentId} />
@@ -33,7 +33,7 @@ const WorkflowEntity = ({ workflow, agentId }: WorkflowEntityProps) => {
       </EntityIcon>
       <EntityContent>
         <EntityName>
-          <Link ref={linkRef} to={`/workflows/${agentId}/${workflow.id}`}>
+          <Link ref={linkRef} to={`/workflows/${workflow.id}/graph`}>
             {workflow.id}
           </Link>
         </EntityName>

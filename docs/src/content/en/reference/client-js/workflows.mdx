@@ -25,10 +25,16 @@ const workflows = await client.getWorkflows();
 
 ## Working with a Specific Workflow
 
-Get an instance of a specific workflow:
+Get an instance of a specific workflow as defined by the const name:
+
+```typescript filename="src/mastra/workflows/test-workflow.ts"
+export const testWorkflow = createWorkflow({
+  id: 'city-workflow'
+})
+```
 
 ```typescript
-const workflow = client.getWorkflow("workflow-id");
+const workflow = client.getWorkflow("testWorkflow");
 ```
 
 ## Workflow Methods
@@ -43,16 +49,15 @@ const details = await workflow.details();
 
 ### Start workflow run asynchronously
 
-Start a workflow run with triggerData and await full run results:
+Start a workflow run with inputData and await full run results:
 
 ```typescript
-const run = workflow.createRun();
+const run = await workflow.createRun();
 
 const result = await workflow.startAsync({
   runId: run.runId,
   inputData: {
-    param1: "value1",
-    param2: "value2",
+    city: "New York",
   },
 });
 ```
@@ -62,7 +67,7 @@ const result = await workflow.startAsync({
 Resume a suspended workflow step and await full run result:
 
 ```typescript
-const run = workflow.createRun();
+const run = await workflow.createRun();
 
 const result = await workflow.resumeAsync({
   runId: run.runId,
@@ -73,30 +78,19 @@ const result = await workflow.resumeAsync({
 
 ### Watch Workflow
 
-Watch workflow transitions
+Watch workflow transitions:
 
 ```typescript
 try {
-  // Get workflow instance
-  const workflow = client.getWorkflow("workflow-id");
+  const workflow = client.getWorkflow("testWorkflow");
 
-  // Create a workflow run
-  const run = workflow.createRun();
+  const run = await workflow.createRun();
 
-  // Watch workflow run
   workflow.watch({ runId: run.runId }, (record) => {
-    // Every new record is the latest transition state of the workflow run
-
-    console.log({
-      currentStep: record.payload.currentStep,
-      workflowState: record.payload.workflowState,
-      eventTimestamp: record.eventTimestamp,
-      runId: record.runId,
-    });
+    console.log(record);
   });
 
-  // Start workflow run
-  workflow.start({
+  const result = await workflow.start({
     runId: run.runId,
     inputData: {
       city: "New York",
@@ -109,29 +103,18 @@ try {
 
 ### Resume Workflow
 
-Resume workflow run and watch workflow step transitions
+Resume workflow run and watch workflow step transitions:
 
 ```typescript
 try {
-  // Get workflow instance
-  const workflow = client.getWorkflow("workflow-id");
+  const workflow = client.getWorkflow("testWorkflow");
 
-  //To resume a workflow run, when a step is suspended
-  const run = workflow.createRun({ runId: prevRunId });
+  const run = await workflow.createRun({ runId: prevRunId });
 
-  //Watch run
   workflow.watch({ runId: run.runId }, (record) => {
-    // Every new record is the latest transition state of the workflow run
-
-    console.log({
-      currentStep: record.payload.currentStep,
-      workflowState: record.payload.workflowState,
-      eventTimestamp: record.eventTimestamp,
-      runId: record.runId,
-    });
+    console.log(record);
   });
 
-  //resume run
   workflow.resume({
     runId: run.runId,
     step: "step-id",

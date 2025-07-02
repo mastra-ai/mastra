@@ -47,7 +47,7 @@ export function executeToolHandler(tools: Record<string, any>) {
       const runtimeContext = c.get('runtimeContext');
       const toolId = decodeURIComponent(c.req.param('toolId'));
       const runId = c.req.query('runId');
-      const { data, runtimeContext: runtimeContextFromRequest } = await c.req.json();
+      const { data } = await c.req.json();
 
       const result = await getOriginalExecuteToolHandler(tools)({
         mastra,
@@ -55,7 +55,6 @@ export function executeToolHandler(tools: Record<string, any>) {
         data,
         runtimeContext,
         runId,
-        runtimeContextFromRequest,
       });
 
       return c.json(result);
@@ -71,7 +70,7 @@ export async function executeAgentToolHandler(c: Context) {
     const runtimeContext = c.get('runtimeContext');
     const agentId = c.req.param('agentId');
     const toolId = c.req.param('toolId');
-    const { data, runtimeContext: runtimeContextFromRequest } = await c.req.json();
+    const { data } = await c.req.json();
 
     const result = await getOriginalExecuteAgentToolHandler({
       mastra,
@@ -79,7 +78,6 @@ export async function executeAgentToolHandler(c: Context) {
       toolId,
       data,
       runtimeContext,
-      runtimeContextFromRequest,
     });
 
     return c.json(result);

@@ -4,13 +4,13 @@ Conversation history relies on a storage adapter to persist messages. By default
 
 ```typescript
 import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLStore } from "@mastra/libsql";
 
 const memory = new Memory({
   // Configure storage
   storage: new LibSQLStore({
     config: {
-      url: "file:memory.db", // Local database
+      url: "file:../../memory.db", // Local database. Relative to the output folder
     },
   }),
   options: {

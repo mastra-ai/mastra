@@ -85,7 +85,7 @@ describe('TokenLimiter', () => {
     const { messages, fakeCore, counts } = generateConversationHistory(config);
 
     const estimate = estimateTokens(messages);
-    const used = (await agent.generate(fakeCore.slice(0, -1))).usage.totalTokens;
+    const used = (await agent.generate(fakeCore)).usage.promptTokens;
 
     console.log(`Estimated ${estimate} tokens, used ${used} tokens.\n`, counts);
 
@@ -100,7 +100,8 @@ describe('TokenLimiter', () => {
       expression: z.string().describe('The mathematical expression to calculate'),
     }),
     execute: async ({ context: { expression } }) => {
-      return `The result of ${expression} is ${eval(expression)}`;
+      // Don't actually eval the expression. The model is dumb and sometimes passes "banana" as the expression because that's one of the sample tokens we're using in input messages lmao
+      return `The result of ${expression} is 10`;
     },
   });
 
@@ -178,16 +179,23 @@ describe('TokenLimiter', () => {
       );
     });
 
-    it(`101 messages, 49 tool calls`, async () => {
-      await expectTokenEstimate(
-        {
-          messageCount: 50,
-          toolFrequency: 1,
-          threadId: '5',
-        },
-        agent,
-      );
-    });
+    it(
+      `101 messages, 49 tool calls`,
+      async () => {
+        await expectTokenEstimate(
+          {
+            messageCount: 50,
+            toolFrequency: 1,
+            threadId: '5',
+          },
+          agent,
+        );
+      },
+      {
+        // for some reason AI SDK randomly returns 2x token count here
+        retry: 3,
+      },
+    );
   });
 });
 

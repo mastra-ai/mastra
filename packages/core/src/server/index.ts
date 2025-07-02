@@ -1,5 +1,6 @@
 import type { Context, Handler, MiddlewareHandler } from 'hono';
 import type { DescribeRouteOptions } from 'hono-openapi';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Mastra } from '../mastra';
 import type { ApiRoute, MastraAuthConfig, Methods } from './types';
 
@@ -44,7 +45,12 @@ export function registerApiRoute<P extends string>(
       },
 ): P extends `/api/${string}` ? never : ApiRoute {
   if (path.startsWith('/api/')) {
-    throw new Error('Path must not start with "/api", it\'s reserved for internal API routes');
+    throw new MastraError({
+      id: 'MASTRA_SERVER_API_PATH_RESERVED',
+      text: 'Path must not start with "/api", it\'s reserved for internal API routes',
+      domain: ErrorDomain.MASTRA_SERVER,
+      category: ErrorCategory.USER,
+    });
   }
 
   // @ts-expect-error

@@ -9,10 +9,10 @@ import { cn } from '../../lib/utils';
 type CopyButtonProps = {
   content: string;
   copyMessage?: string;
-  classname?: string;
+  className?: string;
 };
 
-export function CopyButton({ content, copyMessage, classname }: CopyButtonProps) {
+export function CopyButton({ content, copyMessage, className }: CopyButtonProps) {
   const { isCopied, handleCopy } = useCopyToClipboard({
     text: content,
     copyMessage,
@@ -22,7 +22,7 @@ export function CopyButton({ content, copyMessage, classname }: CopyButtonProps)
     <Button
       variant="ghost"
       size="icon"
-      className={cn('relative h-6 w-6', classname)}
+      className={cn('relative h-6 w-6', className)}
       aria-label="Copy to clipboard"
       onClick={handleCopy}
     >

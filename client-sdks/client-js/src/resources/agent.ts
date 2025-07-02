@@ -106,6 +106,15 @@ export class Agent extends BaseResource {
    * @returns Promise containing the generated response
    */
   generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+    params: GenerateParams<T> & { output?: never; experimental_output?: never },
+  ): Promise<GenerateReturn<T>>;
+  generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+    params: GenerateParams<T> & { output: T; experimental_output?: never },
+  ): Promise<GenerateReturn<T>>;
+  generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+    params: GenerateParams<T> & { output?: never; experimental_output: T },
+  ): Promise<GenerateReturn<T>>;
+  generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
     params: GenerateParams<T>,
   ): Promise<GenerateReturn<T>> {
     const processedParams = {

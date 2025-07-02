@@ -1505,6 +1505,111 @@ describe('MDocument', () => {
     });
   });
 
+  describe('chunkLaTeX', () => {
+    it('should split LaTeX text correctly based on sections', async () => {
+      const text = `\\section{Introduction}
+      
+      This is the introduction section.
+      
+      \\subsection{Background}
+      
+      Some background information.
+      
+      \\subsubsection{Details}
+      
+      Even more detailed explanation.
+      
+      \\section{Conclusion}
+      
+      Final thoughts here.`;
+
+      const doc = MDocument.fromText(text, { meta: 'data' });
+
+      await doc.chunk({
+        strategy: 'latex',
+        size: 100,
+        overlap: 10,
+        keepSeparator: 'start',
+      });
+
+      const chunks = doc.getText();
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks[0]).toContain('\\section{Introduction}');
+    });
+
+    it('should handle environments like equations or itemize', async () => {
+      const text = `\\section{Math Section}
+  
+      Here is an equation:
+      
+      \\[
+      E = mc^2
+      \\]
+      
+      \\begin{itemize}
+        \\item First item
+        \\item Second item
+      \\end{itemize}
+      
+      End of the section.`;
+
+      const doc = MDocument.fromText(text, { meta: 'data' });
+
+      await doc.chunk({
+        strategy: 'latex',
+        size: 100,
+        overlap: 10,
+        keepSeparator: 'start',
+      });
+
+      const chunks = doc.getText();
+      expect(chunks.some(chunk => chunk.includes('\\begin{itemize}'))).toBe(true);
+      expect(chunks.some(chunk => chunk.includes('E = mc^2'))).toBe(true);
+    });
+
+    it('should split with keepSeparator at end', async () => {
+      const text = `Intro text here.
+        \\section{First}
+        Content A.
+
+        \\section{Second}
+        Content B.`;
+
+      const doc = MDocument.fromText(text, { meta: 'data' });
+
+      await doc.chunk({
+        strategy: 'latex',
+        size: 50,
+        overlap: 0,
+        keepSeparator: 'end',
+      });
+
+      const chunks = doc.getText();
+      expect(chunks.length).toBe(3);
+      expect(chunks[0].trimEnd().includes('\\section{')).toBe(true);
+      expect(chunks[1].trimEnd().includes('\\section{')).toBe(true);
+    });
+
+    it('should strip whitespace correctly', async () => {
+      const text = `\\section{Whitespace}
+      
+        Content with leading and trailing whitespace.  
+      `;
+
+      const doc = MDocument.fromText(text, { meta: 'data' });
+
+      await doc.chunk({
+        strategy: 'latex',
+        size: 100,
+        overlap: 0,
+        stripWhitespace: true,
+      });
+
+      const chunks = doc.getText();
+      expect(chunks.every(chunk => chunk === chunk.trim())).toBe(true);
+    });
+  });
+
   describe('MarkdownHeader', () => {
     it('should split on headers and preserve metadata', async () => {
       const text = `# Main Title
