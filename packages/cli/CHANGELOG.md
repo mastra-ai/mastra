@@ -1,5 +1,24 @@
 # mastra
 
+## 0.10.10-alpha.1
+
+### Patch Changes
+
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+- Updated dependencies [6997af1]
+  - @mastra/deployer@0.10.10-alpha.1
+  - @mastra/core@0.10.10-alpha.1
+
+## 0.10.10-alpha.0
+
+### Patch Changes
+
+- 4d3fbdf: Return tool error message rather than throw when a tool error happens for agent and tool playground page.
+- Updated dependencies [6e13b80]
+- Updated dependencies [4d3fbdf]
+  - @mastra/deployer@0.10.10-alpha.0
+  - @mastra/core@0.10.10-alpha.0
+
 ## 0.10.9
 
 ### Patch Changes

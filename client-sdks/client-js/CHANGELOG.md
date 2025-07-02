@@ -1,5 +1,20 @@
 # @mastra/client-js
 
+## 0.10.9-alpha.1
+
+### Patch Changes
+
+- b60f510: Fix getWorkflowRuns by limit and offset
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+  - @mastra/core@0.10.10-alpha.1
+
+## 0.10.9-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10-alpha.0
+
 ## 0.10.8
 
 ### Patch Changes
