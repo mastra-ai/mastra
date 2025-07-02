@@ -109,6 +109,7 @@ describe('WeaviateVector', () => {
       const queryVector = [1.0, 0.1, 0.1];
       const results = await weaviate.query({
         indexName: vectorTestCollectionName,
+
         queryVector,
         topK: 3,
         includeVector: true,
@@ -134,6 +135,7 @@ describe('WeaviateVector', () => {
 
   describe('Vector update operations', () => {
     const updateTestCollectionName = 'TestCollectionUpdate_' + Date.now();
+
     const testVectors = [
       [1, 2, 3],
       [4, 5, 6],
@@ -167,6 +169,7 @@ describe('WeaviateVector', () => {
 
       const results = await weaviate.query({
         indexName: updateTestCollectionName,
+
         queryVector: newVector,
         topK: 2,
         includeVector: true,
@@ -179,6 +182,7 @@ describe('WeaviateVector', () => {
 
     it('should only update the metadata by id', async () => {
       const ids = await weaviate.upsert({ indexName: updateTestCollectionName, vectors: testVectors });
+
       expect(ids).toHaveLength(3);
 
       const idToBeUpdated = ids[0];
@@ -194,6 +198,7 @@ describe('WeaviateVector', () => {
 
       const results = await weaviate.query({
         indexName: updateTestCollectionName,
+
         queryVector: testVectors[0],
         topK: 2,
         includeVector: true,
@@ -258,7 +263,6 @@ describe('WeaviateVector', () => {
 
   describe('Vector delete operations', () => {
     const deleteTestCollectionName = 'TestCollectionUpdate_' + Date.now();
-
     const testVectors = [
       [1, 2, 3],
       [4, 5, 6],
