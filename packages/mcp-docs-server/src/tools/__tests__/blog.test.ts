@@ -47,11 +47,11 @@ describe('blog tool', () => {
 
   test('handles rate limiting response', async () => {
     const result = await callTool(tools.mastra_mastraBlog, { url: '/blog/rate-limited' });
-    expect(result).toBe('Error: Rate limit exceeded');
+    expect(result).toMatch(/Rate limit exceeded/);
   });
 
   test('handles empty blog post content', async () => {
     const result = await callTool(tools.mastra_mastraBlog, { url: '/blog/empty-post' });
-    expect(result).toBe('Error: No content found in blog post');
+    expect(result).toMatch(/No content found in blog post/);
   });
 });

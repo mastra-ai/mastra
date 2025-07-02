@@ -1,6 +1,7 @@
 import { jsonSchemaToZod } from 'json-schema-to-zod';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { MastraError } from './error';
 import { ConsoleLogger } from './logger';
 import { RuntimeContext } from './runtime-context';
 import type { InternalCoreTool } from './tools';
@@ -231,9 +232,9 @@ describe('makeCoreTool', () => {
     expect(coreTool.execute).toBeDefined();
 
     if (coreTool.execute) {
-      await expect(coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] })).rejects.toThrow(
-        'Test error',
-      );
+      const result = await coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
+      expect(result).toBeInstanceOf(MastraError);
+      expect(result.message).toBe('Test error');
       expect(errorSpy).toHaveBeenCalled();
     }
     errorSpy.mockRestore();
