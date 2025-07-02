@@ -1,5 +1,14 @@
 # mastra
 
+## 0.10.10-alpha.1
+
+### Patch Changes
+
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+- Updated dependencies [6997af1]
+  - @mastra/deployer@0.10.10-alpha.1
+  - @mastra/core@0.10.10-alpha.1
+
 ## 0.10.10-alpha.0
 
 ### Patch Changes
