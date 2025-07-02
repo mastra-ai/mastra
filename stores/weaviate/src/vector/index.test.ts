@@ -1,5 +1,5 @@
 import type { QueryResult } from '@mastra/core';
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach } from 'vitest';
 import { generateUuid5 } from 'weaviate-client';
 import { WeaviateVector } from './index';
 

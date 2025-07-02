@@ -1,13 +1,7 @@
 import { BaseFilterTranslator } from '@mastra/core/vector/filter';
-import type {
-  FieldCondition,
-  VectorFilter,
-  LogicalOperator,
-  OperatorSupport,
-  BasicOperator,
-  NumericOperator,
-} from '@mastra/core/vector/filter';
-import { Filters, type Collection, type Filter, type FilterValue, type FilterByProperty } from 'weaviate-client';
+import type { VectorFilter, LogicalOperator, OperatorSupport } from '@mastra/core/vector/filter';
+import { Filters } from 'weaviate-client';
+import type { Collection, Filter, FilterValue, FilterByProperty } from 'weaviate-client';
 
 /**
  * Translates MongoDB-style filters to Weaviate compatible filters.
