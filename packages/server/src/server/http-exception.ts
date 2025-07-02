@@ -75,11 +75,13 @@ export type StatusCode =
  * @property res - Optional response object to use.
  * @property message - Optional custom error message.
  * @property cause - Optional cause of the error.
+ * @property stack - Optional stack trace for the error.
  */
 type HTTPExceptionOptions = {
   res?: Response;
   message?: string;
   cause?: unknown;
+  stack?: string;
 };
 
 /**
@@ -121,6 +123,7 @@ export class HTTPException extends Error {
     super(options?.message, { cause: options?.cause });
     this.res = options?.res;
     this.status = status;
+    this.stack = options?.stack || this.stack;
   }
 
   /**

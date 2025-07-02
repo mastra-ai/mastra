@@ -2,4 +2,4 @@
 '@mastra/mcp-docs-server': patch
 ---
 
-Update transaction tool to use csv format
+Fix blog tool for fetching blogpost
