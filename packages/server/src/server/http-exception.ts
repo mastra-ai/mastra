@@ -123,7 +123,7 @@ export class HTTPException extends Error {
     super(options?.message, { cause: options?.cause });
     this.res = options?.res;
     this.status = status;
-    this.stack = options?.stack;
+    this.stack = options?.stack || this.stack;
   }
 
   /**
