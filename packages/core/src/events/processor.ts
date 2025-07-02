@@ -1,9 +1,10 @@
 import type { PubSub } from './pubsub';
+import type { Event } from './types';
 
 export abstract class EventProcessor {
   protected pubsub: PubSub;
 
-  constructor(pubsub: PubSub) {
+  constructor({ pubsub }: { pubsub: PubSub }) {
     this.pubsub = pubsub;
   }
 

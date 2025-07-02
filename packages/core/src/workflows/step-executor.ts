@@ -24,9 +24,7 @@ export class StepExecutor extends MastraBase {
     emitter: { runtime: PubSub; events: PubSub };
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
-    const { stepResults, runId, workflow, executionPath, runtimeContext, emitter } = params;
-    const { id, serializedStepGraph } = workflow;
-    console.dir({ id, serializedStepGraph, executionPath }, { depth: null });
+    const { stepResults, runId, workflow, executionPath, runtimeContext } = params;
 
     let stepGraph: StepFlowEntry[] = workflow.stepGraph;
     let step: StepFlowEntry | undefined;
