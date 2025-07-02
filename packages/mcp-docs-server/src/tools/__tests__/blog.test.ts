@@ -48,8 +48,7 @@ describe('blog tool', () => {
   });
 
   test('handles empty blog post content', async () => {
-    const result = await callTool(tools.mastra_mastraBlog, { url: `${baseUrl}/blog/empty-post` });
-    expect(result).toContain('Error:');
-    expect(result).toContain('Required');
+    const result = await callTool(tools.mastra_mastraBlog, { url: `${baseUrl}/api/blog/empty-post` });
+    expect(result).toContain('Failed to parse blog post');
   });
 });

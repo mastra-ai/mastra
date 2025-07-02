@@ -13,9 +13,13 @@ async function fetchBlogPosts(): Promise<string> {
   }
   const blogData = await response.json();
 
-  const blogPosts = blogPostSchema.array().parse(blogData);
+  const blogPosts = blogPostSchema.array().safeParse(blogData);
 
-  const blogLinks = blogPosts
+  if (!blogPosts.success) {
+    return 'Failed to parse blog posts';
+  }
+
+  const blogLinks = blogPosts.data
     .map(post => {
       const title = post.metadata.title;
       const href = post.slug;
@@ -52,10 +56,14 @@ async function fetchBlogPost(url: string): Promise<string> {
   }
   const blogData = await response.json();
 
-  const blogPost = blogPostSchema.parse(blogData);
+  const blogPost = blogPostSchema.safeParse(blogData);
+
+  if (!blogPost.success) {
+    return 'Failed to parse blog post';
+  }
 
   // Get the main content
-  const content = blogPost.content;
+  const content = blogPost.data.content;
   if (!content) {
     throw new Error('No content found in blog post');
   }

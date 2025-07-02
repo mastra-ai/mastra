@@ -12,6 +12,7 @@ const blogListFixture = JSON.parse(
 const blogPostFixture = JSON.parse(
   fs.readFileSync(path.join(__dirname, '../__fixtures__/blog-post-raw.json'), 'utf-8'),
 );
+const emptyPostFixture = JSON.parse(fs.readFileSync(path.join(__dirname, '../__fixtures__/empty-post.json'), 'utf-8'));
 
 // Set up test Hono server
 const app = new Hono();
@@ -34,9 +35,8 @@ app.get('/blog/rate-limited', (_c: Context) => {
   });
 });
 
-app.get('/blog/empty-post', (c: Context) => {
-  console.log('Empty post');
-  return c.json({});
+app.get('/api/blog/empty-post', (c: Context) => {
+  return c.json(emptyPostFixture);
 });
 
 // Start the server
