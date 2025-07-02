@@ -1,33 +1,26 @@
-import { JSDOM } from 'jsdom';
 import { z } from 'zod';
 import { logger } from '../logger';
+import { blogPostSchema } from '../utils';
 
 const BLOG_BASE_URL = process.env.BLOG_URL || 'https://mastra.ai';
+
 // Helper function to fetch blog posts as markdown
 async function fetchBlogPosts(): Promise<string> {
   void logger.debug('Fetching list of blog posts');
-  const response = await fetch(`${BLOG_BASE_URL}/blog`);
+  const response = await fetch(`${BLOG_BASE_URL}/api/blog`);
   if (!response.ok) {
     throw new Error('Failed to fetch blog posts');
   }
-  const html = await response.text();
+  const blogData = await response.json();
 
-  const dom = new JSDOM(html);
-  const document = dom.window.document;
+  const blogPosts = blogPostSchema.array().parse(blogData);
 
-  // Find all blog post links
-  const blogLinks = Array.from(document.querySelectorAll('a[href^="/blog/"]'))
-    .filter(link => {
-      const href = link.getAttribute('href');
-      // Exclude the main blog page and any other special pages
-      return href !== '/blog' && !href?.includes('authors');
-    })
-    .map(link => {
-      const h2 = link.querySelector('h2');
-      const title = h2?.textContent?.trim();
-      const href = link.getAttribute('href');
+  const blogLinks = blogPosts
+    .map(post => {
+      const title = post.metadata.title;
+      const href = post.slug;
       if (title && href) {
-        return `[${title}](${href})`;
+        return `[${title}](${BLOG_BASE_URL}/blog/${href})(markdownUrl: ${BLOG_BASE_URL}/api/blog/${href})`;
       }
       return null;
     })
@@ -36,7 +29,7 @@ async function fetchBlogPosts(): Promise<string> {
   return 'Mastra.ai Blog Posts:\n\n' + blogLinks.join('\n');
 }
 
-// Helper function to fetch and convert a blog post to markdown
+// Helper function to fetch a single blog post as markdown
 async function fetchBlogPost(url: string): Promise<string> {
   void logger.debug(`Fetching blog post: ${url}`);
   const response = await fetch(url);
@@ -57,17 +50,12 @@ async function fetchBlogPost(url: string): Promise<string> {
     }
     return `The requested blog post could not be found or fetched: ${url}\n\n${blogList}`;
   }
-  const html = await response.text();
+  const blogData = await response.json();
 
-  const dom = new JSDOM(html);
-  const document = dom.window.document;
-
-  // Remove Next.js initialization code
-  const scripts = document.querySelectorAll('script');
-  scripts.forEach(script => script.remove());
+  const blogPost = blogPostSchema.parse(blogData);
 
   // Get the main content
-  const content = document.body.textContent?.trim() || '';
+  const content = blogPost.content;
   if (!content) {
     throw new Error('No content found in blog post');
   }
@@ -79,7 +67,7 @@ export const blogInputSchema = z.object({
   url: z
     .string()
     .describe(
-      'URL of a specific blog post to fetch. If the string /blog is passed as the url it returns a list of all blog posts.',
+      'URL of a specific blog post to fetch. If the string /api/blog is passed as the url it returns a list of all blog posts. The markdownUrl is the URL of a single blog post which can be used to fetch the blog post content in markdown format.',
     ),
 });
 
@@ -94,8 +82,8 @@ export const blogTool = {
     void logger.debug('Executing mastraBlog tool', { url: args.url });
     try {
       let content: string;
-      if (args.url !== `/blog`) {
-        content = await fetchBlogPost(`${BLOG_BASE_URL}${args.url}`);
+      if (args.url.trim() !== `/api/blog`) {
+        content = await fetchBlogPost(args.url);
       } else {
         content = await fetchBlogPosts();
       }
