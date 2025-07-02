@@ -113,6 +113,9 @@ export class Agent<
   evals: TMetrics;
   #voice: CompositeVoice;
   private saveQueues: Map<string, Promise<void>> = new Map();
+  private saveDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
+  private debounceMs = 100;
+  private static readonly MAX_STALENESS_MS = 2000;
 
   constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
@@ -1118,6 +1121,22 @@ export class Agent<
     };
   }
 
+  private debounceSave(threadId: string, saveFn: () => Promise<void>) {
+    if (this.saveDebounceTimers.has(threadId)) {
+      clearTimeout(this.saveDebounceTimers.get(threadId)!);
+    }
+    this.saveDebounceTimers.set(
+      threadId,
+      setTimeout(() => {
+        this.enqueueSave(threadId, saveFn).catch(err => {
+          // Optionally log or handle the error
+          this.logger?.error?.('Error in debounced save', { err, threadId });
+        });
+        this.saveDebounceTimers.delete(threadId);
+      }, this.debounceMs),
+    );
+  }
+
   private enqueueSave(threadId: string, saveFn: () => Promise<void>) {
     const prev = this.saveQueues.get(threadId) || Promise.resolve();
     const next = prev
@@ -1133,47 +1152,74 @@ export class Agent<
     return next;
   }
 
-  private async saveMessagePart(messageList: MessageList, threadId?: string, memoryConfig?: MemoryConfig) {
+  private clearDebounce(threadId: string) {
+    if (this.saveDebounceTimers.has(threadId)) {
+      clearTimeout(this.saveDebounceTimers.get(threadId)!);
+      this.saveDebounceTimers.delete(threadId);
+    }
+  }
+
+  private async persistUnsavedMessages(messageList: MessageList, memoryConfig?: MemoryConfig) {
+    const memory = this.getMemory();
+    const newMessages = messageList.drainUnsavedMessages();
+    if (newMessages.length > 0 && memory) {
+      await memory.saveMessages({
+        messages: newMessages,
+        memoryConfig,
+      });
+    }
+  }
+
+  private async saveMessagePart(
+    messageList: MessageList,
+    threadId?: string,
+    memoryConfig?: MemoryConfig,
+    forceSave = false,
+  ) {
     if (!threadId) return;
-    return this.enqueueSave(threadId, async () => {
-      const memory = this.getMemory();
-      const newMessages = messageList.drainUnsavedMessages();
-      if (newMessages.length > 0 && memory) {
-        await memory.saveMessages({
-          messages: newMessages,
-          memoryConfig,
-        });
-      }
-    });
+    const earliest = messageList.getEarliestUnsavedMessageTimestamp();
+    const now = Date.now();
+    const saveFn = () => this.persistUnsavedMessages(messageList, memoryConfig);
+
+    if ((earliest && now - earliest > Agent.MAX_STALENESS_MS) || forceSave) {
+      this.clearDebounce(threadId);
+      return this.enqueueSave(threadId, saveFn);
+    } else {
+      return this.debounceSave(threadId, saveFn);
+    }
   }
 
   private async handleFinishStep({
     result,
     messageList,
-    pendingStepResult,
     threadId,
     memoryConfig,
     runId,
     onStepFinish,
+    savePerStep,
   }: {
     result: any;
     messageList: MessageList;
-    pendingStepResult: MessageList;
     threadId?: string;
     memoryConfig?: MemoryConfig;
     runId?: string;
     onStepFinish?: (result: any) => void | Promise<void>;
+    savePerStep?: boolean;
   }) {
     try {
-      pendingStepResult.add(result.response.messages, 'response');
-      await this.saveMessagePart(messageList, threadId, memoryConfig);
+      if (savePerStep) {
+        messageList.add(result.response.messages, 'response');
+        await this.saveMessagePart(messageList, threadId, memoryConfig);
+      }
       return onStepFinish?.({ ...result, runId });
     } catch (e) {
       this.logger.error('Error saving memory on step finish', {
         error: e,
         runId,
       });
-      await this.saveMessagePart(pendingStepResult, threadId, memoryConfig);
+      if (savePerStep) {
+        await this.saveMessagePart(messageList, threadId, memoryConfig, true);
+      }
       throw e;
     }
   }
@@ -1248,15 +1294,12 @@ export class Agent<
           })
           .add(context || [], 'context');
 
-        const pendingStepResult = new MessageList({ threadId, resourceId });
-
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
           return {
             messageObjects: messageList.get.all.prompt(),
             convertedTools,
             messageList,
-            pendingStepResult,
           };
         }
         if (!threadId || !resourceId) {
@@ -1387,7 +1430,6 @@ export class Agent<
           messageList,
           // add old processed messages + new input messages
           messageObjects: processedList,
-          pendingStepResult,
         };
       },
       after: async ({
@@ -1398,7 +1440,6 @@ export class Agent<
         outputText,
         runId,
         messageList,
-        pendingStepResult,
       }: {
         runId: string;
         result: Record<string, any>;
@@ -1407,7 +1448,6 @@ export class Agent<
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
         messageList: MessageList;
-        pendingStepResult: MessageList;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -1468,7 +1508,7 @@ export class Agent<
             }
 
             // Parallelize title generation and message saving
-            const promises: Promise<any>[] = [this.saveMessagePart(messageList, threadId, memoryConfig)];
+            const promises: Promise<any>[] = [this.saveMessagePart(messageList, threadId, memoryConfig, true)];
 
             // Add title generation to promises if needed
             if (thread.title?.startsWith('New Thread')) {
@@ -1498,7 +1538,7 @@ export class Agent<
 
             await Promise.all(promises);
           } catch (e) {
-            await this.saveMessagePart(pendingStepResult, threadId, memoryConfig);
+            await this.saveMessagePart(messageList, threadId, memoryConfig, true);
             if (e instanceof MastraError) {
               throw e;
             }
@@ -1602,6 +1642,7 @@ export class Agent<
       experimental_output,
       telemetry,
       runtimeContext = new RuntimeContext(),
+      savePerStep = false,
       ...args
     }: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, defaultGenerateOptions, generateOptions);
     const generateMessageId =
@@ -1630,7 +1671,7 @@ export class Agent<
       generateMessageId,
     });
 
-    const { thread, messageObjects, convertedTools, messageList, pendingStepResult } = await before();
+    const { thread, messageObjects, convertedTools, messageList } = await before();
 
     const threadId = thread?.id;
 
@@ -1642,11 +1683,11 @@ export class Agent<
           await this.handleFinishStep({
             result,
             messageList,
-            pendingStepResult,
             threadId,
             memoryConfig,
             runId,
             onStepFinish,
+            savePerStep,
           });
         },
         maxSteps: maxSteps,
@@ -1672,7 +1713,6 @@ export class Agent<
         outputText,
         runId,
         messageList,
-        pendingStepResult,
       });
 
       const newResult = result as any;
@@ -1690,11 +1730,11 @@ export class Agent<
           await this.handleFinishStep({
             result,
             messageList,
-            pendingStepResult,
             threadId,
             memoryConfig,
             runId,
             onStepFinish,
+            savePerStep,
           });
         },
         maxSteps,
@@ -1719,7 +1759,6 @@ export class Agent<
         outputText,
         runId,
         messageList,
-        pendingStepResult,
       });
 
       return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1733,11 +1772,11 @@ export class Agent<
         await this.handleFinishStep({
           result,
           messageList,
-          pendingStepResult,
           threadId,
           memoryConfig,
           runId,
           onStepFinish,
+          savePerStep,
         });
       },
       maxSteps,
@@ -1760,7 +1799,6 @@ export class Agent<
       outputText,
       runId,
       messageList,
-      pendingStepResult,
     });
 
     return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1827,6 +1865,7 @@ export class Agent<
       experimental_output,
       telemetry,
       runtimeContext = new RuntimeContext(),
+      savePerStep = false,
       ...args
     }: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, defaultStreamOptions, streamOptions);
     const generateMessageId =
@@ -1856,7 +1895,7 @@ export class Agent<
       generateMessageId,
     });
 
-    const { thread, messageObjects, convertedTools, messageList, pendingStepResult } = await before();
+    const { thread, messageObjects, convertedTools, messageList } = await before();
 
     const threadId = thread?.id;
 
@@ -1873,11 +1912,11 @@ export class Agent<
           await this.handleFinishStep({
             result,
             messageList,
-            pendingStepResult,
             threadId,
             memoryConfig,
             runId,
             onStepFinish,
+            savePerStep,
           });
         },
         onFinish: async (result: any) => {
@@ -1891,7 +1930,6 @@ export class Agent<
               outputText,
               runId,
               messageList,
-              pendingStepResult,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1928,11 +1966,11 @@ export class Agent<
           await this.handleFinishStep({
             result,
             messageList,
-            pendingStepResult,
             threadId,
             memoryConfig,
             runId,
             onStepFinish,
+            savePerStep,
           });
         },
         onFinish: async (result: any) => {
@@ -1946,7 +1984,6 @@ export class Agent<
               outputText,
               runId,
               messageList,
-              pendingStepResult,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1981,11 +2018,11 @@ export class Agent<
         await this.handleFinishStep({
           result,
           messageList,
-          pendingStepResult,
           threadId,
           memoryConfig,
           runId,
           onStepFinish,
+          savePerStep,
         });
       },
       onFinish: async (result: any) => {
@@ -1999,7 +2036,6 @@ export class Agent<
             outputText,
             runId,
             messageList,
-            pendingStepResult,
           });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
