@@ -12,7 +12,7 @@ export function handleError(error: unknown, defaultMessage: string): Promise<Res
     cause: apiError.cause,
   });
 }
-export function errorHandler(isDev: boolean, err: Error, c: Context): Response {
+export function errorHandler(err: Error, c: Context, isDev?: boolean): Response {
   if (err instanceof HTTPException) {
     if (isDev) {
       return c.json({ error: err.message, cause: err.cause, stack: err.stack }, err.status);
