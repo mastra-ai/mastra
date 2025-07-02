@@ -178,7 +178,7 @@ export const blogPostSchema = z.object({
     summary: z.string(),
     image: z.string().optional(),
     author: z.string().optional(),
-    draft: z.boolean().optional(),
+    draft: z.boolean().optional().default(false),
     categories: z.array(z.string()).or(z.string()),
   }),
 });
