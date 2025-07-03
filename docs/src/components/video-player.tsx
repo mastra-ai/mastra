@@ -49,6 +49,7 @@ export const isYouTubeUrl = (url: string): boolean => {
     return allowedHosts.includes(parsedUrl.host);
   } catch (e) {
     // Invalid URL
+    console.error(e);
     return false;
   }
 };
