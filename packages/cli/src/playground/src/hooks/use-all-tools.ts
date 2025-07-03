@@ -1,24 +1,17 @@
-import type { Tool } from '@mastra/core/tools';
+import type { GetToolResponse } from '@mastra/client-js';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { client } from '@/lib/client';
 
 export const useTools = () => {
-  const [tools, setTools] = useState<Record<string, Tool>>({});
+  const [tools, setTools] = useState<Record<string, GetToolResponse>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchTools = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch('/api/tools');
-        if (!res.ok) {
-          const error = await res.json();
-          setTools({});
-          console.error('Error fetching tools', error);
-          toast.error(error?.error || 'Error fetching tools');
-          return;
-        }
-        const tools = await res.json();
+        const tools = await client.getTools();
         setTools(tools);
       } catch (error) {
         setTools({});
@@ -36,7 +29,7 @@ export const useTools = () => {
 };
 
 export const useTool = (toolId: string) => {
-  const [tool, setTool] = useState<Tool | null>(null);
+  const [tool, setTool] = useState<GetToolResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -48,16 +41,9 @@ export const useTool = (toolId: string) => {
           setIsLoading(false);
           return;
         }
-        const res = await fetch(`/api/tools/${toolId}`);
-        if (!res.ok) {
-          const error = await res.json();
-          setTool(null);
-          console.error('Error fetching tool', error);
-          toast.error(error?.error || 'Error fetching tool');
-          return;
-        }
-        const tool = await res.json();
-        setTool(tool);
+        const tool = client.getTool(toolId);
+        const toolResponse = await tool.details();
+        setTool(toolResponse);
       } catch (error) {
         setTool(null);
         console.error('Error fetching tool', error);
