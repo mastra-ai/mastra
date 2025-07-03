@@ -8,7 +8,7 @@ import { myWorkflow } from './workflows';
 import { evalAgent } from './agents/eval-agent';
 
 const storage = new LibSQLStore({
-  url: 'file:./mastra.db',
+  url: 'file:../../mastra.db',
 });
 
 export const mastra = new Mastra({

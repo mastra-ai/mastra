@@ -9,7 +9,7 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { Metric, Scorer } from '../eval';
+import type { LLMScorer, Metric, Scorer } from '../eval';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -39,17 +39,18 @@ export type DynamicArgument<T> = T | (({ runtimeContext }: { runtimeContext: Run
 
 export type SamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
-export type ScorerMetric = {
-  scorer: Scorer;
+export type MastraScorer = {
+  scorer: Scorer | LLMScorer;
   sampling?: SamplingConfig;
 };
 
-export type Scorers = Record<string, ScorerMetric>;
+export type Scorers = Record<string, MastraScorer>;
 export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
+  id?: TAgentId;
   name: TAgentId;
   description?: string;
   instructions: DynamicArgument<string>;

@@ -36,40 +36,43 @@ export function createOnScorerHook(mastra: Mastra) {
       })
       .join('\n');
 
-    console.log('onScorerHook', mastra, userMessages, hookData);
-
     const entityId = hookData.entity.id;
     const entityType = hookData.entityType;
 
-    if (entityType === 'AGENT') {
-      const agent = mastra.getAgent(entityId);
+    try {
+      if (entityType === 'AGENT') {
+        const agent = mastra.getAgentById(entityId);
 
-      const scorers = await agent.getScorers();
+        const scorers = await agent.getScorers();
 
-      const scorer = scorers[hookData.scorer.id];
+        const scorer = scorers[hookData.scorer.id];
 
-      if (!scorer) {
-        throw new MastraError({
-          id: 'MASTRA_SCORER_NOT_FOUND',
-          domain: ErrorDomain.MASTRA,
-          category: ErrorCategory.USER,
-          text: `Scorer with ID ${hookData.scorer.id} not found`,
+        if (!scorer) {
+          throw new MastraError({
+            id: 'MASTRA_SCORER_NOT_FOUND',
+            domain: ErrorDomain.MASTRA,
+            category: ErrorCategory.USER,
+            text: `Scorer with ID ${hookData.scorer.id} not found`,
+          });
+        }
+
+        const { structuredOutput, ...rest } = hookData;
+
+        const score = await scorer.scorer.score({
+          input: userMessages,
+          output: structuredOutput ? JSON.stringify(hookData.output.object) : (hookData.output.text as string),
+        });
+
+        const storage = mastra.getStorage();
+
+        await storage?.saveScore({
+          ...rest,
+          entityId,
+          result: score,
         });
       }
-
-      const score = await scorer.scorer.score({
-        input: userMessages,
-        output: hookData.output.text as string,
-      });
-
-      const storage = mastra.getStorage();
-
-      const { structuredOutput: _structuredOutput, ...rest } = hookData;
-
-      await storage?.saveScore({
-        ...rest,
-        result: score,
-      });
+    } catch (error) {
+      console.log({ error }, 'ERROR GETTING AGENT BY ID');
     }
   };
 }
@@ -428,12 +431,30 @@ do:
     this.setLogger({ logger });
   }
 
-  public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {
-    let agent = this.#agents?.[name];
+  public getAgentById(id: string): Agent {
+    const agent = Object.values(this.#agents).find(a => a.id === id);
 
     if (!agent) {
-      agent = Object.values(this.#agents).find(a => a.name === name) as TAgents[TAgentName];
+      const error = new MastraError({
+        id: 'MASTRA_GET_AGENT_BY_AGENT_ID_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Agent with id ${String(id)} not found`,
+        details: {
+          status: 404,
+          agentId: String(id),
+          agents: Object.keys(this.#agents ?? {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
+
+    return agent;
+  }
+
+  public getAgent<TAgentName extends keyof TAgents>(name: TAgentName): TAgents[TAgentName] {
+    const agent = this.#agents?.[name];
 
     if (!agent) {
       const error = new MastraError({

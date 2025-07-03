@@ -67,3 +67,32 @@ export const agentsTableColumns: DataTableProps<any, any>['columns'] = [
     },
   },
 ];
+
+const ScorerNameCell = ({ row }: { row: any }) => {
+  return (
+    <EntryCell
+      icon={<AgentIcon />}
+      name={
+        <Link className="w-full space-y-0" to={`/scorers/${row.original.id}`}>
+          {row.original.name}
+        </Link>
+      }
+      description={row.original.instructions}
+    />
+  );
+};
+
+export const scorersTableColumns: DataTableProps<any, any>['columns'] = [
+  {
+    id: 'name',
+    header: 'Name',
+    cell: ScorerNameCell,
+  },
+  {
+    id: 'description',
+    header: 'Description',
+    cell: ({ row }: { row: any }) => {
+      return <Cell>{row.original.description}</Cell>;
+    },
+  },
+];

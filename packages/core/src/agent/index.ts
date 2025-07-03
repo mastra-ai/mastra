@@ -117,7 +117,7 @@ export class Agent<
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
-    this.id = config.name;
+    this.id = config.id || config.name;
 
     this.#instructions = config.instructions;
     this.#description = config.description;

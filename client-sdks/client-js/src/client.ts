@@ -42,7 +42,7 @@ import type {
   SaveScoreParams,
   GetScoresResponse,
   SaveScoreResponse,
-  GetScorersResponse,
+  GetScorerResponse,
 } from './types';
 import { VNextNetwork } from './resources/vNextNetwork';
 import { NetworkMemoryThread } from './resources/network-memory-thread';
@@ -488,8 +488,17 @@ export class MastraClient extends BaseResource {
    * Retrieves all available scorers
    * @returns Promise containing list of available scorers
    */
-  public getScorers(): Promise<GetScorersResponse> {
+  public getScorers(): Promise<Record<string, GetScorerResponse>> {
     return this.request('/api/scores/scorers');
+  }
+
+  /**
+   * Retrieves a scorer by ID
+   * @param scorerId - ID of the scorer to retrieve
+   * @returns Promise containing the scorer
+   */
+  public getScorer(scorerId: string): Promise<GetScorerResponse> {
+    return this.request(`/api/scores/scorers/${scorerId}`);
   }
 
   /**
@@ -529,7 +538,7 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/scores/entity/${entityId}/${entityType}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/scores/entity/${entityType}/${entityId}${queryString ? `?${queryString}` : ''}`);
   }
 
   /**

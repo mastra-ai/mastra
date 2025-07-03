@@ -66,7 +66,13 @@ import {
 } from './handlers/network';
 import { generateSystemPromptHandler } from './handlers/prompt';
 import { rootHandler } from './handlers/root';
-import { getScorersHandler, getScoresByRunIdHandler, getScoresByEntityIdHandler, saveScoreHandler } from './handlers/scores';
+import {
+  getScorersHandler,
+  getScoresByRunIdHandler,
+  getScoresByEntityIdHandler,
+  saveScoreHandler,
+  getScorerHandler,
+} from './handlers/scores';
 import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
 import { createIndex, deleteIndex, describeIndex, listIndexes, queryVectors, upsertVectors } from './handlers/vector';
@@ -3478,6 +3484,20 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     getScorersHandler,
+  );
+
+  app.get(
+    '/api/scores/scorers/:scorerId',
+    describeRoute({
+      description: 'Get a scorer by ID',
+      tags: ['scores'],
+      responses: {
+        200: {
+          description: 'Scorer details',
+        },
+      },
+    }),
+    getScorerHandler,
   );
 
   app.get(

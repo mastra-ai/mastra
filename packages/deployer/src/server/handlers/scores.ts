@@ -4,17 +4,35 @@ import {
   getScoresByRunIdHandler as getOriginalScoresByRunIdHandler,
   getScoresByEntityIdHandler as getOriginalScoresByEntityIdHandler,
   saveScoreHandler as getOriginalSaveScoreHandler,
+  getScorerHandler as getOriginalScorerHandler,
 } from '@mastra/server/handlers/scores';
 import type { Context } from 'hono';
 import { handleError } from './error';
 
 export async function getScorersHandler(c: Context) {
   try {
-    const scorers = await getOriginalScorersHandler();
+    const scorers = await getOriginalScorersHandler({
+      mastra: c.get('mastra'),
+      runtimeContext: c.get('runtimeContext'),
+    });
     return c.json(scorers);
   } catch (error) {
     return handleError(error, 'Error getting scorers');
   }
+}
+
+export async function getScorerHandler(c: Context) {
+  const mastra = c.get('mastra');
+  const scorerId = c.req.param('scorerId');
+  const runtimeContext = c.get('runtimeContext');
+
+  const scorer = await getOriginalScorerHandler({
+    mastra,
+    scorerId,
+    runtimeContext,
+  });
+
+  return c.json(scorer);
 }
 
 export async function getScoresByRunIdHandler(c: Context) {

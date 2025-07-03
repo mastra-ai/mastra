@@ -51,9 +51,9 @@ export type ScoreRowData = {
   output: Record<string, any>; // MESSAGE OUTPUT
   additionalLLMContext?: Record<string, any>; // DATA FROM THE CONTEXT PARAM ON AN AGENT
   runtimeContext?: Record<string, any>; // THE EVALUATE RUNTIME CONTEXT FOR THE RUN
-  entityType?: string; // WORKFLOW, AGENT, TOOL, STEP, NETWORK
-  entity?: Record<string, any>; // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP, NETWORK
-  entityId?: string;
+  entityType: string; // WORKFLOW, AGENT, TOOL, STEP, NETWORK
+  entity: Record<string, any>; // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP, NETWORK
+  entityId: string;
   source: string;
   resourceId?: string;
   threadId?: string;

@@ -33,6 +33,7 @@ import { McpServerPage } from './pages/mcps/[serverId]';
 import { WorkflowGraphLayout } from './pages/workflows/layouts/workflow-graph-layout';
 import { MastraClientProvider } from '@mastra/playground-ui';
 import VNextNetwork from './pages/networks/network/v-next';
+import Scorer from './pages/scorers/scorer';
 
 function App() {
   const [queryClient] = useState(() => new QueryClient());
@@ -79,7 +80,16 @@ function App() {
                 </Route>
               </Route>
 
-              <Route path="/scorers" element={<Scorers />} />
+              <Route
+                element={
+                  <Layout>
+                    <Outlet />
+                  </Layout>
+                }
+              >
+                <Route path="/scorers" element={<Scorers />} />
+                <Route path="/scorers/:scorerId" element={<Scorer />} />
+              </Route>
 
               <Route
                 element={

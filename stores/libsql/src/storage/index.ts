@@ -1283,10 +1283,15 @@ export class LibSQLStore extends MastraStorage {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      console.log({ entityId, entityType }, 'ENTITY ID AND TYPE');
+
       const result = await this.client.execute({
-        sql: `SELECT * FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-        args: [entityId, entityType, pagination.perPage + 1, pagination.page * pagination.perPage],
+        sql: `SELECT * FROM ${TABLE_SCORERS} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        args: [pagination.perPage + 1, pagination.page * pagination.perPage],
       });
+
+      console.log({ result }, 'RESULT');
+
       return {
         scores: result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [],
         pagination: {

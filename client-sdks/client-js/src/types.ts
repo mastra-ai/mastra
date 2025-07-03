@@ -9,8 +9,9 @@ import type {
   LegacyWorkflowRuns,
   ScoreRowData,
   StoragePagination,
+  ScorerPrompt,
 } from '@mastra/core';
-import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput } from '@mastra/core/agent';
+import type { AgentGenerateOptions, AgentStreamOptions, MastraScorer, ToolsInput } from '@mastra/core/agent';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
@@ -456,11 +457,10 @@ export interface SaveScoreResponse {
   score: ScoreRowData;
 }
 
-export interface GetScorerResponse {
-  id: string;
-  name: string;
-  description: string;
-}
+export type GetScorerResponse = MastraScorer & {
+  agentIds: string[];
+  prompts?: ScorerPrompt;
+};
 
 export interface GetScorersResponse {
   scorers: Array<GetScorerResponse>;
