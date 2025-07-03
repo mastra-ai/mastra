@@ -1,7 +1,7 @@
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { CircleDashed, HourglassIcon, Loader2, PauseIcon } from 'lucide-react';
-import { StepFlowEntry } from '@mastra/core/workflows';
+import { SerializedStepFlowEntry } from '@mastra/core/workflows';
 
 import { cn } from '@/lib/utils';
 import { useContext } from 'react';
@@ -19,7 +19,7 @@ export type NestedNode = Node<
     description?: string;
     withoutTopHandle?: boolean;
     withoutBottomHandle?: boolean;
-    stepGraph: StepFlowEntry[];
+    stepGraph: SerializedStepFlowEntry[];
     mapConfig?: string;
     event?: string;
   },
