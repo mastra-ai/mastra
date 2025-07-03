@@ -58,38 +58,40 @@ export const testWorkflow = createWorkflow({...})
 
 The `waitForEvent()` method pauses execution until a specific event is received. Use `run.sendEvent()` to send the event. You must provide both the event name and the step to resume.
 
-```typescript {9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {10} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({...});
 const step2 = createStep({...});
+const step3 = createStep({...});
 
 export const testWorkflow = createWorkflow({...})
   .then(step1)
   .waitForEvent("my-event-name", step2)
-  .then(step2)
+  .then(step3)
   .commit();
 ```
 ## sendEvent
 
 The `.sendEvent()` method sends an event to the workflow. It accepts the event name and optional event data, which can be any JSON-serializable value.
 
-```typescript {13} filename="src/test-workflow.ts" showLineNumbers copy
+```typescript {5,12,15} filename="src/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
 const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
 
-const result = await run.start({
+const result = run.start({
   inputData: {
     value: "hello"
   }
 });
 
-
 setTimeout(() => {
-  run.sendEvent("my-event-name", {});
+  run.sendEvent("my-event-name", { value: "from event" });
 }, 3000);
 
-console.log(JSON.stringify(result, null, 2));
+console.log(JSON.stringify(await result, null, 2));
 ```
+
+> In this example, avoid using `await run.start()` directly, it would block sending the event before the workflow reaches its waiting state.
