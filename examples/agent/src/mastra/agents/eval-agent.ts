@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { AnswerRelevancyMetric } from '@mastra/evals/llm';
+import { AnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
 const model = openai('gpt-4o-mini');
 
@@ -10,7 +10,7 @@ export const evalAgent = new Agent({
   model: model,
   scorers: {
     answerRelevancy: {
-      scorer: new AnswerRelevancyMetric(model),
+      scorer: new AnswerRelevancyScorer({ model }),
       sampling: {
         type: 'ratio',
         rate: 0.5,

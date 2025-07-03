@@ -9,7 +9,7 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { Metric } from '../eval';
+import type { Metric, Scorer } from '../eval';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -40,7 +40,7 @@ export type DynamicArgument<T> = T | (({ runtimeContext }: { runtimeContext: Run
 export type SamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
 export type ScorerMetric = {
-  scorer: Metric;
+  scorer: Scorer;
   sampling?: SamplingConfig;
 };
 

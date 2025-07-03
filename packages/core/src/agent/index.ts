@@ -1559,15 +1559,6 @@ export class Agent<
           runtimeContext,
           agentName,
         });
-
-        executeHook(AvailableHooks.ON_GENERATION, {
-          input,
-          output: outputText,
-          runId: runIdToUse,
-          metric: scorerObject.scorer,
-          agentName,
-          instructions: instructions,
-        });
       }
     }
   }
