@@ -7,7 +7,8 @@ import { Callout, Steps } from "nextra/components";
 
 ## AWS Lambda
 
-Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter. This approach allows you to run your Mastra server as a containerized Lambda function with automatic scaling.
+Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter.
+This approach allows you to run your Mastra server as a containerized Lambda function with automatic scaling.
 
 <Callout>
   This guide assumes your Mastra application has been created using the default
@@ -26,6 +27,13 @@ Before deploying to AWS Lambda, ensure you have:
 - Your Mastra application configured with appropriate memory storage
 
 ### Memory Configuration
+
+<Callout>
+  AWS Lambda uses an ephemeral file system,
+  meaning that any files written to the file system are short-lived and may be lost.
+  Avoid using a Mastra storage provider that uses the file system,
+  such as `LibSQLStore` with a file URL.
+</Callout>
 
 Lambda functions have limitations with file system storage. Configure your Mastra application to use either ephemeral memory or external storage providers:
 
