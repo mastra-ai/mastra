@@ -18,6 +18,7 @@ import LegacyWorkflow from './pages/workflows/workflow/legacy';
 import WorkflowTracesPage from './pages/workflows/workflow/traces';
 import LegacyWorkflowTracesPage from './pages/workflows/workflow/legacy/traces';
 import Networks from './pages/networks';
+import Scorers from './pages/scorers';
 import { NetworkLayout } from './domains/networks/network-layout';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import Network from './pages/networks/network';
@@ -77,6 +78,8 @@ function App() {
                   <Route path="chat" element={<Network />} />
                 </Route>
               </Route>
+
+              <Route path="/scorers" element={<Scorers />} />
 
               <Route
                 element={

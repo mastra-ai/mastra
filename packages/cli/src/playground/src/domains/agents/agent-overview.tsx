@@ -22,6 +22,12 @@ export const AgentOverview = ({ agent, agentId }: AgentOverviewProps) => {
     description: `Contains ${Object.keys(workflow.steps || {}).length} steps`,
   }));
 
+  const scorers = Object.entries(agent?.scorers ?? {}).map(([scorerKey, scorer]) => ({
+    id: scorerKey,
+    name: scorer.name,
+    description: scorer.description,
+  }));
+
   return (
     <div className="py-2 overflow-y-auto h-full">
       <div className="px-5">
@@ -61,6 +67,21 @@ export const AgentOverview = ({ agent, agentId }: AgentOverviewProps) => {
           <Txt as="p" variant="ui-lg" className="text-icon6">
             No workflows were attached to this agent.
           </Txt>
+        )}
+
+        {scorers?.length > 0 && (
+          <div>
+            <Txt as="h3" variant="ui-md" className="text-icon3 pb-1">
+              Agent Scorers
+            </Txt>
+            {scorers.map(scorer => (
+              <div key={scorer.id}>
+                <Txt as="p" variant="ui-lg" className="text-icon6">
+                  {scorer.name}
+                </Txt>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

@@ -61,6 +61,7 @@ export interface GetAgentResponse {
   instructions: string;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
+  scorers: Record<string, GetScorerResponse>;
   provider: string;
   modelId: string;
   defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
@@ -455,10 +456,12 @@ export interface SaveScoreResponse {
   score: ScoreRowData;
 }
 
+export interface GetScorerResponse {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export interface GetScorersResponse {
-  scorers: Array<{
-    id: string;
-    name: string;
-    description: string;
-  }>;
+  scorers: Array<GetScorerResponse>;
 }
