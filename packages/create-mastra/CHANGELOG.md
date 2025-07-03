@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.10.10-alpha.0
+
+### Patch Changes
+
+- af9e40e: Map log level number to string value
+- b790fd1: Use SerializedStepFlowEntry in playground
+
 ## 0.10.9
 
 ### Patch Changes
