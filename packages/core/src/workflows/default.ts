@@ -315,8 +315,145 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
   }
 
-  async executeSleep({ duration }: { id: string; duration: number }): Promise<void> {
-    await new Promise(resolve => setTimeout(resolve, duration));
+  async executeSleep({
+    runId,
+    entry,
+    prevOutput,
+    stepResults,
+    emitter,
+    abortController,
+    runtimeContext,
+  }: {
+    workflowId: string;
+    runId: string;
+    serializedStepGraph: SerializedStepFlowEntry[];
+    entry: {
+      type: 'sleep';
+      id: string;
+      duration?: number;
+      fn?: ExecuteFunction<any, any, any, any, DefaultEngineType>;
+    };
+    prevStep: StepFlowEntry;
+    prevOutput: any;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    resume?: {
+      steps: string[];
+      stepResults: Record<string, StepResult<any, any, any, any>>;
+      resumePayload: any;
+      resumePath: number[];
+    };
+    executionContext: ExecutionContext;
+    emitter: Emitter;
+    abortController: AbortController;
+    runtimeContext: RuntimeContext;
+  }): Promise<void> {
+    let { duration, fn } = entry;
+
+    if (fn) {
+      duration = await fn({
+        runId,
+        mastra: this.mastra!,
+        runtimeContext,
+        inputData: prevOutput,
+        runCount: -1,
+        getInitData: () => stepResults?.input as any,
+        getStepResult: (step: any) => {
+          if (!step?.id) {
+            return null;
+          }
+
+          const result = stepResults[step.id];
+          if (result?.status === 'success') {
+            return result.output;
+          }
+
+          return null;
+        },
+
+        // TODO: this function shouldn't have suspend probably?
+        suspend: async (_suspendPayload: any): Promise<any> => {},
+        bail: () => {},
+        abort: () => {
+          abortController?.abort();
+        },
+        [EMITTER_SYMBOL]: emitter,
+        engine: {},
+        abortSignal: abortController?.signal,
+      });
+    }
+
+    await new Promise(resolve => setTimeout(resolve, !duration || duration < 0 ? 0 : duration));
+  }
+
+  async executeSleepUntil({
+    runId,
+    entry,
+    prevOutput,
+    stepResults,
+    emitter,
+    abortController,
+    runtimeContext,
+  }: {
+    workflowId: string;
+    runId: string;
+    serializedStepGraph: SerializedStepFlowEntry[];
+    entry: {
+      type: 'sleepUntil';
+      id: string;
+      date?: Date;
+      fn?: ExecuteFunction<any, any, any, any, DefaultEngineType>;
+    };
+    prevStep: StepFlowEntry;
+    prevOutput: any;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    resume?: {
+      steps: string[];
+      stepResults: Record<string, StepResult<any, any, any, any>>;
+      resumePayload: any;
+      resumePath: number[];
+    };
+    executionContext: ExecutionContext;
+    emitter: Emitter;
+    abortController: AbortController;
+    runtimeContext: RuntimeContext;
+  }): Promise<void> {
+    let { date, fn } = entry;
+
+    if (fn) {
+      date = await fn({
+        runId,
+        mastra: this.mastra!,
+        runtimeContext,
+        inputData: prevOutput,
+        runCount: -1,
+        getInitData: () => stepResults?.input as any,
+        getStepResult: (step: any) => {
+          if (!step?.id) {
+            return null;
+          }
+
+          const result = stepResults[step.id];
+          if (result?.status === 'success') {
+            return result.output;
+          }
+
+          return null;
+        },
+
+        // TODO: this function shouldn't have suspend probably?
+        suspend: async (_suspendPayload: any): Promise<any> => {},
+        bail: () => {},
+        abort: () => {
+          abortController?.abort();
+        },
+        [EMITTER_SYMBOL]: emitter,
+        engine: {},
+        abortSignal: abortController?.signal,
+      });
+    }
+
+    const time = !date ? 0 : date?.getTime() - Date.now();
+    await new Promise(resolve => setTimeout(resolve, time < 0 ? 0 : time));
   }
 
   async executeWaitForEvent({
@@ -1176,7 +1313,20 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         workflowStatus: 'waiting',
       });
 
-      await this.executeSleep({ id: entry.id, duration: entry.duration });
+      await this.executeSleep({
+        workflowId,
+        runId,
+        entry,
+        prevStep,
+        prevOutput,
+        stepResults,
+        serializedStepGraph,
+        resume,
+        executionContext,
+        emitter,
+        abortController,
+        runtimeContext,
+      });
 
       await this.persistStepUpdate({
         workflowId,
@@ -1278,7 +1428,20 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         workflowStatus: 'waiting',
       });
 
-      await this.executeSleep({ id: entry.id, duration: entry.date.getTime() - Date.now() });
+      await this.executeSleepUntil({
+        workflowId,
+        runId,
+        entry,
+        prevStep,
+        prevOutput,
+        stepResults,
+        serializedStepGraph,
+        resume,
+        executionContext,
+        emitter,
+        abortController,
+        runtimeContext,
+      });
 
       await this.persistStepUpdate({
         workflowId,
