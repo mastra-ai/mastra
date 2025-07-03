@@ -27,7 +27,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   async process(event: Event) {
     const { type, data } = event;
 
-    const { runId, executionPath, workflowId } = data;
+    const { workflowId, runId, executionPath, resume, parentWorkflow } = data;
 
     const workflow = this.mastra.getWorkflow(workflowId);
 
@@ -65,7 +65,15 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepGraph = step.steps;
       } else if (step.type === 'step') {
         const asWorkflow = step.step as Workflow;
-        stepGraph = asWorkflow?.stepGraph;
+        await this.pubsub.publish('workflows', {
+          type: resume ? 'workflow.resume' : 'workflow.start',
+          data: {
+            parentWorkflow: { workflowId, runId, executionPath, resume },
+            workflowId: asWorkflow.id,
+            runId,
+          },
+        });
+        return;
       }
     }
 
@@ -95,8 +103,28 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     switch (type) {
       case 'workflow.start':
+        await this.pubsub.publish('workflows', {
+          type: 'workflow.step.run',
+          data: {
+            workflowId,
+            runId,
+            executionPath: [0],
+            resume: false,
+          },
+        });
         break;
       case 'workflow.end':
+        if (parentWorkflow) {
+          await this.pubsub.publish('workflows', {
+            type: 'workflow.nested-end',
+            data: {
+              runId: parentWorkflow.runId,
+              workflowId: parentWorkflow.workflowId,
+              executionPath: parentWorkflow.executionPath,
+              resume,
+            },
+          });
+        }
         break;
       case 'workflow.suspend':
         break;
@@ -105,6 +133,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       case 'workflow.fail':
         break;
       case 'workflow.resume':
+        break;
+      case 'workflow.nested-end':
         break;
       case 'workflow.step.run':
         break;
