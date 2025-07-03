@@ -1,5 +1,6 @@
 import EventEmitter from 'events';
 import { PubSub } from './pubsub';
+import type { Event } from './types';
 
 export class EventEmitterPubSub extends PubSub {
   private emitter: EventEmitter;
@@ -9,7 +10,7 @@ export class EventEmitterPubSub extends PubSub {
     this.emitter = new EventEmitter();
   }
 
-  async publish(topic: string, event: Event): Promise<void> {
+  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
     this.emitter.emit(topic, event);
   }
 

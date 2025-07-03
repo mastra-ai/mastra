@@ -1,5 +1,7 @@
+import type { Event } from './types';
+
 export abstract class PubSub {
-  protected abstract publish(topic: string, event: Event): Promise<void>;
-  protected abstract subscribe(topic: string, cb: (event: Event) => void): Promise<void>;
-  protected abstract unsubscribe(topic: string, cb: (event: Event) => void): Promise<void>;
+  abstract publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void>;
+  abstract subscribe(topic: string, cb: (event: Event) => void): Promise<void>;
+  abstract unsubscribe(topic: string, cb: (event: Event) => void): Promise<void>;
 }

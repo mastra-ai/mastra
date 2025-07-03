@@ -1,8 +1,7 @@
 import EventEmitter from 'events';
-import type { Emitter, Mastra, StepFlowEntry, StepResult, Workflow } from '..';
+import type { Emitter, Mastra, StepFlowEntry, StepResult } from '..';
 import { MastraBase } from '../base';
 import type { RuntimeContext } from '../di';
-import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { PubSub } from '../events';
 import { RegisteredLogger } from '../logger';
 import { EMITTER_SYMBOL } from './constants';
@@ -15,66 +14,15 @@ export class StepExecutor extends MastraBase {
   }
 
   async execute(params: {
-    workflow: Workflow;
+    step: Extract<StepFlowEntry, { type: 'step' }>;
     runId: string;
     input?: any;
-    resumeData: any;
+    resumeData?: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
-    executionPath: number[];
     emitter: { runtime: PubSub; events: PubSub };
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
-    const { stepResults, runId, workflow, executionPath, runtimeContext } = params;
-
-    let stepGraph: StepFlowEntry[] = workflow.stepGraph;
-    let step: StepFlowEntry | undefined;
-    for (let i = 0; i < executionPath.length; i++) {
-      const stepIdx = executionPath[i];
-      if (stepIdx === undefined || !stepGraph) {
-        throw new MastraError({
-          id: 'MASTRA_WORKFLOW',
-          text: `Step not found in step graph: ${JSON.stringify(executionPath)}`,
-          domain: ErrorDomain.MASTRA_WORKFLOW,
-          category: ErrorCategory.SYSTEM,
-        });
-      }
-
-      step = stepGraph[stepIdx];
-
-      if (!step) {
-        throw new MastraError({
-          id: 'MASTRA_WORKFLOW',
-          text: `Step not found in step graph: ${JSON.stringify(executionPath)}`,
-          domain: ErrorDomain.MASTRA_WORKFLOW,
-          category: ErrorCategory.SYSTEM,
-        });
-      }
-
-      if (step.type === 'parallel' || step.type === 'conditional') {
-        stepGraph = step.steps;
-      } else if (step.type === 'step') {
-        const asWorkflow = step.step as Workflow;
-        stepGraph = asWorkflow?.stepGraph;
-      }
-    }
-
-    if (!step) {
-      throw new MastraError({
-        id: 'MASTRA_WORKFLOW',
-        text: `Step not found in step graph: ${JSON.stringify(executionPath)}`,
-        domain: ErrorDomain.MASTRA_WORKFLOW,
-        category: ErrorCategory.SYSTEM,
-      });
-    }
-
-    if (step.type !== 'step') {
-      throw new MastraError({
-        id: 'MASTRA_WORKFLOW',
-        text: `Step is not executable: ${step.type} -- ${JSON.stringify(executionPath)}`,
-        domain: ErrorDomain.MASTRA_WORKFLOW,
-        category: ErrorCategory.SYSTEM,
-      });
-    }
+    const { step, stepResults, runId, runtimeContext } = params;
 
     const abortController = new AbortController();
     const ee = new EventEmitter();
