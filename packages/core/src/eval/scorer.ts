@@ -1,6 +1,4 @@
 import type { UIMessage } from 'ai';
-import type { MessageList } from '../agent';
-import type { Mastra } from '../mastra';
 
 export type ScoreResult = {
   score: number;
@@ -59,7 +57,7 @@ export type ScoreRowData = {
   threadId?: string;
   createdAt: Date;
   updatedAt: Date;
-}
+};
 
 export abstract class LLMScorer extends Scorer {
   abstract prompts(): Record<string, ScoringPrompts>;

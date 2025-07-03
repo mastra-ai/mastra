@@ -7,6 +7,8 @@ import type {
   WorkflowRuns,
   WorkflowRun,
   LegacyWorkflowRuns,
+  ScoreRowData,
+  StoragePagination,
 } from '@mastra/core';
 import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput } from '@mastra/core/agent';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
@@ -419,4 +421,44 @@ export interface McpToolInfo {
 
 export interface McpServerToolListResponse {
   tools: McpToolInfo[];
+}
+
+// Scores-related types
+export interface GetScoresByRunIdParams {
+  runId: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface GetScoresByEntityIdParams {
+  entityId: string;
+  entityType: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface SaveScoreParams {
+  score: ScoreRowData;
+}
+
+export interface GetScoresResponse {
+  pagination: {
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  };
+  scores: ScoreRowData[];
+}
+
+export interface SaveScoreResponse {
+  score: ScoreRowData;
+}
+
+export interface GetScorersResponse {
+  scorers: Array<{
+    id: string;
+    name: string;
+    description: string;
+  }>;
 }
