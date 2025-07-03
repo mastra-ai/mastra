@@ -1227,7 +1227,7 @@ describe('Workflow', () => {
         });
       });
 
-      it.only('should provide access to step results and trigger data via getStepResult helper', async () => {
+      it('should provide access to step results and trigger data via getStepResult helper', async () => {
         const step1Action = vi.fn().mockImplementation(async ({ inputData }) => {
           // Test accessing trigger data with correct type
           expect(inputData).toEqual({ inputValue: 'test-input' });

@@ -20,10 +20,11 @@ export class WorkflowEventProcessor extends EventProcessor {
     this.mastra = mastra;
   }
 
-  private async errorWorkflow(runId: string, e: Error) {
+  private async errorWorkflow(workflowId: string, runId: string, e: Error) {
     await this.pubsub.publish('workflows', {
       type: 'workflow.fail',
       data: {
+        workflowId,
         runId,
         error: e.stack ?? e.message,
       },
@@ -61,7 +62,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         executionPath: [0],
         resume,
         stepResults: {
-          init: prevResult,
+          input: prevResult?.status === 'success' ? prevResult.output : undefined,
         },
         prevResult,
         resumeData,
@@ -95,8 +96,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       await this.pubsub.publish('workflows', {
         type: 'workflow.step.end',
         data: {
-          runId: parentWorkflow.runId,
           workflowId: parentWorkflow.workflowId,
+          runId: parentWorkflow.runId,
           executionPath: parentWorkflow.executionPath,
           resume,
           stepResults: parentWorkflow.stepResults,
@@ -137,45 +138,25 @@ export class WorkflowEventProcessor extends EventProcessor {
     };
   }) {
     let stepGraph: StepFlowEntry[] = workflow.stepGraph;
-    let step: StepFlowEntry | undefined;
-    let i = 0;
-    for (i = 0; i < executionPath.length; i++) {
-      const stepIdx = executionPath[i];
-      if (stepIdx === undefined || !stepGraph) {
-        return this.errorWorkflow(
-          runId,
-          new MastraError({
-            id: 'MASTRA_WORKFLOW',
-            text: `Step not found in step graph: ${JSON.stringify(executionPath)}`,
-            domain: ErrorDomain.MASTRA_WORKFLOW,
-            category: ErrorCategory.SYSTEM,
-          }),
-        );
-      }
 
-      step = stepGraph[stepIdx];
-
-      if (!step) {
-        return this.errorWorkflow(
-          runId,
-          new MastraError({
-            id: 'MASTRA_WORKFLOW',
-            text: `Step not found in step graph: ${JSON.stringify(executionPath)}`,
-            domain: ErrorDomain.MASTRA_WORKFLOW,
-            category: ErrorCategory.SYSTEM,
-          }),
-        );
-      }
-
-      if (step.type === 'parallel' || step.type === 'conditional') {
-        stepGraph = step.steps;
-      } else {
-        break;
-      }
+    if (!executionPath?.length) {
+      return this.errorWorkflow(
+        workflowId,
+        runId,
+        new MastraError({
+          id: 'MASTRA_WORKFLOW',
+          text: `Execution path is empty: ${JSON.stringify(executionPath)}`,
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.SYSTEM,
+        }),
+      );
     }
+
+    const step: StepFlowEntry | undefined = stepGraph[executionPath[0]!];
 
     if (!step) {
       return this.errorWorkflow(
+        workflowId,
         runId,
         new MastraError({
           id: 'MASTRA_WORKFLOW',
@@ -186,8 +167,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
+    // TODO: add support for .parallel()
     if (step.type !== 'step') {
       return this.errorWorkflow(
+        workflowId,
         runId,
         new MastraError({
           id: 'MASTRA_WORKFLOW',
@@ -198,14 +181,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
-    if (i !== executionPath.length - 1) {
+    if (executionPath.length > 1) {
       const asWorkflow = step.step as Workflow;
       await this.pubsub.publish('workflows', {
         type: resume ? 'workflow.resume' : 'workflow.start',
         data: {
           workflowId: asWorkflow.id,
           parentWorkflow: { workflowId, runId, executionPath, resume },
-          executionPath: executionPath.slice(i + 1),
+          executionPath: executionPath.slice(1),
           runId: '', // TODO: generate runId
           resume,
           stepResults: {},
@@ -247,6 +230,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowStepEnd({
+    workflow,
     workflowId,
     runId,
     executionPath,
@@ -322,20 +306,36 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    // TODO: check if there is more steps
-    await this.pubsub.publish('workflows', {
-      type: 'workflow.end',
-      data: {
-        workflowId,
-        runId,
-        executionPath,
-        resume,
-        parentWorkflow,
-        stepResults,
-        prevResult,
-        resumeData,
-      },
-    });
+    const stepGraph = workflow.stepGraph;
+    if (executionPath[0]! >= stepGraph.length - 1) {
+      await this.pubsub.publish('workflows', {
+        type: 'workflow.end',
+        data: {
+          workflowId,
+          runId,
+          executionPath,
+          resume,
+          parentWorkflow,
+          stepResults,
+          prevResult,
+          resumeData,
+        },
+      });
+    } else {
+      await this.pubsub.publish('workflows', {
+        type: 'workflow.step.run',
+        data: {
+          workflowId,
+          runId,
+          executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+          resume,
+          parentWorkflow,
+          stepResults,
+          prevResult,
+          resumeData,
+        },
+      });
+    }
   }
 
   async process(event: Event) {
