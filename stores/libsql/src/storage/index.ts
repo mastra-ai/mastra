@@ -21,7 +21,6 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
-  StoragePagination,
   StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,
@@ -1271,12 +1270,6 @@ export class LibSQLStore extends MastraStorage {
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [entityId, entityType, pagination.perPage + 1, pagination.page * pagination.perPage],
       });
-      console.log({
-        entityId,
-        entityType,
-        pagination,
-        result: result.rows,
-      });
       return {
         scores: result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [],
         pagination: {
@@ -1679,44 +1672,6 @@ export class LibSQLStore extends MastraStorage {
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };
-  }
-
-  /**
-   * SCORERS - Not implemented
-   */
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    throw new Error(
-      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
-        `To use scores functionality, implement the required methods in this storage adapter.`,
-    );
-  }
-
-  async getScoresByRunId({
-    runId: _runId,
-    pagination: _pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    throw new Error(
-      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
-        `To use scores functionality, implement the required methods in this storage adapter.`,
-    );
-  }
-
-  async getScoresByEntityId({
-    entityId: _entityId,
-    entityType: _entityType,
-    pagination: _pagination,
-  }: {
-    pagination: StoragePagination;
-    entityId: string;
-    entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    throw new Error(
-      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
-        `To use scores functionality, implement the required methods in this storage adapter.`,
-    );
   }
 }
 

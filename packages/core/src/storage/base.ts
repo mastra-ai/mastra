@@ -14,7 +14,6 @@ import {
   TABLE_RESOURCES,
   TABLE_SCORERS,
   TABLE_SCHEMAS,
-  TABLE_SCORERS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
 import type {
