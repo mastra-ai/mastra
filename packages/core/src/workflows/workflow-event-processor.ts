@@ -42,6 +42,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId: string;
         executionPath: number[];
         resume: boolean;
+        stepResults: Record<string, StepResult<any, any, any, any>>;
       };
     };
 
@@ -64,7 +65,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         break;
       case 'workflow.end':
         if (parentWorkflow) {
-          // TODO: add workflow result here
           await this.pubsub.publish('workflows', {
             type: 'workflow.step.end',
             data: {
@@ -72,17 +72,27 @@ export class WorkflowEventProcessor extends EventProcessor {
               workflowId: parentWorkflow.workflowId,
               executionPath: parentWorkflow.executionPath,
               resume,
+              stepResults: parentWorkflow.stepResults,
+              prevResult,
+              resumeData,
             },
           });
         }
         break;
-      case 'workflow.suspend':
-        break;
-      case 'workflow.bail':
-        break;
-      case 'workflow.fail':
-        break;
       case 'workflow.resume':
+        await this.pubsub.publish('workflows', {
+          type: 'workflow.step.run',
+          data: {
+            workflowId,
+            runId,
+            executionPath,
+            resume,
+            stepResults,
+            prevResult,
+            resumeData,
+          },
+        });
+
         break;
       case 'workflow.step.end':
         if (prevResult.status === 'failed') {
@@ -246,6 +256,12 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
 
+        break;
+      case 'workflow.suspend':
+        break;
+      case 'workflow.bail':
+        break;
+      case 'workflow.fail':
         break;
       default:
         break;
