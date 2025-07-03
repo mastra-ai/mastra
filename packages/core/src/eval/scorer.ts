@@ -61,6 +61,12 @@ export type ScoreRowData = {
   updatedAt: Date;
 };
 
+export type ScorerPrompt = Record<string, ScoringPrompts> & {
+  extract: ScoringPrompts;
+  score: ScoringPrompts;
+  reason: ScoringPrompts;
+};
+
 export abstract class LLMScorer extends Scorer {
-  abstract prompts(): Record<string, ScoringPrompts>;
+  abstract prompts(): ScorerPrompt;
 }

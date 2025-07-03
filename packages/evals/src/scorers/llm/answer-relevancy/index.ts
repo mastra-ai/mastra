@@ -1,19 +1,12 @@
-import { Agent } from '@mastra/core/agent';
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
 import { MastraError } from '@mastra/core/error';
-import { LLMScorer } from '@mastra/core/eval';
 import type { ScoreResult } from '@mastra/core/eval';
-import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { LLMScorer } from '@mastra/core/eval';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { roundToTwoDecimals } from '../../../metrics/llm/utils';
-import {
-  EVALUATE_STATEMENTS_PROMPT,
-  evaluateStatementsPrompt,
-  EXTRACT_STATEMENTS_PROMPT,
-  extractStatementsPrompt,
-  GENERATE_REASON_PROMPT,
-  generateReasonPrompt,
-} from './prompts';
+import { EXTRACT_PROMPT, extractPrompt, REASON_PROMPT, reasonPrompt, SCORE_PROMPT, scorePrompt } from './prompts';
 
 export const DEFAULT_OPTIONS: Record<'uncertaintyWeight' | 'scale', number> = {
   uncertaintyWeight: 0.3,
@@ -114,16 +107,16 @@ export class AnswerRelevancyScorer extends LLMScorer {
 
   prompts() {
     return {
-      extractStatements: {
-        prompt: EXTRACT_STATEMENTS_PROMPT,
+      extract: {
+        prompt: EXTRACT_PROMPT,
         description: 'Extract relevant statements from the LLM output',
       },
-      evaluateStatements: {
-        prompt: EVALUATE_STATEMENTS_PROMPT,
-        description: 'Evaluate the relevance of the statements to the input',
+      score: {
+        prompt: SCORE_PROMPT,
+        description: 'Score the relevance of the statements to the input',
       },
-      reasoning: {
-        prompt: GENERATE_REASON_PROMPT,
+      reason: {
+        prompt: REASON_PROMPT,
         description: 'Reason about the results',
       },
     };
@@ -143,7 +136,7 @@ export class AnswerRelevancyScorer extends LLMScorer {
         statements: z.array(z.string()),
       }),
       execute: async () => {
-        const statementPrompt = extractStatementsPrompt({ output });
+        const statementPrompt = extractPrompt({ output });
 
         const result = await agent.generate(statementPrompt, {
           output: z.object({
@@ -165,7 +158,7 @@ export class AnswerRelevancyScorer extends LLMScorer {
       }),
       outputSchema: scoringResultsSchema,
       execute: async ({ inputData }) => {
-        const prompt = evaluateStatementsPrompt({ input, statements: inputData.statements });
+        const prompt = scorePrompt({ input, statements: inputData.statements });
         const result = await agent.generate(prompt, {
           output: scoringResultsSchema,
         });
@@ -188,7 +181,7 @@ export class AnswerRelevancyScorer extends LLMScorer {
           scale: this.#options.scale || DEFAULT_OPTIONS.scale,
         });
 
-        const prompt = generateReasonPrompt({
+        const prompt = reasonPrompt({
           input,
           output,
           score,
