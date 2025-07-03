@@ -643,7 +643,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 e,
               );
         this.logger.trackException(error);
-        this.logger.error('Error executing step: ' + error?.stack);
+        this.logger.error(`Error executing step ${step.id}: ` + error?.stack);
         execResults = {
           status: 'failed',
           error: error?.stack,
