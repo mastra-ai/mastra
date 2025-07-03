@@ -452,7 +452,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     }
 
-    const time = Date.now() - (date?.getTime() ?? 0);
+    const time = !date ? 0 : date?.getTime() - Date.now();
     await new Promise(resolve => setTimeout(resolve, time < 0 ? 0 : time));
   }
 

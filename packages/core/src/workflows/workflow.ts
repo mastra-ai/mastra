@@ -578,7 +578,7 @@ export class Workflow<
    * @param duration The duration to sleep for
    * @returns The workflow instance for chaining
    */
-  sleep(duration: number | ExecuteFunction<z.infer<TPrevSchema>, any, any, any, TEngineType>) {
+  sleep(duration: number | ExecuteFunction<z.infer<TPrevSchema>, number, any, any, TEngineType>) {
     const id = `sleep_${randomUUID()}`;
 
     const opts: StepFlowEntry<TEngineType> =
@@ -608,7 +608,7 @@ export class Workflow<
    * @param date The date to sleep until
    * @returns The workflow instance for chaining
    */
-  sleepUntil(date: Date | ExecuteFunction<z.infer<TPrevSchema>, any, any, any, TEngineType>) {
+  sleepUntil(date: Date | ExecuteFunction<z.infer<TPrevSchema>, Date, any, any, TEngineType>) {
     const id = `sleep_${randomUUID()}`;
     const opts: StepFlowEntry<TEngineType> =
       typeof date === 'function'
