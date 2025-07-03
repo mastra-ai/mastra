@@ -1098,7 +1098,7 @@ export class Workflow<
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
-    const run = resume?.steps?.length ? this.createRun({ runId: resume.runId }) : this.createRun();
+    const run = resume?.steps?.length ? await this.createRunAsync({ runId: resume.runId }) : this.createRun();
     const nestedAbortCb = () => {
       abort();
     };
