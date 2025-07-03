@@ -33,6 +33,7 @@ import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import { MessageList } from './message-list';
 import type { MessageInput } from './message-list';
+import { SaveQueueManager } from './save-queue';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -112,10 +113,6 @@ export class Agent<
   metrics: TMetrics;
   evals: TMetrics;
   #voice: CompositeVoice;
-  private saveQueues: Map<string, Promise<void>> = new Map();
-  private saveDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
-  private debounceMs = 100;
-  private static readonly MAX_STALENESS_MS = 2000;
 
   constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
@@ -1121,105 +1118,43 @@ export class Agent<
     };
   }
 
-  private debounceSave(threadId: string, saveFn: () => Promise<void>) {
-    if (this.saveDebounceTimers.has(threadId)) {
-      clearTimeout(this.saveDebounceTimers.get(threadId)!);
-    }
-    this.saveDebounceTimers.set(
-      threadId,
-      setTimeout(() => {
-        this.enqueueSave(threadId, saveFn).catch(err => {
-          this.logger?.error?.('Error in debounceSave', { err, threadId });
-        });
-        this.saveDebounceTimers.delete(threadId);
-      }, this.debounceMs),
-    );
-  }
-
-  private enqueueSave(threadId: string, saveFn: () => Promise<void>) {
-    const prev = this.saveQueues.get(threadId) || Promise.resolve();
-    const next = prev
-      .then(saveFn)
-      .catch(err => {
-        this.logger?.error?.('Error in enqueueSave', { err, threadId });
-      })
-      .then(() => {
-        if (this.saveQueues.get(threadId) === next) {
-          this.saveQueues.delete(threadId);
-        }
-      });
-    this.saveQueues.set(threadId, next);
-    return next;
-  }
-
-  private clearDebounce(threadId: string) {
-    if (this.saveDebounceTimers.has(threadId)) {
-      clearTimeout(this.saveDebounceTimers.get(threadId)!);
-      this.saveDebounceTimers.delete(threadId);
-    }
-  }
-
-  private async persistUnsavedMessages(messageList: MessageList, memoryConfig?: MemoryConfig) {
-    const memory = this.getMemory();
-    const newMessages = messageList.drainUnsavedMessages();
-    if (newMessages.length > 0 && memory) {
-      await memory.saveMessages({
-        messages: newMessages,
-        memoryConfig,
-      });
-    }
-  }
-
-  private async saveMessagePart(
-    messageList: MessageList,
-    threadId?: string,
-    memoryConfig?: MemoryConfig,
-    forceSave = false,
-  ) {
-    if (!threadId) return;
-    const earliest = messageList.getEarliestUnsavedMessageTimestamp();
-    const now = Date.now();
-    const saveFn = () => this.persistUnsavedMessages(messageList, memoryConfig);
-
-    if ((earliest && now - earliest > Agent.MAX_STALENESS_MS) || forceSave) {
-      this.clearDebounce(threadId);
-      return this.enqueueSave(threadId, saveFn);
-    } else {
-      return this.debounceSave(threadId, saveFn);
-    }
-  }
-
-  private async handleFinishStep({
+  /**
+   * Adds response messages from a step to the MessageList and schedules persistence.
+   * This is used for incremental saving: after each agent step, messages are added to a save queue
+   * and a debounced save operation is triggered to avoid redundant writes.
+   *
+   * @param result - The step result containing response messages.
+   * @param messageList - The MessageList instance for the current thread.
+   * @param threadId - The thread ID.
+   * @param memoryConfig - The memory configuration for saving.
+   * @param runId - (Optional) The run ID for logging.
+   */
+  private async saveStepMessages({
     result,
     messageList,
     threadId,
     memoryConfig,
     runId,
-    onStepFinish,
-    savePerStep,
   }: {
     result: any;
     messageList: MessageList;
     threadId?: string;
     memoryConfig?: MemoryConfig;
     runId?: string;
-    onStepFinish?: (result: any) => void | Promise<void>;
-    savePerStep?: boolean;
   }) {
     try {
-      if (savePerStep) {
-        messageList.add(result.response.messages, 'response');
-        await this.saveMessagePart(messageList, threadId, memoryConfig);
-      }
-      return onStepFinish?.({ ...result, runId });
+      messageList.add(result.response.messages, 'response');
+      const memory = this.getMemory();
+      const saveQueueManager = new SaveQueueManager({
+        logger: this.logger,
+        memory,
+      });
+      await saveQueueManager.batchMessages(messageList, threadId, memoryConfig);
     } catch (e) {
       this.logger.error('Error saving memory on step finish', {
         error: e,
         runId,
       });
-      if (savePerStep) {
-        await this.saveMessagePart(messageList, threadId, memoryConfig, true);
-      }
       throw e;
     }
   }
@@ -1487,6 +1422,10 @@ export class Agent<
           : threadAfter;
 
         if (memory && resourceId && thread) {
+          const saveQueueManager = new SaveQueueManager({
+            logger: this.logger,
+            memory,
+          });
           try {
             // Add LLM response messages to the list
             let responseMessages = result.response.messages;
@@ -1508,7 +1447,7 @@ export class Agent<
             }
 
             // Parallelize title generation and message saving
-            const promises: Promise<any>[] = [this.saveMessagePart(messageList, threadId, memoryConfig, true)];
+            const promises: Promise<any>[] = [saveQueueManager.flushMessages(messageList, threadId, memoryConfig)];
 
             // Add title generation to promises if needed
             if (thread.title?.startsWith('New Thread')) {
@@ -1538,7 +1477,7 @@ export class Agent<
 
             await Promise.all(promises);
           } catch (e) {
-            await this.saveMessagePart(messageList, threadId, memoryConfig, true);
+            await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
             if (e instanceof MastraError) {
               throw e;
             }
@@ -1680,15 +1619,16 @@ export class Agent<
         messages: messageObjects,
         tools: convertedTools,
         onStepFinish: async (result: any) => {
-          await this.handleFinishStep({
-            result,
-            messageList,
-            threadId,
-            memoryConfig,
-            runId,
-            onStepFinish,
-            savePerStep,
-          });
+          if (savePerStep) {
+            await this.saveStepMessages({
+              result,
+              messageList,
+              threadId,
+              memoryConfig,
+              runId,
+            });
+          }
+          return onStepFinish?.({ ...result, runId });
         },
         maxSteps: maxSteps,
         runId,
@@ -1727,15 +1667,16 @@ export class Agent<
         messages: messageObjects,
         tools: convertedTools,
         onStepFinish: async (result: any) => {
-          await this.handleFinishStep({
-            result,
-            messageList,
-            threadId,
-            memoryConfig,
-            runId,
-            onStepFinish,
-            savePerStep,
-          });
+          if (savePerStep) {
+            await this.saveStepMessages({
+              result,
+              messageList,
+              threadId,
+              memoryConfig,
+              runId,
+            });
+          }
+          return onStepFinish?.({ ...result, runId });
         },
         maxSteps,
         runId,
@@ -1769,15 +1710,16 @@ export class Agent<
       tools: convertedTools,
       structuredOutput: output,
       onStepFinish: async (result: any) => {
-        await this.handleFinishStep({
-          result,
-          messageList,
-          threadId,
-          memoryConfig,
-          runId,
-          onStepFinish,
-          savePerStep,
-        });
+        if (savePerStep) {
+          await this.saveStepMessages({
+            result,
+            messageList,
+            threadId,
+            memoryConfig,
+            runId,
+          });
+        }
+        return onStepFinish?.({ ...result, runId });
       },
       maxSteps,
       runId,
@@ -1909,15 +1851,16 @@ export class Agent<
         temperature,
         tools: convertedTools,
         onStepFinish: async (result: any) => {
-          await this.handleFinishStep({
-            result,
-            messageList,
-            threadId,
-            memoryConfig,
-            runId,
-            onStepFinish,
-            savePerStep,
-          });
+          if (savePerStep) {
+            await this.saveStepMessages({
+              result,
+              messageList,
+              threadId,
+              memoryConfig,
+              runId,
+            });
+          }
+          return onStepFinish?.({ ...result, runId });
         },
         onFinish: async (result: any) => {
           try {
@@ -1963,15 +1906,16 @@ export class Agent<
         temperature,
         tools: convertedTools,
         onStepFinish: async (result: any) => {
-          await this.handleFinishStep({
-            result,
-            messageList,
-            threadId,
-            memoryConfig,
-            runId,
-            onStepFinish,
-            savePerStep,
-          });
+          if (savePerStep) {
+            await this.saveStepMessages({
+              result,
+              messageList,
+              threadId,
+              memoryConfig,
+              runId,
+            });
+          }
+          return onStepFinish?.({ ...result, runId });
         },
         onFinish: async (result: any) => {
           try {
@@ -2015,15 +1959,16 @@ export class Agent<
       temperature,
       structuredOutput: output,
       onStepFinish: async (result: any) => {
-        await this.handleFinishStep({
-          result,
-          messageList,
-          threadId,
-          memoryConfig,
-          runId,
-          onStepFinish,
-          savePerStep,
-        });
+        if (savePerStep) {
+          await this.saveStepMessages({
+            result,
+            messageList,
+            threadId,
+            memoryConfig,
+            runId,
+          });
+        }
+        return onStepFinish?.({ ...result, runId });
       },
       onFinish: async (result: any) => {
         try {
