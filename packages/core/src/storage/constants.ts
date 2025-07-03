@@ -19,16 +19,14 @@ export type TABLE_NAMES =
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  name: {
-    type: 'text',
-  },
   traceId: {
     type: 'text',
+    nullable: true,
   },
   runId: {
     type: 'text',
   },
-  evaluator: {
+  scorer: {
     type: 'jsonb',
   },
   result: {
@@ -36,6 +34,7 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   },
   metadata: {
     type: 'jsonb',
+    nullable: true,
   },
   input: {
     type: 'jsonb', // MESSAGE INPUT
@@ -43,7 +42,7 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   output: {
     type: 'jsonb', // MESSAGE OUTPUT
   },
-  additionalContext: {
+  additionalLLMContext: {
     type: 'jsonb', // DATA FROM THE CONTEXT PARAM ON AN AGENT
     nullable: true,
   },

@@ -15,7 +15,7 @@ import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
-import { AvailableHooks, executeHook } from '../hooks';
+import { AvailableHooks, executeHook, type ScorerHookData } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
 import type { MastraLLMBase } from '../llm/model';
 import { MastraLLM } from '../llm/model';
@@ -1550,15 +1550,25 @@ export class Agent<
           return;
         }
 
-        this.logger.debug(`[Agent:${this.name}] - Running scorer ${id}`, {
-          runId: runIdToUse,
-          scorerId: id,
+        const payload: ScorerHookData = {
+          scorer: {
+            id,
+            name: scorerObject.scorer.name,
+            description: scorerObject.scorer.description,
+          },
           input,
           output: outputText,
-          instructions,
-          runtimeContext,
-          agentName,
-        });
+          runtimeContext: Object.fromEntries(runtimeContext.entries()),
+          runId: runIdToUse,
+          source: 'LIVE',
+          entity: {
+            id: this.id,
+            name: this.name,
+          },
+          entityType: 'AGENT',
+        };
+
+        executeHook(AvailableHooks.ON_SCORER_RUN, payload);
       }
     }
   }

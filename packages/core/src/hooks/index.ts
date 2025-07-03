@@ -7,6 +7,7 @@ import type { Handler } from './mitt';
 export enum AvailableHooks {
   ON_EVALUATION = 'onEvaluation',
   ON_GENERATION = 'onGeneration',
+  ON_SCORER_RUN = 'onScorerRun',
 }
 
 const hooks = mitt();
@@ -32,15 +33,34 @@ type GenerationHookData = {
   instructions: string;
 };
 
+type ScoringSource = 'LIVE';
+type ScoringEntityType = 'AGENT';
+
+export type ScorerHookData = {
+  runId: string;
+  traceId?: string;
+  scorer: Record<string, any>;
+  input: string;
+  output: string;
+  additionalContext?: Record<string, any>;
+  resourceId?: string;
+  threadId?: string;
+  source: ScoringSource;
+  entity: Record<string, any>;
+  entityType: ScoringEntityType;
+  runtimeContext: Record<string, any>;
+};
+
 export function registerHook(hook: AvailableHooks.ON_EVALUATION, action: Handler<EvaluationHookData>): void;
 export function registerHook(hook: AvailableHooks.ON_GENERATION, action: Handler<GenerationHookData>): void;
+export function registerHook(hook: AvailableHooks.ON_SCORER_RUN, action: Handler<ScorerHookData>): void;
 export function registerHook(hook: `${AvailableHooks}`, action: Handler<any>): void {
   hooks.on(hook, action);
 }
 
 export function executeHook(hook: AvailableHooks.ON_EVALUATION, action: EvaluationHookData): void;
 export function executeHook(hook: AvailableHooks.ON_GENERATION, action: GenerationHookData): void;
-
+export function executeHook(hook: AvailableHooks.ON_SCORER_RUN, action: ScorerHookData): void;
 export function executeHook(hook: `${AvailableHooks}`, data: unknown): void {
   // do not block the main thread
   setImmediate(() => {
