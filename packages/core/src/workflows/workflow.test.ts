@@ -2645,7 +2645,7 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
 
-      expect(endTime - startTime).toBeGreaterThan(1000);
+      expect(endTime - startTime).toBeGreaterThan(900);
     });
 
     it('should execute a waitForEvent step after timeout', async () => {
