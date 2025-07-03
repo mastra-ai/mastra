@@ -55,7 +55,11 @@ export class EventedExecutionEngine extends ExecutionEngine {
   }): Promise<TOutput> {
     const tempCb = async (event: Event) => {
       console.log('event', event);
-      await this.eventProcessor.process(event);
+      try {
+        await this.eventProcessor.process(event);
+      } catch (e) {
+        console.error('Error processing event', e);
+      }
     };
     await this.pubsub.subscribe('workflows', tempCb);
 

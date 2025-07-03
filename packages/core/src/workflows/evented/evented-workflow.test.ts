@@ -15,20 +15,9 @@ import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
 
 const testStorage = new MockStore();
 
-vi.mock('crypto', () => {
-  return {
-    randomUUID: vi.fn(() => 'mock-uuid-1'),
-  };
-});
-
 describe('Workflow', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-
-    let counter = 0;
-    (randomUUID as vi.Mock).mockImplementation(() => {
-      return `mock-uuid-${++counter}`;
-    });
   });
 
   describe('Streaming', () => {
@@ -1086,7 +1075,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should execute multiple steps in parallel', async () => {
+    it.only('should execute multiple steps in parallel', async () => {
       const step1Action = vi.fn().mockImplementation(async () => {
         return { value: 'step1' };
       });
@@ -1115,6 +1104,8 @@ describe('Workflow', () => {
       });
 
       workflow.parallel([step1, step2]).commit();
+
+      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -5967,6 +5958,13 @@ describe('Workflow', () => {
         )
         .commit();
 
+      new Mastra({
+        workflows: {
+          'counter-workflow': counterWorkflow,
+        },
+        storage: testStorage,
+      });
+
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
 
@@ -7178,7 +7176,7 @@ describe('Workflow', () => {
   });
 
   describe('consecutive parallel executions', () => {
-    it.only('should support consecutive parallel calls with proper type inference', async () => {
+    it('should support consecutive parallel calls with proper type inference', async () => {
       // First parallel stage steps
       const step1 = createStep({
         id: 'step1',
