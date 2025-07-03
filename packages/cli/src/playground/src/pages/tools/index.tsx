@@ -1,5 +1,4 @@
 import { useAgents } from '@/hooks/use-agents';
-
 import {
   EntityName,
   EntityDescription,
@@ -21,10 +20,9 @@ import {
 } from '@mastra/playground-ui';
 import { Link } from 'react-router';
 import { startTransition, useMemo, useRef, useState } from 'react';
-import { GetAgentResponse } from '@mastra/client-js';
+import { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
 import { SearchIcon } from 'lucide-react';
 import { useTools } from '@/hooks/use-all-tools';
-import { Tool } from '@mastra/core/tools';
 
 interface ToolWithAgents {
   id: string;
@@ -32,7 +30,7 @@ interface ToolWithAgents {
   agents: Array<{ id: string; name: string }>;
 }
 
-const prepareAgents = (tools: Record<string, Tool>, agents: Record<string, GetAgentResponse>) => {
+const prepareAgents = (tools: Record<string, GetToolResponse>, agents: Record<string, GetAgentResponse>) => {
   const toolsWithAgents = new Map<string, ToolWithAgents>();
   const agentsKeys = Object.keys(agents);
 

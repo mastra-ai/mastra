@@ -367,7 +367,7 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
 
-    it('should execute a a sleep step', async ctx => {
+    it('should execute a sleep step', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -445,6 +445,100 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps['step2']).toMatchObject({
         status: 'success',
         output: { result: 'slept successfully: success' },
+        // payload: { result: 'success' },
+        // startedAt: expect.any(Number),
+        // endedAt: expect.any(Number),
+      });
+
+      expect(endTime - startTime).toBeGreaterThan(1000);
+
+      srv.close();
+    });
+
+    it('should execute a sleep step with fn parameter', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const execute = vi.fn<any>().mockResolvedValue({ value: 1000 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.number() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { value: inputData.value + 1000 };
+        },
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        steps: [step1],
+      });
+
+      workflow
+        .then(step1)
+        .sleep(async ({ inputData }) => {
+          return inputData.value;
+        })
+        .then(step2)
+        .commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRunAsync();
+      const startTime = Date.now();
+      const result = await run.start({ inputData: {} });
+      const endTime = Date.now();
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toMatchObject({
+        status: 'success',
+        output: { value: 1000 },
+        // payload: {},
+        // startedAt: expect.any(Number),
+        // endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toMatchObject({
+        status: 'success',
+        output: { value: 2000 },
         // payload: { result: 'success' },
         // startedAt: expect.any(Number),
         // endedAt: expect.any(Number),
@@ -537,6 +631,100 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps['step2']).toMatchObject({
         status: 'success',
         output: { result: 'slept successfully: success' },
+        // payload: { result: 'success' },
+        // startedAt: expect.any(Number),
+        // endedAt: expect.any(Number),
+      });
+
+      expect(endTime - startTime).toBeGreaterThan(1000);
+
+      srv.close();
+    });
+
+    it('should execute a sleep until step with fn parameter', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const execute = vi.fn<any>().mockResolvedValue({ value: 1000 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.number() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { value: inputData.value + 1000 };
+        },
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        steps: [step1],
+      });
+
+      workflow
+        .then(step1)
+        .sleepUntil(async ({ inputData }) => {
+          return new Date(Date.now() + inputData.value);
+        })
+        .then(step2)
+        .commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRunAsync();
+      const startTime = Date.now();
+      const result = await run.start({ inputData: {} });
+      const endTime = Date.now();
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toMatchObject({
+        status: 'success',
+        output: { value: 1000 },
+        // payload: {},
+        // startedAt: expect.any(Number),
+        // endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toMatchObject({
+        status: 'success',
+        output: { value: 2000 },
         // payload: { result: 'success' },
         // startedAt: expect.any(Number),
         // endedAt: expect.any(Number),
@@ -6467,6 +6655,215 @@ describe('MastraInngestWorkflow', () => {
         output: { result: 'success2' },
         payload: {
           result: 'success1',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
+    it('should handle basic sleep waiting flow with fn parameter', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1Action = vi.fn<any>().mockResolvedValue({ value: 1000 });
+      const step2Action = vi.fn<any>().mockResolvedValue({ value: 2000 });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.number() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+      });
+      workflow
+        .then(step1)
+        .sleep(async ({ inputData }) => {
+          return inputData.value;
+        })
+        .then(step2)
+        .commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const runId = 'test-run-id';
+      let watchData: StreamEvent[] = [];
+      const run = await workflow.createRunAsync({
+        runId,
+      });
+
+      await resetInngest();
+
+      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+
+      // Start watching the workflow
+      const collectedStreamData: StreamEvent[] = [];
+      for await (const data of stream) {
+        collectedStreamData.push(JSON.parse(JSON.stringify(data)));
+      }
+      watchData = collectedStreamData;
+
+      const executionResult = await getWorkflowState();
+
+      await resetInngest();
+
+      srv.close();
+
+      expect(watchData.length).toBe(11);
+      expect(watchData).toMatchObject([
+        {
+          payload: {
+            runId: 'test-run-id',
+          },
+          type: 'start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            startedAt: expect.any(Number),
+            status: 'running',
+            payload: {},
+          },
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            output: {
+              value: 1000,
+            },
+            endedAt: expect.any(Number),
+            status: 'success',
+          },
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step1',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: expect.any(String),
+            startedAt: expect.any(Number),
+            status: 'waiting',
+            payload: {
+              value: 1000,
+            },
+          },
+          type: 'step-waiting',
+        },
+        {
+          payload: {
+            id: expect.any(String),
+            endedAt: expect.any(Number),
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              value: 1000,
+            },
+          },
+          type: 'step-result',
+        },
+        {
+          type: 'step-finish',
+          payload: {
+            id: expect.any(String),
+            metadata: {},
+          },
+        },
+        {
+          payload: {
+            id: 'step2',
+            payload: {
+              value: 1000,
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step2',
+            output: {
+              value: 2000,
+            },
+            endedAt: expect.any(Number),
+            status: 'success',
+          },
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step2',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            runId: 'test-run-id',
+          },
+          type: 'finish',
+        },
+      ]);
+
+      // Verify execution completed successfully
+      expect(executionResult.steps.step1).toMatchObject({
+        status: 'success',
+        output: { value: 1000 },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(executionResult.steps.step2).toMatchObject({
+        status: 'success',
+        output: { value: 2000 },
+        payload: {
+          value: 1000,
         },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),

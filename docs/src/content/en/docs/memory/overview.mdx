@@ -96,7 +96,7 @@ const memory = new Memory({
 });
 ```
 
-By default, title generation uses the same model as your agent. For cost optimization, you can specify a cheaper model specifically for title generation:
+By default, title generation uses the same model and default instructions as your agent. For customization or cost optimization, you can specify a different model or provide custom instructions specifically for title generation:
 
 ```typescript {5-7}
 const memory = new Memory({
@@ -104,6 +104,7 @@ const memory = new Memory({
     threads: {
       generateTitle: {
         model: openai("gpt-4.1-nano"), // Use cheaper model for titles
+        instructions: "Generate a concise title for this conversation based on the first user message.",
       },
     },
   },
