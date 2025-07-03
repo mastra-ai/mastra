@@ -70,5 +70,20 @@
     "@mastra/voice-speechify": "0.10.4",
     "@mastra/inngest": "0.11.2"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_deployer-5602-dependencies",
+    "@mastra_deployer-cloudflare-5602-dependencies",
+    "@mastra_dynamodb-5594-dependencies",
+    "@mastra_memory-5484-dependencies",
+    "@mastra_pg-5484-dependencies",
+    "chatty-hornets-buy",
+    "cruel-walls-watch",
+    "cute-steaks-remain",
+    "honest-squids-glow",
+    "petite-moons-smell",
+    "pink-radios-smash",
+    "polite-clouds-return",
+    "purple-chairs-cough",
+    "whole-pans-cheer"
+  ]
 }
