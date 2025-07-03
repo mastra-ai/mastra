@@ -1,5 +1,6 @@
-export function extractStatementsPrompt({ output }: { output: string }) {
-  return `
+import { renderTemplate } from '../utils';
+
+export const EXTRACT_STATEMENTS_PROMPT = `
         Given the text, break it down into meaningful statements while preserving context and relationships.
     
         Don't split too aggressively.
@@ -27,14 +28,16 @@ export function extractStatementsPrompt({ output }: { output: string }) {
         Return empty list for empty input.
         
         Text:
-        ${output}
+        {{output}}
         
         JSON:
   `;
+
+export function extractStatementsPrompt({ output }: { output: string }) {
+  return renderTemplate(EXTRACT_STATEMENTS_PROMPT, { output });
 }
 
-export function evaluateStatementsPrompt({ input, statements }: { input: string; statements: string[] }) {
-  return `Evaluate each statement's relevance to the input question, considering direct answers, related context, and uncertain cases.
+export const EVALUATE_STATEMENTS_PROMPT = `Evaluate each statement's relevance to the input question, considering direct answers, related context, and uncertain cases.
   
       Return JSON with array of result objects. Each result must include:
       - "result": "yes", "no", or "unsure"
@@ -149,39 +152,34 @@ export function evaluateStatementsPrompt({ input, statements }: { input: string;
           ]
       }}
   
-  The number of results MUST MATCH the number of statements exactly.
+    The number of results MUST MATCH the number of statements exactly.
   
     Input:
-    ${input}
+    {{input}}
   
-    Number of statements: ${statements.length === 0 ? '1' : statements.length}
+    Number of statements: {{statementsLength}}
   
     Statements:
-    ${statements}
+    {{statements}}
   
     JSON:
-    `;
+`;
+
+export function evaluateStatementsPrompt({ input, statements }: { input: string; statements: string[] }) {
+  return renderTemplate(EVALUATE_STATEMENTS_PROMPT, {
+    input,
+    statements,
+    statementsLength: statements.length === 0 ? 1 : statements.length,
+  });
 }
 
-export function generateReasonPrompt({
-  score,
-  results,
-  input,
-  output,
-  scale = 1,
-}: {
-  score: number;
-  results: { result: string; reason: string }[];
-  input: string;
-  output: string;
-  scale: number;
-}) {
-  return `Explain the irrelevancy score where 0 is the lowest and ${scale} is the highest for the LLM's response using this context:
+export const GENERATE_REASON_PROMPT = `
+    Explain the irrelevancy score where 0 is the lowest and {{scale}} is the highest for the LLM's response using this context:
       Context:
-      Input: ${input}
-      Output: ${output}
-      Score: ${score}
-      Results: ${JSON.stringify(results)}
+      Input: {{input}}
+      Output: {{output}}
+      Score: {{score}}
+      Results: {{results}}
       
       Rules:
       - Explain score based on mix of direct answers and related context
@@ -202,5 +200,20 @@ export function generateReasonPrompt({
         {
             "reason": "The score is 3 because while the answer discusses the right topic, it doesn't directly address the question"
         }
-        `;
+`;
+
+export function generateReasonPrompt({
+  score,
+  results,
+  input,
+  output,
+  scale = 1,
+}: {
+  score: number;
+  results: { result: string; reason: string }[];
+  input: string;
+  output: string;
+  scale: number;
+}) {
+  return renderTemplate(GENERATE_REASON_PROMPT, { score, results: JSON.stringify(results), input, output, scale });
 }

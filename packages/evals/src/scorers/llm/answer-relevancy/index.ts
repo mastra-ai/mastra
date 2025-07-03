@@ -1,12 +1,19 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraLanguageModel } from '@mastra/core/agent';
 import { MastraError } from '@mastra/core/error';
-import { Scorer } from '@mastra/core/eval';
+import { LLMScorer } from '@mastra/core/eval';
 import type { ScoreResult } from '@mastra/core/eval';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { roundToTwoDecimals } from '../../../metrics/llm/utils';
-import { evaluateStatementsPrompt, extractStatementsPrompt, generateReasonPrompt } from './prompts';
+import {
+  EVALUATE_STATEMENTS_PROMPT,
+  evaluateStatementsPrompt,
+  EXTRACT_STATEMENTS_PROMPT,
+  extractStatementsPrompt,
+  GENERATE_REASON_PROMPT,
+  generateReasonPrompt,
+} from './prompts';
 
 export const DEFAULT_OPTIONS: Record<'uncertaintyWeight' | 'scale', number> = {
   uncertaintyWeight: 0.3,
@@ -85,9 +92,12 @@ export function calculateScore({
   return roundToTwoDecimals(score * scale);
 }
 
-export class AnswerRelevancyScorer extends Scorer {
+export class AnswerRelevancyScorer extends LLMScorer {
   #agent: Agent;
   #options: AnswerRelevancyMetricOptions;
+
+  name = 'Answer Relevancy Scorer';
+  description = 'A scorer that evaluates the relevancy of an LLM output to an input';
 
   constructor({
     model,
@@ -100,6 +110,23 @@ export class AnswerRelevancyScorer extends Scorer {
 
     this.#agent = createAnswerRelevancyJudge({ model });
     this.#options = options || DEFAULT_OPTIONS;
+  }
+
+  prompts() {
+    return {
+      extractStatements: {
+        prompt: EXTRACT_STATEMENTS_PROMPT,
+        description: 'Extract relevant statements from the LLM output',
+      },
+      evaluateStatements: {
+        prompt: EVALUATE_STATEMENTS_PROMPT,
+        description: 'Evaluate the relevance of the statements to the input',
+      },
+      reasoning: {
+        prompt: GENERATE_REASON_PROMPT,
+        description: 'Reason about the results',
+      },
+    };
   }
 
   async score({ input, output }: { input: string; output: string }): Promise<ScoreResult> {
