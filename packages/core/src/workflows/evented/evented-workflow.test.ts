@@ -1016,7 +1016,7 @@ describe('Workflow', () => {
       );
     });
 
-    it.only('should execute a single step workflow successfully', async () => {
+    it('should execute a single step workflow successfully', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
@@ -1227,7 +1227,7 @@ describe('Workflow', () => {
         });
       });
 
-      it('should provide access to step results and trigger data via getStepResult helper', async () => {
+      it.only('should provide access to step results and trigger data via getStepResult helper', async () => {
         const step1Action = vi.fn().mockImplementation(async ({ inputData }) => {
           // Test accessing trigger data with correct type
           expect(inputData).toEqual({ inputValue: 'test-input' });
@@ -1272,6 +1272,8 @@ describe('Workflow', () => {
         });
 
         workflow.then(step1).then(step2).commit();
+
+        new Mastra({ workflows: { 'test-workflow': workflow } });
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { inputValue: 'test-input' } });
