@@ -37,6 +37,7 @@ export type ScorerHookData = {
   entity: Record<string, any>;
   entityType: ScoringEntityType;
   runtimeContext: Record<string, any>;
+  structuredOutput?: boolean;
 };
 
 export type ScoreRowData = {

@@ -329,6 +329,8 @@ export abstract class MastraStorage extends MastraBase {
    * SCORERS
    */
 
+  abstract getScoreById({ id }: { id: string }): Promise<ScoreRowData | null>;
+
   abstract saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }>;
 
   abstract getScoresByRunId({

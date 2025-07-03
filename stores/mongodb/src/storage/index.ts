@@ -947,6 +947,13 @@ export class MongoDBStore extends MastraStorage {
   /**
    * SCORERS - Not implemented
    */
+  async getScoreById({ id: _id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new Error(
+      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
+        `To use scores functionality, implement the required methods in this storage adapter.`,
+    );
+  }
+
   async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
     throw new Error(
       `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +

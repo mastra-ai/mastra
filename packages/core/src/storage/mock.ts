@@ -251,13 +251,24 @@ export class MockStore extends MastraStorage {
     return traces.slice(start, end);
   }
 
+  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
+    this.logger.debug(`MockStore: getScoreById called for ${id}`);
+    return this.data.mastra_scorers[id] || null;
+  }
+
   async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
     this.logger.debug(`MockStore: saveScore called for ${score.id}`);
     this.data.mastra_scorers[score.id] = score;
     return { score };
   }
 
-  async getScoresByRunId({ runId, pagination }: { runId: string, pagination: StoragePagination }): Promise<{ pagination: PaginationInfo, scores: ScoreRowData[] }> {
+  async getScoresByRunId({
+    runId,
+    pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     this.logger.debug(`MockStore: getScoresByRunId called for ${runId}`);
     const scores = Object.values(this.data.mastra_scorers).filter((s: any) => s.runId === runId);
     return {
@@ -271,9 +282,19 @@ export class MockStore extends MastraStorage {
     };
   }
 
-  async getScoresByEntityId({ entityId, entityType, pagination }: { entityId: string, entityType: string, pagination: StoragePagination }): Promise<{ pagination: PaginationInfo, scores: ScoreRowData[] }> {
+  async getScoresByEntityId({
+    entityId,
+    entityType,
+    pagination,
+  }: {
+    entityId: string;
+    entityType: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     this.logger.debug(`MockStore: getScoresByEntityId called for ${entityId} and ${entityType}`);
-    const scores = Object.values(this.data.mastra_scorers).filter((s: any) => s.entityId === entityId && s.entityType === entityType);
+    const scores = Object.values(this.data.mastra_scorers).filter(
+      (s: any) => s.entityId === entityId && s.entityType === entityType,
+    );
     return {
       scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
       pagination: {

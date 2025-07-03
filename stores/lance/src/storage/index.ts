@@ -1447,6 +1447,15 @@ export class LanceStorage extends MastraStorage {
     throw new Error('Method not implemented');
   }
 
+  async getScoreById({ id: _id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new MastraError({
+      id: 'LANCE_STORAGE_METHOD_NOT_IMPLEMENTED',
+      text: 'getScoreById method is not implemented for LanceStorage',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+    });
+  }
+
   async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
     throw new MastraError({
       id: 'LANCE_STORAGE_METHOD_NOT_IMPLEMENTED',

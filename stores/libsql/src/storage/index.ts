@@ -1204,12 +1204,30 @@ export class LibSQLStore extends MastraStorage {
     }
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM ${TABLE_SCORERS} WHERE id = ?`,
+      args: [id],
+    });
+    return result.rows?.[0] ? this.transformScoreRow(result.rows[0]) : null;
+  }
+
+  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
     try {
+      const id = crypto.randomUUID();
+
       await this.insert({
         tableName: TABLE_SCORERS,
-        record: score,
+        record: {
+          id,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          ...score,
+        },
       });
+
+      const scoreFromDb = await this.getScoreById({ id });
+      return { score: scoreFromDb! };
     } catch (error) {
       throw new MastraError(
         {
@@ -1220,7 +1238,6 @@ export class LibSQLStore extends MastraStorage {
         error,
       );
     }
-    return { score };
   }
 
   async getScoresByRunId({

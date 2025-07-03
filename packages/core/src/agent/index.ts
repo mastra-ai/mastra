@@ -1357,6 +1357,7 @@ export class Agent<
         runId,
         messageList,
         toolCallsCollection,
+        structuredOutput,
       }: {
         runId: string;
         result: Record<string, any>;
@@ -1366,6 +1367,7 @@ export class Agent<
         outputText: string;
         messageList: MessageList;
         //@TODO: types
+        structuredOutput?: boolean;
         toolCallsCollection: Map<string, any>;
       }) => {
         const resToLog = {
@@ -1499,6 +1501,7 @@ export class Agent<
           output: outputForScoring,
           instructions,
           runtimeContext,
+          structuredOutput,
         });
       },
     };
@@ -1511,6 +1514,7 @@ export class Agent<
     output,
     instructions,
     runtimeContext,
+    structuredOutput,
   }: {
     messageList: MessageList;
     runId: string;
@@ -1518,6 +1522,7 @@ export class Agent<
     outputText: string;
     instructions: string;
     runtimeContext: RuntimeContext;
+    structuredOutput?: boolean;
   }) {
     const agentName = this.name;
     const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
@@ -1563,8 +1568,6 @@ export class Agent<
           return;
         }
 
-        console.log(JSON.stringify(messageList.get.all.ui(), null, 2), 'MESSAGE LIST');
-
         const payload: ScorerHookData = {
           scorer: {
             id,
@@ -1579,7 +1582,9 @@ export class Agent<
           entity: {
             id: this.id,
             name: this.name,
+            instructions: instructions,
           },
+          structuredOutput,
           entityType: 'AGENT',
         };
 
@@ -1718,6 +1723,7 @@ export class Agent<
         runId,
         messageList,
         toolCallsCollection,
+        structuredOutput: true,
       });
 
       const newResult = result as any;
@@ -1786,6 +1792,7 @@ export class Agent<
       runId,
       messageList,
       toolCallsCollection,
+      structuredOutput: true,
     });
 
     return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;

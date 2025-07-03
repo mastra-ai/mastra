@@ -1465,6 +1465,15 @@ export class ClickhouseStore extends MastraStorage {
     throw new Error('Method not implemented');
   }
 
+  async getScoreById({ id: _id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_METHOD_NOT_IMPLEMENTED',
+      text: 'getScoreById method is not implemented for ClickhouseStore',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+    });
+  }
+
   async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
     throw new MastraError({
       id: 'CLICKHOUSE_STORAGE_METHOD_NOT_IMPLEMENTED',

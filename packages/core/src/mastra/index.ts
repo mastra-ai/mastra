@@ -62,7 +62,14 @@ export function createOnScorerHook(mastra: Mastra) {
         output: hookData.output.text as string,
       });
 
-      console.log({ score });
+      const storage = mastra.getStorage();
+
+      const { structuredOutput: _structuredOutput, ...rest } = hookData;
+
+      await storage?.saveScore({
+        ...rest,
+        result: score,
+      });
     }
   };
 }
