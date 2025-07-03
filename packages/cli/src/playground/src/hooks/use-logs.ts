@@ -3,6 +3,16 @@ import type { BaseLogMessage } from '@mastra/core/logger';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+const LogLevelMap = {
+  10: 'trace',
+  20: 'debug',
+  30: 'info',
+  40: 'warn',
+  50: 'error',
+  60: 'fatal',
+  100: 'silent',
+};
+
 export const useLogsByRunId = (runId: string) => {
   const [logs, setLogs] = useState<BaseLogMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -22,7 +32,9 @@ export const useLogsByRunId = (runId: string) => {
       const res = await client.getLogForRun({ transportId, runId: runIdToUse });
       setLogs(
         res.logs.map(log => ({
-          level: log.level,
+          level: (typeof log.level === 'number'
+            ? LogLevelMap[log.level as keyof typeof LogLevelMap]
+            : log.level) as BaseLogMessage['level'],
           time: log.time,
           pid: log.pid,
           hostname: log.hostname,
