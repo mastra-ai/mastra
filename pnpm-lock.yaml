@@ -1105,7 +1105,7 @@ importers:
         specifier: ^9.1.0
         version: 9.1.0(@types/react@19.1.8)(react@19.1.0)
       react-router:
-        specifier: ^7.3.0
+        specifier: ^7.6.3
         version: 7.6.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       remark-gfm:
         specifier: ^4.0.1
