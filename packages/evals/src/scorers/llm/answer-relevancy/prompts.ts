@@ -1,6 +1,6 @@
 import { renderTemplate } from '../utils';
 
-export const EXTRACT_STATEMENTS_PROMPT = `
+export const EXTRACT_PROMPT = `
         Given the text, break it down into meaningful statements while preserving context and relationships.
     
         Don't split too aggressively.
@@ -33,11 +33,11 @@ export const EXTRACT_STATEMENTS_PROMPT = `
         JSON:
   `;
 
-export function extractStatementsPrompt({ output }: { output: string }) {
-  return renderTemplate(EXTRACT_STATEMENTS_PROMPT, { output });
+export function extractPrompt({ output }: { output: string }) {
+  return renderTemplate(EXTRACT_PROMPT, { output });
 }
 
-export const EVALUATE_STATEMENTS_PROMPT = `Evaluate each statement's relevance to the input question, considering direct answers, related context, and uncertain cases.
+export const SCORE_PROMPT = `Evaluate each statement's relevance to the input question, considering direct answers, related context, and uncertain cases.
   
       Return JSON with array of result objects. Each result must include:
       - "result": "yes", "no", or "unsure"
@@ -165,15 +165,15 @@ export const EVALUATE_STATEMENTS_PROMPT = `Evaluate each statement's relevance t
     JSON:
 `;
 
-export function evaluateStatementsPrompt({ input, statements }: { input: string; statements: string[] }) {
-  return renderTemplate(EVALUATE_STATEMENTS_PROMPT, {
+export function scorePrompt({ input, statements }: { input: string; statements: string[] }) {
+  return renderTemplate(SCORE_PROMPT, {
     input,
     statements,
     statementsLength: statements.length === 0 ? 1 : statements.length,
   });
 }
 
-export const GENERATE_REASON_PROMPT = `
+export const REASON_PROMPT = `
     Explain the irrelevancy score where 0 is the lowest and {{scale}} is the highest for the LLM's response using this context:
       Context:
       Input: {{input}}
@@ -202,7 +202,7 @@ export const GENERATE_REASON_PROMPT = `
         }
 `;
 
-export function generateReasonPrompt({
+export function reasonPrompt({
   score,
   results,
   input,
@@ -215,5 +215,5 @@ export function generateReasonPrompt({
   output: string;
   scale: number;
 }) {
-  return renderTemplate(GENERATE_REASON_PROMPT, { score, results: JSON.stringify(results), input, output, scale });
+  return renderTemplate(REASON_PROMPT, { score, results: JSON.stringify(results), input, output, scale });
 }
