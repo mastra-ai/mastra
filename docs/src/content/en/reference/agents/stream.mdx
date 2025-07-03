@@ -271,10 +271,11 @@ Configuration options for memory management:
           parameters: [
             {
               name: "generateTitle",
-              type: "boolean | { model: LanguageModelV1 | ((ctx: RuntimeContext) => LanguageModelV1 | Promise<LanguageModelV1>) }",
+              type: "boolean | { model: LanguageModelV1 | ((ctx: RuntimeContext) => LanguageModelV1 | Promise<LanguageModelV1>), instructions: string | ((ctx: RuntimeContext) => string | Promise<string>) }",
               isOptional: true,
               description:
-                "Controls automatic thread title generation from the user's first message. Can be a boolean to enable/disable using the agent's model, or an object with a custom model for title generation (useful for cost optimization). Example: { model: openai('gpt-4.1-nano') }",
+                "Controls automatic thread title generation from the user's first message. Can be a boolean to enable/disable using the agent's model, or an object specifying a custom model and/or custom instructions for title generation (useful for cost optimization or title customization).
+Example: { model: openai('gpt-4.1-nano'), instructions: 'Generate a concise title based on the initial user message.' }",
             },
           ],
         },

@@ -1009,6 +1009,384 @@ describe('agent', () => {
     expect(agentCallCount).toBe(1); // But main agent should still be called
   });
 
+  it('should use custom instructions for title generation when provided in generateTitle config', async () => {
+    let capturedPrompt = '';
+    const customInstructions = 'Generate a creative and engaging title based on the conversation';
+
+    const mockMemory = new MockMemory();
+
+    // Override getMergedThreadConfig to return our test config with custom instructions
+    mockMemory.getMergedThreadConfig = () => {
+      return {
+        threads: {
+          generateTitle: {
+            model: new MockLanguageModelV1({
+              doGenerate: async options => {
+                // Capture the prompt to verify custom instructions are used
+                const messages = options.prompt;
+                const systemMessage = messages.find((msg: any) => msg.role === 'system');
+                if (systemMessage) {
+                  capturedPrompt = systemMessage.content;
+                }
+                return {
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { promptTokens: 5, completionTokens: 10 },
+                  text: `Creative Custom Title`,
+                };
+              },
+            }),
+            instructions: customInstructions,
+          },
+        },
+      };
+    };
+
+    const agent = new Agent({
+      name: 'custom-instructions-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    await agent.generate('What is the weather like today?', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-custom-instructions',
+          title: 'New Thread 2024-01-01T00:00:00.000Z',
+        },
+      },
+    });
+
+    // Give some time for the async title generation to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Verify the custom instructions were used
+    expect(capturedPrompt).toBe(customInstructions);
+
+    // Verify the thread was updated with the custom title
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-custom-instructions' });
+    expect(thread).toBeDefined();
+    expect(thread?.resourceId).toBe('user-1');
+    expect(thread?.title).toBe('Creative Custom Title');
+  });
+
+  it('should support dynamic instructions selection for title generation', async () => {
+    let capturedPrompt = '';
+    let usedLanguage = '';
+
+    const mockMemory = new MockMemory();
+
+    // Override getMergedThreadConfig to return dynamic instructions selection
+    mockMemory.getMergedThreadConfig = () => {
+      return {
+        threads: {
+          generateTitle: {
+            model: new MockLanguageModelV1({
+              doGenerate: async options => {
+                const messages = options.prompt;
+                const systemMessage = messages.find((msg: any) => msg.role === 'system');
+                if (systemMessage) {
+                  capturedPrompt = systemMessage.content;
+                }
+
+                if (capturedPrompt.includes('簡潔なタイトル')) {
+                  usedLanguage = 'ja';
+                  return {
+                    rawCall: { rawPrompt: null, rawSettings: {} },
+                    finishReason: 'stop',
+                    usage: { promptTokens: 5, completionTokens: 10 },
+                    text: `日本語のタイトル`,
+                  };
+                } else {
+                  usedLanguage = 'en';
+                  return {
+                    rawCall: { rawPrompt: null, rawSettings: {} },
+                    finishReason: 'stop',
+                    usage: { promptTokens: 5, completionTokens: 10 },
+                    text: `English Title`,
+                  };
+                }
+              },
+            }),
+            instructions: ({ runtimeContext }: { runtimeContext: RuntimeContext }) => {
+              const language = runtimeContext.get('language');
+              return language === 'ja'
+                ? '会話内容に基づいて簡潔なタイトルを生成してください'
+                : 'Generate a concise title based on the conversation';
+            },
+          },
+        },
+      };
+    };
+
+    const agent = new Agent({
+      name: 'dynamic-instructions-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    // Test with Japanese context
+    const japaneseContext = new RuntimeContext();
+    japaneseContext.set('language', 'ja');
+
+    await agent.generate('Test message', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-ja',
+          title: 'New Thread 2024-01-01T00:00:00.000Z',
+        },
+      },
+      runtimeContext: japaneseContext,
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(usedLanguage).toBe('ja');
+    expect(capturedPrompt).toContain('簡潔なタイトル');
+
+    // Reset and test with English context
+    capturedPrompt = '';
+    usedLanguage = '';
+    const englishContext = new RuntimeContext();
+    englishContext.set('language', 'en');
+
+    await agent.generate('Test message', {
+      memory: {
+        resource: 'user-2',
+        thread: {
+          id: 'thread-en',
+          title: 'New Thread 2024-01-01T00:00:00.000Z',
+        },
+      },
+      runtimeContext: englishContext,
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(usedLanguage).toBe('en');
+    expect(capturedPrompt).toContain('Generate a concise title based on the conversation');
+  });
+
+  it('should use default instructions when instructions config is undefined', async () => {
+    let capturedPrompt = '';
+
+    const mockMemory = new MockMemory();
+
+    mockMemory.getMergedThreadConfig = () => {
+      return {
+        threads: {
+          generateTitle: {
+            model: new MockLanguageModelV1({
+              doGenerate: async options => {
+                const messages = options.prompt;
+                const systemMessage = messages.find((msg: any) => msg.role === 'system');
+                if (systemMessage) {
+                  capturedPrompt = systemMessage.content;
+                }
+                return {
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { promptTokens: 5, completionTokens: 10 },
+                  text: `Default Title`,
+                };
+              },
+            }),
+            // instructions field is intentionally omitted
+          },
+        },
+      };
+    };
+
+    const agent = new Agent({
+      name: 'default-instructions-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    await agent.generate('Test message', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-default',
+          title: 'New Thread 2024-01-01T00:00:00.000Z',
+        },
+      },
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Verify that default instructions were used
+    expect(capturedPrompt).toContain('you will generate a short title');
+    expect(capturedPrompt).toContain('ensure it is not more than 80 characters long');
+
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-default' });
+    expect(thread).toBeDefined();
+    expect(thread?.title).toBe('Default Title');
+  });
+
+  it('should handle errors in dynamic instructions gracefully', async () => {
+    const mockMemory = new MockMemory();
+
+    // Pre-create the thread with the expected title
+    const originalTitle = 'New Thread 2024-01-01T00:00:00.000Z';
+    await mockMemory.saveThread({
+      thread: {
+        id: 'thread-instructions-error',
+        title: originalTitle,
+        resourceId: 'user-1',
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      },
+    });
+
+    mockMemory.getMergedThreadConfig = () => {
+      return {
+        threads: {
+          generateTitle: {
+            model: new MockLanguageModelV1({
+              doGenerate: async () => {
+                return {
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { promptTokens: 5, completionTokens: 10 },
+                  text: `Title with error handling`,
+                };
+              },
+            }),
+            instructions: () => {
+              throw new Error('Instructions selection failed');
+            },
+          },
+        },
+      };
+    };
+
+    const agent = new Agent({
+      name: 'error-instructions-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    // This should not throw, title generation happens async
+    await agent.generate('Test message', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-instructions-error',
+          title: originalTitle,
+        },
+      },
+    });
+
+    // Give time for async title generation
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Thread should still exist with the original title (preserved when generation fails)
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-instructions-error' });
+    expect(thread).toBeDefined();
+    expect(thread?.title).toBe(originalTitle);
+  });
+
+  it('should handle empty or null instructions appropriately', async () => {
+    let capturedPrompt = '';
+
+    const mockMemory = new MockMemory();
+
+    // Test with empty string instructions
+    mockMemory.getMergedThreadConfig = () => {
+      return {
+        threads: {
+          generateTitle: {
+            model: new MockLanguageModelV1({
+              doGenerate: async options => {
+                const messages = options.prompt;
+                const systemMessage = messages.find((msg: any) => msg.role === 'system');
+                if (systemMessage) {
+                  capturedPrompt = systemMessage.content;
+                }
+                return {
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { promptTokens: 5, completionTokens: 10 },
+                  text: `Title with default instructions`,
+                };
+              },
+            }),
+            instructions: '', // Empty string
+          },
+        },
+      };
+    };
+
+    const agent = new Agent({
+      name: 'empty-instructions-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    await agent.generate('Test message', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-empty-instructions',
+          title: 'New Thread 2024-01-01T00:00:00.000Z',
+        },
+      },
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Verify that default instructions were used when empty string was provided
+    expect(capturedPrompt).toContain('you will generate a short title');
+
+    // Test with null instructions (via dynamic function)
+    capturedPrompt = '';
+    mockMemory.getMergedThreadConfig = () => {
+      return {
+        threads: {
+          generateTitle: {
+            model: new MockLanguageModelV1({
+              doGenerate: async options => {
+                const messages = options.prompt;
+                const systemMessage = messages.find((msg: any) => msg.role === 'system');
+                if (systemMessage) {
+                  capturedPrompt = systemMessage.content;
+                }
+                return {
+                  rawCall: { rawPrompt: null, rawSettings: {} },
+                  finishReason: 'stop',
+                  usage: { promptTokens: 5, completionTokens: 10 },
+                  text: `Title with null instructions`,
+                };
+              },
+            }),
+            instructions: () => '', // Function returning empty string
+          },
+        },
+      };
+    };
+
+    await agent.generate('Test message', {
+      memory: {
+        resource: 'user-2',
+        thread: {
+          id: 'thread-null-instructions',
+          title: 'New Thread 2024-01-01T00:00:00.000Z',
+        },
+      },
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Verify that default instructions were used when null was returned
+    expect(capturedPrompt).toContain('you will generate a short title');
+  });
+
   describe('voice capabilities', () => {
     class MockVoice extends MastraVoice {
       async speak(): Promise<NodeJS.ReadableStream> {

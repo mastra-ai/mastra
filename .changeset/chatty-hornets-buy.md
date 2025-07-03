@@ -3,4 +3,4 @@
 'create-mastra': patch
 ---
 
-agent network display
+Map log level number to string value

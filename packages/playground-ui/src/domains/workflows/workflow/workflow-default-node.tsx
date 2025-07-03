@@ -8,6 +8,7 @@ import { Clock } from './workflow-clock';
 
 import { cn } from '@/lib/utils';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
+import { WorkflowSendEventFormProps } from './workflow-run-event-form';
 
 export type DefaultNode = Node<
   {
@@ -25,6 +26,7 @@ export type DefaultNode = Node<
 
 export interface WorkflowDefaultNodeProps {
   onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
+  onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
   parentWorkflowName?: string;
 }
 
@@ -32,6 +34,7 @@ export function WorkflowDefaultNode({
   data,
   onShowTrace,
   parentWorkflowName,
+  onSendEvent,
 }: NodeProps<DefaultNode> & WorkflowDefaultNodeProps) {
   const { steps, isRunning, runId } = useCurrentRun();
   const { label, description, withoutTopHandle, withoutBottomHandle, mapConfig, event, duration, date } = data;
@@ -99,7 +102,10 @@ export function WorkflowDefaultNode({
           output={step?.output}
           error={step?.error}
           mapConfig={mapConfig}
+          event={step?.status === 'waiting' ? event : undefined}
           onShowTrace={runId && onShowTrace ? () => onShowTrace?.({ runId, stepName: fullLabel }) : undefined}
+          runId={runId}
+          onSendEvent={onSendEvent}
         />
       </div>
 
