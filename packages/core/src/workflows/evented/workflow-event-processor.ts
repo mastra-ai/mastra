@@ -137,6 +137,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResults: Record<string, StepResult<any, any, any, any>>;
     };
   }) {
+    let runIdx = 0;
     let stepGraph: StepFlowEntry[] = workflow.stepGraph;
 
     if (!executionPath?.length) {
@@ -152,7 +153,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
-    const step: StepFlowEntry | undefined = stepGraph[executionPath[0]!];
+    let step: StepFlowEntry | undefined = stepGraph[executionPath[0]!];
 
     if (!step) {
       return this.errorWorkflow(
@@ -167,7 +168,47 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
-    // TODO: add support for .parallel()
+    if (step.type === 'parallel' && executionPath.length > 1) {
+      step = step.steps[executionPath[1]!] as StepFlowEntry;
+      runIdx = 1;
+    } else if (step.type === 'parallel') {
+      await Promise.all(
+        step.steps.map(async (_step, idx) => {
+          return this.pubsub.publish('workflows', {
+            type: 'workflow.step.run',
+            data: {
+              workflowId,
+              runId,
+              executionPath: executionPath.concat([idx]),
+              resume,
+              stepResults,
+              prevResult,
+              resumeData,
+              parentWorkflow,
+            },
+          });
+        }),
+      );
+      return;
+    } else if (step.type === 'step' && executionPath.length > 1) {
+      const asWorkflow = step.step as Workflow;
+      await this.pubsub.publish('workflows', {
+        type: resume ? 'workflow.resume' : 'workflow.start',
+        data: {
+          workflowId: asWorkflow.id,
+          parentWorkflow: { workflowId, runId, executionPath, resume },
+          executionPath: executionPath.slice(1 + runIdx),
+          runId: '', // TODO: generate runId
+          resume,
+          stepResults: {},
+          prevResult: prevResult?.status === 'success' ? prevResult.output : undefined,
+          resumeData,
+        },
+      });
+
+      return;
+    }
+
     if (step.type !== 'step') {
       return this.errorWorkflow(
         workflowId,
@@ -181,25 +222,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
-    if (executionPath.length > 1) {
-      const asWorkflow = step.step as Workflow;
-      await this.pubsub.publish('workflows', {
-        type: resume ? 'workflow.resume' : 'workflow.start',
-        data: {
-          workflowId: asWorkflow.id,
-          parentWorkflow: { workflowId, runId, executionPath, resume },
-          executionPath: executionPath.slice(1),
-          runId: '', // TODO: generate runId
-          resume,
-          stepResults: {},
-          prevResult: prevResult?.status === 'success' ? prevResult.output : undefined,
-          resumeData,
-        },
-      });
-
-      return;
-    }
-
     console.log('executing step', step.step.id, prevResult);
     const stepResult = await this.stepExecutor.execute({
       step,
@@ -210,7 +232,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       input: prevResult?.status === 'success' ? prevResult.output : undefined,
       resumeData,
     });
-    console.log('step result', stepResult);
+    console.dir({ stepId: step.step.id, stepResult, stepResults }, { depth: null });
 
     stepResults[step.step.id] = stepResult;
 
@@ -307,7 +329,38 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     const stepGraph = workflow.stepGraph;
-    if (executionPath[0]! >= stepGraph.length - 1) {
+    const step = stepGraph[executionPath[0]!];
+    if (step?.type === 'parallel' && executionPath.length > 1) {
+      const subSteps = step.steps.filter(step => step.type === 'step');
+      const statuses = subSteps.map(step => stepResults[step.step.id]?.status);
+      if (statuses.length < subSteps.length) {
+        return;
+      }
+
+      if (statuses.some(status => status === 'failed')) {
+        return;
+      }
+
+      const subResults = Object.fromEntries(subSteps.map(step => [step.step.id, stepResults[step.step.id]?.output]));
+
+      await this.pubsub.publish('workflows', {
+        type: 'workflow.step.end',
+        data: {
+          workflowId,
+          runId,
+          executionPath: executionPath.slice(0, -1),
+          resume,
+          parentWorkflow,
+          stepResults,
+          prevResult: {
+            status: 'success',
+            output: subResults,
+          },
+
+          resumeData,
+        },
+      });
+    } else if (executionPath[0]! >= stepGraph.length - 1) {
       await this.pubsub.publish('workflows', {
         type: 'workflow.end',
         data: {
