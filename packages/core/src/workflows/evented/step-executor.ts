@@ -30,10 +30,13 @@ export class StepExecutor extends MastraBase {
     let suspended: { payload: any } | undefined;
     let bailed: { payload: any } | undefined;
     const startedAt = Date.now();
-    let stepInfo = {
+    let stepInfo: {
+      startedAt: number;
+      payload: any;
+      resumePayload?: any;
+    } = {
       startedAt,
       payload: params.input,
-      resumePayload: undefined,
     };
 
     if (params.resumeData) {

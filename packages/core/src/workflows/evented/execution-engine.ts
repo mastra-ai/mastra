@@ -65,7 +65,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       data: {
         workflowId: params.workflowId,
         runId: params.runId,
-        prevOutput: params.input,
+        prevResult: { status: 'success', output: params.input },
       },
     });
 

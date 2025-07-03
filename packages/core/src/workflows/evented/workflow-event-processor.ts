@@ -61,7 +61,9 @@ export class WorkflowEventProcessor extends EventProcessor {
             runId,
             executionPath: [0],
             resume,
-            stepResults: {},
+            stepResults: {
+              init: prevResult,
+            },
             prevResult,
             resumeData,
           },
@@ -231,10 +233,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           await this.pubsub.publish('workflows', {
             type: resume ? 'workflow.resume' : 'workflow.start',
             data: {
-              workflowId,
+              workflowId: asWorkflow.id,
               parentWorkflow: { workflowId, runId, executionPath, resume },
               executionPath: executionPath.slice(i + 1),
-              workflowId: asWorkflow.id,
               runId: '', // TODO: generate runId
               resume,
               stepResults: {},
@@ -246,7 +247,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           return;
         }
 
-        console.log('executing step', step.step.id);
+        console.log('executing step', step.step.id, prevResult);
         const stepResult = await this.stepExecutor.execute({
           step,
           runId,
