@@ -1036,6 +1036,8 @@ describe('Workflow', () => {
 
       workflow.then(step1).commit();
 
+      new Mastra({ workflows: { 'test-workflow': workflow } });
+
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
 

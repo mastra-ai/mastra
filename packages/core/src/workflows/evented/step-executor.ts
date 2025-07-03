@@ -41,6 +41,7 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
+      console.log('executor start', step.step.id);
       const stepResult = await step.step.execute({
         runId,
         mastra: this.mastra!,
@@ -74,6 +75,7 @@ export class StepExecutor extends MastraBase {
         engine: {},
         abortSignal: abortController?.signal,
       });
+      console.log('executor end', step.step.id, stepResult);
 
       const endedAt = Date.now();
 

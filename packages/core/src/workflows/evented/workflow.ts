@@ -1,6 +1,19 @@
+import { randomUUID } from 'crypto';
 import z from 'zod';
-import { Workflow, Agent, Tool } from '../..';
-import type { ExecuteFunction, Step, ToolExecutionContext, WorkflowConfig } from '../..';
+import { Workflow, Agent, Tool, Run } from '../..';
+import type {
+  ExecuteFunction,
+  ExecutionEngine,
+  ExecutionGraph,
+  Mastra,
+  SerializedStepFlowEntry,
+  Step,
+  ToolExecutionContext,
+  WorkflowConfig,
+  WorkflowResult,
+} from '../..';
+import { RuntimeContext } from '../../di';
+import type { PubSub } from '../../events';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
@@ -252,11 +265,14 @@ export function createWorkflow<
 >(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
   const pubsub = new EventEmitterPubSub();
   const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra!, pubsub });
-  const executionEngine = new EventedExecutionEngine({ mastra: params.mastra!, eventProcessor });
-  return new Workflow<EventedEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput>({
-    ...params,
-    executionEngine,
-  });
+  const executionEngine = new EventedExecutionEngine({ mastra: params.mastra!, eventProcessor, pubsub });
+  return new EventedWorkflow<EventedEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput>(
+    {
+      ...params,
+      executionEngine,
+    },
+    pubsub,
+  );
 }
 
 export class EventedWorkflow<
@@ -266,4 +282,152 @@ export class EventedWorkflow<
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
   TPrevSchema extends z.ZodType<any> = TInput,
-> extends Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {}
+> extends Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
+  protected pubsub: PubSub;
+  #mastra: Mastra;
+
+  constructor(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>, pubsub: PubSub) {
+    super(params);
+    this.pubsub = pubsub;
+    this.#mastra = params.mastra!;
+  }
+
+  __registerMastra(mastra: Mastra) {
+    this.#mastra = mastra;
+    this.executionEngine.__registerMastra(mastra);
+  }
+
+  async createRunAsync(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
+    const runIdToUse = options?.runId || randomUUID();
+    console.log('creating run', runIdToUse);
+
+    // Return a new Run instance with object parameters
+    const run: Run<TEngineType, TSteps, TInput, TOutput> =
+      this.runs.get(runIdToUse) ??
+      new EventedRun(
+        {
+          workflowId: this.id,
+          runId: runIdToUse,
+          executionEngine: this.executionEngine,
+          executionGraph: this.executionGraph,
+          serializedStepGraph: this.serializedStepGraph,
+          mastra: this.#mastra,
+          retryConfig: this.retryConfig,
+          cleanup: () => this.runs.delete(runIdToUse),
+        },
+        this.pubsub,
+      );
+
+    this.runs.set(runIdToUse, run);
+
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse);
+
+    if (!workflowSnapshotInStorage) {
+      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+        workflowName: this.id,
+        runId: runIdToUse,
+        snapshot: {
+          runId: runIdToUse,
+          status: 'pending',
+          value: {},
+          context: {},
+          activePaths: [],
+          serializedStepGraph: this.serializedStepGraph,
+          suspendedPaths: {},
+          result: undefined,
+          error: undefined,
+          // @ts-ignore
+          timestamp: Date.now(),
+        },
+      });
+    }
+
+    return run;
+  }
+}
+
+export class EventedRun<
+  TEngineType = EventedEngineType,
+  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TInput extends z.ZodType<any> = z.ZodType<any>,
+  TOutput extends z.ZodType<any> = z.ZodType<any>,
+> extends Run<TEngineType, TSteps, TInput, TOutput> {
+  protected pubsub: PubSub;
+  #mastra?: Mastra;
+
+  constructor(
+    params: {
+      workflowId: string;
+      runId: string;
+      executionEngine: ExecutionEngine;
+      executionGraph: ExecutionGraph;
+      serializedStepGraph: SerializedStepFlowEntry[];
+      mastra?: Mastra;
+      retryConfig?: {
+        attempts?: number;
+        delay?: number;
+      };
+      cleanup?: () => void;
+    },
+    pubsub: PubSub,
+  ) {
+    super(params);
+    this.pubsub = pubsub;
+    this.serializedStepGraph = params.serializedStepGraph;
+    this.#mastra = params.mastra!;
+  }
+
+  async start({
+    inputData,
+    runtimeContext,
+  }: {
+    inputData?: z.infer<TInput>;
+    runtimeContext?: RuntimeContext;
+  }): Promise<WorkflowResult<TOutput, TSteps>> {
+    await this.#mastra?.getStorage()?.persistWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      snapshot: {
+        runId: this.runId,
+        serializedStepGraph: this.serializedStepGraph,
+        value: {},
+        context: {} as any,
+        activePaths: [],
+        suspendedPaths: {},
+        timestamp: Date.now(),
+        status: 'running',
+      },
+    });
+
+    const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+      workflowId: this.workflowId,
+      runId: this.runId,
+      graph: this.executionGraph,
+      serializedStepGraph: this.serializedStepGraph,
+      input: inputData,
+      emitter: {
+        emit: async (event: string, data: any) => {
+          this.emitter.emit(event, data);
+        },
+        on: (event: string, callback: (data: any) => void) => {
+          this.emitter.on(event, callback);
+        },
+        off: (event: string, callback: (data: any) => void) => {
+          this.emitter.off(event, callback);
+        },
+        once: (event: string, callback: (data: any) => void) => {
+          this.emitter.once(event, callback);
+        },
+      },
+      retryConfig: this.retryConfig,
+      runtimeContext: runtimeContext ?? new RuntimeContext(),
+      abortController: this.abortController,
+    });
+
+    if (result.status !== 'suspended') {
+      this.cleanup?.();
+    }
+
+    return result;
+  }
+}
