@@ -76,21 +76,23 @@ Currently, to ensure proper compatibility between Mastra and Assistant UI, you n
 ```typescript showLineNumbers copy filename="src/mastra/index.ts"
 export const mastra = new Mastra({
   //mastra server middleware
-  server: {
-    middleware: [
-      async (c, next) => {
-        const body = await c.req.json();
-
-        if ('state' in body && body.state == null) {
-          delete body.state;
-        }
-
-        c.req.json = async () => body;
-
-        return next();
-      },
-    ],
-  },
+  server:{
+  middleware: [{
+    path: '/api/agents/*/stream',
+    handler: async (c,next)=>{
+    
+      const body = await c.req.json();
+  
+      if ('state' in body && body.state == null) {
+        delete body.state;
+      }
+  
+       c.req.json = async() => body;
+  
+      return next()
+    }
+  }]
+ },
 });
 ```
 
