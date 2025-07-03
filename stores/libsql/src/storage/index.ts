@@ -1287,7 +1287,6 @@ export class LibSQLStore extends MastraStorage {
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [entityId, entityType, pagination.perPage + 1, pagination.page * pagination.perPage],
       });
-
       return {
         scores: result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [],
         pagination: {

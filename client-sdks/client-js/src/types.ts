@@ -8,7 +8,6 @@ import type {
   WorkflowRun,
   LegacyWorkflowRuns,
   ScoreRowData,
-  StoragePagination,
   ScorerPrompt,
 } from '@mastra/core';
 import type { AgentGenerateOptions, AgentStreamOptions, MastraScorer, ToolsInput } from '@mastra/core/agent';
