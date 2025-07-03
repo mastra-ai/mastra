@@ -2,6 +2,7 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import { onScorerHook } from '../eval';
 import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
@@ -368,9 +369,7 @@ do:
       this.#server = config.server;
     }
 
-    registerHook(AvailableHooks.ON_SCORER_RUN, ({ input }) => {
-      console.log('onScorerRun', input);
-    });
+    registerHook(AvailableHooks.ON_SCORER_RUN, onScorerHook);
 
     this.setLogger({ logger });
   }

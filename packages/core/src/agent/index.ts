@@ -14,8 +14,8 @@ import type { z, ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
-import type { Metric } from '../eval';
-import { AvailableHooks, executeHook, type ScorerHookData } from '../hooks';
+import type { Metric, ScorerHookData } from '../eval';
+import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
 import type { MastraLLMBase } from '../llm/model';
 import { MastraLLM } from '../llm/model';
@@ -1482,10 +1482,18 @@ export class Agent<
           }
         }
 
+        const outputForScoring = {
+          text: result?.text,
+          object: result?.object,
+          usage: result?.usage,
+          toolCalls: [],
+        };
+
         await this.#runScorers({
           messageList,
           runId,
           outputText,
+          output: outputForScoring,
           instructions,
           runtimeContext,
         });
@@ -1497,11 +1505,13 @@ export class Agent<
     messageList,
     runId,
     outputText,
+    output,
     instructions,
     runtimeContext,
   }: {
     messageList: MessageList;
     runId: string;
+    output: Record<string, any>;
     outputText: string;
     instructions: string;
     runtimeContext: RuntimeContext;
@@ -1557,7 +1567,7 @@ export class Agent<
             description: scorerObject.scorer.description,
           },
           input,
-          output: outputText,
+          output,
           runtimeContext: Object.fromEntries(runtimeContext.entries()),
           runId: runIdToUse,
           source: 'LIVE',
@@ -1867,6 +1877,8 @@ export class Agent<
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
       });
+
+      // @TODO: Accumulate tool calls for after call to pass to scoring
 
       const streamResult = await llm.__stream({
         messages: messageObjects,

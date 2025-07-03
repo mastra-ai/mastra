@@ -19,6 +19,27 @@ export abstract class Scorer {
   abstract score({ input, output }: { input: string; output: string }): Promise<ScoreResult>;
 }
 
+export type ScoringSource = 'LIVE';
+export type ScoringEntityType = 'AGENT';
+
+export type ScorerHookData = {
+  runId: string;
+  traceId?: string;
+  scorer: Record<string, any>;
+  input: string;
+  output: Record<string, any>;
+  additionalContext?: Record<string, any>;
+  resourceId?: string;
+  threadId?: string;
+  source: ScoringSource;
+  entity: Record<string, any>;
+  entityType: ScoringEntityType;
+  runtimeContext: Record<string, any>;
+};
 export abstract class LLMScorer extends Scorer {
   abstract prompts(): Record<string, ScoringPrompts>;
+}
+
+export async function onScorerHook(hookData: ScorerHookData) {
+  console.log('onScorerHook', hookData);
 }
