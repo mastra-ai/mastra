@@ -141,6 +141,11 @@ const links = [
     icon: WorkflowIcon,
   },
   {
+    name: 'Scorers',
+    url: '/scorers',
+    icon: AgentIcon,
+  },
+  {
     name: 'Runtime Context',
     url: '/runtime-context',
     icon: Globe,

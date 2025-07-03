@@ -91,6 +91,7 @@ export async function getAgentByIdHandler({
 }: Context & { isPlayground?: boolean; runtimeContext: RuntimeContext; agentId: string }) {
   try {
     const agent = mastra.getAgent(agentId);
+    const logger = mastra.getLogger();
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -111,7 +112,6 @@ export async function getAgentByIdHandler({
     let serializedAgentWorkflows = {};
 
     if ('getWorkflows' in agent) {
-      const logger = mastra.getLogger();
       try {
         const workflows = await agent.getWorkflows({ runtimeContext });
 
@@ -134,6 +134,25 @@ export async function getAgentByIdHandler({
         }, {});
       } catch (error) {
         logger.error('Error getting workflows for agent', { agentName: agent.name, error });
+      }
+    }
+
+    let serializedAgentScorers = {};
+
+    if ('getScorers' in agent) {
+      try {
+        const scorers = await agent.getScorers({ runtimeContext });
+        serializedAgentScorers = Object.entries(scorers || {}).reduce<any>((acc, [key, scorer]) => {
+          return {
+            ...acc,
+            [key]: {
+              name: scorer.scorer.name,
+              description: scorer.scorer.description,
+            },
+          };
+        }, {});
+      } catch (error) {
+        logger.error('Error getting scorers for agent', { agentName: agent.name, error });
       }
     }
 
@@ -162,6 +181,7 @@ export async function getAgentByIdHandler({
       instructions,
       tools: serializedAgentTools,
       workflows: serializedAgentWorkflows,
+      scorers: serializedAgentScorers,
       provider: llm?.getProvider(),
       modelId: llm?.getModelId(),
       defaultGenerateOptions: defaultGenerateOptions as any,

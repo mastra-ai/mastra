@@ -1,0 +1,31 @@
+import { useScorers } from '@/hooks/use-scorers';
+import { DataTable, Header, HeaderTitle, MainContentLayout } from '@mastra/playground-ui';
+import { scorersTableColumns } from '@/domains/agents/table.columns';
+
+export default function Scorers() {
+  const { scorers, isLoading } = useScorers();
+
+  const scorerListData = Object.entries(scorers).map(([key, scorer]) => ({
+    id: key,
+    name: scorer.scorer.name,
+    description: scorer.scorer.description,
+  }));
+
+  return (
+    <MainContentLayout>
+      <Header>
+        <HeaderTitle>Scorers</HeaderTitle>
+      </Header>
+      <div>
+        <DataTable
+          columns={scorersTableColumns}
+          data={scorerListData}
+          isLoading={isLoading}
+          onClick={props => {
+            console.log(props);
+          }}
+        />
+      </div>
+    </MainContentLayout>
+  );
+}

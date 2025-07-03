@@ -1,7 +1,7 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MetricResult } from '@mastra/core/eval';
+import type { MetricResult, ScoreRowData } from '@mastra/core/eval';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
@@ -22,7 +22,9 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   PaginationArgs,
+  StoragePagination,
 } from '@mastra/core/storage';
+
 import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
@@ -1797,5 +1799,50 @@ export class PostgresStore extends MastraStorage {
     await this.db.none(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
 
     return updatedResource;
+  }
+
+  /**
+   * SCORERS - Not implemented
+   */
+  async getScoreById({ id: _id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new Error(
+      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
+        `To use scores functionality, implement the required methods in this storage adapter.`,
+    );
+  }
+
+  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+    throw new Error(
+      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
+        `To use scores functionality, implement the required methods in this storage adapter.`,
+    );
+  }
+
+  async getScoresByRunId({
+    runId: _runId,
+    pagination: _pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new Error(
+      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
+        `To use scores functionality, implement the required methods in this storage adapter.`,
+    );
+  }
+
+  async getScoresByEntityId({
+    entityId: _entityId,
+    entityType: _entityType,
+    pagination: _pagination,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new Error(
+      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
+        `To use scores functionality, implement the required methods in this storage adapter.`,
+    );
   }
 }

@@ -18,6 +18,7 @@ import LegacyWorkflow from './pages/workflows/workflow/legacy';
 import WorkflowTracesPage from './pages/workflows/workflow/traces';
 import LegacyWorkflowTracesPage from './pages/workflows/workflow/legacy/traces';
 import Networks from './pages/networks';
+import Scorers from './pages/scorers';
 import { NetworkLayout } from './domains/networks/network-layout';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import Network from './pages/networks/network';
@@ -32,6 +33,7 @@ import { McpServerPage } from './pages/mcps/[serverId]';
 import { WorkflowGraphLayout } from './pages/workflows/layouts/workflow-graph-layout';
 import { MastraClientProvider } from '@mastra/playground-ui';
 import VNextNetwork from './pages/networks/network/v-next';
+import Scorer from './pages/scorers/scorer';
 
 function App() {
   const [queryClient] = useState(() => new QueryClient());
@@ -76,6 +78,17 @@ function App() {
                 >
                   <Route path="chat" element={<Network />} />
                 </Route>
+              </Route>
+
+              <Route
+                element={
+                  <Layout>
+                    <Outlet />
+                  </Layout>
+                }
+              >
+                <Route path="/scorers" element={<Scorers />} />
+                <Route path="/scorers/:scorerId" element={<Scorer />} />
               </Route>
 
               <Route

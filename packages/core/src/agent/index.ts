@@ -14,7 +14,7 @@ import type { z, ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
-import type { Metric } from '../eval';
+import type { Metric, ScorerHookData } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
 import type { MastraLLMBase } from '../llm/model';
@@ -43,6 +43,7 @@ import type {
   ToolsInput,
   DynamicArgument,
   AgentMemoryOption,
+  Scorers,
 } from './types';
 
 export { MessageList };
@@ -108,16 +109,15 @@ export class Agent<
   #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
   #tools: DynamicArgument<TTools>;
-  /** @deprecated This property is deprecated. Use evals instead. */
-  metrics: TMetrics;
   evals: TMetrics;
+  #scorers: DynamicArgument<Scorers>;
   #voice: CompositeVoice;
 
   constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
-    this.id = config.name;
+    this.id = config.id || config.name;
 
     this.#instructions = config.instructions;
     this.#description = config.description;
@@ -148,7 +148,6 @@ export class Agent<
 
     this.#tools = config.tools || ({} as TTools);
 
-    this.metrics = {} as TMetrics;
     this.evals = {} as TMetrics;
 
     if (config.mastra) {
@@ -159,15 +158,11 @@ export class Agent<
       });
     }
 
-    if (config.metrics) {
-      this.logger.warn('The metrics property is deprecated. Please use evals instead to add evaluation metrics.');
-      this.metrics = config.metrics;
-      this.evals = config.metrics;
-    }
-
     if (config.evals) {
       this.evals = config.evals;
     }
+
+    this.#scorers = config.scorers || ({} as Scorers);
 
     if (config.memory) {
       this.#memory = config.memory;
@@ -359,6 +354,34 @@ export class Agent<
       }
 
       return options;
+    });
+  }
+
+  async getScorers({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): Promise<Scorers> {
+    if (typeof this.#scorers !== 'function') {
+      return this.#scorers;
+    }
+
+    const result = this.#scorers({ runtimeContext });
+    return resolveMaybePromise(result, scorers => {
+      if (!scorers) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_SCORERS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based scorers returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      return scorers;
     });
   }
 
@@ -1132,7 +1155,7 @@ export class Agent<
     runtimeContext,
     generateMessageId,
   }: {
-    instructions?: string;
+    instructions: string;
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
@@ -1335,6 +1358,8 @@ export class Agent<
         outputText,
         runId,
         messageList,
+        toolCallsCollection,
+        structuredOutput,
       }: {
         runId: string;
         result: Record<string, any>;
@@ -1343,6 +1368,9 @@ export class Agent<
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
         messageList: MessageList;
+        //@TODO: types
+        structuredOutput?: boolean;
+        toolCallsCollection: Map<string, any>;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -1463,25 +1491,110 @@ export class Agent<
           }
         }
 
-        if (Object.keys(this.evals || {}).length > 0) {
-          const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
-          const input = userInputMessages
-            .map(message => (typeof message.content === 'string' ? message.content : ''))
-            .join('\n');
-          const runIdToUse = runId || crypto.randomUUID();
-          for (const metric of Object.values(this.evals || {})) {
-            executeHook(AvailableHooks.ON_GENERATION, {
-              input,
-              output: outputText,
-              runId: runIdToUse,
-              metric,
-              agentName: this.name,
-              instructions: instructions || this.instructions,
-            });
-          }
-        }
+        const outputForScoring = {
+          text: result?.text,
+          object: result?.object,
+          usage: result?.usage,
+          toolCalls: Array.from(toolCallsCollection.values()),
+        };
+
+        await this.#runScorers({
+          messageList,
+          runId,
+          outputText,
+          output: outputForScoring,
+          instructions,
+          runtimeContext,
+          structuredOutput,
+        });
       },
     };
+  }
+
+  async #runScorers({
+    messageList,
+    runId,
+    outputText,
+    output,
+    instructions,
+    runtimeContext,
+    structuredOutput,
+  }: {
+    messageList: MessageList;
+    runId: string;
+    output: Record<string, any>;
+    outputText: string;
+    instructions: string;
+    runtimeContext: RuntimeContext;
+    structuredOutput?: boolean;
+  }) {
+    const agentName = this.name;
+    const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
+    const input = userInputMessages
+      .map(message => (typeof message.content === 'string' ? message.content : ''))
+      .join('\n');
+    const runIdToUse = runId || crypto.randomUUID();
+
+    if (Object.keys(this.evals || {}).length > 0) {
+      for (const metric of Object.values(this.evals || {})) {
+        executeHook(AvailableHooks.ON_GENERATION, {
+          input,
+          output: outputText,
+          runId: runIdToUse,
+          metric,
+          agentName,
+          instructions: instructions,
+        });
+      }
+    }
+
+    const scorers = await this.getScorers({ runtimeContext });
+
+    if (Object.keys(scorers || {}).length > 0) {
+      for (const [id, scorerObject] of Object.entries(scorers)) {
+        let shouldExecute = false;
+
+        if (!scorerObject?.sampling || scorerObject?.sampling?.type === 'none') {
+          shouldExecute = true;
+        }
+
+        if (scorerObject?.sampling?.type) {
+          switch (scorerObject?.sampling?.type) {
+            case 'ratio':
+              shouldExecute = Math.random() < scorerObject?.sampling?.rate;
+              break;
+            default:
+              shouldExecute = true;
+          }
+        }
+
+        if (!shouldExecute) {
+          return;
+        }
+
+        const payload: ScorerHookData = {
+          scorer: {
+            id,
+            name: scorerObject.scorer.name,
+            description: scorerObject.scorer.description,
+          },
+          input: userInputMessages,
+          output,
+          runtimeContext: Object.fromEntries(runtimeContext.entries()),
+          runId: runIdToUse,
+          source: 'LIVE',
+          entity: {
+            id: this.id,
+            name: this.name,
+            instructions: instructions,
+          },
+          structuredOutput,
+          entityType: 'AGENT',
+        };
+
+        executeHook(AvailableHooks.ON_SCORER_RUN, payload);
+      }
+    }
   }
 
   async generate<
@@ -1575,13 +1688,21 @@ export class Agent<
 
     const threadId = thread?.id;
 
+    const toolCallsCollection = new Map();
+
+    const onStepFinishFn = (result: any) => {
+      if (result.finishReason === 'tool-calls') {
+        for (const toolCall of result.toolCalls) {
+          toolCallsCollection.set(toolCall.toolCallId, toolCall);
+        }
+      }
+    };
+
     if (!output && experimental_output) {
       const result = await llm.__text({
         messages: messageObjects,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
-          return onStepFinish?.({ ...result, runId });
-        },
+        onStepFinish: onStepFinishFn,
         maxSteps: maxSteps,
         runId,
         temperature,
@@ -1605,6 +1726,8 @@ export class Agent<
         outputText,
         runId,
         messageList,
+        toolCallsCollection,
+        structuredOutput: true,
       });
 
       const newResult = result as any;
@@ -1618,9 +1741,7 @@ export class Agent<
       const result = await llm.__text({
         messages: messageObjects,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
-          return onStepFinish?.({ ...result, runId });
-        },
+        onStepFinish: onStepFinishFn,
         maxSteps,
         runId,
         temperature,
@@ -1643,6 +1764,7 @@ export class Agent<
         outputText,
         runId,
         messageList,
+        toolCallsCollection,
       });
 
       return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1652,9 +1774,7 @@ export class Agent<
       messages: messageObjects,
       tools: convertedTools,
       structuredOutput: output,
-      onStepFinish: (result: any) => {
-        return onStepFinish?.({ ...result, runId });
-      },
+      onStepFinish: onStepFinishFn,
       maxSteps,
       runId,
       temperature,
@@ -1675,6 +1795,8 @@ export class Agent<
       outputText,
       runId,
       messageList,
+      toolCallsCollection,
+      structuredOutput: true,
     });
 
     return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1774,18 +1896,30 @@ export class Agent<
 
     const threadId = thread?.id;
 
+    const toolCallsCollection = new Map();
+
+    const onStepFinishFn = (result: any) => {
+      if (result.finishReason === 'tool-calls') {
+        for (const toolCall of result.toolCalls) {
+          toolCallsCollection.set(toolCall.toolCallId, toolCall);
+        }
+      }
+
+      return onStepFinish?.({ ...result, runId });
+    };
+
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
       });
 
+      // @TODO: Accumulate tool calls for after call to pass to scoring
+
       const streamResult = await llm.__stream({
         messages: messageObjects,
         temperature,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
-          return onStepFinish?.({ ...result, runId });
-        },
+        onStepFinish: onStepFinishFn,
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
@@ -1797,6 +1931,7 @@ export class Agent<
               outputText,
               runId,
               messageList,
+              toolCallsCollection,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1829,9 +1964,7 @@ export class Agent<
         messages: messageObjects,
         temperature,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
-          return onStepFinish?.({ ...result, runId });
-        },
+        onStepFinish: onStepFinishFn,
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
@@ -1843,6 +1976,7 @@ export class Agent<
               outputText,
               runId,
               messageList,
+              toolCallsCollection,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1873,9 +2007,7 @@ export class Agent<
       tools: convertedTools,
       temperature,
       structuredOutput: output,
-      onStepFinish: (result: any) => {
-        return onStepFinish?.({ ...result, runId });
-      },
+      onStepFinish: onStepFinishFn,
       onFinish: async (result: any) => {
         try {
           const outputText = JSON.stringify(result.object);
@@ -1887,6 +2019,7 @@ export class Agent<
             outputText,
             runId,
             messageList,
+            toolCallsCollection,
           });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {

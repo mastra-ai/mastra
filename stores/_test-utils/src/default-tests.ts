@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
-import type { MetricResult } from '@mastra/core/eval';
+import type { MetricResult, ScoreRowData } from '@mastra/core/eval';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { MastraStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
@@ -87,6 +87,33 @@ export const createSampleEval = (agentName: string, isTest = false, createdAt?: 
     run_id: `run-${randomUUID()}`,
     created_at: createdAt || new Date().toISOString(),
     createdAt: createdAt || new Date(),
+  };
+};
+
+export const createSampleScoreRow = (): ScoreRowData => {
+  const entity = {
+    id: randomUUID(),
+    type: 'test',
+  };
+  return {
+    id: randomUUID(),
+
+    runId: randomUUID(),
+    scorer: { agentName: 'test-agent' },
+    result: { score: 0.8 },
+    metadata: {},
+    input: { text: 'Sample input' },
+    output: { text: 'Sample output' },
+    additionalLLMContext: {},
+    runtimeContext: {},
+    entityType: 'test',
+    entity,
+    entityId: entity.id,
+    source: 'test',
+    resourceId: randomUUID(),
+    threadId: randomUUID(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
   };
 };
 

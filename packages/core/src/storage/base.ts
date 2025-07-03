@@ -1,5 +1,6 @@
 import type { MastraMessageContentV2, MastraMessageV2 } from '../agent';
 import { MastraBase } from '../base';
+import type { ScoreRowData } from '../eval';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { Trace } from '../telemetry';
 import type { WorkflowRunState } from '../workflows';
@@ -11,6 +12,7 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_RESOURCES,
+  TABLE_SCORERS,
   TABLE_SCHEMAS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
@@ -21,6 +23,7 @@ import type {
   StorageGetMessagesArg,
   StorageGetTracesArg,
   StorageResourceType,
+  StoragePagination,
   WorkflowRun,
   WorkflowRuns,
 } from './types';
@@ -250,6 +253,11 @@ export abstract class MastraStorage extends MastraBase {
         tableName: TABLE_TRACES,
         schema: TABLE_SCHEMAS[TABLE_TRACES],
       }),
+
+      this.createTable({
+        tableName: TABLE_SCORERS,
+        schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      }),
     ];
 
     // Only create resources table for storage adapters that support it
@@ -316,6 +324,32 @@ export abstract class MastraStorage extends MastraBase {
 
     return d ? d.snapshot : null;
   }
+
+  /**
+   * SCORERS
+   */
+
+  abstract getScoreById({ id }: { id: string }): Promise<ScoreRowData | null>;
+
+  abstract saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }>;
+
+  abstract getScoresByRunId({
+    runId,
+    pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
+
+  abstract getScoresByEntityId({
+    entityId,
+    entityType,
+    pagination,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
   abstract getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]>;
 

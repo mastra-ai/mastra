@@ -3,6 +3,7 @@ import type { Connection, ConnectionOptions, SchemaLike, FieldLike } from '@lanc
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { ScoreRowData } from '@mastra/core/eval';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType, TraceType } from '@mastra/core/memory';
 import {
   MastraStorage,
@@ -21,6 +22,7 @@ import type {
   EvalRow,
   WorkflowRun,
   WorkflowRuns,
+  StoragePagination,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -1443,5 +1445,55 @@ export class LanceStorage extends MastraStorage {
   }): Promise<MastraMessageV2[]> {
     this.logger.error('updateMessages is not yet implemented in LanceStore');
     throw new Error('Method not implemented');
+  }
+
+  async getScoreById({ id: _id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new MastraError({
+      id: 'LANCE_STORAGE_METHOD_NOT_IMPLEMENTED',
+      text: 'getScoreById method is not implemented for LanceStorage',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+    });
+  }
+
+  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+    throw new MastraError({
+      id: 'LANCE_STORAGE_METHOD_NOT_IMPLEMENTED',
+      text: 'saveScore method is not implemented for LanceStorage',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+    });
+  }
+
+  async getScoresByRunId({
+    runId: _runId,
+    pagination: _pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'LANCE_STORAGE_METHOD_NOT_IMPLEMENTED',
+      text: 'getScoresByRunId method is not implemented for LanceStorage',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+    });
+  }
+
+  async getScoresByEntityId({
+    entityId: _entityId,
+    entityType: _entityType,
+    pagination: _pagination,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'LANCE_STORAGE_METHOD_NOT_IMPLEMENTED',
+      text: 'getScoresByEntityId method is not implemented for LanceStorage',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+    });
   }
 }

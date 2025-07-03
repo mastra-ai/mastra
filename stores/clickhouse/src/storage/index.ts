@@ -3,11 +3,12 @@ import { createClient } from '@clickhouse/client';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import type { MetricResult, TestInfo } from '@mastra/core/eval';
+import type { MetricResult, TestInfo, ScoreRowData } from '@mastra/core/eval';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_EVALS,
+  TABLE_SCORERS,
   TABLE_MESSAGES,
   TABLE_SCHEMAS,
   TABLE_THREADS,
@@ -24,6 +25,7 @@ import type {
   WorkflowRuns,
   StorageGetTracesArg,
   TABLE_RESOURCES,
+  StoragePagination,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -75,6 +77,7 @@ export const TABLE_ENGINES: Record<SUPPORTED_TABLE_NAMES, string> = {
   [TABLE_TRACES]: `MergeTree()`,
   [TABLE_THREADS]: `ReplacingMergeTree()`,
   [TABLE_EVALS]: `MergeTree()`,
+  [TABLE_SCORERS]: `MergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {
@@ -1460,5 +1463,55 @@ export class ClickhouseStore extends MastraStorage {
   }): Promise<MastraMessageV2[]> {
     this.logger.error('updateMessages is not yet implemented in ClickhouseStore');
     throw new Error('Method not implemented');
+  }
+
+  async getScoreById({ id: _id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_METHOD_NOT_IMPLEMENTED',
+      text: 'getScoreById method is not implemented for ClickhouseStore',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+    });
+  }
+
+  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_METHOD_NOT_IMPLEMENTED',
+      text: 'saveScore method is not implemented for ClickhouseStore',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+    });
+  }
+
+  async getScoresByRunId({
+    runId: _runId,
+    pagination: _pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_METHOD_NOT_IMPLEMENTED',
+      text: 'getScoresByRunId method is not implemented for ClickhouseStore',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+    });
+  }
+
+  async getScoresByEntityId({
+    entityId: _entityId,
+    entityType: _entityType,
+    pagination: _pagination,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_METHOD_NOT_IMPLEMENTED',
+      text: 'getScoresByEntityId method is not implemented for ClickhouseStore',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+    });
   }
 }
