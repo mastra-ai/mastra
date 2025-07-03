@@ -1,5 +1,20 @@
 # @mastra/deployer-cloudflare
 
+## 0.10.11-alpha.0
+
+### Patch Changes
+
+- bc40cdd: dependencies updates:
+  - Updated dependency [`@babel/core@^7.27.7` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.27.7) (from `^7.27.4`, in `dependencies`)
+- Updated dependencies [bc40cdd]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/deployer@0.10.11-alpha.0
+  - @mastra/core@0.10.11-alpha.0
+
 ## 0.10.10
 
 ### Patch Changes

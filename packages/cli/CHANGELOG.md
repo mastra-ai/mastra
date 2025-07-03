@@ -1,5 +1,22 @@
 # mastra
 
+## 0.10.11-alpha.0
+
+### Patch Changes
+
+- af9e40e: Map log level number to string value
+- a9f51e4: Fix plaground get tools not including x-mastra-dev-header"
+- 3322d00: Fix tools watcher in dev
+- b790fd1: Use SerializedStepFlowEntry in playground
+- Updated dependencies [bc40cdd]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/deployer@0.10.11-alpha.0
+  - @mastra/core@0.10.11-alpha.0
+
 ## 0.10.10
 
 ### Patch Changes
