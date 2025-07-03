@@ -1150,6 +1150,7 @@ export class Agent<
       messageList.add(result.response.messages, 'response');
       await saveQueueManager.batchMessages(messageList, threadId, memoryConfig);
     } catch (e) {
+      await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
       this.logger.error('Error saving memory on step finish', {
         error: e,
         runId,
