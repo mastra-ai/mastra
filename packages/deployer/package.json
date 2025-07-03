@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.10.8",
+  "version": "0.10.10",
   "description": "",
   "type": "module",
   "files": [
@@ -92,7 +92,7 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@babel/core": "^7.27.4",
+    "@babel/core": "^7.27.7",
     "@babel/helper-module-imports": "^7.27.1",
     "@mastra/server": "workspace:^",
     "@neon-rs/load": "^0.1.82",
@@ -139,6 +139,6 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.10.2-alpha.0"
+    "@mastra/core": ">=0.10.9-0 <0.11.0-0"
   }
 }
