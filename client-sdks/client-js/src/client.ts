@@ -37,6 +37,12 @@ import type {
   GetNetworkMemoryThreadParams,
   CreateNetworkMemoryThreadParams,
   SaveNetworkMessageToMemoryParams,
+  GetScoresByRunIdParams,
+  GetScoresByEntityIdParams,
+  SaveScoreParams,
+  GetScoresResponse,
+  SaveScoreResponse,
+  GetScorersResponse,
 } from './types';
 import { VNextNetwork } from './resources/vNextNetwork';
 import { NetworkMemoryThread } from './resources/network-memory-thread';
@@ -476,5 +482,65 @@ export class MastraClient extends BaseResource {
    */
   public getA2A(agentId: string) {
     return new A2A(this.options, agentId);
+  }
+
+  /**
+   * Retrieves all available scorers
+   * @returns Promise containing list of available scorers
+   */
+  public getScorers(): Promise<GetScorersResponse> {
+    return this.request('/api/scores/scorers');
+  }
+
+  /**
+   * Retrieves scores by run ID
+   * @param params - Parameters containing run ID and pagination options
+   * @returns Promise containing scores and pagination info
+   */
+  public getScoresByRunId(params: GetScoresByRunIdParams): Promise<GetScoresResponse> {
+    const { runId, page, perPage } = params;
+    const searchParams = new URLSearchParams();
+
+    if (page !== undefined) {
+      searchParams.set('page', String(page));
+    }
+    if (perPage !== undefined) {
+      searchParams.set('perPage', String(perPage));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/scores/run/${runId}${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Retrieves scores by entity ID and type
+   * @param params - Parameters containing entity ID, type, and pagination options
+   * @returns Promise containing scores and pagination info
+   */
+  public getScoresByEntityId(params: GetScoresByEntityIdParams): Promise<GetScoresResponse> {
+    const { entityId, entityType, page, perPage } = params;
+    const searchParams = new URLSearchParams();
+
+    if (page !== undefined) {
+      searchParams.set('page', String(page));
+    }
+    if (perPage !== undefined) {
+      searchParams.set('perPage', String(perPage));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/scores/entity/${entityId}/${entityType}${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Saves a score
+   * @param params - Parameters containing the score data to save
+   * @returns Promise containing the saved score
+   */
+  public saveScore(params: SaveScoreParams): Promise<SaveScoreResponse> {
+    return this.request('/api/scores', {
+      method: 'POST',
+      body: params,
+    });
   }
 }
