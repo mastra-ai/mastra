@@ -29,15 +29,18 @@ Before deploying to AWS Lambda, ensure you have:
 
 Lambda functions have limitations with file system storage. Configure your Mastra application to use either ephemeral memory or external storage providers:
 
-#### Option 1: Ephemeral Memory (Simplest)
+#### Option 1: In-Memory (Simplest)
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
 import { Mastra } from "@mastra/core";
-import { EphemeralMemory } from "@mastra/core/memory";
+import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
-  memory: new EphemeralMemory(),
-  // ... other configuration
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: ":memory:",
+    }),
+  }),
 });
 ```
 
@@ -286,3 +289,4 @@ For production deployments:
 - [Mastra Client SDK](/docs/client-js/overview)
 - [AWS Lambda documentation](https://docs.aws.amazon.com/lambda/)
 - [AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter)
+
