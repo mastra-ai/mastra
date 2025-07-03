@@ -426,6 +426,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     runId: string;
     stepResults: Record<string, StepResult<any, any, any, any>>;
   }) {
+    // TODO: we need to add to stepResults on db level, preferably
+    // otherwise we'll need to start managing parallel execution states somehow :thinking:
     await this.mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflow.id,
       runId,
