@@ -2,7 +2,7 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
-import { onScorerHook } from '../eval';
+import type { ScorerHookData } from '../eval';
 import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
@@ -19,6 +19,16 @@ import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import type { LegacyWorkflow } from '../workflows/legacy';
+
+export function createOnScorerHook(mastra: Mastra) {
+  return async (hookData: ScorerHookData) => {
+    if (!mastra.getStorage()) {
+      return;
+    }
+
+    console.log('onScorerHook', mastra, hookData);
+  };
+}
 
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
@@ -369,7 +379,7 @@ do:
       this.#server = config.server;
     }
 
-    registerHook(AvailableHooks.ON_SCORER_RUN, onScorerHook);
+    registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
     this.setLogger({ logger });
   }

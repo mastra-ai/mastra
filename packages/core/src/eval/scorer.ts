@@ -1,3 +1,5 @@
+import type { Mastra } from '../mastra';
+
 export type ScoreResult = {
   score: number;
   results: {
@@ -38,8 +40,4 @@ export type ScorerHookData = {
 };
 export abstract class LLMScorer extends Scorer {
   abstract prompts(): Record<string, ScoringPrompts>;
-}
-
-export async function onScorerHook(hookData: ScorerHookData) {
-  console.log('onScorerHook', hookData);
 }
