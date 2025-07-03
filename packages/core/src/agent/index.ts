@@ -1260,7 +1260,7 @@ export class Agent<
                     vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
                   })
                   .then(r => r.messagesV2),
-                memory.getSystemMessage({ threadId: threadObject.id, memoryConfig }),
+                memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
               ])
             : [[], null, null];
 
