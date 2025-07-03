@@ -12,6 +12,7 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_RESOURCES,
+  TABLE_SCORERS,
   TABLE_SCHEMAS,
   TABLE_SCORERS,
 } from './constants';

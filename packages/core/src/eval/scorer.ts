@@ -1,6 +1,4 @@
 import type { UIMessage } from 'ai';
-import type { MessageList } from '../agent';
-import type { Mastra } from '../mastra';
 
 export type ScoreResult = {
   score: number;

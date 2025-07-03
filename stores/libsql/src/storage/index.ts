@@ -26,6 +26,7 @@ import type {
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
+  StoragePagination,
 } from '@mastra/core/storage';
 
 import type { Trace } from '@mastra/core/telemetry';
@@ -1678,6 +1679,44 @@ export class LibSQLStore extends MastraStorage {
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };
+  }
+
+  /**
+   * SCORERS - Not implemented
+   */
+  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+    throw new Error(
+      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
+        `To use scores functionality, implement the required methods in this storage adapter.`,
+    );
+  }
+
+  async getScoresByRunId({
+    runId: _runId,
+    pagination: _pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new Error(
+      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
+        `To use scores functionality, implement the required methods in this storage adapter.`,
+    );
+  }
+
+  async getScoresByEntityId({
+    entityId: _entityId,
+    entityType: _entityType,
+    pagination: _pagination,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new Error(
+      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
+        `To use scores functionality, implement the required methods in this storage adapter.`,
+    );
   }
 }
 
