@@ -40,6 +40,27 @@ export type ScorerHookData = {
   entityType: ScoringEntityType;
   runtimeContext: Record<string, any>;
 };
+
+export type ScoreRowData = {
+  id: string;
+  traceId?: string;
+  runId: string;
+  scorer: Record<string, any>;
+  result: Record<string, any>;
+  metadata?: Record<string, any>;
+  input: Record<string, any>; // MESSAGE INPUT
+  output: Record<string, any>; // MESSAGE OUTPUT
+  additionalLLMContext?: Record<string, any>; // DATA FROM THE CONTEXT PARAM ON AN AGENT
+  runtimeContext?: Record<string, any>; // THE EVALUATE RUNTIME CONTEXT FOR THE RUN
+  entityType?: string; // WORKFLOW, AGENT, TOOL, STEP, NETWORK
+  entity?: Record<string, any>; // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP, NETWORK
+  source: string;
+  resourceId?: string;
+  threadId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export abstract class LLMScorer extends Scorer {
   abstract prompts(): Record<string, ScoringPrompts>;
 }

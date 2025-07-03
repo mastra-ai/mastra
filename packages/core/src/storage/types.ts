@@ -3,6 +3,11 @@ import type { MemoryConfig } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
 import type { LegacyWorkflowRunState } from '../workflows/legacy';
 
+export type StoragePagination = {
+  page: number;
+  perPage: number;
+}
+
 export interface StorageColumn {
   type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'bigint';
   primaryKey?: boolean;
