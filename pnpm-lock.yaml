@@ -20,7 +20,7 @@ importers:
         version: 5.0.0
     devDependencies:
       '@changesets/cli':
-        specifier: ^2.29.4
+        specifier: ^2.29.5
         version: 2.29.5
       '@types/node':
         specifier: ^20.17.57
