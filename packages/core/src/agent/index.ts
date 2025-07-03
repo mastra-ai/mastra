@@ -556,10 +556,12 @@ export class Agent<
     message,
     runtimeContext = new RuntimeContext(),
     model,
+    instructions,
   }: {
     message: string | MessageInput;
     runtimeContext?: RuntimeContext;
     model?: DynamicArgument<MastraLanguageModel>;
+    instructions?: DynamicArgument<string>;
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ runtimeContext, model });
@@ -586,17 +588,15 @@ export class Agent<
       }
     }
 
+    // Resolve instructions using the dedicated method
+    const systemInstructions = await this.resolveTitleInstructions(runtimeContext, instructions);
+
     const { text } = await llm.__text<{ title: string }>({
       runtimeContext,
       messages: [
         {
           role: 'system',
-          content: `\n
-    - you will generate a short title based on the first message a user begins a conversation with
-    - ensure it is not more than 80 characters long
-    - the title should be a summary of the user's message
-    - do not use quotes or colons
-    - the entire text you return will be used as the title`,
+          content: systemInstructions,
         },
         {
           role: 'user',
@@ -619,6 +619,7 @@ export class Agent<
     userMessage: string | MessageInput | undefined,
     runtimeContext: RuntimeContext,
     model?: DynamicArgument<MastraLanguageModel>,
+    instructions?: DynamicArgument<string>,
   ) {
     try {
       if (userMessage) {
@@ -628,6 +629,7 @@ export class Agent<
             message: normMessage,
             runtimeContext,
             model,
+            instructions,
           });
         }
       }
@@ -1413,13 +1415,15 @@ export class Agent<
               const config = memory.getMergedThreadConfig(memoryConfig);
               const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
 
-              const { shouldGenerate, model: titleModel } = this.resolveTitleGenerationConfig(
-                config?.threads?.generateTitle,
-              );
+              const {
+                shouldGenerate,
+                model: titleModel,
+                instructions: titleInstructions,
+              } = this.resolveTitleGenerationConfig(config?.threads?.generateTitle);
 
               if (shouldGenerate && userMessage) {
                 promises.push(
-                  this.genTitle(userMessage, runtimeContext, titleModel).then(title => {
+                  this.genTitle(userMessage, runtimeContext, titleModel, titleInstructions).then(title => {
                     if (title) {
                       return memory.createThread({
                         threadId: thread.id,
@@ -2075,10 +2079,14 @@ export class Agent<
    * @private
    */
   private resolveTitleGenerationConfig(
-    generateTitleConfig: boolean | { model: DynamicArgument<MastraLanguageModel> } | undefined,
+    generateTitleConfig:
+      | boolean
+      | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }
+      | undefined,
   ): {
     shouldGenerate: boolean;
     model?: DynamicArgument<MastraLanguageModel>;
+    instructions?: DynamicArgument<string>;
   } {
     if (typeof generateTitleConfig === 'boolean') {
       return { shouldGenerate: generateTitleConfig };
@@ -2088,9 +2096,39 @@ export class Agent<
       return {
         shouldGenerate: true,
         model: generateTitleConfig.model,
+        instructions: generateTitleConfig.instructions,
       };
     }
 
     return { shouldGenerate: false };
+  }
+
+  /**
+   * Resolves title generation instructions, handling both static strings and dynamic functions
+   * @private
+   */
+  private async resolveTitleInstructions(
+    runtimeContext: RuntimeContext,
+    instructions?: DynamicArgument<string>,
+  ): Promise<string> {
+    const DEFAULT_TITLE_INSTRUCTIONS = `
+    - you will generate a short title based on the first message a user begins a conversation with
+    - ensure it is not more than 80 characters long
+    - the title should be a summary of the user's message
+    - do not use quotes or colons
+    - the entire text you return will be used as the title`;
+
+    if (!instructions) {
+      return DEFAULT_TITLE_INSTRUCTIONS;
+    }
+
+    if (typeof instructions === 'string') {
+      return instructions;
+    } else {
+      const result = instructions({ runtimeContext });
+      return resolveMaybePromise(result, resolvedInstructions => {
+        return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
+      });
+    }
   }
 }

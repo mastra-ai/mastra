@@ -63,6 +63,7 @@ const memory = new Memory({
       // Or use a different model for title generation
       // generateTitle: {
       //   model: openai("gpt-4.1-nano"), // Use cheaper model for titles
+      //   instructions: "Generate a concise title based on the initial user message.", // Custom instructions for title
       // },
     },
   },
@@ -109,9 +110,9 @@ const memory = new Memory({
 });
 ```
 
-#### Cost Optimization with Custom Models
+#### Cost Optimization with Custom Models and Instructions
 
-You can specify a different (typically cheaper) model for title generation while using a high-quality model for the main conversation:
+You can specify a different (typically cheaper) model and custom instructions for title generation while using a high-quality model for the main conversation:
 
 ```typescript copy showLineNumbers
 import { openai } from "@ai-sdk/openai";
@@ -121,6 +122,7 @@ const memory = new Memory({
     threads: {
       generateTitle: {
         model: openai("gpt-4.1-nano"), // Cheaper model for titles
+        instructions: "Generate a concise, friendly title based on the initial user message.", // Custom title instructions
       },
     },
   },
@@ -132,9 +134,9 @@ const agent = new Agent({
 });
 ```
 
-#### Dynamic Model Selection
+#### Dynamic Model Selection and Instructions
 
-You can also use a function to dynamically determine the model based on runtime context:
+You can also use a function to dynamically determine the model and instructions based on runtime context:
 
 ```typescript copy showLineNumbers
 const memory = new Memory({
@@ -147,6 +149,10 @@ const memory = new Memory({
           return userTier === "premium" 
             ? openai("gpt-4.1")
             : openai("gpt-4.1-nano");
+        },
+        instructions: (ctx: RuntimeContext) => {
+          const language = ctx.get("userLanguage") || "English";
+          return `Generate a concise, engaging title in ${language} based on the user's first message.`;
         },
       },
     },
@@ -285,9 +291,9 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
     },
     {
       name: "threads",
-      type: "{ generateTitle?: boolean | { model: LanguageModelV1 | ((ctx: RuntimeContext) => LanguageModelV1 | Promise<LanguageModelV1>) } }",
+      type: "{ generateTitle?: boolean | { model: LanguageModelV1 | ((ctx: RuntimeContext) => LanguageModelV1 | Promise<LanguageModelV1>), instructions?: string | ((ctx: RuntimeContext) => string | Promise<string>) } }",
       description:
-        "Settings related to memory thread creation. `generateTitle` controls automatic thread title generation from the user's first message. Can be a boolean to enable/disable using the agent's model, or an object with a custom model for title generation (useful for cost optimization). Example: { generateTitle: { model: openai('gpt-4.1-nano') } }",
+        "Settings related to memory thread creation. `generateTitle` controls automatic thread title generation from the user's first message. Can be a boolean to enable/disable using the agent's model, or an object specifying a custom model or custom instructions for title generation (useful for cost optimization or title customization). Example: { generateTitle: { model: openai('gpt-4.1-nano'), instructions: 'Concise title based on the initial user message.' } }",
       isOptional: true,
       defaultValue: "{ generateTitle: false }",
     },

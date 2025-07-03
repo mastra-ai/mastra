@@ -1,5 +1,17 @@
 # @mastra/playground-ui
 
+## 5.1.10
+
+### Patch Changes
+
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+- 45f0dba: Display too-call finish reason error in playground
+- Updated dependencies [b60f510]
+- Updated dependencies [6997af1]
+- Updated dependencies [4d3fbdf]
+  - @mastra/client-js@0.10.9
+  - @mastra/core@0.10.10
+
 ## 5.1.10-alpha.1
 
 ### Patch Changes
