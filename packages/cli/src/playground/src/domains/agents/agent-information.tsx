@@ -11,8 +11,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { providerMapToIcon } from './table.columns';
 import { AgentOverview } from './agent-overview';
 import { useMemory } from '@/hooks/use-memory';
+import { AgentWorkingMemory } from './agent-working-memory';
 
-export function AgentInformation({ agentId }: { agentId: string }) {
+export function AgentInformation({ agentId, threadId }: { agentId: string; threadId: string }) {
   const { agent, isLoading } = useAgent(agentId);
   const { memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { handleCopy } = useCopyToClipboard({ text: agentId });
@@ -23,7 +24,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
     <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto border-l-sm border-border1">
       <div className="p-5 border-b-sm border-border1">
         <div className="text-icon6 flex items-center gap-2 min-w-0">
-          <Icon size="lg" className="bg-surface4 rounded-md p-1">
+          <Icon size="lg">
             <AgentIcon />
           </Icon>
 
@@ -101,6 +102,11 @@ export function AgentInformation({ agentId }: { agentId: string }) {
               Log&nbsp;Drains
             </p>
           </TabsTrigger>
+          <TabsTrigger value="working-memory" className="group">
+            <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
+              Working Memory
+            </p>
+          </TabsTrigger>
         </TabsList>
 
         <div className="overflow-y-auto">
@@ -117,6 +123,13 @@ export function AgentInformation({ agentId }: { agentId: string }) {
           </TabsContent>
           <TabsContent value="logs">
             {isLoading ? <Skeleton className="h-full" /> : <AgentLogs agentId={agentId} />}
+          </TabsContent>
+          <TabsContent value="working-memory">
+            {isLoading ? (
+              <Skeleton className="h-full" />
+            ) : (
+              <AgentWorkingMemory agentId={agentId} threadId={threadId} resourceId={agentId} />
+            )}
           </TabsContent>
         </div>
       </Tabs>

@@ -292,3 +292,62 @@ export async function getMessagesHandler({
     return handleError(error, 'Error getting messages');
   }
 }
+
+/**
+ * Handler to get the working memory for a thread (optionally resource-scoped).
+ * Returns { workingMemory, source }.
+ */
+export async function getWorkingMemoryHandler({
+  mastra,
+  agentId,
+  threadId,
+  resourceId,
+  networkId,
+  runtimeContext,
+  memoryConfig,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
+  resourceId?: string;
+  memoryConfig?: any;
+}) {
+  try {
+    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    validateBody({ threadId });
+    if (!memory) {
+      throw new HTTPException(400, { message: 'Memory is not initialized' });
+    }
+    const workingMemory = await memory.getWorkingMemory({ threadId: threadId!, resourceId, memoryConfig });
+    const config = memory.getMergedThreadConfig(memoryConfig || {});
+    const source = config.workingMemory?.scope === 'resource' && resourceId ? 'resource' : 'thread';
+    return { workingMemory, source };
+  } catch (error) {
+    return handleError(error, 'Error getting working memory');
+  }
+}
+
+/**
+ * Handler to update the working memory for a thread (optionally resource-scoped).
+ * Expects { threadId, workingMemory, resourceId? } in the body.
+ */
+export async function updateWorkingMemoryHandler({
+  mastra,
+  agentId,
+  threadId,
+  body,
+  networkId,
+  runtimeContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
+  body: Parameters<MastraMemory['updateWorkingMemory']>[0];
+}) {
+  try {
+    validateBody({ threadId });
+    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const { resourceId, memoryConfig, workingMemory } = body;
+    if (!memory) {
+      throw new HTTPException(400, { message: 'Memory is not initialized' });
+    }
+    await memory.updateWorkingMemory({ threadId: threadId!, resourceId, workingMemory, memoryConfig });
+    return { success: true };
+  } catch (error) {
+    return handleError(error, 'Error updating working memory');
+  }
+}

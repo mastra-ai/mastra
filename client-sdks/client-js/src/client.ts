@@ -13,6 +13,8 @@ import {
   MCPTool,
   LegacyWorkflow,
 } from './resources';
+import { NetworkMemoryThread } from './resources/network-memory-thread';
+import { VNextNetwork } from './resources/vNextNetwork';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -38,8 +40,6 @@ import type {
   CreateNetworkMemoryThreadParams,
   SaveNetworkMessageToMemoryParams,
 } from './types';
-import { VNextNetwork } from './resources/vNextNetwork';
-import { NetworkMemoryThread } from './resources/network-memory-thread';
 
 export class MastraClient extends BaseResource {
   constructor(options: ClientOptions) {
@@ -476,5 +476,19 @@ export class MastraClient extends BaseResource {
    */
   public getA2A(agentId: string) {
     return new A2A(this.options, agentId);
+  }
+
+  public getWorkingMemory(agentId: string, threadId: string, resourceId?: string) {
+    return this.request(`/api/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}`);
+  }
+
+  public updateWorkingMemory(agentId: string, threadId: string, workingMemory: string, resourceId?: string) {
+    return this.request(`/api/memory/threads/${threadId}/working-memory?agentId=${agentId}`, {
+      method: 'POST',
+      body: {
+        workingMemory,
+        resourceId,
+      },
+    });
   }
 }

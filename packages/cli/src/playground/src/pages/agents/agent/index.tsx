@@ -65,7 +65,7 @@ function Agent() {
           />
         </div>
 
-        <AgentInformation agentId={agentId!} />
+        <AgentInformation agentId={agentId!} threadId={threadId!} />
       </MainContentContent>
     </AgentSettingsProvider>
   );
