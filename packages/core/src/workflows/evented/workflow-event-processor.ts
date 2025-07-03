@@ -1,9 +1,9 @@
 import EventEmitter from 'events';
-import type { Mastra, StepFlowEntry, StepResult, Workflow } from '..';
-import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import type { Event, PubSub } from '../events';
-import { EventProcessor } from '../events/processor';
-import { RuntimeContext } from '../runtime-context';
+import type { Mastra, StepFlowEntry, StepResult, Workflow } from '../..';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import type { Event, PubSub } from '../../events';
+import { EventProcessor } from '../../events/processor';
+import { RuntimeContext } from '../../runtime-context';
 import { StepExecutor } from './step-executor';
 
 export class WorkflowEventProcessor extends EventProcessor {
