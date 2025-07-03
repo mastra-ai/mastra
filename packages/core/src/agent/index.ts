@@ -1356,6 +1356,7 @@ export class Agent<
         outputText,
         runId,
         messageList,
+        toolCallsCollection,
       }: {
         runId: string;
         result: Record<string, any>;
@@ -1364,6 +1365,8 @@ export class Agent<
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
         messageList: MessageList;
+        //@TODO: types
+        toolCallsCollection: Map<string, any>;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -1486,7 +1489,7 @@ export class Agent<
           text: result?.text,
           object: result?.object,
           usage: result?.usage,
-          toolCalls: [],
+          toolCalls: Array.from(toolCallsCollection.values()),
         };
 
         await this.#runScorers({
@@ -1560,13 +1563,15 @@ export class Agent<
           return;
         }
 
+        console.log(JSON.stringify(messageList.get.all.ui(), null, 2), 'MESSAGE LIST');
+
         const payload: ScorerHookData = {
           scorer: {
             id,
             name: scorerObject.scorer.name,
             description: scorerObject.scorer.description,
           },
-          input,
+          input: userInputMessages,
           output,
           runtimeContext: Object.fromEntries(runtimeContext.entries()),
           runId: runIdToUse,
@@ -1674,13 +1679,21 @@ export class Agent<
 
     const threadId = thread?.id;
 
+    const toolCallsCollection = new Map();
+
+    const onStepFinishFn = (result: any) => {
+      if (result.finishReason === 'tool-calls') {
+        for (const toolCall of result.toolCalls) {
+          toolCallsCollection.set(toolCall.toolCallId, toolCall);
+        }
+      }
+    };
+
     if (!output && experimental_output) {
       const result = await llm.__text({
         messages: messageObjects,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
-          return onStepFinish?.({ ...result, runId });
-        },
+        onStepFinish: onStepFinishFn,
         maxSteps: maxSteps,
         runId,
         temperature,
@@ -1704,6 +1717,7 @@ export class Agent<
         outputText,
         runId,
         messageList,
+        toolCallsCollection,
       });
 
       const newResult = result as any;
@@ -1717,9 +1731,7 @@ export class Agent<
       const result = await llm.__text({
         messages: messageObjects,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
-          return onStepFinish?.({ ...result, runId });
-        },
+        onStepFinish: onStepFinishFn,
         maxSteps,
         runId,
         temperature,
@@ -1742,6 +1754,7 @@ export class Agent<
         outputText,
         runId,
         messageList,
+        toolCallsCollection,
       });
 
       return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1751,9 +1764,7 @@ export class Agent<
       messages: messageObjects,
       tools: convertedTools,
       structuredOutput: output,
-      onStepFinish: (result: any) => {
-        return onStepFinish?.({ ...result, runId });
-      },
+      onStepFinish: onStepFinishFn,
       maxSteps,
       runId,
       temperature,
@@ -1774,6 +1785,7 @@ export class Agent<
       outputText,
       runId,
       messageList,
+      toolCallsCollection,
     });
 
     return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1873,6 +1885,18 @@ export class Agent<
 
     const threadId = thread?.id;
 
+    const toolCallsCollection = new Map();
+
+    const onStepFinishFn = (result: any) => {
+      if (result.finishReason === 'tool-calls') {
+        for (const toolCall of result.toolCalls) {
+          toolCallsCollection.set(toolCall.toolCallId, toolCall);
+        }
+      }
+
+      return onStepFinish?.({ ...result, runId });
+    };
+
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
@@ -1884,9 +1908,7 @@ export class Agent<
         messages: messageObjects,
         temperature,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
-          return onStepFinish?.({ ...result, runId });
-        },
+        onStepFinish: onStepFinishFn,
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
@@ -1898,6 +1920,7 @@ export class Agent<
               outputText,
               runId,
               messageList,
+              toolCallsCollection,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1930,9 +1953,7 @@ export class Agent<
         messages: messageObjects,
         temperature,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
-          return onStepFinish?.({ ...result, runId });
-        },
+        onStepFinish: onStepFinishFn,
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
@@ -1944,6 +1965,7 @@ export class Agent<
               outputText,
               runId,
               messageList,
+              toolCallsCollection,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1974,9 +1996,7 @@ export class Agent<
       tools: convertedTools,
       temperature,
       structuredOutput: output,
-      onStepFinish: (result: any) => {
-        return onStepFinish?.({ ...result, runId });
-      },
+      onStepFinish: onStepFinishFn,
       onFinish: async (result: any) => {
         try {
           const outputText = JSON.stringify(result.object);
@@ -1988,6 +2008,7 @@ export class Agent<
             outputText,
             runId,
             messageList,
+            toolCallsCollection,
           });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {

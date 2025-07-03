@@ -26,7 +26,17 @@ export function createOnScorerHook(mastra: Mastra) {
       return;
     }
 
-    console.log('onScorerHook', mastra, hookData);
+    const userMessages = hookData.input
+      .filter(m => m.role === 'user')
+      .map(m => {
+        if (typeof m.content === 'object') {
+          return JSON.stringify(m.content);
+        }
+        return m.content;
+      })
+      .join('\n');
+
+    console.log('onScorerHook', mastra, userMessages, hookData);
   };
 }
 

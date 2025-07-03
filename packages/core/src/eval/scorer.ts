@@ -1,3 +1,5 @@
+import type { UIMessage } from 'ai';
+import type { MessageList } from '../agent';
 import type { Mastra } from '../mastra';
 
 export type ScoreResult = {
@@ -28,7 +30,7 @@ export type ScorerHookData = {
   runId: string;
   traceId?: string;
   scorer: Record<string, any>;
-  input: string;
+  input: UIMessage[];
   output: Record<string, any>;
   additionalContext?: Record<string, any>;
   resourceId?: string;

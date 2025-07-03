@@ -28,7 +28,7 @@ export const evalAgent = new Agent({
       scorer: new AnswerRelevancyScorer({ model }),
       sampling: {
         type: 'ratio',
-        rate: 0.5,
+        rate: 1,
       },
     },
   },
