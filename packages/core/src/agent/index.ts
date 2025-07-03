@@ -1550,23 +1550,9 @@ export class Agent<
           return;
         }
 
-        this.logger.debug(`[Agent:${this.name}] - Running scorer ${id}`, {
-          runId: runIdToUse,
+        executeHook(AvailableHooks.ON_SCORER_RUN, {
           scorerId: id,
           input,
-          output: outputText,
-          instructions,
-          runtimeContext,
-          agentName,
-        });
-
-        executeHook(AvailableHooks.ON_GENERATION, {
-          input,
-          output: outputText,
-          runId: runIdToUse,
-          metric: scorerObject.scorer,
-          agentName,
-          instructions: instructions,
         });
       }
     }
