@@ -189,6 +189,103 @@ export default function Page() {
 }
 ```
 
+### With additional data / RuntimeContext
+
+You can send additional data via the UI hooks that can be leveraged in Mastra as RuntimeContext using the `sendExtraMessageFields` option.
+
+#### Frontend: Using sendExtraMessageFields
+
+```typescript
+import { useChat } from '@ai-sdk/react';
+
+export function ChatComponent() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: '/api/chat',
+    sendExtraMessageFields: true, // Enable sending extra fields
+  });
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+        e.preventDefault();        
+        handleSubmit(e,{
+            // Add context data to the message
+            data: {
+                userId: 'user123',
+                preferences: { language: 'en', temperature: 'celsius' },
+            },
+        });
+  };
+
+  return (
+    <form onSubmit={handleFormSubmit}>
+      <input value={input} onChange={handleInputChange} />
+    </form>
+  );
+}
+```
+
+#### Backend: Handling in API Route
+
+```typescript filename="app/api/chat/route.ts" copy
+import { mastra } from "@/src/mastra";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+
+export async function POST(req: Request) {
+  const { messages, data } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  
+  const runtimeContext = new RuntimeContext();
+  
+  if (data) {
+    Object.entries(data).forEach(([key, value]) => {
+      runtimeContext.set(key, value);
+    });
+  }
+  
+  const stream = await myAgent.stream(messages, { runtimeContext });
+  return stream.toDataStreamResponse();
+}
+```
+
+#### Alternative: Server Middleware
+
+You can also handle this at the server middleware level:
+
+```typescript filename="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+  server: {
+    middleware: [
+      async (c, next) => {
+        const runtimeContext = c.get("runtimeContext");
+        
+        if (c.req.method === 'POST') {
+          try {
+            // Clone the request since reading the body can only be done once
+            const clonedReq = c.req.raw.clone();
+            const body = await clonedReq.json();
+            
+            
+            if (body?.data) {
+              Object.entries(body.data).forEach(([key, value]) => {
+                runtimeContext.set(key, value);
+              });
+            }
+          } catch {
+            // Continue without additional data
+          }
+        }
+        
+        await next();
+      },
+    ],
+  },
+});
+```
+
+You can then access this data in your tools via the `runtimeContext` parameter. See the [Runtime Context documentation](/docs/agents/runtime-variables) for more details.
+
 ## Tool Calling
 
 ### AI SDK Tool Format

@@ -1,5 +1,29 @@
 # @mastra/deployer
 
+## 0.10.10
+
+### Patch Changes
+
+- 6e13b80: Add error cause and stack trace to mastra server error handler
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10
+
+## 0.10.10-alpha.1
+
+### Patch Changes
+
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+  - @mastra/core@0.10.10-alpha.1
+
+## 0.10.10-alpha.0
+
+### Patch Changes
+
+- 6e13b80: Add error cause and stack trace to mastra server error handler
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10-alpha.0
+
 ## 0.10.9
 
 ### Patch Changes
