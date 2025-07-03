@@ -1075,7 +1075,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should execute multiple steps in parallel', async () => {
+    it('should execute multiple steps in parallel', async () => {
       const step1Action = vi.fn().mockImplementation(async () => {
         return { value: 'step1' };
       });
@@ -1171,7 +1171,7 @@ describe('Workflow', () => {
     });
 
     describe('Variable Resolution', () => {
-      it('should resolve trigger data', async () => {
+      it.only('should resolve trigger data', async () => {
         const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
 
         const step1 = createStep({
@@ -1194,6 +1194,8 @@ describe('Workflow', () => {
         });
 
         workflow.then(step1).then(step2).commit();
+
+        new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { inputData: 'test-input' } });
@@ -5995,6 +5997,95 @@ describe('Workflow', () => {
         },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
+      });
+    });
+
+    it.only('should be able to nest workflows sequentially', async () => {
+      const start = vi.fn().mockImplementation(async ({ inputData }) => {
+        // Get the current value (either from trigger or previous increment)
+        const currentValue = inputData.startValue || 0;
+
+        // Increment the value
+        const newValue = currentValue + 1;
+
+        return { newValue };
+      });
+      const startStep = createStep({
+        id: 'start',
+        inputSchema: z.object({ startValue: z.number() }),
+        outputSchema: z.object({
+          newValue: z.number(),
+        }),
+        execute: start,
+      });
+
+      const other = vi.fn().mockImplementation(async ({ inputData }) => {
+        return { other: inputData.newValue + 26 };
+      });
+      const otherStep = createStep({
+        id: 'other',
+        inputSchema: z.object({ newValue: z.number() }),
+        outputSchema: z.object({ other: z.number() }),
+        execute: other,
+      });
+
+      const final = vi.fn().mockImplementation(async ({ getStepResult }) => {
+        const otherVal = getStepResult(otherStep)?.other ?? 0;
+        return { finalValue: 1 + otherVal };
+      });
+      const finalStep = createStep({
+        id: 'final',
+        inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+        outputSchema: z.object({ success: z.boolean() }),
+        execute: final,
+      });
+
+      const counterWorkflow = createWorkflow({
+        id: 'counter-workflow',
+        inputSchema: z.object({
+          startValue: z.number(),
+        }),
+        outputSchema: z.object({ success: z.boolean() }),
+      });
+
+      const wfA = createWorkflow({
+        id: 'nested-workflow-a',
+        inputSchema: counterWorkflow.inputSchema,
+        outputSchema: startStep.outputSchema,
+      })
+        .then(startStep)
+        .commit();
+      const wfB = createWorkflow({
+        id: 'nested-workflow-b',
+        inputSchema: wfA.outputSchema,
+        outputSchema: z.object({ success: z.boolean() }),
+      })
+        .then(otherStep)
+        .then(finalStep)
+        .commit();
+      counterWorkflow.then(wfA).then(wfB).commit();
+
+      new Mastra({
+        workflows: {
+          'counter-workflow': counterWorkflow,
+        },
+        storage: testStorage,
+      });
+
+      const run = counterWorkflow.createRun();
+      const result = await run.start({ inputData: { startValue: 0 } });
+
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(other).toHaveBeenCalledTimes(1);
+      expect(final).toHaveBeenCalledTimes(1);
+      // @ts-ignore
+      expect(result.steps['nested-workflow-a'].output).toEqual({
+        newValue: 1,
+      });
+
+      // @ts-ignore
+      expect(result.steps['nested-workflow-b'].output).toEqual({
+        finalValue: 28,
       });
     });
 
