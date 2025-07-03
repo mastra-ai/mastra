@@ -7,10 +7,11 @@ import {
   createSampleMessageV1,
   resetRole,
   createSampleMessageV2,
+  createSampleScoreRow,
 } from '@internal/storage-test-utils';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core';
 import { Mastra } from '@mastra/core/mastra';
-import { TABLE_EVALS, TABLE_TRACES, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
+import { TABLE_EVALS, TABLE_TRACES, TABLE_MESSAGES, TABLE_THREADS, TABLE_SCORERS } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 
 import { LibSQLStore } from './index';
@@ -38,6 +39,7 @@ describe('LibSQLStore Pagination Features', () => {
     await store.clearTable({ tableName: TABLE_TRACES });
     await store.clearTable({ tableName: TABLE_MESSAGES });
     await store.clearTable({ tableName: TABLE_THREADS });
+    await store.clearTable({ tableName: TABLE_SCORERS });
   });
 
   describe('getEvals with pagination', () => {
@@ -126,6 +128,39 @@ describe('LibSQLStore Pagination Features', () => {
       });
       expect(onlyDayBefore.total).toBe(2);
       expect(onlyDayBefore.evals).toHaveLength(2);
+    });
+  });
+
+  describe('Scorers', () => {
+    it('should save scorer', async () => {
+      const scorer = createSampleScoreRow();
+      await store.saveScore(scorer);
+      const result = await store.getScoresByRunId({ runId: scorer.runId, pagination: { page: 0, perPage: 10 } });
+      expect(result.scores).toHaveLength(1);
+      expect(result.pagination.total).toBe(1);
+      expect(result.pagination.page).toBe(0);
+      expect(result.pagination.perPage).toBe(10);
+      expect(result.pagination.hasMore).toBe(false);
+    });
+
+    it('getScoresByEntityId should return paginated scores with total count when returnPaginationResults is true', async () => {
+      const scorer = createSampleScoreRow();
+      await store.saveScore(scorer);
+
+      console.log({
+        entityId: scorer.entity!.id!,
+        entityType: scorer.entityType!,
+      });
+      const result = await store.getScoresByEntityId({
+        entityId: scorer.entity!.id!,
+        entityType: scorer.entityType!,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(result.scores).toHaveLength(1);
+      expect(result.pagination.total).toBe(1);
+      expect(result.pagination.page).toBe(0);
+      expect(result.pagination.perPage).toBe(10);
+      expect(result.pagination.hasMore).toBe(false);
     });
   });
 

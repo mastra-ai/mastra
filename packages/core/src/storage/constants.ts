@@ -61,6 +61,10 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
     type: 'jsonb', // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP, NETWORK
     nullable: true,
   },
+  entityId: {
+    type: 'text',
+    nullable: true,
+  },
   source: {
     type: 'text',
   },

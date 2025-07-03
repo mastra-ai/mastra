@@ -13,6 +13,7 @@ import {
   TABLE_TRACES,
   TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCORERS,
 } from '@mastra/core/storage';
 import type {
   EvalRow,
@@ -20,11 +21,11 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
+  StoragePagination,
   StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
-  StoragePagination,
 } from '@mastra/core/storage';
 
 import type { Trace } from '@mastra/core/telemetry';
@@ -1035,6 +1036,38 @@ export class LibSQLStore extends MastraStorage {
     return updatedResult.rows.map(row => this.parseRow(row));
   }
 
+  private transformScoreRow(row: Record<string, any>): ScoreRowData {
+    const resultValue = JSON.parse(row.result ?? '{}');
+    const scorerValue = JSON.parse(row.scorer ?? '{}');
+    const inputValue = JSON.parse(row.input ?? '{}');
+    const outputValue = JSON.parse(row.output ?? '{}');
+    const additionalLLMContextValue = row.additionalLLMContext ? JSON.parse(row.additionalLLMContext) : null;
+    const runtimeContextValue = row.runtimeContext ? JSON.parse(row.runtimeContext) : null;
+    const metadataValue = row.metadata ? JSON.parse(row.metadata) : null;
+    const entityValue = row.entity ? JSON.parse(row.entity) : null;
+
+    return {
+      id: row.id,
+      traceId: row.traceId,
+      runId: row.runId,
+      scorer: scorerValue,
+      result: resultValue,
+      metadata: metadataValue,
+      input: inputValue,
+      output: outputValue,
+      additionalLLMContext: additionalLLMContextValue,
+      runtimeContext: runtimeContextValue,
+      entityType: row.entityType,
+      entity: entityValue,
+      entityId: row.entityId,
+      source: row.source,
+      resourceId: row.resourceId,
+      threadId: row.threadId,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+
   private transformEvalRow(row: Record<string, any>): EvalRow {
     const resultValue = JSON.parse(row.result as string);
     const testInfoValue = row.test_info ? JSON.parse(row.test_info as string) : undefined;
@@ -1163,6 +1196,99 @@ export class LibSQLStore extends MastraStorage {
       throw new MastraError(
         {
           id: 'LIBSQL_STORE_GET_EVALS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+    try {
+      await this.insert({
+        tableName: TABLE_SCORERS,
+        record: score,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_SAVE_SCORE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+    return { score };
+  }
+
+  async getScoresByRunId({
+    runId,
+    pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const result = await this.client.execute({
+        sql: `SELECT * FROM ${TABLE_SCORERS} WHERE runId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        args: [runId, pagination.perPage + 1, pagination.page * pagination.perPage],
+      });
+      return {
+        scores: result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [],
+        pagination: {
+          total: result.rows?.length ?? 0,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore: result.rows?.length > pagination.perPage,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async getScoresByEntityId({
+    entityId,
+    entityType,
+    pagination,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const result = await this.client.execute({
+        sql: `SELECT * FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        args: [entityId, entityType, pagination.perPage + 1, pagination.page * pagination.perPage],
+      });
+      console.log({
+        entityId,
+        entityType,
+        pagination,
+        result: result.rows,
+      });
+      return {
+        scores: result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [],
+        pagination: {
+          total: result.rows?.length ?? 0,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore: result.rows?.length > pagination.perPage,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -1552,44 +1678,6 @@ export class LibSQLStore extends MastraStorage {
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };
-  }
-
-  /**
-   * SCORERS - Not implemented
-   */
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    throw new Error(
-      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
-        `To use scores functionality, implement the required methods in this storage adapter.`,
-    );
-  }
-
-  async getScoresByRunId({
-    runId: _runId,
-    pagination: _pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    throw new Error(
-      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
-        `To use scores functionality, implement the required methods in this storage adapter.`,
-    );
-  }
-
-  async getScoresByEntityId({
-    entityId: _entityId,
-    entityType: _entityType,
-    pagination: _pagination,
-  }: {
-    pagination: StoragePagination;
-    entityId: string;
-    entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    throw new Error(
-      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
-        `To use scores functionality, implement the required methods in this storage adapter.`,
-    );
   }
 }
 

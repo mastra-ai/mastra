@@ -54,12 +54,13 @@ export type ScoreRowData = {
   runtimeContext?: Record<string, any>; // THE EVALUATE RUNTIME CONTEXT FOR THE RUN
   entityType?: string; // WORKFLOW, AGENT, TOOL, STEP, NETWORK
   entity?: Record<string, any>; // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP, NETWORK
+  entityId?: string;
   source: string;
   resourceId?: string;
   threadId?: string;
   createdAt: Date;
   updatedAt: Date;
-}
+};
 
 export abstract class LLMScorer extends Scorer {
   abstract prompts(): Record<string, ScoringPrompts>;
