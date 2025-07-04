@@ -54,6 +54,21 @@ const store = new D1Store({
 });
 ```
 
+### Or you can pass any client implementation you want
+
+```typescript
+import { D1Store } from '@mastra/cloudflare-d1';
+
+const store = new D1Store({
+  client: {
+    query: ({ sql, params }) => {
+      // do something
+    },
+  },
+  tablePrefix: 'mastra_', // optional
+});
+```
+
 ## Supported Methods
 
 ### Thread Operations
