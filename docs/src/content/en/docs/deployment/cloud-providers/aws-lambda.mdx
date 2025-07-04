@@ -54,7 +54,7 @@ For persistent memory across Lambda invocations, use external storage providers 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
 import { LibSQLStore } from "@mastra/libsql";
 
-storage: new LibSQLStore({
+const storage = new LibSQLStore({
   url: "libsql://your-database.turso.io", // External Turso database
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
