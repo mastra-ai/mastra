@@ -37,7 +37,7 @@
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
-    "dotenv": "^16.5.0",
+    "dotenv": "^17.0.0",
     "eslint": "^9.29.0",
     "miniflare": "^4.20250617.4",
     "tsup": "^8.5.0",

@@ -69,6 +69,40 @@ You now have a basic Mastra server project ready. You should have the following 
 Ensure that you have set the appropriate environment variables for your LLM provider in the `.env` file.
 </Callout>
 
+### Compatibility Fix
+
+Currently, to ensure proper compatibility between Mastra and Assistant UI, you need to setup server middleware. Update your `/mastra/index.ts` file with the following configuration:
+
+```typescript showLineNumbers copy filename="src/mastra/index.ts"
+export const mastra = new Mastra({
+  //mastra server middleware
+  server:{
+  middleware: [{
+    path: '/api/agents/*/stream',
+    handler: async (c,next)=>{
+    
+      const body = await c.req.json();
+  
+      if ('state' in body && body.state == null) {
+        delete body.state;
+        delete body.tools;
+      }
+  
+       c.req.json = async() => body;
+  
+      return next()
+    }
+  }]
+ },
+});
+```
+
+This middleware ensures that when Assistant UI sends a request with `state: null` and `tools: {}` in the request body, we remove those properties to make the request work properly with Mastra.
+
+<Callout type="info">
+The `state: null` property can cause errors like `Cannot use 'in' operator to search for 'input' in null` in Mastra. Additionally, passing `tools: {}` overrides Mastra's built-in tools. Mastra only supports `clientTools` via the Mastra client SDK from the client side. For more information about client tools, see the [Client Tools documentation](/reference/client-js/agents#client-tools).
+</Callout>
+
 ### Run the Mastra Server
 
 Run the Mastra server using the following command:

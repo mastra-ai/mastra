@@ -2,7 +2,7 @@ version: '3'
 
 services:
   inngest:
-    image: inngest/inngest:v1.5.10
+    image: inngest/inngest:v1.8.2
     command: inngest dev -p 4000 -u http://host.docker.internal:4001/inngest/api --poll-interval=1
     ports:
       - '4000:4000'
