@@ -16,7 +16,7 @@ import { ChatProps } from '@/types';
 
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachments/pdfs-adapter';
-import { attachmentToCoreMessage, attachmentToExperimental, experimentalToAssistant } from './mappers';
+import { attachmentToExperimental, experimentalToAssistant } from './mappers';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -101,7 +101,6 @@ export function MastraRuntimeProvider({
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
 
-    const coreMessages = await attachmentToCoreMessage(message.attachments);
     const experimentalAttachments = await attachmentToExperimental(message.attachments);
 
     const input = message.content[0].text;
