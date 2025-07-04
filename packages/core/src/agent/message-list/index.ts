@@ -139,6 +139,13 @@ export class MessageList {
     this.newResponseMessages.clear();
     return messages;
   }
+  public getEarliestUnsavedMessageTimestamp(): number | undefined {
+    const unsavedMessages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
+    if (unsavedMessages.length === 0) return undefined;
+    // Find the earliest createdAt among unsaved messages
+    return Math.min(...unsavedMessages.map(m => new Date(m.createdAt).getTime()));
+  }
+
   public getSystemMessages(tag?: string): CoreMessage[] {
     if (tag) {
       return this.taggedSystemMessages[tag] || [];

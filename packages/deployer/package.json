@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.10.10",
+  "version": "0.10.11-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -92,7 +92,7 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@babel/core": "^7.27.4",
+    "@babel/core": "^7.27.7",
     "@babel/helper-module-imports": "^7.27.1",
     "@mastra/server": "workspace:^",
     "@neon-rs/load": "^0.1.82",

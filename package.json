@@ -3,7 +3,7 @@
   "version": "0.1.11",
   "type": "module",
   "devDependencies": {
-    "@changesets/cli": "^2.29.4",
+    "@changesets/cli": "^2.29.5",
     "@types/node": "^20.19.0",
     "husky": "^9.1.7",
     "lint-staged": "^15.5.2",

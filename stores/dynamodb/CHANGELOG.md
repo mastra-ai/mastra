@@ -1,5 +1,18 @@
 # @mastra/dynamodb
 
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- 7228a97: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.839.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.839.0) (from `^3.828.0`, in `dependencies`)
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/core@0.10.11-alpha.0
+
 ## 0.12.0
 
 ### Minor Changes
