@@ -208,8 +208,8 @@ importers:
         specifier: ^0.4.0
         version: 0.4.0
       rxjs:
-        specifier: 7.8.1
-        version: 7.8.1
+        specifier: 7.8.2
+        version: 7.8.2
       zod:
         specifier: ^3.25.67
         version: 3.25.67
@@ -739,8 +739,8 @@ importers:
         specifier: ^4.8.3
         version: 4.8.3
       rxjs:
-        specifier: 7.8.1
-        version: 7.8.1
+        specifier: 7.8.2
+        version: 7.8.2
       zod:
         specifier: ^3.0.0
         version: 3.25.67
@@ -16105,6 +16105,9 @@ packages:
   rxjs@7.8.1:
     resolution: {integrity: sha512-AA3TVj+0A2iuIoQkWEK/tqFjBq2j+6PO6Y0zJcvzLAFhEFIO3HL0vls9hWLncZbAAbK0mar7oZ4V079I/qPMxg==}
 
+  rxjs@7.8.2:
+    resolution: {integrity: sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==}
+
   sade@1.8.1:
     resolution: {integrity: sha512-xal3CZX1Xlo/k4ApwCFrHVACi9fBqJ7V+mwhBsuf/1IOKbBy098Fex+Wa/5QMubw09pSZ/u8EY8PWgevJsXp1A==}
     engines: {node: '>=6'}
@@ -20250,7 +20253,7 @@ snapshots:
       pino: 9.7.0
       pino-pretty: 11.3.0
       reflect-metadata: 0.2.2
-      rxjs: 7.8.1
+      rxjs: 7.8.2
       type-graphql: 2.0.0-rc.1(class-validator@0.14.2)(graphql-scalars@1.24.2(graphql@16.11.0))(graphql@16.11.0)
       zod: 3.25.67
     transitivePeerDependencies:
@@ -30096,7 +30099,7 @@ snapshots:
       mute-stream: 0.0.8
       ora: 5.4.1
       run-async: 2.4.1
-      rxjs: 7.8.1
+      rxjs: 7.8.2
       string-width: 4.2.3
       strip-ansi: 6.0.1
       through: 2.3.8
@@ -31953,7 +31956,7 @@ snapshots:
     dependencies:
       neo4j-driver-bolt-connection: 5.28.1
       neo4j-driver-core: 5.28.1
-      rxjs: 7.8.1
+      rxjs: 7.8.2
 
   nested-error-stacks@2.1.1: {}
 
@@ -33480,6 +33483,10 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
+  rxjs@7.8.2:
+    dependencies:
+      tslib: 2.8.1
+
   sade@1.8.1:
     dependencies:
       mri: 1.2.0
@@ -34515,7 +34522,7 @@ snapshots:
       lodash: 4.17.21
       ora: 5.4.1
       prettier: 3.0.3
-      rxjs: 7.8.1
+      rxjs: 7.8.2
       slash: 3.0.0
       threads: 1.7.0
       tslib: 2.8.1
@@ -34687,7 +34694,7 @@ snapshots:
 
   typed-emitter@2.1.0:
     optionalDependencies:
-      rxjs: 7.8.1
+      rxjs: 7.8.2
 
   typescript-eslint@8.35.1(eslint@9.30.0(jiti@2.4.2))(typescript@5.8.3):
     dependencies:
