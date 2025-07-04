@@ -11,6 +11,7 @@ const meta = {
   sleep: "sleep()",
   sleepUntil: "sleepUntil()",
   waitForEvent: "waitForEvent()",
+  sendEvent: "sendEvent()",
   commit: "commit()",
   "create-run": "createRun()",
   snapshots: "Snapshots",
