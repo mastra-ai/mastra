@@ -13,7 +13,7 @@ const meta = {
   waitForEvent: "waitForEvent()",
   sendEvent: "sendEvent()",
   commit: "commit()",
-  "create-run": "createRun()",
+  "create-run": "createRunAsync()",
   snapshots: "Snapshots",
   watch: "watch()",
   stream: "stream()",
