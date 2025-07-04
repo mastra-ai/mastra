@@ -85,6 +85,7 @@ export const mastra = new Mastra({
   
       if ('state' in body && body.state == null) {
         delete body.state;
+        delete body.tools;
       }
   
        c.req.json = async() => body;
@@ -96,8 +97,11 @@ export const mastra = new Mastra({
 });
 ```
 
-This middleware ensures that when Assistant UI sends a request with `state: null` in the request body, we remove that property to make the request work properly with Mastra.
+This middleware ensures that when Assistant UI sends a request with `state: null` and `tools: {}` in the request body, we remove those properties to make the request work properly with Mastra.
 
+<Callout type="info">
+The `state: null` property can cause errors like `Cannot use 'in' operator to search for 'input' in null` in Mastra. Additionally, passing `tools: {}` overrides Mastra's built-in tools. Mastra only supports `clientTools` via the Mastra client SDK from the client side. For more information about client tools, see the [Client Tools documentation](/reference/client-js/agents#client-tools).
+</Callout>
 
 ### Run the Mastra Server
 
