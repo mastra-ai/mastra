@@ -44,14 +44,14 @@ const step1 = createStep({
     city: z.string()
   }),
   execute: async ({ resumeData, suspend }) => {
-    if (!(resumeData ?? {}).city) {
+    const { city } = resumeData ?? {};
+
+    if (!city) {
       await suspend({});
       return { output: "" };
     }
 
-    return {
-      output: ""
-    };
+    return { output: "" };
   }
 });
 
