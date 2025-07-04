@@ -1042,7 +1042,7 @@ importers:
         specifier: ^1.1.8
         version: 1.2.7(@types/react-dom@19.1.6(@types/react@19.1.8))(@types/react@19.1.8)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@tanstack/react-query':
-        specifier: ^5.80.10
+        specifier: ^5.81.5
         version: 5.81.5(react@19.1.0)
       '@tanstack/react-virtual':
         specifier: ^3.13.10
