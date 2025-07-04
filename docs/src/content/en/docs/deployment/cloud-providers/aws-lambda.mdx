@@ -35,42 +35,28 @@ Before deploying to AWS Lambda, ensure you have:
   such as `LibSQLStore` with a file URL.
 </Callout>
 
-Lambda functions have limitations with file system storage. Configure your Mastra application to use either ephemeral memory or external storage providers:
+Lambda functions have limitations with file system storage. Configure your Mastra application to use either in-memory or external storage providers:
 
 #### Option 1: In-Memory (Simplest)
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
-import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
-export const mastra = new Mastra({
-  memory: new Memory({
-    storage: new LibSQLStore({
-      url: ":memory:",
-    }),
-  }),
+const storage = new LibSQLStore({
+  url: ":memory:", // in-memory storage
 });
 ```
 
 #### Option 2: External Storage Providers
 
-For persistent memory across Lambda invocations, use external storage providers like LibSQL with Turso or PostgreSQL:
+For persistent memory across Lambda invocations, use external storage providers like `LibSQLStore` with Turso or other storage providers like `PostgreStore`:
 
 ```typescript filename="src/mastra/index.ts" copy showLineNumbers
-import { Mastra } from "@mastra/core";
-import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 
-const memory = new Memory({
-  storage: new LibSQLStore({
-    url: "libsql://your-database.turso.io", // External Turso database
-    authToken: process.env.TURSO_AUTH_TOKEN,
-  }),
-});
-
-export const mastra = new Mastra({
-  memory,
-  // ... other configuration
+storage: new LibSQLStore({
+  url: "libsql://your-database.turso.io", // External Turso database
+  authToken: process.env.TURSO_AUTH_TOKEN,
 });
 ```
 
@@ -85,35 +71,29 @@ For more memory configuration options, see the [Memory documentation](/docs/memo
 Create a `Dockerfile` in your Mastra project root directory:
 
 ```dockerfile filename="Dockerfile" copy showLineNumbers
-FROM public.ecr.aws/lambda/nodejs:18
+FROM node:22-alpine
 
-# Install the Lambda Web Adapter
-COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.8.4 /lambda-adapter /opt/extensions/lambda-adapter
-
-# Set environment variables for Lambda Web Adapter
-ENV AWS_LAMBDA_EXEC_WRAPPER=/opt/bootstrap
-ENV RUST_LOG=info
-
-# Copy package files
+WORKDIR /app
 COPY package*.json ./
+RUN npm ci
+COPY src ./src
+RUN npx mastra build
+RUN apk add --no-cache gcompat
 
-# Install dependencies
-RUN npm ci --only=production
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.0 /lambda-adapter /opt/extensions/lambda-adapter
+RUN addgroup -g 1001 -S nodejs && \
+  adduser -S mastra -u 1001 && \
+  chown -R mastra:nodejs /app
 
-# Copy application code
-COPY . .
+USER mastra
 
-# Build the application
-RUN npm run build
-
-# Set the port for Lambda Web Adapter
 ENV PORT=8080
+ENV NODE_ENV=production
+ENV READINESS_CHECK_PATH="/api"
 
-# Expose the port
 EXPOSE 8080
 
-# Start the Mastra server
-CMD ["node", ".mastra/output/index.mjs"]
+CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]
 ```
 
 </Steps>
@@ -218,7 +198,7 @@ Configure the function's memory and timeout settings:
 Once deployed, test your Lambda function:
 
 1. Copy the **Function URL** from the Lambda console
-2. Visit the URL in your browser to see the Mastra home screen
+2. Visit the URL in your browser to see your Mastra's server home screen
 3. Test your agents and workflows using the generated API endpoints
 
 For more information about available API endpoints, see the [Server documentation](/docs/deployment/server).
@@ -297,4 +277,3 @@ For production deployments:
 - [Mastra Client SDK](/docs/client-js/overview)
 - [AWS Lambda documentation](https://docs.aws.amazon.com/lambda/)
 - [AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter)
-
