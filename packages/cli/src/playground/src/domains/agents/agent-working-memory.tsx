@@ -1,26 +1,12 @@
-import React from 'react';
 import { WorkingMemoryViewer } from './working-memory-viewer';
-import { useAgentWorkingMemory } from '@/hooks/use-agent-working-memory';
+import { useWorkingMemory } from '@mastra/playground-ui';
 
-interface AgentWorkingMemoryProps {
-  agentId: string;
-  threadId: string;
-  resourceId: string;
-}
-
-export const AgentWorkingMemory: React.FC<AgentWorkingMemoryProps> = ({ agentId, threadId, resourceId }) => {
-  const { workingMemory, workingMemorySource, isLoading, isUpdating, updateWorkingMemory } = useAgentWorkingMemory(
-    agentId,
-    threadId,
-    resourceId,
-  );
-
-  console.log('workingMemory', workingMemory);
-  console.log('workingMemorySource', workingMemorySource);
+export const AgentWorkingMemory = () => {
+  const { workingMemoryData, workingMemorySource, isLoading, isUpdating, updateWorkingMemory } = useWorkingMemory();
 
   return (
     <WorkingMemoryViewer
-      workingMemory={workingMemory}
+      workingMemory={workingMemoryData}
       workingMemorySource={workingMemorySource}
       isLoading={isLoading}
       isUpdating={isUpdating}

@@ -13,7 +13,7 @@ import { AgentOverview } from './agent-overview';
 import { useMemory } from '@/hooks/use-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
 
-export function AgentInformation({ agentId, threadId }: { agentId: string; threadId: string }) {
+export function AgentInformation({ agentId }: { agentId: string }) {
   const { agent, isLoading } = useAgent(agentId);
   const { memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { handleCopy } = useCopyToClipboard({ text: agentId });
@@ -125,11 +125,7 @@ export function AgentInformation({ agentId, threadId }: { agentId: string; threa
             {isLoading ? <Skeleton className="h-full" /> : <AgentLogs agentId={agentId} />}
           </TabsContent>
           <TabsContent value="working-memory">
-            {isLoading ? (
-              <Skeleton className="h-full" />
-            ) : (
-              <AgentWorkingMemory agentId={agentId} threadId={threadId} resourceId={agentId} />
-            )}
+            {isLoading ? <Skeleton className="h-full" /> : <AgentWorkingMemory />}
           </TabsContent>
         </div>
       </Tabs>
