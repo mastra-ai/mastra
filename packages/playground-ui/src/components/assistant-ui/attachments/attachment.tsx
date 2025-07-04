@@ -21,7 +21,7 @@ const ComposerTxtAttachment = ({ document }: { document: AttachmentState }) => {
 
   return (
     <div className="flex items-center justify-center h-full w-full">
-      {isLoading ? <Spinner className="animate-spin" /> : <TxtEntry data={text} />}
+      {isLoading ? <Spinner className="animate-spin" /> : <TxtEntry data={text} nameSlot={document.name} />}
     </div>
   );
 };
@@ -40,7 +40,7 @@ const ComposerPdfAttachment = ({ document }: { document: AttachmentState }) => {
 
   return (
     <div className="flex items-center justify-center h-full w-full">
-      {state.isLoading ? <Spinner className="animate-spin" /> : <PdfEntry data={state.text} />}
+      {state.isLoading ? <Spinner className="animate-spin" /> : <PdfEntry data={state.text} nameSlot={document.name} />}
     </div>
   );
 };
@@ -58,7 +58,7 @@ const AttachmentThumbnail = () => {
           <Tooltip>
             <AttachmentPrimitive.Root>
               <TooltipTrigger asChild>
-                <div className="overflow-hidden size-16 rounded-lg bg-surface3 border-sm border-border1 ">
+                <div className="overflow-hidden size-16 rounded-lg bg-surface3 border-sm border-border1">
                   {isImage ? (
                     <ImageEntry src={src ?? ''} />
                   ) : document?.contentType === 'application/pdf' ? (

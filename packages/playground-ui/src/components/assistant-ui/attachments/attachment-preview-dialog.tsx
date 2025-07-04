@@ -1,18 +1,29 @@
 import { Dialog, DialogTitle, DialogContent } from '@/components/ui/dialog';
 import { FileText } from 'lucide-react';
-import { useState } from 'react';
+import { ReactNode, useState } from 'react';
+
+type Variants = 'default' | 'badge';
+
+const variantClasses = {
+  default: 'h-full w-full flex items-center justify-center',
+  badge: 'h-full w-full flex items-center gap-2 border-border1 bg-surface3 border-sm rounded-lg p-2',
+};
 
 interface PdfEntryProps {
   data: string;
+  nameSlot: ReactNode;
+  variant?: Variants;
 }
 
-export const PdfEntry = ({ data }: PdfEntryProps) => {
+export const PdfEntry = ({ data, variant = 'default', nameSlot }: PdfEntryProps) => {
   const [open, setOpen] = useState(false);
+  const variantClass = variantClasses[variant];
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="h-full w-full flex items-center justify-center" type="button">
+      <button onClick={() => setOpen(true)} className={variantClass} type="button">
         <FileText className="text-accent2" />
+        {variant === 'badge' && <span className="text-ui-sm text-icon3 truncate">{nameSlot}</span>}
       </button>
 
       <PdfPreviewDialog data={data} open={open} onOpenChange={setOpen} />
@@ -77,10 +88,13 @@ export const ImagePreviewDialog = ({ src, open, onOpenChange }: ImagePreviewDial
 
 interface TxtEntryProps {
   data: string;
+  nameSlot: ReactNode;
+  variant?: Variants;
 }
 
-export const TxtEntry = ({ data }: TxtEntryProps) => {
+export const TxtEntry = ({ data, variant = 'default', nameSlot }: TxtEntryProps) => {
   const [open, setOpen] = useState(false);
+  const variantClass = variantClasses[variant];
 
   // assistant-ui wraps txt related files with somethign like <attachment name=text.txt>
   // We remove the <attachment> tag and everything inside it
@@ -88,8 +102,9 @@ export const TxtEntry = ({ data }: TxtEntryProps) => {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="h-full w-full flex items-center justify-center" type="button">
+      <button onClick={() => setOpen(true)} className={variantClass} type="button">
         <FileText className="text-icon3" />
+        {variant === 'badge' && <span className="text-ui-sm text-icon3 truncate">{nameSlot}</span>}
       </button>
       <TxtPreviewDialog data={formattedContent} open={open} onOpenChange={setOpen} />
     </>
