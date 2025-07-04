@@ -8,6 +8,25 @@ import { RuntimeContext } from '../../runtime-context';
 import { StepExecutor } from './step-executor';
 import { EventedWorkflow } from './workflow';
 
+type ProcessorArgs = {
+  activeSteps: string[];
+  workflow: Workflow;
+  workflowId: string;
+  runId: string;
+  executionPath: number[];
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  resume: boolean;
+  prevResult: StepResult<any, any, any, any>;
+  resumeData: any;
+  parentWorkflow?: {
+    workflowId: string;
+    runId: string;
+    executionPath: number[];
+    resume: boolean;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+  };
+};
+
 export class WorkflowEventProcessor extends EventProcessor {
   protected mastra: Mastra;
   private stepExecutor: StepExecutor;
@@ -40,23 +59,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     resume,
     prevResult,
     resumeData,
-  }: {
-    workflow: Workflow;
-    workflowId: string;
-    runId: string;
-    executionPath: number[];
-    stepResults: Record<string, StepResult<any, any, any, any>>;
-    resume: boolean;
-    prevResult: StepResult<any, any, any, any>;
-    resumeData: any;
-    parentWorkflow?: {
-      workflowId: string;
-      runId: string;
-      executionPath: number[];
-      resume: boolean;
-      stepResults: Record<string, StepResult<any, any, any, any>>;
-    };
-  }) {
+  }: ProcessorArgs) {
     await this.pubsub.publish('workflows', {
       type: 'workflow.step.run',
       data: {
@@ -74,29 +77,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     });
   }
 
-  protected async processWorkflowEnd({
-    workflowId,
-    resume,
-    prevResult,
-    resumeData,
-    parentWorkflow,
-  }: {
-    workflow: Workflow;
-    workflowId: string;
-    runId: string;
-    executionPath: number[];
-    stepResults: Record<string, StepResult<any, any, any, any>>;
-    resume: boolean;
-    prevResult: StepResult<any, any, any, any>;
-    resumeData: any;
-    parentWorkflow?: {
-      workflowId: string;
-      runId: string;
-      executionPath: number[];
-      resume: boolean;
-      stepResults: Record<string, StepResult<any, any, any, any>>;
-    };
-  }) {
+  protected async processWorkflowEnd({ workflowId, resume, prevResult, resumeData, parentWorkflow }: ProcessorArgs) {
     if (parentWorkflow) {
       await this.pubsub.publish('workflows', {
         type: 'workflow.step.end',
@@ -126,23 +107,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     prevResult,
     resumeData,
     parentWorkflow,
-  }: {
-    workflow: Workflow;
-    workflowId: string;
-    runId: string;
-    executionPath: number[];
-    stepResults: Record<string, StepResult<any, any, any, any>>;
-    resume: boolean;
-    prevResult: StepResult<any, any, any, any>;
-    resumeData: any;
-    parentWorkflow?: {
-      workflowId: string;
-      runId: string;
-      executionPath: number[];
-      resume: boolean;
-      stepResults: Record<string, StepResult<any, any, any, any>>;
-    };
-  }) {
+  }: ProcessorArgs) {
     let stepGraph: StepFlowEntry[] = workflow.stepGraph;
 
     if (!executionPath?.length) {
@@ -266,23 +231,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     resumeData,
     parentWorkflow,
     stepResults,
-  }: {
-    workflow: Workflow;
-    workflowId: string;
-    runId: string;
-    executionPath: number[];
-    stepResults: Record<string, StepResult<any, any, any, any>>;
-    resume: boolean;
-    prevResult: StepResult<any, any, any, any>;
-    resumeData: any;
-    parentWorkflow?: {
-      workflowId: string;
-      runId: string;
-      executionPath: number[];
-      resume: boolean;
-      stepResults: Record<string, StepResult<any, any, any, any>>;
-    };
-  }) {
+  }: ProcessorArgs) {
     let step = workflow.stepGraph[executionPath[0]!];
 
     if (step?.type === 'parallel' && executionPath.length > 1) {
@@ -293,7 +242,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResults[step.step.id] = prevResult;
     }
 
-    await this.saveData({ workflow, runId, stepResults });
+    // await this.saveData({ workflow, runId, stepResults });
 
     if (!prevResult?.status || prevResult.status === 'failed') {
       await this.pubsub.publish('workflows', {
@@ -426,8 +375,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     runId: string;
     stepResults: Record<string, StepResult<any, any, any, any>>;
   }) {
-    // TODO: we need to add to stepResults on db level, preferably
-    // otherwise we'll need to start managing parallel execution states somehow :thinking:
     await this.mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflow.id,
       runId,
@@ -485,6 +432,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     const { type, data } = event;
 
     const workflowData = data as {
+      activeSteps: string[];
       workflowId: string;
       runId: string;
       executionPath: number[];
@@ -501,11 +449,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       };
     };
 
-    workflowData.stepResults = await this.loadData({
-      workflowId: workflowData.workflowId,
-      runId: workflowData.runId,
-      stepResults: workflowData.stepResults,
-    });
+    // workflowData.stepResults = await this.loadData({
+    //   workflowId: workflowData.workflowId,
+    //   runId: workflowData.runId,
+    //   stepResults: workflowData.stepResults,
+    // });
 
     const workflow = workflowData.parentWorkflow
       ? this.getNestedWorkflow(workflowData.parentWorkflow)
