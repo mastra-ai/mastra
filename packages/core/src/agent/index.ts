@@ -33,6 +33,7 @@ import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import { MessageList } from './message-list';
 import type { MessageInput } from './message-list';
+import { SaveQueueManager } from './save-queue';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -1119,6 +1120,45 @@ export class Agent<
     };
   }
 
+  /**
+   * Adds response messages from a step to the MessageList and schedules persistence.
+   * This is used for incremental saving: after each agent step, messages are added to a save queue
+   * and a debounced save operation is triggered to avoid redundant writes.
+   *
+   * @param result - The step result containing response messages.
+   * @param messageList - The MessageList instance for the current thread.
+   * @param threadId - The thread ID.
+   * @param memoryConfig - The memory configuration for saving.
+   * @param runId - (Optional) The run ID for logging.
+   */
+  private async saveStepMessages({
+    saveQueueManager,
+    result,
+    messageList,
+    threadId,
+    memoryConfig,
+    runId,
+  }: {
+    saveQueueManager: SaveQueueManager;
+    result: any;
+    messageList: MessageList;
+    threadId?: string;
+    memoryConfig?: MemoryConfig;
+    runId?: string;
+  }) {
+    try {
+      messageList.add(result.response.messages, 'response');
+      await saveQueueManager.batchMessages(messageList, threadId, memoryConfig);
+    } catch (e) {
+      await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
+      this.logger.error('Error saving memory on step finish', {
+        error: e,
+        runId,
+      });
+      throw e;
+    }
+  }
+
   __primitive({
     instructions,
     messages,
@@ -1131,6 +1171,7 @@ export class Agent<
     clientTools,
     runtimeContext,
     generateMessageId,
+    saveQueueManager,
   }: {
     instructions?: string;
     toolsets?: ToolsetsInput;
@@ -1143,6 +1184,7 @@ export class Agent<
     messages: string | string[] | CoreMessage[] | AiMessageType[];
     runtimeContext: RuntimeContext;
     generateMessageId: undefined | IDGenerator;
+    saveQueueManager: SaveQueueManager;
   }) {
     return {
       before: async () => {
@@ -1403,12 +1445,7 @@ export class Agent<
             }
 
             // Parallelize title generation and message saving
-            const promises: Promise<any>[] = [
-              memory.saveMessages({
-                messages: messageList.drainUnsavedMessages(),
-                memoryConfig,
-              }),
-            ];
+            const promises: Promise<any>[] = [saveQueueManager.flushMessages(messageList, threadId, memoryConfig)];
 
             // Add title generation to promises if needed
             if (thread.title?.startsWith('New Thread')) {
@@ -1440,6 +1477,7 @@ export class Agent<
 
             await Promise.all(promises);
           } catch (e) {
+            await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
             if (e instanceof MastraError) {
               throw e;
             }
@@ -1543,6 +1581,7 @@ export class Agent<
       experimental_output,
       telemetry,
       runtimeContext = new RuntimeContext(),
+      savePerStep = false,
       ...args
     }: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, defaultGenerateOptions, generateOptions);
     const generateMessageId =
@@ -1557,6 +1596,12 @@ export class Agent<
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
 
+    const memory = this.getMemory();
+    const saveQueueManager = new SaveQueueManager({
+      logger: this.logger,
+      memory,
+    });
+
     const { before, after } = this.__primitive({
       messages,
       instructions,
@@ -1569,6 +1614,7 @@ export class Agent<
       clientTools,
       runtimeContext,
       generateMessageId,
+      saveQueueManager,
     });
 
     const { thread, messageObjects, convertedTools, messageList } = await before();
@@ -1579,7 +1625,17 @@ export class Agent<
       const result = await llm.__text({
         messages: messageObjects,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
+        onStepFinish: async (result: any) => {
+          if (savePerStep) {
+            await this.saveStepMessages({
+              saveQueueManager,
+              result,
+              messageList,
+              threadId,
+              memoryConfig,
+              runId,
+            });
+          }
           return onStepFinish?.({ ...result, runId });
         },
         maxSteps: maxSteps,
@@ -1618,7 +1674,17 @@ export class Agent<
       const result = await llm.__text({
         messages: messageObjects,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
+        onStepFinish: async (result: any) => {
+          if (savePerStep) {
+            await this.saveStepMessages({
+              saveQueueManager,
+              result,
+              messageList,
+              threadId,
+              memoryConfig,
+              runId,
+            });
+          }
           return onStepFinish?.({ ...result, runId });
         },
         maxSteps,
@@ -1652,7 +1718,17 @@ export class Agent<
       messages: messageObjects,
       tools: convertedTools,
       structuredOutput: output,
-      onStepFinish: (result: any) => {
+      onStepFinish: async (result: any) => {
+        if (savePerStep) {
+          await this.saveStepMessages({
+            saveQueueManager,
+            result,
+            messageList,
+            threadId,
+            memoryConfig,
+            runId,
+          });
+        }
         return onStepFinish?.({ ...result, runId });
       },
       maxSteps,
@@ -1741,6 +1817,7 @@ export class Agent<
       experimental_output,
       telemetry,
       runtimeContext = new RuntimeContext(),
+      savePerStep = false,
       ...args
     }: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, defaultStreamOptions, streamOptions);
     const generateMessageId =
@@ -1756,6 +1833,12 @@ export class Agent<
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
 
+    const memory = this.getMemory();
+    const saveQueueManager = new SaveQueueManager({
+      logger: this.logger,
+      memory,
+    });
+
     const { before, after } = this.__primitive({
       instructions,
       messages,
@@ -1768,6 +1851,7 @@ export class Agent<
       clientTools,
       runtimeContext,
       generateMessageId,
+      saveQueueManager,
     });
 
     const { thread, messageObjects, convertedTools, messageList } = await before();
@@ -1783,7 +1867,17 @@ export class Agent<
         messages: messageObjects,
         temperature,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
+        onStepFinish: async (result: any) => {
+          if (savePerStep) {
+            await this.saveStepMessages({
+              saveQueueManager,
+              result,
+              messageList,
+              threadId,
+              memoryConfig,
+              runId,
+            });
+          }
           return onStepFinish?.({ ...result, runId });
         },
         onFinish: async (result: any) => {
@@ -1829,7 +1923,17 @@ export class Agent<
         messages: messageObjects,
         temperature,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
+        onStepFinish: async (result: any) => {
+          if (savePerStep) {
+            await this.saveStepMessages({
+              saveQueueManager,
+              result,
+              messageList,
+              threadId,
+              memoryConfig,
+              runId,
+            });
+          }
           return onStepFinish?.({ ...result, runId });
         },
         onFinish: async (result: any) => {
@@ -1873,7 +1977,17 @@ export class Agent<
       tools: convertedTools,
       temperature,
       structuredOutput: output,
-      onStepFinish: (result: any) => {
+      onStepFinish: async (result: any) => {
+        if (savePerStep) {
+          await this.saveStepMessages({
+            saveQueueManager,
+            result,
+            messageList,
+            threadId,
+            memoryConfig,
+            runId,
+          });
+        }
         return onStepFinish?.({ ...result, runId });
       },
       onFinish: async (result: any) => {
