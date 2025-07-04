@@ -9,7 +9,7 @@ import { StepExecutor } from './step-executor';
 import { EventedWorkflow } from './workflow';
 
 type ProcessorArgs = {
-  activeSteps: string[];
+  activeSteps: number[][];
   workflow: Workflow;
   workflowId: string;
   runId: string;
@@ -73,11 +73,19 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
         prevResult,
         resumeData,
+        activeSteps: [],
       },
     });
   }
 
-  protected async processWorkflowEnd({ workflowId, resume, prevResult, resumeData, parentWorkflow }: ProcessorArgs) {
+  protected async processWorkflowEnd({
+    workflowId,
+    resume,
+    prevResult,
+    resumeData,
+    parentWorkflow,
+    activeSteps,
+  }: ProcessorArgs) {
     if (parentWorkflow) {
       await this.pubsub.publish('workflows', {
         type: 'workflow.step.end',
@@ -86,12 +94,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId: parentWorkflow.runId,
           executionPath: parentWorkflow.executionPath,
           resume,
-          stepResults: {
-            ...parentWorkflow.stepResults,
-            [workflowId]: prevResult,
-          },
+          stepResults: parentWorkflow.stepResults,
           prevResult,
           resumeData,
+          activeSteps,
         },
       });
     }
@@ -103,6 +109,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     runId,
     executionPath,
     stepResults,
+    activeSteps,
     resume,
     prevResult,
     resumeData,
@@ -141,6 +148,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (step.type === 'parallel' && executionPath.length > 1) {
       step = step.steps[executionPath[1]!] as StepFlowEntry;
     } else if (step.type === 'parallel') {
+      for (let i = 0; i < step.steps.length; i++) {
+        activeSteps.push(executionPath.concat([i]));
+      }
+
       await Promise.all(
         step.steps.map(async (_step, idx) => {
           return this.pubsub.publish('workflows', {
@@ -154,6 +165,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               prevResult,
               resumeData,
               parentWorkflow,
+              activeSteps,
             },
           });
         }),
@@ -174,6 +186,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
+    activeSteps.push(executionPath);
+
     // Run nested workflow
     if (step.step instanceof EventedWorkflow) {
       console.log('starting nested workflow', step.step.id);
@@ -181,13 +195,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         type: resume ? 'workflow.resume' : 'workflow.start',
         data: {
           workflowId: step.step.id,
-          parentWorkflow: { workflowId, runId, executionPath, resume },
+          parentWorkflow: { workflowId, runId, executionPath, resume, stepResults },
           executionPath: [0],
           runId: randomUUID(),
           resume,
           stepResults: {},
           prevResult,
           resumeData,
+          activeSteps,
         },
       });
 
@@ -217,6 +232,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults,
         prevResult: stepResult,
         resumeData,
+        activeSteps,
       },
     });
   }
@@ -231,7 +247,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     resumeData,
     parentWorkflow,
     stepResults,
+    activeSteps,
   }: ProcessorArgs) {
+    // clear from activeSteps
+    const activeStepIndex = activeSteps.findIndex(step => step.every((idx, i) => idx === executionPath[i]));
+    if (activeStepIndex !== -1) {
+      activeSteps.splice(activeStepIndex, 1);
+    }
+
     let step = workflow.stepGraph[executionPath[0]!];
 
     if (step?.type === 'parallel' && executionPath.length > 1) {
@@ -256,6 +279,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepResults,
           prevResult,
           resumeData,
+          activeSteps,
         },
       });
 
@@ -272,6 +296,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepResults,
           prevResult,
           resumeData,
+          activeSteps,
         },
       });
 
@@ -288,6 +313,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepResults,
           prevResult,
           resumeData,
+          activeSteps,
         },
       });
 
@@ -295,25 +321,15 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (step?.type === 'parallel' && executionPath.length > 1) {
-      const subSteps = step.steps.filter(step => step.type === 'step');
-      const statuses = subSteps.map(step => stepResults[step.step.id]?.status).filter(Boolean);
-      if (statuses.length < subSteps.length) {
+      // if parent executionPath no longer has active steps, we can end it
+      const parentExecutionPath = executionPath.slice(0, -1);
+      const parentActiveStepIndex = activeSteps.findIndex(step =>
+        step.every((idx, i) => idx === parentExecutionPath[i]),
+      );
+
+      if (parentActiveStepIndex !== -1) {
         return;
       }
-
-      if (statuses.some(status => status !== 'success')) {
-        await this.pubsub.publish('workflows', {
-          type: 'workflow.fail',
-          data: {
-            workflowId,
-            runId,
-            error: 'Parallel step failed: ' + JSON.stringify(stepResults),
-          },
-        });
-      }
-
-      // @ts-ignore
-      const subResults = Object.fromEntries(subSteps.map(step => [step.step.id, stepResults[step.step.id]?.output]));
 
       await this.pubsub.publish('workflows', {
         type: 'workflow.step.end',
@@ -323,16 +339,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           executionPath: executionPath.slice(0, -1),
           resume,
-          stepResults: {
-            ...stepResults,
-            ...subResults,
-          },
-          prevResult: {
-            status: 'success',
-            output: subResults,
-          },
-
+          stepResults: stepResults,
+          prevResult,
           resumeData,
+          activeSteps,
         },
       });
     } else if (executionPath[0]! >= workflow.stepGraph.length - 1) {
@@ -347,6 +357,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepResults,
           prevResult,
           resumeData,
+          activeSteps,
         },
       });
     } else {
@@ -361,6 +372,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepResults,
           prevResult,
           resumeData,
+          activeSteps,
         },
       });
     }
@@ -432,7 +444,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     const { type, data } = event;
 
     const workflowData = data as {
-      activeSteps: string[];
+      activeSteps: number[][];
       workflowId: string;
       runId: string;
       executionPath: number[];

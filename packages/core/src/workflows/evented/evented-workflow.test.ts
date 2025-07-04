@@ -1171,7 +1171,7 @@ describe('Workflow', () => {
     });
 
     describe('Variable Resolution', () => {
-      it.only('should resolve trigger data', async () => {
+      it('should resolve trigger data', async () => {
         const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
 
         const step1 = createStep({
