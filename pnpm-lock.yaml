@@ -227,7 +227,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/_config
       '@tsconfig/recommended':
-        specifier: ^1.0.9
+        specifier: ^1.0.10
         version: 1.0.10
       '@types/json-schema':
         specifier: ^7.0.15
