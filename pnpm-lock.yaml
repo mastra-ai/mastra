@@ -196,8 +196,8 @@ importers:
   client-sdks/client-js:
     dependencies:
       '@ag-ui/client':
-        specifier: ^0.0.27
-        version: 0.0.27
+        specifier: ^0.0.30
+        version: 0.0.30
       '@ai-sdk/ui-utils':
         specifier: ^1.2.11
         version: 1.2.11(zod@3.25.67)
@@ -727,14 +727,14 @@ importers:
   packages/agui:
     dependencies:
       '@ag-ui/client':
-        specifier: ^0.0.28
-        version: 0.0.28
+        specifier: ^0.0.30
+        version: 0.0.30
       '@ai-sdk/ui-utils':
         specifier: ^1.2.11
         version: 1.2.11(zod@3.25.67)
       '@copilotkit/runtime':
         specifier: ^1.9.1
-        version: 1.9.1(95f65626796f7f4a490411a6d0dce880)
+        version: 1.9.1(c4880a2cf6a7ef46c5e700ddb96afd2e)
       hono:
         specifier: ^4.8.3
         version: 4.8.3
@@ -829,7 +829,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.60.1
-        version: 0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -3567,32 +3567,32 @@ importers:
 
 packages:
 
-  '@ag-ui/client@0.0.27':
-    resolution: {integrity: sha512-W7PX/C40dxeCdf/j9lSL6TI8IEpWct/Fn9JkZdX3zXFf5rPN+RpckRKhYTC0ZstMi909oTww7SHVsVm7exPReg==}
-
   '@ag-ui/client@0.0.28':
     resolution: {integrity: sha512-B09Yp2Czol9Y8AoiiMW/SF2PCAdUMePzW6JtGIqmb7Q05QHi+GXPKIXKpoOasQvFgMqwJDW0g6RGozUlD45dxA==}
 
-  '@ag-ui/core@0.0.27':
-    resolution: {integrity: sha512-I8i0qsamIVaOhPZ11bz7a+JQ7DIwIhLCon2EYWHikgcLiWzfZNBJhlVBR6Fn29tv3Ost4p6wYWQy84WzAhjJ+Q==}
+  '@ag-ui/client@0.0.30':
+    resolution: {integrity: sha512-bWdd4DgniHa8mWBaVMVYvwKLAbwi+SBUCUGqnEH8z2lkHgjY5xZVekNq5g3x3i4OSJ6RVr4XDE+DAORgOh09qA==}
 
   '@ag-ui/core@0.0.28':
     resolution: {integrity: sha512-2Vjuxl0gE8E2RFjFccGZNczDw3Xqxve/EfoYRVAFNX3+rY7z64Mj0OWDw5p9L+X8UG0/+t0xYIquQpw7B4NdHA==}
 
-  '@ag-ui/encoder@0.0.27':
-    resolution: {integrity: sha512-GO42BDdi9pmNsfhPlMQeSxGFfMJJg/Jvgng/N/5elHEfEOjGVtOCkDPpN4lirkuBoXEh/hW6gIgYAXDu/HuZJA==}
+  '@ag-ui/core@0.0.30':
+    resolution: {integrity: sha512-cBukbc2O0qMKi/BKix6Exld5zSqGKR72376KA6NZNQz/xYAiPNhmK40VX77d/hyblhtXT3BlBGrYmda9V4ETlw==}
 
   '@ag-ui/encoder@0.0.28':
     resolution: {integrity: sha512-A7N7QE6P70rBQ9k5kcm1xQUAq4K6Dhg7y/hapkL6oJG/zQabRKS5wSePO34wfLtg4KKIPIqiUGqVdy8qk2a3Ng==}
 
+  '@ag-ui/encoder@0.0.30':
+    resolution: {integrity: sha512-xk43F5WaEpaRg5vY0y6U/ZMAzScieSA1L0TAtVGysh91M9JS9hxuxTK2jyxh/sC3AySIjbZUQ9m69fECKloT0g==}
+
   '@ag-ui/langgraph@0.0.3':
     resolution: {integrity: sha512-GxKXEtBHZViO5hNL6BTKyneu4lwXrEa3EpxIod5rGg81vT5gamAE0bWAVT532QdveYXQJYrSH5J417cKSFoHdA==}
 
-  '@ag-ui/proto@0.0.27':
-    resolution: {integrity: sha512-bgF2DGqU+DvcNKF3gOlT97kZmhHNB0lWfjkJQ6ONxMtmWlSVYAE97LCtdTIjXEhnHyqi3QQBQ0BEXJ74q7QMcg==}
-
   '@ag-ui/proto@0.0.28':
     resolution: {integrity: sha512-jgvUT81n4K5TldkrpVxM5eLRNOq5tV5BKNi079NGCDnK1mc2ElORsHcCd6fjAOpUPpfirS8RuQr9MvoMXE42aQ==}
+
+  '@ag-ui/proto@0.0.30':
+    resolution: {integrity: sha512-5yObohnpAhuzkIrcbgBuT7xrXLThuhsBl+vh85uNeUlb6CNJ7W2rdwApJGTj/3HbitK4iLq2BiY3U18Bno+qqg==}
 
   '@ai-sdk/anthropic@1.2.12':
     resolution: {integrity: sha512-YSzjlko7JvuiyQFmI9RN1tNZdEiZxc+6xld/0tq/VkJaHpEzGAb1yiNxxvmYVcjvfu/PcvCxAAYXmTYQQ63IHQ==}
@@ -17817,18 +17817,6 @@ packages:
 
 snapshots:
 
-  '@ag-ui/client@0.0.27':
-    dependencies:
-      '@ag-ui/core': 0.0.27
-      '@ag-ui/encoder': 0.0.27
-      '@ag-ui/proto': 0.0.27
-      '@types/uuid': 10.0.0
-      fast-json-patch: 3.1.1
-      rxjs: 7.8.1
-      untruncate-json: 0.0.1
-      uuid: 11.1.0
-      zod: 3.25.67
-
   '@ag-ui/client@0.0.28':
     dependencies:
       '@ag-ui/core': 0.0.28
@@ -17841,9 +17829,16 @@ snapshots:
       uuid: 11.1.0
       zod: 3.25.67
 
-  '@ag-ui/core@0.0.27':
+  '@ag-ui/client@0.0.30':
     dependencies:
+      '@ag-ui/core': 0.0.30
+      '@ag-ui/encoder': 0.0.30
+      '@ag-ui/proto': 0.0.30
+      '@types/uuid': 10.0.0
+      fast-json-patch: 3.1.1
       rxjs: 7.8.1
+      untruncate-json: 0.0.1
+      uuid: 11.1.0
       zod: 3.25.67
 
   '@ag-ui/core@0.0.28':
@@ -17851,15 +17846,20 @@ snapshots:
       rxjs: 7.8.1
       zod: 3.25.67
 
-  '@ag-ui/encoder@0.0.27':
+  '@ag-ui/core@0.0.30':
     dependencies:
-      '@ag-ui/core': 0.0.27
-      '@ag-ui/proto': 0.0.27
+      rxjs: 7.8.1
+      zod: 3.25.67
 
   '@ag-ui/encoder@0.0.28':
     dependencies:
       '@ag-ui/core': 0.0.28
       '@ag-ui/proto': 0.0.28
+
+  '@ag-ui/encoder@0.0.30':
+    dependencies:
+      '@ag-ui/core': 0.0.30
+      '@ag-ui/proto': 0.0.30
 
   '@ag-ui/langgraph@0.0.3(openai@4.104.0(encoding@0.1.13)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.67))(react@19.1.0)':
     dependencies:
@@ -17872,14 +17872,14 @@ snapshots:
       - openai
       - react
 
-  '@ag-ui/proto@0.0.27':
-    dependencies:
-      '@ag-ui/core': 0.0.27
-      '@bufbuild/protobuf': 2.5.2
-
   '@ag-ui/proto@0.0.28':
     dependencies:
       '@ag-ui/core': 0.0.28
+      '@bufbuild/protobuf': 2.5.2
+
+  '@ag-ui/proto@0.0.30':
+    dependencies:
+      '@ag-ui/core': 0.0.30
       '@bufbuild/protobuf': 2.5.2
 
   '@ai-sdk/anthropic@1.2.12(zod@3.25.67)':
@@ -20221,13 +20221,13 @@ snapshots:
 
   '@colors/colors@1.5.0': {}
 
-  '@copilotkit/runtime@1.9.1(95f65626796f7f4a490411a6d0dce880)':
+  '@copilotkit/runtime@1.9.1(c4880a2cf6a7ef46c5e700ddb96afd2e)':
     dependencies:
-      '@ag-ui/client': 0.0.28
-      '@ag-ui/core': 0.0.28
-      '@ag-ui/encoder': 0.0.28
+      '@ag-ui/client': 0.0.30
+      '@ag-ui/core': 0.0.30
+      '@ag-ui/encoder': 0.0.30
       '@ag-ui/langgraph': 0.0.3(openai@4.104.0(encoding@0.1.13)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.67))(react@19.1.0)
-      '@ag-ui/proto': 0.0.28
+      '@ag-ui/proto': 0.0.30
       '@anthropic-ai/sdk': 0.27.3(encoding@0.1.13)
       '@copilotkit/shared': 1.9.1(encoding@0.1.13)
       '@graphql-yoga/plugin-defer-stream': 3.13.5(graphql-yoga@5.13.5(graphql@16.11.0))(graphql@16.11.0)
@@ -22267,7 +22267,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
+  '@opentelemetry/auto-instrumentations-node@0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -22317,7 +22317,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.9.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.2(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.36.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resource-detector-gcp': 0.36.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.202.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -23908,7 +23908,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.36.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/resource-detector-gcp@0.36.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -29983,7 +29983,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.10.0)
+      retry-axios: 2.6.0(axios@1.10.0(debug@4.4.1))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -33330,7 +33330,7 @@ snapshots:
       onetime: 7.0.0
       signal-exit: 4.1.0
 
-  retry-axios@2.6.0(axios@1.10.0):
+  retry-axios@2.6.0(axios@1.10.0(debug@4.4.1)):
     dependencies:
       axios: 1.10.0(debug@4.4.1)
 
