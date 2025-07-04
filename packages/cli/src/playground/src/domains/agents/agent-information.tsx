@@ -24,7 +24,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
     <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto border-l-sm border-border1">
       <div className="p-5 border-b-sm border-border1">
         <div className="text-icon6 flex items-center gap-2 min-w-0">
-          <Icon size="lg">
+          <Icon size="lg" className="bg-surface4 rounded-md p-1">
             <AgentIcon />
           </Icon>
 

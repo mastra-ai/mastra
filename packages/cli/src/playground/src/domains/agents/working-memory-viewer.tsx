@@ -65,8 +65,12 @@ export const WorkingMemoryViewer: React.FC<WorkingMemoryViewerProps> = ({
             <Button
               variant="default"
               onClick={async () => {
-                await onUpdate(editValue);
-                setIsEditing(false);
+                try {
+                  await onUpdate(editValue);
+                  setIsEditing(false);
+                } catch (error) {
+                  console.error('Failed to update working memory:', error);
+                }
               }}
             >
               {isUpdating ? <RefreshCcwIcon className="w-4 h-4 animate-spin" /> : 'Save'}

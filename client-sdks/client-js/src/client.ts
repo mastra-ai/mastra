@@ -478,10 +478,24 @@ export class MastraClient extends BaseResource {
     return new A2A(this.options, agentId);
   }
 
+  /**
+   * Retrieves the working memory for a specific thread (optionally resource-scoped).
+   * @param agentId - ID of the agent.
+   * @param threadId - ID of the thread.
+   * @param resourceId - Optional ID of the resource.
+   * @returns Working memory for the specified thread or resource.
+   */
   public getWorkingMemory(agentId: string, threadId: string, resourceId?: string) {
     return this.request(`/api/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}`);
   }
 
+  /**
+   * Updates the working memory for a specific thread (optionally resource-scoped).
+   * @param agentId - ID of the agent.
+   * @param threadId - ID of the thread.
+   * @param workingMemory - The new working memory content.
+   * @param resourceId - Optional ID of the resource.
+   */
   public updateWorkingMemory(agentId: string, threadId: string, workingMemory: string, resourceId?: string) {
     return this.request(`/api/memory/threads/${threadId}/working-memory?agentId=${agentId}`, {
       method: 'POST',

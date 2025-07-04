@@ -1,5 +1,5 @@
 import type { RuntimeContext } from '@mastra/core/di';
-import type { MastraMemory } from '@mastra/core/memory';
+import type { MastraMemory, MemoryConfig } from '@mastra/core/memory';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
@@ -307,7 +307,7 @@ export async function getWorkingMemoryHandler({
   memoryConfig,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
   resourceId?: string;
-  memoryConfig?: any;
+  memoryConfig?: MemoryConfig;
 }) {
   try {
     const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
