@@ -105,6 +105,36 @@ Here's what a traced agent interaction looks like in [SigNoz](https://signoz.io)
 
 For a complete list of supported observability providers and their configuration details, see the [Observability Providers reference](../../reference/observability/providers/).
 
+### Custom Instrumentation files
+
+You can define custom instrumentation files in your Mastra project by placing them in the `/mastra` folder. Mastra automatically detects and bundles these files instead of using the default instrumentation.
+
+#### Supported File Types
+
+Mastra looks for instrumentation files with these extensions:
+- `instrumentation.js`
+- `instrumentation.ts` 
+- `instrumentation.mjs`
+
+#### Example
+
+```ts filename="/mastra/instrumentation.ts" showLineNumbers copy
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter({
+    url: 'http://localhost:4318/v1/traces',
+  }),
+  instrumentations: [getNodeAutoInstrumentations()],
+});
+
+sdk.start();
+```
+
+When Mastra finds a custom instrumentation file, it automatically replaces the default instrumentation and bundles it during the build process.
+
 ### Next.js-specific Tracing steps
 
 If you're using Next.js, you have three additional configuration steps:

@@ -12,6 +12,7 @@ import type { InputOptions, OutputOptions } from 'rollup';
 
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
+import { writeCustomInstrumentation } from '../build/customInstrumentation';
 import { writeTelemetryConfig } from '../build/telemetry';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
@@ -37,11 +38,15 @@ export abstract class Bundler extends MastraBundler {
     await ensureDir(join(outputDirectory, this.outputDir));
   }
 
-  async writeInstrumentationFile(outputDirectory: string) {
+  async writeInstrumentationFile(outputDirectory: string, customInstrumentationFile?: string) {
     const instrumentationFile = join(outputDirectory, 'instrumentation.mjs');
     const __dirname = dirname(fileURLToPath(import.meta.url));
 
-    await copy(join(__dirname, 'templates', 'instrumentation-template.js'), instrumentationFile);
+    if (customInstrumentationFile) {
+      await copy(customInstrumentationFile, instrumentationFile);
+    } else {
+      await copy(join(__dirname, 'templates', 'instrumentation-template.js'), instrumentationFile);
+    }
   }
 
   async writePackageJson(
@@ -246,7 +251,38 @@ export abstract class Bundler extends MastraBundler {
       );
     }
 
+    const mastraFolder = dirname(mastraEntryFile);
+
+    const fileService = new FileService();
+    const customInstrumentation = fileService.getFirstExistingFileOrUndefined([
+      join(mastraFolder, 'instrumentation.js'),
+      join(mastraFolder, 'instrumentation.ts'),
+      join(mastraFolder, 'instrumentation.mjs'),
+    ]);
+
+    try {
+      if (customInstrumentation) {
+        const result = await writeCustomInstrumentation(customInstrumentation, join(outputDirectory, this.outputDir));
+        externalDependencies = [...externalDependencies, ...result.externalDependencies];
+        await this.writeInstrumentationFile(join(outputDirectory, this.outputDir), customInstrumentation);
+      } else {
+        await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new MastraError(
+        {
+          id: 'DEPLOYER_BUNDLER_INSTRUMENTATION_FILE_FAILED',
+          text: `Failed to write instrumentation file: ${message}, ${customInstrumentation ? ` Found custom instrumentation file: ${customInstrumentation}` : ''}`,
+          domain: ErrorDomain.DEPLOYER,
+          category: ErrorCategory.SYSTEM,
+        },
+        error,
+      );
+    }
+
     const dependenciesToInstall = new Map<string, string>();
+
     // Add extenal dependencies from telemetry file
     for (const external of externalDependencies) {
       dependenciesToInstall.set(external, 'latest');
@@ -306,7 +342,6 @@ export abstract class Bundler extends MastraBundler {
 
     try {
       await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall, resolutions);
-      await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
 
       this.logger.info('Bundling Mastra application');
       const inputOptions: InputOptions = await this.getBundlerOptions(
