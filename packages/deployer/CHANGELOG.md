@@ -1,5 +1,39 @@
 # @mastra/deployer
 
+## 0.10.11-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11-alpha.1
+  - @mastra/server@0.10.11-alpha.1
+
+## 0.10.11-alpha.0
+
+### Patch Changes
+
+- bc40cdd: dependencies updates:
+  - Updated dependency [`@babel/core@^7.27.7` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.27.7) (from `^7.27.4`, in `dependencies`)
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/core@0.10.11-alpha.0
+  - @mastra/server@0.10.11-alpha.0
+
+## 0.10.10
+
+### Patch Changes
+
+- 6e13b80: Add error cause and stack trace to mastra server error handler
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+- Updated dependencies [6e13b80]
+- Updated dependencies [6997af1]
+- Updated dependencies [4d3fbdf]
+  - @mastra/server@0.10.10
+  - @mastra/core@0.10.10
+
 ## 0.10.10-alpha.1
 
 ### Patch Changes

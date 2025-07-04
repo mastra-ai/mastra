@@ -1,5 +1,52 @@
 # mastra
 
+## 0.10.11-alpha.1
+
+### Patch Changes
+
+- a7a836a: Highlight send event button
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11-alpha.1
+  - @mastra/deployer@0.10.11-alpha.1
+
+## 0.10.11-alpha.0
+
+### Patch Changes
+
+- af9e40e: Map log level number to string value
+- a9f51e4: Fix plaground get tools not including x-mastra-dev-header"
+- 3322d00: Fix tools watcher in dev
+- b790fd1: Use SerializedStepFlowEntry in playground
+- Updated dependencies [bc40cdd]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/deployer@0.10.11-alpha.0
+  - @mastra/core@0.10.11-alpha.0
+
+## 0.10.10
+
+### Patch Changes
+
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+- 4d3fbdf: Return tool error message rather than throw when a tool error happens for agent and tool playground page.
+- Updated dependencies [6e13b80]
+- Updated dependencies [25bf999]
+- Updated dependencies [6997af1]
+- Updated dependencies [4d3fbdf]
+  - @mastra/deployer@0.10.10
+  - @mastra/loggers@0.10.3
+  - @mastra/core@0.10.10
+
+## 0.10.10-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [25bf999]
+  - @mastra/loggers@0.10.3-alpha.0
+
 ## 0.10.10-alpha.1
 
 ### Patch Changes

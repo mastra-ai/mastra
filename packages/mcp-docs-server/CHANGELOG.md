@@ -1,5 +1,13 @@
 # @mastra/mcp-docs-server
 
+## 0.13.4
+
+### Patch Changes
+
+- 16bc2f9: Fix blog tool for fetching blogpost
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10
+
 ## 0.13.4-alpha.0
 
 ### Patch Changes
