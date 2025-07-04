@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.10.11-alpha.1
+
+### Patch Changes
+
+- 7f6e403: [MASTRA-3765] Save Message parts - Add ability for user to save messages on step finish for stream and agent
+
 ## 0.10.11-alpha.0
 
 ### Patch Changes

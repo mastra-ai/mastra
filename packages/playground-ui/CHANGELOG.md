@@ -1,5 +1,14 @@
 # @mastra/playground-ui
 
+## 5.1.11-alpha.1
+
+### Patch Changes
+
+- a7a836a: Highlight send event button
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11-alpha.1
+  - @mastra/client-js@0.10.10-alpha.1
+
 ## 5.1.11-alpha.0
 
 ### Patch Changes
