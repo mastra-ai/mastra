@@ -27,22 +27,26 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
         return null;
       }
 
-      let importerMeta: { [PLUGIN_NAME]?: { resolved?: boolean } } = {};
-      if (localResolve) {
-        const importerInfo = this.getModuleInfo(importer);
-
-        importerMeta = importerInfo?.meta || {};
-
-        if (!request.startsWith('./') && !request.startsWith('../') && importerMeta?.[PLUGIN_NAME]?.resolved) {
-          return {
-            id: resolveFrom(importer, request) ?? null,
-            external: true,
-          };
-        }
-      }
-
       const moduleName = handler?.(request, normalize(importer));
+      // No tsconfig alias found, so we need to resolve it normally
       if (!moduleName) {
+        let importerMeta: { [PLUGIN_NAME]?: { resolved?: boolean } } = {};
+
+        // If localResolve is true, we need to check if the importer has been resolved by the tsconfig-paths plugin
+        // if so, we need to resolve the request from the importer instead of the root and mark it as external
+        if (localResolve) {
+          const importerInfo = this.getModuleInfo(importer);
+
+          importerMeta = importerInfo?.meta || {};
+
+          if (!request.startsWith('./') && !request.startsWith('../') && importerMeta?.[PLUGIN_NAME]?.resolved) {
+            return {
+              id: resolveFrom(importer, request) ?? null,
+              external: true,
+            };
+          }
+        }
+
         const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
 
         if (!resolved) {
@@ -58,6 +62,7 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
         };
       }
 
+      // When a module does not have an extension, we need to resolve it to a file
       if (!path.extname(moduleName)) {
         const resolved = await this.resolve(moduleName, importer, { skipSelf: true, ...options });
 
