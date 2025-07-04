@@ -76,16 +76,6 @@ export function MastraRuntimeProvider({
               result: toolInvocation?.result,
             }));
 
-            // const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
-            //   type: image.contentType.startsWith(`image/`)
-            //     ? 'image'
-            //     : image.contentType.startsWith(`audio/`)
-            //       ? 'audio'
-            //       : 'file',
-            //   mimeType: image.contentType,
-            //   image: image.url,
-            // }));
-
             const attachmentsAsContentParts = experimentalToAssistant(message.experimental_attachments || []);
 
             return {
@@ -124,14 +114,13 @@ export function MastraRuntimeProvider({
     try {
       if (chatWithGenerate) {
         const generateResponse = await agent.generate({
-          // @ts-expect-error - TODO: fix this type issue somehow
+          // @ts-expect-error - TODO: experimental_attachments is not typed
           messages: [
             {
               role: 'user',
               content: input,
               experimental_attachments: experimentalAttachments,
             },
-            // ...coreMessages,
           ],
           runId: agentId,
           frequencyPenalty,
@@ -233,14 +222,13 @@ export function MastraRuntimeProvider({
         }
       } else {
         const response = await agent.stream({
-          // @ts-expect-error - TODO: fix this type issue somehow
+          // @ts-expect-error - TODO: experimental_attachments is not typed
           messages: [
             {
               role: 'user',
               content: input,
               experimental_attachments: experimentalAttachments,
             },
-            // ...coreMessages,
           ],
           runId: agentId,
           frequencyPenalty,
