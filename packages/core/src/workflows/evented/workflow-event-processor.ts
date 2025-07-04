@@ -265,7 +265,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResults[step.step.id] = prevResult;
     }
 
-    // await this.saveData({ workflow, runId, stepResults });
+    await this.saveData({ workflow, runId, stepResults });
 
     if (!prevResult?.status || prevResult.status === 'failed') {
       await this.pubsub.publish('workflows', {
