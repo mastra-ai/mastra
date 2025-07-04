@@ -36,16 +36,21 @@ export function useAgentModelSettingsState({ agentId }: AgentModelSettingsStateP
     // Only run on mount or when initialSettings changes
   }, [LOCAL_STORAGE_KEY]);
 
-  useEffect(() => {
-    if (modelSettings) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ modelSettings, chatWithGenerate, agentId }));
-    }
-  }, [modelSettings, chatWithGenerate, LOCAL_STORAGE_KEY]);
-
-  const setModelSettings = (modelSettingsValue: ModelSettings) =>
+  const setModelSettings = (modelSettingsValue: ModelSettings) => {
     setModelSettingsState(prev => ({ ...prev, ...modelSettingsValue }));
+    localStorage.setItem(
+      LOCAL_STORAGE_KEY,
+      JSON.stringify({ modelSettings: modelSettingsValue, chatWithGenerate, agentId }),
+    );
+  };
 
-  const setChatWithGenerate = (chatWithGenerateValue: boolean) => setChatWithGenerateState(chatWithGenerateValue);
+  const setChatWithGenerate = (chatWithGenerateValue: boolean) => {
+    setChatWithGenerateState(chatWithGenerateValue);
+    localStorage.setItem(
+      LOCAL_STORAGE_KEY,
+      JSON.stringify({ modelSettings, chatWithGenerate: chatWithGenerateValue, agentId }),
+    );
+  };
 
   const resetAll = () => {
     setModelSettingsState(defaultModelSettings);

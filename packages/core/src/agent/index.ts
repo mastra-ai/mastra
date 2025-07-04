@@ -33,6 +33,7 @@ import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import { MessageList } from './message-list';
 import type { MessageInput } from './message-list';
+import { SaveQueueManager } from './save-queue';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -556,10 +557,12 @@ export class Agent<
     message,
     runtimeContext = new RuntimeContext(),
     model,
+    instructions,
   }: {
     message: string | MessageInput;
     runtimeContext?: RuntimeContext;
     model?: DynamicArgument<MastraLanguageModel>;
+    instructions?: DynamicArgument<string>;
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ runtimeContext, model });
@@ -586,17 +589,15 @@ export class Agent<
       }
     }
 
+    // Resolve instructions using the dedicated method
+    const systemInstructions = await this.resolveTitleInstructions(runtimeContext, instructions);
+
     const { text } = await llm.__text<{ title: string }>({
       runtimeContext,
       messages: [
         {
           role: 'system',
-          content: `\n
-    - you will generate a short title based on the first message a user begins a conversation with
-    - ensure it is not more than 80 characters long
-    - the title should be a summary of the user's message
-    - do not use quotes or colons
-    - the entire text you return will be used as the title`,
+          content: systemInstructions,
         },
         {
           role: 'user',
@@ -619,6 +620,7 @@ export class Agent<
     userMessage: string | MessageInput | undefined,
     runtimeContext: RuntimeContext,
     model?: DynamicArgument<MastraLanguageModel>,
+    instructions?: DynamicArgument<string>,
   ) {
     try {
       if (userMessage) {
@@ -628,6 +630,7 @@ export class Agent<
             message: normMessage,
             runtimeContext,
             model,
+            instructions,
           });
         }
       }
@@ -1117,6 +1120,45 @@ export class Agent<
     };
   }
 
+  /**
+   * Adds response messages from a step to the MessageList and schedules persistence.
+   * This is used for incremental saving: after each agent step, messages are added to a save queue
+   * and a debounced save operation is triggered to avoid redundant writes.
+   *
+   * @param result - The step result containing response messages.
+   * @param messageList - The MessageList instance for the current thread.
+   * @param threadId - The thread ID.
+   * @param memoryConfig - The memory configuration for saving.
+   * @param runId - (Optional) The run ID for logging.
+   */
+  private async saveStepMessages({
+    saveQueueManager,
+    result,
+    messageList,
+    threadId,
+    memoryConfig,
+    runId,
+  }: {
+    saveQueueManager: SaveQueueManager;
+    result: any;
+    messageList: MessageList;
+    threadId?: string;
+    memoryConfig?: MemoryConfig;
+    runId?: string;
+  }) {
+    try {
+      messageList.add(result.response.messages, 'response');
+      await saveQueueManager.batchMessages(messageList, threadId, memoryConfig);
+    } catch (e) {
+      await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
+      this.logger.error('Error saving memory on step finish', {
+        error: e,
+        runId,
+      });
+      throw e;
+    }
+  }
+
   __primitive({
     instructions,
     messages,
@@ -1129,6 +1171,7 @@ export class Agent<
     clientTools,
     runtimeContext,
     generateMessageId,
+    saveQueueManager,
   }: {
     instructions?: string;
     toolsets?: ToolsetsInput;
@@ -1141,6 +1184,7 @@ export class Agent<
     messages: string | string[] | CoreMessage[] | AiMessageType[];
     runtimeContext: RuntimeContext;
     generateMessageId: undefined | IDGenerator;
+    saveQueueManager: SaveQueueManager;
   }) {
     return {
       before: async () => {
@@ -1258,7 +1302,7 @@ export class Agent<
                     vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
                   })
                   .then(r => r.messagesV2),
-                memory.getSystemMessage({ threadId: threadObject.id, memoryConfig }),
+                memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
               ])
             : [[], null, null];
 
@@ -1401,25 +1445,22 @@ export class Agent<
             }
 
             // Parallelize title generation and message saving
-            const promises: Promise<any>[] = [
-              memory.saveMessages({
-                messages: messageList.drainUnsavedMessages(),
-                memoryConfig,
-              }),
-            ];
+            const promises: Promise<any>[] = [saveQueueManager.flushMessages(messageList, threadId, memoryConfig)];
 
             // Add title generation to promises if needed
             if (thread.title?.startsWith('New Thread')) {
               const config = memory.getMergedThreadConfig(memoryConfig);
               const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
 
-              const { shouldGenerate, model: titleModel } = this.resolveTitleGenerationConfig(
-                config?.threads?.generateTitle,
-              );
+              const {
+                shouldGenerate,
+                model: titleModel,
+                instructions: titleInstructions,
+              } = this.resolveTitleGenerationConfig(config?.threads?.generateTitle);
 
               if (shouldGenerate && userMessage) {
                 promises.push(
-                  this.genTitle(userMessage, runtimeContext, titleModel).then(title => {
+                  this.genTitle(userMessage, runtimeContext, titleModel, titleInstructions).then(title => {
                     if (title) {
                       return memory.createThread({
                         threadId: thread.id,
@@ -1436,6 +1477,7 @@ export class Agent<
 
             await Promise.all(promises);
           } catch (e) {
+            await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
             if (e instanceof MastraError) {
               throw e;
             }
@@ -1539,6 +1581,7 @@ export class Agent<
       experimental_output,
       telemetry,
       runtimeContext = new RuntimeContext(),
+      savePerStep = false,
       ...args
     }: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, defaultGenerateOptions, generateOptions);
     const generateMessageId =
@@ -1553,6 +1596,12 @@ export class Agent<
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
 
+    const memory = this.getMemory();
+    const saveQueueManager = new SaveQueueManager({
+      logger: this.logger,
+      memory,
+    });
+
     const { before, after } = this.__primitive({
       messages,
       instructions,
@@ -1565,6 +1614,7 @@ export class Agent<
       clientTools,
       runtimeContext,
       generateMessageId,
+      saveQueueManager,
     });
 
     const { thread, messageObjects, convertedTools, messageList } = await before();
@@ -1575,7 +1625,17 @@ export class Agent<
       const result = await llm.__text({
         messages: messageObjects,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
+        onStepFinish: async (result: any) => {
+          if (savePerStep) {
+            await this.saveStepMessages({
+              saveQueueManager,
+              result,
+              messageList,
+              threadId,
+              memoryConfig,
+              runId,
+            });
+          }
           return onStepFinish?.({ ...result, runId });
         },
         maxSteps: maxSteps,
@@ -1614,7 +1674,17 @@ export class Agent<
       const result = await llm.__text({
         messages: messageObjects,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
+        onStepFinish: async (result: any) => {
+          if (savePerStep) {
+            await this.saveStepMessages({
+              saveQueueManager,
+              result,
+              messageList,
+              threadId,
+              memoryConfig,
+              runId,
+            });
+          }
           return onStepFinish?.({ ...result, runId });
         },
         maxSteps,
@@ -1648,7 +1718,17 @@ export class Agent<
       messages: messageObjects,
       tools: convertedTools,
       structuredOutput: output,
-      onStepFinish: (result: any) => {
+      onStepFinish: async (result: any) => {
+        if (savePerStep) {
+          await this.saveStepMessages({
+            saveQueueManager,
+            result,
+            messageList,
+            threadId,
+            memoryConfig,
+            runId,
+          });
+        }
         return onStepFinish?.({ ...result, runId });
       },
       maxSteps,
@@ -1737,6 +1817,7 @@ export class Agent<
       experimental_output,
       telemetry,
       runtimeContext = new RuntimeContext(),
+      savePerStep = false,
       ...args
     }: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, defaultStreamOptions, streamOptions);
     const generateMessageId =
@@ -1752,6 +1833,12 @@ export class Agent<
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
 
+    const memory = this.getMemory();
+    const saveQueueManager = new SaveQueueManager({
+      logger: this.logger,
+      memory,
+    });
+
     const { before, after } = this.__primitive({
       instructions,
       messages,
@@ -1764,6 +1851,7 @@ export class Agent<
       clientTools,
       runtimeContext,
       generateMessageId,
+      saveQueueManager,
     });
 
     const { thread, messageObjects, convertedTools, messageList } = await before();
@@ -1779,7 +1867,17 @@ export class Agent<
         messages: messageObjects,
         temperature,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
+        onStepFinish: async (result: any) => {
+          if (savePerStep) {
+            await this.saveStepMessages({
+              saveQueueManager,
+              result,
+              messageList,
+              threadId,
+              memoryConfig,
+              runId,
+            });
+          }
           return onStepFinish?.({ ...result, runId });
         },
         onFinish: async (result: any) => {
@@ -1825,7 +1923,17 @@ export class Agent<
         messages: messageObjects,
         temperature,
         tools: convertedTools,
-        onStepFinish: (result: any) => {
+        onStepFinish: async (result: any) => {
+          if (savePerStep) {
+            await this.saveStepMessages({
+              saveQueueManager,
+              result,
+              messageList,
+              threadId,
+              memoryConfig,
+              runId,
+            });
+          }
           return onStepFinish?.({ ...result, runId });
         },
         onFinish: async (result: any) => {
@@ -1869,7 +1977,17 @@ export class Agent<
       tools: convertedTools,
       temperature,
       structuredOutput: output,
-      onStepFinish: (result: any) => {
+      onStepFinish: async (result: any) => {
+        if (savePerStep) {
+          await this.saveStepMessages({
+            saveQueueManager,
+            result,
+            messageList,
+            threadId,
+            memoryConfig,
+            runId,
+          });
+        }
         return onStepFinish?.({ ...result, runId });
       },
       onFinish: async (result: any) => {
@@ -2075,10 +2193,14 @@ export class Agent<
    * @private
    */
   private resolveTitleGenerationConfig(
-    generateTitleConfig: boolean | { model: DynamicArgument<MastraLanguageModel> } | undefined,
+    generateTitleConfig:
+      | boolean
+      | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }
+      | undefined,
   ): {
     shouldGenerate: boolean;
     model?: DynamicArgument<MastraLanguageModel>;
+    instructions?: DynamicArgument<string>;
   } {
     if (typeof generateTitleConfig === 'boolean') {
       return { shouldGenerate: generateTitleConfig };
@@ -2088,9 +2210,39 @@ export class Agent<
       return {
         shouldGenerate: true,
         model: generateTitleConfig.model,
+        instructions: generateTitleConfig.instructions,
       };
     }
 
     return { shouldGenerate: false };
+  }
+
+  /**
+   * Resolves title generation instructions, handling both static strings and dynamic functions
+   * @private
+   */
+  private async resolveTitleInstructions(
+    runtimeContext: RuntimeContext,
+    instructions?: DynamicArgument<string>,
+  ): Promise<string> {
+    const DEFAULT_TITLE_INSTRUCTIONS = `
+    - you will generate a short title based on the first message a user begins a conversation with
+    - ensure it is not more than 80 characters long
+    - the title should be a summary of the user's message
+    - do not use quotes or colons
+    - the entire text you return will be used as the title`;
+
+    if (!instructions) {
+      return DEFAULT_TITLE_INSTRUCTIONS;
+    }
+
+    if (typeof instructions === 'string') {
+      return instructions;
+    } else {
+      const result = instructions({ runtimeContext });
+      return resolveMaybePromise(result, resolvedInstructions => {
+        return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
+      });
+    }
   }
 }

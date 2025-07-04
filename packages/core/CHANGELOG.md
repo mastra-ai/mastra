@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.10.11-alpha.0
+
+### Patch Changes
+
+- f8ce2cc: Add stepId to workflow executeStep error log
+- 8c846b6: Fixed a problem where per-resource working memory wasn't being queried properly
+- b790fd1: Ability to pass a function to .sleep()/.sleepUntil()
+- d7ed04d: make workflow execute use createRunAsync
+- f36e4f1: Allow passing custom instructions to generateTitle to override default instructions.
+
 ## 0.10.10
 
 ### Patch Changes
