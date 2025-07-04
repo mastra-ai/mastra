@@ -1,5 +1,14 @@
 # mastra
 
+## 0.10.11-alpha.1
+
+### Patch Changes
+
+- a7a836a: Highlight send event button
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11-alpha.1
+  - @mastra/deployer@0.10.11-alpha.1
+
 ## 0.10.11-alpha.0
 
 ### Patch Changes
