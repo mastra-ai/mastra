@@ -1,5 +1,17 @@
 # @mastra/inngest
 
+## 0.11.3-alpha.0
+
+### Patch Changes
+
+- b790fd1: Ability to pass a function to .sleep()/.sleepUntil()
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/core@0.10.11-alpha.0
+
 ## 0.11.2
 
 ### Patch Changes
