@@ -1,25 +1,25 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
-import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
-import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
+  TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_THREADS,
-  TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_EVALS,
   TABLE_TRACES,
+  TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
 import type {
-  TABLE_NAMES,
+  EvalRow,
+  PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
-  EvalRow,
-  WorkflowRuns,
+  TABLE_NAMES,
   WorkflowRun,
-  PaginationInfo,
+  WorkflowRuns,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -41,6 +41,13 @@ export interface D1Config {
   tablePrefix?: string;
 }
 
+export interface D1ClientConfig {
+  /** Optional prefix for table names */
+  tablePrefix?: string;
+  /** D1 Client */
+  client: D1Client;
+}
+
 /**
  * Configuration for D1 using the Workers Binding API
  */
@@ -54,16 +61,19 @@ export interface D1WorkersConfig {
 /**
  * Combined configuration type supporting both REST API and Workers Binding API
  */
-export type D1StoreConfig = D1Config | D1WorkersConfig;
+export type D1StoreConfig = D1Config | D1WorkersConfig | D1ClientConfig;
 
 function isArrayOfRecords(value: any): value is Record<string, any>[] {
   return value && Array.isArray(value) && value.length > 0;
 }
 
+export type D1QueryResult = Awaited<ReturnType<Cloudflare['d1']['database']['query']>>['result'];
+export interface D1Client {
+  query(args: { sql: string; params: string[] }): Promise<{ result: D1QueryResult }>;
+}
+
 export class D1Store extends MastraStorage {
-  private client?: Cloudflare;
-  private accountId?: string;
-  private databaseId?: string;
+  private client?: D1Client;
   private binding?: D1Database; // D1Database binding
   private tablePrefix: string;
 
@@ -88,15 +98,28 @@ export class D1Store extends MastraStorage {
         }
         this.binding = config.binding;
         this.logger.info('Using D1 Workers Binding API');
+      } else if ('client' in config) {
+        if (!config.client) {
+          throw new Error('D1 client is required when using D1ClientConfig');
+        }
+        this.client = config.client;
+        this.logger.info('Using D1 Client');
       } else {
         if (!config.accountId || !config.databaseId || !config.apiToken) {
           throw new Error('accountId, databaseId, and apiToken are required when using REST API');
         }
-        this.accountId = config.accountId;
-        this.databaseId = config.databaseId;
-        this.client = new Cloudflare({
+        const cfClient = new Cloudflare({
           apiToken: config.apiToken,
         });
+        this.client = {
+          query: ({ sql, params }) => {
+            return cfClient.d1.database.query(config.databaseId, {
+              account_id: config.accountId,
+              sql,
+              params,
+            });
+          },
+        };
         this.logger.info('Using D1 REST API');
       }
     } catch (error) {
@@ -187,14 +210,13 @@ export class D1Store extends MastraStorage {
     first = false,
   }: SqlQueryOptions): Promise<Record<string, any>[] | Record<string, any> | null> {
     // Ensure required properties are defined
-    if (!this.client || !this.accountId || !this.databaseId) {
+    if (!this.client) {
       throw new Error('Missing required REST API configuration');
     }
 
     try {
-      const response = await this.client.d1.database.query(this.databaseId, {
-        account_id: this.accountId,
-        sql: sql,
+      const response = await this.client.query({
+        sql,
         params: this.formatSqlParams(params),
       });
 
@@ -233,7 +255,7 @@ export class D1Store extends MastraStorage {
       if (this.binding) {
         // Use Workers Binding API
         return this.executeWorkersBindingQuery({ sql, params, first });
-      } else if (this.client && this.accountId && this.databaseId) {
+      } else if (this.client) {
         // Use REST API
         return this.executeRestQuery({ sql, params, first });
       } else {
@@ -594,7 +616,9 @@ export class D1Store extends MastraStorage {
           id: 'CLOUDFLARE_D1_STORAGE_GET_THREADS_BY_RESOURCE_ID_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Error getting threads by resourceId ${resourceId}: ${error instanceof Error ? error.message : String(error)}`,
+          text: `Error getting threads by resourceId ${resourceId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
           details: { resourceId },
         },
         error,
@@ -625,7 +649,9 @@ export class D1Store extends MastraStorage {
 
     try {
       const countQuery = createSqlBuilder().count().from(fullTableName).where('resourceId = ?', resourceId);
-      const countResult = (await this.executeQuery(countQuery.build())) as { count: number }[];
+      const countResult = (await this.executeQuery(countQuery.build())) as {
+        count: number;
+      }[];
       const total = Number(countResult?.[0]?.count ?? 0);
 
       const selectQuery = createSqlBuilder()
@@ -652,7 +678,9 @@ export class D1Store extends MastraStorage {
           id: 'CLOUDFLARE_D1_STORAGE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Error getting threads by resourceId ${resourceId}: ${error instanceof Error ? error.message : String(error)}`,
+          text: `Error getting threads by resourceId ${resourceId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
           details: { resourceId },
         },
         error,
@@ -818,9 +846,15 @@ export class D1Store extends MastraStorage {
       // Validate all messages before insert
       for (const [i, message] of messages.entries()) {
         if (!message.id) throw new Error(`Message at index ${i} missing id`);
-        if (!message.threadId) throw new Error(`Message at index ${i} missing threadId`);
-        if (!message.content) throw new Error(`Message at index ${i} missing content`);
-        if (!message.role) throw new Error(`Message at index ${i} missing role`);
+        if (!message.threadId) {
+          throw new Error(`Message at index ${i} missing threadId`);
+        }
+        if (!message.content) {
+          throw new Error(`Message at index ${i} missing content`);
+        }
+        if (!message.role) {
+          throw new Error(`Message at index ${i} missing role`);
+        }
         const thread = await this.getThreadById({ threadId: message.threadId });
         if (!thread) {
           throw new Error(`Thread ${message.threadId} not found`);
@@ -930,7 +964,10 @@ export class D1Store extends MastraStorage {
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const fullTableName = this.getTableName(TABLE_MESSAGES);
-    const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
+    const limit = this.resolveMessageLimit({
+      last: selectBy?.last,
+      defaultLimit: 40,
+    });
     const include = selectBy?.include || [];
     const messages: any[] = [];
 
@@ -989,7 +1026,9 @@ export class D1Store extends MastraStorage {
           id: 'CLOUDFLARE_D1_STORAGE_GET_MESSAGES_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to retrieve messages for thread ${threadId}: ${error instanceof Error ? error.message : String(error)}`,
+          text: `Failed to retrieve messages for thread ${threadId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
           details: { threadId },
         },
         error,
@@ -1028,7 +1067,9 @@ export class D1Store extends MastraStorage {
         countQuery.andWhere('createdAt <= ?', this.serializeDate(toDate));
       }
 
-      const countResult = (await this.executeQuery(countQuery.build())) as { count: number }[];
+      const countResult = (await this.executeQuery(countQuery.build())) as {
+        count: number;
+      }[];
       const total = Number(countResult[0]?.count ?? 0);
 
       const query = createSqlBuilder()
@@ -1065,7 +1106,9 @@ export class D1Store extends MastraStorage {
           id: 'CLOUDFLARE_D1_STORAGE_GET_MESSAGES_PAGINATED_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to retrieve messages for thread ${threadId}: ${error instanceof Error ? error.message : String(error)}`,
+          text: `Failed to retrieve messages for thread ${threadId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
           details: { threadId },
         },
         error,
@@ -1449,7 +1492,9 @@ export class D1Store extends MastraStorage {
         countQuery.andWhere('createdAt <= ?', toDateStr);
       }
 
-      const countResult = (await this.executeQuery(countQuery.build())) as { count: number }[];
+      const countResult = (await this.executeQuery(countQuery.build())) as {
+        count: number;
+      }[];
       const total = Number(countResult?.[0]?.count ?? 0);
 
       dataQuery
@@ -1546,7 +1591,9 @@ export class D1Store extends MastraStorage {
           id: 'CLOUDFLARE_D1_STORAGE_GET_EVALS_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to retrieve evals for agent ${agentName}: ${error instanceof Error ? error.message : String(error)}`,
+          text: `Failed to retrieve evals for agent ${agentName}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
           details: { agentName },
         },
         error,
@@ -1600,7 +1647,11 @@ export class D1Store extends MastraStorage {
     const { sql: countSql, params: countParams } = countQueryBuilder.build();
 
     try {
-      const countResult = (await this.executeQuery({ sql: countSql, params: countParams, first: true })) as {
+      const countResult = (await this.executeQuery({
+        sql: countSql,
+        params: countParams,
+        first: true,
+      })) as {
         count: number;
       } | null;
       const total = Number(countResult?.count || 0);
@@ -1624,7 +1675,10 @@ export class D1Store extends MastraStorage {
       dataQueryBuilder.orderBy('createdAt', 'DESC').limit(perPage).offset(currentOffset);
 
       const { sql: dataSql, params: dataParams } = dataQueryBuilder.build();
-      const rows = await this.executeQuery({ sql: dataSql, params: dataParams });
+      const rows = await this.executeQuery({
+        sql: dataSql,
+        params: dataParams,
+      });
 
       const evals = (isArrayOfRecords(rows) ? rows : []).map((row: Record<string, any>) => {
         const result = this.deserializeValue(row.result);
@@ -1663,7 +1717,9 @@ export class D1Store extends MastraStorage {
           id: 'CLOUDFLARE_D1_STORAGE_GET_EVALS_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to retrieve evals for agent ${agentName}: ${error instanceof Error ? error.message : String(error)}`,
+          text: `Failed to retrieve evals for agent ${agentName}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
           details: { agentName: agentName ?? '', type: type ?? '' },
         },
         error,
@@ -1749,7 +1805,11 @@ export class D1Store extends MastraStorage {
 
       if (limit !== undefined && offset !== undefined) {
         const { sql: countSql, params: countParams } = countBuilder.build();
-        const countResult = await this.executeQuery({ sql: countSql, params: countParams, first: true });
+        const countResult = await this.executeQuery({
+          sql: countSql,
+          params: countParams,
+          first: true,
+        });
         total = Number((countResult as Record<string, any>)?.count ?? 0);
       }
 
@@ -1763,7 +1823,10 @@ export class D1Store extends MastraStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to retrieve workflow runs: ${error instanceof Error ? error.message : String(error)}`,
-          details: { workflowName: workflowName ?? '', resourceId: resourceId ?? '' },
+          details: {
+            workflowName: workflowName ?? '',
+            resourceId: resourceId ?? '',
+          },
         },
         error,
       );
@@ -1821,7 +1884,10 @@ export class D1Store extends MastraStorage {
     messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
       {
         id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+        content?: {
+          metadata?: MastraMessageContentV2['metadata'];
+          content?: MastraMessageContentV2['content'];
+        };
       }[];
   }): Promise<MastraMessageV2[]> {
     this.logger.error('updateMessages is not yet implemented in CloudflareD1Store');
