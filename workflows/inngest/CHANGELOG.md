@@ -1,5 +1,14 @@
 # @mastra/inngest
 
+## 0.11.3-alpha.1
+
+### Patch Changes
+
+- 515488a: dependencies updates:
+  - Updated dependency [`inngest@^3.39.2` ↗︎](https://www.npmjs.com/package/inngest/v/3.39.2) (from `^3.39.1`, in `dependencies`)
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11-alpha.1
+
 ## 0.11.3-alpha.0
 
 ### Patch Changes

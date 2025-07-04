@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.10-alpha.1
+
+### Patch Changes
+
+- a7a836a: Highlight send event button
+
 ## 0.10.10-alpha.0
 
 ### Patch Changes
