@@ -44,7 +44,7 @@ const graphTool = createGraphRAGTool({
       name: "id",
       type: "string",
       description:
-        "Custom ID for the tool. By default: 'GraphRAG {vectorStoreName} {indexName} Tool'. (Set at creation only.)",
+        "Custom ID for the tool. By default: 'GraphRAG Tool'. (Set at creation only.)",
       isOptional: true,
     },
     {
@@ -56,36 +56,36 @@ const graphTool = createGraphRAGTool({
     },
     {
       name: "vectorStoreName",
-      type: "string",
+      type: "string | DynamicArgument<string>",
       description:
         "Name of the vector store to query. (Can be set at creation or overridden at runtime.)",
       isOptional: false,
     },
     {
       name: "indexName",
-      type: "string",
+      type: "string | DynamicArgument<string>",
       description:
         "Name of the index within the vector store. (Can be set at creation or overridden at runtime.)",
       isOptional: false,
     },
     {
       name: "model",
-      type: "EmbeddingModel",
+      type: "EmbeddingModel | DynamicArgument<EmbeddingModel>",
       description:
-        "Embedding model to use for vector search. (Set at creation only.)",
+        "Embedding model to use for vector search. (Can be set at creation or overridden at runtime.)",
       isOptional: false,
     },
     {
       name: "enableFilter",
-      type: "boolean",
+      type: "boolean | DynamicArgument<boolean>",
       description:
-        "Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the runtime context.)",
+        "Enable filtering of results based on metadata. (Can be set at creation or overridden at runtime.)",
       isOptional: true,
       defaultValue: "false",
     },
     {
       name: "includeSources",
-      type: "boolean",
+      type: "boolean | DynamicArgument<boolean>",
       description:
         "Include the full retrieval objects in the results. (Can be set at creation or overridden at runtime.)",
       isOptional: true,
@@ -93,10 +93,17 @@ const graphTool = createGraphRAGTool({
     },
     {
       name: "graphOptions",
-      type: "GraphOptions",
-      description: "Configuration for the graph-based retrieval",
+      type: "GraphOptions | DynamicArgument<GraphOptions>",
+      description: "Configuration for the graph-based retrieval. (Can be set at creation or overridden at runtime.)",
       isOptional: true,
       defaultValue: "Default graph options",
+    },
+    {
+      name: "databaseConfig",
+      type: "DatabaseConfig | DynamicArgument<DatabaseConfig>",
+      description:
+        "Database-specific configuration options for optimizing queries. (Can be set at creation or overridden at runtime.)",
+      isOptional: true,
     },
   ]}
 />
@@ -210,6 +217,67 @@ const graphTool = createGraphRAGTool({
 
 This example shows how to customize the tool description for a specific use case while maintaining its core purpose of relationship analysis.
 
+## Database-Specific Configuration Examples
+
+The `databaseConfig` parameter allows you to leverage unique features and optimizations specific to each vector database. These configurations are automatically applied during query execution.
+
+### Pinecone Configuration
+
+```typescript
+const pineconeGraphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
+  databaseConfig: {
+    pinecone: {
+      namespace: "production",  // Organize vectors by environment
+      sparseVector: {          // Enable hybrid search
+        indices: [0, 1, 2, 3],
+        values: [0.1, 0.2, 0.15, 0.05]
+      }
+    }
+  }
+});
+```
+
+### pgVector Configuration
+
+```typescript
+const pgVectorGraphTool = createGraphRAGTool({
+  vectorStoreName: "postgres",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
+  databaseConfig: {
+    pgvector: {
+      minScore: 0.7,    // Only return results above 70% similarity
+      ef: 200,          // Higher value = better accuracy, slower search
+      probes: 10        // For IVFFlat: more probes = better recall
+    }
+  }
+});
+```
+
+### Chroma Configuration
+
+```typescript
+const chromaGraphTool = createGraphRAGTool({
+  vectorStoreName: "chroma",
+  indexName: "documents",
+  model: openai.embedding("text-embedding-3-small"),
+  databaseConfig: {
+    chroma: {
+      where: {                    // Metadata filtering
+        "category": "technical",
+        "status": "published"
+      },
+      whereDocument: {            // Document content filtering
+        "$contains": "API"
+      }
+    }
+  }
+});
+```
+
 ## Example: Using Runtime Context
 
 ```typescript
@@ -228,6 +296,9 @@ const runtimeContext = new RuntimeContext<{
   indexName: string;
   topK: number;
   filter: any;
+  randomWalkSteps: number;
+  restartProb: number;
+  databaseConfig: DatabaseConfig;
 }>();
 runtimeContext.set("vectorStoreName", "my-store");
 runtimeContext.set("indexName", "my-index");
@@ -235,12 +306,75 @@ runtimeContext.set("topK", 5);
 runtimeContext.set("filter", { category: "docs" });
 runtimeContext.set("randomWalkSteps", 100);
 runtimeContext.set("restartProb", 0.15);
+runtimeContext.set("databaseConfig", {
+  pinecone: { namespace: "production" }
+});
 
 const response = await agent.generate(
   "Find documentation from the knowledge base.",
   {
     runtimeContext,
   },
+);
+```
+
+## Example with Dynamic Arguments
+
+You can also set most options by passing them as dynamic arguments that receive a RuntimeContext.
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { createGraphRAGTool } from "@mastra/rag";
+
+const graphTool = createGraphRAGTool({
+  model: ({ runtimeContext }) => {
+    // Use different models based on user tier
+    const userTier = runtimeContext.get('user-tier');
+    return userTier === "enterprise" 
+      ? openai.embedding("text-embedding-3-large")
+      : openai.embedding("text-embedding-3-small");
+  },
+  vectorStoreName: ({ runtimeContext }) => {
+    // Use different stores based on environment
+    const environment = runtimeContext.get('environment');
+    return environment === "production" ? "prod-store" : "dev-store";
+  },
+  indexName: ({ runtimeContext }) => {
+    // Use different indices based on user role
+    const userRole = runtimeContext.get('user-role');
+    return userRole === "admin" ? "admin-docs" : "user-docs";
+  },
+  graphOptions: ({ runtimeContext }) => {
+    // Adjust graph parameters based on query complexity
+    const queryComplexity = runtimeContext.get('query-complexity');
+    return {
+      dimension: 1536,
+      threshold: queryComplexity === "high" ? 0.8 : 0.7,
+      randomWalkSteps: queryComplexity === "high" ? 200 : 100,
+      restartProb: queryComplexity === "high" ? 0.2 : 0.15,
+    };
+  },
+  databaseConfig: ({ runtimeContext }) => {
+    // Configure database based on performance requirements
+    const performanceMode = runtimeContext.get('performance-mode');
+    return {
+      pinecone: {
+        namespace: performanceMode === "fast" ? "cached" : "full"
+      }
+    };
+  },
+});
+
+const runtimeContext = new RuntimeContext();
+runtimeContext.set("user-tier", "enterprise");
+runtimeContext.set("environment", "production");
+runtimeContext.set("user-role", "admin");
+runtimeContext.set("query-complexity", "high");
+runtimeContext.set("performance-mode", "fast");
+
+const response = await agent.generate(
+  "Analyze complex relationships in our documentation.",
+  { runtimeContext }
 );
 ```
 

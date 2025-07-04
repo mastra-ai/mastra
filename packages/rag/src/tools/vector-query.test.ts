@@ -286,10 +286,10 @@ describe('createVectorQueryTool', () => {
       expect(result.sources).toEqual([]); // includeSources false
       expect(vectorQuerySearch).toHaveBeenCalledWith(
         expect.objectContaining({
-          indexName: 'anotherIndex',
+          indexName: 'anotherIndex', // can be overridden by runtimeContext
           vectorStore: {
             anotherStore: {},
-          },
+          }, // can be overridden by runtimeContext
           queryText: 'foo',
           model: mockModel,
           queryFilter: { foo: 'bar' },
@@ -324,6 +324,81 @@ describe('createVectorQueryTool', () => {
         runtimeContext,
       });
       expect(result.relevantContext[0]).toEqual({ text: 'bar' });
+    });
+
+    it('handles dynamic arguments (function-based options) with runtimeContext', async () => {
+      const dynamicModel = vi.fn().mockResolvedValue(mockModel);
+      const dynamicIncludeVectors = vi.fn().mockResolvedValue(true);
+      const dynamicIncludeSources = vi.fn().mockResolvedValue(false);
+      const dynamicReranker = vi.fn().mockResolvedValue({
+        model: 'dynamic-reranker',
+        options: { topK: 2 },
+      });
+      const dynamicDatabaseConfig = vi.fn().mockResolvedValue({
+        customConfig: 'value',
+      });
+
+      const tool = createVectorQueryTool({
+        id: 'dynamic-test',
+        indexName: 'testIndex', // static
+        vectorStoreName: 'testStore', // static
+        model: dynamicModel as any,
+        includeVectors: dynamicIncludeVectors as any,
+        includeSources: dynamicIncludeSources as any,
+        reranker: dynamicReranker as any,
+        databaseConfig: dynamicDatabaseConfig as any,
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('customKey', 'customValue');
+
+      // Mock rerank for dynamic reranker
+      vi.mocked(rerank).mockResolvedValue([
+        {
+          result: { id: '1', metadata: { text: 'dynamic-result' }, score: 1 },
+          score: 1,
+          details: { semantic: 1, vector: 1, position: 1 },
+        },
+      ]);
+
+      const result = await tool.execute({
+        context: { queryText: 'dynamic query', topK: 5 },
+        mastra: mockMastra as any,
+        runtimeContext,
+      });
+
+      // Verify that dynamic functions were called with runtimeContext
+      expect(dynamicModel).toHaveBeenCalledWith({ runtimeContext });
+      expect(dynamicIncludeVectors).toHaveBeenCalledWith({ runtimeContext });
+      expect(dynamicIncludeSources).toHaveBeenCalledWith({ runtimeContext });
+      expect(dynamicReranker).toHaveBeenCalledWith({ runtimeContext });
+      expect(dynamicDatabaseConfig).toHaveBeenCalledWith({ runtimeContext });
+
+      // Verify that vectorQuerySearch was called with dynamic values
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          indexName: 'testIndex', // static value
+          vectorStore: {
+            testStore: {},
+          }, // static value
+          queryText: 'dynamic query',
+          model: mockModel,
+          topK: 5,
+          includeVectors: true,
+          databaseConfig: { customConfig: 'value' },
+        }),
+      );
+
+      // Verify rerank was called with dynamic reranker
+      expect(rerank).toHaveBeenCalledWith(
+        expect.any(Array),
+        'dynamic query',
+        'dynamic-reranker',
+        expect.objectContaining({ topK: 2 }),
+      );
+
+      expect(result.relevantContext[0]).toEqual({ text: 'dynamic-result' });
+      expect(result.sources).toEqual([]); // includeSources false
     });
   });
 });

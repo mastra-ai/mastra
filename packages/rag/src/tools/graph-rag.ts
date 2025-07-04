@@ -1,3 +1,4 @@
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -8,19 +9,38 @@ import { convertToSources } from '../utils/convert-sources';
 import type { GraphRagToolOptions } from './types';
 import { defaultGraphOptions } from './types';
 
+/**
+ * Resolves option values with priority: runtime context > function option > static option > default
+ * Handles both synchronous and asynchronous option resolvers
+ */
+async function resolveOption<T>(
+  runtimeContext: RuntimeContext,
+  key: string,
+  option: T | ((params: { runtimeContext: RuntimeContext }) => Promise<T> | T) | undefined,
+  defaultValue?: T,
+): Promise<T | undefined> {
+  // Check runtime context first
+  const runtimeValue = runtimeContext.get(key);
+  if (runtimeValue !== undefined && runtimeValue !== null) {
+    return runtimeValue as T;
+  }
+
+  // Handle function options
+  if (typeof option === 'function') {
+    const fn = option as (params: { runtimeContext: RuntimeContext }) => Promise<T> | T;
+    const result = fn({ runtimeContext });
+    return result instanceof Promise ? await result : result;
+  }
+
+  // Return static option value
+  return option ?? defaultValue;
+}
+
 export const createGraphRAGTool = (options: GraphRagToolOptions) => {
-  const { model, id, description } = options;
+  const { id, description } = options;
 
-  const toolId = id || `GraphRAG ${options.vectorStoreName} ${options.indexName} Tool`;
+  const toolId = id || `GraphRAG Tool`;
   const toolDescription = description || defaultGraphRagDescription();
-  const graphOptions = {
-    ...defaultGraphOptions,
-    ...(options.graphOptions || {}),
-  };
-  // Initialize GraphRAG
-  const graphRag = new GraphRAG(graphOptions.dimension, graphOptions.threshold);
-  let isInitialized = false;
-
   const inputSchema = options.enableFilter ? filterSchema : z.object(baseSchema).passthrough();
 
   return createTool({
@@ -29,18 +49,40 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
     outputSchema,
     description: toolDescription,
     execute: async ({ context, mastra, runtimeContext }) => {
-      const indexName: string = runtimeContext.get('indexName') ?? options.indexName;
-      const vectorStoreName: string = runtimeContext.get('vectorStoreName') ?? options.vectorStoreName;
+      // Resolve dynamic options
+      const indexName = await resolveOption(runtimeContext, 'indexName', options.indexName);
+      const vectorStoreName = await resolveOption(runtimeContext, 'vectorStoreName', options.vectorStoreName);
+      const model = await resolveOption(runtimeContext, 'model', options.model);
+      const includeSources = await resolveOption(runtimeContext, 'includeSources', options.includeSources, true);
+      const graphOptions = await resolveOption(
+        runtimeContext,
+        'graphOptions',
+        options.graphOptions,
+        defaultGraphOptions,
+      );
+      const databaseConfig = await resolveOption(runtimeContext, 'databaseConfig', options.databaseConfig);
+      const enableFilter = await resolveOption(runtimeContext, 'enableFilter', options.enableFilter, false);
+
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
-      const includeSources: boolean = runtimeContext.get('includeSources') ?? options.includeSources ?? true;
-      const randomWalkSteps: number | undefined = runtimeContext.get('randomWalkSteps') ?? graphOptions.randomWalkSteps;
-      const restartProb: number | undefined = runtimeContext.get('restartProb') ?? graphOptions.restartProb;
+      if (!model) throw new Error(`model is required, got: ${model}`);
+
+      // Initialize GraphRAG with resolved options
+      const resolvedGraphOptions = {
+        ...defaultGraphOptions,
+        ...(graphOptions || {}),
+      };
+      const graphRag = new GraphRAG(resolvedGraphOptions.dimension, resolvedGraphOptions.threshold);
+      let isInitialized = false;
+
+      const randomWalkSteps: number | undefined =
+        runtimeContext.get('randomWalkSteps') ?? resolvedGraphOptions.randomWalkSteps;
+      const restartProb: number | undefined = runtimeContext.get('restartProb') ?? resolvedGraphOptions.restartProb;
       const topK: number = runtimeContext.get('topK') ?? context.topK ?? 10;
       const filter: Record<string, any> = runtimeContext.get('filter') ?? context.filter;
       const queryText = context.queryText;
 
-      const enableFilter = !!runtimeContext.get('filter') || (options.enableFilter ?? false);
+      const enableFilterValue = !!runtimeContext.get('filter') || enableFilter;
 
       const logger = mastra?.getLogger();
       if (!logger) {
@@ -68,7 +110,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
         }
 
         let queryFilter = {};
-        if (enableFilter) {
+        if (enableFilterValue) {
           queryFilter = (() => {
             try {
               return typeof filter === 'string' ? JSON.parse(filter) : filter;
@@ -82,7 +124,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
           })();
         }
         if (logger) {
-          logger.debug('Prepared vector query parameters:', { queryFilter, topK: topKValue });
+          logger.debug('Prepared vector query parameters:', { queryFilter, topK: topKValue, databaseConfig });
         }
         const { results, queryEmbedding } = await vectorQuerySearch({
           indexName,
@@ -92,6 +134,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
           queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
           topK: topKValue,
           includeVectors: true,
+          databaseConfig,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });

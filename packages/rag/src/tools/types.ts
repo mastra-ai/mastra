@@ -1,5 +1,8 @@
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { EmbeddingModel } from 'ai';
 import type { RerankConfig } from '../rerank';
+
+export type DynamicArgument<T> = T | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => Promise<T> | T);
 
 export interface PineconeConfig {
   namespace?: string;
@@ -57,29 +60,31 @@ export type VectorQueryToolOptions = {
   description?: string;
   indexName: string;
   vectorStoreName: string;
-  model: EmbeddingModel<string>;
   enableFilter?: boolean;
-  includeVectors?: boolean;
-  includeSources?: boolean;
-  reranker?: RerankConfig;
+  model: DynamicArgument<EmbeddingModel<string>>;
+  includeVectors?: DynamicArgument<boolean>;
+  includeSources?: DynamicArgument<boolean>;
+  reranker?: DynamicArgument<RerankConfig>;
   /** Database-specific configuration options */
-  databaseConfig?: DatabaseConfig;
+  databaseConfig?: DynamicArgument<DatabaseConfig>;
 };
 
 export type GraphRagToolOptions = {
   id?: string;
   description?: string;
-  indexName: string;
-  vectorStoreName: string;
-  model: EmbeddingModel<string>;
-  enableFilter?: boolean;
-  includeSources?: boolean;
-  graphOptions?: {
+  indexName: DynamicArgument<string>;
+  vectorStoreName: DynamicArgument<string>;
+  model: DynamicArgument<EmbeddingModel<string>>;
+  enableFilter?: DynamicArgument<boolean>;
+  includeSources?: DynamicArgument<boolean>;
+  graphOptions?: DynamicArgument<{
     dimension?: number;
     randomWalkSteps?: number;
     restartProb?: number;
     threshold?: number;
-  };
+  }>;
+  /** Database-specific configuration options */
+  databaseConfig?: DynamicArgument<DatabaseConfig>;
 };
 
 /**
