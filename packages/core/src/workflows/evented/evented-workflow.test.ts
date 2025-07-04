@@ -3607,6 +3607,13 @@ describe('Workflow', () => {
         ])
         .commit();
 
+      new Mastra({
+        workflows: {
+          'test-workflow': workflow,
+        },
+        storage: testStorage,
+      });
+
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
 
@@ -4662,7 +4669,6 @@ describe('Workflow', () => {
         .commit();
 
       new Mastra({
-        logger: false,
         workflows: { 'test-workflow': workflow },
         storage: testStorage,
       });
@@ -5470,7 +5476,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should be able to use an agent in parallel', async () => {
+    it.only('should be able to use an agent in parallel', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const finalStep = createStep({
         id: 'finalStep',
@@ -6000,7 +6006,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should be able to nest workflows sequentially', async () => {
+    it('should be able to nest workflows sequentially', async () => {
       const start = vi.fn().mockImplementation(async ({ inputData }) => {
         // Get the current value (either from trigger or previous increment)
         const currentValue = inputData.startValue || 0;

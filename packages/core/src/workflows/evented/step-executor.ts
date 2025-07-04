@@ -44,7 +44,7 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
-      console.log('executor start', step.step.id);
+      console.log('executor start', step.step.id, step.step);
       const stepResult = await step.step.execute({
         runId,
         mastra: this.mastra!,

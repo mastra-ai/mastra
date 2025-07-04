@@ -173,13 +173,13 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    if (step.type !== 'step') {
+    if (step?.type !== 'step') {
       return this.errorWorkflow(
         workflowId,
         runId,
         new MastraError({
           id: 'MASTRA_WORKFLOW',
-          text: `Step is not executable: ${step.type} -- ${JSON.stringify(executionPath)}`,
+          text: `Step is not executable: ${step?.type} -- ${JSON.stringify(executionPath)}`,
           domain: ErrorDomain.MASTRA_WORKFLOW,
           category: ErrorCategory.SYSTEM,
         }),

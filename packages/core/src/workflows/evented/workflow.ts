@@ -64,6 +64,14 @@ export function cloneStep<TStepId extends string>(
   };
 }
 
+function isAgent(params: any): params is Agent<any, any, any> {
+  return params?.component === 'AGENT';
+}
+
+function isTool(params: any): params is Tool<any, any, any> {
+  return params instanceof Tool;
+}
+
 export function createStep<
   TStepId extends string,
   TStepInput extends z.ZodType<any>,
@@ -138,7 +146,7 @@ export function createStep<
         execute: (context: ToolExecutionContext<TStepInput>) => Promise<any>;
       }),
 ): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType> {
-  if (params instanceof Agent) {
+  if (isAgent(params)) {
     return {
       id: params.name,
       // @ts-ignore
@@ -218,7 +226,7 @@ export function createStep<
     };
   }
 
-  if (params instanceof Tool) {
+  if (isTool(params)) {
     if (!params.inputSchema || !params.outputSchema) {
       throw new Error('Tool must have input and output schemas defined');
     }
