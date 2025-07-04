@@ -210,10 +210,11 @@ export class MessageList {
     const experimentalAttachments: UIMessage['experimental_attachments'] = m.content.experimental_attachments
       ? [...m.content.experimental_attachments]
       : [];
+
     const contentString =
       typeof m.content.content === `string` && m.content.content !== ''
         ? m.content.content
-        : m.content.parts.reduce((prev, part) => {
+        : (m.content?.parts ?? []).reduce((prev, part) => {
             if (part.type === `text`) {
               // return only the last text part like AI SDK does
               return part.text;
@@ -222,7 +223,7 @@ export class MessageList {
           }, '');
 
     const parts: MastraMessageContentV2['parts'] = [];
-    if (m.content.parts.length) {
+    if (m.content?.parts?.length) {
       for (const part of m.content.parts) {
         if (part.type === `file`) {
           experimentalAttachments.push({
@@ -367,7 +368,7 @@ export class MessageList {
     }
     // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
     const latestMessagePartType = latestMessage?.content?.parts?.filter(p => p.type !== `step-start`)?.at?.(-1)?.type;
-    const newMessageFirstPartType = messageV2.content.parts.filter(p => p.type !== `step-start`).at(0)?.type;
+    const newMessageFirstPartType = messageV2?.content?.parts?.filter(p => p.type !== `step-start`).at(0)?.type;
     const shouldAppendToLastAssistantMessage =
       latestMessage?.role === 'assistant' &&
       messageV2.role === 'assistant' &&
@@ -599,6 +600,7 @@ export class MessageList {
     const content: MastraMessageContentV2 = {
       format: 2,
       parts: message.parts,
+      content: message.content,
     };
 
     if (message.toolInvocations) content.toolInvocations = message.toolInvocations;

@@ -34,7 +34,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
     const message = messages[i];
     const isLastMessage = i === messages.length - 1;
     if (!message?.content) continue;
-    const { content, experimental_attachments: inputAttachments = [], parts: inputParts } = message.content;
+    const { content, experimental_attachments: inputAttachments = [], parts: inputParts = [] } = message.content;
     const { role } = message;
     const fields = {
       id: message.id,
@@ -70,7 +70,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
             content: userContent,
           });
         } else {
-          const textParts = message.content.parts
+          const textParts = (message.content.parts || [])
             .filter(part => part.type === 'text')
             .map(part => ({
               type: 'text' as const,

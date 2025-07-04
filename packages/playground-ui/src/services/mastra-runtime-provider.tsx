@@ -14,10 +14,9 @@ import { RuntimeContext } from '@mastra/core/di';
 
 import { ChatProps } from '@/types';
 
-import { CoreUserMessage } from '@mastra/core';
-import { fileToBase64 } from '@/lib/file';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachments/pdfs-adapter';
+import { attachmentToCoreMessage, attachmentToExperimental, experimentalToAssistant } from './mappers';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -30,50 +29,6 @@ const handleFinishReason = (finishReason: string) => {
     default:
       break;
   }
-};
-
-const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreUserMessage>> => {
-  const promises = attachments
-    .filter(attachment => attachment.type === 'image' || attachment.type === 'document')
-    .map(async attachment => {
-      if (attachment.type === 'document') {
-        if (attachment.contentType === 'application/pdf') {
-          // @ts-expect-error - TODO: fix this type issue somehow
-          const pdfText = attachment.content?.[0]?.text || '';
-          return {
-            role: 'user' as const,
-            content: [
-              {
-                type: 'file' as const,
-                data: `data:application/pdf;base64,${pdfText}`,
-                mimeType: attachment.contentType,
-                filename: attachment.name,
-              },
-            ],
-          };
-        }
-
-        return {
-          role: 'user' as const,
-          // @ts-expect-error - TODO: fix this type issue somehow
-          content: attachment.content[0]?.text || '',
-        };
-      }
-
-      return {
-        role: 'user' as const,
-
-        content: [
-          {
-            type: 'image' as const,
-            image: await fileToBase64(attachment.file!),
-            mimeType: attachment.file!.type,
-          },
-        ],
-      };
-    });
-
-  return Promise.all(promises);
 };
 
 export function MastraRuntimeProvider({
@@ -121,15 +76,17 @@ export function MastraRuntimeProvider({
               result: toolInvocation?.result,
             }));
 
-            const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
-              type: image.contentType.startsWith(`image/`)
-                ? 'image'
-                : image.contentType.startsWith(`audio/`)
-                  ? 'audio'
-                  : 'file',
-              mimeType: image.contentType,
-              image: image.url,
-            }));
+            // const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
+            //   type: image.contentType.startsWith(`image/`)
+            //     ? 'image'
+            //     : image.contentType.startsWith(`audio/`)
+            //       ? 'audio'
+            //       : 'file',
+            //   mimeType: image.contentType,
+            //   image: image.url,
+            // }));
+
+            const attachmentsAsContentParts = experimentalToAssistant(message.experimental_attachments || []);
 
             return {
               ...message,
@@ -154,7 +111,8 @@ export function MastraRuntimeProvider({
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
 
-    const attachments = await convertToAIAttachments(message.attachments);
+    const coreMessages = await attachmentToCoreMessage(message.attachments);
+    const experimentalAttachments = await attachmentToExperimental(message.attachments);
 
     const input = message.content[0].text;
     setMessages(currentConversation => [
@@ -166,12 +124,14 @@ export function MastraRuntimeProvider({
     try {
       if (chatWithGenerate) {
         const generateResponse = await agent.generate({
+          // @ts-expect-error - TODO: fix this type issue somehow
           messages: [
             {
               role: 'user',
               content: input,
+              experimental_attachments: experimentalAttachments,
             },
-            ...attachments,
+            // ...coreMessages,
           ],
           runId: agentId,
           frequencyPenalty,
@@ -273,12 +233,14 @@ export function MastraRuntimeProvider({
         }
       } else {
         const response = await agent.stream({
+          // @ts-expect-error - TODO: fix this type issue somehow
           messages: [
             {
               role: 'user',
               content: input,
+              experimental_attachments: experimentalAttachments,
             },
-            ...attachments,
+            // ...coreMessages,
           ],
           runId: agentId,
           frequencyPenalty,

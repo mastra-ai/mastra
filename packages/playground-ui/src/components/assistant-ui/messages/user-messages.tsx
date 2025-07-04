@@ -1,6 +1,6 @@
 'use client';
 
-import { AttachmentPrimitive, MessagePrimitive, TextContentPart, useAttachment } from '@assistant-ui/react';
+import { AttachmentPrimitive, MessagePrimitive, TextContentPart, useAttachment, useMessage } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -10,10 +10,8 @@ import { ImageEntry, PdfEntry, TxtEntry } from '../attachments/attachment-previe
 
 const InMessageContextWrapper = () => {
   return (
-    <AttachmentPrimitive.Root className="pt-4">
-      <div className="max-w-[366px] px-5 py-3 text-icon6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
-        <InMessageAttachmentWrapper />
-      </div>
+    <AttachmentPrimitive.Root>
+      <InMessageAttachmentWrapper />
     </AttachmentPrimitive.Root>
   );
 };
@@ -75,9 +73,9 @@ const InMessageAttachment = ({ type, contentType, nameSlot, src, data }: InMessa
             {type === 'image' ? (
               <ImageEntry src={src ?? ''} />
             ) : type === 'document' && contentType === 'application/pdf' ? (
-              <PdfEntry data={data ?? ''} />
+              <PdfEntry data={data ?? ''} nameSlot={nameSlot} variant="badge" />
             ) : (
-              <TxtEntry data={data ?? ''} />
+              <TxtEntry data={data ?? ''} nameSlot={nameSlot} variant="badge" />
             )}
           </div>
         </TooltipTrigger>
@@ -88,52 +86,54 @@ const InMessageAttachment = ({ type, contentType, nameSlot, src, data }: InMessa
   );
 };
 
-export const UserMessageAttachments = () => {
+const ClientSideAttachments = () => {
   return <MessagePrimitive.Attachments components={{ Attachment: InMessageContextWrapper }} />;
 };
 
+const ServerSideAttachments = () => {
+  return (
+    <MessagePrimitive.Content
+      components={{
+        File: p => {
+          return (
+            <InMessageAttachment
+              type="document"
+              contentType={p.mimeType}
+              // @ts-expect-error - TODO: fix this type issue somehow
+              nameSlot={p.name}
+              src={undefined}
+              data={p.data}
+            />
+          );
+        },
+        Image: p => {
+          return (
+            <InMessageAttachment
+              type="image" // @ts-expect-error - TODO: fix this type issue somehow
+              nameSlot={p.name}
+              src={p.image}
+            />
+          );
+        },
+        Text: () => null, // We do custom content placement in UserMessage
+      }}
+    />
+  );
+};
+
 export const UserMessage = () => {
+  const message = useMessage();
+  const content = message.content.find(c => c.type === 'text')?.text ?? '';
   return (
     <MessagePrimitive.Root className="w-full flex items-end pb-4 flex-col">
       {/* <UserActionBar /> */}
 
-      <div className="max-w-[366px] px-5 py-3 text-icon6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
-        <MessagePrimitive.Content
-          components={{
-            File: p => {
-              return (
-                <InMessageAttachment
-                  type="document"
-                  contentType={p.mimeType}
-                  nameSlot="Unknown filename"
-                  src={undefined}
-                  data={(p as any).image as string} // yeah, for some reasons
-                />
-              );
-            },
-            Image: p => {
-              return <InMessageAttachment type="image" nameSlot="Unknown filename" src={p.image} />;
-            },
-            Text: p => {
-              if (p.text.includes('<attachment name=')) {
-                return (
-                  <InMessageAttachment
-                    type="document"
-                    contentType="text/plain"
-                    nameSlot="Unknown filename"
-                    src={undefined}
-                    data={p.text}
-                  />
-                );
-              }
-
-              return p.text;
-            },
-          }}
-        />
+      <div className="max-w-[366px] px-5 py-3 text-icon6 text-ui-lg leading-ui-lg rounded-lg bg-surface3 flex flex-col gap-2">
+        {content}
+        <ServerSideAttachments />
+        {/* Client side */}
+        <ClientSideAttachments />
       </div>
-
-      <UserMessageAttachments />
 
       {/* <BranchPicker className="col-span-full col-start-1 row-start-3 -mr-1 justify-end" /> */}
     </MessagePrimitive.Root>
