@@ -1,14 +1,15 @@
 import { ActionBarPrimitive, MessagePrimitive, ToolCallContentPartComponent, useMessage } from '@assistant-ui/react';
 import { CheckIcon, CopyIcon } from 'lucide-react';
-import { FC } from 'react';
 
 import { MarkdownText } from './markdown-text';
-import { TooltipIconButton } from './tooltip-icon-button';
-import { ToolFallback } from '@/components/assistant-ui/tool-fallback';
+import { TooltipIconButton } from '../tooltip-icon-button';
+import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
 
-export const AssistantMessage: FC<{ ToolFallback?: ToolCallContentPartComponent }> = ({
-  ToolFallback: ToolFallbackCustom,
-}) => {
+export interface AssistantMessageProps {
+  ToolFallback?: ToolCallContentPartComponent;
+}
+
+export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom }: AssistantMessageProps) => {
   const data = useMessage();
   const isSolelyToolCall = data.content.length === 1 && data.content[0].type === 'tool-call';
 
@@ -28,7 +29,7 @@ export const AssistantMessage: FC<{ ToolFallback?: ToolCallContentPartComponent 
   );
 };
 
-const AssistantActionBar: FC = () => {
+const AssistantActionBar = () => {
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning

@@ -17,7 +17,7 @@ import { ChatProps } from '@/types';
 import { CoreUserMessage } from '@mastra/core';
 import { fileToBase64 } from '@/lib/file';
 import { useMastraClient } from '@/contexts/mastra-client-context';
-import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachment-adapters/pdfs-adapter';
+import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachments/pdfs-adapter';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -38,13 +38,14 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
     .map(async attachment => {
       if (attachment.type === 'document') {
         if (attachment.contentType === 'application/pdf') {
+          // @ts-expect-error - TODO: fix this type issue somehow
+          const pdfText = attachment.content?.[0]?.text || '';
           return {
             role: 'user' as const,
             content: [
               {
                 type: 'file' as const,
-                // @ts-expect-error - TODO: fix this type issue somehow
-                data: attachment.content?.[0]?.text || '',
+                data: `data:application/pdf;base64,${pdfText}`,
                 mimeType: attachment.contentType,
                 filename: attachment.name,
               },
