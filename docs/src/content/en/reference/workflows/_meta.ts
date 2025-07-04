@@ -12,7 +12,7 @@ const meta = {
   sleepUntil: "sleepUntil()",
   waitForEvent: "waitForEvent()",
   commit: "commit()",
-  "create-run": "createRun()",
+  "create-run": "createRunAsync()",
   snapshots: "Snapshots",
   watch: "watch()",
   stream: "stream()",
