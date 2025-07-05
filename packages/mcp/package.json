@@ -46,7 +46,7 @@
     "@hono/node-server": "^1.14.4",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@mendable/firecrawl-js": "^1.25.5",
+    "@mendable/firecrawl-js": "^1.29.1",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
     "ai": "4.3.16",
