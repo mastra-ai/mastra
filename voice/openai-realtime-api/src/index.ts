@@ -618,6 +618,9 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       this.emit('response.done', ev);
       speakerStreams.delete(ev.response.id);
     });
+    this.client.on('error', async ev => {
+      this.emit('error', ev);
+    });
   }
 
   private async handleFunctionCalls(ev: any) {
