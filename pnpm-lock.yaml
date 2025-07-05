@@ -734,7 +734,7 @@ importers:
         version: 1.2.11(zod@3.25.67)
       '@copilotkit/runtime':
         specifier: ^1.9.1
-        version: 1.9.1(95f65626796f7f4a490411a6d0dce880)
+        version: 1.9.1(3b0fe0dd50d444004402184083447eb9)
       hono:
         specifier: ^4.8.3
         version: 4.8.3
@@ -1720,8 +1720,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@mendable/firecrawl-js':
-        specifier: ^1.25.5
-        version: 1.29.0
+        specifier: ^1.29.1
+        version: 1.29.1
       '@microsoft/api-extractor':
         specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.2)
@@ -6848,8 +6848,8 @@ packages:
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
-  '@mendable/firecrawl-js@1.29.0':
-    resolution: {integrity: sha512-ZS97rwri5ZZmqDWy7VQJlzCmNFATSvUj+LNBtMj//Rs6fm/uIsyOU5Noq6zWVWKLqFsuQnDM5wnMz8q0JFRi/w==}
+  '@mendable/firecrawl-js@1.29.1':
+    resolution: {integrity: sha512-w7mXja6hSNL6li7BHgY6LQLnBJ9RIxWkmZ16y2MCOr3w6MlR7k2ZcTxro6vEJrUoshhyoOqhcFCyD1P0ckBuRw==}
     engines: {node: '>=22.0.0'}
 
   '@microsoft/api-extractor-model@7.28.13':
@@ -20221,7 +20221,7 @@ snapshots:
 
   '@colors/colors@1.5.0': {}
 
-  '@copilotkit/runtime@1.9.1(95f65626796f7f4a490411a6d0dce880)':
+  '@copilotkit/runtime@1.9.1(3b0fe0dd50d444004402184083447eb9)':
     dependencies:
       '@ag-ui/client': 0.0.28
       '@ag-ui/core': 0.0.28
@@ -20232,7 +20232,7 @@ snapshots:
       '@copilotkit/shared': 1.9.1(encoding@0.1.13)
       '@graphql-yoga/plugin-defer-stream': 3.13.5(graphql-yoga@5.13.5(graphql@16.11.0))(graphql@16.11.0)
       '@langchain/aws': 0.1.11(@langchain/core@0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.67)))
-      '@langchain/community': 0.3.45(59c1141547c960f20576e46068316c33)
+      '@langchain/community': 0.3.45(5adf6089e73efdf3f73368ad15f6ef4c)
       '@langchain/core': 0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.67))
       '@langchain/google-gauth': 0.1.8(@langchain/core@0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.67)))(encoding@0.1.13)(zod@3.25.67)
       '@langchain/langgraph-sdk': 0.0.70(@langchain/core@0.3.59(openai@4.104.0(encoding@0.1.13)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.67)))(react@19.1.0)
@@ -21674,7 +21674,7 @@ snapshots:
     transitivePeerDependencies:
       - aws-crt
 
-  '@langchain/community@0.3.45(59c1141547c960f20576e46068316c33)':
+  '@langchain/community@0.3.45(5adf6089e73efdf3f73368ad15f6ef4c)':
     dependencies:
       '@browserbasehq/stagehand': 1.14.0(@playwright/test@1.53.1)(bufferutil@4.0.9)(deepmerge@4.3.1)(dotenv@17.0.1)(encoding@0.1.13)(openai@4.104.0(encoding@0.1.13)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.67))(utf-8-validate@6.0.3)(zod@3.25.67)
       '@ibm-cloud/watsonx-ai': 1.6.7
@@ -21702,7 +21702,7 @@ snapshots:
       '@browserbasehq/sdk': 2.6.0(encoding@0.1.13)
       '@datastax/astra-db-ts': 1.5.0
       '@google-cloud/storage': 7.16.0(encoding@0.1.13)
-      '@mendable/firecrawl-js': 1.29.0
+      '@mendable/firecrawl-js': 1.29.1
       '@neondatabase/serverless': 0.9.5
       '@opensearch-project/opensearch': 3.5.1
       '@pinecone-database/pinecone': 3.0.3
@@ -21929,7 +21929,7 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mendable/firecrawl-js@1.29.0':
+  '@mendable/firecrawl-js@1.29.1':
     dependencies:
       axios: 1.10.0(debug@4.4.1)
       typescript-event-target: 1.1.1
@@ -29983,7 +29983,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.10.0)
+      retry-axios: 2.6.0(axios@1.10.0(debug@4.4.1))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -33330,7 +33330,7 @@ snapshots:
       onetime: 7.0.0
       signal-exit: 4.1.0
 
-  retry-axios@2.6.0(axios@1.10.0):
+  retry-axios@2.6.0(axios@1.10.0(debug@4.4.1)):
     dependencies:
       axios: 1.10.0(debug@4.4.1)
 
