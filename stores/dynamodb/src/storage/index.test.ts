@@ -545,8 +545,8 @@ describe('DynamoDBStore Integration Tests', () => {
 
         // updatedAt should be newer than the initial creation time
         expect(retrieved?.updatedAt.getTime()).toBeGreaterThan(initialCreatedAt.getTime());
-        // createdAt should remain the same or be the initial creation time
-        expect(retrieved?.createdAt.getTime()).toBeLessThanOrEqual(retrieved!.updatedAt.getTime());
+        // createdAt should remain exactly equal to the initial creation time
+        expect(retrieved?.createdAt.getTime()).toBe(initialCreatedAt.getTime());
       });
 
       test('saveThread upsert: should handle complex metadata updates', async () => {
