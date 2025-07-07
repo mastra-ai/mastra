@@ -53,6 +53,7 @@ import {
   deleteThreadHandler,
   getMemoryStatusHandler,
   getMessagesHandler,
+  getSemanticRecallMessagesHandler,
   getThreadByIdHandler,
   getThreadsHandler,
   getWorkingMemoryHandler,
@@ -2463,6 +2464,49 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     updateWorkingMemoryHandler,
+  );
+
+  app.get(
+    '/api/memory/threads/:threadId/semantic-recall-messages',
+    describeRoute({
+      description: 'Get semantic recall messages for a thread',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'resourceId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'vectorMessageSearch',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Semantic recall messages',
+        },
+        404: {
+          description: 'Thread not found',
+        },
+      },
+    }),
+    getSemanticRecallMessagesHandler,
   );
 
   app.post(

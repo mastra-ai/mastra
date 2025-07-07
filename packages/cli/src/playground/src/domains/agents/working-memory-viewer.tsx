@@ -38,8 +38,7 @@ export const WorkingMemoryViewer: React.FC<WorkingMemoryViewerProps> = ({
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <Txt variant="header-md">Working Memory</Txt>
-      <span className="text-xs text-mastra-el-6 mb-1">Source: {workingMemorySource}</span>
+      <Txt variant="header-md">Working Memory (Scope: {workingMemorySource})</Txt>
       {!isEditing ? (
         <CodeDisplay
           content={workingMemory || ''}

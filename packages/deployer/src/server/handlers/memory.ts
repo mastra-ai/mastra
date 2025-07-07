@@ -10,6 +10,7 @@ import {
   getMessagesHandler as getOriginalGetMessagesHandler,
   getWorkingMemoryHandler as getOriginalGetWorkingMemoryHandler,
   updateWorkingMemoryHandler as getOriginalUpdateWorkingMemoryHandler,
+  getSemanticRecallMessagesHandler as getOriginalGetSemanticRecallMessagesHandler,
 } from '@mastra/server/handlers/memory';
 import type { Context } from 'hono';
 
@@ -192,14 +193,12 @@ export async function updateWorkingMemoryHandler(c: Context) {
     const agentId = c.req.query('agentId');
     const threadId = c.req.param('threadId');
     const body = await c.req.json();
-    const networkId = c.req.query('networkId');
 
     const result = await getOriginalUpdateWorkingMemoryHandler({
       mastra,
       agentId,
       threadId,
       body,
-      networkId,
     });
 
     return c.json(result);
@@ -213,7 +212,6 @@ export async function getWorkingMemoryHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
     const threadId = c.req.param('threadId');
-    const networkId = c.req.query('networkId');
     const resourceId = c.req.query('resourceId');
 
     const result = await getOriginalGetWorkingMemoryHandler({
@@ -221,11 +219,32 @@ export async function getWorkingMemoryHandler(c: Context) {
       agentId,
       threadId,
       resourceId,
-      networkId,
     });
 
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error getting working memory');
+  }
+}
+
+export async function getSemanticRecallMessagesHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.query('agentId');
+    const threadId = c.req.param('threadId');
+    const resourceId = c.req.query('resourceId');
+    const vectorMessageSearch = c.req.query('vectorMessageSearch');
+
+    const result = await getOriginalGetSemanticRecallMessagesHandler({
+      mastra,
+      agentId,
+      threadId,
+      resourceId,
+      vectorMessageSearch,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error getting semantic recall messages');
   }
 }

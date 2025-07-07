@@ -505,4 +505,17 @@ export class MastraClient extends BaseResource {
       },
     });
   }
+
+  /**
+   * Retrieves the semantic recall messages for a specific thread (optionally resource-scoped).
+   * @param agentId - ID of the agent.
+   * @param threadId - ID of the thread.
+   * @param resourceId - Optional ID of the resource.
+   * @returns Semantic recall messages for the specified thread or resource.
+   */
+  public getSemanticRecallMessages(agentId: string, threadId: string, resourceId?: string) {
+    return this.request(
+      `/api/memory/threads/${threadId}/semantic-recall-messages?agentId=${agentId}&resourceId=${resourceId}`,
+    );
+  }
 }
