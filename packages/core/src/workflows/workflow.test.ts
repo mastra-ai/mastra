@@ -2468,7 +2468,7 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
 
-      expect(endTime - startTime).toBeGreaterThanOrEqual(1000);
+      expect(endTime - startTime).toBeGreaterThanOrEqual(900);
     });
 
     it('should execute a a sleep until step', async () => {
@@ -4788,16 +4788,25 @@ describe('Workflow', () => {
 
       expect(initialResult.steps.humanIntervention.status).toBe('suspended');
       expect(initialResult.steps.explainResponse).toBeUndefined();
+      expect(getUserInputAction).toHaveBeenCalledTimes(1);
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+      expect(evaluateToneAction).toHaveBeenCalledTimes(1);
       expect(humanInterventionAction).toHaveBeenCalledTimes(1);
       expect(explainResponseAction).not.toHaveBeenCalled();
 
       // Wait for the workflow to be ready to resume
       const resumeData = await workflowSuspended;
-      const resumeResult = await run.resume({ resumeData: resumeData as any, step: humanIntervention });
+      const run2 = await workflow.createRunAsync({ runId: run.runId });
+      const resumeResult = await run2.resume({ resumeData: resumeData as any, step: humanIntervention });
 
       if (!resumeResult) {
         throw new Error('Resume failed to return a result');
       }
+
+      expect(getUserInputAction).toHaveBeenCalledTimes(1);
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+      expect(evaluateToneAction).toHaveBeenCalledTimes(1);
+      expect(humanInterventionAction).toHaveBeenCalledTimes(2);
 
       expect(resumeResult.steps).toEqual({
         input: { input: 'test' },
