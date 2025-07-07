@@ -24,7 +24,7 @@ import { weatherTool } from '../__fixtures__/tools';
 import { InternalMastraMCPClient } from '../client/client';
 import { MCPClient } from '../client/configuration';
 import { MCPServer } from './server';
-import type { MCPServerResources, MCPServerResourceContent } from './types';
+import type { MCPServerResources, MCPServerResourceContent, MCPRequestHandlerExtra } from './types';
 
 const PORT = 9100 + Math.floor(Math.random() * 1000);
 let server: MCPServer;
@@ -937,12 +937,32 @@ describe('MCPServer', () => {
     let server: MCPServer;
     let client: MCPClient;
     const PORT = 9200 + Math.floor(Math.random() * 1000);
+    const TOKEN = `<random-token>`;
 
     beforeAll(async () => {
       server = new MCPServer({
         name: 'Test MCP Server',
         version: '0.1.0',
-        tools: { weatherTool },
+        tools: {
+          weatherTool,
+          testAuthTool: {
+            description: 'Test tool to validate auth information from extra params',
+            parameters: z.object({
+              message: z.string().describe('Message to show to user'),
+            }),
+            execute: async (context, options) => {
+              const extra = options.extra as MCPRequestHandlerExtra;
+
+              return {
+                message: context.message,
+                sessionId: extra?.sessionId || null,
+                authInfo: extra?.authInfo || null,
+                requestId: extra?.requestId || null,
+                hasExtra: !!extra,
+              };
+            },
+          },
+        },
       });
 
       httpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
@@ -964,6 +984,9 @@ describe('MCPServer', () => {
         servers: {
           local: {
             url: new URL(`http://localhost:${PORT}/http`),
+            requestInit: {
+              headers: { Authorization: `Bearer ${TOKEN}` },
+            },
           },
         },
       });
@@ -1007,6 +1030,46 @@ describe('MCPServer', () => {
       expect(toolResult).toHaveProperty('conditions');
       expect(toolResult).toHaveProperty('windSpeed');
       expect(toolResult).toHaveProperty('windGust');
+    });
+
+    it('should pass auth information through extra parameter', async () => {
+      const mcpTool = server.convertedTools['testAuthTool'];
+      if (!mcpTool || !mcpTool.execute) {
+        throw new Error('Tool not found or execute function is undefined');
+      }
+
+      expect(mcpTool).toBeDefined();
+      expect(mcpTool.execute).toBeDefined();
+
+      const mockExtra: MCPRequestHandlerExtra = {
+        signal: new AbortController().signal,
+        sessionId: 'test-session-id',
+        authInfo: {
+          token: TOKEN,
+          clientId: 'test-client-id',
+          scopes: ['read'],
+        },
+        requestId: 'test-request-id',
+        sendNotification: vi.fn(),
+        sendRequest: vi.fn(),
+      };
+
+      const result = await mcpTool.execute({ message: 'test auth' }, {
+        messages: [],
+        toolCallId: 'test-tool-call-id',
+        elicitation: {
+          sendRequest: vi.fn(),
+        },
+        extra: mockExtra,
+      } as any);
+
+      expect(result).toBeDefined();
+      expect(result.message).toBe('test auth');
+      expect(result.hasExtra).toBe(true);
+      expect(result.sessionId).toBe('test-session-id');
+      expect(result.authInfo).toBeDefined();
+      expect(result.authInfo.token).toBe(TOKEN);
+      expect(result.requestId).toBe('test-request-id');
     });
   });
 
