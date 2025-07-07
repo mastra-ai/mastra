@@ -13,6 +13,10 @@ export class StepExecutor extends MastraBase {
     this.mastra = mastra;
   }
 
+  __registerMastra(mastra: Mastra) {
+    this.mastra = mastra;
+  }
+
   async execute(params: {
     step: Extract<StepFlowEntry, { type: 'step' }>;
     runId: string;
@@ -44,7 +48,7 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
-      console.log('executor start', step.step.id, step.step);
+      console.log('executor start', this.mastra, step.step.id, step.step);
       const stepResult = await step.step.execute({
         runId,
         mastra: this.mastra!,

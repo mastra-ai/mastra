@@ -39,6 +39,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
   __registerMastra(mastra: Mastra) {
     this.mastra = mastra;
+    this.stepExecutor.__registerMastra(mastra);
   }
 
   private async errorWorkflow(workflowId: string, runId: string, e: Error) {
@@ -190,7 +191,6 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Run nested workflow
     if (step.step instanceof EventedWorkflow) {
-      console.log('starting nested workflow', step.step.id);
       await this.pubsub.publish('workflows', {
         type: resume ? 'workflow.resume' : 'workflow.start',
         data: {
@@ -209,7 +209,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    console.log('executing step', step.step.id, prevResult);
     const stepResult = await this.stepExecutor.execute({
       step,
       runId,

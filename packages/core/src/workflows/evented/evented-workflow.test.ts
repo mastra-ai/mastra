@@ -5476,7 +5476,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should be able to use an agent in parallel', async () => {
+    it('should be able to use an agent in parallel', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const finalStep = createStep({
         id: 'finalStep',
@@ -5646,7 +5646,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should be able to use an agent as a step via mastra instance', async () => {
+    it.only('should be able to use an agent as a step via mastra instance', async () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({
@@ -5703,6 +5703,7 @@ describe('Workflow', () => {
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
       });
+
       workflow
         .then(startStep)
         .map({
