@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { Navigate, NavigateOptions, useParams } from 'react-router';
 
 export interface NavigateToProps {
@@ -9,16 +8,12 @@ export interface NavigateToProps {
 export const NavigateTo = ({ to, options }: NavigateToProps) => {
   const params = useParams();
 
-  const newUrl = useMemo(() => {
-    const extractedRouteParams = extractRouteParams(to);
-    let newUrl = to;
+  const extractedRouteParams = extractRouteParams(to);
+  let newUrl = to;
 
-    for (const param of extractedRouteParams) {
-      newUrl = newUrl.replace(`:${param}`, params[param] as string);
-    }
-
-    return newUrl;
-  }, [to, params]);
+  for (const param of extractedRouteParams) {
+    newUrl = newUrl.replace(`:${param}`, params[param] as string);
+  }
 
   return <Navigate to={newUrl} {...options} />;
 };
