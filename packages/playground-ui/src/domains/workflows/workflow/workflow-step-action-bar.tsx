@@ -132,7 +132,9 @@ export const WorkflowStepActionBar = ({
 
           {showEventForm && (
             <>
-              <Button onClick={() => setIsEventFormOpen(true)}>Send event</Button>
+              <Button className="ring-1 ring-accent5 !text-accent5" onClick={() => setIsEventFormOpen(true)}>
+                Send event
+              </Button>
 
               <Dialog open={isEventFormOpen} onOpenChange={setIsEventFormOpen}>
                 <DialogContent className={dialogContentClass}>
