@@ -1945,7 +1945,7 @@ importers:
         specifier: ^8.16.3
         version: 8.16.3
       pg-pool:
-        specifier: ^3.10.0
+        specifier: ^3.10.1
         version: 3.10.1(pg@8.16.3)
       postgres:
         specifier: ^3.4.7
@@ -29983,7 +29983,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.10.0)
+      retry-axios: 2.6.0(axios@1.10.0(debug@4.4.1))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -33330,7 +33330,7 @@ snapshots:
       onetime: 7.0.0
       signal-exit: 4.1.0
 
-  retry-axios@2.6.0(axios@1.10.0):
+  retry-axios@2.6.0(axios@1.10.0(debug@4.4.1)):
     dependencies:
       axios: 1.10.0(debug@4.4.1)
 
