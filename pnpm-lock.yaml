@@ -1078,8 +1078,8 @@ importers:
         specifier: ^0.4.5
         version: 0.4.6(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       pnpm:
-        specifier: ^10.7.1
-        version: 10.10.0
+        specifier: ^10.12.4
+        version: 10.12.4
       posthog-js:
         specifier: ^1.255.1
         version: 1.256.0
@@ -3245,8 +3245,8 @@ importers:
         specifier: ^9.29.0
         version: 9.30.0(jiti@2.4.2)
       pnpm:
-        specifier: 10.10.0
-        version: 10.10.0
+        specifier: 10.12.4
+        version: 10.12.4
       tsup:
         specifier: ^8.4.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.2))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
@@ -15380,8 +15380,8 @@ packages:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
     engines: {node: '>=4'}
 
-  pnpm@10.10.0:
-    resolution: {integrity: sha512-1hXbJG/nDyXc/qbY1z3ueCziPiJF48T2+Igkn7VoFJMYY33Kc8LFyO8qTKDVZX+5VnGIv6tH9WbR7mzph4FcOQ==}
+  pnpm@10.12.4:
+    resolution: {integrity: sha512-Xqiw3u2U7WhpHJutTJVUknBcXuuKh++GvGLHSiawN7CP+VcPEIsuTb0d0akYb+qSXlJ/FBxkjoWvRWMQdGgBhA==}
     engines: {node: '>=18.12'}
     hasBin: true
 
@@ -32670,7 +32670,7 @@ snapshots:
 
   pluralize@8.0.0: {}
 
-  pnpm@10.10.0: {}
+  pnpm@10.12.4: {}
 
   possible-typed-array-names@1.1.0: {}
 
