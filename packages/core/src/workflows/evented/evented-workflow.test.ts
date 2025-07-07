@@ -5646,7 +5646,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should be able to use an agent as a step via mastra instance', async () => {
+    it('should be able to use an agent as a step via mastra instance', async () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({
@@ -5771,7 +5771,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should be able to use an agent as a step in nested workflow via mastra instance', async () => {
+    it.only('should be able to use an agent as a step in nested workflow via mastra instance', async () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({

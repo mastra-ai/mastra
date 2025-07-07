@@ -25,6 +25,10 @@ type ProcessorArgs = {
     resume: boolean;
     stepResults: Record<string, StepResult<any, any, any, any>>;
   };
+  parentContext?: {
+    workflowId: string;
+    input: any;
+  };
 };
 
 export class WorkflowEventProcessor extends EventProcessor {
@@ -87,6 +91,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     parentWorkflow,
     activeSteps,
   }: ProcessorArgs) {
+    // handle nested workflow
     if (parentWorkflow) {
       await this.pubsub.publish('workflows', {
         type: 'workflow.step.end',
@@ -99,6 +104,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult,
           resumeData,
           activeSteps,
+          parentContext: parentWorkflow,
         },
       });
     }
@@ -195,7 +201,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         type: resume ? 'workflow.resume' : 'workflow.start',
         data: {
           workflowId: step.step.id,
-          parentWorkflow: { workflowId, runId, executionPath, resume, stepResults },
+          parentWorkflow: { workflowId, runId, executionPath, resume, stepResults, input: prevResult },
           executionPath: [0],
           runId: randomUUID(),
           resume,
@@ -247,6 +253,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     parentWorkflow,
     stepResults,
     activeSteps,
+    parentContext,
   }: ProcessorArgs) {
     // clear from activeSteps
     const activeStepIndex = activeSteps.findIndex(step => step.every((idx, i) => idx === executionPath[i]));
@@ -261,7 +268,19 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (step?.type === 'step') {
-      stepResults[step.step.id] = prevResult;
+      // handle nested workflow
+      if (parentContext) {
+        console.log('YOYO', prevResult, parentContext?.input?.output, {
+          ...prevResult,
+          payload: parentContext.input?.output,
+        });
+        stepResults[step.step.id] = {
+          ...prevResult,
+          payload: parentContext.input?.output,
+        };
+      } else {
+        stepResults[step.step.id] = prevResult;
+      }
       await this.saveData({ workflow, runId, stepResults });
     }
 
@@ -481,6 +500,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         executionPath: number[];
         resume: boolean;
         stepResults: Record<string, StepResult<any, any, any, any>>;
+        input: any;
       };
     };
 
