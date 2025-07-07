@@ -1033,14 +1033,6 @@ describe('MCPServer', () => {
     });
 
     it('should pass auth information through extra parameter', async () => {
-      const mcpTool = server.convertedTools['testAuthTool'];
-      if (!mcpTool || !mcpTool.execute) {
-        throw new Error('Tool not found or execute function is undefined');
-      }
-
-      expect(mcpTool).toBeDefined();
-      expect(mcpTool.execute).toBeDefined();
-
       const mockExtra: MCPRequestHandlerExtra = {
         signal: new AbortController().signal,
         sessionId: 'test-session-id',
@@ -1054,22 +1046,44 @@ describe('MCPServer', () => {
         sendRequest: vi.fn(),
       };
 
-      const result = await mcpTool.execute({ message: 'test auth' }, {
-        messages: [],
-        toolCallId: 'test-tool-call-id',
-        elicitation: {
-          sendRequest: vi.fn(),
+      const mockRequest = {
+        jsonrpc: '2.0' as const,
+        id: 'test-request-1',
+        method: 'tools/call' as const,
+        params: {
+          name: 'testAuthTool',
+          arguments: {
+            message: 'test auth',
+          },
         },
-        extra: mockExtra,
-      } as any);
+      };
+
+      const serverInstance = server.getServer();
+
+      // @ts-ignore - this is a private property, but we need to access it to test the request handler
+      const requestHandlers = serverInstance._requestHandlers;
+      const callToolHandler = requestHandlers.get('tools/call');
+
+      expect(callToolHandler).toBeDefined();
+
+      const result = await callToolHandler(mockRequest, mockExtra);
 
       expect(result).toBeDefined();
-      expect(result.message).toBe('test auth');
-      expect(result.hasExtra).toBe(true);
-      expect(result.sessionId).toBe('test-session-id');
-      expect(result.authInfo).toBeDefined();
-      expect(result.authInfo.token).toBe(TOKEN);
-      expect(result.requestId).toBe('test-request-id');
+      expect(result.isError).toBe(false);
+      expect(result.content).toBeInstanceOf(Array);
+      expect(result.content.length).toBeGreaterThan(0);
+
+      const toolOutput = result.content[0];
+      expect(toolOutput.type).toBe('text');
+      const toolResult = JSON.parse(toolOutput.text);
+
+      expect(toolResult.message).toBe('test auth');
+      expect(toolResult.hasExtra).toBe(true);
+      expect(toolResult.sessionId).toBe('test-session-id');
+      expect(toolResult.authInfo).toBeDefined();
+      expect(toolResult.authInfo.token).toBe(TOKEN);
+      expect(toolResult.authInfo.clientId).toBe('test-client-id');
+      expect(toolResult.requestId).toBe('test-request-id');
     });
   });
 
