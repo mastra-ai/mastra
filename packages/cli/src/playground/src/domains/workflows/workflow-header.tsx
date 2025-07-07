@@ -13,6 +13,10 @@ export function WorkflowHeader({
   isLegacy?: boolean;
   runId?: string;
 }) {
+  const workflowLink = isLegacy ? `/workflows/legacy/${workflowId}/legacy` : `/workflows/${workflowId}`;
+
+  console.log('workflowLink', workflowLink);
+
   return (
     <div className="shrink-0">
       <Header>
@@ -20,7 +24,7 @@ export function WorkflowHeader({
           <Crumb as={Link} to={`/workflows`}>
             Workflows
           </Crumb>
-          <Crumb as={Link} to={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}`} isCurrent={!runId}>
+          <Crumb as={Link} to={workflowLink} isCurrent={!runId}>
             {workflowName}
           </Crumb>
 
