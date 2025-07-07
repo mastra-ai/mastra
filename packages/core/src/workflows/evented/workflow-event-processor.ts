@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import EventEmitter from 'events';
-import type { Mastra, StepFlowEntry, StepResult, Workflow } from '../..';
+import type { Mastra, Step, StepFlowEntry, StepResult, Workflow } from '../..';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { Event, PubSub } from '../../events';
 import { EventProcessor } from '../../events/processor';
@@ -263,9 +263,8 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (step?.type === 'step') {
       stepResults[step.step.id] = prevResult;
+      await this.saveData({ workflow, runId, stepResults });
     }
-
-    await this.saveData({ workflow, runId, stepResults });
 
     if (!prevResult?.status || prevResult.status === 'failed') {
       await this.pubsub.publish('workflows', {
@@ -320,14 +319,37 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
+    step = workflow.stepGraph[executionPath[0]!];
     if (step?.type === 'parallel' && executionPath.length > 1) {
-      // if parent executionPath no longer has active steps, we can end it
-      const parentExecutionPath = executionPath.slice(0, -1);
-      const parentActiveStepIndex = activeSteps.findIndex(step =>
-        step.every((idx, i) => idx === parentExecutionPath[i]),
+      let actualStep: { type: 'step'; step: Step } = step.steps[executionPath[1]!] as { type: 'step'; step: Step };
+
+      const newStepResults = await this.mastra.getStorage()?.updateWorkflowResults({
+        workflowName: workflow.id,
+        runId,
+        stepId: actualStep.step.id,
+        result: prevResult,
+      });
+
+      if (!newStepResults) {
+        return;
+      }
+
+      const allResults: Record<string, StepResult<any, any, any, any>> = step.steps.reduce(
+        (acc, step) => {
+          if (step.type === 'step') {
+            const res = newStepResults?.[step.step.id];
+            if (res) {
+              acc[step.step.id] = res;
+            }
+          }
+
+          return acc;
+        },
+        {} as Record<string, StepResult<any, any, any, any>>,
       );
 
-      if (parentActiveStepIndex !== -1) {
+      const keys = Object.keys(allResults);
+      if (keys.length < step.steps.length) {
         return;
       }
 
@@ -339,8 +361,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           executionPath: executionPath.slice(0, -1),
           resume,
-          stepResults: stepResults,
-          prevResult,
+          stepResults: newStepResults,
+          prevResult: allResults,
           resumeData,
           activeSteps,
         },

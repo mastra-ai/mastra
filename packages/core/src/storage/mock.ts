@@ -2,6 +2,7 @@ import { MessageList } from '../agent';
 import type { MastraMessageV2 } from '../agent';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { Trace } from '../telemetry';
+import type { StepResult } from '../workflows';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
 import type {
@@ -53,6 +54,29 @@ export class MockStore extends MastraStorage {
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     this.logger.debug(`MockStore: insert called for ${tableName}`, record);
     this.data[tableName][record.run_id] = JSON.parse(JSON.stringify(record)); // simple clone - fine for mocking
+  }
+
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    this.logger.debug(`MockStore: updateWorkflowResults called for ${workflowName} ${runId} ${stepId}`, result);
+    const snapshot = this.data.mastra_workflow_snapshot[runId];
+    if (!snapshot || !snapshot?.snapshot?.context) {
+      throw new Error(`Snapshot not found for runId ${runId}`);
+    }
+
+    snapshot.snapshot.context[stepId] = result;
+    this.data.mastra_workflow_snapshot[runId] = snapshot;
+
+    return snapshot.snapshot.context;
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {

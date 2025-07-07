@@ -2,7 +2,7 @@ import type { MastraMessageContentV2, MastraMessageV2 } from '../agent';
 import { MastraBase } from '../base';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { Trace } from '../telemetry';
-import type { WorkflowRunState } from '../workflows';
+import type { StepResult, WorkflowRunState } from '../workflows';
 
 import {
   TABLE_WORKFLOW_SNAPSHOT,
@@ -297,6 +297,18 @@ export abstract class MastraStorage extends MastraBase {
       record: data,
     });
   }
+
+  abstract updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>>;
 
   async loadWorkflowSnapshot({
     workflowName,
