@@ -15,8 +15,6 @@ export function WorkflowHeader({
 }) {
   const workflowLink = isLegacy ? `/workflows/legacy/${workflowId}/legacy` : `/workflows/${workflowId}`;
 
-  console.log('workflowLink', workflowLink);
-
   return (
     <div className="shrink-0">
       <Header>
