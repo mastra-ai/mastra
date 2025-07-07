@@ -26,7 +26,7 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@supabase/supabase-js": "^2.50.0"
+    "@supabase/supabase-js": "^2.50.3"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
