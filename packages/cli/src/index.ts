@@ -173,6 +173,8 @@ program
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-p, --port <port>', 'deprecated: Port number for the development server (defaults to 4111)')
   .option('-e, --env <env>', 'Custom env file to include in the dev server')
+  .option('-i, --inspect', 'Start the dev server in inspect mode')
+  .option('-b, --inspect-brk', 'Start the dev server in inspect mode and break at the beginning of the script')
   .action(args => {
     analytics.trackCommand({
       command: 'dev',
@@ -189,6 +191,8 @@ program
       root: args?.root,
       tools: args?.tools ? args.tools.split(',') : [],
       env: args?.env,
+      inspect: args?.inspect && !args?.inspectBrk,
+      inspectBrk: args?.inspectBrk,
     }).catch(err => {
       logger.error(err.message);
     });
