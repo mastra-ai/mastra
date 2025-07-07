@@ -1,10 +1,9 @@
 import jsonSchemaToZod from 'json-schema-to-zod';
-import { Braces, Footprints, Loader2 } from 'lucide-react';
-import { useState, useEffect, useContext, useId } from 'react';
+import { Braces, Loader2, StopCircle } from 'lucide-react';
+import { useState, useEffect, useContext } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
-import { DynamicForm } from '@/components/dynamic-form';
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
 import { Button } from '@/ds/components/Button';
 import { CodeBlockDemo } from '@/components/ui/code-block';
@@ -20,9 +19,9 @@ import { Txt } from '@/ds/components/Txt';
 
 import { GetWorkflowResponse, WorkflowWatchResult } from '@mastra/client-js';
 import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
-import { Input } from '@/components/ui/input';
 import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
 import { WorkflowStatus } from './workflow-status';
+import { WorkflowInputData } from './workflow-input-data';
 
 interface SuspendedStep {
   stepId: string;
@@ -192,24 +191,6 @@ export function WorkflowTrigger({
   return (
     <div className="h-full pt-3 pb-12">
       <div className="space-y-4 px-5 pb-5 border-b-sm border-border1">
-        {result?.runId && (
-          <Button
-            variant="light"
-            onClick={handleCancelWorkflowRun}
-            disabled={!!cancelResponse?.message || isCancellingWorkflowRun}
-          >
-            {isCancellingWorkflowRun ? (
-              <Icon>
-                <Loader2 className="animate-spin" />
-              </Icon>
-            ) : (
-              <Icon>
-                <CircleStopIcon />
-              </Icon>
-            )}
-            {cancelResponse?.message || 'Cancel Workflow Run'}
-          </Button>
-        )}
         {(isResumingWorkflow || (isSuspendedSteps && isStreamingWorkflow)) && (
           <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b-sm border-border1">
             <Icon>
@@ -222,7 +203,7 @@ export function WorkflowTrigger({
         {!isSuspendedSteps && (
           <>
             {zodInputSchema ? (
-              <DynamicForm
+              <WorkflowInputData
                 schema={zodInputSchema}
                 defaultValues={payload}
                 isSubmitLoading={isStreamingWorkflow}
@@ -274,7 +255,7 @@ export function WorkflowTrigger({
                     />
                   </div>
                 )}
-                <DynamicForm
+                <WorkflowInputData
                   schema={stepSchema}
                   isSubmitLoading={isResumingWorkflow}
                   submitButtonLabel="Resume"
@@ -292,6 +273,27 @@ export function WorkflowTrigger({
               </div>
             );
           })}
+
+        {result?.runId && (
+          <Button
+            variant="light"
+            className="w-full"
+            size="lg"
+            onClick={handleCancelWorkflowRun}
+            disabled={!!cancelResponse?.message || isCancellingWorkflowRun}
+          >
+            {isCancellingWorkflowRun ? (
+              <Icon>
+                <Loader2 className="animate-spin" />
+              </Icon>
+            ) : (
+              <Icon>
+                <StopCircle />
+              </Icon>
+            )}
+            {cancelResponse?.message || 'Cancel Workflow Run'}
+          </Button>
+        )}
 
         {hasWorkflowActivePaths && (
           <>
@@ -321,95 +323,6 @@ export function WorkflowTrigger({
   );
 }
 
-interface WorkflowResultSectionProps {
-  result: WorkflowWatchResult;
-  workflow: GetWorkflowResponse;
-}
-
-const WorkflowResultSection = ({ result, workflow }: WorkflowResultSectionProps) => {
-  const workflowState = result.payload.workflowState as WorkflowWatchResult['payload']['workflowState'] & {
-    result: unknown | null;
-  };
-
-  const hasResult = Object.keys(workflowState.steps || {}).length > 0;
-  if (!hasResult) return null;
-
-  return (
-    <div className="p-5">
-      <Txt variant="ui-sm" className="text-icon3">
-        Final Output
-      </Txt>
-      <ul className="pt-4">
-        {Object.entries(workflowState.steps || {}).map(([stepId, stepResult]) => {
-          const stepDefinition = workflow.steps[stepId];
-          if (!stepDefinition) return null;
-
-          return (
-            <li
-              key={stepId}
-              className="border-b-sm border-dashed border-border1 last:border-b-0 py-4 first:pt-0 last:pb-0"
-            >
-              <WorkflowResultFinishedStep stepResult={stepResult.output} stepDefinition={stepDefinition} />
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-};
-
-interface WorkflowResultFinishedStepProps {
-  stepResult: unknown;
-  stepDefinition: GetWorkflowResponse['steps'][string];
-}
-
-const WorkflowResultFinishedStep = ({ stepResult, stepDefinition }: WorkflowResultFinishedStepProps) => {
-  const id = useId();
-
-  try {
-    const zodObjectSchema = resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.outputSchema)));
-
-    if (zodObjectSchema?._def?.typeName === 'ZodString') {
-      return (
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <Icon>
-              <Footprints className="text-icon3" />
-            </Icon>
-
-            <Txt as="label" htmlFor={id} variant="ui-sm" className="text-icon3">
-              {stepDefinition.description || stepDefinition.id}
-            </Txt>
-          </div>
-          <Input id={id} defaultValue={stepResult as string} readOnly />
-        </div>
-      );
-    }
-
-    return (
-      <div>
-        <div className="flex items-center gap-2 pb-2">
-          <Icon>
-            <Footprints className="text-icon3" />
-          </Icon>
-          <Txt variant="ui-sm" className="text-icon3">
-            {stepDefinition.description || stepDefinition.id}
-          </Txt>
-        </div>
-        <DynamicForm
-          key={JSON.stringify(stepResult)}
-          schema={zodObjectSchema}
-          defaultValues={stepResult as Record<string, unknown>}
-          readOnly
-        />
-      </div>
-    );
-  } catch (err: unknown) {
-    console.error('Error parsing output schema', err);
-    return <Txt>An error occured. Please open an issue on GitHub.</Txt>;
-  }
-};
-
 const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => {
   const [open, setOpen] = useState(false);
 
@@ -433,13 +346,5 @@ const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => 
         </DialogPortal>
       </Dialog>
     </>
-  );
-};
-
-const CircleStopIcon = () => {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
-      <rect width="10" height="10" x="3" y="3" rx="2" />
-    </svg>
   );
 };
