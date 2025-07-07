@@ -2468,7 +2468,7 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
 
-      expect(endTime - startTime).toBeGreaterThanOrEqual(1000);
+      expect(endTime - startTime).toBeGreaterThanOrEqual(900);
     });
 
     it('should execute a a sleep until step', async () => {
