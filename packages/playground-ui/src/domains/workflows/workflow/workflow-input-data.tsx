@@ -95,11 +95,13 @@ const JSONInput = ({ schema, defaultValues, isSubmitLoading, submitButtonLabel, 
             {errors.length} errors found
           </Txt>
 
-          {errors.map((error, idx) => (
-            <Txt as="p" variant="ui-sm" className="text-accent2" key={idx}>
-              {error}
-            </Txt>
-          ))}
+          <ul className="list-disc list-inside">
+            {errors.map((error, idx) => (
+              <li key={idx} className="text-ui-sm text-accent2">
+                {error}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
