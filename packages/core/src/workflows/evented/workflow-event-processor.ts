@@ -267,6 +267,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (!prevResult?.status || prevResult.status === 'failed') {
+      console.log('failed step', prevResult);
       await this.pubsub.publish('workflows', {
         type: 'workflow.fail',
         data: {
@@ -334,12 +335,12 @@ export class WorkflowEventProcessor extends EventProcessor {
         return;
       }
 
-      const allResults: Record<string, StepResult<any, any, any, any>> = step.steps.reduce(
+      const allResults: Record<string, any> = step.steps.reduce(
         (acc, step) => {
           if (step.type === 'step') {
             const res = newStepResults?.[step.step.id];
-            if (res) {
-              acc[step.step.id] = res;
+            if (res && res.status === 'success') {
+              acc[step.step.id] = res?.output;
             }
           }
 
@@ -353,6 +354,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         return;
       }
 
+      console.dir({ parallel: { status: 'success', output: allResults } }, { depth: null });
       await this.pubsub.publish('workflows', {
         type: 'workflow.step.end',
         data: {
@@ -362,7 +364,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           executionPath: executionPath.slice(0, -1),
           resume,
           stepResults: newStepResults,
-          prevResult: allResults,
+          prevResult: { status: 'success', output: allResults },
           resumeData,
           activeSteps,
         },
