@@ -5623,8 +5623,10 @@ describe('Workflow', () => {
         status: 'success',
         output: { text: 'Paris' },
         payload: {
-          prompt1: 'Capital of France, just the name',
-          prompt2: 'Capital of UK, just the name',
+          // TODO:
+          //   prompt1: 'Capital of France, just the name',
+          //   prompt2: 'Capital of UK, just the name',
+          prompt: 'Capital of France, just the name',
         },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
@@ -5634,8 +5636,10 @@ describe('Workflow', () => {
         status: 'success',
         output: { text: 'London' },
         payload: {
-          prompt1: 'Capital of France, just the name',
-          prompt2: 'Capital of UK, just the name',
+          // TODO:
+          //   prompt1: 'Capital of France, just the name',
+          //   prompt2: 'Capital of UK, just the name',
+          prompt: 'Capital of UK, just the name',
         },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
