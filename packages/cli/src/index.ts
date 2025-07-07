@@ -191,7 +191,7 @@ program
       root: args?.root,
       tools: args?.tools ? args.tools.split(',') : [],
       env: args?.env,
-      inspect: args?.inspect,
+      inspect: args?.inspect && !args?.inspectBrk,
       inspectBrk: args?.inspectBrk,
     }).catch(err => {
       logger.error(err.message);
