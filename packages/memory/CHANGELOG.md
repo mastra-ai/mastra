@@ -1,5 +1,16 @@
 # @mastra/memory
 
+## 0.11.2-alpha.1
+
+### Patch Changes
+
+- bc2bbdc: dependencies updates:
+  - Updated dependency [`pg-pool@^3.10.1` ↗︎](https://www.npmjs.com/package/pg-pool/v/3.10.1) (from `^3.10.0`, in `dependencies`)
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [565cc0c]
+  - @mastra/core@0.10.11-alpha.2
+
 ## 0.11.2-alpha.0
 
 ### Patch Changes

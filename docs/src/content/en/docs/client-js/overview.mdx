@@ -78,6 +78,22 @@ const client = new MastraClient({
 });
 ```
 
+## AbortSignal
+
+The Mastra Client SDK supports request cancellation using the standard Web API `AbortSignal`. Pass an `AbortSignal` to the client constructor to enable cancellation for all requests:
+
+```typescript
+const controller = new AbortController();
+
+const client = new MastraClient({
+  baseUrl: "http://localhost:4111",
+  abortSignal: controller.signal,
+});
+
+// Cancel all requests from this client
+controller.abort();
+```
+
 ## Example
 
 Once your MastraClient is initialized you can start making client calls via the type-safe
