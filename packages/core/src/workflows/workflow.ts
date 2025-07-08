@@ -1498,6 +1498,22 @@ export class Run<
       runId: this.runId,
     });
 
+    if (!snapshot) {
+      throw new Error('No snapshot found for this workflow run');
+    }
+
+    if (snapshot.status !== 'suspended') {
+      throw new Error('This workflow run was not suspended');
+    }
+
+    const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
+
+    const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
+
+    if (!isStepSuspended) {
+      throw new Error('This workflow step was not suspended');
+    }
+
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
         workflowId: this.workflowId,

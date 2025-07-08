@@ -1607,7 +1607,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       serializedStepGraph,
       stepResults,
       executionContext,
-      workflowStatus: 'running',
+      workflowStatus: execResults.status,
     });
 
     return { result: execResults, stepResults, executionContext };
