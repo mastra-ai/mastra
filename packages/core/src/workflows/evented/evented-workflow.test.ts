@@ -2798,7 +2798,7 @@ describe('Workflow', () => {
       expect((result.steps?.step2 as any)?.error).toMatch(/^Error: Step execution failed/);
     });
 
-    it.only('should handle step execution errors within nested workflows', async () => {
+    it('should handle step execution errors within nested workflows', async () => {
       const error = new Error('Step execution failed');
       const failingAction = vi.fn<any>().mockImplementation(() => {
         throw error;
@@ -2863,7 +2863,8 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
-      expect((result.steps?.['test-workflow'] as any)?.error).toMatch(/^Error: Error: Step execution failed/);
+
+      expect((result.steps?.['test-workflow'] as any)?.error).toMatch(/^Error: Step execution failed/);
     });
   });
 

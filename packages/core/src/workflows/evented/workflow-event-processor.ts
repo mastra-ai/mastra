@@ -136,7 +136,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (parentWorkflow) {
       console.log('failing nested', workflowId, parentWorkflow);
       await this.pubsub.publish('workflows', {
-        type: 'workflow.fail',
+        type: 'workflow.step.end',
         data: {
           workflowId: parentWorkflow.workflowId,
           runId: parentWorkflow.runId,
