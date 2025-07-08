@@ -7,8 +7,6 @@ description: "Control flow in Mastra workflows allows you to manage branching, m
 
 When you build a workflow, you typically break down operations into smaller tasks that can be linked and reused. **Steps** provide a structured way to manage these tasks by defining inputs, outputs, and execution logic.
 
-![Workflows control flow](/image/workflows/workflows-control-flow.jpg)
-
 - If the schemas match, the `outputSchema` from each step is automatically passed to the `inputSchema` of the next step.
 - If the schemas don't match, use [Input data mapping](./input-data-mapping.mdx) to transform the `outputSchema` into the expected `inputSchema`.
 
@@ -31,7 +29,7 @@ export const testWorkflow = createWorkflow({...})
 
 This does what you'd expect: it executes `step1`, then it executes `step2`.
 
-## Parallel steps with `.parallel()`:
+## Parallel steps with `.parallel()`
 
 Execute steps in parallel using `.parallel()`:
 
@@ -53,7 +51,7 @@ This executes `step1` and `step2` concurrently, then continues to `step3` after 
 
 > See [Parallel Execution with Steps](/examples/workflows/parallel-steps) for more information.
 
-## Conditional branching (`.branch()`)
+## Conditional branching with `.branch()`
 
 Create conditional branches using `.branch()`:
 
@@ -76,7 +74,7 @@ Branch conditions are evaluated sequentially, but steps with matching conditions
 
 > See [Workflow with Conditional Branching](/examples/workflows/conditional-branching) for more information.
 
-## Looping commands
+## Looping steps
 
 Workflows support two types of loops. When looping a step, or any step-compatible construct like a nested workflow, the initial `inputData` is sourced from the output of the previous step.
 
@@ -85,7 +83,7 @@ To ensure compatibility, the loop’s initial input must either match the shape 
 - Match the shape of the previous step’s output, or
 - Be explicitly transformed using the `map` function.
 
-### Dowhile
+### Repeating with `dowhile()`
 
 Executes a step repeatedly while a condition is true.
 
@@ -100,7 +98,7 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-### Dountil
+### Repeating with `dountil()`
 
 Executes a step repeatedly until a condition becomes true.
 
@@ -115,7 +113,7 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-### Foreach
+### Repeating with `foreach()`
 
 Sequentially executes the same step for each item from the `inputSchema`.
 
@@ -130,7 +128,7 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-#### Concurrency
+#### Setting concurrency limits
 
 Use `concurrency` to execute steps in parallel with a limit on the number of concurrent executions.
 
@@ -145,7 +143,7 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-## Nested Workflow
+## Using a nested workflow
 
 Use a nested workflow as a step by passing it to `.then()`. This runs each of its steps in sequence as part of the parent workflow.
 
@@ -160,7 +158,7 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-## Clone Workflow
+## Cloning a workflow
 
 Use `cloneWorkflow` to duplicate an existing workflow. This lets you reuse its structure while overriding parameters like `id`.
 
@@ -178,7 +176,7 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-## Bail
+## Exiting early with `bail()`
 
 Use `bail()` in a step to exit early with a successful result. This returns the provided payload as the step output and ends workflow execution.
 
@@ -200,7 +198,7 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-### Error handling
+## Exiting early with `throw`
 
 Use `throw new Error()` in a step to exit with an error.
 
