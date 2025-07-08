@@ -9,7 +9,10 @@ const meta: Meta = {
   agents: "Agents",
   tools: "Tools",
   workflows: "Workflows",
-  legacyWorkflows: "Legacy Workflows",
+  legacyWorkflows: {
+    title: "Legacy Workflows",
+    display: "hidden",
+  },
   networks: "Networks",
   memory: "Memory",
   storage: "Storage",
