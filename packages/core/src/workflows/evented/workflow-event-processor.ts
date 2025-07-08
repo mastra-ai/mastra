@@ -93,6 +93,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }: ProcessorArgs) {
     // handle nested workflow
     if (parentWorkflow) {
+      console.log('ending nested', workflowId, parentWorkflow);
       await this.pubsub.publish('workflows', {
         type: 'workflow.step.end',
         data: {
@@ -197,6 +198,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Run nested workflow
     if (step.step instanceof EventedWorkflow) {
+      console.log('starting nested', step.step.id, prevResult);
       await this.pubsub.publish('workflows', {
         type: resume ? 'workflow.resume' : 'workflow.start',
         data: {
@@ -274,13 +276,14 @@ export class WorkflowEventProcessor extends EventProcessor {
           ...prevResult,
           payload: parentContext.input?.output,
         });
-        stepResults[step.step.id] = {
+        prevResult = stepResults[step.step.id] = {
           ...prevResult,
           payload: parentContext.input?.output,
         };
       } else {
         stepResults[step.step.id] = prevResult;
       }
+      console.log('saving data', step.step.id, stepResults);
       await this.saveData({ workflow, runId, stepResults });
     }
 

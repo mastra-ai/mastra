@@ -5476,7 +5476,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should be able to use an agent in parallel', async () => {
+    it.only('should be able to use an agent in parallel', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const finalStep = createStep({
         id: 'finalStep',
@@ -5623,10 +5623,8 @@ describe('Workflow', () => {
         status: 'success',
         output: { text: 'Paris' },
         payload: {
-          // TODO:
-          //   prompt1: 'Capital of France, just the name',
-          //   prompt2: 'Capital of UK, just the name',
-          prompt: 'Capital of France, just the name',
+          prompt1: 'Capital of France, just the name',
+          prompt2: 'Capital of UK, just the name',
         },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
@@ -5636,10 +5634,8 @@ describe('Workflow', () => {
         status: 'success',
         output: { text: 'London' },
         payload: {
-          // TODO:
-          //   prompt1: 'Capital of France, just the name',
-          //   prompt2: 'Capital of UK, just the name',
-          prompt: 'Capital of UK, just the name',
+          prompt1: 'Capital of France, just the name',
+          prompt2: 'Capital of UK, just the name',
         },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
@@ -5771,7 +5767,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should be able to use an agent as a step in nested workflow via mastra instance', async () => {
+    it('should be able to use an agent as a step in nested workflow via mastra instance', async () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({

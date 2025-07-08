@@ -69,6 +69,17 @@ export class MockStore extends MastraStorage {
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     this.logger.debug(`MockStore: updateWorkflowResults called for ${workflowName} ${runId} ${stepId}`, result);
     const snapshot = this.data.mastra_workflow_snapshot[runId];
+
+    if (!snapshot) {
+      this.data.mastra_workflow_snapshot[runId] = {
+        run_id: runId,
+        workflow_name: workflowName,
+        snapshot: {
+          context: {},
+        },
+      };
+    }
+
     if (!snapshot || !snapshot?.snapshot?.context) {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
