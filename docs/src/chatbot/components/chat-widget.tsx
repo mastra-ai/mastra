@@ -13,6 +13,13 @@ import "@copilotkit/react-ui/styles.css";
 import { ArrowUp } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 
+interface ResponseData {
+  response: string;
+  conversation_id: string;
+  question_id?: string;
+  original_question?: string;
+}
+
 const DocsChat: React.FC<{
   setIsAgentMode: (isAgentMode: boolean) => void;
   searchQuery: string;
@@ -96,9 +103,9 @@ export function CustomChatInterface({
           const messageContent = "content" in message ? String(message.content) : "";
 
           // Link response to the pending question
-          const responseData: any = {
+          const responseData: ResponseData = {
             response: messageContent,
-            conversation_id: conversationIdRef.current,
+            conversation_id: conversationIdRef.current || "",
           };
 
           if (pendingQuestionRef.current) {
