@@ -28,7 +28,7 @@ export default defineConfig({
     json(),
     nodeResolve({
       preferBuiltins: true,
-      exportConditions: ['node', 'default', 'module', 'import'],
+      exportConditions: ['node'],
     }),
     esbuild({
       target: 'node20',
