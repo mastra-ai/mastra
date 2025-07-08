@@ -2,12 +2,21 @@ import type { UIMessage } from 'ai';
 
 export type ScoreResult = {
   score: number;
+  input: string;
+  output: string;
+};
+
+export type LLMScorerScoreResult = ScoreResult & {
   results: {
     result: string;
     reason: string;
   }[];
-  input: string;
-  output: string;
+};
+
+export type CodeScorerScoreResult = ScoreResult & {
+  info: {
+    [key: string]: unknown;
+  };
 };
 
 export type ScoringPrompts = {
@@ -69,4 +78,16 @@ export type ScorerPrompt = Record<string, ScoringPrompts> & {
 
 export abstract class LLMScorer extends Scorer {
   abstract prompts(): ScorerPrompt;
+
+  abstract score({ input, output }: { input: string; output: string }): Promise<LLMScorerScoreResult>;
+}
+
+export abstract class CodeScorer extends Scorer {
+  abstract score({
+    input,
+    output,
+  }: { input: string; output: string } & {
+    expectedOutput?: string;
+    metadata?: Record<string, any>;
+  }): Promise<CodeScorerScoreResult>;
 }

@@ -1,7 +1,7 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { MastraError } from '@mastra/core/error';
-import type { ScoreResult } from '@mastra/core/eval';
+import type { LLMScorerScoreResult } from '@mastra/core/eval';
 import { LLMScorer } from '@mastra/core/eval';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
@@ -122,7 +122,7 @@ export class AnswerRelevancyScorer extends LLMScorer {
     };
   }
 
-  async score({ input, output }: { input: string; output: string }): Promise<ScoreResult> {
+  async score({ input, output }: { input: string; output: string }): Promise<LLMScorerScoreResult> {
     const agent = this.#agent;
 
     const extractStatementsStep = createStep({
