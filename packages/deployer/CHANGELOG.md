@@ -1,5 +1,36 @@
 # @mastra/deployer
 
+## 0.10.11
+
+### Patch Changes
+
+- bc40cdd: dependencies updates:
+  - Updated dependency [`@babel/core@^7.27.7` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.27.7) (from `^7.27.4`, in `dependencies`)
+- 2873c7f: dependencies updates:
+  - Updated dependency [`dotenv@^16.6.1` ↗︎](https://www.npmjs.com/package/dotenv/v/16.6.1) (from `^16.5.0`, in `dependencies`)
+- 1c1c6a1: dependencies updates:
+  - Updated dependency [`hono@^4.8.4` ↗︎](https://www.npmjs.com/package/hono/v/4.8.4) (from `^4.8.3`, in `dependencies`)
+- d9b26b5: dependencies updates:
+  - Updated dependency [`rollup@^4.44.2` ↗︎](https://www.npmjs.com/package/rollup/v/4.44.2) (from `^4.43.0`, in `dependencies`)
+- 18ca936: Remove require exportCondition from rollup config to improve bundling
+- 40cd025: Check if tool is actually a tool for /api/tools
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [565cc0c]
+- Updated dependencies [b790fd1]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [cb16baf]
+- Updated dependencies [f36e4f1]
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11
+  - @mastra/server@0.10.11
+
 ## 0.10.11-alpha.4
 
 ### Patch Changes

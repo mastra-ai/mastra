@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-supabase",
-  "version": "0.10.2-alpha.0",
+  "version": "0.10.2",
   "description": "Mastra Supabase Auth integration",
   "type": "module",
   "main": "dist/index.js",

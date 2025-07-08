@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 0.10.4
+
+### Patch Changes
+
+- 0c85311: Fix Google models ZodNull tool schema handling
+
 ## 0.10.4-alpha.0
 
 ### Patch Changes
