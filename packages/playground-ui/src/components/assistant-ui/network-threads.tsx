@@ -12,14 +12,14 @@ import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 
-import { UserMessage } from './user-message';
+import { UserMessage } from './messages/user-messages';
 import { useEffect, useRef } from 'react';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { Txt } from '@/ds/components/Txt';
 import { Icon, InfoIcon } from '@/ds/icons';
 import { useSpeechRecognition } from '@/hooks/use-speech-recognition';
-import { ComposerAttachments } from './attachment';
-import { useHasAttachments } from './use-has-attachments';
+import { ComposerAttachments } from './attachments/attachment';
+import { useHasAttachments } from './hooks/use-has-attachments';
 import { NextAssistantMessage } from '@/domains/networks/v-next/wrapped-assistant-message';
 import clsx from 'clsx';
 
