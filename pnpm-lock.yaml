@@ -168,7 +168,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/auth
       '@workos-inc/node':
-        specifier: ^7.54.0
+        specifier: ^7.57.0
         version: 7.57.0(express@5.1.0)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))
     devDependencies:
       '@internal/lint':
