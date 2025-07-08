@@ -11,7 +11,7 @@
     "@ai-sdk/react": "^1.2.12",
     "@mastra/client-js": "workspace:*",
     "@mastra/mcp": "workspace:*",
-    "dotenv": "^16.5.0",
+    "dotenv": "^16.6.1",
     "zod": "^3.25.67"
   },
   "devDependencies": {
