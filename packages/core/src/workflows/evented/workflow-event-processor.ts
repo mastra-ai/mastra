@@ -184,8 +184,17 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (!step) {
       return this.errorWorkflow(
-        workflowId,
-        runId,
+        {
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resume,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+        },
         new MastraError({
           id: 'MASTRA_WORKFLOW',
           text: `Step not found in step graph: ${JSON.stringify(executionPath)}`,
@@ -212,7 +221,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath: executionPath.concat([idx]),
               resume,
               stepResults,
-              prevResult: undefined,
+              prevResult,
               resumeData,
               parentWorkflow,
               activeSteps,
@@ -347,8 +356,17 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (step?.type !== 'step') {
       return this.errorWorkflow(
-        workflowId,
-        runId,
+        {
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resume,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+        },
         new MastraError({
           id: 'MASTRA_WORKFLOW',
           text: `Step is not executable: ${step?.type} -- ${JSON.stringify(executionPath)}`,

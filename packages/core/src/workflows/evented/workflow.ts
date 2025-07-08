@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
 import z from 'zod';
-import { Workflow, Agent, Tool, Run } from '../..';
+import { Workflow, Run } from '../..';
 import type {
+  Agent,
   ExecuteFunction,
   ExecutionEngine,
   ExecutionGraph,
@@ -15,6 +16,7 @@ import type {
 import { RuntimeContext } from '../../di';
 import type { PubSub } from '../../events';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { Tool } from '../../tools';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
 import { WorkflowEventProcessor } from './workflow-event-processor';
