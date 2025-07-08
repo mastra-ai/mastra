@@ -29,19 +29,22 @@ const ComposerTxtAttachment = ({ document }: { document: AttachmentState }) => {
 const ComposerPdfAttachment = ({ document }: { document: AttachmentState }) => {
   const [state, setState] = useState({ isLoading: false, text: '' });
   useEffect(() => {
-    let isCancelled = false;
+    let isCanceled = false;
+
     const run = async () => {
       if (!document.file) return;
       setState(s => ({ ...s, isLoading: true }));
       const text = await fileToBase64(document.file);
-      if (isCanceled) { return; }
+      if (isCanceled) {
+        return;
+      }
       setState(s => ({ ...s, isLoading: false, text }));
     };
     run();
-    
-    return {
+
+    return () => {
       isCanceled = true;
-    }
+    };
   }, [document]);
 
   return (
