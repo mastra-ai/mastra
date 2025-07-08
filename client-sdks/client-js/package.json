@@ -36,7 +36,7 @@
     "@ai-sdk/ui-utils": "^1.2.11",
     "@mastra/core": "workspace:*",
     "json-schema": "^0.4.0",
-    "rxjs": "7.8.1",
+    "rxjs": "7.8.2",
     "zod": "^3.25.67",
     "zod-to-json-schema": "^3.24.5"
   },
