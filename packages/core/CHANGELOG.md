@@ -1,5 +1,27 @@
 # @mastra/core
 
+## 0.10.11-alpha.3
+
+### Patch Changes
+
+- c7bbf1e: Implement workflow retry delay
+- 8722d53: Fix multi modal remaining steps
+- 132027f: Check if workflow and step is suspended before resuming
+- 0c85311: Fix Google models ZodNull tool schema handling
+- cb16baf: Fix MCP tool output schema type and return value
+- Updated dependencies [0c85311]
+  - @mastra/schema-compat@0.10.4-alpha.0
+
+## 0.10.11-alpha.2
+
+### Patch Changes
+
+- 2873c7f: dependencies updates:
+  - Updated dependency [`dotenv@^16.6.1` ↗︎](https://www.npmjs.com/package/dotenv/v/16.6.1) (from `^16.5.0`, in `dependencies`)
+- 1c1c6a1: dependencies updates:
+  - Updated dependency [`hono@^4.8.4` ↗︎](https://www.npmjs.com/package/hono/v/4.8.4) (from `^4.8.3`, in `dependencies`)
+- 565cc0c: fix redirection when clicking on the playground breadcrumbs
+
 ## 0.10.11-alpha.1
 
 ### Patch Changes

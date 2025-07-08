@@ -48,11 +48,7 @@ function Agent() {
   const withSidebar = Boolean(memory?.result);
 
   return (
-    <AgentSettingsProvider
-      agentId={agentId!}
-      defaultGenerateOptions={agent?.defaultGenerateOptions}
-      defaultStreamOptions={agent?.defaultStreamOptions}
-    >
+    <AgentSettingsProvider agentId={agentId!}>
       <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
         <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
           {withSidebar && (

@@ -8,8 +8,8 @@ import {
 import { CheckIcon, CopyIcon } from 'lucide-react';
 import { FC } from 'react';
 
-import { ToolFallback } from '@/components/assistant-ui/tool-fallback';
-import { MarkdownText } from '@/components/assistant-ui/markdown-text';
+import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
+import { MarkdownText } from '@/components/assistant-ui/messages/markdown-text';
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
 import { StepDropdown } from './step-dropdown';
 

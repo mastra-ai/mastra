@@ -10,9 +10,9 @@ When you build a workflow, you typically break down operations into smaller task
 - If the schemas match, the `outputSchema` from each step is automatically passed to the `inputSchema` of the next step.
 - If the schemas don't match, use [Input data mapping](./input-data-mapping.mdx) to transform the `outputSchema` into the expected `inputSchema`.
 
-## Sequential
+## Chaining steps with `.then()`
 
-Chain steps to execute in sequence using `.then()`:
+Chain steps to execute sequentially using `.then()`:
 
 ```typescript {8-9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -27,7 +27,9 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-## Parallel
+This does what you'd expect: it executes `step1`, then it executes `step2`.
+
+## Parallel steps with `.parallel()`:
 
 Execute steps in parallel using `.parallel()`:
 
@@ -37,17 +39,19 @@ import { z } from "zod";
 
 const step1 = createStep({...});
 const step2 = createStep({...});
+const step3 = createStep({...});
 
 export const testWorkflow = createWorkflow({...})
   .parallel([step1, step2])
+  .then(step3)
   .commit();
 ```
 
-This executes all steps in the array concurrently, then continues to the next step after all parallel steps complete.
+This executes `step1` and `step2` concurrently, then continues to `step3` after both complete.
 
 > See [Parallel Execution with Steps](/examples/workflows/parallel-steps) for more information.
 
-## Branch
+## Conditional branching (`.branch()`)
 
 Create conditional branches using `.branch()`:
 
@@ -60,8 +64,8 @@ const greaterThanStep = createStep({...});
 
 export const testWorkflow = createWorkflow({...})
   .branch([
-    [async ({ inputData: { some_value } }) => some_value <= 9, lessThanStep],
-    [async ({ inputData: { some_value } }) => some_value >= 10, greaterThanStep]
+    [async ({ inputData: { value } }) => (value < 9), lessThanStep],
+    [async ({ inputData: { value } }) => (value >= 9), greaterThanStep]
   ])
   .commit();
 ```
@@ -70,17 +74,13 @@ Branch conditions are evaluated sequentially, but steps with matching conditions
 
 > See [Workflow with Conditional Branching](/examples/workflows/conditional-branching) for more information.
 
-## Loops
+## Looping commands
 
 Workflows support two types of loops. When looping a step, or any step-compatible construct like a nested workflow, the initial `inputData` is sourced from the output of the previous step.
 
-To ensure compatibility, the loop’s initial input must either:
+To ensure compatibility, the loop’s initial input must either match the shape of the previous step’s output, or be explicitly transformed using the `map` function.
 
-- Match the shape of the previous step’s output, or
-- Be explicitly transformed using the `map` function.
-
-
-### Dowhile
+### `.dowhile()`
 
 Executes a step repeatedly while a condition is true.
 
@@ -95,7 +95,7 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-### Dountil
+### `.dountil()`
 
 Executes a step repeatedly until a condition becomes true.
 
@@ -110,8 +110,7 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-
-### Foreach
+### `.foreach()`
 
 Sequentially executes the same step for each item from the `inputSchema`.
 
@@ -126,7 +125,7 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-### Early exit
+### Early exit with `.bail()`
 
 You can bail out of a workflow execution successfully by calling `bail()` in a step. This returns whatever payload is passed to the `bail()` function as the result of the workflow.
 
@@ -167,6 +166,7 @@ export const testWorkflow = createWorkflow({...})
   .then(step1)
   .commit();
 ```
+
 #### Example Run Instance
 
 The following example demonstrates how to start a run with multiple inputs. Each input will pass through the `mapStep` sequentially.
@@ -202,7 +202,26 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-## Parallel Workflows
+## Using a workflow as a step
+
+For greater composability, you can re-use a workflow as a step in another workflow.
+
+In the example below, `nestedWorkflow` is used as a step within `testWorkflow`. The `testWorkflow` uses `step1` while the `nestedWorkflow` composes `step2` and `step3`:
+
+```typescript {4,7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+export const nestedWorkflow = createWorkflow({...})
+
+export const testWorkflow = createWorkflow({...})
+  .then(nestedWorkflow)
+  .commit();
+```
+
+When using `.branch()` or `.parallel()` to build more complex control flows, executing more than one step requires wrapping those steps in a nested workflow, along with a clear definition of how they should be executed.
+
+## Running nested workflows in parallel
 
 Workflows themselves can also be executed in parallel.
 
@@ -220,26 +239,7 @@ export const testWorkflow = createWorkflow({...})
 
 Parallel steps receive previous step results as input. Their outputs are passed into the next step input as an object where the key is the step `id` and the value is the step `output`.
 
-## Nested Workflows
-
-In the example below, `nestedWorkflow` is used as a step within `testWorkflow`. The `testWorkflow` uses `step1` whilst the `nestedWorkflow` composes `step2` and `step3`
-
-
-```typescript {4,7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-export const nestedWorkflow = createWorkflow({...})
-
-export const testWorkflow = createWorkflow({...})
-  .then(nestedWorkflow)
-  .commit();
-```
-
-When using `.branch()` or `.parallel()` to build more complex control flows, executing more than one step requires wrapping those steps in a nested workflow, along with a clear definition of how they should be executed.
-
-
-## Cloned Workflows
+## Cloning workflows
 
 In the example below, `clonedWorkflow` is a clone of `workflow1` and is used as a step within `testWorkflow`. The `clonedWorkflow` is run sequentially after `step1`.
 

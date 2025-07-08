@@ -59,7 +59,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "pino": "^9.7.0",
     "pino-pretty": "^13.0.0"
