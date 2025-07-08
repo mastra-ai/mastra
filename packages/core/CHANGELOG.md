@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.10.11-alpha.3
+
+### Patch Changes
+
+- c7bbf1e: Implement workflow retry delay
+- 8722d53: Fix multi modal remaining steps
+- 132027f: Check if workflow and step is suspended before resuming
+- 0c85311: Fix Google models ZodNull tool schema handling
+- cb16baf: Fix MCP tool output schema type and return value
+- Updated dependencies [0c85311]
+  - @mastra/schema-compat@0.10.4-alpha.0
+
 ## 0.10.11-alpha.2
 
 ### Patch Changes

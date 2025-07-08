@@ -1,5 +1,18 @@
 # @mastra/mcp
 
+## 0.10.6-alpha.1
+
+### Patch Changes
+
+- c0ba5e2: Handle json schema with $defs and $ref property for MCP tool schemas.
+- cb16baf: Fix MCP tool output schema type and return value
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [cb16baf]
+  - @mastra/core@0.10.11-alpha.3
+
 ## 0.10.6-alpha.0
 
 ### Patch Changes
