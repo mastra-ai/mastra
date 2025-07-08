@@ -41,7 +41,7 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@upstash/redis": "^1.35.0",
+    "@upstash/redis": "^1.35.1",
     "ai": "^4.3.16",
     "js-tiktoken": "^1.0.20",
     "pg": "^8.16.3",
