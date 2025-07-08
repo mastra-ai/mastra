@@ -84,7 +84,7 @@
     "@types/sentiment": "^5.0.4",
     "@types/string-similarity": "^4.0.2",
     "ai": "^4.3.16",
-    "dotenv": "^16.5.0",
+    "dotenv": "^17.0.0",
     "eslint": "^9.29.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",

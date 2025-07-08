@@ -99,6 +99,7 @@ export class InngestRun<
       await new Promise(resolve => setTimeout(resolve, 1000));
       runs = await this.getRuns(eventId);
       if (runs?.[0]?.status === 'Failed') {
+        console.log('run', runs?.[0]);
         throw new Error(`Function run ${runs?.[0]?.status}`);
       } else if (runs?.[0]?.status === 'Cancelled') {
         const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
@@ -996,8 +997,158 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     });
   }
 
-  async executeSleep({ id, duration }: { id: string; duration: number }): Promise<void> {
-    await this.inngestStep.sleep(id, duration);
+  // async executeSleep({ id, duration }: { id: string; duration: number }): Promise<void> {
+  //   await this.inngestStep.sleep(id, duration);
+  // }
+
+  async executeSleep({
+    workflowId,
+    runId,
+    entry,
+    prevOutput,
+    stepResults,
+    emitter,
+    abortController,
+    runtimeContext,
+  }: {
+    workflowId: string;
+    runId: string;
+    serializedStepGraph: SerializedStepFlowEntry[];
+    entry: {
+      type: 'sleep';
+      id: string;
+      duration?: number;
+      fn?: ExecuteFunction<any, any, any, any, InngestEngineType>;
+    };
+    prevStep: StepFlowEntry;
+    prevOutput: any;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    resume?: {
+      steps: string[];
+      stepResults: Record<string, StepResult<any, any, any, any>>;
+      resumePayload: any;
+      resumePath: number[];
+    };
+    executionContext: ExecutionContext;
+    emitter: Emitter;
+    abortController: AbortController;
+    runtimeContext: RuntimeContext;
+  }): Promise<void> {
+    let { duration, fn } = entry;
+
+    if (fn) {
+      duration = await this.inngestStep.run(`workflow.${workflowId}.sleep.${entry.id}`, async () => {
+        return await fn({
+          runId,
+          mastra: this.mastra!,
+          runtimeContext,
+          inputData: prevOutput,
+          runCount: -1,
+          getInitData: () => stepResults?.input as any,
+          getStepResult: (step: any) => {
+            if (!step?.id) {
+              return null;
+            }
+
+            const result = stepResults[step.id];
+            if (result?.status === 'success') {
+              return result.output;
+            }
+
+            return null;
+          },
+
+          // TODO: this function shouldn't have suspend probably?
+          suspend: async (_suspendPayload: any): Promise<any> => {},
+          bail: () => {},
+          abort: () => {
+            abortController?.abort();
+          },
+          [EMITTER_SYMBOL]: emitter,
+          engine: { step: this.inngestStep },
+          abortSignal: abortController?.signal,
+        });
+      });
+    }
+
+    await this.inngestStep.sleep(entry.id, !duration || duration < 0 ? 0 : duration);
+  }
+
+  async executeSleepUntil({
+    workflowId,
+    runId,
+    entry,
+    prevOutput,
+    stepResults,
+    emitter,
+    abortController,
+    runtimeContext,
+  }: {
+    workflowId: string;
+    runId: string;
+    serializedStepGraph: SerializedStepFlowEntry[];
+    entry: {
+      type: 'sleepUntil';
+      id: string;
+      date?: Date;
+      fn?: ExecuteFunction<any, any, any, any, InngestEngineType>;
+    };
+    prevStep: StepFlowEntry;
+    prevOutput: any;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    resume?: {
+      steps: string[];
+      stepResults: Record<string, StepResult<any, any, any, any>>;
+      resumePayload: any;
+      resumePath: number[];
+    };
+    executionContext: ExecutionContext;
+    emitter: Emitter;
+    abortController: AbortController;
+    runtimeContext: RuntimeContext;
+  }): Promise<void> {
+    let { date, fn } = entry;
+
+    if (fn) {
+      date = await this.inngestStep.run(`workflow.${workflowId}.sleepUntil.${entry.id}`, async () => {
+        return await fn({
+          runId,
+          mastra: this.mastra!,
+          runtimeContext,
+          inputData: prevOutput,
+          runCount: -1,
+          getInitData: () => stepResults?.input as any,
+          getStepResult: (step: any) => {
+            if (!step?.id) {
+              return null;
+            }
+
+            const result = stepResults[step.id];
+            if (result?.status === 'success') {
+              return result.output;
+            }
+
+            return null;
+          },
+
+          // TODO: this function shouldn't have suspend probably?
+          suspend: async (_suspendPayload: any): Promise<any> => {},
+          bail: () => {},
+          abort: () => {
+            abortController?.abort();
+          },
+          [EMITTER_SYMBOL]: emitter,
+          engine: { step: this.inngestStep },
+          abortSignal: abortController?.signal,
+        });
+      });
+    }
+
+    if (!(date instanceof Date)) {
+      return;
+    }
+
+    await this.inngestStep.sleepUntil(entry.id, date);
   }
 
   async executeWaitForEvent({ event, timeout }: { event: string; timeout?: number }): Promise<any> {
@@ -1067,6 +1218,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           payload: {
             id: step.id,
             status: 'running',
+            payload: prevOutput,
+            startedAt,
           },
         });
 

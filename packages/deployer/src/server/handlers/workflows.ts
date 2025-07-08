@@ -13,6 +13,7 @@ import {
   getWorkflowRunByIdHandler as getOriginalGetWorkflowRunByIdHandler,
   getWorkflowRunExecutionResultHandler as getOriginalGetWorkflowRunExecutionResultHandler,
   cancelWorkflowRunHandler as getOriginalCancelWorkflowRunHandler,
+  sendWorkflowRunEventHandler as getOriginalSendWorkflowRunEventHandler,
 } from '@mastra/server/handlers/workflows';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -326,5 +327,26 @@ export async function cancelWorkflowRunHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error canceling workflow run');
+  }
+}
+
+export async function sendWorkflowRunEventHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const workflowId = c.req.param('workflowId');
+    const runId = c.req.param('runId');
+    const { event, data } = await c.req.json();
+
+    const result = await getOriginalSendWorkflowRunEventHandler({
+      mastra,
+      workflowId,
+      runId,
+      event,
+      data,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error sending workflow run event');
   }
 }

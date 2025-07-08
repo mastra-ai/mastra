@@ -82,6 +82,7 @@ export type MemoryConfig = {
       | boolean
       | {
           model: DynamicArgument<MastraLanguageModel>;
+          instructions?: DynamicArgument<string>;
         };
   };
 };
