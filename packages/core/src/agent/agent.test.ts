@@ -120,6 +120,10 @@ class MockMemory extends MastraMemory {
   getMergedThreadConfig(config?: MemoryConfig) {
     return config || {};
   }
+
+  async updateWorkingMemory() {
+    return;
+  }
 }
 
 const mockFindUser = vi.fn().mockImplementation(async data => {
