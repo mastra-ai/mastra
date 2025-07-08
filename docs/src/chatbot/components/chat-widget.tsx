@@ -58,7 +58,9 @@ export function CustomChatInterface({
   const processedQueryRef = useRef(""); // Track processed queries
   const lastMessageCountRef = useRef(0); // Track message count for response detection
   const conversationIdRef = useRef<string>(); // Track conversation ID
-  const pendingQuestionRef = useRef<{ id: string; question: string } | null>(null); // Track pending question waiting for response
+  const pendingQuestionRef = useRef<{ id: string; question: string } | null>(
+    null,
+  ); // Track pending question waiting for response
 
   // Initialize conversation ID on first render
   useEffect(() => {
@@ -98,9 +100,11 @@ export function CustomChatInterface({
       const newMessages = visibleMessages.slice(lastMessageCountRef.current);
 
       newMessages.forEach((message) => {
-        const isAssistant = "role" in message && message.role === Role.Assistant;
+        const isAssistant =
+          "role" in message && message.role === Role.Assistant;
         if (isAssistant) {
-          const messageContent = "content" in message ? String(message.content) : "";
+          const messageContent =
+            "content" in message ? String(message.content) : "";
 
           // Link response to the pending question
           const responseData: ResponseData = {
@@ -110,7 +114,8 @@ export function CustomChatInterface({
 
           if (pendingQuestionRef.current) {
             responseData.question_id = pendingQuestionRef.current.id;
-            responseData.original_question = pendingQuestionRef.current.question;
+            responseData.original_question =
+              pendingQuestionRef.current.question;
 
             // Clear the pending question after linking
             pendingQuestionRef.current = null;
