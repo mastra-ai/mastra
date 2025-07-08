@@ -134,18 +134,12 @@ const planIndoorActivities = createStep({
   id: 'plan-indoor-activities',
   description: 'Suggests indoor activities based on weather conditions',
   inputSchema: forecastSchema,
-  resumeSchema: forecastSchema,
   outputSchema: z.object({
     activities: z.string(),
   }),
-  execute: async ({ inputData, mastra, resumeData, suspend }) => {
-    if (!resumeData) {
-      suspend({ inputData });
-
-      return { activities: '' };
-    }
-    console.log('planIndoorActivities', resumeData);
-    const forecast = resumeData;
+  execute: async ({ inputData, mastra }) => {
+    console.log('planIndoorActivities', inputData);
+    const forecast = inputData;
 
     if (!forecast) {
       throw new Error('Forecast data not found');
@@ -258,17 +252,6 @@ const planBothWorkflow = createWorkflow({
       }),
       steps: [planIndoorActivities],
     })
-      .then(
-        createStep({
-          id: 'plan-indoor-activities-first-step',
-          description: 'Plan indoor activities first step',
-          inputSchema: forecastSchema,
-          outputSchema: forecastSchema,
-          execute: async ({ inputData }) => {
-            return inputData;
-          },
-        }),
-      )
       .then(planIndoorActivities)
       .commit(),
   ])
