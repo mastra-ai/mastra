@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.10.11-alpha.4
+
+### Patch Changes
+
+- 40cd025: Check if tool is actually a tool for /api/tools
+  - @mastra/core@0.10.11-alpha.4
+  - @mastra/server@0.10.11-alpha.4
+
 ## 0.10.11-alpha.3
 
 ### Patch Changes
