@@ -1863,7 +1863,7 @@ export class Agent<
         runId,
       });
 
-      const streamResult = await llm.__stream({
+      const streamResult = llm.__stream({
         messages: messageObjects,
         temperature,
         tools: convertedTools,

@@ -7,7 +7,7 @@ description: Overview of agents in Mastra, detailing their capabilities and how 
 
 **Agents** are one of the core Mastra primitives. Agents use a language model to decide on a sequence of actions. They can call functions (known as _tools_). You can compose them with *workflows* (the other main Mastra primitive), either by giving an agent a workflow as a tool, or by running an agent from within a workflow.
 
-Agents can run autonomously in a loop, run once, or take turns with a user. You can give short-term, long-term, and working memory of their user interactions. They can stream text or return structured output (ie, JSON). They can access third-party APIs, query knowledge bases, and so on. 
+Agents can run autonomously in a loop, run once, or take turns with a user. You can give short-term, long-term, and working memory of their user interactions. They can stream text or return structured output (ie, JSON). They can access third-party APIs, query knowledge bases, and so on.
 
 ## 1. Creating an Agent
 
@@ -275,9 +275,9 @@ const stream = await myAgent.stream(
 
 ## 5. Testing agents locally
 
-Mastra provides a CLI command `mastra dev` to run your agents behind an API. By default, this looks for exported agents in files in the `src/mastra/agents` directory. It generates endpoints for testing your agent (eg `http://localhost:4111/api/agents/myAgent/generate`) and provides a visual playground where you can chat with an agent and view traces. 
+Mastra provides a CLI command `mastra dev` to run your agents behind an API. By default, this looks for exported agents in files in the `src/mastra/agents` directory. It generates endpoints for testing your agent (eg `http://localhost:4111/api/agents/myAgent/generate`) and provides a visual playground where you can chat with an agent and view traces.
 
-For more details, see the [Local Dev Playground](en/docs/local-dev/mastra-dev) docs.
+For more details, see the [Local Dev Playground](/docs/server-db/local-dev-playground) docs.
 
 ## Next Steps
 
