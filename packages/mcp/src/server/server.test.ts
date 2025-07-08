@@ -1712,10 +1712,8 @@ describe('MCPServer with Tool Output Schema', () => {
         timestamp: z.string(),
       }),
       execute: async ({ input }: { input: string }) => ({
-        structuredContent: {
-          processedInput: `processed: ${input}`,
-          timestamp: mockDateISO,
-        },
+        processedInput: `processed: ${input}`,
+        timestamp: mockDateISO,
       }),
     },
   };

@@ -52,15 +52,17 @@ export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined 
   runtimeContext: RuntimeContext;
 }
 
+// Helper type to determine the return type based on whether there's an output schema
+type ToolExecuteReturnType<TSchemaOut extends z.ZodSchema | undefined> = TSchemaOut extends z.ZodSchema
+  ? z.infer<TSchemaOut> | { structuredContent: z.infer<TSchemaOut> }
+  : unknown;
+
 export interface ToolAction<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
   TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
 > extends IAction<string, TSchemaIn, TSchemaOut, TContext, ToolExecutionOptions> {
   description: string;
-  execute?: (
-    context: TContext,
-    options?: ToolExecutionOptions,
-  ) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
+  execute?: (context: TContext, options?: ToolExecutionOptions) => Promise<ToolExecuteReturnType<TSchemaOut>>;
   mastra?: Mastra;
 }
