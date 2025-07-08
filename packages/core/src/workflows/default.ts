@@ -573,9 +573,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     let execResults: any;
 
     const retries = step.retries ?? executionContext.retryConfig.attempts ?? 0;
+    const delay = executionContext.retryConfig.delay ?? 0;
 
     // +1 for the initial attempt
     for (let i = 0; i < retries + 1; i++) {
+      if (i > 0 && delay) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
       try {
         let suspended: { payload: any } | undefined;
         let bailed: { payload: any } | undefined;
