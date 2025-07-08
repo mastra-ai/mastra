@@ -313,7 +313,7 @@ Workflows will use their `inputSchema` for the tool's input.
 
 You can define an `outputSchema` for your tools to enforce a specific structure for the tool's output. This is useful for ensuring that the tool returns data in a consistent and predictable format, which can then be validated by the client.
 
-When a tool includes an `outputSchema`, its `execute` function **must** return an object containing a `structuredContent` property. The value of `structuredContent` must conform to the `outputSchema`. Mastra will automatically validate this output on both the server and client sides.
+When a tool includes an `outputSchema`, its `execute` function **must** return an object. The value of the object must conform to the `outputSchema`. Mastra will automatically validate this output on both the server and client sides.
 
 Here's an example of a tool with an `outputSchema`:
 
@@ -331,12 +331,10 @@ export const structuredTool = createTool({
     timestamp: z.string().describe('An ISO timestamp.'),
   }),
   execute: async ({ input }) => {
-    // When outputSchema is defined, you must return a structuredContent object
+    // When outputSchema is defined, you must return an object
     return {
-      structuredContent: {
-        processedInput: `processed: ${input}`,
-        timestamp: new Date().toISOString(),
-      },
+      processedInput: `processed: ${input}`,
+      timestamp: new Date().toISOString(),
     };
   },
 });
