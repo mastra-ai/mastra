@@ -44,7 +44,6 @@ export interface RerankerFunctionOptions {
   weights?: WeightConfig;
   queryEmbedding?: number[];
   topK?: number;
-  relevanceProvider?: RelevanceScoreProvider;
 }
 
 export interface RerankConfig {
