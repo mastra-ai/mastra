@@ -166,6 +166,7 @@ export function createStep<
   outputSchema: TStepOutput;
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
+  retries?: number;
   execute: ExecuteFunction<
     z.infer<TStepInput>,
     z.infer<TStepOutput>,
@@ -212,6 +213,7 @@ export function createStep<
         outputSchema: TStepOutput;
         resumeSchema?: TResumeSchema;
         suspendSchema?: TSuspendSchema;
+        retries?: number;
         execute: ExecuteFunction<
           z.infer<TStepInput>,
           z.infer<TStepOutput>,
@@ -335,6 +337,7 @@ export function createStep<
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
+    retries: params.retries,
     execute: params.execute,
   };
 }
@@ -349,6 +352,7 @@ export function cloneStep<TStepId extends string>(
     inputSchema: step.inputSchema,
     outputSchema: step.outputSchema,
     execute: step.execute,
+    retries: step.retries,
   };
 }
 
@@ -1493,6 +1497,22 @@ export class Run<
       workflowName: this.workflowId,
       runId: this.runId,
     });
+
+    if (!snapshot) {
+      throw new Error('No snapshot found for this workflow run');
+    }
+
+    if (snapshot.status !== 'suspended') {
+      throw new Error('This workflow run was not suspended');
+    }
+
+    const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
+
+    const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
+
+    if (!isStepSuspended) {
+      throw new Error('This workflow step was not suspended');
+    }
 
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({

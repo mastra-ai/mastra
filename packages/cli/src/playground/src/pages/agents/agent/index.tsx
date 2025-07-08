@@ -43,11 +43,7 @@ function Agent() {
   const withSidebar = Boolean(memory?.result);
 
   return (
-    <AgentSettingsProvider
-      agentId={agentId!}
-      defaultGenerateOptions={agent?.defaultGenerateOptions}
-      defaultStreamOptions={agent?.defaultStreamOptions}
-    >
+    <AgentSettingsProvider agentId={agentId!}>
       <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
         {withSidebar && (
           <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
