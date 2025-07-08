@@ -1,3 +1,4 @@
+import { generateEmptyFromSchema } from '@mastra/core';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import { HTTPException } from '../http-exception';
@@ -316,10 +317,17 @@ export async function getWorkingMemoryHandler({
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
+    const thread = await memory.getThreadById({ threadId: threadId! });
+    const threadExists = !!thread;
+    const template = await memory.getWorkingMemoryTemplate({ memoryConfig });
+    const workingMemoryTemplate =
+      template?.format === 'json'
+        ? { ...template, content: JSON.stringify(generateEmptyFromSchema(template.content)) }
+        : template;
     const workingMemory = await memory.getWorkingMemory({ threadId: threadId!, resourceId, memoryConfig });
     const config = memory.getMergedThreadConfig(memoryConfig || {});
     const source = config.workingMemory?.scope === 'resource' && resourceId ? 'resource' : 'thread';
-    return { workingMemory, source };
+    return { workingMemory, source, workingMemoryTemplate, threadExists };
   } catch (error) {
     return handleError(error, 'Error getting working memory');
   }

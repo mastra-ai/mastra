@@ -43,6 +43,25 @@ export function deepMerge<T extends object = object>(target: T, source: Partial<
   return output;
 }
 
+export function generateEmptyFromSchema(schema: string) {
+  try {
+    const parsedSchema = JSON.parse(schema);
+    if (!parsedSchema || parsedSchema.type !== 'object' || !parsedSchema.properties) return {};
+    const obj: Record<string, any> = {};
+    for (const [key, prop] of Object.entries<any>(parsedSchema.properties)) {
+      if (prop.type === 'string') obj[key] = '';
+      else if (prop.type === 'array') obj[key] = [];
+      else if (prop.type === 'object') obj[key] = {};
+      else if (prop.type === 'number' || prop.type === 'integer') obj[key] = 0;
+      else if (prop.type === 'boolean') obj[key] = false;
+      else obj[key] = null;
+    }
+    return obj;
+  } catch {
+    return null;
+  }
+}
+
 export interface TagMaskOptions {
   /** Called when masking begins */
   onStart?: () => void;

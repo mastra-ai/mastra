@@ -2,6 +2,7 @@ import { createContext, useContext, ReactNode } from 'react';
 import { useAgentWorkingMemory } from '@/domains/agents/hooks/use-agent-working-memory';
 
 type AgentWorkingMemoryContextType = {
+  threadExists: boolean;
   workingMemoryData: string | null;
   workingMemorySource: 'thread' | 'resource' | null;
   isLoading: boolean;

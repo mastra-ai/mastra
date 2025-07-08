@@ -410,7 +410,11 @@ export abstract class MastraMemory extends MastraBase {
    * @param threadId - The unique identifier of the thread
    * @returns Promise resolving to working memory template or null if not found
    */
-  abstract getWorkingMemoryTemplate(): Promise<WorkingMemoryTemplate | null>;
+  abstract getWorkingMemoryTemplate({
+    memoryConfig,
+  }: {
+    memoryConfig?: MemoryConfig;
+  }): Promise<WorkingMemoryTemplate | null>;
 
   abstract updateWorkingMemory({
     threadId,
