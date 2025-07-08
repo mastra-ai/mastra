@@ -166,6 +166,7 @@ export function createStep<
   outputSchema: TStepOutput;
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
+  retries?: number;
   execute: ExecuteFunction<
     z.infer<TStepInput>,
     z.infer<TStepOutput>,
@@ -212,6 +213,7 @@ export function createStep<
         outputSchema: TStepOutput;
         resumeSchema?: TResumeSchema;
         suspendSchema?: TSuspendSchema;
+        retries?: number;
         execute: ExecuteFunction<
           z.infer<TStepInput>,
           z.infer<TStepOutput>,
@@ -335,6 +337,7 @@ export function createStep<
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
+    retries: params.retries,
     execute: params.execute,
   };
 }
@@ -349,6 +352,7 @@ export function cloneStep<TStepId extends string>(
     inputSchema: step.inputSchema,
     outputSchema: step.outputSchema,
     execute: step.execute,
+    retries: step.retries,
   };
 }
 
