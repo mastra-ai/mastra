@@ -829,7 +829,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.60.1
-        version: 0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+        version: 0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1045,7 +1045,7 @@ importers:
         specifier: ^5.80.10
         version: 5.81.5(react@19.1.0)
       '@tanstack/react-virtual':
-        specifier: ^3.13.10
+        specifier: ^3.13.12
         version: 3.13.12(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@uiw/codemirror-theme-dracula':
         specifier: ^4.23.14
@@ -22056,7 +22056,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
+  '@opentelemetry/auto-instrumentations-node@0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -22106,7 +22106,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.9.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.2(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.36.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
+      '@opentelemetry/resource-detector-gcp': 0.36.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.202.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -23697,7 +23697,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.36.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
+  '@opentelemetry/resource-detector-gcp@0.36.0(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -29696,7 +29696,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.10.0)
+      retry-axios: 2.6.0(axios@1.10.0(debug@4.4.1))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -33037,7 +33037,7 @@ snapshots:
       onetime: 7.0.0
       signal-exit: 4.1.0
 
-  retry-axios@2.6.0(axios@1.10.0):
+  retry-axios@2.6.0(axios@1.10.0(debug@4.4.1)):
     dependencies:
       axios: 1.10.0(debug@4.4.1)
 
