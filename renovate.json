@@ -140,6 +140,15 @@
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false
+    },
+    {
+      "groupName": "AWS SDK",
+      "commitMessageTopic": "AWS SDK",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@aws-sdk/lib-dynamodb", "@aws-sdk/client-dynamodb"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "dependencyDashboardApproval": false
     }
   ]
 }
