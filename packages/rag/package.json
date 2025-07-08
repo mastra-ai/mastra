@@ -21,6 +21,7 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "buld:watch": "pnpm build --watch",
+    "vitest": "vitest",
     "test": "vitest run",
     "lint": "eslint ."
   },

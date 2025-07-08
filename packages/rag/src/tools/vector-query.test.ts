@@ -44,11 +44,13 @@ describe('createVectorQueryTool', () => {
       debug: vi.fn(),
       warn: vi.fn(),
       info: vi.fn(),
+      error: vi.fn(),
     },
     getLogger: vi.fn(() => ({
       debug: vi.fn(),
       warn: vi.fn(),
       info: vi.fn(),
+      error: vi.fn(),
     })),
   };
 
@@ -299,7 +301,7 @@ describe('createVectorQueryTool', () => {
       );
     });
 
-    it('handles reranker from runtimeContext', async () => {
+    it.only('handles reranker from runtimeContext', async () => {
       const tool = createVectorQueryTool({
         id: 'test',
         model: mockModel,

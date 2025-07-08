@@ -94,6 +94,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
         }
+
         if (reranker) {
           if (logger) {
             logger.debug('Reranking results', { rerankerModel: reranker.model, rerankerOptions: reranker.options });
@@ -101,7 +102,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
 
           let rerankedResults: RerankResult[] = [];
 
-          if ('getRelevanceScore' in reranker.model) {
+          if (typeof reranker?.model === 'object' && 'getRelevanceScore' in reranker?.model) {
             rerankedResults = await rerankWithScorer({
               results,
               query: queryText,
