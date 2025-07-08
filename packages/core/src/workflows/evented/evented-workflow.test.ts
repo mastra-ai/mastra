@@ -2205,7 +2205,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should execute a a sleep step', async () => {
+    it('should execute a a sleep step', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
@@ -2232,6 +2232,11 @@ describe('Workflow', () => {
       });
 
       workflow.then(step1).sleep(1000).then(step2).commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
 
       const run = await workflow.createRunAsync();
       const startTime = Date.now();
@@ -2290,6 +2295,11 @@ describe('Workflow', () => {
         .then(step2)
         .commit();
 
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
+
       const run = await workflow.createRunAsync();
       const startTime = Date.now();
       const result = await run.start({ inputData: {} });
@@ -2315,7 +2325,7 @@ describe('Workflow', () => {
       expect(endTime - startTime).toBeGreaterThan(900);
     });
 
-    it('should execute a waitForEvent step', async () => {
+    it.only('should execute a waitForEvent step', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
@@ -2344,6 +2354,11 @@ describe('Workflow', () => {
       });
 
       workflow.then(step1).waitForEvent('hello-event', step2).commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
 
       const run = await workflow.createRunAsync();
       const startTime = Date.now();

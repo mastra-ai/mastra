@@ -241,6 +241,70 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
 
       return;
+    } else if (step?.type === 'sleep') {
+      const duration = await this.stepExecutor.resolveSleep({
+        step,
+        runId,
+        stepResults,
+        emitter: new EventEmitter() as any, // TODO
+        runtimeContext: new RuntimeContext(), // TODO
+        input: prevResult?.status === 'success' ? prevResult.output : undefined,
+        resumeData,
+      });
+
+      setTimeout(
+        async () => {
+          return this.pubsub.publish('workflows', {
+            type: 'workflow.step.run',
+            data: {
+              workflowId,
+              runId,
+              executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+              resume,
+              stepResults,
+              prevResult,
+              resumeData,
+              parentWorkflow,
+              activeSteps,
+            },
+          });
+        },
+        duration < 0 ? 0 : duration,
+      );
+
+      return;
+    } else if (step?.type === 'sleepUntil') {
+      const duration = await this.stepExecutor.resolveSleepUntil({
+        step,
+        runId,
+        stepResults,
+        emitter: new EventEmitter() as any, // TODO
+        runtimeContext: new RuntimeContext(), // TODO
+        input: prevResult?.status === 'success' ? prevResult.output : undefined,
+        resumeData,
+      });
+
+      setTimeout(
+        async () => {
+          return this.pubsub.publish('workflows', {
+            type: 'workflow.step.run',
+            data: {
+              workflowId,
+              runId,
+              executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+              resume,
+              stepResults,
+              prevResult,
+              resumeData,
+              parentWorkflow,
+              activeSteps,
+            },
+          });
+        },
+        duration < 0 ? 0 : duration,
+      );
+
+      return;
     }
 
     if (step?.type !== 'step') {

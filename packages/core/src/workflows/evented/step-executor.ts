@@ -191,4 +191,130 @@ export class StepExecutor extends MastraBase {
 
     return idxs;
   }
+
+  async resolveSleep(params: {
+    step: Extract<StepFlowEntry, { type: 'sleep' }>;
+    runId: string;
+    input?: any;
+    resumeData?: any;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    emitter: { runtime: PubSub; events: PubSub };
+    runtimeContext: RuntimeContext;
+  }): Promise<number> {
+    const { step, stepResults, runId, runtimeContext } = params;
+
+    const abortController = new AbortController();
+    const ee = new EventEmitter();
+
+    if (step.duration) {
+      return step.duration;
+    }
+
+    if (!step.fn) {
+      return 0;
+    }
+
+    try {
+      return await step.fn({
+        runId,
+        mastra: this.mastra!,
+        runtimeContext,
+        inputData: params.input,
+        runCount: 0, // TODO: implement this
+        resumeData: params.resumeData,
+        getInitData: () => stepResults?.input as any,
+        getStepResult: (step: any) => {
+          if (!step?.id) {
+            return null;
+          }
+
+          const result = stepResults[step.id];
+          if (result?.status === 'success') {
+            return result.output;
+          }
+
+          return null;
+        },
+        suspend: async (_suspendPayload: any): Promise<any> => {
+          throw new Error('Not implemented');
+        },
+        bail: (_result: any) => {
+          throw new Error('Not implemented');
+        },
+        abort: () => {
+          abortController?.abort();
+        },
+        [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
+        engine: {},
+        abortSignal: abortController?.signal,
+      });
+    } catch (e) {
+      console.error('error evaluating condition', e);
+      return 0;
+    }
+  }
+
+  async resolveSleepUntil(params: {
+    step: Extract<StepFlowEntry, { type: 'sleepUntil' }>;
+    runId: string;
+    input?: any;
+    resumeData?: any;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    emitter: { runtime: PubSub; events: PubSub };
+    runtimeContext: RuntimeContext;
+  }): Promise<number> {
+    const { step, stepResults, runId, runtimeContext } = params;
+
+    const abortController = new AbortController();
+    const ee = new EventEmitter();
+
+    if (step.date) {
+      return step.date.getTime() - Date.now();
+    }
+
+    if (!step.fn) {
+      return 0;
+    }
+
+    try {
+      const result = await step.fn({
+        runId,
+        mastra: this.mastra!,
+        runtimeContext,
+        inputData: params.input,
+        runCount: 0, // TODO: implement this
+        resumeData: params.resumeData,
+        getInitData: () => stepResults?.input as any,
+        getStepResult: (step: any) => {
+          if (!step?.id) {
+            return null;
+          }
+
+          const result = stepResults[step.id];
+          if (result?.status === 'success') {
+            return result.output;
+          }
+
+          return null;
+        },
+        suspend: async (_suspendPayload: any): Promise<any> => {
+          throw new Error('Not implemented');
+        },
+        bail: (_result: any) => {
+          throw new Error('Not implemented');
+        },
+        abort: () => {
+          abortController?.abort();
+        },
+        [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
+        engine: {},
+        abortSignal: abortController?.signal,
+      });
+
+      return result.getTime() - Date.now();
+    } catch (e) {
+      console.error('error evaluating condition', e);
+      return 0;
+    }
+  }
 }
