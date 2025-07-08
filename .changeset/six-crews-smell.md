@@ -6,7 +6,6 @@
 "@mastra/playground-ui": patch
 "@mastra/server": patch
 "@mastra/client-js": patch
-"@mastra/playground": patch
 ---
 
 [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
