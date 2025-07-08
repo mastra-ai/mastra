@@ -32,7 +32,7 @@
     "big.js": "^7.0.1",
     "cohere-ai": "^7.17.1",
     "js-tiktoken": "^1.0.20",
-    "node-html-better-parser": "^1.4.11",
+    "node-html-better-parser": "^1.5.1",
     "pathe": "^2.0.3",
     "zeroentropy": "0.1.0-alpha.6",
     "zod": "^3.25.67"
