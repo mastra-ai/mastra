@@ -24,7 +24,7 @@ import { weatherTool } from '../__fixtures__/tools';
 import { InternalMastraMCPClient } from '../client/client';
 import { MCPClient } from '../client/configuration';
 import { MCPServer } from './server';
-import type { MCPServerResources, MCPServerResourceContent } from './types';
+import type { MCPServerResources, MCPServerResourceContent, MCPRequestHandlerExtra } from './types';
 
 const PORT = 9100 + Math.floor(Math.random() * 1000);
 let server: MCPServer;
@@ -937,12 +937,32 @@ describe('MCPServer', () => {
     let server: MCPServer;
     let client: MCPClient;
     const PORT = 9200 + Math.floor(Math.random() * 1000);
+    const TOKEN = `<random-token>`;
 
     beforeAll(async () => {
       server = new MCPServer({
         name: 'Test MCP Server',
         version: '0.1.0',
-        tools: { weatherTool },
+        tools: {
+          weatherTool,
+          testAuthTool: {
+            description: 'Test tool to validate auth information from extra params',
+            parameters: z.object({
+              message: z.string().describe('Message to show to user'),
+            }),
+            execute: async (context, options) => {
+              const extra = options.extra as MCPRequestHandlerExtra;
+
+              return {
+                message: context.message,
+                sessionId: extra?.sessionId || null,
+                authInfo: extra?.authInfo || null,
+                requestId: extra?.requestId || null,
+                hasExtra: !!extra,
+              };
+            },
+          },
+        },
       });
 
       httpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
@@ -964,6 +984,9 @@ describe('MCPServer', () => {
         servers: {
           local: {
             url: new URL(`http://localhost:${PORT}/http`),
+            requestInit: {
+              headers: { Authorization: `Bearer ${TOKEN}` },
+            },
           },
         },
       });
@@ -1007,6 +1030,60 @@ describe('MCPServer', () => {
       expect(toolResult).toHaveProperty('conditions');
       expect(toolResult).toHaveProperty('windSpeed');
       expect(toolResult).toHaveProperty('windGust');
+    });
+
+    it('should pass auth information through extra parameter', async () => {
+      const mockExtra: MCPRequestHandlerExtra = {
+        signal: new AbortController().signal,
+        sessionId: 'test-session-id',
+        authInfo: {
+          token: TOKEN,
+          clientId: 'test-client-id',
+          scopes: ['read'],
+        },
+        requestId: 'test-request-id',
+        sendNotification: vi.fn(),
+        sendRequest: vi.fn(),
+      };
+
+      const mockRequest = {
+        jsonrpc: '2.0' as const,
+        id: 'test-request-1',
+        method: 'tools/call' as const,
+        params: {
+          name: 'testAuthTool',
+          arguments: {
+            message: 'test auth',
+          },
+        },
+      };
+
+      const serverInstance = server.getServer();
+
+      // @ts-ignore - this is a private property, but we need to access it to test the request handler
+      const requestHandlers = serverInstance._requestHandlers;
+      const callToolHandler = requestHandlers.get('tools/call');
+
+      expect(callToolHandler).toBeDefined();
+
+      const result = await callToolHandler(mockRequest, mockExtra);
+
+      expect(result).toBeDefined();
+      expect(result.isError).toBe(false);
+      expect(result.content).toBeInstanceOf(Array);
+      expect(result.content.length).toBeGreaterThan(0);
+
+      const toolOutput = result.content[0];
+      expect(toolOutput.type).toBe('text');
+      const toolResult = JSON.parse(toolOutput.text);
+
+      expect(toolResult.message).toBe('test auth');
+      expect(toolResult.hasExtra).toBe(true);
+      expect(toolResult.sessionId).toBe('test-session-id');
+      expect(toolResult.authInfo).toBeDefined();
+      expect(toolResult.authInfo.token).toBe(TOKEN);
+      expect(toolResult.authInfo.clientId).toBe('test-client-id');
+      expect(toolResult.requestId).toBe('test-request-id');
     });
   });
 

@@ -1,5 +1,22 @@
 # @mastra/dynamodb
 
+## 0.13.0-alpha.1
+
+### Minor Changes
+
+- 10cd23a: Change DynamoDB saveThread from create to upsert to handle updates.
+
+### Patch Changes
+
+- 7d16f45: dependencies updates:
+  - Updated dependency [`@aws-sdk/lib-dynamodb@^3.840.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/lib-dynamodb/v/3.840.0) (from `^3.830.0`, in `dependencies`)
+- 649274f: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.840.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.840.0) (from `^3.839.0`, in `dependencies`)
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [565cc0c]
+  - @mastra/core@0.10.11-alpha.2
+
 ## 0.12.1-alpha.0
 
 ### Patch Changes
