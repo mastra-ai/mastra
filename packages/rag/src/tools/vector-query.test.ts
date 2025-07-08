@@ -301,7 +301,7 @@ describe('createVectorQueryTool', () => {
       );
     });
 
-    it.only('handles reranker from runtimeContext', async () => {
+    it('handles reranker from runtimeContext', async () => {
       const tool = createVectorQueryTool({
         id: 'test',
         model: mockModel,
