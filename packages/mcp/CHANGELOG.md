@@ -1,5 +1,16 @@
 # @mastra/mcp
 
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- f5ec3a4: Fix tool calling args for mcp server to ensure validatedArgs are not undefined
+- ab3bbff: Add support for extra arguments in mcp
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [565cc0c]
+  - @mastra/core@0.10.11-alpha.2
+
 ## 0.10.5
 
 ### Patch Changes
