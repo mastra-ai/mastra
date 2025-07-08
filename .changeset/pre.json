@@ -73,6 +73,7 @@
   "changesets": [
     "@mastra_agui-5742-dependencies",
     "@mastra_auth-supabase-5723-dependencies",
+    "@mastra_auth-workos-5747-dependencies",
     "@mastra_core-5741-dependencies",
     "@mastra_core-5742-dependencies",
     "@mastra_deployer-5602-dependencies",
