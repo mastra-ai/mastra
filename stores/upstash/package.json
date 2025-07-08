@@ -29,7 +29,7 @@
   "license": "MIT",
   "dependencies": {
     "@upstash/redis": "^1.35.0",
-    "@upstash/vector": "^1.2.1"
+    "@upstash/vector": "^1.2.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
