@@ -49,13 +49,22 @@ export class WorkflowEventProcessor extends EventProcessor {
     this.stepExecutor.__registerMastra(mastra);
   }
 
-  private async errorWorkflow(workflowId: string, runId: string, e: Error) {
+  private async errorWorkflow(
+    { parentWorkflow, workflowId, runId, resume, stepResults, resumeData }: ProcessorArgs,
+    e: Error,
+  ) {
     await this.pubsub.publish('workflows', {
       type: 'workflow.fail',
       data: {
         workflowId,
         runId,
-        error: e.stack ?? e.message,
+        executionPath: [],
+        resume,
+        stepResults,
+        prevResult: { status: 'failed', error: e.stack ?? e.message },
+        resumeData,
+        activeSteps: [],
+        parentWorkflow: parentWorkflow,
       },
     });
   }
@@ -99,6 +108,35 @@ export class WorkflowEventProcessor extends EventProcessor {
       console.log('ending nested', workflowId, parentWorkflow);
       await this.pubsub.publish('workflows', {
         type: 'workflow.step.end',
+        data: {
+          workflowId: parentWorkflow.workflowId,
+          runId: parentWorkflow.runId,
+          executionPath: parentWorkflow.executionPath,
+          resume,
+          stepResults: parentWorkflow.stepResults,
+          prevResult,
+          resumeData,
+          activeSteps,
+          parentWorkflow: parentWorkflow.parentWorkflow,
+          parentContext: parentWorkflow,
+        },
+      });
+    }
+  }
+
+  protected async processWorkflowFail({
+    workflowId,
+    resume,
+    prevResult,
+    resumeData,
+    parentWorkflow,
+    activeSteps,
+  }: ProcessorArgs) {
+    // handle nested workflow
+    if (parentWorkflow) {
+      console.log('failing nested', workflowId, parentWorkflow);
+      await this.pubsub.publish('workflows', {
+        type: 'workflow.fail',
         data: {
           workflowId: parentWorkflow.workflowId,
           runId: parentWorkflow.runId,
@@ -684,6 +722,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       case 'workflow.bail':
         break;
       case 'workflow.fail':
+        await this.processWorkflowFail({
+          workflow,
+          ...workflowData,
+        });
         break;
       default:
         break;

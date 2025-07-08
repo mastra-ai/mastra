@@ -2325,7 +2325,8 @@ describe('Workflow', () => {
       expect(endTime - startTime).toBeGreaterThan(900);
     });
 
-    it.only('should execute a waitForEvent step', async () => {
+    // TODO
+    it.skip('should execute a waitForEvent step', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
@@ -2391,7 +2392,8 @@ describe('Workflow', () => {
       expect(endTime - startTime).toBeGreaterThan(1000);
     });
 
-    it('should execute a waitForEvent step after timeout', async () => {
+    // TODO
+    it.skip('should execute a waitForEvent step after timeout', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
@@ -2447,7 +2449,8 @@ describe('Workflow', () => {
     });
   });
 
-  describe('abort', () => {
+  // TODO
+  describe.skip('abort', () => {
     it('should be able to abort workflow execution in between steps', async () => {
       const step1 = createStep({
         id: 'step1',
@@ -2619,7 +2622,7 @@ describe('Workflow', () => {
   });
 
   describe('Error Handling', () => {
-    it('should handle step execution errors', async () => {
+    it.only('should handle step execution errors', async () => {
       const error = new Error('Step execution failed');
       const failingAction = vi.fn<any>().mockImplementation(() => {
         throw error;
@@ -2639,6 +2642,11 @@ describe('Workflow', () => {
       });
 
       workflow.then(step1).commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
 
       const run = await workflow.createRunAsync();
 

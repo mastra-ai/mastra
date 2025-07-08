@@ -77,6 +77,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
       const finishCb = async (event: Event) => {
         if (event.type === 'workflow.end' && event.data.runId === params.runId) {
           resolve(event.data);
+        } else if (event.type === 'workflow.fail' && event.data.runId === params.runId) {
+          resolve(event.data);
         }
       };
 
@@ -86,6 +88,15 @@ export class EventedExecutionEngine extends ExecutionEngine {
     await this.pubsub.unsubscribe('workflows', tempCb);
 
     console.log('resultData', resultData);
+
+    if (resultData.prevResult.status === 'failed') {
+      return {
+        status: 'failed',
+        error: resultData.prevResult.error,
+        steps: resultData.stepResults,
+      } as TOutput;
+    }
+
     return {
       status: resultData.prevResult.status,
       result: resultData.prevResult?.output,

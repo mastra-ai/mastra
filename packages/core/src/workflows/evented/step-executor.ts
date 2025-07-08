@@ -116,7 +116,7 @@ export class StepExecutor extends MastraBase {
         ...stepInfo,
         status: 'failed',
         endedAt,
-        error: e,
+        error: e.stack ?? e.message,
       };
     }
   }
