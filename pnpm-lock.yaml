@@ -1042,7 +1042,7 @@ importers:
         specifier: ^1.2.7
         version: 1.2.7(@types/react-dom@19.1.6(@types/react@19.1.8))(@types/react@19.1.8)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@tanstack/react-query':
-        specifier: ^5.80.10
+        specifier: ^5.81.5
         version: 5.81.5(react@19.1.0)
       '@tanstack/react-virtual':
         specifier: ^3.13.12
@@ -29696,7 +29696,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.10.0(debug@4.4.1))
+      retry-axios: 2.6.0(axios@1.10.0)
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -33037,7 +33037,7 @@ snapshots:
       onetime: 7.0.0
       signal-exit: 4.1.0
 
-  retry-axios@2.6.0(axios@1.10.0(debug@4.4.1)):
+  retry-axios@2.6.0(axios@1.10.0):
     dependencies:
       axios: 1.10.0(debug@4.4.1)
 
