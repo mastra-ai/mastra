@@ -3380,7 +3380,7 @@ describe('Workflow', () => {
       expect(result.steps.start.output).toEqual({ newValue: 2 });
     });
 
-    it.only('should run the else branch', async () => {
+    it('should run the else branch', async () => {
       const start = vi.fn().mockImplementation(async ({ inputData }) => {
         // Get the current value (either from trigger or previous increment)
 
@@ -3481,6 +3481,11 @@ describe('Workflow', () => {
           ],
         ])
         .commit();
+
+      new Mastra({
+        workflows: { 'counter-workflow': counterWorkflow },
+        storage: testStorage,
+      });
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { startValue: 6 } });
