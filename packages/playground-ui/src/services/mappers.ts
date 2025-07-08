@@ -9,17 +9,9 @@ export const attachmentToExperimental = async (userMessage: AppendMessage['attac
       // @ts-expect-error - TODO: fix this type issue somehow
       const txt = attachment.content?.[0]?.text || '';
 
-      if (attachment.contentType === 'application/pdf') {
-        return {
-          name: attachment.name,
-          url: `data:application/pdf;base64,${txt}`,
-          contentType: attachment.contentType,
-        };
-      }
-
       return {
         name: attachment.name,
-        url: `data:text/plain;base64,${btoa(txt)}`,
+        url: `data:${attachment.contentType};base64,${btoa(txt)}`,
         contentType: attachment.contentType,
       };
     }
