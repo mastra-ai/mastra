@@ -2622,7 +2622,7 @@ describe('Workflow', () => {
   });
 
   describe('Error Handling', () => {
-    it.only('should handle step execution errors', async () => {
+    it('should handle step execution errors', async () => {
       const error = new Error('Step execution failed');
       const failingAction = vi.fn<any>().mockImplementation(() => {
         throw error;
@@ -2704,6 +2704,11 @@ describe('Workflow', () => {
         .then(step2)
         .commit();
 
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
+
       const run = await workflow.createRunAsync();
       await expect(run.start({ inputData: {} })).resolves.toMatchObject({
         steps: {
@@ -2767,6 +2772,11 @@ describe('Workflow', () => {
 
       workflow.parallel([step1, step2]).then(step3).commit();
 
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
+
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
 
@@ -2788,7 +2798,7 @@ describe('Workflow', () => {
       expect((result.steps?.step2 as any)?.error).toMatch(/^Error: Step execution failed/);
     });
 
-    it('should handle step execution errors within nested workflows', async () => {
+    it.only('should handle step execution errors within nested workflows', async () => {
       const error = new Error('Step execution failed');
       const failingAction = vi.fn<any>().mockImplementation(() => {
         throw error;
@@ -2835,6 +2845,11 @@ describe('Workflow', () => {
       })
         .then(workflow)
         .commit();
+
+      new Mastra({
+        workflows: { 'main-workflow': mainWorkflow },
+        storage: testStorage,
+      });
 
       const run = await mainWorkflow.createRunAsync();
       const result = await run.start({ inputData: {} });
