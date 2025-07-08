@@ -18,17 +18,20 @@ type ProcessorArgs = {
   resume: boolean;
   prevResult: StepResult<any, any, any, any>;
   resumeData: any;
-  parentWorkflow?: {
-    workflowId: string;
-    runId: string;
-    executionPath: number[];
-    resume: boolean;
-    stepResults: Record<string, StepResult<any, any, any, any>>;
-  };
+  parentWorkflow?: ParentWorkflow;
   parentContext?: {
     workflowId: string;
     input: any;
   };
+};
+
+type ParentWorkflow = {
+  workflowId: string;
+  runId: string;
+  executionPath: number[];
+  resume: boolean;
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  parentWorkflow?: ParentWorkflow;
 };
 
 export class WorkflowEventProcessor extends EventProcessor {
@@ -105,6 +108,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult,
           resumeData,
           activeSteps,
+          parentWorkflow: parentWorkflow.parentWorkflow,
           parentContext: parentWorkflow,
         },
       });
@@ -203,7 +207,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         type: resume ? 'workflow.resume' : 'workflow.start',
         data: {
           workflowId: step.step.id,
-          parentWorkflow: { workflowId, runId, executionPath, resume, stepResults, input: prevResult },
+          parentWorkflow: { workflowId, runId, executionPath, resume, stepResults, input: prevResult, parentWorkflow },
           executionPath: [0],
           runId: randomUUID(),
           resume,
@@ -464,22 +468,27 @@ export class WorkflowEventProcessor extends EventProcessor {
     return { ...(snapshot?.context ?? {}), ...stepResults };
   }
 
-  getNestedWorkflow(parentWorkflow: {
-    workflowId: string;
-    runId: string;
-    executionPath: number[];
-    resume: boolean;
-    stepResults: Record<string, StepResult<any, any, any, any>>;
-  }) {
-    const workflow = this.mastra.getWorkflow(parentWorkflow.workflowId);
+  getNestedWorkflow({ workflowId, executionPath, parentWorkflow }: ParentWorkflow): Workflow | null {
+    let workflow: Workflow | null = null;
+
+    if (parentWorkflow) {
+      const nestedWorkflow = this.getNestedWorkflow(parentWorkflow);
+      if (!nestedWorkflow) {
+        return null;
+      }
+
+      workflow = nestedWorkflow;
+    }
+
+    workflow = workflow ?? this.mastra.getWorkflow(workflowId);
     const stepGraph = workflow.stepGraph;
-    let parentStep = stepGraph[parentWorkflow.executionPath[0]!];
+    let parentStep = stepGraph[executionPath[0]!];
     if (parentStep?.type === 'parallel') {
-      parentStep = parentStep.steps[parentWorkflow.executionPath[1]!];
+      parentStep = parentStep.steps[executionPath[1]!];
     }
 
     if (parentStep?.type === 'step') {
-      return parentStep.step as Workflow;
+      return parentStep.step as Workflow; // TODO: this is wrong
     }
 
     return null;
@@ -488,24 +497,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   async process(event: Event) {
     const { type, data } = event;
 
-    const workflowData = data as {
-      activeSteps: number[][];
-      workflowId: string;
-      runId: string;
-      executionPath: number[];
-      stepResults: Record<string, StepResult<any, any, any, any>>;
-      resume: boolean;
-      prevResult: StepResult<any, any, any, any>;
-      resumeData: any;
-      parentWorkflow?: {
-        workflowId: string;
-        runId: string;
-        executionPath: number[];
-        resume: boolean;
-        stepResults: Record<string, StepResult<any, any, any, any>>;
-        input: any;
-      };
-    };
+    const workflowData = data as Omit<ProcessorArgs, 'workflow'>;
 
     // workflowData.stepResults = await this.loadData({
     //   workflowId: workflowData.workflowId,

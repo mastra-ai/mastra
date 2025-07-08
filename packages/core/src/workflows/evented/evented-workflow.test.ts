@@ -5476,7 +5476,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should be able to use an agent in parallel', async () => {
+    it('should be able to use an agent in parallel', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const finalStep = createStep({
         id: 'finalStep',
@@ -6183,6 +6183,13 @@ describe('Workflow', () => {
           }),
         )
         .commit();
+
+      new Mastra({
+        workflows: {
+          'counter-workflow': counterWorkflow,
+        },
+        storage: testStorage,
+      });
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
@@ -7001,6 +7008,13 @@ describe('Workflow', () => {
           )
           .commit();
 
+        new Mastra({
+          workflows: {
+            'counter-workflow': counterWorkflow,
+          },
+          storage: testStorage,
+        });
+
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
         const results = result.steps;
@@ -7030,7 +7044,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should be able to suspend nested workflow step in a nested workflow step', async () => {
+    it.only('should be able to suspend nested workflow step in a nested workflow step', async () => {
       const start = vi.fn().mockImplementation(async ({ inputData }) => {
         // Get the current value (either from trigger or previous increment)
         const currentValue = inputData.startValue || 0;
@@ -7156,7 +7170,7 @@ describe('Workflow', () => {
       new Mastra({
         logger: false,
         storage: testStorage,
-        workflows: { counterWorkflow },
+        workflows: { 'counter-workflow': counterWorkflow },
       });
 
       const run = counterWorkflow.createRun();
