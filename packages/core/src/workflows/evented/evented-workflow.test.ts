@@ -3262,7 +3262,7 @@ describe('Workflow', () => {
   });
 
   describe('if-else branching', () => {
-    it('should run the if-then branch', async () => {
+    it.only('should run the if-then branch', async () => {
       const start = vi.fn().mockImplementation(async ({ inputData }) => {
         // Get the current value (either from trigger or previous increment)
 
@@ -7417,7 +7417,7 @@ describe('Workflow', () => {
   });
 
   describe('Run count', () => {
-    it.only('runCount property should increment the run count when a step is executed multiple times', async () => {
+    it('runCount property should increment the run count when a step is executed multiple times', async () => {
       const repeatingStep = createStep({
         id: 'repeatingStep',
         inputSchema: z.object({}),

@@ -487,7 +487,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       parentStep = parentStep.steps[executionPath[1]!];
     }
 
-    if (parentStep?.type === 'step') {
+    if (parentStep?.type === 'step' || parentStep?.type === 'loop') {
       return parentStep.step as Workflow; // TODO: this is wrong
     }
 
