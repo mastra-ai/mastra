@@ -1,5 +1,17 @@
 # @mastra/rag
 
+## 1.0.2-alpha.0
+
+### Patch Changes
+
+- 43da563: Refactor relevance provider
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [cb16baf]
+  - @mastra/core@0.10.11-alpha.3
+
 ## 1.0.1
 
 ### Patch Changes

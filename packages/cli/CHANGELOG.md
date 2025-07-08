@@ -1,5 +1,21 @@
 # mastra
 
+## 0.10.11-alpha.3
+
+### Patch Changes
+
+- f457d86: reset localstorage when resetting model settings
+- 8722d53: Fix multi modal remaining steps
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [c0ba5e2]
+- Updated dependencies [cb16baf]
+  - @mastra/core@0.10.11-alpha.3
+  - @mastra/mcp@0.10.6-alpha.1
+  - @mastra/deployer@0.10.11-alpha.3
+
 ## 0.10.11-alpha.2
 
 ### Patch Changes
