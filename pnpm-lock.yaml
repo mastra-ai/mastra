@@ -500,7 +500,7 @@ importers:
         version: 7.52.8(@types/node@20.19.2)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@3.29.5)
+        version: 3.0.3(rollup@4.44.1)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -564,7 +564,7 @@ importers:
         version: 7.52.8(@types/node@20.19.2)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@4.44.1)
+        version: 3.0.3(rollup@3.29.5)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -1289,13 +1289,16 @@ importers:
       xstate:
         specifier: ^5.19.4
         version: 5.20.0
+      zeroentropy:
+        specifier: 0.1.0-alpha.6
+        version: 0.1.0-alpha.6(encoding@0.1.13)
       zod-to-json-schema:
         specifier: ^3.24.5
         version: 3.24.6(zod@3.25.67)
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.22
-        version: 1.3.22(zod@3.25.67)
+        version: 1.3.23(zod@3.25.67)
       '@babel/core':
         specifier: ^7.27.7
         version: 7.27.7
@@ -1583,7 +1586,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.22(zod@3.25.67)
+        version: 1.3.23(zod@3.25.67)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1709,7 +1712,7 @@ importers:
         version: 1.2.12(zod@3.25.67)
       '@ai-sdk/openai':
         specifier: ^1.3.22
-        version: 1.3.22(zod@3.25.67)
+        version: 1.3.23(zod@3.25.67)
       '@hono/node-server':
         specifier: ^1.14.4
         version: 1.14.4(hono@4.8.3)
@@ -1891,7 +1894,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.22
-        version: 1.3.22(zod@3.25.67)
+        version: 1.3.23(zod@3.25.67)
       '@ai-sdk/react':
         specifier: ^1.2.12
         version: 1.2.12(react@19.1.0)(zod@3.25.67)
@@ -1965,7 +1968,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.22
-        version: 1.3.22(zod@3.25.67)
+        version: 1.3.23(zod@3.25.67)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -2004,7 +2007,7 @@ importers:
         version: 1.2.21(zod@3.25.67)
       '@ai-sdk/openai':
         specifier: ^1.3.0
-        version: 1.3.22(zod@3.25.67)
+        version: 1.3.23(zod@3.25.67)
       '@ai-sdk/react':
         specifier: ^1.2.1
         version: 1.2.12(react@19.1.0)(zod@3.25.67)
@@ -2328,7 +2331,7 @@ importers:
         version: 1.2.10(zod@3.25.67)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.22(zod@3.25.67)
+        version: 1.3.23(zod@3.25.67)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -2407,7 +2410,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.22
-        version: 1.3.22(zod@3.25.67)
+        version: 1.3.23(zod@3.25.67)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3515,7 +3518,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.22
-        version: 1.3.22(zod@3.25.67)
+        version: 1.3.23(zod@3.25.67)
       '@hono/node-server':
         specifier: ^1.14.4
         version: 1.14.4(hono@4.8.3)
@@ -3612,8 +3615,8 @@ packages:
     peerDependencies:
       zod: ^3.0.0
 
-  '@ai-sdk/openai@1.3.22':
-    resolution: {integrity: sha512-QwA+2EkG0QyjVR+7h6FE7iOu2ivNqAVMm9UJZkVxxTk5OIq5fFJDTEI/zICEMuHImTTXR2JjsL6EirJ28Jc4cw==}
+  '@ai-sdk/openai@1.3.23':
+    resolution: {integrity: sha512-86U7rFp8yacUAOE/Jz8WbGcwMCqWvjK33wk5DXkfnAOEn3mx2r7tNSJdjukQFZbAK97VMXGPPHxF+aEARDXRXQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -17759,6 +17762,9 @@ packages:
     engines: {node: '>=8.0.0'}
     hasBin: true
 
+  zeroentropy@0.1.0-alpha.6:
+    resolution: {integrity: sha512-8roJUFph+VgQ13ABYm5XmtlHvabMD5r1TA9tOKQA7MVc2h0y2JymtmoWJl4qaaHQtpFkqzJu4pNY7rLksMOWBg==}
+
   zimmerframe@1.1.2:
     resolution: {integrity: sha512-rAbqEGa8ovJy4pyBxZM70hg4pE6gDgaQ0Sl9M3enG3I0d6H4XSAM3GeNGLKnsBpuijUow064sf7ww1nutC5/3w==}
 
@@ -17900,7 +17906,7 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.67)
       zod: 3.25.67
 
-  '@ai-sdk/openai@1.3.22(zod@3.25.67)':
+  '@ai-sdk/openai@1.3.23(zod@3.25.67)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.67)
@@ -29983,7 +29989,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.10.0)
+      retry-axios: 2.6.0(axios@1.10.0(debug@4.4.1))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -33330,7 +33336,7 @@ snapshots:
       onetime: 7.0.0
       signal-exit: 4.1.0
 
-  retry-axios@2.6.0(axios@1.10.0):
+  retry-axios@2.6.0(axios@1.10.0(debug@4.4.1)):
     dependencies:
       axios: 1.10.0(debug@4.4.1)
 
@@ -35382,6 +35388,18 @@ snapshots:
       validator: 13.15.15
     optionalDependencies:
       commander: 9.5.0
+
+  zeroentropy@0.1.0-alpha.6(encoding@0.1.13):
+    dependencies:
+      '@types/node': 20.19.2
+      '@types/node-fetch': 2.6.12
+      abort-controller: 3.0.0
+      agentkeepalive: 4.6.0
+      form-data-encoder: 1.7.2
+      formdata-node: 4.4.1
+      node-fetch: 2.7.0(encoding@0.1.13)
+    transitivePeerDependencies:
+      - encoding
 
   zimmerframe@1.1.2: {}
 
