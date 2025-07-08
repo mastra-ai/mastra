@@ -1910,7 +1910,7 @@ describe('Workflow', () => {
     });
 
     describe('Simple Conditions', () => {
-      it.only('should follow conditional chains', async () => {
+      it('should follow conditional chains', async () => {
         const step1Action = vi.fn().mockImplementation(() => {
           return Promise.resolve({ status: 'success' });
         });
@@ -2094,7 +2094,7 @@ describe('Workflow', () => {
           ])
           .map({
             result: {
-              step: step3,
+              step: step2,
               path: 'result',
             },
           })
@@ -2107,6 +2107,11 @@ describe('Workflow', () => {
             ],
           ])
           .commit();
+
+        new Mastra({
+          workflows: { 'test-workflow': workflow },
+          storage: testStorage,
+        });
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { status: 'success' } });
@@ -2172,6 +2177,11 @@ describe('Workflow', () => {
           ])
           .commit();
 
+        new Mastra({
+          workflows: { 'test-workflow': workflow },
+          storage: testStorage,
+        });
+
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { count: 5 } });
 
@@ -2195,7 +2205,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should execute a a sleep step', async () => {
+    it.only('should execute a a sleep step', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
