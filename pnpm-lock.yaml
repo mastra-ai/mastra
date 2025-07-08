@@ -500,7 +500,7 @@ importers:
         version: 7.52.8(@types/node@20.19.2)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@3.29.5)
+        version: 3.0.3(rollup@4.44.2)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -564,7 +564,7 @@ importers:
         version: 7.52.8(@types/node@20.19.2)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@4.44.2)
+        version: 3.0.3(rollup@3.29.5)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -2310,6 +2310,9 @@ importers:
       big.js:
         specifier: ^7.0.1
         version: 7.0.1
+      cohere-ai:
+        specifier: ^7.17.1
+        version: 7.17.1(encoding@0.1.13)
       js-tiktoken:
         specifier: ^1.0.20
         version: 1.0.20
@@ -2319,6 +2322,9 @@ importers:
       pathe:
         specifier: ^2.0.3
         version: 2.0.3
+      zeroentropy:
+        specifier: 0.1.0-alpha.6
+        version: 0.1.0-alpha.6(encoding@0.1.13)
       zod:
         specifier: ^3.25.67
         version: 3.25.67
@@ -17611,6 +17617,9 @@ packages:
     engines: {node: '>=8.0.0'}
     hasBin: true
 
+  zeroentropy@0.1.0-alpha.6:
+    resolution: {integrity: sha512-8roJUFph+VgQ13ABYm5XmtlHvabMD5r1TA9tOKQA7MVc2h0y2JymtmoWJl4qaaHQtpFkqzJu4pNY7rLksMOWBg==}
+
   zod-from-json-schema@0.0.5:
     resolution: {integrity: sha512-zYEoo86M1qpA1Pq6329oSyHLS785z/mTwfr9V1Xf/ZLhuuBGaMlDGu/pDVGVUe4H4oa1EFgWZT53DP0U3oT9CQ==}
 
@@ -29696,7 +29705,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.10.0(debug@4.4.1))
+      retry-axios: 2.6.0(axios@1.10.0)
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -33037,7 +33046,7 @@ snapshots:
       onetime: 7.0.0
       signal-exit: 4.1.0
 
-  retry-axios@2.6.0(axios@1.10.0(debug@4.4.1)):
+  retry-axios@2.6.0(axios@1.10.0):
     dependencies:
       axios: 1.10.0(debug@4.4.1)
 
@@ -35051,6 +35060,18 @@ snapshots:
       validator: 13.15.15
     optionalDependencies:
       commander: 9.5.0
+
+  zeroentropy@0.1.0-alpha.6(encoding@0.1.13):
+    dependencies:
+      '@types/node': 20.19.2
+      '@types/node-fetch': 2.6.12
+      abort-controller: 3.0.0
+      agentkeepalive: 4.6.0
+      form-data-encoder: 1.7.2
+      formdata-node: 4.4.1
+      node-fetch: 2.7.0(encoding@0.1.13)
+    transitivePeerDependencies:
+      - encoding
 
   zod-from-json-schema@0.0.5:
     dependencies:
