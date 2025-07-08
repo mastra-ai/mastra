@@ -3513,7 +3513,7 @@ importers:
         specifier: ^1.9.0
         version: 1.9.0
       inngest:
-        specifier: ^3.39.2
+        specifier: ^3.40.0
         version: 3.40.0(encoding@0.1.13)(express@5.1.0)(hono@4.8.4)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
       zod:
         specifier: ^3.25.67
