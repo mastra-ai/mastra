@@ -2677,7 +2677,7 @@ importers:
   stores/dynamodb:
     dependencies:
       '@aws-sdk/client-dynamodb':
-        specifier: ^3.839.0
+        specifier: ^3.840.0
         version: 3.840.0
       '@aws-sdk/lib-dynamodb':
         specifier: ^3.840.0
