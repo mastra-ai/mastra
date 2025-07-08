@@ -11,14 +11,14 @@ const meta = {
   },
   "networks-vnext": { title: "Networks (vNext)" },
   rag: { title: "RAG" },
-  "local-dev": { title: "Local Dev" },
+  "server-db": {
+    title: "Server & DB",
+  },
   deployment: { title: "Deployment" },
   "mastra-cloud": { title: "Mastra Cloud" },
   observability: { title: "Observability" },
   evals: { title: "Evals" },
   frameworks: { title: "Frameworks" },
-  "client-js": { title: "Client SDK" },
-  storage: { title: "Storage" },
   voice: { title: "Voice" },
   community: "Community",
 };
