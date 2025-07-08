@@ -4,7 +4,7 @@
   "description": "Mem0 is a memory-based AI platform that allows you to store, search your memories based on the user's query.",
   "type": "module",
   "keywords": [],
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "author": "https://mem0.ai",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",

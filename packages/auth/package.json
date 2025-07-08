@@ -28,7 +28,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "jsonwebtoken": "^9.0.2",
     "jwks-rsa": "^3.2.0"

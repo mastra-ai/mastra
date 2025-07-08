@@ -12,9 +12,9 @@ When you build a workflow, you typically break down operations into smaller task
 - If the schemas match, the `outputSchema` from each step is automatically passed to the `inputSchema` of the next step.
 - If the schemas don't match, use [Input data mapping](./input-data-mapping.mdx) to transform the `outputSchema` into the expected `inputSchema`.
 
-## Sequential
+## Chaining steps with `.then()`
 
-Chain steps to execute in sequence using `.then()`:
+Chain steps to execute sequentially using `.then()`:
 
 ```typescript {8-9,4-5} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -29,7 +29,9 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-## Parallel
+This does what you'd expect: it executes `step1`, then it executes `step2`.
+
+## Parallel steps with `.parallel()`:
 
 Execute steps in parallel using `.parallel()`:
 
@@ -39,21 +41,21 @@ import { z } from "zod";
 
 const step1 = createStep({...});
 const step2 = createStep({...});
+const step3 = createStep({...});
 
 export const testWorkflow = createWorkflow({...})
   .parallel([step1, step2])
+  .then(step3)
   .commit();
 ```
 
-This executes all steps in the array concurrently, then continues to the next step after all parallel steps complete.
+This executes `step1` and `step2` concurrently, then continues to `step3` after both complete.
 
 > See [Parallel Execution with Steps](/examples/workflows/parallel-steps) for more information.
 
-## Branch
+## Conditional branching (`.branch()`)
 
 Create conditional branches using `.branch()`:
-
-**!Workflows branch /image/workflows/workflows-branch.jpg**
 
 ```typescript {8-11,4-5} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -64,8 +66,8 @@ const greaterThanStep = createStep({...});
 
 export const testWorkflow = createWorkflow({...})
   .branch([
-    [async ({ inputData: { some_value } }) => some_value <= 9, lessThanStep],
-    [async ({ inputData: { some_value } }) => some_value >= 10, greaterThanStep]
+    [async ({ inputData: { value } }) => (value < 9), lessThanStep],
+    [async ({ inputData: { value } }) => (value >= 9), greaterThanStep]
   ])
   .commit();
 ```
@@ -74,11 +76,11 @@ Branch conditions are evaluated sequentially, but steps with matching conditions
 
 > See [Workflow with Conditional Branching](/examples/workflows/conditional-branching) for more information.
 
-## Loops
+## Looping commands
 
 Workflows support two types of loops. When looping a step, or any step-compatible construct like a nested workflow, the initial `inputData` is sourced from the output of the previous step.
 
-To ensure compatibility, the loop’s initial input must either:
+To ensure compatibility, the loop’s initial input must either match the shape of the previous step’s output, or be explicitly transformed using the `map` function.
 
 - Match the shape of the previous step’s output, or
 - Be explicitly transformed using the `map` function.
