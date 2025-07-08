@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import type { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
-import { rerank, rerankWithProvider } from '../rerank';
+import { rerank, rerankWithScorer } from '../rerank';
 import type { RerankConfig, RerankResult } from '../rerank';
 import { vectorQuerySearch, defaultVectorQueryDescription, filterSchema, outputSchema, baseSchema } from '../utils';
 import type { RagTool } from '../utils';
@@ -102,10 +102,10 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
           let rerankedResults: RerankResult[] = [];
 
           if ('getRelevanceScore' in reranker.model) {
-            rerankedResults = await rerankWithProvider({
+            rerankedResults = await rerankWithScorer({
               results,
               query: queryText,
-              provider: reranker.model,
+              scorer: reranker.model,
               options: {
                 ...reranker.options,
                 topK: reranker.options?.topK || topKValue,

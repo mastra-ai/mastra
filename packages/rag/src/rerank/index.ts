@@ -86,12 +86,12 @@ function adjustScores(score: number, queryAnalysis: { magnitude: number; dominan
 async function executeRerank({
   results,
   query,
-  provider,
+  scorer,
   options,
 }: {
   results: QueryResult[];
   query: string;
-  provider: RelevanceScoreProvider;
+  scorer: RelevanceScoreProvider;
   options: RerankerFunctionOptions;
 }) {
   const { queryEmbedding, topK = 3 } = options;
@@ -116,7 +116,7 @@ async function executeRerank({
       // Get semantic score from chosen provider
       let semanticScore = 0;
       if (result?.metadata?.text) {
-        semanticScore = await provider.getRelevanceScore(query, result?.metadata?.text);
+        semanticScore = await scorer.getRelevanceScore(query, result?.metadata?.text);
       }
 
       // Get existing vector score from result
@@ -155,24 +155,25 @@ async function executeRerank({
   return scoredResults.sort((a, b) => b.score - a.score).slice(0, topK);
 }
 
-export async function rerankWithProvider({
+export async function rerankWithScorer({
   results,
   query,
-  provider,
+  scorer,
   options,
 }: {
   results: QueryResult[];
   query: string;
-  provider: RelevanceScoreProvider;
+  scorer: RelevanceScoreProvider;
   options: RerankerFunctionOptions;
 }): Promise<RerankResult[]> {
   return executeRerank({
     results,
     query,
-    provider,
+    scorer,
     options,
   });
 }
+
 // Takes in a list of results from a vector store and reranks them based on semantic, vector, and position scores
 export async function rerank(
   results: QueryResult[],
@@ -191,7 +192,7 @@ export async function rerank(
   return executeRerank({
     results,
     query,
-    provider: semanticProvider,
+    scorer: semanticProvider,
     options,
   });
 }
