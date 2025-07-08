@@ -34,6 +34,7 @@ export interface ClientOptions {
   /** Custom headers to include with requests */
   headers?: Record<string, string>;
   /** Abort signal for request */
+  abortSignal?: AbortSignal;
 }
 
 export interface RequestOptions {
@@ -41,7 +42,6 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   body?: any;
   stream?: boolean;
-  signal?: AbortSignal;
 }
 
 type WithoutMethods<T> = {
@@ -71,7 +71,9 @@ export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undef
   experimental_output?: T;
   runtimeContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
-} & WithoutMethods<Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools'>>;
+} & WithoutMethods<
+  Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
+>;
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
@@ -79,7 +81,9 @@ export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefin
   experimental_output?: T;
   runtimeContext?: RuntimeContext | Record<string, any>;
   clientTools?: ToolsInput;
-} & WithoutMethods<Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools'>>;
+} & WithoutMethods<
+  Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
+>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];

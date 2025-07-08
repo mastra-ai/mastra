@@ -5,56 +5,93 @@ description: "Pausing execution in Mastra workflows allows you to pause executio
 
 # Sleep & Events
 
-Pausing execution in Mastra workflows allows you to pause execution while waiting for external input or resources via `sleep()`, `sleepUntil()` and `waitForEvent()`.
+Mastra lets you pause workflow execution when waiting for external input or timing conditions. This can be useful for things like polling, delayed retries, or waiting on user actions.
 
-This sets the workflow status to `waiting`.
+You can pause execution using:
 
-## sleep()
+- `sleep()`: Pause for a set number of milliseconds
+- `sleepUntil()`: Pause until a specific timestamp
+- `waitForEvent()`: Pause until an external event is received
+- `sendEvent()`: Send an event to resume a waiting workflow
 
-`sleep()` pauses execution for a specified number of milliseconds.
+When using any of these methods, the workflow status is set to `waiting` until execution resumes.
 
-```typescript
-workflow
-    .then(step1)
-    .sleep(1000)
-    .then(step2)
-    .commit();
+## sleep
+
+The `sleep()` method pauses execution between steps for a specified number of milliseconds.
+
+```typescript {9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .sleep(1000)
+  .then(step2)
+  .commit();
 ```
 
-## sleepUntil()
+## sleepUntil
 
-`sleepUntil()` pauses execution until a specified date.
+The `sleepUntil()` method pauses execution between steps until a specified date.
 
-```typescript
-workflow
-    .then(step1)
-    .sleepUntil(new Date(Date.now() + 1000))
-    .then(step2)
-    .commit();
+```typescript {9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .sleepUntil(new Date(Date.now() + 5000))
+  .then(step2)
+  .commit();
 ```
 
-## waitForEvent()
+> `Date.now()` is evaluated when the workflow starts, not at the moment the `sleepUntil()` method is called.
 
-`waitForEvent()` pauses execution until an event is received. Events can be sent to the workflow using `run.sendEvent()`. The event name and the step to resume after the event is received are provided as arguments to `waitForEvent()`.
+## waitForEvent
 
-`.sendEvent()` takes as arguments the event name and the event data. The event data is optional and can be any JSON-serializable value.
+The `waitForEvent()` method pauses execution until a specific event is received. Use `run.sendEvent()` to send the event. You must provide both the event name and the step to resume.
 
-```typescript
-workflow
-    .then(step1)
-    .waitForEvent('my-event-name', step2)
-    .then(step3)
-    .commit();
+```typescript {10} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
-const run = await workflow.createRunAsync()
-run.start({})
+const step1 = createStep({...});
+const step2 = createStep({...});
+const step3 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .waitForEvent("my-event-name", step2)
+  .then(step3)
+  .commit();
+```
+## sendEvent
+
+The `.sendEvent()` method sends an event to the workflow. It accepts the event name and optional event data, which can be any JSON-serializable value.
+
+```typescript {5,12,15} filename="src/test-workflow.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+
+const result = run.start({
+  inputData: {
+    value: "hello"
+  }
+});
 
 setTimeout(() => {
-    run.sendEvent('my-event-name', {
-        data1: 'hello',
-        data2: {
-            anyData: 12
-        }
-    })
-}, 2e3)
+  run.sendEvent("my-event-name", { value: "from event" });
+}, 3000);
+
+console.log(JSON.stringify(await result, null, 2));
 ```
+
+> In this example, avoid using `await run.start()` directly, it would block sending the event before the workflow reaches its waiting state.

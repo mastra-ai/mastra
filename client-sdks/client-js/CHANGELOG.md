@@ -1,5 +1,33 @@
 # @mastra/client-js
 
+## 0.10.10-alpha.2
+
+### Patch Changes
+
+- 18da791: Add abortSignal to client SDK options
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [565cc0c]
+  - @mastra/core@0.10.11-alpha.2
+
+## 0.10.10-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11-alpha.1
+
+## 0.10.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/core@0.10.11-alpha.0
+
 ## 0.10.9
 
 ### Patch Changes

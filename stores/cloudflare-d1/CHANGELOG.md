@@ -1,5 +1,15 @@
 # @mastra/cloudflare-d1
 
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- c460c00: Allow D1Store to be configured using an inline client implementation
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [565cc0c]
+  - @mastra/core@0.10.11-alpha.2
+
 ## 0.12.0
 
 ### Minor Changes

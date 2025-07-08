@@ -1,5 +1,47 @@
 # @mastra/playground-ui
 
+## 5.1.11-alpha.2
+
+### Patch Changes
+
+- 7fb0909: dependencies updates:
+  - Updated dependency [`@dagrejs/dagre@^1.1.5` ↗︎](https://www.npmjs.com/package/@dagrejs/dagre/v/1.1.5) (from `^1.1.4`, in `dependencies`)
+- 05ba777: dependencies updates:
+  - Updated dependency [`@xyflow/react@^12.8.1` ↗︎](https://www.npmjs.com/package/@xyflow/react/v/12.8.1) (from `^12.6.4`, in `dependencies`)
+- 7ccbf43: dependencies updates:
+  - Updated dependency [`motion@^12.23.0` ↗︎](https://www.npmjs.com/package/motion/v/12.23.0) (from `^12.16.0`, in `dependencies`)
+- 4b4b339: dependencies updates:
+  - Updated dependency [`@uiw/react-codemirror@^4.23.14` ↗︎](https://www.npmjs.com/package/@uiw/react-codemirror/v/4.23.14) (from `^4.23.13`, in `dependencies`)
+- 4219597: add JSON input close to form input
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [565cc0c]
+- Updated dependencies [18da791]
+  - @mastra/core@0.10.11-alpha.2
+  - @mastra/client-js@0.10.10-alpha.2
+
+## 5.1.11-alpha.1
+
+### Patch Changes
+
+- a7a836a: Highlight send event button
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11-alpha.1
+  - @mastra/client-js@0.10.10-alpha.1
+
+## 5.1.11-alpha.0
+
+### Patch Changes
+
+- b790fd1: Use SerializedStepFlowEntry in playground
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/core@0.10.11-alpha.0
+  - @mastra/client-js@0.10.10-alpha.0
+
 ## 5.1.10
 
 ### Patch Changes

@@ -1,5 +1,29 @@
 # @mastra/memory
 
+## 0.11.2-alpha.1
+
+### Patch Changes
+
+- bc2bbdc: dependencies updates:
+  - Updated dependency [`pg-pool@^3.10.1` ↗︎](https://www.npmjs.com/package/pg-pool/v/3.10.1) (from `^3.10.0`, in `dependencies`)
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [565cc0c]
+  - @mastra/core@0.10.11-alpha.2
+
+## 0.11.2-alpha.0
+
+### Patch Changes
+
+- fb2a1b9: dependencies updates:
+  - Updated dependency [`pg@^8.16.3` ↗︎](https://www.npmjs.com/package/pg/v/8.16.3) (from `^8.16.0`, in `dependencies`)
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/core@0.10.11-alpha.0
+
 ## 0.11.1
 
 ### Patch Changes

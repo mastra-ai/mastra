@@ -31,8 +31,8 @@ importers:
         version: link:../../stores/upstash
     devDependencies:
       dotenv:
-        specifier: ^16.4.7
-        version: 16.5.0
+        specifier: ^17.0.0
+        version: 17.0.1
       tsx:
         specifier: ^4.19.3
         version: 4.19.3
@@ -205,8 +205,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  dotenv@16.5.0:
-    resolution: {integrity: sha512-m/C+AwOAr9/W1UOIZUo232ejMNnJAJtYQjUbHoNTBNTJSvqzzDh7vnrei3o3r3m9blf6ZoDkvcw0VmozNRFJxg==}
+  dotenv@17.0.1:
+    resolution: {integrity: sha512-GLjkduuAL7IMJg/ZnOPm9AnWKJ82mSE2tzXLaJ/6hD6DhwGfZaXG77oB8qbReyiczNxnbxQKyh0OE5mXq0bAHA==}
     engines: {node: '>=12'}
 
   esbuild@0.25.3:
@@ -338,7 +338,7 @@ snapshots:
   '@esbuild/win32-x64@0.25.3':
     optional: true
 
-  dotenv@16.5.0: {}
+  dotenv@17.0.1: {}
 
   esbuild@0.25.3:
     optionalDependencies:
