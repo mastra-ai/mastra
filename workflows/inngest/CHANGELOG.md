@@ -1,5 +1,12 @@
 # @mastra/inngest
 
+## 0.11.3-alpha.3
+
+### Patch Changes
+
+- c1cceea: Bump peerdeps of @matra/core
+  - @mastra/core@0.10.11-alpha.4
+
 ## 0.11.3-alpha.2
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @mastra/playground-ui
 
+## 5.1.11-alpha.4
+
+### Patch Changes
+
+- c1cceea: Bump peerdeps of @matra/core
+  - @mastra/core@0.10.11-alpha.4
+  - @mastra/client-js@0.10.10-alpha.4
+
 ## 5.1.11-alpha.3
 
 ### Patch Changes
