@@ -4,36 +4,52 @@ import { Button } from '@/ds/components/Button';
 import { Dialog } from '@/components/ui/dialog';
 import { CodeDialogContent } from './workflow-code-dialog-content';
 import { useState } from 'react';
+import { WorkflowRunEventForm, WorkflowSendEventFormProps } from './workflow-run-event-form';
 
 export interface WorkflowStepActionBarProps {
   input?: any;
   output?: any;
+  resumeData?: any;
   error?: any;
   stepName: string;
   mapConfig?: string;
+  event?: string;
   onShowTrace?: () => void;
+  onShowNestedGraph?: () => void;
+  onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
+  runId?: string;
 }
 
 export const WorkflowStepActionBar = ({
   input,
   output,
+  resumeData,
   error,
   mapConfig,
   stepName,
+  event,
   onShowTrace,
+  onShowNestedGraph,
+  onSendEvent,
+  runId,
 }: WorkflowStepActionBarProps) => {
   const [isInputOpen, setIsInputOpen] = useState(false);
   const [isOutputOpen, setIsOutputOpen] = useState(false);
+  const [isResumeDataOpen, setIsResumeDataOpen] = useState(false);
   const [isErrorOpen, setIsErrorOpen] = useState(false);
   const [isMapConfigOpen, setIsMapConfigOpen] = useState(false);
+  const [isEventFormOpen, setIsEventFormOpen] = useState(false);
 
   const dialogContentClass = 'bg-surface2 rounded-lg border-sm border-border1 max-w-4xl w-full px-0';
   const dialogTitleClass = 'border-b-sm border-border1 pb-4 px-6';
 
+  const showEventForm = event && onSendEvent && runId;
+
   return (
     <>
-      {(input || output || error || mapConfig) && (
+      {(input || output || error || mapConfig || resumeData || onShowNestedGraph || showEventForm) && (
         <div className="flex flex-wrap items-center bg-surface4 border-t-sm border-border1 px-2 py-1 gap-2 rounded-b-lg">
+          {onShowNestedGraph && <Button onClick={onShowNestedGraph}>View nested graph</Button>}
           {mapConfig && (
             <>
               <Button onClick={() => setIsMapConfigOpen(true)}>Map config</Button>
@@ -59,6 +75,22 @@ export const WorkflowStepActionBar = ({
 
                   <div className="px-4 overflow-hidden">
                     <CodeDialogContent data={input} />
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
+
+          {resumeData && (
+            <>
+              <Button onClick={() => setIsResumeDataOpen(true)}>Resume data</Button>
+
+              <Dialog open={isResumeDataOpen} onOpenChange={setIsResumeDataOpen}>
+                <DialogContent className={dialogContentClass}>
+                  <DialogTitle className={dialogTitleClass}>{stepName} resume data</DialogTitle>
+
+                  <div className="px-4 overflow-hidden">
+                    <CodeDialogContent data={resumeData} />
                   </div>
                 </DialogContent>
               </Dialog>
@@ -97,6 +129,24 @@ export const WorkflowStepActionBar = ({
           )}
 
           {onShowTrace && <Button onClick={onShowTrace}>Show trace</Button>}
+
+          {showEventForm && (
+            <>
+              <Button className="ring-1 ring-accent5 !text-accent5" onClick={() => setIsEventFormOpen(true)}>
+                Send event
+              </Button>
+
+              <Dialog open={isEventFormOpen} onOpenChange={setIsEventFormOpen}>
+                <DialogContent className={dialogContentClass}>
+                  <DialogTitle className={dialogTitleClass}>Send {event} event</DialogTitle>
+
+                  <div className="px-4 overflow-hidden">
+                    <WorkflowRunEventForm event={event} runId={runId} onSendEvent={onSendEvent} />
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
         </div>
       )}
     </>

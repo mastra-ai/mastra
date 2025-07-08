@@ -17,6 +17,11 @@ const memory = new Memory({
   storage: new LibSQLStore({
     url: "file:../mastra.db", // Or your database URL
   }),
+  options: {
+    threads: {
+      generateTitle: true, // Enable automatic title generation
+    },
+  },
 });
 
 const memoryAgent = new Agent({

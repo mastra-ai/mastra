@@ -311,6 +311,11 @@ header nav:nth-child(2) {
   }
 }
 
+/* Hack for Tabs / Nextra auto-inserted h3s */
+div[role="tabpanel"] > h3:first-child {
+  display: none;
+}
+
 /*****Main Content******/
 
 aside {
@@ -409,10 +414,6 @@ pre code.nextra-code:not([class*="twoslash-"]) > span[data-highlighted-line] {
   &:is(html[class~="dark"] *) {
     background-color: var(--color-surface-5);
   }
-}
-
-div[role="tabpanel"] h3 {
-  display: none;
 }
 
 .nextra-code {

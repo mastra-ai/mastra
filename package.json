@@ -3,7 +3,7 @@
   "version": "0.1.11",
   "type": "module",
   "devDependencies": {
-    "@changesets/cli": "^2.29.4",
+    "@changesets/cli": "^2.29.5",
     "@types/node": "^20.19.0",
     "husky": "^9.1.7",
     "lint-staged": "^15.5.2",
@@ -11,7 +11,7 @@
     "prettier": "^3.5.3",
     "turbo": "^2.5.4",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.3"
+    "vitest": "^3.2.4"
   },
   "scripts": {
     "ci:publish": "pnpm publish -r",
@@ -77,8 +77,8 @@
     "typescript": "^5.8.3",
     "@types/node": "^20.17.57"
   },
-  "license": "Elastic-2.0",
-  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.12.4",
   "dependencies": {
     "globby": "^14.1.0",
     "resolve-from": "^5.0.0"

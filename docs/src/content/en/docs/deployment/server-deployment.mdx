@@ -1,0 +1,56 @@
+---
+title: "Deploy A Mastra Server"
+description: "Deploy a Mastra server with middleware and other options"
+---
+
+# Deploy A Mastra Server
+
+Mastra builds to a standard Node.js server, so you can deploy it to any platform that supports Node.js applications.
+
+- Cloud VMs (AWS EC2, DigitalOcean Droplets, GCP Compute Engine)
+- Container platforms (Docker, Kubernetes)
+- Platform as a Service (Heroku, Railway)
+- Self-hosted servers
+
+See the [Cloud Providers](/docs/deployment/cloud-providers/) for more information.
+
+### Building
+
+Build the application:
+
+```bash copy
+# Build from current directory
+mastra build
+
+# Or specify a directory
+mastra build --dir ./my-project
+```
+
+The build process:
+
+1. Locates entry file (`src/mastra/index.ts` or `src/mastra/index.js`)
+2. Creates `.mastra` output directory
+3. Bundles code using Rollup with tree shaking and source maps
+4. Generates [Hono](https://hono.dev) HTTP server
+
+See [`mastra build`](/reference/cli/build) for all options.
+
+### Running the Server
+
+Start the HTTP server:
+
+```bash copy
+node .mastra/output/index.mjs
+```
+
+### Enable Telemetry for build output
+
+Load instrumentation for the build output like so:
+
+```bash copy
+node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs
+```
+
+## Serverless Deployment
+
+Mastra also supports serverless deployment on Cloudflare Workers, Vercel, and Netlify. See [Serverless Platforms](/docs/deployment/serverless-platforms/) for more information.

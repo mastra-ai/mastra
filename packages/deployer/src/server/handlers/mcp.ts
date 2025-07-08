@@ -155,11 +155,9 @@ export const getMcpRegistryServerDetailHandler = async (c: Context) => {
 
   // If a specific version was requested, check if it matches the server's actual version
   if (requestedVersion && serverDetailInfo.version_detail.version !== requestedVersion) {
-    c
-      .get('logger')
-      ?.info(
-        `MCP server with ID '${serverId}' found, but version '${serverDetailInfo.version_detail.version}' does not match requested version '${requestedVersion}'.`,
-      );
+    c.get('logger')?.info(
+      `MCP server with ID '${serverId}' found, but version '${serverDetailInfo.version_detail.version}' does not match requested version '${requestedVersion}'.`,
+    );
     return c.json(
       {
         error: `MCP server with ID '${serverId}' found, but not version '${requestedVersion}'. Available version is '${serverDetailInfo.version_detail.version}'.`,

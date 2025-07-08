@@ -456,7 +456,10 @@ Here's how to use re-ranking:
 
 ```ts showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
-import { rerank } from "@mastra/rag";
+import { 
+  rerankWithScorer as rerank, 
+  MastraAgentRelevanceScorer 
+} from "@mastra/rag";
 
 // Get initial results from vector search
 const initialResults = await pgVector.query({
@@ -465,19 +468,35 @@ const initialResults = await pgVector.query({
   topK: 10,
 });
 
+// Create a relevance scorer
+const relevanceProvider = new MastraAgentRelevanceScorer('relevance-scorer', openai("gpt-4o-mini"));
+
 // Re-rank the results
-const rerankedResults = await rerank(
-  initialResults,
+const rerankedResults = await rerank({
+  results: initialResults,
   query,
-  openai("gpt-4o-mini"),
+  provider: relevanceProvider,
+  options: {
+    topK: 10,
+  },
 );
 ```
 
 > **Note:** For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
 
+You can also use other relevance score providers like Cohere or ZeroEntropy:
+
+```ts showLineNumbers copy
+const relevanceProvider = new CohereRelevanceScorer('rerank-v3.5');
+```
+
+```ts showLineNumbers copy
+const relevanceProvider = new ZeroEntropyRelevanceScorer('zerank-1');
+```
+
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 
-For more details about re-ranking, see the [rerank()](/reference/rag/rerank) method.
+For more details about re-ranking, see the [rerank()](/reference/rag/rerankWithScorer) method.
 
 For an example of how to use the re-ranking method, see the [Re-ranking Results](../../examples/rag/rerank/rerank.mdx) example.
 

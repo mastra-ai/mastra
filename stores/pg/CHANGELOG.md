@@ -1,5 +1,84 @@
 # @mastra/pg
 
+## 0.12.2
+
+### Patch Changes
+
+- fb2a1b9: dependencies updates:
+  - Updated dependency [`pg@^8.16.3` ↗︎](https://www.npmjs.com/package/pg/v/8.16.3) (from `^8.16.0`, in `dependencies`)
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [565cc0c]
+- Updated dependencies [b790fd1]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [cb16baf]
+- Updated dependencies [f36e4f1]
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11
+
+## 0.12.2-alpha.0
+
+### Patch Changes
+
+- fb2a1b9: dependencies updates:
+  - Updated dependency [`pg@^8.16.3` ↗︎](https://www.npmjs.com/package/pg/v/8.16.3) (from `^8.16.0`, in `dependencies`)
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/core@0.10.11-alpha.0
+
+## 0.12.1
+
+### Patch Changes
+
+- e0ad8e3: Exposes database connection objects as public fields in PostgresStore and PgVector classes to enable direct database operations and connection monitoring.
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9
+
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- e0ad8e3: Exposes database connection objects as public fields in PostgresStore and PgVector classes to enable direct database operations and connection monitoring.
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9-alpha.0
+
 ## 0.12.0
 
 ### Minor Changes
@@ -1577,7 +1656,6 @@
 ### Minor Changes
 
 - c87eb4e: Combine PostgreSQL packages into `@mastra/pg`.
-
   - Move and combine packages to `stores/pg`
   - Reorganize source files into `src/vector` and `src/store`
   - Add deprecation notices to old packages
@@ -1911,7 +1989,6 @@
 ### Minor Changes
 
 - c87eb4e: Combine PostgreSQL packages into `@mastra/pg`.
-
   - Move and combine packages to `stores/pg`
   - Reorganize source files into `src/vector` and `src/store`
   - Add deprecation notices to old packages

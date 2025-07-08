@@ -8,7 +8,7 @@ import {
   resetRole,
   createSampleMessageV2,
 } from '@internal/storage-test-utils';
-import type { MastraMessageV1, StorageThreadType } from '@mastra/core';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core';
 import { Mastra } from '@mastra/core/mastra';
 import { TABLE_EVALS, TABLE_TRACES, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
@@ -525,5 +525,63 @@ describe('LibSQLStore updateMessages', () => {
 
     const fromDb = await store.getMessages({ threadId: thread.id, format: 'v2' });
     expect(fromDb[0].role).toBe(originalMessage.role);
+  });
+});
+
+describe('LibSQLStore Double-nesting Prevention', () => {
+  let store: LibSQLStore;
+
+  beforeAll(async () => {
+    store = libsql;
+  });
+
+  beforeEach(async () => {
+    await store.clearTable({ tableName: TABLE_MESSAGES });
+    await store.clearTable({ tableName: TABLE_THREADS });
+  });
+
+  it('should handle stringified JSON content without double-nesting', async () => {
+    const threadData = createSampleThread();
+    const thread = await store.saveThread({ thread: threadData as StorageThreadType });
+
+    // Simulate user passing stringified JSON as message content (like the original bug report)
+    const stringifiedContent = JSON.stringify({ userInput: 'test data', metadata: { key: 'value' } });
+    const message: MastraMessageV2 = {
+      id: `msg-${randomUUID()}`,
+      role: 'user',
+      threadId: thread.id,
+      resourceId: thread.resourceId,
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: stringifiedContent }],
+        content: stringifiedContent, // This is the stringified JSON that user passed
+      },
+      createdAt: new Date(),
+    };
+
+    // Save the message - this should stringify the whole content object for storage
+    await store.saveMessages({ messages: [message], format: 'v2' });
+
+    // Retrieve the message - this is where double-nesting could occur
+    const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
+    expect(retrievedMessages).toHaveLength(1);
+
+    const retrievedMessage = retrievedMessages[0] as MastraMessageV2;
+
+    // Check that content is properly structured as a V2 message
+    expect(typeof retrievedMessage.content).toBe('object');
+    expect(retrievedMessage.content.format).toBe(2);
+
+    // CRITICAL: The content.content should still be the original stringified JSON
+    // NOT double-nested like: { content: '{"format":2,"parts":[...],"content":"{\\"userInput\\":\\"test data\\"}"}' }
+    expect(retrievedMessage.content.content).toBe(stringifiedContent);
+
+    // Verify the content can be parsed as the original JSON
+    const parsedContent = JSON.parse(retrievedMessage.content.content as string);
+    expect(parsedContent).toEqual({ userInput: 'test data', metadata: { key: 'value' } });
+
+    // Additional check: ensure the message doesn't have the "Found unhandled message" structure
+    expect(retrievedMessage.content.parts).toBeDefined();
+    expect(Array.isArray(retrievedMessage.content.parts)).toBe(true);
   });
 });

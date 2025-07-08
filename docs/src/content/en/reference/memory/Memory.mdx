@@ -56,6 +56,16 @@ const memory = new Memory({
 - Last Name:
 `,
     },
+
+    // Thread configuration
+    threads: {
+      generateTitle: true, // Enable title generation using agent's model
+      // Or use a different model for title generation
+      // generateTitle: {
+      //   model: openai("gpt-4.1-nano"), // Use cheaper model for titles
+      //   instructions: "Generate a concise title based on the initial user message.", // Custom instructions for title
+      // },
+    },
   },
 });
 
@@ -84,6 +94,71 @@ const memory = new Memory({
 
 If no template is provided, the Memory class uses a default template that includes fields for user details, preferences, goals, and other contextual information in Markdown format. See the [Working Memory guide](/docs/memory/working-memory.mdx#designing-effective-templates) for detailed usage examples and best practices.
 
+### Thread Title Generation
+
+The `generateTitle` feature automatically creates meaningful titles for conversation threads based on the user's first message. This helps organize and identify conversations in your application.
+
+#### Basic Usage
+
+```typescript copy showLineNumbers
+const memory = new Memory({
+  options: {
+    threads: {
+      generateTitle: true, // Use the agent's model for title generation
+    },
+  },
+});
+```
+
+#### Cost Optimization with Custom Models and Instructions
+
+You can specify a different (typically cheaper) model and custom instructions for title generation while using a high-quality model for the main conversation:
+
+```typescript copy showLineNumbers
+import { openai } from "@ai-sdk/openai";
+
+const memory = new Memory({
+  options: {
+    threads: {
+      generateTitle: {
+        model: openai("gpt-4.1-nano"), // Cheaper model for titles
+        instructions: "Generate a concise, friendly title based on the initial user message.", // Custom title instructions
+      },
+    },
+  },
+});
+
+const agent = new Agent({
+  model: openai("gpt-4o"), // High-quality model for main conversation
+  memory,
+});
+```
+
+#### Dynamic Model Selection and Instructions
+
+You can also use a function to dynamically determine the model and instructions based on runtime context:
+
+```typescript copy showLineNumbers
+const memory = new Memory({
+  options: {
+    threads: {
+      generateTitle: {
+        model: (ctx: RuntimeContext) => {
+          // Use different models based on context
+          const userTier = ctx.get("userTier");
+          return userTier === "premium" 
+            ? openai("gpt-4.1")
+            : openai("gpt-4.1-nano");
+        },
+        instructions: (ctx: RuntimeContext) => {
+          const language = ctx.get("userLanguage") || "English";
+          return `Generate a concise, engaging title in ${language} based on the user's first message.`;
+        },
+      },
+    },
+  },
+});
+```
 ### embedder
 
 An embedding model is required if `semanticRecall` is enabled.
@@ -216,9 +291,9 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
     },
     {
       name: "threads",
-      type: "{ generateTitle?: boolean }",
+      type: "{ generateTitle?: boolean | { model: LanguageModelV1 | ((ctx: RuntimeContext) => LanguageModelV1 | Promise<LanguageModelV1>), instructions?: string | ((ctx: RuntimeContext) => string | Promise<string>) } }",
       description:
-        "Settings related to memory thread creation. `generateTitle` will cause the thread.title to be generated from an llm summary of the users first message.",
+        "Settings related to memory thread creation. `generateTitle` controls automatic thread title generation from the user's first message. Can be a boolean to enable/disable using the agent's model, or an object specifying a custom model or custom instructions for title generation (useful for cost optimization or title customization). Example: { generateTitle: { model: openai('gpt-4.1-nano'), instructions: 'Concise title based on the initial user message.' } }",
       isOptional: true,
       defaultValue: "{ generateTitle: false }",
     },

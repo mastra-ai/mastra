@@ -47,13 +47,15 @@ function cleanup(monorepoDir, resetChanges = false) {
 
 /**
  *
- * @param {string} storageDirectory
- * @param {number} port
+ * @param {string} monorepoDir
+ * @param {typeof import('globby').globby} glob
+ * @param {string} tag
  * @returns
  */
-export async function prepareMonorepo(monorepoDir, glob) {
+export async function prepareMonorepo(monorepoDir, glob, tag) {
   let shelvedChanges = false;
 
+  console.log('Storing changes into SAVEPOINT.');
   try {
     const gitStatus = await execAsync('git status --porcelain', {
       cwd: monorepoDir,
@@ -72,6 +74,7 @@ export async function prepareMonorepo(monorepoDir, glob) {
       shelvedChanges = true;
     }
 
+    console.log('Updating workspace dependencies to use * instead of ^');
     await (async function updateWorkspaceDependencies() {
       // Update workspace dependencies to use ^ instead of *
       const packageFiles = await glob('**/package.json', {
@@ -91,6 +94,7 @@ export async function prepareMonorepo(monorepoDir, glob) {
       }
     })();
 
+    console.log('Running pnpm changeset pre exit');
     await retryWithTimeout(
       async () => {
         await execAsync('pnpm changeset pre exit', {
@@ -102,15 +106,16 @@ export async function prepareMonorepo(monorepoDir, glob) {
       'pnpm changeset pre exit',
     );
 
+    console.log(`Running pnpm changeset version --snapshot ${tag}`);
     await retryWithTimeout(
       async () => {
-        await execAsync('pnpm changeset version --snapshot create-mastra-e2e-test', {
+        await execAsync(`pnpm changeset version --snapshot ${tag}`, {
           cwd: monorepoDir,
           stdio: ['inherit', 'inherit', 'inherit'],
         });
       },
       defaultTimeout,
-      'pnpm changeset version --snapshot create-mastra-e2e-test',
+      `pnpm changeset version --snapshot ${tag}`,
     );
   } catch (error) {
     cleanup(monorepoDir, false);

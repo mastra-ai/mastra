@@ -7,6 +7,7 @@ import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core';
 import { Telemetry } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { Tool } from '@mastra/core/tools';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -79,6 +80,7 @@ import {
 } from './handlers/vNextNetwork';
 import { getListenerHandler, getSpeakersHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
+  cancelWorkflowRunHandler,
   createWorkflowRunHandler,
   getWorkflowByIdHandler,
   getWorkflowRunByIdHandler,
@@ -87,6 +89,7 @@ import {
   getWorkflowsHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
+  sendWorkflowRunEventHandler,
   startAsyncWorkflowHandler,
   startWorkflowRunHandler,
   streamWorkflowHandler,
@@ -113,20 +116,14 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
   let tools: Record<string, any> = {};
   try {
-    const toolsPath = './tools.mjs';
-    const mastraToolsPaths = (await import(toolsPath)).tools;
-    const toolImports = mastraToolsPaths
-      ? await Promise.all(
-          // @ts-ignore
-          mastraToolsPaths.map(async toolPath => {
-            return import(toolPath);
-          }),
-        )
-      : [];
+    // @ts-expect-error Tools is generated dependency
+    const toolImports = (await import('#tools')).tools as Record<string, Function>[];
 
     tools = toolImports.reduce((acc, toolModule) => {
       Object.entries(toolModule).forEach(([key, tool]) => {
-        acc[key] = tool;
+        if (tool instanceof Tool) {
+          acc[key] = tool;
+        }
       });
       return acc;
     }, {});
@@ -163,7 +160,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
     }
   });
 
-  app.onError(errorHandler);
+  app.onError((err, c) => errorHandler(err, c, options.isDev));
 
   // Add Mastra to context
   app.use('*', async function setContext(c, next) {
@@ -3268,6 +3265,70 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     watchWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/runs/:runId/cancel',
+    describeRoute({
+      description: 'Cancel a workflow run',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      tags: ['workflows'],
+      responses: {
+        200: {
+          description: 'workflow run cancelled',
+        },
+      },
+    }),
+    cancelWorkflowRunHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/runs/:runId/send-event',
+    describeRoute({
+      description: 'Send an event to a workflow run',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { type: 'object', properties: { event: { type: 'string' }, data: { type: 'object' } } },
+          },
+        },
+      },
+      tags: ['workflows'],
+      responses: {
+        200: {
+          description: 'workflow run event sent',
+        },
+      },
+    }),
+    sendWorkflowRunEventHandler,
   );
   // Log routes
   app.get(

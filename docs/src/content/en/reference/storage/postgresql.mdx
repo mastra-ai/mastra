@@ -91,3 +91,20 @@ The storage implementation handles schema creation and updates automatically. It
 - `threads`: Stores conversation threads
 - `messages`: Stores individual messages
 - `metadata`: Stores additional metadata for threads and messages
+
+### Direct Database and Pool Access
+
+`PostgresStore` exposes both the underlying database object and the pg-promise instance as public fields:
+
+```typescript
+store.db  // pg-promise database instance
+store.pgp // pg-promise main instance
+```
+
+This enables direct queries and custom transaction management. When using these fields:
+- You are responsible for proper connection and transaction handling.
+- Closing the store (`store.close()`) will destroy the associated connection pool.
+- Direct access bypasses any additional logic or validation provided by PostgresStore methods.
+
+This approach is intended for advanced scenarios where low-level access is required.
+

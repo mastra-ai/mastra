@@ -141,7 +141,7 @@ export const agent = new Agent({
 ```typescript
 import { agent } from "./agents/weather";
 
-type MyRuntimeContext = {"temperature-scale", "celsius" | "farenheit"}
+type MyRuntimeContext = {"temperature-scale": "celsius" | "fahrenheit"}
 
 const runtimeContext = new RuntimeContext<MyRuntimeContext>();
 runtimeContext.set("temperature-scale", "celsius");

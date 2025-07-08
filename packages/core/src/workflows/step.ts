@@ -11,6 +11,7 @@ export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSche
   runtimeContext: RuntimeContext;
   inputData: TStepInput;
   resumeData?: TResumeSchema;
+  runCount: number;
   getInitData<T extends z.ZodType<any>>(): z.infer<T>;
   getInitData<T extends Workflow<any, any, any, any, any>>(): T extends undefined
     ? unknown
@@ -21,12 +22,14 @@ export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSche
   // TODO: should this be a schema you can define on the step?
   suspend(suspendPayload: TSuspendSchema): Promise<any>;
   bail(result: any): any;
+  abort(): any;
   resume?: {
     steps: string[];
     resumePayload: any;
   };
   [EMITTER_SYMBOL]: Emitter;
   engine: EngineType;
+  abortSignal: AbortSignal;
 }) => Promise<TStepOutput>;
 
 // Define a Step interface

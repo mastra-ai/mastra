@@ -31,8 +31,8 @@ export type DefaultEngineType = {};
 
 export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
-  | { type: 'sleep'; id: string; duration: number }
-  | { type: 'sleepUntil'; id: string; date: Date }
+  | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, TEngineType> }
+  | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, TEngineType> }
   | { type: 'waitForEvent'; event: string; step: Step; timeout?: number }
   | {
       type: 'parallel';
@@ -76,12 +76,14 @@ export type SerializedStepFlowEntry =
   | {
       type: 'sleep';
       id: string;
-      duration: number;
+      duration?: number;
+      fn?: string;
     }
   | {
       type: 'sleepUntil';
       id: string;
-      date: Date;
+      date?: Date;
+      fn?: string;
     }
   | {
       type: 'waitForEvent';
@@ -111,6 +113,11 @@ export type SerializedStepFlowEntry =
         concurrency: number;
       };
     };
+
+export type StepWithComponent = Step<string, any, any, any, any, any> & {
+  component?: string;
+  steps?: Record<string, StepWithComponent>;
+};
 
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
   step,
@@ -159,6 +166,7 @@ export function createStep<
   outputSchema: TStepOutput;
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
+  retries?: number;
   execute: ExecuteFunction<
     z.infer<TStepInput>,
     z.infer<TStepOutput>,
@@ -205,6 +213,7 @@ export function createStep<
         outputSchema: TStepOutput;
         resumeSchema?: TResumeSchema;
         suspendSchema?: TSuspendSchema;
+        retries?: number;
         execute: ExecuteFunction<
           z.infer<TStepInput>,
           z.infer<TStepOutput>,
@@ -233,7 +242,7 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext }) => {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -259,7 +268,12 @@ export function createStep<
           onFinish: result => {
             streamPromise.resolve(result.text);
           },
+          abortSignal,
         });
+
+        if (abortSignal.aborted) {
+          return abort();
+        }
 
         for await (const chunk of fullStream) {
           switch (chunk.type) {
@@ -323,6 +337,7 @@ export function createStep<
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
+    retries: params.retries,
     execute: params.execute,
   };
 }
@@ -337,6 +352,7 @@ export function cloneStep<TStepId extends string>(
     inputSchema: step.inputSchema,
     outputSchema: step.outputSchema,
     execute: step.execute,
+    retries: step.retries,
   };
 }
 
@@ -464,9 +480,9 @@ export class Workflow<
   public description?: string | undefined;
   public inputSchema: TInput;
   public outputSchema: TOutput;
-  public steps: Record<string, Step<string, any, any, any, any>>;
+  public steps: Record<string, StepWithComponent>;
   public stepDefs?: TSteps;
-  protected stepFlow: StepFlowEntry[];
+  protected stepFlow: StepFlowEntry<TEngineType>[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
@@ -535,7 +551,7 @@ export class Workflow<
     }
   }
 
-  setStepFlow(stepFlow: StepFlowEntry[]) {
+  setStepFlow(stepFlow: StepFlowEntry<TEngineType>[]) {
     this.stepFlow = stepFlow;
   }
 
@@ -566,14 +582,20 @@ export class Workflow<
    * @param duration The duration to sleep for
    * @returns The workflow instance for chaining
    */
-  sleep(duration: number) {
+  sleep(duration: number | ExecuteFunction<z.infer<TPrevSchema>, number, any, any, TEngineType>) {
     const id = `sleep_${randomUUID()}`;
-    this.stepFlow.push({ type: 'sleep', id, duration });
-    this.serializedStepFlow.push({
-      type: 'sleep',
-      id,
-      duration,
-    });
+
+    const opts: StepFlowEntry<TEngineType> =
+      typeof duration === 'function'
+        ? { type: 'sleep', id, fn: duration }
+        : { type: 'sleep', id, duration: duration as number };
+    const serializedOpts: SerializedStepFlowEntry =
+      typeof duration === 'function'
+        ? { type: 'sleep', id, fn: duration.toString() }
+        : { type: 'sleep', id, duration: duration as number };
+
+    this.stepFlow.push(opts);
+    this.serializedStepFlow.push(serializedOpts);
     this.steps[id] = createStep({
       id,
       inputSchema: z.object({}),
@@ -590,14 +612,19 @@ export class Workflow<
    * @param date The date to sleep until
    * @returns The workflow instance for chaining
    */
-  sleepUntil(date: Date) {
+  sleepUntil(date: Date | ExecuteFunction<z.infer<TPrevSchema>, Date, any, any, TEngineType>) {
     const id = `sleep_${randomUUID()}`;
-    this.stepFlow.push({ type: 'sleepUntil', id, date });
-    this.serializedStepFlow.push({
-      type: 'sleepUntil',
-      id,
-      date,
-    });
+    const opts: StepFlowEntry<TEngineType> =
+      typeof date === 'function'
+        ? { type: 'sleepUntil', id, fn: date }
+        : { type: 'sleepUntil', id, date: date as Date };
+    const serializedOpts: SerializedStepFlowEntry =
+      typeof date === 'function'
+        ? { type: 'sleepUntil', id, fn: date.toString() }
+        : { type: 'sleepUntil', id, date: date as Date };
+
+    this.stepFlow.push(opts);
+    this.serializedStepFlow.push(serializedOpts);
     this.steps[id] = createStep({
       id,
       inputSchema: z.object({}),
@@ -1031,23 +1058,27 @@ export class Workflow<
 
     this.#runs.set(runIdToUse, run);
 
-    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
-      workflowName: this.id,
-      runId: runIdToUse,
-      snapshot: {
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse);
+
+    if (!workflowSnapshotInStorage) {
+      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+        workflowName: this.id,
         runId: runIdToUse,
-        status: 'pending',
-        value: {},
-        context: {},
-        activePaths: [],
-        serializedStepGraph: this.serializedStepGraph,
-        suspendedPaths: {},
-        result: undefined,
-        error: undefined,
-        // @ts-ignore
-        timestamp: Date.now(),
-      },
-    });
+        snapshot: {
+          runId: runIdToUse,
+          status: 'pending',
+          value: {},
+          context: {},
+          activePaths: [],
+          serializedStepGraph: this.serializedStepGraph,
+          suspendedPaths: {},
+          result: undefined,
+          error: undefined,
+          // @ts-ignore
+          timestamp: Date.now(),
+        },
+      });
+    }
 
     return run;
   }
@@ -1060,6 +1091,8 @@ export class Workflow<
     [EMITTER_SYMBOL]: emitter,
     mastra,
     runtimeContext,
+    abort,
+    abortSignal,
   }: {
     inputData: z.infer<TInput>;
     resumeData?: any;
@@ -1076,12 +1109,26 @@ export class Workflow<
     mastra: Mastra;
     runtimeContext?: RuntimeContext;
     engine: DefaultEngineType;
+    abortSignal: AbortSignal;
+    bail: (result: any) => any;
+    abort: () => any;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
-    const run = resume?.steps?.length ? this.createRun({ runId: resume.runId }) : this.createRun();
+    const run = resume?.steps?.length
+      ? await this.createRunAsync({ runId: resume.runId })
+      : await this.createRunAsync();
+    const nestedAbortCb = () => {
+      abort();
+    };
+    run.abortController?.signal.addEventListener('abort', nestedAbortCb);
+    abortSignal.addEventListener('abort', async () => {
+      run.abortController.signal.removeEventListener('abort', nestedAbortCb);
+      await run.cancel();
+    });
+
     const unwatchV2 = run.watch(event => {
-      emitter.emit('nested-watch-v2', event);
+      emitter.emit('nested-watch-v2', { event, workflowId: this.id });
     }, 'watch-v2');
     const unwatch = run.watch(event => {
       emitter.emit('nested-watch', { event, workflowId: this.id, runId: run.runId, isResume: !!resume?.steps?.length });
@@ -1191,6 +1238,7 @@ export class Run<
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
 > {
+  public abortController: AbortController;
   protected emitter: EventEmitter;
   /**
    * Unique identifier for this workflow
@@ -1259,9 +1307,17 @@ export class Run<
     this.emitter = new EventEmitter();
     this.retryConfig = params.retryConfig;
     this.cleanup = params.cleanup;
+    this.abortController = new AbortController();
   }
 
-  sendEvent(event: string, data: any) {
+  /**
+   * Cancels the workflow execution
+   */
+  async cancel() {
+    this.abortController?.abort();
+  }
+
+  async sendEvent(event: string, data: any) {
     this.emitter.emit(`user-event-${event}`, data);
   }
 
@@ -1299,9 +1355,12 @@ export class Run<
       },
       retryConfig: this.retryConfig,
       runtimeContext: runtimeContext ?? new RuntimeContext(),
+      abortController: this.abortController,
     });
 
-    this.cleanup?.();
+    if (result.status !== 'suspended') {
+      this.cleanup?.();
+    }
 
     return result;
   }
@@ -1390,20 +1449,31 @@ export class Run<
       }
     };
 
+    const nestedWatchV2Cb = ({
+      event,
+      workflowId,
+    }: {
+      event: { type: string; payload: { id: string } & Record<string, unknown> };
+      workflowId: string;
+    }) => {
+      this.emitter.emit('watch-v2', {
+        ...event,
+        ...(event.payload?.id ? { payload: { ...event.payload, id: `${workflowId}.${event.payload.id}` } } : {}),
+      });
+    };
+
     if (type === 'watch') {
       this.emitter.on('watch', watchCb);
       this.emitter.on('nested-watch', nestedWatchCb);
     } else if (type === 'watch-v2') {
       this.emitter.on('watch-v2', cb);
-      this.emitter.on('nested-watch-v2', (event: WatchEvent) => {
-        this.emitter.emit('watch-v2', event);
-      });
+      this.emitter.on('nested-watch-v2', nestedWatchV2Cb);
     }
 
     return () => {
       if (type === 'watch-v2') {
         this.emitter.off('watch-v2', cb);
-        this.emitter.off('nested-watch-v2', nestedWatchCb);
+        this.emitter.off('nested-watch-v2', nestedWatchV2Cb);
       } else {
         this.emitter.off('watch', watchCb);
         this.emitter.off('nested-watch', nestedWatchCb);
@@ -1427,6 +1497,22 @@ export class Run<
       workflowName: this.workflowId,
       runId: this.runId,
     });
+
+    if (!snapshot) {
+      throw new Error('No snapshot found for this workflow run');
+    }
+
+    if (snapshot.status !== 'suspended') {
+      throw new Error('This workflow run was not suspended');
+    }
+
+    const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
+
+    const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
+
+    if (!isStepSuspended) {
+      throw new Error('This workflow step was not suspended');
+    }
 
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
@@ -1458,6 +1544,7 @@ export class Run<
           },
         },
         runtimeContext: params.runtimeContext ?? new RuntimeContext(),
+        abortController: this.abortController,
       })
       .then(result => {
         if (result.status !== 'suspended') {

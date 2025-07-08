@@ -1,11 +1,9 @@
 const meta = {
   overview: "Overview",
-  server: "With a Server",
-  deployment: "Serverless Platforms",
-  "cloud-providers": "Cloud Providers",
+  "server-deployment": "Server deployment",
   "web-framework": "With a Web Framework",
-  middleware: "Middleware",
-  "custom-api-routes": "Custom API Routes",
+  "serverless-platforms": "Serverless Platforms",
+  "cloud-providers": "Cloud Providers",
 };
 
 export default meta;

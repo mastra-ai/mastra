@@ -46,7 +46,6 @@ This example demonstrates how to use Mastra's Summarization metric to evaluate h
 The Summarization metric evaluates summaries based on two key aspects:
 
 1. Alignment (Factual Accuracy):
-
    - Verifies claims against source text
    - Checks for factual correctness
    - Identifies misrepresentations
@@ -61,13 +60,11 @@ The Summarization metric evaluates summaries based on two key aspects:
 The example includes three scenarios:
 
 1. High-quality Summary:
-
    - Complete coverage of key information
    - Perfect factual accuracy
    - Well-balanced content
 
 2. Partial Coverage:
-
    - Accurate but incomplete information
    - Good factual alignment
    - Missing some details

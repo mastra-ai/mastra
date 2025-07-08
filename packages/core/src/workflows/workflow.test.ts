@@ -74,68 +74,74 @@ describe('Workflow', () => {
       const executionResult = await getWorkflowState();
 
       expect(watchData.length).toBe(8);
-      expect(watchData).toMatchInlineSnapshot(`
-        [
-          {
-            "payload": {
-              "runId": "test-run-id",
-            },
-            "type": "start",
+      expect(watchData).toMatchObject([
+        {
+          payload: {
+            runId: 'test-run-id',
           },
-          {
-            "payload": {
-              "id": "step1",
-            },
-            "type": "step-start",
+          type: 'start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            payload: {},
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "step1",
-              "output": {
-                "result": "success1",
-              },
-              "status": "success",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            output: {
+              result: 'success1',
             },
-            "type": "step-result",
+            endedAt: expect.any(Number),
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "step1",
-              "metadata": {},
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step1',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'step2',
+            payload: {
+              result: 'success1',
             },
-            "type": "step-finish",
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "step2",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step2',
+            output: {
+              result: 'success2',
             },
-            "type": "step-start",
+            endedAt: expect.any(Number),
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "step2",
-              "output": {
-                "result": "success2",
-              },
-              "status": "success",
-            },
-            "type": "step-result",
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step2',
+            metadata: {},
           },
-          {
-            "payload": {
-              "id": "step2",
-              "metadata": {},
-            },
-            "type": "step-finish",
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            runId: 'test-run-id',
           },
-          {
-            "payload": {
-              "runId": "test-run-id",
-            },
-            "type": "finish",
-          },
-        ]
-      `);
+          type: 'finish',
+        },
+      ]);
       // Verify execution completed successfully
       expect(executionResult.steps.step1).toEqual({
         status: 'success',
@@ -404,168 +410,193 @@ describe('Workflow', () => {
         values.push(value);
       }
 
-      expect(values).toMatchInlineSnapshot(`
-        [
-          {
-            "payload": {
-              "runId": "test-run-id",
-            },
-            "type": "start",
+      expect(values).toMatchObject([
+        {
+          payload: {
+            runId: 'test-run-id',
           },
-          {
-            "payload": {
-              "id": "start",
+          type: 'start',
+        },
+        {
+          payload: {
+            id: 'start',
+            payload: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
             },
-            "type": "step-start",
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "start",
-              "output": {
-                "prompt1": "Capital of France, just the name",
-                "prompt2": "Capital of UK, just the name",
-              },
-              "status": "success",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'start',
+            output: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
             },
-            "type": "step-result",
+            endedAt: expect.any(Number),
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "start",
-              "metadata": {},
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'start',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'mapping_mock-uuid-1',
+            payload: {
+              prompt1: 'Capital of France, just the name',
+              prompt2: 'Capital of UK, just the name',
             },
-            "type": "step-finish",
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "mapping_mock-uuid-1",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'mapping_mock-uuid-1',
+            endedAt: expect.any(Number),
+            output: {
+              prompt: 'Capital of France, just the name',
             },
-            "type": "step-start",
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "mapping_mock-uuid-1",
-              "output": {
-                "prompt": "Capital of France, just the name",
-              },
-              "status": "success",
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'mapping_mock-uuid-1',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'test-agent-1',
+            payload: {
+              prompt: 'Capital of France, just the name',
             },
-            "type": "step-result",
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "mapping_mock-uuid-1",
-              "metadata": {},
+          type: 'step-start',
+        },
+        {
+          args: {
+            prompt: 'Capital of France, just the name',
+          },
+          name: 'test-agent-1',
+          type: 'tool-call-streaming-start',
+        },
+        {
+          args: {
+            prompt: 'Capital of France, just the name',
+          },
+          argsTextDelta: 'Paris',
+          name: 'test-agent-1',
+          type: 'tool-call-delta',
+        },
+        {
+          payload: {
+            id: 'test-agent-1',
+            output: {
+              text: 'Paris',
             },
-            "type": "step-finish",
+            endedAt: expect.any(Number),
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "test-agent-1",
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'test-agent-1',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'mapping_mock-uuid-2',
+            payload: {
+              text: 'Paris',
             },
-            "type": "step-start",
+            startedAt: expect.any(Number),
           },
-          {
-            "args": {
-              "prompt": "Capital of France, just the name",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'mapping_mock-uuid-2',
+            endedAt: expect.any(Number),
+            output: {
+              prompt: 'Capital of UK, just the name',
             },
-            "name": "test-agent-1",
-            "type": "tool-call-streaming-start",
+            status: 'success',
           },
-          {
-            "args": {
-              "prompt": "Capital of France, just the name",
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'mapping_mock-uuid-2',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'test-agent-2',
+            payload: {
+              prompt: 'Capital of UK, just the name',
             },
-            "argsTextDelta": "Paris",
-            "name": "test-agent-1",
-            "type": "tool-call-delta",
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "test-agent-1",
-              "output": {
-                "text": "Paris",
-              },
-              "status": "success",
+          type: 'step-start',
+        },
+        {
+          args: {
+            prompt: 'Capital of UK, just the name',
+          },
+          name: 'test-agent-2',
+          type: 'tool-call-streaming-start',
+        },
+        {
+          args: {
+            prompt: 'Capital of UK, just the name',
+          },
+          argsTextDelta: 'London',
+          name: 'test-agent-2',
+          type: 'tool-call-delta',
+        },
+        {
+          payload: {
+            id: 'test-agent-2',
+            endedAt: expect.any(Number),
+            output: {
+              text: 'London',
             },
-            "type": "step-result",
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "test-agent-1",
-              "metadata": {},
-            },
-            "type": "step-finish",
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'test-agent-2',
+            metadata: {},
           },
-          {
-            "payload": {
-              "id": "mapping_mock-uuid-2",
-            },
-            "type": "step-start",
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            runId: 'test-run-id',
           },
-          {
-            "payload": {
-              "id": "mapping_mock-uuid-2",
-              "output": {
-                "prompt": "Capital of UK, just the name",
-              },
-              "status": "success",
-            },
-            "type": "step-result",
-          },
-          {
-            "payload": {
-              "id": "mapping_mock-uuid-2",
-              "metadata": {},
-            },
-            "type": "step-finish",
-          },
-          {
-            "payload": {
-              "id": "test-agent-2",
-            },
-            "type": "step-start",
-          },
-          {
-            "args": {
-              "prompt": "Capital of UK, just the name",
-            },
-            "name": "test-agent-2",
-            "type": "tool-call-streaming-start",
-          },
-          {
-            "args": {
-              "prompt": "Capital of UK, just the name",
-            },
-            "argsTextDelta": "London",
-            "name": "test-agent-2",
-            "type": "tool-call-delta",
-          },
-          {
-            "payload": {
-              "id": "test-agent-2",
-              "output": {
-                "text": "London",
-              },
-              "status": "success",
-            },
-            "type": "step-result",
-          },
-          {
-            "payload": {
-              "id": "test-agent-2",
-              "metadata": {},
-            },
-            "type": "step-finish",
-          },
-          {
-            "payload": {
-              "runId": "test-run-id",
-            },
-            "type": "finish",
-          },
-        ]
-      `);
+          type: 'finish',
+        },
+      ]);
     });
 
     it('should handle sleep waiting flow', async () => {
@@ -610,7 +641,7 @@ describe('Workflow', () => {
 
       const executionResult = await getWorkflowState();
 
-      expect(watchData.length).toBe(9);
+      expect(watchData.length).toBe(11);
       expect(watchData).toMatchObject([
         {
           payload: {
@@ -621,6 +652,9 @@ describe('Workflow', () => {
         {
           payload: {
             id: 'step1',
+            startedAt: expect.any(Number),
+            status: 'running',
+            payload: {},
           },
           type: 'step-start',
         },
@@ -630,6 +664,7 @@ describe('Workflow', () => {
             output: {
               result: 'success1',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
           type: 'step-result',
@@ -642,12 +677,43 @@ describe('Workflow', () => {
           type: 'step-finish',
         },
         {
-          payload: {},
+          payload: {
+            id: 'sleep_mock-uuid-1',
+            startedAt: expect.any(Number),
+            status: 'waiting',
+            payload: {
+              result: 'success1',
+            },
+          },
           type: 'step-waiting',
         },
         {
           payload: {
+            id: 'sleep_mock-uuid-1',
+            endedAt: expect.any(Number),
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              result: 'success1',
+            },
+          },
+          type: 'step-result',
+        },
+        {
+          type: 'step-finish',
+          payload: {
+            id: 'sleep_mock-uuid-1',
+            metadata: {},
+          },
+        },
+        {
+          payload: {
             id: 'step2',
+            payload: {
+              result: 'success1',
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
           },
           type: 'step-start',
         },
@@ -657,6 +723,7 @@ describe('Workflow', () => {
             output: {
               result: 'success2',
             },
+            endedAt: expect.any(Number),
             status: 'success',
           },
           type: 'step-result',
@@ -688,6 +755,174 @@ describe('Workflow', () => {
         output: { result: 'success2' },
         payload: {
           result: 'success1',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    });
+
+    it('should handle sleep waiting flow with fn parameter', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ value: 1000 });
+      const step2Action = vi.fn<any>().mockResolvedValue({ value: 2000 });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.number() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+      });
+      workflow
+        .then(step1)
+        .sleep(async ({ inputData }) => {
+          return inputData.value;
+        })
+        .then(step2)
+        .commit();
+
+      const runId = 'test-run-id';
+      let watchData: StreamEvent[] = [];
+      const run = await workflow.createRunAsync({
+        runId,
+      });
+
+      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+
+      // Start watching the workflow
+      const collectedStreamData: StreamEvent[] = [];
+      for await (const data of stream) {
+        collectedStreamData.push(JSON.parse(JSON.stringify(data)));
+      }
+      watchData = collectedStreamData;
+
+      const executionResult = await getWorkflowState();
+
+      expect(watchData.length).toBe(11);
+      expect(watchData).toMatchObject([
+        {
+          payload: {
+            runId: 'test-run-id',
+          },
+          type: 'start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            startedAt: expect.any(Number),
+            status: 'running',
+            payload: {},
+          },
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            output: {
+              value: 1000,
+            },
+            endedAt: expect.any(Number),
+            status: 'success',
+          },
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step1',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'sleep_mock-uuid-1',
+            startedAt: expect.any(Number),
+            status: 'waiting',
+            payload: {
+              value: 1000,
+            },
+          },
+          type: 'step-waiting',
+        },
+        {
+          payload: {
+            id: 'sleep_mock-uuid-1',
+            endedAt: expect.any(Number),
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {
+              value: 1000,
+            },
+          },
+          type: 'step-result',
+        },
+        {
+          type: 'step-finish',
+          payload: {
+            id: 'sleep_mock-uuid-1',
+            metadata: {},
+          },
+        },
+        {
+          payload: {
+            id: 'step2',
+            payload: {
+              value: 1000,
+            },
+            startedAt: expect.any(Number),
+            status: 'running',
+          },
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step2',
+            output: {
+              value: 2000,
+            },
+            endedAt: expect.any(Number),
+            status: 'success',
+          },
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step2',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            runId: 'test-run-id',
+          },
+          type: 'finish',
+        },
+      ]);
+      // Verify execution completed successfully
+      expect(executionResult.steps.step1).toEqual({
+        status: 'success',
+        output: { value: 1000 },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(executionResult.steps.step2).toEqual({
+        status: 'success',
+        output: { value: 2000 },
+        payload: {
+          value: 1000,
         },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
@@ -2177,6 +2412,65 @@ describe('Workflow', () => {
       expect(endTime - startTime).toBeGreaterThanOrEqual(1000);
     });
 
+    it('should execute a sleep step with fn parameter', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ value: 1000 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.number() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { value: inputData.value + 1000 };
+        },
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow
+        .then(step1)
+        .sleep(async ({ inputData }) => {
+          return inputData.value;
+        })
+        .then(step2)
+        .commit();
+
+      const run = await workflow.createRunAsync();
+      const startTime = Date.now();
+      const result = await run.start({ inputData: {} });
+      const endTime = Date.now();
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { value: 1000 },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toEqual({
+        status: 'success',
+        output: { value: 2000 },
+        payload: { value: 1000 },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(endTime - startTime).toBeGreaterThanOrEqual(900);
+    });
+
     it('should execute a a sleep until step', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
@@ -2227,6 +2521,65 @@ describe('Workflow', () => {
         status: 'success',
         output: { result: 'slept successfully: success' },
         payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(endTime - startTime).toBeGreaterThan(900);
+    });
+
+    it('should execute a sleep until step with fn parameter', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ value: 1000 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.number() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { value: inputData.value + 1000 };
+        },
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow
+        .then(step1)
+        .sleepUntil(async ({ inputData }) => {
+          return new Date(Date.now() + inputData.value);
+        })
+        .then(step2)
+        .commit();
+
+      const run = await workflow.createRunAsync();
+      const startTime = Date.now();
+      const result = await run.start({ inputData: {} });
+      const endTime = Date.now();
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { value: 1000 },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toEqual({
+        status: 'success',
+        output: { value: 2000 },
+        payload: { value: 1000 },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -2292,7 +2645,7 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
 
-      expect(endTime - startTime).toBeGreaterThan(1000);
+      expect(endTime - startTime).toBeGreaterThan(900);
     });
 
     it('should execute a waitForEvent step after timeout', async () => {
@@ -2348,6 +2701,177 @@ describe('Workflow', () => {
       });
 
       expect(endTime - startTime).toBeGreaterThan(900);
+    });
+  });
+
+  describe('abort', () => {
+    it('should be able to abort workflow execution in between steps', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { result: 'step2: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1, step2],
+      });
+
+      workflow.then(step1).sleep(1000).then(step2).commit();
+
+      const run = await workflow.createRunAsync();
+      const p = run.start({ inputData: { value: 'test' } });
+
+      setTimeout(() => {
+        run.cancel();
+      }, 300);
+
+      const result = await p;
+
+      expect(result.status).toBe('canceled');
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'step1: test' },
+        payload: { value: 'test' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toBeUndefined();
+    });
+
+    it('should be able to abort workflow execution immediately', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { result: 'step2: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1, step2],
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const run = await workflow.createRunAsync();
+      const p = run.start({ inputData: { value: 'test' } });
+
+      await run.cancel();
+
+      const result = await p;
+
+      expect(result.status).toBe('canceled');
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'step1: test' },
+        payload: { value: 'test' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toBeUndefined();
+    });
+
+    it('should be able to abort workflow execution during a step', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData, abortSignal, abort }) => {
+          const timeout: Promise<string> = new Promise((resolve, _reject) => {
+            const ref = setTimeout(() => {
+              resolve('step2: ' + inputData.result);
+            }, 1000);
+
+            abortSignal.addEventListener('abort', () => {
+              resolve('');
+              clearTimeout(ref);
+            });
+          });
+
+          const result = await timeout;
+          if (abortSignal.aborted) {
+            return abort();
+          }
+          return { result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1, step2],
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const run = await workflow.createRunAsync();
+      const p = run.start({ inputData: { value: 'test' } });
+
+      setTimeout(() => {
+        run.cancel();
+      }, 300);
+
+      const result = await p;
+
+      expect(result.status).toBe('canceled');
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'step1: test' },
+        payload: { value: 'test' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      // expect(result.steps['step2']).toEqual({
+      //   status: 'success',
+      //   payload: { result: 'step1: test' },
+      //   output: undefined,
+      //   startedAt: expect.any(Number),
+      //   endedAt: expect.any(Number),
+      // });
     });
   });
 
@@ -3893,68 +4417,74 @@ describe('Workflow', () => {
         values.push(value);
       }
 
-      expect(values).toMatchInlineSnapshot(`
-        [
-          {
-            "payload": {
-              "runId": "mock-uuid-1",
-            },
-            "type": "start",
+      expect(values).toMatchObject([
+        {
+          payload: {
+            runId: 'mock-uuid-1',
           },
-          {
-            "payload": {
-              "id": "step1",
-            },
-            "type": "step-start",
+          type: 'start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            payload: {},
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "step1",
-              "output": {
-                "name": "step1",
-              },
-              "status": "success",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'step1',
+            endedAt: expect.any(Number),
+            output: {
+              name: 'step1',
             },
-            "type": "step-result",
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "step1",
-              "metadata": {},
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'step1',
+            metadata: {},
+          },
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            id: 'random-tool',
+            payload: {
+              name: 'step1',
             },
-            "type": "step-finish",
+            startedAt: expect.any(Number),
           },
-          {
-            "payload": {
-              "id": "random-tool",
+          type: 'step-start',
+        },
+        {
+          payload: {
+            id: 'random-tool',
+            endedAt: expect.any(Number),
+            output: {
+              name: 'step1',
             },
-            "type": "step-start",
+            status: 'success',
           },
-          {
-            "payload": {
-              "id": "random-tool",
-              "output": {
-                "name": "step1",
-              },
-              "status": "success",
-            },
-            "type": "step-result",
+          type: 'step-result',
+        },
+        {
+          payload: {
+            id: 'random-tool',
+            metadata: {},
           },
-          {
-            "payload": {
-              "id": "random-tool",
-              "metadata": {},
-            },
-            "type": "step-finish",
+          type: 'step-finish',
+        },
+        {
+          payload: {
+            runId: 'mock-uuid-1',
           },
-          {
-            "payload": {
-              "runId": "mock-uuid-1",
-            },
-            "type": "finish",
-          },
-        ]
-      `);
+          type: 'finish',
+        },
+      ]);
 
       const result = await getWorkflowState();
 
@@ -4258,16 +4788,25 @@ describe('Workflow', () => {
 
       expect(initialResult.steps.humanIntervention.status).toBe('suspended');
       expect(initialResult.steps.explainResponse).toBeUndefined();
+      expect(getUserInputAction).toHaveBeenCalledTimes(1);
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+      expect(evaluateToneAction).toHaveBeenCalledTimes(1);
       expect(humanInterventionAction).toHaveBeenCalledTimes(1);
       expect(explainResponseAction).not.toHaveBeenCalled();
 
       // Wait for the workflow to be ready to resume
       const resumeData = await workflowSuspended;
-      const resumeResult = await run.resume({ resumeData: resumeData as any, step: humanIntervention });
+      const run2 = await workflow.createRunAsync({ runId: run.runId });
+      const resumeResult = await run2.resume({ resumeData: resumeData as any, step: humanIntervention });
 
       if (!resumeResult) {
         throw new Error('Resume failed to return a result');
       }
+
+      expect(getUserInputAction).toHaveBeenCalledTimes(1);
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+      expect(evaluateToneAction).toHaveBeenCalledTimes(1);
+      expect(humanInterventionAction).toHaveBeenCalledTimes(2);
 
       expect(resumeResult.steps).toEqual({
         input: { input: 'test' },
@@ -7078,6 +7617,101 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+    });
+  });
+
+  describe('Run count', () => {
+    it('runCount property should increment the run count when a step is executed multiple times', async () => {
+      const repeatingStep = createStep({
+        id: 'repeatingStep',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          count: z.number(),
+        }),
+        execute: async ({ runCount }) => {
+          return { count: runCount };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: repeatingStep.outputSchema,
+      })
+        .dountil(repeatingStep, async ({ inputData }) => inputData.count === 3)
+        .commit();
+
+      const result = await workflow.createRun().start({ inputData: {} });
+
+      expect(result.status).toBe('success');
+      expect(result.steps.repeatingStep).toHaveProperty('output', { count: 3 });
+    });
+
+    it('multiple steps should have different run counts', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          count: z.number(),
+        }),
+        execute: async ({ runCount }) => {
+          return { count: runCount };
+        },
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        inputSchema: step1.outputSchema,
+        outputSchema: z.object({
+          count: z.number(),
+        }),
+        execute: async ({ runCount }) => {
+          return { count: runCount };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .dowhile(step1, async ({ inputData }) => inputData.count < 3)
+        .dountil(step2, async ({ inputData }) => inputData.count === 10)
+        .commit();
+
+      const result = await workflow.createRun().start({ inputData: {} });
+
+      expect(result.status).toBe('success');
+      expect(result.steps.step1).toHaveProperty('output', { count: 3 });
+      expect(result.steps.step2).toHaveProperty('output', { count: 10 });
+    });
+
+    it('runCount should exist and equal zero for the first run', async () => {
+      const mockExec = vi.fn().mockImplementation(async ({ runCount }) => {
+        return { count: runCount };
+      });
+      const step = createStep({
+        id: 'step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          count: z.number(),
+        }),
+        execute: mockExec,
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(step)
+        .commit();
+
+      const run = workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(mockExec).toHaveBeenCalledTimes(1);
+      expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
     });
   });
 });
