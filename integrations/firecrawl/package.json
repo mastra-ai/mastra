@@ -57,7 +57,7 @@
     "@rollup/plugin-image": "^3.0.3",
     "@size-limit/preset-small-lib": "^11.2.0",
     "@types/jest": "^29.5.14",
-    "@types/lodash": "^4.17.19",
+    "@types/lodash": "^4.17.20",
     "@types/node": "^20.19.0",
     "dts-cli": "^2.0.5",
     "eslint": "^9.29.0",
