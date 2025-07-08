@@ -1075,7 +1075,7 @@ importers:
         specifier: ^0.522.0
         version: 0.522.0(react@19.1.0)
       next-themes:
-        specifier: ^0.4.5
+        specifier: ^0.4.6
         version: 0.4.6(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       pnpm:
         specifier: ^10.12.4
