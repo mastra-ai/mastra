@@ -64,4 +64,4 @@ The package uses Firestore to manage user access. It expects a collection named 
 
 ## License
 
-Elastic-2.0
+Apache-2.0

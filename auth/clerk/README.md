@@ -76,4 +76,4 @@ Checks if a user is authorized by verifying their organization membership.
 
 ## License
 
-MIT
+Apache-2.0

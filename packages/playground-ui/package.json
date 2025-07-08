@@ -41,7 +41,7 @@
     "components"
   ],
   "author": "Mastra",
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "@ai-sdk/ui-utils": "^1.2.11",
     "@assistant-ui/react": "^0.7.91",

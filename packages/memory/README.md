@@ -4,4 +4,4 @@ Memory management for Mastra agents. Visit [the docs](https://mastra.ai/docs/age
 
 ## License
 
-MIT
+Apache-2.0

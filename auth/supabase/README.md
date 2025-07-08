@@ -77,4 +77,4 @@ Checks if a user has the required permissions (currently checks for admin status
 
 ## License
 
-Elastic-2.0
+Apache-2.0

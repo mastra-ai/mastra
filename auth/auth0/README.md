@@ -86,4 +86,4 @@ const isAuthorized = await auth0Provider.authorizeUser(user);
 
 ## License
 
-MIT
+Apache-2.0

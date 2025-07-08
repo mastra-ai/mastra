@@ -125,4 +125,4 @@ The client uses the native `fetch` API internally for making HTTP requests. All 
 
 ## License
 
-MIT
+Apache-2.0

@@ -75,4 +75,4 @@ Checks if a user has admin privileges by verifying their organization membership
 
 ## License
 
-MIT
+Apache-2.0

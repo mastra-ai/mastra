@@ -69,4 +69,4 @@ const speakers = await voice.getSpeakers();
 
 ## License
 
-MIT
+Apache-2.0
