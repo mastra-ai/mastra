@@ -1,7 +1,7 @@
 {
   "name": "mastra",
   "version": "0.10.11-alpha.3",
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
   "main": "dist/index.js",

@@ -25,7 +25,7 @@
     "directory": "client-sdks/client-js"
   },
   "homepage": "https://github.com/mastra-ai/mastra/tree/main/client-sdks/client-js#readme",
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake=smallest --splitting",
     "dev": "pnpm build --watch",

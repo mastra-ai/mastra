@@ -77,7 +77,7 @@
     "typescript": "^5.8.3",
     "@types/node": "^20.17.57"
   },
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "packageManager": "pnpm@10.12.4",
   "dependencies": {
     "globby": "^14.1.0",

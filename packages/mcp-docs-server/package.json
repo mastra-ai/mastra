@@ -29,7 +29,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "@mastra/mcp": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.13.0",

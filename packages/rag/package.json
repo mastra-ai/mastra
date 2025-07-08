@@ -26,7 +26,7 @@
     "lint": "eslint ."
   },
   "author": "",
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
     "big.js": "^7.0.1",
