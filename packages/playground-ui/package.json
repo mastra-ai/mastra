@@ -74,7 +74,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@uiw/codemirror-theme-dracula": "^4.23.14",
-    "@uiw/react-codemirror": "^4.23.13",
+    "@uiw/react-codemirror": "^4.23.14",
     "@xyflow/react": "^12.6.4",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
