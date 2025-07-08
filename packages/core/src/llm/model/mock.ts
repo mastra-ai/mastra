@@ -143,8 +143,9 @@ export class MockProvider extends MastraLLM {
 
     return {
       ...result,
-      // on await read the stream
+      // @ts-ignore on await read the stream
       then: (onfulfilled, onrejected) => {
+        // @ts-ignore
         return result.baseStream.pipeTo(new WritableStream()).then(onfulfilled, onrejected);
       },
     };
@@ -157,8 +158,9 @@ export class MockProvider extends MastraLLM {
 
     return {
       ...result,
-      // on await read the stream
+      // @ts-ignore on await read the stream
       then: (onfulfilled, onrejected) => {
+        // @ts-ignore
         return result.baseStream.pipeTo(new WritableStream()).then(onfulfilled, onrejected);
       },
     };
