@@ -7044,7 +7044,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should be able to suspend nested workflow step in a nested workflow step', async () => {
+    it('should be able to suspend nested workflow step in a nested workflow step', async () => {
       const start = vi.fn().mockImplementation(async ({ inputData }) => {
         // Get the current value (either from trigger or previous increment)
         const currentValue = inputData.startValue || 0;
@@ -7371,6 +7371,7 @@ describe('Workflow', () => {
 
       new Mastra({
         workflows: { 'consecutive-parallel-workflow': workflow },
+        storage: testStorage,
       });
 
       const run = workflow.createRun();
@@ -7416,7 +7417,7 @@ describe('Workflow', () => {
   });
 
   describe('Run count', () => {
-    it('runCount property should increment the run count when a step is executed multiple times', async () => {
+    it.only('runCount property should increment the run count when a step is executed multiple times', async () => {
       const repeatingStep = createStep({
         id: 'repeatingStep',
         inputSchema: z.object({}),
@@ -7435,6 +7436,11 @@ describe('Workflow', () => {
       })
         .dountil(repeatingStep, async ({ inputData }) => inputData.count === 3)
         .commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
 
       const result = await workflow.createRun().start({ inputData: {} });
 
