@@ -8,6 +8,7 @@ const meta = {
   "workflows-legacy": {
     title: "Workflows (Legacy)",
     theme: { collapsed: true },
+    display: "hidden",
   },
   "networks-vnext": { title: "Networks (vNext)" },
   rag: { title: "RAG" },
