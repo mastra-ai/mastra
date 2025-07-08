@@ -17,7 +17,7 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
         setIsLoading(false);
         return;
       }
-      const res = await client.getWorkingMemory(agentId, threadId, resourceId);
+      const res = await client.getWorkingMemory({ agentId, threadId, resourceId });
       const { workingMemory, source } = res as { workingMemory: string; source: 'thread' | 'resource' };
       setWorkingMemoryData(workingMemory);
       setWorkingMemorySource(source);
@@ -37,7 +37,7 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
   const updateWorkingMemory = async (newMemory: string) => {
     setIsUpdating(true);
     try {
-      await client.updateWorkingMemory(agentId, threadId, newMemory, resourceId);
+      await client.updateWorkingMemory({ agentId, threadId, workingMemory: newMemory, resourceId });
       setWorkingMemoryData(newMemory);
       toast.success('Working memory updated');
     } catch (error) {

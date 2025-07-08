@@ -316,10 +316,6 @@ export async function getWorkingMemoryHandler({
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
-    const thread = await memory.getThreadById({ threadId: threadId! });
-    if (!thread) {
-      throw new HTTPException(404, { message: 'Thread not found' });
-    }
     const workingMemory = await memory.getWorkingMemory({ threadId: threadId!, resourceId, memoryConfig });
     const config = memory.getMergedThreadConfig(memoryConfig || {});
     const source = config.workingMemory?.scope === 'resource' && resourceId ? 'resource' : 'thread';
@@ -360,44 +356,5 @@ export async function updateWorkingMemoryHandler({
     return { success: true };
   } catch (error) {
     return handleError(error, 'Error updating working memory');
-  }
-}
-
-export async function getSemanticRecallMessagesHandler({
-  mastra,
-  agentId,
-  threadId,
-  networkId,
-  runtimeContext,
-  resourceId,
-  vectorMessageSearch,
-  config,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
-  resourceId?: Parameters<MastraMemory['rememberMessages']>[0]['resourceId'];
-  vectorMessageSearch?: Parameters<MastraMemory['rememberMessages']>[0]['vectorMessageSearch'];
-  config?: Parameters<MastraMemory['rememberMessages']>[0]['config'];
-}) {
-  try {
-    validateBody({ threadId });
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
-
-    if (!memory) {
-      throw new HTTPException(400, { message: 'Memory is not initialized' });
-    }
-    const thread = await memory.getThreadById({ threadId: threadId! });
-    if (!thread) {
-      throw new HTTPException(404, { message: 'Thread not found' });
-    }
-
-    const result = await memory.rememberMessages({
-      threadId: threadId!,
-      resourceId,
-      vectorMessageSearch,
-      config,
-    });
-
-    return result;
-  } catch (error) {
-    return handleError(error, 'Error getting semantic recall messages');
   }
 }
