@@ -861,7 +861,7 @@ importers:
         specifier: ^12.1.0
         version: 12.1.0
       dotenv:
-        specifier: ^16.5.0
+        specifier: ^16.6.1
         version: 16.6.1
       execa:
         specifier: ^9.6.0
@@ -1260,7 +1260,7 @@ importers:
         specifier: ^3.6.0
         version: 3.6.0
       dotenv:
-        specifier: ^16.5.0
+        specifier: ^16.6.1
         version: 16.6.1
       hono:
         specifier: ^4.8.4
@@ -1463,7 +1463,7 @@ importers:
         specifier: ^2.0.4
         version: 2.0.4
       dotenv:
-        specifier: ^16.5.0
+        specifier: ^16.6.1
         version: 16.6.1
       esbuild:
         specifier: ^0.25.5
@@ -1902,7 +1902,7 @@ importers:
         specifier: workspace:*
         version: link:..
       dotenv:
-        specifier: ^16.5.0
+        specifier: ^16.6.1
         version: 16.6.1
       zod:
         specifier: ^3.25.67
