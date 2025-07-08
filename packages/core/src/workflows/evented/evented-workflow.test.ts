@@ -1910,7 +1910,7 @@ describe('Workflow', () => {
     });
 
     describe('Simple Conditions', () => {
-      it('should follow conditional chains', async () => {
+      it.only('should follow conditional chains', async () => {
         const step1Action = vi.fn().mockImplementation(() => {
           return Promise.resolve({ status: 'success' });
         });
@@ -1980,8 +1980,14 @@ describe('Workflow', () => {
           .then(step4)
           .commit();
 
+        new Mastra({
+          workflows: { 'test-workflow': workflow },
+          storage: testStorage,
+        });
+
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { status: 'success' } });
+        console.dir({ result }, { depth: null });
 
         expect(step1Action).toHaveBeenCalled();
         expect(step2Action).toHaveBeenCalled();

@@ -174,7 +174,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath: executionPath.concat([idx]),
               resume,
               stepResults,
-              prevResult,
+              prevResult: undefined,
               resumeData,
               parentWorkflow,
               activeSteps,
@@ -205,6 +205,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       await Promise.all(
         step.steps.map(async (_step, idx) => {
           if (truthyIdxs[idx]) {
+            console.log('suhh: running conditional step', executionPath.concat([idx]));
             return this.pubsub.publish('workflows', {
               type: 'workflow.step.run',
               data: {
@@ -220,6 +221,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               },
             });
           } else {
+            console.log('suhh: skipping conditional step', executionPath.concat([idx]));
             return this.pubsub.publish('workflows', {
               type: 'workflow.step.end',
               data: {
@@ -228,7 +230,7 @@ export class WorkflowEventProcessor extends EventProcessor {
                 executionPath: executionPath.concat([idx]),
                 resume,
                 stepResults,
-                prevResult,
+                prevResult: { status: 'skipped' },
                 resumeData,
                 parentWorkflow,
                 activeSteps,
@@ -416,12 +418,16 @@ export class WorkflowEventProcessor extends EventProcessor {
         return;
       }
 
+      let skippedCount = 0;
       const allResults: Record<string, any> = step.steps.reduce(
         (acc, step) => {
           if (step.type === 'step') {
             const res = newStepResults?.[step.step.id];
             if (res && res.status === 'success') {
               acc[step.step.id] = res?.output;
+              // @ts-ignore
+            } else if (res?.status === 'skipped') {
+              skippedCount++;
             }
           }
 
@@ -431,7 +437,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
 
       const keys = Object.keys(allResults);
-      if (keys.length < step.steps.length) {
+      if (keys.length + skippedCount < step.steps.length) {
         return;
       }
 
