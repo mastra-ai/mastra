@@ -37,7 +37,11 @@ Then, import the necessary dependencies:
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { openai } from "@ai-sdk/openai";
 import { PgVector } from "@mastra/pg";
-import { MDocument, rerank } from "@mastra/rag";
+import { 
+  MDocument, 
+  rerankWithScorer as rerank, 
+  MastraAgentRelevanceScorer 
+} from "@mastra/rag";
 import { embedMany, embed } from "ai";
 ```
 
@@ -75,10 +79,12 @@ const { embeddings } = await embedMany({
 const pgVector = new PgVector({
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
+
 await pgVector.createIndex({
   indexName: "embeddings",
   dimension: 1536,
 });
+
 await pgVector.upsert({
   indexName: "embeddings",
   vectors: embeddings,
@@ -107,11 +113,11 @@ const initialResults = await pgVector.query({
 });
 
 // Re-rank results
-const rerankedResults = await rerank(
-  initialResults,
+const rerankedResults = await rerank({
+  results: initialResults,
   query,
-  openai("gpt-4o-mini"),
-  {
+  scorer: new MastraAgentRelevanceScorer('relevance-scorer', openai("gpt-4o-mini")),
+  options: {
     weights: {
       semantic: 0.5, // How well the content matches the query semantically
       vector: 0.3, // Original vector similarity score
@@ -119,7 +125,7 @@ const rerankedResults = await rerank(
     },
     topK: 3,
   },
-);
+});
 ```
 
 The weights control how different factors influence the final ranking:

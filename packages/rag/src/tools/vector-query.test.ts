@@ -44,11 +44,13 @@ describe('createVectorQueryTool', () => {
       debug: vi.fn(),
       warn: vi.fn(),
       info: vi.fn(),
+      error: vi.fn(),
     },
     getLogger: vi.fn(() => ({
       debug: vi.fn(),
       warn: vi.fn(),
       info: vi.fn(),
+      error: vi.fn(),
     })),
   };
 

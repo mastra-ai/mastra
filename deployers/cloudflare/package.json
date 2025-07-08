@@ -39,7 +39,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "@babel/core": "^7.27.7",
     "@mastra/deployer": "workspace:^",

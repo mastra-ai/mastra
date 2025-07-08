@@ -1,5 +1,19 @@
 # @mastra/playground-ui
 
+## 5.1.11-alpha.3
+
+### Patch Changes
+
+- f457d86: reset localstorage when resetting model settings
+- 8722d53: Fix multi modal remaining steps
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [cb16baf]
+  - @mastra/core@0.10.11-alpha.3
+  - @mastra/client-js@0.10.10-alpha.3
+
 ## 5.1.11-alpha.2
 
 ### Patch Changes
