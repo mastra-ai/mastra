@@ -3019,7 +3019,7 @@ importers:
         specifier: ^1.35.0
         version: 1.35.1
       '@upstash/vector':
-        specifier: ^1.2.1
+        specifier: ^1.2.2
         version: 1.2.2
     devDependencies:
       '@internal/lint':
