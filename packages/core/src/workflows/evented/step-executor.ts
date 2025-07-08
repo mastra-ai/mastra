@@ -120,4 +120,75 @@ export class StepExecutor extends MastraBase {
       };
     }
   }
+
+  async evaluateConditions(params: {
+    step: Extract<StepFlowEntry, { type: 'conditional' }>;
+    runId: string;
+    input?: any;
+    resumeData?: any;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    emitter: { runtime: PubSub; events: PubSub };
+    runtimeContext: RuntimeContext;
+  }): Promise<number[]> {
+    const { step, stepResults, runId, runtimeContext } = params;
+
+    const abortController = new AbortController();
+    const ee = new EventEmitter();
+
+    console.log('executor start condition eval', this.mastra, step);
+    const results = await Promise.all(
+      step.conditions.map(condition => {
+        try {
+          console.log('evaluating condition', condition, params);
+          return condition({
+            runId,
+            mastra: this.mastra!,
+            runtimeContext,
+            inputData: params.input,
+            runCount: 0, // TODO: implement this
+            resumeData: params.resumeData,
+            getInitData: () => stepResults?.input as any,
+            getStepResult: (step: any) => {
+              if (!step?.id) {
+                return null;
+              }
+
+              const result = stepResults[step.id];
+              if (result?.status === 'success') {
+                return result.output;
+              }
+
+              return null;
+            },
+            suspend: async (_suspendPayload: any): Promise<any> => {
+              throw new Error('Not implemented');
+            },
+            bail: (_result: any) => {
+              throw new Error('Not implemented');
+            },
+            abort: () => {
+              abortController?.abort();
+            },
+            [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
+            engine: {},
+            abortSignal: abortController?.signal,
+          });
+        } catch (e) {
+          console.error('error evaluating condition', e);
+          return false;
+        }
+      }),
+    );
+    console.log('executor end', results);
+
+    const idxs = results.reduce((acc, result, idx) => {
+      if (result) {
+        acc.push(idx);
+      }
+
+      return acc;
+    }, [] as number[]);
+
+    return idxs;
+  }
 }

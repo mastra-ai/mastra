@@ -157,7 +157,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
-    if (step.type === 'parallel' && executionPath.length > 1) {
+    if ((step.type === 'parallel' || step.type === 'conditional') && executionPath.length > 1) {
       step = step.steps[executionPath[1]!] as StepFlowEntry;
     } else if (step.type === 'parallel') {
       for (let i = 0; i < step.steps.length; i++) {
@@ -182,6 +182,62 @@ export class WorkflowEventProcessor extends EventProcessor {
           });
         }),
       );
+      return;
+    } else if (step?.type === 'conditional') {
+      console.log('conditional found');
+      const idxs = await this.stepExecutor.evaluateConditions({
+        step,
+        runId,
+        stepResults,
+        emitter: new EventEmitter() as any, // TODO
+        runtimeContext: new RuntimeContext(), // TODO
+        input: prevResult?.status === 'success' ? prevResult.output : undefined,
+        resumeData,
+      });
+      console.log('conditional idxs', idxs);
+
+      const truthyIdxs: Record<number, boolean> = {};
+      for (let i = 0; i < idxs.length; i++) {
+        activeSteps.push(executionPath.concat([idxs[i]!]));
+        truthyIdxs[idxs[i]!] = true;
+      }
+
+      await Promise.all(
+        step.steps.map(async (_step, idx) => {
+          if (truthyIdxs[idx]) {
+            return this.pubsub.publish('workflows', {
+              type: 'workflow.step.run',
+              data: {
+                workflowId,
+                runId,
+                executionPath: executionPath.concat([idx]),
+                resume,
+                stepResults,
+                prevResult,
+                resumeData,
+                parentWorkflow,
+                activeSteps,
+              },
+            });
+          } else {
+            return this.pubsub.publish('workflows', {
+              type: 'workflow.step.end',
+              data: {
+                workflowId,
+                runId,
+                executionPath: executionPath.concat([idx]),
+                resume,
+                stepResults,
+                prevResult,
+                resumeData,
+                parentWorkflow,
+                activeSteps,
+              },
+            });
+          }
+        }),
+      );
+
       return;
     }
 
@@ -269,7 +325,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     let step = workflow.stepGraph[executionPath[0]!];
 
-    if (step?.type === 'parallel' && executionPath.length > 1) {
+    if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
       step = step.steps[executionPath[1]!];
     }
 
@@ -346,7 +402,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     step = workflow.stepGraph[executionPath[0]!];
-    if (step?.type === 'parallel' && executionPath.length > 1) {
+    if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
       let actualStep: { type: 'step'; step: Step } = step.steps[executionPath[1]!] as { type: 'step'; step: Step };
 
       const newStepResults = await this.mastra.getStorage()?.updateWorkflowResults({
@@ -483,7 +539,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     workflow = workflow ?? this.mastra.getWorkflow(workflowId);
     const stepGraph = workflow.stepGraph;
     let parentStep = stepGraph[executionPath[0]!];
-    if (parentStep?.type === 'parallel') {
+    if (parentStep?.type === 'parallel' || parentStep?.type === 'conditional') {
       parentStep = parentStep.steps[executionPath[1]!];
     }
 
