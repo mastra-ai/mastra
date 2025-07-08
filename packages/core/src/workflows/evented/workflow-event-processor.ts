@@ -50,7 +50,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   private async errorWorkflow(
-    { parentWorkflow, workflowId, runId, resume, stepResults, resumeData }: ProcessorArgs,
+    { parentWorkflow, workflowId, runId, resume, stepResults, resumeData }: Omit<ProcessorArgs, 'workflow'>,
     e: Error,
   ) {
     await this.pubsub.publish('workflows', {
@@ -392,6 +392,31 @@ export class WorkflowEventProcessor extends EventProcessor {
     });
     console.dir({ stepId: step.step.id, stepResult, stepResults }, { depth: null });
 
+    // @ts-ignore
+    if (stepResult.status === 'bailed') {
+      // @ts-ignore
+      stepResult.status = 'success';
+
+      await this.pubsub.publish('workflows', {
+        type: 'workflow.end',
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resume,
+          stepResults: {
+            ...stepResults,
+            [step.step.id]: stepResult,
+          },
+          prevResult: stepResult,
+          resumeData,
+          activeSteps,
+        },
+      });
+      return;
+    }
+
     await this.pubsub.publish('workflows', {
       type: 'workflow.step.end',
       data: {
@@ -438,11 +463,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       if (parentContext) {
         console.log('YOYO', prevResult, parentContext?.input?.output, {
           ...prevResult,
-          payload: parentContext.input?.output,
+          payload: parentContext.input?.output ?? {},
         });
         prevResult = stepResults[step.step.id] = {
           ...prevResult,
-          payload: parentContext.input?.output,
+          payload: parentContext.input?.output ?? {},
         };
       } else {
         stepResults[step.step.id] = prevResult;
@@ -472,23 +497,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     } else if (prevResult.status === 'suspended') {
       await this.pubsub.publish('workflows', {
         type: 'workflow.suspend',
-        data: {
-          workflowId,
-          runId,
-          executionPath,
-          resume,
-          parentWorkflow,
-          stepResults,
-          prevResult,
-          resumeData,
-          activeSteps,
-        },
-      });
-
-      return;
-    } else if (prevResult.status === 'waiting') {
-      await this.pubsub.publish('workflows', {
-        type: 'workflow.bail',
         data: {
           workflowId,
           runId,
@@ -675,8 +683,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (!workflow) {
       return this.errorWorkflow(
-        workflowData.workflowId,
-        workflowData.runId,
+        workflowData,
         new MastraError({
           id: 'MASTRA_WORKFLOW',
           text: `Workflow not found: ${workflowData.workflowId}`,

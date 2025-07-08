@@ -40,7 +40,7 @@ export class StepExecutor extends MastraBase {
       resumePayload?: any;
     } = {
       startedAt,
-      payload: params.input,
+      payload: params.input ?? {},
     };
 
     if (params.resumeData) {
@@ -97,7 +97,10 @@ export class StepExecutor extends MastraBase {
       } else if (bailed) {
         finalResult = {
           ...stepInfo,
-          status: 'waiting',
+          // @ts-ignore
+          status: 'bailed',
+          endedAt,
+          output: bailed.payload,
         };
       } else {
         finalResult = {
