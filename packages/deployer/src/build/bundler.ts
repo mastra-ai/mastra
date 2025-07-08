@@ -20,13 +20,10 @@ export async function getInputOptions(
     platform === 'node'
       ? nodeResolve({
           preferBuiltins: true,
-          exportConditions: ['node', 'import', 'require'],
-          mainFields: ['module', 'main'],
+          exportConditions: ['node'],
         })
       : nodeResolve({
           preferBuiltins: false,
-          exportConditions: ['browser', 'import', 'require'],
-          mainFields: ['module', 'main'],
           browser: true,
         });
 

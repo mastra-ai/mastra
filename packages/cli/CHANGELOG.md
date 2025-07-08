@@ -1,5 +1,27 @@
 # mastra
 
+## 0.10.11-alpha.2
+
+### Patch Changes
+
+- ec77f83: Expose --inspect flag for mastra dev to start debugger
+- 565cc0c: fix redirection when clicking on the playground breadcrumbs
+- 4219597: add JSON input close to form input
+- 2873c7f: dependencies updates:
+  - Updated dependency [`dotenv@^16.6.1` ↗︎](https://www.npmjs.com/package/dotenv/v/16.6.1) (from `^16.5.0`, in `dependencies`)
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [d9b26b5]
+- Updated dependencies [f5ec3a4]
+- Updated dependencies [ab3bbff]
+- Updated dependencies [565cc0c]
+- Updated dependencies [18ca936]
+  - @mastra/core@0.10.11-alpha.2
+  - @mastra/deployer@0.10.11-alpha.2
+  - @mastra/mcp@0.10.6-alpha.0
+
 ## 0.10.11-alpha.1
 
 ### Patch Changes
