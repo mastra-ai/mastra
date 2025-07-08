@@ -1,5 +1,16 @@
 # @mastra/agui
 
+## 1.0.6-alpha.0
+
+### Patch Changes
+
+- 1c1c6a1: dependencies updates:
+  - Updated dependency [`hono@^4.8.4` ↗︎](https://www.npmjs.com/package/hono/v/4.8.4) (from `^4.8.3`, in `dependencies`)
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [565cc0c]
+  - @mastra/core@0.10.11-alpha.2
+
 ## 1.0.5
 
 ### Patch Changes

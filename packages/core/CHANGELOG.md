@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.10.11-alpha.2
+
+### Patch Changes
+
+- 2873c7f: dependencies updates:
+  - Updated dependency [`dotenv@^16.6.1` ↗︎](https://www.npmjs.com/package/dotenv/v/16.6.1) (from `^16.5.0`, in `dependencies`)
+- 1c1c6a1: dependencies updates:
+  - Updated dependency [`hono@^4.8.4` ↗︎](https://www.npmjs.com/package/hono/v/4.8.4) (from `^4.8.3`, in `dependencies`)
+- 565cc0c: fix redirection when clicking on the playground breadcrumbs
+
 ## 0.10.11-alpha.1
 
 ### Patch Changes

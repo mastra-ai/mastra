@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.10.10-alpha.2
+
+### Patch Changes
+
+- 4219597: add JSON input close to form input
+- 18ca936: Update rollup config for create-mastra
+
 ## 0.10.10-alpha.1
 
 ### Patch Changes
