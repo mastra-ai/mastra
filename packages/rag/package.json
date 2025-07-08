@@ -21,6 +21,7 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "buld:watch": "pnpm build --watch",
+    "vitest": "vitest",
     "test": "vitest run",
     "lint": "eslint ."
   },
@@ -29,9 +30,11 @@
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
     "big.js": "^7.0.1",
+    "cohere-ai": "^7.17.1",
     "js-tiktoken": "^1.0.20",
     "node-html-better-parser": "^1.4.11",
     "pathe": "^2.0.3",
+    "zeroentropy": "0.1.0-alpha.6",
     "zod": "^3.25.67"
   },
   "peerDependencies": {

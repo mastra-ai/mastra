@@ -2,8 +2,8 @@ import { createTool } from '@mastra/core/tools';
 import type { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
-import { rerank } from '../rerank';
-import type { RerankConfig } from '../rerank';
+import { rerank, rerankWithScorer } from '../rerank';
+import type { RerankConfig, RerankResult } from '../rerank';
 import { vectorQuerySearch, defaultVectorQueryDescription, filterSchema, outputSchema, baseSchema } from '../utils';
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
@@ -94,26 +94,48 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
         }
+
         if (reranker) {
           if (logger) {
             logger.debug('Reranking results', { rerankerModel: reranker.model, rerankerOptions: reranker.options });
           }
-          const rerankedResults = await rerank(results, queryText, reranker.model, {
-            ...reranker.options,
-            topK: reranker.options?.topK || topKValue,
-          });
+
+          let rerankedResults: RerankResult[] = [];
+
+          if (typeof reranker?.model === 'object' && 'getRelevanceScore' in reranker?.model) {
+            rerankedResults = await rerankWithScorer({
+              results,
+              query: queryText,
+              scorer: reranker.model,
+              options: {
+                ...reranker.options,
+                topK: reranker.options?.topK || topKValue,
+              },
+            });
+          } else {
+            rerankedResults = await rerank(results, queryText, reranker.model, {
+              ...reranker.options,
+              topK: reranker.options?.topK || topKValue,
+            });
+          }
+
           if (logger) {
             logger.debug('Reranking complete', { rerankedCount: rerankedResults.length });
           }
+
           const relevantChunks = rerankedResults.map(({ result }) => result?.metadata);
+
           if (logger) {
             logger.debug('Returning reranked relevant context chunks', { count: relevantChunks.length });
           }
+
           const sources = includeSources ? convertToSources(rerankedResults) : [];
+
           return { relevantContext: relevantChunks, sources };
         }
 
         const relevantChunks = results.map(result => result?.metadata);
+
         if (logger) {
           logger.debug('Returning relevant context chunks', { count: relevantChunks.length });
         }

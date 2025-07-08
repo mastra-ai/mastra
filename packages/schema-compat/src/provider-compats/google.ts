@@ -1,10 +1,12 @@
 import type { LanguageModelV1 } from 'ai';
 import type { ZodTypeAny } from 'zod';
+import { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import {
   SchemaCompatLayer,
   UNSUPPORTED_ZOD_TYPES,
   isArr,
+  isNull,
   isNumber,
   isObj,
   isOptional,
@@ -35,6 +37,12 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
         'ZodNumber',
         ...UNSUPPORTED_ZOD_TYPES,
       ]);
+    } else if (isNull(value)) {
+      // Google models don't support null, so we need to convert it to any and then refine it to null
+      return z
+        .any()
+        .refine(v => v === null, { message: 'must be null' })
+        .describe(value._def.description || 'must be null');
     } else if (isObj(value)) {
       return this.defaultZodObjectHandler(value);
     } else if (isArr(value)) {
