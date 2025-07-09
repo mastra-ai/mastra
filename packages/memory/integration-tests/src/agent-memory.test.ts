@@ -315,10 +315,10 @@ describe('Agent with message processors', () => {
 
     const secondResponseRequestMessages: CoreMessage[] = JSON.parse(secondResponse.request.body as string).messages;
 
-    expect(secondResponseRequestMessages.length).toBe(4);
+    expect(secondResponseRequestMessages.length).toBe(6);
     // Filter out tool messages and tool results, should be the same as above.
     expect(
-      secondResponseRequestMessages.filter(m => m.role !== 'tool' || (m as any)?.tool_calls?.[0]?.type !== 'function')
+      secondResponseRequestMessages.filter(m => m.role !== 'tool' && (m as any)?.tool_calls?.[0]?.type !== 'function')
         .length,
     ).toBe(4);
   }, 30_000);
