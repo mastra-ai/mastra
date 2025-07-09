@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.10.12-alpha.1
+
+### Patch Changes
+
+- 4d5583d: [Cloud-195] added retrieved memory messages to agent traces
+
 ## 0.10.12-alpha.0
 
 ### Patch Changes
