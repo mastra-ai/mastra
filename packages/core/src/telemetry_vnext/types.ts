@@ -47,21 +47,13 @@ export enum SpanType {
 // ============================================================================
 
 /**
- * Base metadata that all spans share
+ * Base user-provided metadata that all spans can have
  */
-export interface BaseSpanMetadata {
-  /** Type of the span */
-  type: SpanType;
+export interface BaseUserMetadata {
   /** Custom tags for categorization */
   tags?: string[];
   /** User-defined attributes */
   attributes?: Record<string, any>;
-  /** Timestamp when span was created */
-  createdAt: Date;
-  /** Optional parent span ID */
-  parentSpanId?: string;
-  /** Trace ID this span belongs to */
-  traceId: string;
   /** Error information if span failed */
   error?: {
     message: string;
@@ -72,16 +64,14 @@ export interface BaseSpanMetadata {
 }
 
 /**
- * Agent Run metadata
+ * Agent Run metadata (user-provided)
  */
-export interface AgentRunMetadata extends BaseSpanMetadata {
-  type: SpanType.AGENT_RUN;
+export interface AgentRunMetadata extends BaseUserMetadata {
+  // type is managed by system, not user-provided
   /** Agent identifier */
   agentId: string;
   /** Agent name/type */
   agentName?: string;
-  /** Execution context */
-  context?: string;
   /** Available tools for this execution */
   availableTools?: string[];
   /** Input to the agent */
@@ -92,8 +82,6 @@ export interface AgentRunMetadata extends BaseSpanMetadata {
   status: 'pending' | 'running' | 'completed' | 'failed' | 'suspended';
   /** Memory thread ID if using memory */
   threadId?: string;
-  /** Workflow ID if part of a workflow */
-  workflowId?: string;
   /** Maximum steps allowed */
   maxSteps?: number;
   /** Current step number */
@@ -101,10 +89,10 @@ export interface AgentRunMetadata extends BaseSpanMetadata {
 }
 
 /**
- * Workflow Run metadata
+ * Workflow Run metadata (user-provided)
  */
-export interface WorkflowRunMetadata extends BaseSpanMetadata {
-  type: SpanType.WORKFLOW_RUN;
+export interface WorkflowRunMetadata extends BaseUserMetadata {
+  // type is managed by system, not user-provided
   /** Workflow identifier */
   workflowId: string;
   /** Workflow name/type */
@@ -125,15 +113,13 @@ export interface WorkflowRunMetadata extends BaseSpanMetadata {
   suspendable?: boolean;
   /** Execution mode (sequential, parallel, conditional) */
   executionMode?: 'sequential' | 'parallel' | 'conditional' | 'graph';
-  /** Workflow metadata */
-  metadata?: Record<string, any>;
 }
 
 /**
- * LLM Generation metadata
+ * LLM Generation metadata (user-provided)
  */
-export interface LLMGenerationMetadata extends BaseSpanMetadata {
-  type: SpanType.LLM_GENERATION;
+export interface LLMGenerationMetadata extends BaseUserMetadata {
+  // type is managed by system, not user-provided
   /** Model name (e.g., 'gpt-4', 'claude-3') */
   model: string;
   /** Model provider (e.g., 'openai', 'anthropic') */
@@ -172,10 +158,10 @@ export interface LLMGenerationMetadata extends BaseSpanMetadata {
 }
 
 /**
- * Tool Call metadata
+ * Tool Call metadata (user-provided)
  */
-export interface ToolCallMetadata extends BaseSpanMetadata {
-  type: SpanType.TOOL_CALL;
+export interface ToolCallMetadata extends BaseUserMetadata {
+  // type is managed by system, not user-provided
   /** Name of the tool/function */
   toolName: string;
   /** Tool provider/source */
@@ -184,17 +170,15 @@ export interface ToolCallMetadata extends BaseSpanMetadata {
   input?: any;
   /** Tool output */
   output?: any;
-  /** Execution time in milliseconds */
-  executionTime?: number;
   /** Whether tool execution was successful */
   success?: boolean;
 }
 
 /**
- * MCP Tool Call metadata
+ * MCP Tool Call metadata (user-provided)
  */
-export interface MCPToolCallMetadata extends BaseSpanMetadata {
-  type: SpanType.MCP_TOOL_CALL;
+export interface MCPToolCallMetadata extends BaseUserMetadata {
+  // type is managed by system, not user-provided
   /** Name of the MCP tool/function */
   toolName: string;
   /** MCP server identifier */
@@ -209,8 +193,6 @@ export interface MCPToolCallMetadata extends BaseSpanMetadata {
   output?: any;
   /** MCP-specific error type if tool failed */
   mcpErrorType?: string;
-  /** Execution time in milliseconds */
-  executionTime?: number;
   /** Whether tool execution was successful */
   success?: boolean;
   /** MCP protocol version */
@@ -220,10 +202,10 @@ export interface MCPToolCallMetadata extends BaseSpanMetadata {
 }
 
 /**
- * Memory Lookup metadata
+ * Memory Lookup metadata (user-provided)
  */
-export interface MemoryLookupMetadata extends BaseSpanMetadata {
-  type: SpanType.MEMORY_LOOKUP;
+export interface MemoryLookupMetadata extends BaseUserMetadata {
+  // type is managed by system, not user-provided
   /** Memory type (e.g., 'semantic', 'episodic', 'working') */
   memoryType: string;
   /** Search query */
@@ -245,10 +227,10 @@ export interface MemoryLookupMetadata extends BaseSpanMetadata {
 }
 
 /**
- * Memory Update metadata
+ * Memory Update metadata (user-provided)
  */
-export interface MemoryUpdateMetadata extends BaseSpanMetadata {
-  type: SpanType.MEMORY_UPDATE;
+export interface MemoryUpdateMetadata extends BaseUserMetadata {
+  // type is managed by system, not user-provided
   /** Memory type (e.g., 'semantic', 'episodic', 'working') */
   memoryType: string;
   /** Operation type */
@@ -270,10 +252,10 @@ export interface MemoryUpdateMetadata extends BaseSpanMetadata {
 }
 
 /**
- * RAG Query metadata
+ * RAG Query metadata (user-provided)
  */
-export interface RAGQueryMetadata extends BaseSpanMetadata {
-  type: SpanType.RAG_QUERY;
+export interface RAGQueryMetadata extends BaseUserMetadata {
+  // type is managed by system, not user-provided
   /** Original user query */
   query: string;
   /** Processed/rewritten query */
@@ -301,10 +283,10 @@ export interface RAGQueryMetadata extends BaseSpanMetadata {
 }
 
 /**
- * Embedding Generation metadata
+ * Embedding Generation metadata (user-provided)
  */
-export interface EmbeddingGenerationMetadata extends BaseSpanMetadata {
-  type: SpanType.EMBEDDING_GENERATION;
+export interface EmbeddingGenerationMetadata extends BaseUserMetadata {
+  // type is managed by system, not user-provided
   /** Embedding model used */
   model: string;
   /** Model provider (e.g., 'openai', 'cohere', 'sentence-transformers') */
@@ -336,10 +318,10 @@ export interface EmbeddingGenerationMetadata extends BaseSpanMetadata {
 }
 
 /**
- * Workflow Step metadata
+ * Workflow Step metadata (user-provided)
  */
-export interface WorkflowStepMetadata extends BaseSpanMetadata {
-  type: SpanType.WORKFLOW_STEP;
+export interface WorkflowStepMetadata extends BaseUserMetadata {
+  // type is managed by system, not user-provided
   /** Workflow identifier */
   workflowId: string;
   /** Step name/identifier */
@@ -360,10 +342,10 @@ export interface WorkflowStepMetadata extends BaseSpanMetadata {
 }
 
 /**
- * Evaluation Execution metadata
+ * Evaluation Execution metadata (user-provided)
  */
-export interface EvalExecutionMetadata extends BaseSpanMetadata {
-  type: SpanType.EVAL_EXECUTION;
+export interface EvalExecutionMetadata extends BaseUserMetadata {
+  // type is managed by system, not user-provided
   /** Evaluation identifier */
   evalId: string;
   /** Evaluation name/type */
@@ -405,7 +387,7 @@ export interface EvalExecutionMetadata extends BaseSpanMetadata {
 }
 
 /**
- * Union type for all span metadata
+ * Complete span metadata (system + user provided)
  */
 export type SpanMetadata =
   | AgentRunMetadata
@@ -419,7 +401,7 @@ export type SpanMetadata =
   | EmbeddingGenerationMetadata
   | EvalExecutionMetadata
   | WorkflowStepMetadata
-  | (BaseSpanMetadata & { type: SpanType.GENERIC });
+  | BaseUserMetadata; // For generic spans
 
 // ============================================================================
 // Trace and Span Interfaces
@@ -451,8 +433,6 @@ export interface Trace {
   tags?: string[];
   /** Root spans (spans with no parent span) */
   rootSpans: AISpan[];
-  /** Additional metadata */
-  metadata?: Record<string, any>;
 }
 
 /**
@@ -461,10 +441,18 @@ export interface Trace {
 export interface AISpan {
   /** Unique span identifier */
   id: string;
-  /** OpenTelemetry span (for compatibility) */
-  otelSpan?: OTelSpan;
+  /** Type of the span */
+  type: SpanType;
+  /** When span started */
+  startTime: Date;
+  /** When span ended */
+  endTime?: Date;
   /** AI-specific metadata */
   metadata: SpanMetadata;
+  /** Custom attributes */
+  attributes?: Record<string, any>;
+  /** OpenTelemetry span (for compatibility) */
+  otelSpan?: OTelSpan;
   /** Child spans */
   children: AISpan[];
   /** Parent span reference (undefined for root spans) */
@@ -474,68 +462,50 @@ export interface AISpan {
 
   // Methods for span lifecycle
   /** End the span */
-  end(options?: {
-    endTime?: Date;
-    metadata?: Partial<Omit<AgentRunMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
-  }): void;
-  end(options?: {
-    endTime?: Date;
-    metadata?: Partial<Omit<WorkflowRunMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
-  }): void;
-  end(options?: {
-    endTime?: Date;
-    metadata?: Partial<Omit<LLMGenerationMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
-  }): void;
-  end(options?: {
-    endTime?: Date;
-    metadata?: Partial<Omit<ToolCallMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
-  }): void;
-  end(options?: {
-    endTime?: Date;
-    metadata?: Partial<Omit<MCPToolCallMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
-  }): void;
-  end(options?: {
-    endTime?: Date;
-    metadata?: Partial<Omit<MemoryLookupMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
-  }): void;
-  end(options?: {
-    endTime?: Date;
-    metadata?: Partial<Omit<MemoryUpdateMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
-  }): void;
-  end(options?: {
-    endTime?: Date;
-    metadata?: Partial<Omit<RAGQueryMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
-  }): void;
-  end(options?: {
-    endTime?: Date;
-    metadata?: Partial<Omit<EmbeddingGenerationMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
-  }): void;
-  end(options?: {
-    endTime?: Date;
-    metadata?: Partial<Omit<EvalExecutionMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
-  }): void;
-  end(options?: {
-    endTime?: Date;
-    metadata?: Partial<Omit<WorkflowStepMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
-  }): void;
-  end(options?: { endTime?: Date; metadata?: Partial<SpanMetadata> }): void;
+  end(options?: { endTime?: Date; metadata?: Partial<AgentRunMetadata> }): void;
+  end(options?: { endTime?: Date; metadata?: Partial<WorkflowRunMetadata> }): void;
+  end(options?: { endTime?: Date; metadata?: Partial<LLMGenerationMetadata> }): void;
+  end(options?: { endTime?: Date; metadata?: Partial<ToolCallMetadata> }): void;
+  end(options?: { endTime?: Date; metadata?: Partial<MCPToolCallMetadata> }): void;
+  end(options?: { endTime?: Date; metadata?: Partial<MemoryLookupMetadata> }): void;
+  end(options?: { endTime?: Date; metadata?: Partial<MemoryUpdateMetadata> }): void;
+  end(options?: { endTime?: Date; metadata?: Partial<RAGQueryMetadata> }): void;
+  end(options?: { endTime?: Date; metadata?: Partial<EmbeddingGenerationMetadata> }): void;
+  end(options?: { endTime?: Date; metadata?: Partial<EvalExecutionMetadata> }): void;
+  end(options?: { endTime?: Date; metadata?: Partial<WorkflowStepMetadata> }): void;
+  end(options?: { endTime?: Date; metadata?: Partial<BaseUserMetadata> }): void;
 
   /** Update span metadata */
-  update(metadata: Partial<Omit<AgentRunMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
-  update(metadata: Partial<Omit<WorkflowRunMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
-  update(metadata: Partial<Omit<LLMGenerationMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
-  update(metadata: Partial<Omit<ToolCallMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
-  update(metadata: Partial<Omit<MCPToolCallMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
-  update(metadata: Partial<Omit<MemoryLookupMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
-  update(metadata: Partial<Omit<MemoryUpdateMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
-  update(metadata: Partial<Omit<RAGQueryMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
-  update(metadata: Partial<Omit<EmbeddingGenerationMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
-  update(metadata: Partial<Omit<EvalExecutionMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
-  update(metadata: Partial<Omit<WorkflowStepMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
-  update(metadata: Partial<SpanMetadata>): void;
+  update(metadata: Partial<AgentRunMetadata>): void;
+  update(metadata: Partial<WorkflowRunMetadata>): void;
+  update(metadata: Partial<LLMGenerationMetadata>): void;
+  update(metadata: Partial<ToolCallMetadata>): void;
+  update(metadata: Partial<MCPToolCallMetadata>): void;
+  update(metadata: Partial<MemoryLookupMetadata>): void;
+  update(metadata: Partial<MemoryUpdateMetadata>): void;
+  update(metadata: Partial<RAGQueryMetadata>): void;
+  update(metadata: Partial<EmbeddingGenerationMetadata>): void;
+  update(metadata: Partial<EvalExecutionMetadata>): void;
+  update(metadata: Partial<WorkflowStepMetadata>): void;
+  update(metadata: Partial<BaseUserMetadata>): void;
 
   /** Create child span */
-  createChildSpan(metadata: Omit<SpanMetadata, 'traceId' | 'parentSpanId' | 'createdAt'>): AISpan;
+  createChildSpan(
+    spanType: SpanType,
+    metadata:
+      | AgentRunMetadata
+      | WorkflowRunMetadata
+      | LLMGenerationMetadata
+      | ToolCallMetadata
+      | MCPToolCallMetadata
+      | MemoryLookupMetadata
+      | MemoryUpdateMetadata
+      | RAGQueryMetadata
+      | EmbeddingGenerationMetadata
+      | EvalExecutionMetadata
+      | WorkflowStepMetadata
+      | BaseUserMetadata,
+  ): AISpan;
   /** Export span for distributed tracing */
   export(): Promise<string>;
 }
@@ -679,191 +649,72 @@ export interface TelemetrySampler {
 // ============================================================================
 
 /**
- * Strongly-typed span creation options using discriminated unions
+ * Strongly-typed span creation options
  */
 export type TypedSpanOptions =
   | {
-      name: string;
       spanType: SpanType.AGENT_RUN;
-      metadata: Omit<AgentRunMetadata, 'type' | 'traceId' | 'createdAt'>;
-      parent?: AISpan;
-      context?: Context;
-      attributes?: Record<string, any>;
-      /** Internal callback for span lifecycle events (set by telemetry instance) */
-      _callbacks?: {
-        onEnd?: (span: AISpan) => void;
-        onUpdate?: (span: AISpan) => void;
-      };
+      metadata: AgentRunMetadata;
     }
   | {
-      name: string;
       spanType: SpanType.WORKFLOW_RUN;
-      metadata: Omit<WorkflowRunMetadata, 'type' | 'traceId' | 'createdAt'>;
-      parent?: AISpan;
-      context?: Context;
-      attributes?: Record<string, any>;
-      /** Internal callback for span lifecycle events (set by telemetry instance) */
-      _callbacks?: {
-        onEnd?: (span: AISpan) => void;
-        onUpdate?: (span: AISpan) => void;
-      };
+      metadata: WorkflowRunMetadata;
     }
   | {
-      name: string;
       spanType: SpanType.LLM_GENERATION;
-      metadata: Omit<LLMGenerationMetadata, 'type' | 'traceId' | 'createdAt'>;
-      parent?: AISpan;
-      context?: Context;
-      attributes?: Record<string, any>;
-      /** Internal callback for span lifecycle events (set by telemetry instance) */
-      _callbacks?: {
-        onEnd?: (span: AISpan) => void;
-        onUpdate?: (span: AISpan) => void;
-      };
+      metadata: LLMGenerationMetadata;
     }
   | {
-      name: string;
       spanType: SpanType.TOOL_CALL;
-      metadata: Omit<ToolCallMetadata, 'type' | 'traceId' | 'createdAt'>;
-      parent?: AISpan;
-      context?: Context;
-      attributes?: Record<string, any>;
-      /** Internal callback for span lifecycle events (set by telemetry instance) */
-      _callbacks?: {
-        onEnd?: (span: AISpan) => void;
-        onUpdate?: (span: AISpan) => void;
-      };
+      metadata: ToolCallMetadata;
     }
   | {
-      name: string;
       spanType: SpanType.MCP_TOOL_CALL;
-      metadata: Omit<MCPToolCallMetadata, 'type' | 'traceId' | 'createdAt'>;
-      parent?: AISpan;
-      context?: Context;
-      attributes?: Record<string, any>;
-      /** Internal callback for span lifecycle events (set by telemetry instance) */
-      _callbacks?: {
-        onEnd?: (span: AISpan) => void;
-        onUpdate?: (span: AISpan) => void;
-      };
+      metadata: MCPToolCallMetadata;
     }
   | {
-      name: string;
       spanType: SpanType.MEMORY_LOOKUP;
-      metadata: Omit<MemoryLookupMetadata, 'type' | 'traceId' | 'createdAt'>;
-      parent?: AISpan;
-      context?: Context;
-      attributes?: Record<string, any>;
-      /** Internal callback for span lifecycle events (set by telemetry instance) */
-      _callbacks?: {
-        onEnd?: (span: AISpan) => void;
-        onUpdate?: (span: AISpan) => void;
-      };
+      metadata: MemoryLookupMetadata;
     }
   | {
-      name: string;
       spanType: SpanType.MEMORY_UPDATE;
-      metadata: Omit<MemoryUpdateMetadata, 'type' | 'traceId' | 'createdAt'>;
-      parent?: AISpan;
-      context?: Context;
-      attributes?: Record<string, any>;
-      /** Internal callback for span lifecycle events (set by telemetry instance) */
-      _callbacks?: {
-        onEnd?: (span: AISpan) => void;
-        onUpdate?: (span: AISpan) => void;
-      };
+      metadata: MemoryUpdateMetadata;
     }
   | {
-      name: string;
       spanType: SpanType.RAG_QUERY;
-      metadata: Omit<RAGQueryMetadata, 'type' | 'traceId' | 'createdAt'>;
-      parent?: AISpan;
-      context?: Context;
-      attributes?: Record<string, any>;
-      /** Internal callback for span lifecycle events (set by telemetry instance) */
-      _callbacks?: {
-        onEnd?: (span: AISpan) => void;
-        onUpdate?: (span: AISpan) => void;
-      };
+      metadata: RAGQueryMetadata;
     }
   | {
-      name: string;
       spanType: SpanType.EMBEDDING_GENERATION;
-      metadata: Omit<EmbeddingGenerationMetadata, 'type' | 'traceId' | 'createdAt'>;
-      parent?: AISpan;
-      context?: Context;
-      attributes?: Record<string, any>;
-      /** Internal callback for span lifecycle events (set by telemetry instance) */
-      _callbacks?: {
-        onEnd?: (span: AISpan) => void;
-        onUpdate?: (span: AISpan) => void;
-      };
+      metadata: EmbeddingGenerationMetadata;
     }
   | {
-      name: string;
       spanType: SpanType.EVAL_EXECUTION;
-      metadata: Omit<EvalExecutionMetadata, 'type' | 'traceId' | 'createdAt'>;
-      parent?: AISpan;
-      context?: Context;
-      attributes?: Record<string, any>;
-      /** Internal callback for span lifecycle events (set by telemetry instance) */
-      _callbacks?: {
-        onEnd?: (span: AISpan) => void;
-        onUpdate?: (span: AISpan) => void;
-      };
+      metadata: EvalExecutionMetadata;
     }
   | {
-      name: string;
       spanType: SpanType.WORKFLOW_STEP;
-      metadata: Omit<WorkflowStepMetadata, 'type' | 'traceId' | 'createdAt'>;
-      parent?: AISpan;
-      context?: Context;
-      attributes?: Record<string, any>;
-      /** Internal callback for span lifecycle events (set by telemetry instance) */
-      _callbacks?: {
-        onEnd?: (span: AISpan) => void;
-        onUpdate?: (span: AISpan) => void;
-      };
+      metadata: WorkflowStepMetadata;
     }
   | {
-      name: string;
       spanType: SpanType.GENERIC;
-      metadata: Omit<BaseSpanMetadata & { type: SpanType.GENERIC }, 'type' | 'traceId' | 'createdAt'>;
-      parent?: AISpan;
-      context?: Context;
-      attributes?: Record<string, any>;
-      /** Internal callback for span lifecycle events (set by telemetry instance) */
-      _callbacks?: {
-        onEnd?: (span: AISpan) => void;
-        onUpdate?: (span: AISpan) => void;
-      };
+      metadata: BaseUserMetadata;
     };
 
 /**
- * Options for span creation (legacy - for backward compatibility)
+ * Options for span creation (internal - used by telemetry system)
  */
 export interface SpanOptions {
   /** Span name */
   name: string;
-  /** Span metadata */
-  metadata: Omit<SpanMetadata, 'traceId' | 'createdAt'>;
+  /** Span metadata (partial - system fields will be filled in) */
+  metadata: Partial<SpanMetadata>;
   /** Parent span */
   parent?: AISpan;
   /** OpenTelemetry context */
   context?: Context;
   /** Custom attributes */
   attributes?: Record<string, any>;
-  /** Internal callback for span lifecycle events (set by telemetry instance) */
-  _callbacks?: {
-    onEnd?: (span: AISpan) => void;
-    onUpdate?: (span: AISpan) => void;
-  };
-}
-
-/**
- * Internal span options used by the telemetry system
- */
-export interface InternalSpanOptions extends SpanOptions {
   /** Internal callback for span lifecycle events (set by telemetry instance) */
   _callbacks?: {
     onEnd?: (span: AISpan) => void;
