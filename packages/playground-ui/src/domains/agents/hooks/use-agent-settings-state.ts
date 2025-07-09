@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react';
 import { AgentSettingsType as AgentSettings, ModelSettings } from '@/types';
 
 export interface AgentSettingsStateProps {
-  initialModelSettings?: ModelSettings;
-  initialChatWithGenerate?: boolean;
   agentId: string;
 }
 
