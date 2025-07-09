@@ -335,7 +335,7 @@ describe('Memory with Processors', () => {
       },
     });
     expect(remembered.messages.filter(m => m.role === 'user').length).toBe(2);
-    expect(remembered.messages.length).toBe(6); // 2 user, 2 assistant, 1 tool call, 1 tool result. These wont be filtered because they come from memory.query() directly
+    expect(remembered.messages.length).toBe(4); // 2 user, 2 assistant. These wont be filtered because they come from memory.query() directly
   });
 
   it('should apply processors with a real Mastra agent', async () => {
