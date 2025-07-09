@@ -3040,8 +3040,8 @@ describe('Workflow', () => {
   });
 
   // TODO
-  describe.skip('Loops', () => {
-    it('should run an until loop', async () => {
+  describe('Loops', () => {
+    it.only('should run an until loop', async () => {
       const increment = vi.fn().mockImplementation(async ({ inputData }) => {
         // Get the current value (either from trigger or previous increment)
         const currentValue = inputData.value;
@@ -3097,6 +3097,11 @@ describe('Workflow', () => {
         })
         .then(finalStep)
         .commit();
+
+      new Mastra({
+        workflows: { 'counter-workflow': counterWorkflow },
+        storage: testStorage,
+      });
 
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: { target: 10, value: 0 } });

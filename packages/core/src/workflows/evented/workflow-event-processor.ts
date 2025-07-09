@@ -169,8 +169,17 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (!executionPath?.length) {
       return this.errorWorkflow(
-        workflowId,
-        runId,
+        {
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resume,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+        },
         new MastraError({
           id: 'MASTRA_WORKFLOW',
           text: `Execution path is empty: ${JSON.stringify(executionPath)}`,
