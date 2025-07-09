@@ -23,7 +23,7 @@ This example demonstrates how to integrate [Mastra](https://mastra.ai) with [AI 
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - pnpm (recommended) or npm/yarn
 
 ### Installation

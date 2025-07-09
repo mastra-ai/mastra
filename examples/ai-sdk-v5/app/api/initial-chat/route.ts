@@ -6,6 +6,6 @@ export async function GET() {
   const result = await myAgent.getMemory()?.query({
     threadId: "2",
   });
-  
+
   return NextResponse.json(result?.uiMessages || []);
 }

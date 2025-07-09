@@ -14,7 +14,7 @@ export const memory = new Memory({
     workingMemory: {
       enabled: false,
     },
-    lastMessages: 5
+    lastMessages: 5,
   },
 });
 
