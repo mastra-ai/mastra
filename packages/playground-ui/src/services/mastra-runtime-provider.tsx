@@ -329,6 +329,7 @@ export function MastraRuntimeProvider({
 
         await response.processDataStream({
           onTextPart(value) {
+            console.log('textPart===', value);
             if (assistantToolCallAddedForContent) {
               // start new content value to add as next message item in messages array
               assistantToolCallAddedForContent = false;
@@ -432,6 +433,15 @@ export function MastraRuntimeProvider({
           },
           onFinishMessagePart({ finishReason }) {
             handleFinishReason(finishReason);
+          },
+          onReasoningPart(streamPart) {
+            console.log('reasoningPart===', streamPart);
+          },
+          onReasoningSignaturePart(streamPart) {
+            console.log('reasoningSignaturePart===', streamPart);
+          },
+          onRedactedReasoningPart(streamPart) {
+            console.log('redactedReasoningPart===', streamPart);
           },
         });
       }
