@@ -48,6 +48,7 @@ class TestConnectorHandler implements ConnectorHandler {
 
   async close() {
     await this.#client.close();
+    this.#isConnected = false;
   }
 }
 
