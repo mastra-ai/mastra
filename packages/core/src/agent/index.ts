@@ -828,7 +828,7 @@ export class Agent<
     return convertedMemoryTools;
   }
 
-  private async getSemanticRecallMessages({
+  private async getMemoryMessages({
     resourceId,
     threadId,
     vectorMessageSearch,
@@ -1319,7 +1319,7 @@ export class Agent<
         let [memoryMessages, memorySystemMessage] =
           thread.id && memory
             ? await Promise.all([
-                this.getSemanticRecallMessages({
+                this.getMemoryMessages({
                   resourceId,
                   threadId: threadObject.id,
                   vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
