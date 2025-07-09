@@ -14,15 +14,15 @@ import z from 'zod';
     const agent = client.getAgent('weatherAgent');
     const response = await agent.stream({
       messages: 'what is the weather in new york?',
-      // output: z.object({
-      //   weather: z.string(),
-      //   temperature: z.number(),
-      //   humidity: z.number(),
-      //   windSpeed: z.number(),
-      //   windDirection: z.string(),
-      //   windGust: z.number(),
-      //   windChill: z.number(),
-      // })
+      output: z.object({
+        weather: z.string(),
+        temperature: z.number(),
+        humidity: z.number(),
+        windSpeed: z.number(),
+        windDirection: z.string(),
+        windGust: z.number(),
+        windChill: z.number(),
+      }),
     });
 
     // Process data stream - unstructured output
@@ -52,6 +52,15 @@ import z from 'zod';
     //     process.stdout.write(text);
     //   },
     // });
+
+    // read the response body directly
+
+    // const reader = response.body!.getReader();
+    // while (true) {
+    //   const { done, value } = await reader.read();
+    //   if (done) break;
+    //   console.log(new TextDecoder().decode(value));
+    // }
   } catch (error) {
     console.error(error);
   }
