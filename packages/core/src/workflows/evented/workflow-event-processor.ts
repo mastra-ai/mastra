@@ -153,6 +153,101 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
+  protected async processWorkflowLoop(
+    {
+      workflowId,
+      prevResult,
+      runId,
+      executionPath,
+      stepResults,
+      activeSteps,
+      resume,
+      resumeData,
+      parentWorkflow,
+    }: ProcessorArgs,
+    step: Extract<StepFlowEntry, { type: 'loop' }>,
+    stepResult: StepResult<any, any, any, any>,
+  ) {
+    console.log('loop found', step.step.id, stepResult);
+    const loopCondition = await this.stepExecutor.evaluateCondition({
+      condition: step.condition,
+      runId,
+      stepResults,
+      emitter: new EventEmitter() as any, // TODO
+      runtimeContext: new RuntimeContext(), // TODO
+      inputData: prevResult?.status === 'success' ? prevResult.output : undefined,
+      resumeData,
+      abortController: new AbortController(),
+      runCount: 0,
+    });
+
+    if (step.loopType === 'dountil') {
+      if (loopCondition) {
+        await this.pubsub.publish('workflows', {
+          type: 'workflow.step.end',
+          data: {
+            parentWorkflow,
+            workflowId,
+            runId,
+            executionPath,
+            resume,
+            stepResults,
+            prevResult: stepResult,
+            resumeData,
+            activeSteps,
+          },
+        });
+      } else {
+        await this.pubsub.publish('workflows', {
+          type: 'workflow.step.run',
+          data: {
+            parentWorkflow,
+            workflowId,
+            runId,
+            executionPath,
+            resume,
+            stepResults,
+            prevResult: stepResult,
+            resumeData,
+            activeSteps,
+          },
+        });
+      }
+    } else {
+      if (loopCondition) {
+        await this.pubsub.publish('workflows', {
+          type: 'workflow.step.run',
+          data: {
+            parentWorkflow,
+            workflowId,
+            runId,
+            executionPath,
+            resume,
+            stepResults,
+            prevResult: stepResult,
+            resumeData,
+            activeSteps,
+          },
+        });
+      } else {
+        await this.pubsub.publish('workflows', {
+          type: 'workflow.step.end',
+          data: {
+            parentWorkflow,
+            workflowId,
+            runId,
+            executionPath,
+            resume,
+            stepResults,
+            prevResult: stepResult,
+            resumeData,
+            activeSteps,
+          },
+        });
+      }
+    }
+  }
+
   protected async processWorkflowStepRun({
     workflow,
     workflowId,
@@ -363,7 +458,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    if (step?.type !== 'step') {
+    if (step?.type !== 'step' && step?.type !== 'loop') {
       return this.errorWorkflow(
         {
           workflowId,
@@ -409,7 +504,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     const stepResult = await this.stepExecutor.execute({
-      step,
+      step: step.step,
       runId,
       stepResults,
       emitter: new EventEmitter() as any, // TODO
@@ -444,20 +539,39 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    await this.pubsub.publish('workflows', {
-      type: 'workflow.step.end',
-      data: {
-        parentWorkflow,
-        workflowId,
-        runId,
-        executionPath,
-        resume,
-        stepResults,
-        prevResult: stepResult,
-        resumeData,
-        activeSteps,
-      },
-    });
+    if (step.type === 'loop') {
+      await this.processWorkflowLoop(
+        {
+          workflow,
+          workflowId,
+          prevResult: stepResult,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resume,
+          resumeData,
+          parentWorkflow,
+        },
+        step,
+        stepResult,
+      );
+    } else {
+      await this.pubsub.publish('workflows', {
+        type: 'workflow.step.end',
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resume,
+          stepResults,
+          prevResult: stepResult,
+          resumeData,
+          activeSteps,
+        },
+      });
+    }
   }
 
   protected async processWorkflowStepEnd({
@@ -485,7 +599,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       step = step.steps[executionPath[1]!];
     }
 
-    if (step?.type === 'step') {
+    if (step?.type === 'step' || step?.type === 'loop') {
       // handle nested workflow
       if (parentContext) {
         console.log('YOYO', prevResult, parentContext?.input?.output, {

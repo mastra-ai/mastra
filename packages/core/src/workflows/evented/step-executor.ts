@@ -1,5 +1,5 @@
 import EventEmitter from 'events';
-import type { Emitter, Mastra, StepFlowEntry, StepResult } from '../..';
+import type { Emitter, ExecuteFunction, Mastra, Step, StepFlowEntry, StepResult } from '../..';
 import { MastraBase } from '../../base';
 import type { RuntimeContext } from '../../di';
 import type { PubSub } from '../../events';
@@ -18,7 +18,7 @@ export class StepExecutor extends MastraBase {
   }
 
   async execute(params: {
-    step: Extract<StepFlowEntry, { type: 'step' }>;
+    step: Step<any, any, any, any>;
     runId: string;
     input?: any;
     resumeData?: any;
@@ -48,8 +48,8 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
-      console.log('executor start', this.mastra, step.step.id, step.step);
-      const stepResult = await step.step.execute({
+      console.log('executor start', this.mastra, step.id, step);
+      const stepResult = await step.execute({
         runId,
         mastra: this.mastra!,
         runtimeContext,
@@ -82,7 +82,7 @@ export class StepExecutor extends MastraBase {
         engine: {},
         abortSignal: abortController?.signal,
       });
-      console.log('executor end', step.step.id, stepResult);
+      console.log('executor end', step.id, stepResult);
 
       const endedAt = Date.now();
 
@@ -143,38 +143,16 @@ export class StepExecutor extends MastraBase {
       step.conditions.map(condition => {
         try {
           console.log('evaluating condition', condition, params);
-          return condition({
+          return this.evaluateCondition({
+            condition,
             runId,
-            mastra: this.mastra!,
             runtimeContext,
             inputData: params.input,
             runCount: 0, // TODO: implement this
             resumeData: params.resumeData,
-            getInitData: () => stepResults?.input as any,
-            getStepResult: (step: any) => {
-              if (!step?.id) {
-                return null;
-              }
-
-              const result = stepResults[step.id];
-              if (result?.status === 'success') {
-                return result.output;
-              }
-
-              return null;
-            },
-            suspend: async (_suspendPayload: any): Promise<any> => {
-              throw new Error('Not implemented');
-            },
-            bail: (_result: any) => {
-              throw new Error('Not implemented');
-            },
-            abort: () => {
-              abortController?.abort();
-            },
-            [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
-            engine: {},
-            abortSignal: abortController?.signal,
+            abortController,
+            stepResults,
+            emitter: ee,
           });
         } catch (e) {
           console.error('error evaluating condition', e);
@@ -193,6 +171,61 @@ export class StepExecutor extends MastraBase {
     }, [] as number[]);
 
     return idxs;
+  }
+
+  async evaluateCondition({
+    condition,
+    runId,
+    inputData,
+    resumeData,
+    stepResults,
+    runtimeContext,
+    emitter,
+    abortController,
+  }: {
+    condition: ExecuteFunction<any, any, any, any, any>;
+    runId: string;
+    inputData?: any;
+    resumeData?: any;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    emitter: EventEmitter;
+    runtimeContext: RuntimeContext;
+    abortController: AbortController;
+    runCount: number;
+  }): Promise<boolean> {
+    return condition({
+      runId,
+      mastra: this.mastra!,
+      runtimeContext,
+      inputData,
+      runCount: 0, // TODO: implement this
+      resumeData: resumeData,
+      getInitData: () => stepResults?.input as any,
+      getStepResult: (step: any) => {
+        if (!step?.id) {
+          return null;
+        }
+
+        const result = stepResults[step.id];
+        if (result?.status === 'success') {
+          return result.output;
+        }
+
+        return null;
+      },
+      suspend: async (_suspendPayload: any): Promise<any> => {
+        throw new Error('Not implemented');
+      },
+      bail: (_result: any) => {
+        throw new Error('Not implemented');
+      },
+      abort: () => {
+        abortController?.abort();
+      },
+      [EMITTER_SYMBOL]: emitter as unknown as Emitter, // TODO: refactor this to use our PubSub actually
+      engine: {},
+      abortSignal: abortController?.signal,
+    });
   }
 
   async resolveSleep(params: {
