@@ -8,7 +8,7 @@ import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export const AgentAdvancedSettings = () => {
-  const { modelSettings, setModelSettings } = useAgentSettings();
+  const { settings, setSettings } = useAgentSettings();
   const [isOpen, setIsOpen] = useState(false);
 
   const collapsibleClassName = 'rounded-lg border-sm border-border1 bg-surface3 overflow-clip';
@@ -32,9 +32,15 @@ export const AgentAdvancedSettings = () => {
           <Input
             id="top-k"
             type="number"
-            value={modelSettings?.topK || ''}
+            value={settings?.modelSettings?.topK || ''}
             onChange={e =>
-              setModelSettings({ ...modelSettings, topK: e.target.value ? Number(e.target.value) : undefined })
+              setSettings({
+                ...settings,
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  topK: e.target.value ? Number(e.target.value) : undefined,
+                },
+              })
             }
           />
         </div>
@@ -46,11 +52,14 @@ export const AgentAdvancedSettings = () => {
           <Input
             id="frequency-penalty"
             type="number"
-            value={modelSettings?.frequencyPenalty || ''}
+            value={settings?.modelSettings?.frequencyPenalty || ''}
             onChange={e =>
-              setModelSettings({
-                ...modelSettings,
-                frequencyPenalty: e.target.value ? Number(e.target.value) : undefined,
+              setSettings({
+                ...settings,
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  frequencyPenalty: e.target.value ? Number(e.target.value) : undefined,
+                },
               })
             }
           />
@@ -63,11 +72,14 @@ export const AgentAdvancedSettings = () => {
           <Input
             id="presence-penalty"
             type="number"
-            value={modelSettings?.presencePenalty || ''}
+            value={settings?.modelSettings?.presencePenalty || ''}
             onChange={e =>
-              setModelSettings({
-                ...modelSettings,
-                presencePenalty: e.target.value ? Number(e.target.value) : undefined,
+              setSettings({
+                ...settings,
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  presencePenalty: e.target.value ? Number(e.target.value) : undefined,
+                },
               })
             }
           />
@@ -80,11 +92,14 @@ export const AgentAdvancedSettings = () => {
           <Input
             id="max-tokens"
             type="number"
-            value={modelSettings?.maxTokens || ''}
+            value={settings?.modelSettings?.maxTokens || ''}
             onChange={e =>
-              setModelSettings({
-                ...modelSettings,
-                maxTokens: e.target.value ? Number(e.target.value) : undefined,
+              setSettings({
+                ...settings,
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  maxTokens: e.target.value ? Number(e.target.value) : undefined,
+                },
               })
             }
           />
@@ -97,11 +112,14 @@ export const AgentAdvancedSettings = () => {
           <Input
             id="max-steps"
             type="number"
-            value={modelSettings?.maxSteps || ''}
+            value={settings?.modelSettings?.maxSteps || ''}
             onChange={e =>
-              setModelSettings({
-                ...modelSettings,
-                maxSteps: e.target.value ? Number(e.target.value) : undefined,
+              setSettings({
+                ...settings,
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  maxSteps: e.target.value ? Number(e.target.value) : undefined,
+                },
               })
             }
           />
@@ -114,11 +132,14 @@ export const AgentAdvancedSettings = () => {
           <Input
             id="max-retries"
             type="number"
-            value={modelSettings?.maxRetries || ''}
+            value={settings?.modelSettings?.maxRetries || ''}
             onChange={e =>
-              setModelSettings({
-                ...modelSettings,
-                maxRetries: e.target.value ? Number(e.target.value) : undefined,
+              setSettings({
+                ...settings,
+                modelSettings: {
+                  ...settings?.modelSettings,
+                  maxRetries: e.target.value ? Number(e.target.value) : undefined,
+                },
               })
             }
           />
