@@ -25,7 +25,9 @@
     "test:watch": "vitest watch",
     "lint": "eslint ."
   },
-  "dependencies": {},
+  "dependencies": {
+    "convex": "1.25.2"
+  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",

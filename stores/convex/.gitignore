@@ -1,5 +1,4 @@
 .env
+.env.local
 dist/
 node_modules/
-lancedb-vector/
-lancedb-storage/
