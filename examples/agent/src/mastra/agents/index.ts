@@ -5,6 +5,7 @@ import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
+import { ToneConsistencyMetric } from '@mastra/evals/nlp';
 
 const memory = new Memory();
 
@@ -54,6 +55,9 @@ export const chefAgent = new Agent({
   },
   memory,
   voice: new OpenAIVoice(),
+  evals: {
+    toneConsistency: new ToneConsistencyMetric(),
+  },
 });
 
 export const dynamicAgent = new Agent({
