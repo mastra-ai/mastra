@@ -24,10 +24,9 @@ export interface ThreadProps {
   ToolFallback?: ToolCallContentPartComponent;
   agentName?: string;
   hasMemory?: boolean;
-  showFileSupport?: boolean;
 }
 
-export const Thread = ({ ToolFallback, agentName, hasMemory, showFileSupport }: ThreadProps) => {
+export const Thread = ({ ToolFallback, agentName, hasMemory }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
@@ -55,7 +54,7 @@ export const Thread = ({ ToolFallback, agentName, hasMemory, showFileSupport }: 
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} showFileSupport={showFileSupport} />
+      <Composer hasMemory={hasMemory} />
     </ThreadWrapper>
   );
 };
@@ -98,10 +97,9 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 
 interface ComposerProps {
   hasMemory?: boolean;
-  showFileSupport?: boolean;
 }
 
-const Composer = ({ hasMemory, showFileSupport }: ComposerProps) => {
+const Composer = ({ hasMemory }: ComposerProps) => {
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
@@ -121,7 +119,7 @@ const Composer = ({ hasMemory, showFileSupport }: ComposerProps) => {
           </ComposerPrimitive.Input>
           <div className="flex justify-end gap-2">
             <SpeechInput />
-            <ComposerAction showFileSupport={showFileSupport} />
+            <ComposerAction />
           </div>
         </div>
       </ComposerPrimitive.Root>
@@ -161,20 +159,14 @@ const SpeechInput = () => {
   );
 };
 
-interface ComposerActionProps {
-  showFileSupport?: boolean;
-}
-
-const ComposerAction = ({ showFileSupport }: ComposerActionProps) => {
+const ComposerAction = () => {
   return (
     <>
-      {showFileSupport && (
-        <ComposerPrimitive.AddAttachment asChild>
-          <TooltipIconButton tooltip="Add attachment" variant="ghost" className="rounded-full">
-            <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
-          </TooltipIconButton>
-        </ComposerPrimitive.AddAttachment>
-      )}
+      <ComposerPrimitive.AddAttachment asChild>
+        <TooltipIconButton tooltip="Add attachment" variant="ghost" className="rounded-full">
+          <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
+        </TooltipIconButton>
+      </ComposerPrimitive.AddAttachment>
 
       <ThreadPrimitive.If running={false}>
         <ComposerPrimitive.Send asChild>
