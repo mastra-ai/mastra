@@ -88,7 +88,7 @@
     "shiki": "^1.29.2",
     "strip-json-comments": "^5.0.2",
     "superjson": "^2.2.2",
-    "swr": "^2.3.3",
+    "swr": "^2.3.4",
     "tcp-port-used": "^1.0.2",
     "yocto-spinner": "^0.2.3",
     "zod": "^3.25.67",
