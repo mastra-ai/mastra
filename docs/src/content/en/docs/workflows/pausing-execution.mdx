@@ -48,7 +48,8 @@ const step2 = createStep({...});
 export const testWorkflow = createWorkflow({...})
   .then(step1)
   .sleep(async ({ inputData }) => {
-    return inputData.delayInMs;
+    const { delayInMs }  = inputData
+    return delayInMs;
   })
   .then(step2)
   .commit();
@@ -86,7 +87,8 @@ const step2 = createStep({...});
 export const testWorkflow = createWorkflow({...})
   .then(step1)
   .sleepUntil(async ({ inputData }) => {
-    return new Date(Date.now() + inputData.delayInMs);
+    const { delayInMs }  = inputData
+    return new Date(Date.now() + delayInMs);
   })
   .then(step2)
   .commit();
