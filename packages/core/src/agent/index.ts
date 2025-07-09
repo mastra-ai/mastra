@@ -829,18 +829,20 @@ export class Agent<
   }
 
   private async getSemanticRecallMessages({
-    memory,
     resourceId,
     threadId,
     vectorMessageSearch,
     memoryConfig,
   }: {
-    memory: MastraMemory;
     resourceId?: string;
     threadId: string;
     vectorMessageSearch: string;
     memoryConfig?: MemoryConfig;
   }) {
+    const memory = this.getMemory();
+    if (!memory) {
+      return [];
+    }
     return memory
       .rememberMessages({
         threadId,
@@ -1318,7 +1320,6 @@ export class Agent<
           thread.id && memory
             ? await Promise.all([
                 this.getSemanticRecallMessages({
-                  memory,
                   resourceId,
                   threadId: threadObject.id,
                   vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
