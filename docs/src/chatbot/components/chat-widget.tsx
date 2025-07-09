@@ -2,6 +2,7 @@
 import { CopilotKit, useCopilotChat } from "@copilotkit/react-core";
 import { Markdown } from "@copilotkit/react-ui";
 import { Role, TextMessage } from "@copilotkit/runtime-client-gql";
+import { usePostHog } from "posthog-js/react";
 
 import { ArrowLeftIcon } from "@/components/svgs/Icons";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,13 @@ import { Textarea } from "@/components/ui/textarea";
 import "@copilotkit/react-ui/styles.css";
 import { ArrowUp } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
+
+interface ResponseData {
+  response: string;
+  conversation_id: string;
+  question_id?: string;
+  original_question?: string;
+}
 
 const DocsChat: React.FC<{
   setIsAgentMode: (isAgentMode: boolean) => void;
@@ -43,18 +51,83 @@ export function CustomChatInterface({
   searchQuery: string;
 }) {
   const { visibleMessages, appendMessage, isLoading } = useCopilotChat();
+  const posthog = usePostHog();
 
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const processedQueryRef = useRef(""); // Track processed queries
+  const lastMessageCountRef = useRef(0); // Track message count for response detection
+  const conversationIdRef = useRef<string>(); // Track conversation ID
+  const pendingQuestionRef = useRef<{ id: string; question: string } | null>(
+    null,
+  ); // Track pending question waiting for response
+
+  // Initialize conversation ID on first render
+  useEffect(() => {
+    if (!conversationIdRef.current) {
+      conversationIdRef.current = `conversation_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    }
+  }, []);
+
+  const trackQuestion = (question: string) => {
+    const questionId = `question_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+
+    posthog?.capture("DOCS_CHATBOT_QUESTION", {
+      question,
+      question_id: questionId,
+      conversation_id: conversationIdRef.current,
+    });
+
+    // Store the pending question for response linking
+    pendingQuestionRef.current = { id: questionId, question };
+  };
 
   useEffect(() => {
     if (searchQuery === "" || processedQueryRef.current === searchQuery) return;
 
     // Track that we've processed this query
     processedQueryRef.current = searchQuery;
+
+    // Track the question
+    trackQuestion(searchQuery);
+
     appendMessage(new TextMessage({ content: searchQuery, role: Role.User }));
-  }, [searchQuery, appendMessage]);
+  }, [searchQuery, appendMessage, posthog]);
+
+  // Track responses when new assistant messages appear
+  useEffect(() => {
+    if (visibleMessages.length > lastMessageCountRef.current) {
+      const newMessages = visibleMessages.slice(lastMessageCountRef.current);
+
+      newMessages.forEach((message) => {
+        const isAssistant =
+          "role" in message && message.role === Role.Assistant;
+        if (isAssistant) {
+          const messageContent =
+            "content" in message ? String(message.content) : "";
+
+          // Link response to the pending question
+          const responseData: ResponseData = {
+            response: messageContent,
+            conversation_id: conversationIdRef.current || "",
+          };
+
+          if (pendingQuestionRef.current) {
+            responseData.question_id = pendingQuestionRef.current.id;
+            responseData.original_question =
+              pendingQuestionRef.current.question;
+
+            // Clear the pending question after linking
+            pendingQuestionRef.current = null;
+          }
+
+          posthog?.capture("DOCS_CHATBOT_RESPONSE", responseData);
+        }
+      });
+
+      lastMessageCountRef.current = visibleMessages.length;
+    }
+  }, [visibleMessages, posthog]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -64,6 +137,9 @@ export function CustomChatInterface({
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputValue.trim() === "") return;
+
+    // Track the question
+    trackQuestion(inputValue);
 
     // Send the message
     appendMessage(new TextMessage({ content: inputValue, role: Role.User }));
@@ -77,7 +153,7 @@ export function CustomChatInterface({
   return (
     <div className="flex flex-col w-full h-[600px]">
       {/* Chat header */}
-      <div className="flex w-full p-5">
+      <div className="flex p-5 w-full">
         <Button
           variant="ghost"
           className="cursor-pointer hover:bg-surface-6 dark:text-icons-3 text-[var(--light-color-text-4)] dark:bg-surface-5 bg-[var(--light-color-surface-4)]"
@@ -90,7 +166,7 @@ export function CustomChatInterface({
       </div>
 
       {/* Messages container */}
-      <ScrollArea className="relative flex-1 w-full h-full p-4">
+      <ScrollArea className="relative flex-1 p-4 w-full h-full">
         {visibleMessages.map((message) => {
           // Check if 'role' exists on message and if it equals Role.User
           const isUser = "role" in message && message.role === Role.User;
@@ -128,7 +204,7 @@ export function CustomChatInterface({
       </ScrollArea>
 
       {/* Input area */}
-      <div className="p-4 ">
+      <div className="p-4">
         <form
           onSubmit={handleSendMessage}
           className="border-t dark:border-borders-2 border-[var(--light-border-code)] "
@@ -142,6 +218,9 @@ export function CustomChatInterface({
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   if (inputValue.trim() !== "") {
+                    // Track the question
+                    trackQuestion(inputValue);
+
                     // Submit the form on Enter
                     appendMessage(
                       new TextMessage({ content: inputValue, role: Role.User }),

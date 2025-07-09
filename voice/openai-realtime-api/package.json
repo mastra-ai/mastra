@@ -24,7 +24,7 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "openai-realtime-api": "^1.0.7",
     "ws": "^8.18.2",

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.10.11-alpha.1",
+  "version": "0.10.11",
   "description": "",
   "type": "module",
   "files": [
@@ -39,7 +39,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "@babel/core": "^7.27.7",
     "@mastra/deployer": "workspace:^",
