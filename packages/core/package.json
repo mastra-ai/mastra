@@ -155,7 +155,7 @@
     "@babel/core": "^7.27.7",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@openrouter/ai-sdk-provider": "^0.4.6",
+    "@openrouter/ai-sdk-provider": "^0.7.2",
     "@size-limit/preset-small-lib": "^11.2.0",
     "@types/babel__core": "^7.20.5",
     "@types/json-schema": "^7.0.15",
