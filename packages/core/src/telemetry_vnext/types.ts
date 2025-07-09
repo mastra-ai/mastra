@@ -474,11 +474,68 @@ export interface AISpan {
 
   // Methods for span lifecycle
   /** End the span */
-  end(endTime?: Date): void;
+  end(options?: {
+    endTime?: Date;
+    metadata?: Partial<Omit<AgentRunMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
+  }): void;
+  end(options?: {
+    endTime?: Date;
+    metadata?: Partial<Omit<WorkflowRunMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
+  }): void;
+  end(options?: {
+    endTime?: Date;
+    metadata?: Partial<Omit<LLMGenerationMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
+  }): void;
+  end(options?: {
+    endTime?: Date;
+    metadata?: Partial<Omit<ToolCallMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
+  }): void;
+  end(options?: {
+    endTime?: Date;
+    metadata?: Partial<Omit<MCPToolCallMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
+  }): void;
+  end(options?: {
+    endTime?: Date;
+    metadata?: Partial<Omit<MemoryLookupMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
+  }): void;
+  end(options?: {
+    endTime?: Date;
+    metadata?: Partial<Omit<MemoryUpdateMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
+  }): void;
+  end(options?: {
+    endTime?: Date;
+    metadata?: Partial<Omit<RAGQueryMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
+  }): void;
+  end(options?: {
+    endTime?: Date;
+    metadata?: Partial<Omit<EmbeddingGenerationMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
+  }): void;
+  end(options?: {
+    endTime?: Date;
+    metadata?: Partial<Omit<EvalExecutionMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
+  }): void;
+  end(options?: {
+    endTime?: Date;
+    metadata?: Partial<Omit<WorkflowStepMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>;
+  }): void;
+  end(options?: { endTime?: Date; metadata?: Partial<SpanMetadata> }): void;
+
+  /** Update span metadata */
+  update(metadata: Partial<Omit<AgentRunMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
+  update(metadata: Partial<Omit<WorkflowRunMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
+  update(metadata: Partial<Omit<LLMGenerationMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
+  update(metadata: Partial<Omit<ToolCallMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
+  update(metadata: Partial<Omit<MCPToolCallMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
+  update(metadata: Partial<Omit<MemoryLookupMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
+  update(metadata: Partial<Omit<MemoryUpdateMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
+  update(metadata: Partial<Omit<RAGQueryMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
+  update(metadata: Partial<Omit<EmbeddingGenerationMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
+  update(metadata: Partial<Omit<EvalExecutionMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
+  update(metadata: Partial<Omit<WorkflowStepMetadata, 'type' | 'createdAt' | 'traceId' | 'parentSpanId'>>): void;
+  update(metadata: Partial<SpanMetadata>): void;
+
   /** Create child span */
   createChildSpan(metadata: Omit<SpanMetadata, 'traceId' | 'parentSpanId' | 'createdAt'>): AISpan;
-  /** Update span metadata */
-  updateMetadata(updates: Partial<SpanMetadata>): void;
   /** Export span for distributed tracing */
   export(): Promise<string>;
 }
@@ -622,7 +679,168 @@ export interface TelemetrySampler {
 // ============================================================================
 
 /**
- * Options for span creation
+ * Strongly-typed span creation options using discriminated unions
+ */
+export type TypedSpanOptions =
+  | {
+      name: string;
+      spanType: SpanType.AGENT_RUN;
+      metadata: Omit<AgentRunMetadata, 'type' | 'traceId' | 'createdAt'>;
+      parent?: AISpan;
+      context?: Context;
+      attributes?: Record<string, any>;
+      /** Internal callback for span lifecycle events (set by telemetry instance) */
+      _callbacks?: {
+        onEnd?: (span: AISpan) => void;
+        onUpdate?: (span: AISpan) => void;
+      };
+    }
+  | {
+      name: string;
+      spanType: SpanType.WORKFLOW_RUN;
+      metadata: Omit<WorkflowRunMetadata, 'type' | 'traceId' | 'createdAt'>;
+      parent?: AISpan;
+      context?: Context;
+      attributes?: Record<string, any>;
+      /** Internal callback for span lifecycle events (set by telemetry instance) */
+      _callbacks?: {
+        onEnd?: (span: AISpan) => void;
+        onUpdate?: (span: AISpan) => void;
+      };
+    }
+  | {
+      name: string;
+      spanType: SpanType.LLM_GENERATION;
+      metadata: Omit<LLMGenerationMetadata, 'type' | 'traceId' | 'createdAt'>;
+      parent?: AISpan;
+      context?: Context;
+      attributes?: Record<string, any>;
+      /** Internal callback for span lifecycle events (set by telemetry instance) */
+      _callbacks?: {
+        onEnd?: (span: AISpan) => void;
+        onUpdate?: (span: AISpan) => void;
+      };
+    }
+  | {
+      name: string;
+      spanType: SpanType.TOOL_CALL;
+      metadata: Omit<ToolCallMetadata, 'type' | 'traceId' | 'createdAt'>;
+      parent?: AISpan;
+      context?: Context;
+      attributes?: Record<string, any>;
+      /** Internal callback for span lifecycle events (set by telemetry instance) */
+      _callbacks?: {
+        onEnd?: (span: AISpan) => void;
+        onUpdate?: (span: AISpan) => void;
+      };
+    }
+  | {
+      name: string;
+      spanType: SpanType.MCP_TOOL_CALL;
+      metadata: Omit<MCPToolCallMetadata, 'type' | 'traceId' | 'createdAt'>;
+      parent?: AISpan;
+      context?: Context;
+      attributes?: Record<string, any>;
+      /** Internal callback for span lifecycle events (set by telemetry instance) */
+      _callbacks?: {
+        onEnd?: (span: AISpan) => void;
+        onUpdate?: (span: AISpan) => void;
+      };
+    }
+  | {
+      name: string;
+      spanType: SpanType.MEMORY_LOOKUP;
+      metadata: Omit<MemoryLookupMetadata, 'type' | 'traceId' | 'createdAt'>;
+      parent?: AISpan;
+      context?: Context;
+      attributes?: Record<string, any>;
+      /** Internal callback for span lifecycle events (set by telemetry instance) */
+      _callbacks?: {
+        onEnd?: (span: AISpan) => void;
+        onUpdate?: (span: AISpan) => void;
+      };
+    }
+  | {
+      name: string;
+      spanType: SpanType.MEMORY_UPDATE;
+      metadata: Omit<MemoryUpdateMetadata, 'type' | 'traceId' | 'createdAt'>;
+      parent?: AISpan;
+      context?: Context;
+      attributes?: Record<string, any>;
+      /** Internal callback for span lifecycle events (set by telemetry instance) */
+      _callbacks?: {
+        onEnd?: (span: AISpan) => void;
+        onUpdate?: (span: AISpan) => void;
+      };
+    }
+  | {
+      name: string;
+      spanType: SpanType.RAG_QUERY;
+      metadata: Omit<RAGQueryMetadata, 'type' | 'traceId' | 'createdAt'>;
+      parent?: AISpan;
+      context?: Context;
+      attributes?: Record<string, any>;
+      /** Internal callback for span lifecycle events (set by telemetry instance) */
+      _callbacks?: {
+        onEnd?: (span: AISpan) => void;
+        onUpdate?: (span: AISpan) => void;
+      };
+    }
+  | {
+      name: string;
+      spanType: SpanType.EMBEDDING_GENERATION;
+      metadata: Omit<EmbeddingGenerationMetadata, 'type' | 'traceId' | 'createdAt'>;
+      parent?: AISpan;
+      context?: Context;
+      attributes?: Record<string, any>;
+      /** Internal callback for span lifecycle events (set by telemetry instance) */
+      _callbacks?: {
+        onEnd?: (span: AISpan) => void;
+        onUpdate?: (span: AISpan) => void;
+      };
+    }
+  | {
+      name: string;
+      spanType: SpanType.EVAL_EXECUTION;
+      metadata: Omit<EvalExecutionMetadata, 'type' | 'traceId' | 'createdAt'>;
+      parent?: AISpan;
+      context?: Context;
+      attributes?: Record<string, any>;
+      /** Internal callback for span lifecycle events (set by telemetry instance) */
+      _callbacks?: {
+        onEnd?: (span: AISpan) => void;
+        onUpdate?: (span: AISpan) => void;
+      };
+    }
+  | {
+      name: string;
+      spanType: SpanType.WORKFLOW_STEP;
+      metadata: Omit<WorkflowStepMetadata, 'type' | 'traceId' | 'createdAt'>;
+      parent?: AISpan;
+      context?: Context;
+      attributes?: Record<string, any>;
+      /** Internal callback for span lifecycle events (set by telemetry instance) */
+      _callbacks?: {
+        onEnd?: (span: AISpan) => void;
+        onUpdate?: (span: AISpan) => void;
+      };
+    }
+  | {
+      name: string;
+      spanType: SpanType.GENERIC;
+      metadata: Omit<BaseSpanMetadata & { type: SpanType.GENERIC }, 'type' | 'traceId' | 'createdAt'>;
+      parent?: AISpan;
+      context?: Context;
+      attributes?: Record<string, any>;
+      /** Internal callback for span lifecycle events (set by telemetry instance) */
+      _callbacks?: {
+        onEnd?: (span: AISpan) => void;
+        onUpdate?: (span: AISpan) => void;
+      };
+    };
+
+/**
+ * Options for span creation (legacy - for backward compatibility)
  */
 export interface SpanOptions {
   /** Span name */
@@ -635,6 +853,17 @@ export interface SpanOptions {
   context?: Context;
   /** Custom attributes */
   attributes?: Record<string, any>;
+  /** Internal callback for span lifecycle events (set by telemetry instance) */
+  _callbacks?: {
+    onEnd?: (span: AISpan) => void;
+    onUpdate?: (span: AISpan) => void;
+  };
+}
+
+/**
+ * Internal span options used by the telemetry system
+ */
+export interface InternalSpanOptions extends SpanOptions {
   /** Internal callback for span lifecycle events (set by telemetry instance) */
   _callbacks?: {
     onEnd?: (span: AISpan) => void;

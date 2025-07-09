@@ -1,6 +1,6 @@
 /**
  * Mastra Telemetry V-Next
- * 
+ *
  * New telemetry interface that addresses limitations of the current system
  * while incorporating best practices from leading AI observability platforms.
  */
@@ -12,19 +12,10 @@ export * from './types';
 export { MastraTelemetry, telemetryDefaultOptions } from './base';
 
 // Registry functions
-export {
-  registerTelemetry,
-  getTelemetry,
-  unregisterTelemetry,
-  clearTelemetryRegistry,
-  hasTelemetry,
-} from './registry';
+export { registerTelemetry, getTelemetry, unregisterTelemetry, clearTelemetryRegistry, hasTelemetry } from './registry';
 
 // Decorators
-export {
-  withSpan,
-  InstrumentClass,
-} from './decorators';
+export { withSpan, InstrumentClass } from './decorators';
 
 // Re-export commonly used types for convenience
 export type {
@@ -32,7 +23,7 @@ export type {
   Trace,
   AISpan,
   SpanMetadata,
-  
+
   // Specific metadata types
   AgentRunMetadata,
   WorkflowRunMetadata,
@@ -45,22 +36,17 @@ export type {
   EmbeddingGenerationMetadata,
   EvalExecutionMetadata,
   WorkflowStepMetadata,
-  
-  // Scoring and annotations
-  EvaluationScore,
-  HumanAnnotation,
-  LLMAnnotation,
-  
+
   // Configuration
   TelemetryConfig,
   SharedTelemetryConfig,
   TelemetrySupports,
-  
+
   // Plugin interfaces
   TelemetryExporter,
   SpanProcessor,
   TelemetrySampler,
-  
+
   // Options
   SpanOptions,
   TracingOptions,

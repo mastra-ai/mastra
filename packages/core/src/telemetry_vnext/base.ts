@@ -14,6 +14,7 @@ import type {
   Trace,
   AISpan,
   SpanOptions,
+  TypedSpanOptions,
   TracingOptions,
   TelemetryExporter,
   SpanProcessor,
@@ -23,6 +24,7 @@ import type {
   TelemetrySupports,
   TelemetryEvent,
 } from './types';
+import type { Context } from '@opentelemetry/api';
 
 // ============================================================================
 // Default Configuration
@@ -112,26 +114,44 @@ export abstract class MastraTelemetry extends MastraBase {
   }
 
   /**
-   * Start a new span (handles sampling)
+   * Start a new span with strongly-typed metadata using discriminated unions
    */
-  startSpan(options: SpanOptions): AISpan {
+  startSpan(options: TypedSpanOptions): AISpan {
     if (!this.isEnabled()) {
-      return this.createNoOpSpan(options);
+      // Convert TypedSpanOptions to SpanOptions for no-op creation
+      const spanOptions: SpanOptions = {
+        name: options.name,
+        metadata: {
+          ...options.metadata,
+          type: options.spanType,
+        } as Omit<SpanMetadata, 'traceId' | 'createdAt'>,
+        parent: options.parent,
+        context: options.context,
+        attributes: options.attributes,
+      };
+      return this.createNoOpSpan(spanOptions);
     }
 
     // For spans, we typically inherit the trace sampling decision
     // But we could add span-level sampling here if needed
 
-    // Set up lifecycle callbacks
-    const optionsWithCallbacks: SpanOptions = {
-      ...options,
+    // Convert TypedSpanOptions to SpanOptions for internal processing
+    const spanOptions: SpanOptions = {
+      name: options.name,
+      metadata: {
+        ...options.metadata,
+        type: options.spanType,
+      } as Omit<SpanMetadata, 'traceId' | 'createdAt'>,
+      parent: options.parent,
+      context: options.context,
+      attributes: options.attributes,
       _callbacks: {
         onEnd: (span: AISpan) => this.emitSpanEnded(span),
         onUpdate: (span: AISpan) => this.emitSpanUpdated(span),
       },
     };
 
-    const span = this._startSpan(optionsWithCallbacks);
+    const span = this._startSpan(spanOptions);
 
     // Add to trace if it's a root span
     this.addSpanToTrace(span);
@@ -344,7 +364,7 @@ export abstract class MastraTelemetry extends MastraBase {
       trace: noOpTrace,
       end: () => {},
       createChildSpan: () => noOpSpan,
-      updateMetadata: () => {},
+      update: () => {},
       export: async () => '',
     };
     return noOpSpan;
@@ -372,16 +392,16 @@ export abstract class MastraTelemetry extends MastraBase {
 
     // Store original methods
     const originalEnd = span.end.bind(span);
-    const originalUpdateMetadata = span.updateMetadata.bind(span);
+    const originalUpdate = span.update.bind(span);
 
     // Wrap methods to call callbacks
-    span.end = (endTime?: Date) => {
-      originalEnd(endTime);
+    span.end = (endOptions?: any) => {
+      originalEnd(endOptions);
       options._callbacks?.onEnd?.(span);
     };
 
-    span.updateMetadata = updates => {
-      originalUpdateMetadata(updates);
+    span.update = (metadata: any) => {
+      originalUpdate(metadata);
       options._callbacks?.onUpdate?.(span);
     };
 

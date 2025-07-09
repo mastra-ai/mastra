@@ -1,5 +1,7 @@
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
+import { SpanType } from '../telemetry_vnext/types';
+import type { AISpan } from '../telemetry_vnext/types';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { EMITTER_SYMBOL } from './constants';
@@ -19,6 +21,7 @@ export type ExecutionContext = {
     delay: number;
   };
   executionSpan: Span;
+  aiSpan?: AISpan;
 };
 
 /**
@@ -171,9 +174,37 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     }
 
+    // Legacy telemetry span
     const executionSpan = this.mastra?.getTelemetry()?.tracer.startSpan(`workflow.${workflowId}.execute`, {
       attributes: { componentName: workflowId, runId },
     });
+
+    // VNext telemetry span - running alongside legacy span
+    let vnextSpan: AISpan | undefined;
+    const vnextTelemetry = this.mastra?.getTelemetryVNext();
+    if (vnextTelemetry) {
+      // Start a trace for the workflow execution
+      const trace = vnextTelemetry.startTrace(`workflow-${workflowId}`, {
+        attributes: { workflowId, runId },
+        tags: ['workflow', 'execution'],
+      });
+
+      // Create a strongly-typed WORKFLOW_RUN span using discriminated union
+      vnextSpan = vnextTelemetry.startSpan({
+        name: `workflow.${workflowId}.execute`,
+        spanType: SpanType.WORKFLOW_RUN,
+        metadata: {
+          workflowId,
+          workflowName: workflowId,
+          status: 'running',
+        },
+        attributes: {
+          componentName: workflowId,
+          runId,
+          executionMode: 'sequential', // Default execution mode
+        },
+      });
+    }
 
     let startIdx = 0;
     if (resume?.resumePath) {
@@ -202,6 +233,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: {},
             retryConfig: { attempts, delay },
             executionSpan: executionSpan as Span,
+            aiSpan: vnextSpan,
           },
           abortController: params.abortController,
           emitter: params.emitter,
@@ -212,6 +244,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           if (lastOutput.result.status === 'bailed') {
             lastOutput.result.status = 'success';
           }
+
+          // End vnext span with success status
+          vnextSpan?.end({
+            metadata: {
+              status: 'completed',
+              output: lastOutput.result,
+            },
+          });
 
           const result = (await this.fmtReturnValue(
             executionSpan,
@@ -247,6 +287,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         this.logger?.trackException(error);
         this.logger?.error(`Error executing step: ${error?.stack}`);
+
+        // End vnext span with error status
+        vnextSpan?.end({
+          metadata: {
+            status: 'failed',
+            error: {
+              message: error?.message || 'Unknown error',
+              code: error?.code,
+              stack: error?.stack,
+            },
+          },
+        });
+
         const result = (await this.fmtReturnValue(
           executionSpan,
           params.emitter,
@@ -267,6 +320,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         return result;
       }
     }
+
+    // End vnext span with final success status
+    vnextSpan?.end({
+      metadata: {
+        status: 'completed',
+        output: lastOutput.result,
+      },
+    });
 
     const result = (await this.fmtReturnValue(executionSpan, params.emitter, stepResults, lastOutput.result)) as any;
     await this.persistStepUpdate({
@@ -758,6 +819,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
+            aiSpan: executionContext.aiSpan,
           },
           emitter,
           abortController,
@@ -903,6 +965,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
+            aiSpan: executionContext.aiSpan,
           },
           emitter,
           abortController,
