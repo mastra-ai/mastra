@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.10.12-alpha.0
+
+### Patch Changes
+
+- b4a9811: Remove async-await of stream inside llm base class
+
 ## 0.10.11
 
 ### Patch Changes

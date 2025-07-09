@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 5.1.12-alpha.0
+
+### Patch Changes
+
+- 640f47e: move agent model settings into agent settings
+- Updated dependencies [9468be4]
+- Updated dependencies [b4a9811]
+- Updated dependencies [44731a4]
+  - @mastra/client-js@0.10.11-alpha.0
+  - @mastra/core@0.10.12-alpha.0
+
 ## 5.1.11
 
 ### Patch Changes
