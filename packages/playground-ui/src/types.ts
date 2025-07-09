@@ -37,6 +37,11 @@ export interface ModelSettings {
   topK?: number;
   topP?: number;
   instructions?: string;
+  chatWithGenerate?: boolean;
+}
+
+export interface AgentSettingsType {
+  modelSettings: ModelSettings;
 }
 
 export interface ChatProps {
