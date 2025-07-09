@@ -18,12 +18,14 @@ import type { Context, Span as OTelSpan } from '@opentelemetry/api';
 export enum SpanType {
   /** Agent run - root span for agent processes */
   AGENT_RUN = 'agent_run',
-  /** Workflow run - root span for workflow processes */
-  WORKFLOW_RUN = 'workflow_run',
+  /** Embedding generation for documents and queries */
+  EMBEDDING_GENERATION = 'embedding_generation',
+  /** Evaluation execution with metrics and scoring */
+  EVAL_EXECUTION = 'eval_execution',
+  /** Generic span for custom operations */
+  GENERIC = 'generic',
   /** LLM generation with model calls, token usage, prompts, completions */
   LLM_GENERATION = 'llm_generation',
-  /** Function/tool execution with inputs, outputs, errors */
-  TOOL_CALL = 'tool_call',
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
   /** Memory retrieval with query, results, similarity scores */
@@ -32,14 +34,12 @@ export enum SpanType {
   MEMORY_UPDATE = 'memory_update',
   /** Vector search with embeddings, chunks, relevance scores */
   RAG_QUERY = 'rag_query',
-  /** Embedding generation for documents and queries */
-  EMBEDDING_GENERATION = 'embedding_generation',
-  /** Evaluation execution with metrics and scoring */
-  EVAL_EXECUTION = 'eval_execution',
+  /** Function/tool execution with inputs, outputs, errors */
+  TOOL_CALL = 'tool_call',
+  /** Workflow run - root span for workflow processes */
+  WORKFLOW_RUN = 'workflow_run',
   /** Workflow step execution with step status, data flow */
   WORKFLOW_STEP = 'workflow_step',
-  /** Generic span for custom operations */
-  GENERIC = 'generic',
 }
 
 // ============================================================================
@@ -47,9 +47,9 @@ export enum SpanType {
 // ============================================================================
 
 /**
- * Base user-provided metadata that all spans can have
+ * Base metadata that all spans can have
  */
-export interface BaseUserMetadata {
+export interface BaseMetadata {
   /** Custom tags for categorization */
   tags?: string[];
   /** User-defined attributes */
@@ -64,10 +64,9 @@ export interface BaseUserMetadata {
 }
 
 /**
- * Agent Run metadata (user-provided)
+ * Agent Run metadata
  */
-export interface AgentRunMetadata extends BaseUserMetadata {
-  // type is managed by system, not user-provided
+export interface AgentRunMetadata extends BaseMetadata {
   /** Agent identifier */
   agentId: string;
   /** Agent name/type */
@@ -89,37 +88,9 @@ export interface AgentRunMetadata extends BaseUserMetadata {
 }
 
 /**
- * Workflow Run metadata (user-provided)
+ * LLM Generation metadata
  */
-export interface WorkflowRunMetadata extends BaseUserMetadata {
-  // type is managed by system, not user-provided
-  /** Workflow identifier */
-  workflowId: string;
-  /** Workflow name/type */
-  workflowName?: string;
-  /** Workflow version */
-  version?: string;
-  /** Input to the workflow */
-  input?: any;
-  /** Workflow output */
-  output?: any;
-  /** Workflow status */
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'suspended' | 'cancelled';
-  /** Total number of steps in workflow */
-  totalSteps?: number;
-  /** Current step index */
-  currentStepIndex?: number;
-  /** Whether workflow supports suspend/resume */
-  suspendable?: boolean;
-  /** Execution mode (sequential, parallel, conditional) */
-  executionMode?: 'sequential' | 'parallel' | 'conditional' | 'graph';
-}
-
-/**
- * LLM Generation metadata (user-provided)
- */
-export interface LLMGenerationMetadata extends BaseUserMetadata {
-  // type is managed by system, not user-provided
+export interface LLMGenerationMetadata extends BaseMetadata {
   /** Model name (e.g., 'gpt-4', 'claude-3') */
   model: string;
   /** Model provider (e.g., 'openai', 'anthropic') */
@@ -158,10 +129,9 @@ export interface LLMGenerationMetadata extends BaseUserMetadata {
 }
 
 /**
- * Tool Call metadata (user-provided)
+ * Tool Call metadata
  */
-export interface ToolCallMetadata extends BaseUserMetadata {
-  // type is managed by system, not user-provided
+export interface ToolCallMetadata extends BaseMetadata {
   /** Name of the tool/function */
   toolName: string;
   /** Tool provider/source */
@@ -175,10 +145,9 @@ export interface ToolCallMetadata extends BaseUserMetadata {
 }
 
 /**
- * MCP Tool Call metadata (user-provided)
+ * MCP Tool Call metadata
  */
-export interface MCPToolCallMetadata extends BaseUserMetadata {
-  // type is managed by system, not user-provided
+export interface MCPToolCallMetadata extends BaseMetadata {
   /** Name of the MCP tool/function */
   toolName: string;
   /** MCP server identifier */
@@ -202,10 +171,9 @@ export interface MCPToolCallMetadata extends BaseUserMetadata {
 }
 
 /**
- * Memory Lookup metadata (user-provided)
+ * Memory Lookup metadata
  */
-export interface MemoryLookupMetadata extends BaseUserMetadata {
-  // type is managed by system, not user-provided
+export interface MemoryLookupMetadata extends BaseMetadata {
   /** Memory type (e.g., 'semantic', 'episodic', 'working') */
   memoryType: string;
   /** Search query */
@@ -227,10 +195,9 @@ export interface MemoryLookupMetadata extends BaseUserMetadata {
 }
 
 /**
- * Memory Update metadata (user-provided)
+ * Memory Update metadata
  */
-export interface MemoryUpdateMetadata extends BaseUserMetadata {
-  // type is managed by system, not user-provided
+export interface MemoryUpdateMetadata extends BaseMetadata {
   /** Memory type (e.g., 'semantic', 'episodic', 'working') */
   memoryType: string;
   /** Operation type */
@@ -252,10 +219,9 @@ export interface MemoryUpdateMetadata extends BaseUserMetadata {
 }
 
 /**
- * RAG Query metadata (user-provided)
+ * RAG Query metadata
  */
-export interface RAGQueryMetadata extends BaseUserMetadata {
-  // type is managed by system, not user-provided
+export interface RAGQueryMetadata extends BaseMetadata {
   /** Original user query */
   query: string;
   /** Processed/rewritten query */
@@ -283,10 +249,9 @@ export interface RAGQueryMetadata extends BaseUserMetadata {
 }
 
 /**
- * Embedding Generation metadata (user-provided)
+ * Embedding Generation metadata
  */
-export interface EmbeddingGenerationMetadata extends BaseUserMetadata {
-  // type is managed by system, not user-provided
+export interface EmbeddingGenerationMetadata extends BaseMetadata {
   /** Embedding model used */
   model: string;
   /** Model provider (e.g., 'openai', 'cohere', 'sentence-transformers') */
@@ -318,34 +283,37 @@ export interface EmbeddingGenerationMetadata extends BaseUserMetadata {
 }
 
 /**
- * Workflow Step metadata (user-provided)
+ * Workflow Run metadata
  */
-export interface WorkflowStepMetadata extends BaseUserMetadata {
-  // type is managed by system, not user-provided
+export interface WorkflowRunMetadata extends BaseMetadata {
   /** Workflow identifier */
   workflowId: string;
+  /** Workflow version */
+  version?: string;
+  /** Input to the workflow */
+  input?: any;
+  /** Workflow output */
+  output?: any;
+}
+
+/**
+ * Workflow Step metadata
+ */
+export interface WorkflowStepMetadata extends BaseMetadata {
+  /** Step identifier */
+  stepId: string;
   /** Step name/identifier */
   stepName: string;
-  /** Step index in workflow */
-  stepIndex?: number;
-  /** Step status */
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'suspended';
   /** Input data for this step */
   input?: any;
   /** Output data from this step */
   output?: any;
-  /** Whether step supports suspend/resume */
-  suspendable?: boolean;
-  /** Retry information */
-  retryCount?: number;
-  maxRetries?: number;
 }
 
 /**
- * Evaluation Execution metadata (user-provided)
+ * Evaluation Execution metadata
  */
-export interface EvalExecutionMetadata extends BaseUserMetadata {
-  // type is managed by system, not user-provided
+export interface EvalExecutionMetadata extends BaseMetadata {
   /** Evaluation identifier */
   evalId: string;
   /** Evaluation name/type */
@@ -401,7 +369,7 @@ export type SpanMetadata =
   | EmbeddingGenerationMetadata
   | EvalExecutionMetadata
   | WorkflowStepMetadata
-  | BaseUserMetadata; // For generic spans
+  | BaseMetadata; // For generic spans
 
 // ============================================================================
 // Trace and Span Interfaces
@@ -438,7 +406,7 @@ export interface Trace {
 /**
  * Enhanced Span interface that wraps OpenTelemetry spans with AI-specific features
  */
-export interface AISpan {
+export interface AISpan<TMetadata extends SpanMetadata = SpanMetadata> {
   /** Unique span identifier */
   id: string;
   /** Type of the span */
@@ -448,9 +416,7 @@ export interface AISpan {
   /** When span ended */
   endTime?: Date;
   /** AI-specific metadata */
-  metadata: SpanMetadata;
-  /** Custom attributes */
-  attributes?: Record<string, any>;
+  metadata: TMetadata;
   /** OpenTelemetry span (for compatibility) */
   otelSpan?: OTelSpan;
   /** Child spans */
@@ -462,52 +428,21 @@ export interface AISpan {
 
   // Methods for span lifecycle
   /** End the span */
-  end(options?: { endTime?: Date; metadata?: Partial<AgentRunMetadata> }): void;
-  end(options?: { endTime?: Date; metadata?: Partial<WorkflowRunMetadata> }): void;
-  end(options?: { endTime?: Date; metadata?: Partial<LLMGenerationMetadata> }): void;
-  end(options?: { endTime?: Date; metadata?: Partial<ToolCallMetadata> }): void;
-  end(options?: { endTime?: Date; metadata?: Partial<MCPToolCallMetadata> }): void;
-  end(options?: { endTime?: Date; metadata?: Partial<MemoryLookupMetadata> }): void;
-  end(options?: { endTime?: Date; metadata?: Partial<MemoryUpdateMetadata> }): void;
-  end(options?: { endTime?: Date; metadata?: Partial<RAGQueryMetadata> }): void;
-  end(options?: { endTime?: Date; metadata?: Partial<EmbeddingGenerationMetadata> }): void;
-  end(options?: { endTime?: Date; metadata?: Partial<EvalExecutionMetadata> }): void;
-  end(options?: { endTime?: Date; metadata?: Partial<WorkflowStepMetadata> }): void;
-  end(options?: { endTime?: Date; metadata?: Partial<BaseUserMetadata> }): void;
+  end(options?: { endTime?: Date; metadata?: Partial<TMetadata> }): void;
 
   /** Update span metadata */
-  update(metadata: Partial<AgentRunMetadata>): void;
-  update(metadata: Partial<WorkflowRunMetadata>): void;
-  update(metadata: Partial<LLMGenerationMetadata>): void;
-  update(metadata: Partial<ToolCallMetadata>): void;
-  update(metadata: Partial<MCPToolCallMetadata>): void;
-  update(metadata: Partial<MemoryLookupMetadata>): void;
-  update(metadata: Partial<MemoryUpdateMetadata>): void;
-  update(metadata: Partial<RAGQueryMetadata>): void;
-  update(metadata: Partial<EmbeddingGenerationMetadata>): void;
-  update(metadata: Partial<EvalExecutionMetadata>): void;
-  update(metadata: Partial<WorkflowStepMetadata>): void;
-  update(metadata: Partial<BaseUserMetadata>): void;
+  update(metadata: Partial<TMetadata>): void;
 
   /** Create child span */
-  createChildSpan(
-    spanType: SpanType,
-    metadata:
-      | AgentRunMetadata
-      | WorkflowRunMetadata
-      | LLMGenerationMetadata
-      | ToolCallMetadata
-      | MCPToolCallMetadata
-      | MemoryLookupMetadata
-      | MemoryUpdateMetadata
-      | RAGQueryMetadata
-      | EmbeddingGenerationMetadata
-      | EvalExecutionMetadata
-      | WorkflowStepMetadata
-      | BaseUserMetadata,
-  ): AISpan;
+  createChildSpan(type: SpanType, metadata: SpanMetadata): AISpan;
   /** Export span for distributed tracing */
   export(): Promise<string>;
+}
+
+export interface StartSpanOptions {
+  parent?: AISpan;
+  context?: Context;
+  attributes?: Record<string, any>;
 }
 
 // ============================================================================
@@ -524,7 +459,7 @@ export type SamplingStrategy =
   | { type: 'custom'; sampler: (traceContext: any) => boolean };
 
 /**
- * Telemetry configuration
+ * Complete telemetry configuration that combines all options
  */
 export interface TelemetryConfig {
   /** Service name for telemetry */
@@ -542,25 +477,6 @@ export interface TelemetryConfig {
     /** Fields to exclude from serialization */
     excludeFields?: string[];
   };
-  /** Error handling configuration */
-  errorHandling?: {
-    /** Whether to retry failed exports */
-    enableRetries?: boolean;
-    /** Maximum retry attempts */
-    maxRetries?: number;
-    /** Retry delay in milliseconds */
-    retryDelay?: number;
-    /** Whether to use exponential backoff */
-    exponentialBackoff?: boolean;
-  };
-}
-
-/**
- * Shared telemetry configuration for constructor
- */
-export interface SharedTelemetryConfig {
-  /** Telemetry options */
-  options?: TelemetryConfig;
   /** Custom exporters */
   exporters?: TelemetryExporter[];
   /** Custom processors */
@@ -643,63 +559,6 @@ export interface TelemetrySampler {
   /** Determine if trace should be sampled */
   shouldSample(traceContext: any): boolean;
 }
-
-// ============================================================================
-// Instrumentation Types
-// ============================================================================
-
-/**
- * Strongly-typed span creation options
- */
-export type TypedSpanOptions =
-  | {
-      spanType: SpanType.AGENT_RUN;
-      metadata: AgentRunMetadata;
-    }
-  | {
-      spanType: SpanType.WORKFLOW_RUN;
-      metadata: WorkflowRunMetadata;
-    }
-  | {
-      spanType: SpanType.LLM_GENERATION;
-      metadata: LLMGenerationMetadata;
-    }
-  | {
-      spanType: SpanType.TOOL_CALL;
-      metadata: ToolCallMetadata;
-    }
-  | {
-      spanType: SpanType.MCP_TOOL_CALL;
-      metadata: MCPToolCallMetadata;
-    }
-  | {
-      spanType: SpanType.MEMORY_LOOKUP;
-      metadata: MemoryLookupMetadata;
-    }
-  | {
-      spanType: SpanType.MEMORY_UPDATE;
-      metadata: MemoryUpdateMetadata;
-    }
-  | {
-      spanType: SpanType.RAG_QUERY;
-      metadata: RAGQueryMetadata;
-    }
-  | {
-      spanType: SpanType.EMBEDDING_GENERATION;
-      metadata: EmbeddingGenerationMetadata;
-    }
-  | {
-      spanType: SpanType.EVAL_EXECUTION;
-      metadata: EvalExecutionMetadata;
-    }
-  | {
-      spanType: SpanType.WORKFLOW_STEP;
-      metadata: WorkflowStepMetadata;
-    }
-  | {
-      spanType: SpanType.GENERIC;
-      metadata: BaseUserMetadata;
-    };
 
 /**
  * Options for span creation (internal - used by telemetry system)

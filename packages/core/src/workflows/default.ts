@@ -10,6 +10,7 @@ import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
 import type { Emitter, StepFailure, StepResult, StepSuccess } from './types';
 import type { DefaultEngineType, SerializedStepFlowEntry, StepFlowEntry } from './workflow';
+import { api } from '@opentelemetry/sdk-node';
 
 export type ExecutionContext = {
   workflowId: string;
@@ -165,22 +166,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
-    if (steps.length === 0) {
-      throw new MastraError({
-        id: 'WORKFLOW_EXECUTE_EMPTY_GRAPH',
-        text: 'Workflow must have at least one step',
-        domain: ErrorDomain.MASTRA_WORKFLOW,
-        category: ErrorCategory.USER,
-      });
-    }
-
-    // Legacy telemetry span
-    const executionSpan = this.mastra?.getTelemetry()?.tracer.startSpan(`workflow.${workflowId}.execute`, {
-      attributes: { componentName: workflowId, runId },
-    });
-
     // VNext telemetry span - running alongside legacy span
-    let vnextSpan: AISpan | undefined;
+    let aiSpan: AISpan | undefined;
     const vnextTelemetry = this.mastra?.getTelemetryVNext();
     if (vnextTelemetry) {
       // Start a trace for the workflow execution
@@ -189,22 +176,39 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         tags: ['workflow', 'execution'],
       });
 
-      // Create a strongly-typed WORKFLOW_RUN span using discriminated union
-      vnextSpan = vnextTelemetry.startSpan({
-        name: `workflow.${workflowId}.execute`,
-        spanType: SpanType.WORKFLOW_RUN,
-        metadata: {
+      aiSpan = vnextTelemetry.startWorkflowRunSpan(
+        `workflow.${workflowId}.execute`,
+        {
           workflowId,
-          workflowName: workflowId,
-          status: 'running',
+          input,
         },
-        attributes: {
-          componentName: workflowId,
-          runId,
-          executionMode: 'sequential', // Default execution mode
+        {},
+      );
+    }
+
+    if (steps.length === 0) {
+      const empty_graph_error = new MastraError({
+        id: 'WORKFLOW_EXECUTE_EMPTY_GRAPH',
+        text: 'Workflow must have at least one step',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+      });
+
+      aiSpan?.end({
+        metadata: {
+          error: {
+            message: empty_graph_error.message,
+          },
         },
       });
+
+      throw empty_graph_error;
     }
+
+    // Legacy telemetry span
+    const executionSpan = this.mastra?.getTelemetry()?.tracer.startSpan(`workflow.${workflowId}.execute`, {
+      attributes: { componentName: workflowId, runId },
+    });
 
     let startIdx = 0;
     if (resume?.resumePath) {
@@ -233,7 +237,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: {},
             retryConfig: { attempts, delay },
             executionSpan: executionSpan as Span,
-            aiSpan: vnextSpan,
+            aiSpan,
           },
           abortController: params.abortController,
           emitter: params.emitter,
@@ -244,14 +248,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           if (lastOutput.result.status === 'bailed') {
             lastOutput.result.status = 'success';
           }
-
-          // End vnext span with success status
-          vnextSpan?.end({
-            metadata: {
-              status: 'completed',
-              output: lastOutput.result,
-            },
-          });
 
           const result = (await this.fmtReturnValue(
             executionSpan,
@@ -288,13 +284,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         this.logger?.trackException(error);
         this.logger?.error(`Error executing step: ${error?.stack}`);
 
-        // End vnext span with error status
-        vnextSpan?.end({
+        // End span with error status
+        aiSpan?.end({
           metadata: {
             status: 'failed',
             error: {
               message: error?.message || 'Unknown error',
-              code: error?.code,
+              code: (error as any)?.code,
               stack: error?.stack,
             },
           },
@@ -322,7 +318,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     // End vnext span with final success status
-    vnextSpan?.end({
+    aiSpan?.end({
       metadata: {
         status: 'completed',
         output: lastOutput.result,

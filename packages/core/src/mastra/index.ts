@@ -14,8 +14,9 @@ import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
 import { DefaultTelemetry } from '../telemetry_vnext/default';
-import { registerTelemetry, getTelemetry } from '../telemetry_vnext/registry';
+import { registerTelemetry } from '../telemetry_vnext/registry';
 import type { TelemetryConfig } from '../telemetry_vnext/types';
+import { MastraTelemetry } from '../telemetry_vnext/base';
 import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
@@ -42,7 +43,7 @@ export interface Config<
   workflows?: TWorkflows;
   tts?: TTTS;
   telemetry?: OtelConfig;
-  telemetryVNext?: TelemetryConfig;
+  telemetryVNext?: TelemetryConfig | MastraTelemetry;
   deployer?: MastraDeployer;
   server?: ServerConfig;
   mcpServers?: TMCPServers;
@@ -89,7 +90,7 @@ export class Mastra<
     path: string;
   }> = [];
   #telemetry?: Telemetry;
-  #telemetryVNext?: DefaultTelemetry;
+  #telemetryVNext?: MastraTelemetry;
   #storage?: MastraStorage;
   #memory?: MastraMemory;
   #networks?: TNetworks;
@@ -165,22 +166,28 @@ export class Mastra<
     }
 
     /*
-    Telemetry
-    */
-    this.#telemetry = Telemetry.init(config?.telemetry);
-
-    /*
     Telemetry VNext - Running alongside existing telemetry
     */
     if (config?.telemetryVNext) {
-      this.#telemetryVNext = new DefaultTelemetry({
-        name: 'mastra-vnext',
-        options: config.telemetryVNext,
-      });
+      if (config.telemetryVNext instanceof MastraTelemetry) {
+        // User provided their own telemetry implementation
+        this.#telemetryVNext = config.telemetryVNext;
+      } else {
+        // User provided config, create DefaultTelemetry
+        this.#telemetryVNext = new DefaultTelemetry({
+          name: 'mastra-vnext',
+          ...config.telemetryVNext,
+        });
+      }
 
       // Register with the global registry following best practices
       registerTelemetry('mastra-vnext', this.#telemetryVNext, true);
     }
+
+    /*
+    Telemetry
+    */
+    this.#telemetry = Telemetry.init(config?.telemetry);
 
     /*
       Storage

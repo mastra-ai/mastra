@@ -10,20 +10,23 @@ import { RegisteredLogger } from '../logger/constants';
 import { deepMerge } from '../utils';
 import type {
   TelemetryConfig,
-  SharedTelemetryConfig,
   Trace,
   AISpan,
   SpanOptions,
-  TypedSpanOptions,
   TracingOptions,
   TelemetryExporter,
   SpanProcessor,
   TelemetrySampler,
-  SpanType,
   SpanMetadata,
   TelemetrySupports,
   TelemetryEvent,
+  AgentRunMetadata,
+  WorkflowRunMetadata,
+  WorkflowStepMetadata,
+  BaseMetadata,
+  StartSpanOptions,
 } from './types';
+import { SpanType } from './types';
 import type { Context } from '@opentelemetry/api';
 
 // ============================================================================
@@ -38,12 +41,6 @@ export const telemetryDefaultOptions: TelemetryConfig = {
     includeIO: true,
     maxDataSize: 64 * 1024, // 64KB
     excludeFields: ['password', 'token', 'secret', 'key'],
-  },
-  errorHandling: {
-    enableRetries: true,
-    maxRetries: 3,
-    retryDelay: 1000,
-    exponentialBackoff: true,
   },
 };
 
@@ -66,10 +63,10 @@ export abstract class MastraTelemetry extends MastraBase {
   protected processors: SpanProcessor[] = [];
   protected samplers: TelemetrySampler[] = [];
 
-  constructor(config: { name: string } & SharedTelemetryConfig) {
+  constructor(config: { name: string } & TelemetryConfig) {
     super({ component: RegisteredLogger.TELEMETRY, name: config.name });
 
-    this.config = this.getMergedTelemetryConfig(config.options);
+    this.config = this.getMergedTelemetryConfig(config);
 
     if (config.exporters) {
       this.exporters = [...config.exporters];
@@ -113,35 +110,53 @@ export abstract class MastraTelemetry extends MastraBase {
     return this._startTrace(name, options);
   }
 
+  startWorkflowRunSpan(
+    name: string,
+    metadata: WorkflowRunMetadata,
+    options: StartSpanOptions,
+  ): AISpan<WorkflowRunMetadata> {
+    return this.startSpan(name, SpanType.WORKFLOW_RUN, metadata, options);
+  }
+
+  startAgentRunSpan(name: string, metadata: AgentRunMetadata, options: StartSpanOptions): AISpan<AgentRunMetadata> {
+    return this.startSpan(name, SpanType.AGENT_RUN, metadata, options);
+  }
+
+  startWorkflowStepSpan(
+    name: string,
+    metadata: WorkflowStepMetadata,
+    options: StartSpanOptions,
+  ): AISpan<WorkflowStepMetadata> {
+    return this.startSpan(name, SpanType.WORKFLOW_STEP, metadata, options);
+  }
+
+  startGenericSpan(name: string, metadata: BaseMetadata, options: StartSpanOptions): AISpan<BaseMetadata> {
+    return this.startSpan(name, SpanType.GENERIC, metadata, options);
+  }
+
   /**
-   * Start a new span with strongly-typed metadata using discriminated unions
+   * Start a new span with strongly-typed metadata
    */
-  startSpan(options: TypedSpanOptions): AISpan {
+  startSpan<T extends SpanMetadata>(
+    name: string,
+    spanType: SpanType,
+    metadata: T,
+    options: StartSpanOptions,
+  ): AISpan<T> {
     if (!this.isEnabled()) {
-      // Convert TypedSpanOptions to SpanOptions for no-op creation
       const spanOptions: SpanOptions = {
-        name: options.name,
-        metadata: {
-          ...options.metadata,
-          type: options.spanType,
-        } as Omit<SpanMetadata, 'traceId' | 'createdAt'>,
+        name,
+        metadata: metadata,
         parent: options.parent,
         context: options.context,
         attributes: options.attributes,
       };
-      return this.createNoOpSpan(spanOptions);
+      return this.createNoOpSpan(spanOptions) as AISpan<T>;
     }
 
-    // For spans, we typically inherit the trace sampling decision
-    // But we could add span-level sampling here if needed
-
-    // Convert TypedSpanOptions to SpanOptions for internal processing
     const spanOptions: SpanOptions = {
-      name: options.name,
-      metadata: {
-        ...options.metadata,
-        type: options.spanType,
-      } as Omit<SpanMetadata, 'traceId' | 'createdAt'>,
+      name,
+      metadata: metadata,
       parent: options.parent,
       context: options.context,
       attributes: options.attributes,
@@ -151,7 +166,7 @@ export abstract class MastraTelemetry extends MastraBase {
       },
     };
 
-    const span = this._startSpan(spanOptions);
+    const span = this._startSpan(spanType, spanOptions);
 
     // Add to trace if it's a root span
     this.addSpanToTrace(span);
@@ -159,7 +174,7 @@ export abstract class MastraTelemetry extends MastraBase {
     // Emit span started event
     this.emitSpanStarted(span);
 
-    return span;
+    return span as AISpan<T>;
   }
 
   // ============================================================================
@@ -193,9 +208,10 @@ export abstract class MastraTelemetry extends MastraBase {
    *
    * Example:
    * ```typescript
-   * protected _startSpan(options: SpanOptions): AISpan {
+   * protected _startSpan(spanType: SpanType, options: SpanOptions): AISpan {
    *   return this.createSpanWithCallbacks(options, (opts) => {
    *     const span = new MySpanImplementation(opts);
+   *     span.type = spanType;
    *     span.trace = getCurrentTrace(); // Set trace reference
    *     span.parent = opts.parent;      // Set parent if any
    *     return span;
@@ -203,7 +219,7 @@ export abstract class MastraTelemetry extends MastraBase {
    * }
    * ```
    */
-  protected abstract _startSpan(options: SpanOptions): AISpan;
+  protected abstract _startSpan(spanType: SpanType, options: SpanOptions): AISpan;
 
   /**
    * Trace a class instance with automatic instrumentation (handles sampling)
@@ -324,11 +340,11 @@ export abstract class MastraTelemetry extends MastraBase {
   }
 
   // ============================================================================
-  // No-op Methods for Disabled/Unsampled Operations
+  // No-op Methods for Disabled/Un-sampled Operations
   // ============================================================================
 
   /**
-   * Create a no-op trace for disabled/unsampled operations
+   * Create a no-op trace for disabled/un-sampled operations
    */
   protected createNoOpTrace(name: string): Trace {
     return {
@@ -341,7 +357,7 @@ export abstract class MastraTelemetry extends MastraBase {
   }
 
   /**
-   * Create a no-op span for disabled/unsampled operations
+   * Create a no-op span for disabled/un-sampled operations
    */
   protected createNoOpSpan(options: SpanOptions): AISpan {
     const noOpTrace: Trace = {
@@ -354,11 +370,9 @@ export abstract class MastraTelemetry extends MastraBase {
 
     const noOpSpan: AISpan = {
       id: 'noop',
-      metadata: {
-        ...options.metadata,
-        traceId: 'noop',
-        createdAt: new Date(),
-      } as SpanMetadata,
+      type: SpanType.GENERIC,
+      startTime: new Date(),
+      metadata: options.metadata as SpanMetadata,
       children: [],
       parent: options.parent,
       trace: noOpTrace,

@@ -18,16 +18,20 @@ import {
   type SpanMetadata,
   SpanType,
   type TelemetryExporter,
-  type SharedTelemetryConfig,
-  // Note: Individual metadata types are now part of TypedSpanOptions discriminated union
+  type TelemetryConfig,
 } from './types';
 
 // ============================================================================
 // Default AISpan Implementation
 // ============================================================================
 
+function generateId(type: string): string {
+  return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
 class DefaultAISpan implements AISpan {
   public id: string;
+  public type: SpanType;
   public metadata: SpanMetadata;
   public children: AISpan[] = [];
   public parent?: AISpan;
@@ -35,8 +39,9 @@ class DefaultAISpan implements AISpan {
   public startTime: Date;
   public endTime?: Date;
 
-  constructor(options: { id: string; metadata: SpanMetadata; trace: Trace; parent?: AISpan }) {
+  constructor(options: { id: string; type: SpanType; metadata: SpanMetadata; trace: Trace; parent?: AISpan }) {
     this.id = options.id;
+    this.type = options.type;
     this.metadata = options.metadata;
     this.trace = options.trace;
     this.parent = options.parent;
@@ -56,18 +61,13 @@ class DefaultAISpan implements AISpan {
     // Callback will be set up by base class createSpanWithCallbacks
   }
 
-  createChildSpan(metadata: Omit<SpanMetadata, 'traceId' | 'parentSpanId' | 'createdAt'>): AISpan {
-    const childId = `span-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-    const childMetadata: SpanMetadata = {
-      ...metadata,
-      traceId: this.trace.id,
-      parentSpanId: this.id,
-      createdAt: new Date(),
-    } as SpanMetadata;
+  createChildSpan(type: SpanType, metadata: SpanMetadata): AISpan {
+    const childId = generateId('span');
 
     return new DefaultAISpan({
       id: childId,
-      metadata: childMetadata,
+      type,
+      metadata,
       trace: this.trace,
       parent: this,
     });
@@ -148,16 +148,16 @@ export class DefaultConsoleExporter implements TelemetryExporter {
         break;
       case 'span_started':
         console.log(
-          `[${timestamp}] SPAN_STARTED: ${event.span.metadata.type} (${event.span.id}) in trace ${event.span.trace.id}`,
+          `[${timestamp}] SPAN_STARTED: ${event.span.type} (${event.span.id}) in trace ${event.span.trace.id}`,
         );
         break;
       case 'span_ended':
         const span = event.span as DefaultAISpan;
         const duration = span.endTime && span.startTime ? span.endTime.getTime() - span.startTime.getTime() : 0;
-        console.log(`[${timestamp}] SPAN_ENDED: ${span.metadata.type} (${span.id}) - Duration: ${duration}ms`);
+        console.log(`[${timestamp}] SPAN_ENDED: ${span.type} (${span.id}) - Duration: ${duration}ms`);
         break;
       case 'span_updated':
-        console.log(`[${timestamp}] SPAN_UPDATED: ${event.span.metadata.type} (${event.span.id})`);
+        console.log(`[${timestamp}] SPAN_UPDATED: ${event.span.type} (${event.span.id})`);
         break;
       default:
         console.log(`[${timestamp}] UNKNOWN_EVENT:`, event);
@@ -177,7 +177,7 @@ export class DefaultTelemetry extends MastraTelemetry {
   private currentTrace?: Trace;
   private traces = new Map<string, Trace>();
 
-  constructor(config: { name: string } & SharedTelemetryConfig = { name: 'default-telemetry' }) {
+  constructor(config: { name: string } & TelemetryConfig = { name: 'default-telemetry' }) {
     // Add console exporter by default if none provided
     if (!config.exporters || config.exporters.length === 0) {
       config.exporters = [new DefaultConsoleExporter()];
@@ -198,7 +198,7 @@ export class DefaultTelemetry extends MastraTelemetry {
       tags?: string[];
     },
   ): Trace {
-    const traceId = `trace-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    const traceId = generateId('trace');
 
     const trace = new DefaultTrace({
       id: traceId,
@@ -217,8 +217,8 @@ export class DefaultTelemetry extends MastraTelemetry {
     return trace;
   }
 
-  protected _startSpan(options: SpanOptions): AISpan {
-    const spanId = `span-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  protected _startSpan(spanType: SpanType, options: SpanOptions): AISpan {
+    const spanId = generateId('span');
 
     // Use current trace if no parent span provided, or parent's trace if parent exists
     const trace = options.parent?.trace || this.currentTrace;
@@ -227,17 +227,13 @@ export class DefaultTelemetry extends MastraTelemetry {
       throw new Error('No active trace found. Start a trace before creating spans.');
     }
 
-    const metadata: SpanMetadata = {
-      ...options.metadata,
-      traceId: trace.id,
-      parentSpanId: options.parent?.id,
-      createdAt: new Date(),
-    } as SpanMetadata;
+    const metadata: SpanMetadata = options.metadata as SpanMetadata;
 
     // Use the createSpanWithCallbacks helper to wire up lifecycle callbacks
-    return this.createSpanWithCallbacks(options, opts => {
+    return this.createSpanWithCallbacks(options, () => {
       return new DefaultAISpan({
         id: spanId,
+        type: spanType,
         metadata,
         trace,
         parent: options.parent,
@@ -287,18 +283,17 @@ export class DefaultTelemetry extends MastraTelemetry {
       attributes?: Record<string, any>;
     },
   ): TMethod {
-    const { spanName, spanType = SpanType.GENERIC, attributes = {} } = options;
+    const { spanName, attributes = {} } = options;
 
     return ((...args: unknown[]) => {
       // Create span using strongly-typed API
-      const span = this.startSpan({
-        name: spanName,
-        spanType: spanType,
-        metadata: {
+      const span = this.startGenericSpan(
+        spanName,
+        {
           attributes,
-        } as any, // Type assertion needed for generic span type
-        attributes,
-      });
+        },
+        {},
+      );
 
       try {
         // Record input arguments (safely)
