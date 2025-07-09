@@ -6,7 +6,7 @@ import { useAgentSettings } from '../context/agent-context';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 export const AgentChat = ({ agentId, agentName, threadId, initialMessages, memory, refreshThreadList }: ChatProps) => {
-  const { modelSettings, chatWithGenerate } = useAgentSettings();
+  const { settings } = useAgentSettings();
   const { runtimeContext } = usePlaygroundStore();
   return (
     <MastraRuntimeProvider
@@ -16,8 +16,7 @@ export const AgentChat = ({ agentId, agentName, threadId, initialMessages, memor
       initialMessages={initialMessages}
       memory={memory}
       refreshThreadList={refreshThreadList}
-      modelSettings={modelSettings}
-      chatWithGenerate={chatWithGenerate}
+      settings={settings}
       runtimeContext={runtimeContext}
     >
       <Thread agentName={agentName ?? ''} hasMemory={memory} />
