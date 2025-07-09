@@ -14,9 +14,8 @@ import { Txt } from '@/ds/components/Txt/Txt';
 
 import { AgentAdvancedSettings } from './agent-advanced-settings';
 
-export function AgentModelSettings() {
-  const { modelSettings, setModelSettings, chatWithGenerate, setChatWithGenerate, resetModelSettings } =
-    useAgentSettings();
+export const AgentSettings = () => {
+  const { settings, setSettings, resetAll } = useAgentSettings();
 
   return (
     <div className="px-5 text-xs py-2 pb-4">
@@ -24,8 +23,13 @@ export function AgentModelSettings() {
         <Entry label="Chat Method">
           <RadioGroup
             orientation="horizontal"
-            value={chatWithGenerate ? 'generate' : 'stream'}
-            onValueChange={(value: string) => setChatWithGenerate(value === 'generate')}
+            value={settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream'}
+            onValueChange={(value: string) =>
+              setSettings({
+                ...settings,
+                modelSettings: { ...settings?.modelSettings, chatWithGenerate: value === 'generate' },
+              })
+            }
             className="flex flex-row gap-4"
           >
             <div className="flex items-center gap-2">
@@ -47,16 +51,19 @@ export function AgentModelSettings() {
           <Entry label="Temperature">
             <div className="flex flex-row justify-between items-center gap-2">
               <Slider
-                value={[modelSettings?.temperature ?? -0.1]}
+                value={[settings?.modelSettings?.temperature ?? -0.1]}
                 max={1}
                 min={-0.1}
                 step={0.1}
                 onValueChange={value =>
-                  setModelSettings({ ...modelSettings, temperature: value[0] < 0 ? undefined : value[0] })
+                  setSettings({
+                    ...settings,
+                    modelSettings: { ...settings?.modelSettings, temperature: value[0] < 0 ? undefined : value[0] },
+                  })
                 }
               />
               <Txt as="p" variant="ui-sm" className="text-icon3">
-                {modelSettings?.temperature ?? 'n/a'}
+                {settings?.modelSettings?.temperature ?? 'n/a'}
               </Txt>
             </div>
           </Entry>
@@ -65,16 +72,19 @@ export function AgentModelSettings() {
             <div className="flex flex-row justify-between items-center gap-2">
               <Slider
                 onValueChange={value =>
-                  setModelSettings({ ...modelSettings, topP: value[0] < 0 ? undefined : value[0] })
+                  setSettings({
+                    ...settings,
+                    modelSettings: { ...settings?.modelSettings, topP: value[0] < 0 ? undefined : value[0] },
+                  })
                 }
-                value={[modelSettings?.topP ?? -0.1]}
+                value={[settings?.modelSettings?.topP ?? -0.1]}
                 max={1}
                 min={-0.1}
                 step={0.1}
               />
 
               <Txt as="p" variant="ui-sm" className="text-icon3">
-                {modelSettings?.topP ?? 'n/a'}
+                {settings?.modelSettings?.topP ?? 'n/a'}
               </Txt>
             </div>
           </Entry>
@@ -85,7 +95,7 @@ export function AgentModelSettings() {
         <AgentAdvancedSettings />
       </section>
 
-      <Button onClick={() => resetModelSettings()} variant="light" className="w-full" size="lg">
+      <Button onClick={() => resetAll()} variant="light" className="w-full" size="lg">
         <Icon>
           <RefreshCw />
         </Icon>
@@ -93,4 +103,4 @@ export function AgentModelSettings() {
       </Button>
     </div>
   );
-}
+};

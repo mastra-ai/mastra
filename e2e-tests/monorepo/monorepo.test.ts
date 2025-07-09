@@ -73,6 +73,13 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(res.status).toBe(200);
       expect(body).toEqual({ message: 'Hello, POST!' });
     });
+
+    it('should return tools from the api', async () => {
+      const res = await fetch(`http://localhost:${port}/api/tools`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(Object.keys(body)).toEqual(['calculatorTool', 'lodashTool']);
+    });
   }
 
   describe('dev', async () => {

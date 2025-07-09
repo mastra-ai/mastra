@@ -4,4 +4,4 @@
 'create-mastra': patch
 ---
 
-reset localstorage when resetting model settings
+move agent model settings into agent settings
