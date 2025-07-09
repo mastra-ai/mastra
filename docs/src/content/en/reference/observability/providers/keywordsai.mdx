@@ -47,8 +47,6 @@ import { KeywordsAIExporter } from "@keywordsai/exporter-vercel";
 telemetry: {
   serviceName: "keywordai-mastra-example",
   enabled: true,
-
-# ===== Add this section =====
   export: {
     type: "custom",
     exporter: new KeywordsAIExporter({
@@ -62,7 +60,7 @@ telemetry: {
 
 ### 3. Run the Project
 
-```bash
+```bash copy
 mastra dev
 ```
 This opens the Mastra playground where you can interact with the weather agent.
