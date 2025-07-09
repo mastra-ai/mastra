@@ -742,7 +742,7 @@ export class Agent extends BaseResource {
     streamResponse.processTextStream = async options => {
       await processTextStream({
         stream: streamResponse.body as ReadableStream<Uint8Array>,
-        onTextPart: options?.onTextPart!,
+        onTextPart: options?.onTextPart ?? (() => {}),
       });
     };
 
