@@ -697,7 +697,7 @@ export class Agent extends BaseResource {
   /**
    * Streams a response from the agent
    * @param params - Stream parameters including prompt
-   * @returns Promise containing the enhanced Response object with processDataStream method
+   * @returns Promise containing the enhanced Response object with processDataStream and processTextStream methods
    */
   async stream<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
     params: StreamParams<T>,
