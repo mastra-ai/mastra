@@ -56,11 +56,12 @@ export function CustomChatInterface({
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const processedQueryRef = useRef(""); // Track processed queries
-  const lastMessageCountRef = useRef(0); // Track message count for response detection
   const conversationIdRef = useRef<string>(); // Track conversation ID
   const pendingQuestionRef = useRef<{ id: string; question: string } | null>(
     null,
   ); // Track pending question waiting for response
+  const previouslyLoadingRef = useRef(false); // Track previous loading state
+  const lastResponseCapturedRef = useRef<string>(""); // Track last captured response to avoid duplicates
 
   // Initialize conversation ID on first render
   useEffect(() => {
@@ -94,18 +95,28 @@ export function CustomChatInterface({
     appendMessage(new TextMessage({ content: searchQuery, role: Role.User }));
   }, [searchQuery, appendMessage, posthog]);
 
-  // Track responses when new assistant messages appear
+  // Track responses when streaming is complete
   useEffect(() => {
-    if (visibleMessages.length > lastMessageCountRef.current) {
-      const newMessages = visibleMessages.slice(lastMessageCountRef.current);
+    // Only capture response when loading changes from true to false (streaming complete)
+    if (previouslyLoadingRef.current && !isLoading) {
+      // Find the most recent assistant message
+      const lastAssistantMessage = [...visibleMessages]
+        .reverse()
+        .find(
+          (message) => "role" in message && message.role === Role.Assistant,
+        );
 
-      newMessages.forEach((message) => {
-        const isAssistant =
-          "role" in message && message.role === Role.Assistant;
-        if (isAssistant) {
-          const messageContent =
-            "content" in message ? String(message.content) : "";
+      if (lastAssistantMessage) {
+        const messageContent =
+          "content" in lastAssistantMessage
+            ? String(lastAssistantMessage.content)
+            : "";
 
+        // Only capture if we have content and haven't captured this exact response before
+        if (
+          messageContent.trim() &&
+          messageContent !== lastResponseCapturedRef.current
+        ) {
           // Link response to the pending question
           const responseData: ResponseData = {
             response: messageContent,
@@ -122,12 +133,14 @@ export function CustomChatInterface({
           }
 
           posthog?.capture("DOCS_CHATBOT_RESPONSE", responseData);
+          lastResponseCapturedRef.current = messageContent;
         }
-      });
-
-      lastMessageCountRef.current = visibleMessages.length;
+      }
     }
-  }, [visibleMessages, posthog]);
+
+    // Update previous loading state
+    previouslyLoadingRef.current = isLoading;
+  }, [isLoading, visibleMessages, posthog]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
