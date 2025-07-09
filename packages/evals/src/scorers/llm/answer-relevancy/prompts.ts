@@ -152,12 +152,10 @@ export const SCORE_PROMPT = `Evaluate each statement's relevance to the input qu
           ]
       }}
   
-    The number of results MUST MATCH the number of statements exactly.
+    The number of results MUST MATCH the number of statements exactly. Statements are always an array of strings.
   
     Input:
     {{input}}
-  
-    Number of statements: {{statementsLength}}
   
     Statements:
     {{statements}}
@@ -188,6 +186,7 @@ export const REASON_PROMPT = `
       - Use given score, don't recalculate
       - Don't judge factual correctness
       - Explain both relevant and irrelevant aspects
+      - if results is empty, explain why
       - For mixed responses, explain the balance
         Format:
         {

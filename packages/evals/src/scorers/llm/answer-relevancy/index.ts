@@ -1,12 +1,8 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import { Agent } from '@mastra/core/agent';
-import { MastraError } from '@mastra/core/error';
-import type { ScoreResult } from '@mastra/core/eval';
 import { createLLMScorer } from '@mastra/core/eval';
-import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { roundToTwoDecimals } from '../../../metrics/llm/utils';
-import { EXTRACT_PROMPT, extractPrompt, REASON_PROMPT, reasonPrompt, SCORE_PROMPT, scorePrompt } from './prompts';
+import { EXTRACT_PROMPT, REASON_PROMPT, SCORE_PROMPT } from './prompts';
 
 export const DEFAULT_OPTIONS: Record<'uncertaintyWeight' | 'scale', number> = {
   uncertaintyWeight: 0.3,
@@ -25,7 +21,13 @@ export const ANSWER_RELEVANCY_AGENT_INSTRUCTIONS = `
     6. Responses that discuss the type of information being asked show partial relevance
 `;
 
-export function createAnswerRelevancyScorer({ model }: { model: MastraLanguageModel }) {
+export function createAnswerRelevancyScorer({
+  model,
+  options = DEFAULT_OPTIONS,
+}: {
+  model: MastraLanguageModel;
+  options?: Record<'uncertaintyWeight' | 'scale', number>;
+}) {
   return createLLMScorer({
     name: 'Answer Relevancy Scorer',
     description: 'A scorer that evaluates the relevancy of an LLM output to an input',
@@ -41,11 +43,9 @@ export function createAnswerRelevancyScorer({ model }: { model: MastraLanguageMo
       score: {
         prompt: SCORE_PROMPT,
         description: 'Score the relevance of the statements to the input',
-        transform: (props) => {
-          const { results, uncertaintyWeight, scale } = props;
-
+        transform: ({ results }) => {
           if (!results || results.length === 0) {
-            return props;
+            return { results };
           }
 
           const numberOfResults = results.length;
@@ -55,26 +55,25 @@ export function createAnswerRelevancyScorer({ model }: { model: MastraLanguageMo
             if (result.trim().toLowerCase() === 'yes') {
               relevancyCount++;
             } else if (result.trim().toLowerCase() === 'unsure') {
-              relevancyCount += uncertaintyWeight;
+              relevancyCount += options.uncertaintyWeight;
             }
           }
 
           const score = relevancyCount / numberOfResults;
 
           return {
-            score: roundToTwoDecimals(score * scale),
+            score: roundToTwoDecimals(score * options.scale),
             results,
-          }
+          };
         },
       },
       reason: {
         prompt: REASON_PROMPT,
         description: 'Reason about the results',
       },
-    }
+    },
   });
 }
-
 
 export interface AnswerRelevancyMetricOptions {
   uncertaintyWeight?: number;
@@ -100,176 +99,176 @@ export const scoringResultsWithReasonSchema = z.object({
   score: z.number(),
 });
 
-export function calculateScore({
-  results,
-  uncertaintyWeight = DEFAULT_OPTIONS.uncertaintyWeight,
-  scale = DEFAULT_OPTIONS.scale,
-}: {
-  results: zResultsSchema;
-  uncertaintyWeight: number;
-  scale: number;
-}): number {
+// export function calculateScore({
+//   results,
+//   uncertaintyWeight = DEFAULT_OPTIONS.uncertaintyWeight,
+//   scale = DEFAULT_OPTIONS.scale,
+// }: {
+//   results: zResultsSchema;
+//   uncertaintyWeight: number;
+//   scale: number;
+// }): number {
 
-}
+// }
 
-export class AnswerRelevancyScorer extends LLMScorer {
-  #agent: Agent;
-  #options: AnswerRelevancyMetricOptions;
+// export class AnswerRelevancyScorer extends LLMScorer {
+//   #agent: Agent;
+//   #options: AnswerRelevancyMetricOptions;
 
-  name = 'Answer Relevancy Scorer';
-  description = 'A scorer that evaluates the relevancy of an LLM output to an input';
+//   name = 'Answer Relevancy Scorer';
+//   description = 'A scorer that evaluates the relevancy of an LLM output to an input';
 
-  constructor({
-    model,
-    options = DEFAULT_OPTIONS,
-  }: {
-    model: MastraLanguageModel;
-    options?: AnswerRelevancyMetricOptions;
-  }) {
-    super();
+//   constructor({
+//     model,
+//     options = DEFAULT_OPTIONS,
+//   }: {
+//     model: MastraLanguageModel;
+//     options?: AnswerRelevancyMetricOptions;
+//   }) {
+//     super();
 
-    this.#agent = createAnswerRelevancyJudge({ model });
-    this.#options = options || DEFAULT_OPTIONS;
-  }
+//     this.#agent = createAnswerRelevancyJudge({ model });
+//     this.#options = options || DEFAULT_OPTIONS;
+//   }
 
-  prompts() {
-    return {
-      extract: {
-        prompt: EXTRACT_PROMPT,
-        description: 'Extract relevant statements from the LLM output',
-      },
-      score: {
-        prompt: SCORE_PROMPT,
-        description: 'Score the relevance of the statements to the input',
-      },
-      reason: {
-        prompt: REASON_PROMPT,
-        description: 'Reason about the results',
-      },
-    };
-  }
+//   prompts() {
+//     return {
+//       extract: {
+//         prompt: EXTRACT_PROMPT,
+//         description: 'Extract relevant statements from the LLM output',
+//       },
+//       score: {
+//         prompt: SCORE_PROMPT,
+//         description: 'Score the relevance of the statements to the input',
+//       },
+//       reason: {
+//         prompt: REASON_PROMPT,
+//         description: 'Reason about the results',
+//       },
+//     };
+//   }
 
-  async score({ input, output }: { input: string; output: string }): Promise<ScoreResult> {
-    const agent = this.#agent;
+//   async score({ input, output }: { input: string; output: string }): Promise<ScoreResult> {
+//     const agent = this.#agent;
 
-    const extractStatementsStep = createStep({
-      id: 'extract-statements',
-      description: 'Extract statements from the input and output',
-      inputSchema: z.object({
-        input: z.string(),
-        output: z.string(),
-      }),
-      outputSchema: z.object({
-        statements: z.array(z.string()),
-      }),
-      execute: async () => {
-        const statementPrompt = extractPrompt({ output });
+//     const extractStatementsStep = createStep({
+//       id: 'extract-statements',
+//       description: 'Extract statements from the input and output',
+//       inputSchema: z.object({
+//         input: z.string(),
+//         output: z.string(),
+//       }),
+//       outputSchema: z.object({
+//         statements: z.array(z.string()),
+//       }),
+//       execute: async () => {
+//         const statementPrompt = extractPrompt({ output });
 
-        const result = await agent.generate(statementPrompt, {
-          output: z.object({
-            statements: z.array(z.string()),
-          }),
-        });
+//         const result = await agent.generate(statementPrompt, {
+//           output: z.object({
+//             statements: z.array(z.string()),
+//           }),
+//         });
 
-        return {
-          statements: result.object.statements,
-        };
-      },
-    });
+//         return {
+//           statements: result.object.statements,
+//         };
+//       },
+//     });
 
-    const evaluateStep = createStep({
-      id: 'evaluate',
-      description: 'Evaluate the statements',
-      inputSchema: z.object({
-        statements: z.array(z.string()),
-      }),
-      outputSchema: scoringResultsSchema,
-      execute: async ({ inputData }) => {
-        const prompt = scorePrompt({ input, statements: inputData.statements });
-        const result = await agent.generate(prompt, {
-          output: scoringResultsSchema,
-        });
+//     const evaluateStep = createStep({
+//       id: 'evaluate',
+//       description: 'Evaluate the statements',
+//       inputSchema: z.object({
+//         statements: z.array(z.string()),
+//       }),
+//       outputSchema: scoringResultsSchema,
+//       execute: async ({ inputData }) => {
+//         const prompt = scorePrompt({ input, statements: inputData.statements });
+//         const result = await agent.generate(prompt, {
+//           output: scoringResultsSchema,
+//         });
 
-        return result.object;
-      },
-    });
+//         return result.object;
+//       },
+//     });
 
-    const reasoningStep = createStep({
-      id: 'reasoning',
-      description: 'Reason about the results',
-      inputSchema: scoringResultsSchema,
-      outputSchema: scoringResultsWithReasonSchema,
-      execute: async ({ inputData }) => {
-        const results = inputData.results;
+//     const reasoningStep = createStep({
+//       id: 'reasoning',
+//       description: 'Reason about the results',
+//       inputSchema: scoringResultsSchema,
+//       outputSchema: scoringResultsWithReasonSchema,
+//       execute: async ({ inputData }) => {
+//         const results = inputData.results;
 
-        const score = calculateScore({
-          results,
-          uncertaintyWeight: this.#options.uncertaintyWeight || DEFAULT_OPTIONS.uncertaintyWeight,
-          scale: this.#options.scale || DEFAULT_OPTIONS.scale,
-        });
+//         const score = calculateScore({
+//           results,
+//           uncertaintyWeight: this.#options.uncertaintyWeight || DEFAULT_OPTIONS.uncertaintyWeight,
+//           scale: this.#options.scale || DEFAULT_OPTIONS.scale,
+//         });
 
-        const prompt = reasonPrompt({
-          input,
-          output,
-          score,
-          scale: this.#options.scale || DEFAULT_OPTIONS.scale,
-          results,
-        });
+//         const prompt = reasonPrompt({
+//           input,
+//           output,
+//           score,
+//           scale: this.#options.scale || DEFAULT_OPTIONS.scale,
+//           results,
+//         });
 
-        const result = await agent.generate(prompt, {
-          output: z.object({
-            reason: z.string(),
-          }),
-        });
+//         const result = await agent.generate(prompt, {
+//           output: z.object({
+//             reason: z.string(),
+//           }),
+//         });
 
-        return {
-          results,
-          reason: result.object.reason,
-          score,
-        };
-      },
-    });
+//         return {
+//           results,
+//           reason: result.object.reason,
+//           score,
+//         };
+//       },
+//     });
 
-    const scoringWorkflow = createWorkflow({
-      id: 'Answer Relevancy Scoring Workflow',
-      inputSchema: z.object({}),
-      outputSchema: scoringResultsWithReasonSchema,
-      steps: [extractStatementsStep, evaluateStep, reasoningStep],
-    })
-      .then(extractStatementsStep)
-      .then(evaluateStep)
-      .then(reasoningStep)
-      .commit();
+//     const scoringWorkflow = createWorkflow({
+//       id: 'Answer Relevancy Scoring Workflow',
+//       inputSchema: z.object({}),
+//       outputSchema: scoringResultsWithReasonSchema,
+//       steps: [extractStatementsStep, evaluateStep, reasoningStep],
+//     })
+//       .then(extractStatementsStep)
+//       .then(evaluateStep)
+//       .then(reasoningStep)
+//       .commit();
 
-    const run = await scoringWorkflow.createRunAsync();
+//     const run = await scoringWorkflow.createRunAsync();
 
-    const wfResult = await run.start({});
+//     const wfResult = await run.start({});
 
-    if (wfResult.status !== 'success') {
-      let error;
+//     if (wfResult.status !== 'success') {
+//       let error;
 
-      if (wfResult.status === 'failed') {
-        error = wfResult.error;
-      } else {
-        error = new Error('Answer Relevancy Scorer failed to run');
-      }
-      throw new MastraError(
-        {
-          category: 'UNKNOWN',
-          details: {
-            steps: JSON.stringify(wfResult.steps),
-          },
-          domain: 'EVAL',
-          id: 'ANSWER_RELEVANCY_SCORER_FAILED',
-        },
-        error,
-      );
-    }
+//       if (wfResult.status === 'failed') {
+//         error = wfResult.error;
+//       } else {
+//         error = new Error('Answer Relevancy Scorer failed to run');
+//       }
+//       throw new MastraError(
+//         {
+//           category: 'UNKNOWN',
+//           details: {
+//             steps: JSON.stringify(wfResult.steps),
+//           },
+//           domain: 'EVAL',
+//           id: 'ANSWER_RELEVANCY_SCORER_FAILED',
+//         },
+//         error,
+//       );
+//     }
 
-    return {
-      input,
-      output,
-      ...wfResult.result,
-    };
-  }
-}
+//     return {
+//       input,
+//       output,
+//       ...wfResult.result,
+//     };
+//   }
+// }
