@@ -37,6 +37,11 @@ export interface ModelSettings {
   topK?: number;
   topP?: number;
   instructions?: string;
+  chatWithGenerate?: boolean;
+}
+
+export interface AgentSettingsType {
+  modelSettings: ModelSettings;
 }
 
 export interface ChatProps {
@@ -46,8 +51,7 @@ export interface ChatProps {
   initialMessages?: Message[];
   memory?: boolean;
   refreshThreadList?: () => void;
-  modelSettings?: ModelSettings;
-  chatWithGenerate?: boolean;
+  settings?: AgentSettingsType;
   runtimeContext?: Record<string, any>;
 }
 
