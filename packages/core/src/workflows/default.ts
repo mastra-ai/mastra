@@ -162,6 +162,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
+    //clear runCounts
+    this.runCounts.clear();
+
     if (steps.length === 0) {
       throw new MastraError({
         id: 'WORKFLOW_EXECUTE_EMPTY_GRAPH',
