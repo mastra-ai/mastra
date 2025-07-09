@@ -16,8 +16,7 @@ export const AgentChat = ({ agentId, agentName, threadId, initialMessages, memor
       initialMessages={initialMessages}
       memory={memory}
       refreshThreadList={refreshThreadList}
-      modelSettings={settings?.modelSettings}
-      chatWithGenerate={settings?.modelSettings?.chatWithGenerate}
+      settings={settings}
       runtimeContext={runtimeContext}
     >
       <Thread agentName={agentName ?? ''} hasMemory={memory} />

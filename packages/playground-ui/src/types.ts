@@ -51,8 +51,7 @@ export interface ChatProps {
   initialMessages?: Message[];
   memory?: boolean;
   refreshThreadList?: () => void;
-  modelSettings?: ModelSettings;
-  chatWithGenerate?: boolean;
+  settings?: AgentSettingsType;
   runtimeContext?: Record<string, any>;
 }
 
