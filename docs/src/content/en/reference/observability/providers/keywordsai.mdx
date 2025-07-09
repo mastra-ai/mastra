@@ -15,7 +15,7 @@ Here's the tutorial about the Mastra Weather Agent example.
 
 ### 1. Install Dependencies
 
-```bash
+```bash copy
 pnpm install
 ```
 
@@ -23,13 +23,13 @@ pnpm install
 
 Copy the example environment file and add your API keys:
 
-```bash
+```bash copy
 cp .env.local.example .env.local
 ```
 
 Update .env.local with your credentials: 
 
-```bash .env.local
+```bash .env.local copy
 OPENAI_API_KEY=your-openai-api-key
 KEYWORDSAI_API_KEY=your-keywordsai-api-key
 KEYWORDSAI_BASE_URL=https://api.keywordsai.co
@@ -39,7 +39,11 @@ KEYWORDSAI_BASE_URL=https://api.keywordsai.co
 
 Configure with KeywordsAI telemetry in `src/mastra/index.ts`:
 
-```typescript
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+
+import { Mastra } from "@mastra/core/mastra";
+import { KeywordsAIExporter } from "@keywordsai/exporter-vercel";
+
 telemetry: {
   serviceName: "keywordai-mastra-example",
   enabled: true,
