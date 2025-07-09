@@ -1,0 +1,142 @@
+---
+title: "Weaviate | Vector Database | Mastra Core"
+description: Documentation for the Weaviate Vector Database implementation in Mastra.
+---
+
+# Weaviate
+
+The Weaviate vector store implementation provides a high-performance vector database solution for similarity search and AI applications. It supports semantic search, hybrid search, and other vector-based operations.
+
+## Installation
+
+```bash copy
+npm install @mastra/weaviate@latest
+```
+
+## Usage
+
+```typescript copy showLineNumbers
+import { WeaviateVector } from "@mastra/weaviate";
+
+// Local development (default connection)
+const vectorStore = await WeaviateVector.use();
+
+// Production with custom configuration
+const vectorStore = await WeaviateVector.use({
+  httpHost: "your-weaviate-host.com",
+  httpPort: 443,
+  httpSecure: true,
+  authCredentials: new weaviate.ApiKey("your-api-key")
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "httpHost",
+      type: "string",
+      description: "HTTP host for Weaviate connection",
+      isOptional: true,
+    },
+    {
+      name: "httpPort",
+      type: "number",
+      description: "HTTP port for Weaviate connection",
+      isOptional: true,
+    },
+    {
+      name: "httpSecure",
+      type: "boolean",
+      description: "Whether to use HTTPS for HTTP connections",
+      isOptional: true,
+    },
+    {
+      name: "grpcHost",
+      type: "string",
+      description: "gRPC host for Weaviate connection",
+      isOptional: true,
+    },
+    {
+      name: "grpcPort",
+      type: "number",
+      description: "gRPC port for Weaviate connection",
+      isOptional: true,
+    },
+    {
+      name: "grpcSecure",
+      type: "boolean",
+      description: "Whether to use secure gRPC connections",
+      isOptional: true,
+    },
+    {
+      name: "authCredentials",
+      type: "object",
+      description: "Authentication credentials (API key, OAuth, etc.)",
+      isOptional: true,
+    },
+    {
+      name: "timeout",
+      type: "number",
+      description: "Connection timeout in milliseconds",
+      isOptional: true,
+    },
+    {
+      name: "headers",
+      type: "object",
+      description: "Additional HTTP headers",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Additional Notes
+
+### Vector Operations
+
+Basic vector operations include creating collections, inserting vectors, and querying for similarity:
+
+```typescript copy showLineNumbers
+// Create a collection
+await vectorStore.createIndex({
+  indexName: "documents",
+  metric: "cosine" // 'cosine', 'euclidean', or 'dotproduct'
+});
+
+// Insert vectors with metadata
+const vectors = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]];
+const metadata = [{ title: "Doc 1" }, { title: "Doc 2" }];
+
+await vectorStore.upsert({
+  indexName: "documents",
+  vectors,
+  metadata
+});
+
+// Query similar vectors
+const results = await vectorStore.query({
+  indexName: "documents",
+  queryVector: [0.1, 0.2, 0.3],
+  topK: 5,
+  filter: { title: "Doc 1" }
+});
+```
+
+### Distance Metrics
+
+The implementation supports three distance metrics:
+
+- **cosine** (default): Best for normalized vectors and semantic similarity
+- **euclidean**: Best for absolute distance measurements
+- **dotproduct**: Best for sparse vectors
+
+### Advanced Filtering
+
+Supports comprehensive filtering with operators like `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$all`, `$and`, `$or`, `$length`, `$geo`, `$null`, and `$regex` for complex queries.
+
+### Performance Features
+
+- Automatic batching of vectors in groups of 500 for optimal performance
+- Built-in error handling for batch operations
+- Concurrent operations support for better throughput
