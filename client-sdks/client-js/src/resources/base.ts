@@ -30,6 +30,7 @@ export class BaseResource {
             // TODO: Bring this back once we figure out what we/users need to do to make this work with cross-origin requests
             // 'x-mastra-client-type': 'js',
           },
+          signal: this.options.abortSignal,
           body:
             options.body instanceof FormData ? options.body : options.body ? JSON.stringify(options.body) : undefined,
         });

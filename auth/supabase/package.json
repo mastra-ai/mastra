@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-supabase",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Mastra Supabase Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -24,9 +24,9 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
-    "@supabase/supabase-js": "^2.50.0"
+    "@supabase/supabase-js": "^2.50.3"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
