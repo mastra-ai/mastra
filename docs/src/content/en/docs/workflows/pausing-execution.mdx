@@ -58,6 +58,8 @@ export const testWorkflow = createWorkflow({...})
 
 The `waitForEvent()` method pauses execution until a specific event is received. Use `run.sendEvent()` to send the event. You must provide both the event name and the step to resume.
 
+![Pausing with .waitForEvent()](/image/workflows/workflows-sleep-events-waitforevent.jpg)
+
 ```typescript {10} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";

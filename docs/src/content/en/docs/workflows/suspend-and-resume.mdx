@@ -28,6 +28,8 @@ When running a workflow, its `status` can be one of the following:
 
 When the state is `suspended`, you can identify any and all steps that have been suspended by looking at the `suspended` array of the workflow result output.
 
+![Suspending a workflow with suspend()](/image/workflows/workflows-suspend-resume-suspend.jpg)
+
 ```typescript {18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
   id: "step-1",
