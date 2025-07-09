@@ -114,7 +114,7 @@ export function CustomChatInterface({
 
         // Only capture if we have content and haven't captured this exact response before
         if (
-          messageContent &&
+          messageContent.trim() &&
           messageContent !== lastResponseCapturedRef.current
         ) {
           // Link response to the pending question
