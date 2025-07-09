@@ -294,16 +294,14 @@ export class EventedWorkflow<
   TPrevSchema extends z.ZodType<any> = TInput,
 > extends Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
   protected pubsub: PubSub;
-  #mastra: Mastra;
 
   constructor(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>, pubsub: PubSub) {
     super(params);
     this.pubsub = pubsub;
-    this.#mastra = params.mastra!;
   }
 
   __registerMastra(mastra: Mastra) {
-    this.#mastra = mastra;
+    super.__registerMastra(mastra);
     this.executionEngine.__registerMastra(mastra);
   }
 
@@ -321,7 +319,7 @@ export class EventedWorkflow<
           executionEngine: this.executionEngine,
           executionGraph: this.executionGraph,
           serializedStepGraph: this.serializedStepGraph,
-          mastra: this.#mastra,
+          mastra: this.mastra,
           retryConfig: this.retryConfig,
           cleanup: () => this.runs.delete(runIdToUse),
         },
@@ -363,7 +361,6 @@ export class EventedRun<
   TOutput extends z.ZodType<any> = z.ZodType<any>,
 > extends Run<TEngineType, TSteps, TInput, TOutput> {
   protected pubsub: PubSub;
-  #mastra?: Mastra;
 
   constructor(
     params: {
@@ -384,7 +381,6 @@ export class EventedRun<
     super(params);
     this.pubsub = pubsub;
     this.serializedStepGraph = params.serializedStepGraph;
-    this.#mastra = params.mastra!;
   }
 
   async start({
@@ -394,7 +390,7 @@ export class EventedRun<
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
-    await this.#mastra?.getStorage()?.persistWorkflowSnapshot({
+    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       snapshot: {

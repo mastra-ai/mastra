@@ -3230,6 +3230,11 @@ describe('Workflow', () => {
 
       counterWorkflow.foreach(mapStep).then(finalStep).commit();
 
+      new Mastra({
+        workflows: { 'counter-workflow': counterWorkflow },
+        storage: testStorage,
+      });
+
       const run = await counterWorkflow.createRunAsync();
       const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
 
@@ -5375,8 +5380,7 @@ describe('Workflow', () => {
     });
   });
 
-  // TODO: storage
-  describe.skip('Workflow Runs', () => {
+  describe('Workflow Runs', () => {
     let testStorage: MockStore;
 
     beforeEach(async () => {

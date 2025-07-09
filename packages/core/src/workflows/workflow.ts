@@ -1271,6 +1271,10 @@ export class Run<
    */
   #mastra?: Mastra;
 
+  get mastra() {
+    return this.#mastra;
+  }
+
   protected closeStreamAction?: () => Promise<void>;
   protected executionResults?: Promise<WorkflowResult<TOutput, TSteps>>;
 
