@@ -927,6 +927,39 @@ describe('UpstashStore', () => {
       checkWorkflowSnapshot(secondSnapshot, stepId1, 'success');
     });
 
+    it('returns all workflows when no namespace is provided', async () => {
+      const workflowName1 = 'default_test_1';
+      const workflowName2 = 'default_test_2';
+
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('waiting');
+
+      await store.persistWorkflowSnapshot({
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
+
+      const { runs, total } = await store.getWorkflowRuns({
+        limit: 10,
+        offset: 0,
+      });
+      expect(runs).toHaveLength(2);
+      expect(total).toBe(2);
+      expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
+      expect(runs[1]!.workflowName).toBe(workflowName1);
+      const firstSnapshot = runs[0]!.snapshot;
+      const secondSnapshot = runs[1]!.snapshot;
+      checkWorkflowSnapshot(firstSnapshot, stepId2, 'waiting');
+      checkWorkflowSnapshot(secondSnapshot, stepId1, 'success');
+    });
+
     it('filters by workflow name', async () => {
       const workflowName1 = 'filter_test_1';
       const workflowName2 = 'filter_test_2';
