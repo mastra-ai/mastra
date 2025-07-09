@@ -145,12 +145,18 @@ export class Agent extends BaseResource {
     });
 
     if (response.finishReason === 'tool-calls') {
-      for (const toolCall of (
+      const toolCalls = (
         response as unknown as {
           toolCalls: { toolName: string; args: any; toolCallId: string }[];
           messages: CoreMessage[];
         }
-      ).toolCalls) {
+      ).toolCalls;
+
+      if (!toolCalls || !Array.isArray(toolCalls)) {
+        return response;
+      }
+
+      for (const toolCall of toolCalls) {
         const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
