@@ -1,5 +1,18 @@
 # mastra
 
+## 0.10.12
+
+### Patch Changes
+
+- 640f47e: move agent model settings into agent settings
+- 5d0c163: Scaffold create-mastra projects with zod@^3 to prevent package version conflicts during install
+- 53e3f58: Add support for custom instrumentation files
+- Updated dependencies [b4a9811]
+- Updated dependencies [4d5583d]
+- Updated dependencies [53e3f58]
+  - @mastra/core@0.10.12
+  - @mastra/deployer@0.10.12
+
 ## 0.10.12-alpha.0
 
 ### Patch Changes

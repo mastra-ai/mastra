@@ -1,6 +1,6 @@
 {
   "name": "create-mastra",
-  "version": "0.10.11-alpha.0",
+  "version": "0.10.11",
   "description": "Create Mastra apps with one command",
   "license": "Apache-2.0",
   "type": "module",

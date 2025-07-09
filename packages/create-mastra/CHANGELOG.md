@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.11
+
+### Patch Changes
+
+- 640f47e: move agent model settings into agent settings
+
 ## 0.10.11-alpha.0
 
 ### Patch Changes
