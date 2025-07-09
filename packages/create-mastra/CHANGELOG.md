@@ -1,5 +1,86 @@
 # create-mastra
 
+## 0.10.10
+
+### Patch Changes
+
+- af9e40e: Map log level number to string value
+- f457d86: reset localstorage when resetting model settings
+- 8722d53: Fix multi modal remaining steps
+- 4219597: add JSON input close to form input
+- b790fd1: Use SerializedStepFlowEntry in playground
+- a7a836a: Highlight send event button
+- 18ca936: Update rollup config for create-mastra
+
+## 0.10.10-alpha.3
+
+### Patch Changes
+
+- f457d86: reset localstorage when resetting model settings
+- 8722d53: Fix multi modal remaining steps
+
+## 0.10.10-alpha.2
+
+### Patch Changes
+
+- 4219597: add JSON input close to form input
+- 18ca936: Update rollup config for create-mastra
+
+## 0.10.10-alpha.1
+
+### Patch Changes
+
+- a7a836a: Highlight send event button
+
+## 0.10.10-alpha.0
+
+### Patch Changes
+
+- af9e40e: Map log level number to string value
+- b790fd1: Use SerializedStepFlowEntry in playground
+
+## 0.10.9
+
+### Patch Changes
+
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+
+## 0.10.9-alpha.0
+
+### Patch Changes
+
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+
+## 0.10.8
+
+### Patch Changes
+
+- 4e06e3f: timing not displayed correctly in traces
+- 7e801dd: [MASTRA-4118] fixes issue with agent network loopStream where subsequent messages aren't present in playground on refresh
+- a606c75: show right suspend schema for nested workflow on playground
+- 1760a1c: Use workflow stream in playground instead of watch
+- 038e5ae: Add cancel workflow run
+- ac369c6: Show resume data on workflow graph
+- 976a62b: remove persistence capabilities in model settings components
+- 4e809ad: Visualizations for .sleep()/.sleepUntil()/.waitForEvent()
+- f78f399: Make AgentModelSettings shareable between cloud and playground
+- 57929df: agent network display
+
+## 0.10.8-alpha.0
+
+### Patch Changes
+
+- 4e06e3f: timing not displayed correctly in traces
+- 7e801dd: [MASTRA-4118] fixes issue with agent network loopStream where subsequent messages aren't present in playground on refresh
+- a606c75: show right suspend schema for nested workflow on playground
+- 1760a1c: Use workflow stream in playground instead of watch
+- 038e5ae: Add cancel workflow run
+- ac369c6: Show resume data on workflow graph
+- 976a62b: remove persistence capabilities in model settings components
+- 4e809ad: Visualizations for .sleep()/.sleepUntil()/.waitForEvent()
+- f78f399: Make AgentModelSettings shareable between cloud and playground
+- 57929df: agent network display
+
 ## 0.10.7
 
 ### Patch Changes

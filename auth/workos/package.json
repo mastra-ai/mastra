@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-workos",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Mastra WorkOS Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -24,10 +24,10 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "@mastra/auth": "workspace:*",
-    "@workos-inc/node": "^7.54.0"
+    "@workos-inc/node": "^7.57.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -36,6 +36,6 @@
     "eslint": "^9.29.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^2.1.9"
+    "vitest": "^3.2.4"
   }
 }

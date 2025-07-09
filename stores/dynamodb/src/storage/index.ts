@@ -598,7 +598,7 @@ export class DynamoDBStore extends MastraStorage {
     };
 
     try {
-      await this.service.entities.thread.create(threadData).go();
+      await this.service.entities.thread.upsert(threadData).go();
 
       return {
         id: thread.id,

@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'child_process';
+import process from 'node:process';
 import { join } from 'path';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';
@@ -14,13 +15,27 @@ let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
 const ON_ERROR_MAX_RESTARTS = 3;
 
-const startServer = async (dotMastraPath: string, port: number, env: Map<string, string>, errorRestartCount = 0) => {
+const startServer = async (
+  dotMastraPath: string,
+  port: number,
+  env: Map<string, string>,
+  startOptions: { inspect?: boolean; inspectBrk?: boolean } = {},
+  errorRestartCount = 0,
+) => {
   let serverIsReady = false;
   try {
     // Restart server
     logger.info('[Mastra Dev] - Starting server...');
 
     const commands = [];
+
+    if (startOptions.inspect) {
+      commands.push('--inspect');
+    }
+
+    if (startOptions.inspectBrk) {
+      commands.push('--inspect-brk'); //stops at beginning of script
+    }
 
     if (!isWebContainer()) {
       const instrumentation = import.meta.resolve('@opentelemetry/instrumentation/hook.mjs');
@@ -30,9 +45,9 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
         `--import=${instrumentation}`,
       );
     }
-
     commands.push('index.mjs');
-    currentServerProcess = execa('node', commands, {
+
+    currentServerProcess = execa(process.execPath, commands, {
       cwd: dotMastraPath,
       env: {
         NODE_ENV: 'production',
@@ -103,13 +118,18 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
           `Attempting to restart server after error... (Attempt ${errorRestartCount}/${ON_ERROR_MAX_RESTARTS})`,
         );
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        startServer(dotMastraPath, port, env, errorRestartCount);
+        startServer(dotMastraPath, port, env, startOptions, errorRestartCount);
       }
     }, 1000);
   }
 };
 
-async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: DevBundler) {
+async function rebundleAndRestart(
+  dotMastraPath: string,
+  port: number,
+  bundler: DevBundler,
+  startOptions: { inspect?: boolean; inspectBrk?: boolean } = {},
+) {
   if (isRestarting) {
     return;
   }
@@ -124,7 +144,7 @@ async function rebundleAndRestart(dotMastraPath: string, port: number, bundler: 
 
     const env = await bundler.loadEnvVars();
 
-    await startServer(join(dotMastraPath, 'output'), port, env);
+    await startServer(join(dotMastraPath, 'output'), port, env, startOptions);
   } finally {
     isRestarting = false;
   }
@@ -136,12 +156,16 @@ export async function dev({
   root,
   tools,
   env,
+  inspect,
+  inspectBrk,
 }: {
   dir?: string;
   root?: string;
   port: number | null;
   tools?: string[];
   env?: string;
+  inspect?: boolean;
+  inspectBrk?: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
@@ -149,6 +173,7 @@ export async function dev({
 
   const defaultToolsPath = join(mastraDir, 'tools/**/*.{js,ts}');
   const discoveredTools = [defaultToolsPath, ...(tools || [])];
+  const startOptions = { inspect, inspectBrk };
 
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
@@ -174,12 +199,12 @@ export async function dev({
     );
   }
 
-  await startServer(join(dotMastraPath, 'output'), Number(portToUse), loadedEnv);
+  await startServer(join(dotMastraPath, 'output'), Number(portToUse), loadedEnv, startOptions);
   watcher.on('event', (event: { code: string }) => {
     if (event.code === 'BUNDLE_END') {
       logger.info('[Mastra Dev] - Bundling finished, restarting server...');
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      rebundleAndRestart(dotMastraPath, Number(portToUse), bundler);
+      rebundleAndRestart(dotMastraPath, Number(portToUse), bundler, startOptions);
     }
   });
 

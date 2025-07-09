@@ -52,7 +52,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.2.2"
+    "vitest": "^3.2.4"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.0-alpha.0"

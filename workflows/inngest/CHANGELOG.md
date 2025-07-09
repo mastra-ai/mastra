@@ -1,5 +1,140 @@
 # @mastra/inngest
 
+## 0.11.3
+
+### Patch Changes
+
+- 515488a: dependencies updates:
+  - Updated dependency [`inngest@^3.39.2` ↗︎](https://www.npmjs.com/package/inngest/v/3.39.2) (from `^3.39.1`, in `dependencies`)
+- defb5ae: dependencies updates:
+  - Updated dependency [`inngest@^3.40.0` ↗︎](https://www.npmjs.com/package/inngest/v/3.40.0) (from `^3.39.2`, in `dependencies`)
+- b790fd1: Ability to pass a function to .sleep()/.sleepUntil()
+- c1cceea: Bump peerdeps of @matra/core
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [565cc0c]
+- Updated dependencies [b790fd1]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [cb16baf]
+- Updated dependencies [f36e4f1]
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11
+
+## 0.11.3-alpha.3
+
+### Patch Changes
+
+- c1cceea: Bump peerdeps of @matra/core
+  - @mastra/core@0.10.11-alpha.4
+
+## 0.11.3-alpha.2
+
+### Patch Changes
+
+- defb5ae: dependencies updates:
+  - Updated dependency [`inngest@^3.40.0` ↗︎](https://www.npmjs.com/package/inngest/v/3.40.0) (from `^3.39.2`, in `dependencies`)
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [cb16baf]
+  - @mastra/core@0.10.11-alpha.3
+
+## 0.11.3-alpha.1
+
+### Patch Changes
+
+- 515488a: dependencies updates:
+  - Updated dependency [`inngest@^3.39.2` ↗︎](https://www.npmjs.com/package/inngest/v/3.39.2) (from `^3.39.1`, in `dependencies`)
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11-alpha.1
+
+## 0.11.3-alpha.0
+
+### Patch Changes
+
+- b790fd1: Ability to pass a function to .sleep()/.sleepUntil()
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/core@0.10.11-alpha.0
+
+## 0.11.2
+
+### Patch Changes
+
+- 48d9738: Fix inngest sleep stream events
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10
+
+## 0.11.2-alpha.0
+
+### Patch Changes
+
+- 48d9738: Fix inngest sleep stream events
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10-alpha.0
+
+## 0.11.1
+
+### Patch Changes
+
+- e423a31: Fix bug where nested workflows would cause Inngest duplicate key error
+- 764f86a: Introduces the runCount property in the execution parameters for the steps execute function
+- 1760a1c: Use workflow stream in playground instead of watch
+- 038e5ae: Add cancel workflow run
+- 81a1b3b: Update peerdeps
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9
+
+## 0.11.1-alpha.0
+
+### Patch Changes
+
+- e423a31: Fix bug where nested workflows would cause Inngest duplicate key error
+- 764f86a: Introduces the runCount property in the execution parameters for the steps execute function
+- 1760a1c: Use workflow stream in playground instead of watch
+- 038e5ae: Add cancel workflow run
+- 81a1b3b: Update peerdeps
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9-alpha.0
+
 ## 0.11.0
 
 ### Minor Changes

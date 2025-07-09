@@ -19,26 +19,32 @@ import { NestedNode, WorkflowNestedNode } from './workflow-nested-node';
 import { ZoomSlider } from './zoom-slider';
 
 import { useCurrentRun } from '../context/use-current-run';
+import { WorkflowSendEventFormProps } from './workflow-run-event-form';
 
 export interface WorkflowGraphInnerProps {
   workflow: {
     stepGraph: GetWorkflowResponse['stepGraph'];
   };
   onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
+  onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
 }
 
-export function WorkflowGraphInner({ workflow, onShowTrace }: WorkflowGraphInnerProps) {
+export function WorkflowGraphInner({ workflow, onShowTrace, onSendEvent }: WorkflowGraphInnerProps) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges(workflow);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
   const { steps, runId } = useCurrentRun();
 
   const nodeTypes = {
-    'default-node': (props: NodeProps<DefaultNode>) => <WorkflowDefaultNode onShowTrace={onShowTrace} {...props} />,
+    'default-node': (props: NodeProps<DefaultNode>) => (
+      <WorkflowDefaultNode onShowTrace={onShowTrace} onSendEvent={onSendEvent} {...props} />
+    ),
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
-    'nested-node': (props: NodeProps<NestedNode>) => <WorkflowNestedNode onShowTrace={onShowTrace} {...props} />,
+    'nested-node': (props: NodeProps<NestedNode>) => (
+      <WorkflowNestedNode onShowTrace={onShowTrace} onSendEvent={onSendEvent} {...props} />
+    ),
   };
 
   return (

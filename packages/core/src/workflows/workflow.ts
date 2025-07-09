@@ -31,8 +31,8 @@ export type DefaultEngineType = {};
 
 export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
-  | { type: 'sleep'; id: string; duration: number }
-  | { type: 'sleepUntil'; id: string; date: Date }
+  | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, TEngineType> }
+  | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, TEngineType> }
   | { type: 'waitForEvent'; event: string; step: Step; timeout?: number }
   | {
       type: 'parallel';
@@ -76,12 +76,14 @@ export type SerializedStepFlowEntry =
   | {
       type: 'sleep';
       id: string;
-      duration: number;
+      duration?: number;
+      fn?: string;
     }
   | {
       type: 'sleepUntil';
       id: string;
-      date: Date;
+      date?: Date;
+      fn?: string;
     }
   | {
       type: 'waitForEvent';
@@ -164,6 +166,7 @@ export function createStep<
   outputSchema: TStepOutput;
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
+  retries?: number;
   execute: ExecuteFunction<
     z.infer<TStepInput>,
     z.infer<TStepOutput>,
@@ -210,6 +213,7 @@ export function createStep<
         outputSchema: TStepOutput;
         resumeSchema?: TResumeSchema;
         suspendSchema?: TSuspendSchema;
+        retries?: number;
         execute: ExecuteFunction<
           z.infer<TStepInput>,
           z.infer<TStepOutput>,
@@ -333,6 +337,7 @@ export function createStep<
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
+    retries: params.retries,
     execute: params.execute,
   };
 }
@@ -347,6 +352,7 @@ export function cloneStep<TStepId extends string>(
     inputSchema: step.inputSchema,
     outputSchema: step.outputSchema,
     execute: step.execute,
+    retries: step.retries,
   };
 }
 
@@ -476,7 +482,7 @@ export class Workflow<
   public outputSchema: TOutput;
   public steps: Record<string, StepWithComponent>;
   public stepDefs?: TSteps;
-  protected stepFlow: StepFlowEntry[];
+  protected stepFlow: StepFlowEntry<TEngineType>[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
@@ -545,7 +551,7 @@ export class Workflow<
     }
   }
 
-  setStepFlow(stepFlow: StepFlowEntry[]) {
+  setStepFlow(stepFlow: StepFlowEntry<TEngineType>[]) {
     this.stepFlow = stepFlow;
   }
 
@@ -576,14 +582,20 @@ export class Workflow<
    * @param duration The duration to sleep for
    * @returns The workflow instance for chaining
    */
-  sleep(duration: number) {
+  sleep(duration: number | ExecuteFunction<z.infer<TPrevSchema>, number, any, any, TEngineType>) {
     const id = `sleep_${randomUUID()}`;
-    this.stepFlow.push({ type: 'sleep', id, duration });
-    this.serializedStepFlow.push({
-      type: 'sleep',
-      id,
-      duration,
-    });
+
+    const opts: StepFlowEntry<TEngineType> =
+      typeof duration === 'function'
+        ? { type: 'sleep', id, fn: duration }
+        : { type: 'sleep', id, duration: duration as number };
+    const serializedOpts: SerializedStepFlowEntry =
+      typeof duration === 'function'
+        ? { type: 'sleep', id, fn: duration.toString() }
+        : { type: 'sleep', id, duration: duration as number };
+
+    this.stepFlow.push(opts);
+    this.serializedStepFlow.push(serializedOpts);
     this.steps[id] = createStep({
       id,
       inputSchema: z.object({}),
@@ -600,14 +612,19 @@ export class Workflow<
    * @param date The date to sleep until
    * @returns The workflow instance for chaining
    */
-  sleepUntil(date: Date) {
+  sleepUntil(date: Date | ExecuteFunction<z.infer<TPrevSchema>, Date, any, any, TEngineType>) {
     const id = `sleep_${randomUUID()}`;
-    this.stepFlow.push({ type: 'sleepUntil', id, date });
-    this.serializedStepFlow.push({
-      type: 'sleepUntil',
-      id,
-      date,
-    });
+    const opts: StepFlowEntry<TEngineType> =
+      typeof date === 'function'
+        ? { type: 'sleepUntil', id, fn: date }
+        : { type: 'sleepUntil', id, date: date as Date };
+    const serializedOpts: SerializedStepFlowEntry =
+      typeof date === 'function'
+        ? { type: 'sleepUntil', id, fn: date.toString() }
+        : { type: 'sleepUntil', id, date: date as Date };
+
+    this.stepFlow.push(opts);
+    this.serializedStepFlow.push(serializedOpts);
     this.steps[id] = createStep({
       id,
       inputSchema: z.object({}),
@@ -1098,7 +1115,9 @@ export class Workflow<
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
-    const run = resume?.steps?.length ? this.createRun({ runId: resume.runId }) : this.createRun();
+    const run = resume?.steps?.length
+      ? await this.createRunAsync({ runId: resume.runId })
+      : await this.createRunAsync();
     const nestedAbortCb = () => {
       abort();
     };
@@ -1478,6 +1497,22 @@ export class Run<
       workflowName: this.workflowId,
       runId: this.runId,
     });
+
+    if (!snapshot) {
+      throw new Error('No snapshot found for this workflow run');
+    }
+
+    if (snapshot.status !== 'suspended') {
+      throw new Error('This workflow run was not suspended');
+    }
+
+    const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
+
+    const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
+
+    if (!isStepSuspended) {
+      throw new Error('This workflow step was not suspended');
+    }
 
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({

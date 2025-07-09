@@ -27,7 +27,7 @@
     "lint": "eslint .",
     "test": "vitest run"
   },
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "@speechify/api-sdk": "^2.5.4",
     "zod": "^3.25.67"
@@ -40,7 +40,7 @@
     "eslint": "^9.29.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^2.1.9"
+    "vitest": "^3.2.4"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.0-alpha.0"

@@ -7,6 +7,7 @@ import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core';
 import { Telemetry } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { Tool } from '@mastra/core/tools';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -88,6 +89,7 @@ import {
   getWorkflowsHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
+  sendWorkflowRunEventHandler,
   startAsyncWorkflowHandler,
   startWorkflowRunHandler,
   streamWorkflowHandler,
@@ -119,7 +121,9 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
     tools = toolImports.reduce((acc, toolModule) => {
       Object.entries(toolModule).forEach(([key, tool]) => {
-        acc[key] = tool;
+        if (tool instanceof Tool) {
+          acc[key] = tool;
+        }
       });
       return acc;
     }, {});
@@ -156,7 +160,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
     }
   });
 
-  app.onError(errorHandler);
+  app.onError((err, c) => errorHandler(err, c, options.isDev));
 
   // Add Mastra to context
   app.use('*', async function setContext(c, next) {
@@ -3289,6 +3293,42 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     cancelWorkflowRunHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/runs/:runId/send-event',
+    describeRoute({
+      description: 'Send an event to a workflow run',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { type: 'object', properties: { event: { type: 'string' }, data: { type: 'object' } } },
+          },
+        },
+      },
+      tags: ['workflows'],
+      responses: {
+        200: {
+          description: 'workflow run event sent',
+        },
+      },
+    }),
+    sendWorkflowRunEventHandler,
   );
   // Log routes
   app.get(

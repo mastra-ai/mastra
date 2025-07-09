@@ -12,14 +12,14 @@ import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 
-import { UserMessage } from './user-message';
+import { UserMessage } from './messages/user-messages';
 import { useEffect, useRef } from 'react';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { Txt } from '@/ds/components/Txt';
 import { Icon, InfoIcon } from '@/ds/icons';
 import { useSpeechRecognition } from '@/hooks/use-speech-recognition';
-import { ComposerAttachments } from './attachment';
-import { useHasAttachments } from './use-has-attachments';
+import { ComposerAttachments } from './attachments/attachment';
+import { useHasAttachments } from './hooks/use-has-attachments';
 import { NextAssistantMessage } from '@/domains/networks/v-next/wrapped-assistant-message';
 import clsx from 'clsx';
 
@@ -27,10 +27,9 @@ export interface ThreadProps {
   ToolFallback?: ToolCallContentPartComponent;
   networkName?: string;
   hasMemory?: boolean;
-  showFileSupport?: boolean;
 }
 
-export const NetworkThread = ({ ToolFallback, networkName, hasMemory, showFileSupport }: ThreadProps) => {
+export const NetworkThread = ({ ToolFallback, networkName, hasMemory }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
@@ -57,7 +56,7 @@ export const NetworkThread = ({ ToolFallback, networkName, hasMemory, showFileSu
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} showFileSupport={showFileSupport} />
+      <Composer hasMemory={hasMemory} />
     </ThreadWrapper>
   );
 };
@@ -107,7 +106,7 @@ const ThreadWelcome = ({ networkName }: ThreadWelcomeProps) => {
   );
 };
 
-const Composer: FC<{ hasMemory?: boolean; showFileSupport?: boolean }> = ({ hasMemory, showFileSupport }) => {
+const Composer: FC<{ hasMemory?: boolean }> = ({ hasMemory }) => {
   return (
     <div>
       <ComposerPrimitive.Root>
@@ -125,7 +124,7 @@ const Composer: FC<{ hasMemory?: boolean; showFileSupport?: boolean }> = ({ hasM
           </ComposerPrimitive.Input>
           <div className="flex justify-end gap-2">
             <SpeechInput />
-            <ComposerAction showFileSupport={showFileSupport} />
+            <ComposerAction />
           </div>
         </div>
       </ComposerPrimitive.Root>
@@ -165,16 +164,14 @@ const SpeechInput = () => {
   );
 };
 
-const ComposerAction: FC<{ showFileSupport?: boolean }> = ({ showFileSupport }) => {
+const ComposerAction: FC = () => {
   return (
     <>
-      {showFileSupport && (
-        <ComposerPrimitive.AddAttachment asChild>
-          <TooltipIconButton tooltip="Add attachment" variant="ghost" className="rounded-full">
-            <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
-          </TooltipIconButton>
-        </ComposerPrimitive.AddAttachment>
-      )}
+      <ComposerPrimitive.AddAttachment asChild>
+        <TooltipIconButton tooltip="Add attachment" variant="ghost" className="rounded-full">
+          <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
+        </TooltipIconButton>
+      </ComposerPrimitive.AddAttachment>
 
       <ThreadPrimitive.If running={false}>
         <ComposerPrimitive.Send asChild>

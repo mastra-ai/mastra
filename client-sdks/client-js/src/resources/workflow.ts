@@ -115,10 +115,10 @@ export class Workflow extends BaseResource {
     if (params?.toDate) {
       searchParams.set('toDate', params.toDate.toISOString());
     }
-    if (params?.limit) {
+    if (params?.limit !== null && params?.limit !== undefined && !isNaN(Number(params?.limit))) {
       searchParams.set('limit', String(params.limit));
     }
-    if (params?.offset) {
+    if (params?.offset !== null && params?.offset !== undefined && !isNaN(Number(params?.offset))) {
       searchParams.set('offset', String(params.offset));
     }
     if (params?.resourceId) {
@@ -158,6 +158,18 @@ export class Workflow extends BaseResource {
   cancelRun(runId: string): Promise<{ message: string }> {
     return this.request(`/api/workflows/${this.workflowId}/runs/${runId}/cancel`, {
       method: 'POST',
+    });
+  }
+
+  /**
+   * Sends an event to a specific workflow run by its ID
+   * @param params - Object containing the runId, event and data
+   * @returns Promise containing a success message
+   */
+  sendRunEvent(params: { runId: string; event: string; data: unknown }): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${params.runId}/send-event`, {
+      method: 'POST',
+      body: { event: params.event, data: params.data },
     });
   }
 

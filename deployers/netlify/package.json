@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-netlify",
-  "version": "0.11.1",
+  "version": "0.11.4",
   "description": "",
   "type": "module",
   "files": [
@@ -29,7 +29,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
@@ -47,7 +47,7 @@
     "eslint": "^9.29.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.3"
+    "vitest": "^3.2.4"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.1-alpha.0"

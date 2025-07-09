@@ -24,7 +24,7 @@ const AgentTool = () => {
   const { toolId, agentId } = useParams();
   const { runtimeContext: playgroundRuntimeContext } = usePlaygroundStore();
 
-  const { mutateAsync: executeTool, isPending: isExecutingTool } = useExecuteTool();
+  const { mutateAsync: executeTool, isPending: isExecutingTool, error } = useExecuteTool();
   const [result, setResult] = useState<any>(null);
 
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
@@ -74,6 +74,7 @@ const AgentTool = () => {
       ) : (
         <ToolExecutor
           executionResult={result}
+          errorString={error?.message ?? ''}
           isExecutingTool={isExecutingTool}
           zodInputSchema={zodInputSchema}
           handleExecuteTool={handleExecuteTool}

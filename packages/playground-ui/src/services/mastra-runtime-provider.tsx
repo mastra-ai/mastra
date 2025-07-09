@@ -17,10 +17,19 @@ import { ChatProps } from '@/types';
 import { CoreUserMessage } from '@mastra/core';
 import { fileToBase64 } from '@/lib/file';
 import { useMastraClient } from '@/contexts/mastra-client-context';
-import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachment-adapters/pdfs-adapter';
+import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachments/pdfs-adapter';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
+};
+
+const handleFinishReason = (finishReason: string) => {
+  switch (finishReason) {
+    case 'tool-calls':
+      throw new Error('Stream finished with reason tool-calls, try increasing maxSteps');
+    default:
+      break;
+  }
 };
 
 const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreUserMessage>> => {
@@ -29,13 +38,14 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
     .map(async attachment => {
       if (attachment.type === 'document') {
         if (attachment.contentType === 'application/pdf') {
+          // @ts-expect-error - TODO: fix this type issue somehow
+          const pdfText = attachment.content?.[0]?.text || '';
           return {
             role: 'user' as const,
             content: [
               {
                 type: 'file' as const,
-                // @ts-expect-error - TODO: fix this type issue somehow
-                data: attachment.content?.[0]?.text || '',
+                data: `data:application/pdf;base64,${pdfText}`,
                 mimeType: attachment.contentType,
                 filename: attachment.name,
               },
@@ -70,12 +80,10 @@ export function MastraRuntimeProvider({
   children,
   agentId,
   initialMessages,
-  agentName,
   memory,
   threadId,
   refreshThreadList,
-  modelSettings = {},
-  chatWithGenerate,
+  settings,
   runtimeContext,
 }: Readonly<{
   children: ReactNode;
@@ -85,8 +93,18 @@ export function MastraRuntimeProvider({
   const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
 
-  const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
-    modelSettings;
+  const {
+    frequencyPenalty,
+    presencePenalty,
+    maxRetries,
+    maxSteps,
+    maxTokens,
+    temperature,
+    topK,
+    topP,
+    instructions,
+    chatWithGenerate,
+  } = settings?.modelSettings ?? {};
 
   const runtimeContextInstance = new RuntimeContext();
   Object.entries(runtimeContext ?? {}).forEach(([key, value]) => {
@@ -259,6 +277,7 @@ export function MastraRuntimeProvider({
             { role: 'assistant', content: [] } as ThreadMessageLike,
           );
           setMessages(currentConversation => [...currentConversation, latestMessage]);
+          handleFinishReason(generateResponse.finishReason);
         }
       } else {
         const response = await agent.stream({
@@ -419,6 +438,9 @@ export function MastraRuntimeProvider({
           onErrorPart(error) {
             throw new Error(error);
           },
+          onFinishMessagePart({ finishReason }) {
+            handleFinishReason(finishReason);
+          },
         });
       }
 
@@ -431,7 +453,7 @@ export function MastraRuntimeProvider({
       setIsRunning(false);
       setMessages(currentConversation => [
         ...currentConversation,
-        { role: 'assistant', content: [{ type: 'text', text: `Error: ${error}` as string }] },
+        { role: 'assistant', content: [{ type: 'text', text: `${error}` as string }] },
       ]);
     }
   };
