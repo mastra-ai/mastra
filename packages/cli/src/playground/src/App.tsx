@@ -37,8 +37,6 @@ import { NavigateTo } from './lib/react-router';
 function App() {
   const [queryClient] = useState(() => new QueryClient());
 
-  console.log('loool', import.meta.env.VITE_HELLO_WORLD);
-
   return (
     <QueryClientProvider client={queryClient}>
       <PostHogProvider>
