@@ -111,5 +111,69 @@ describe('createGraphRAGTool', () => {
         }),
       );
     });
+
+    it('handles dynamic arguments (function-based options) with runtimeContext', async () => {
+      const dynamicModel = vi.fn().mockResolvedValue(mockModel);
+      const dynamicIndexName = vi.fn().mockResolvedValue('dynamicIndex');
+      const dynamicVectorStoreName = vi.fn().mockResolvedValue('dynamicStore');
+      const dynamicIncludeSources = vi.fn().mockResolvedValue(false);
+      const dynamicGraphOptions = vi.fn().mockResolvedValue({
+        dimension: 768,
+        randomWalkSteps: 50,
+        restartProb: 0.1,
+        threshold: 0.8,
+      });
+      const dynamicDatabaseConfig = vi.fn().mockResolvedValue({
+        customConfig: 'value',
+      });
+
+      const tool = createGraphRAGTool({
+        id: 'dynamic-test',
+        model: dynamicModel as any,
+        indexName: dynamicIndexName as any,
+        vectorStoreName: dynamicVectorStoreName as any,
+        includeSources: dynamicIncludeSources as any,
+        graphOptions: dynamicGraphOptions as any,
+        databaseConfig: dynamicDatabaseConfig as any,
+      });
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('customKey', 'customValue');
+
+      const result = await tool.execute({
+        context: { queryText: 'dynamic query', topK: 5 },
+        mastra: mockMastra as any,
+        runtimeContext,
+      });
+
+      // Verify that dynamic functions were called with runtimeContext
+      expect(dynamicModel).toHaveBeenCalledWith({ runtimeContext });
+      expect(dynamicIndexName).toHaveBeenCalledWith({ runtimeContext });
+      expect(dynamicVectorStoreName).toHaveBeenCalledWith({ runtimeContext });
+      expect(dynamicIncludeSources).toHaveBeenCalledWith({ runtimeContext });
+      expect(dynamicGraphOptions).toHaveBeenCalledWith({ runtimeContext });
+      expect(dynamicDatabaseConfig).toHaveBeenCalledWith({ runtimeContext });
+
+      // Verify that vectorQuerySearch was called with dynamic values
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          indexName: 'dynamicIndex',
+          vectorStore: {
+            dynamicStore: {},
+          },
+          queryText: 'dynamic query',
+          model: mockModel,
+          topK: 5,
+          includeVectors: true,
+          databaseConfig: { customConfig: 'value' },
+        }),
+      );
+
+      // Verify GraphRAG was initialized with dynamic graph options
+      expect(GraphRAG).toHaveBeenCalledWith(768, 0.8);
+
+      expect(result.relevantContext).toEqual(['foo', 'bar']);
+      expect(result.sources).toEqual([]); // includeSources false
+    });
   });
 });
