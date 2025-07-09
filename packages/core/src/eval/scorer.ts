@@ -21,16 +21,15 @@ export type ExtractedElements = z.infer<typeof extractedElementsSchema>;
 
 export const scoreSchema = z.number();
 
-const resultSchema = z
-  .array(
-    z.object({
-      result: z.string(),
-      reason: z.string(),
-    }),
-  )
+const resultSchema = z.array(
+  z.object({
+    result: z.string(),
+    reason: z.string(),
+  }),
+);
 
 const scoreResultSchema = z.object({
-  score: z.number(),
+  score: z.number().optional(),
   results: resultSchema.optional(),
 });
 
@@ -50,9 +49,7 @@ export type ScoringRunWithExtractedElementAndScoreAndReason = ScoringRunWithExtr
 
 export type ExtractionStepFn = (run: ScoringRun) => Promise<ExtractedElements>;
 export type ScoreStepFn = (run: ScoringRunWithExtractedElement) => Promise<ScoreResult>;
-export type ReasonStepFn = (
-  run: ScoringRunWithExtractedElementAndScore,
-) => Promise<ReasonResult | null>;
+export type ReasonStepFn = (run: ScoringRunWithExtractedElementAndScore) => Promise<ReasonResult | null>;
 
 export type ScorerOptions = {
   name: string;
@@ -186,7 +183,11 @@ export type LLMScorerOptions = {
       prompt: string;
       description: string;
       judge?: LLMJudge;
-      transform?: (result: z.infer<typeof scoreResultSchema>) => z.infer<typeof scoreResultSchema>;
+      transform?: ({
+        results,
+      }: {
+        results: z.infer<typeof resultSchema>;
+      }) => { results: z.infer<typeof resultSchema> } & { score?: number };
     };
     reason?: {
       prompt: string;
@@ -194,12 +195,15 @@ export type LLMScorerOptions = {
       judge?: LLMJudge;
     };
   };
-
 };
 
 export function renderTemplate(template: string, params: Record<string, any> = {}) {
   return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-    return params[key] !== undefined ? String(params[key]) : match;
+    return params[key] !== undefined
+      ? typeof params[key] === 'string'
+        ? params[key]
+        : JSON.stringify(params[key])
+      : match;
   });
 }
 
@@ -210,7 +214,7 @@ export function createLLMScorer(opts: LLMScorerOptions) {
     name: opts.name,
     instructions: opts.description,
     model: model,
-  })
+  });
 
   const hasReason = !!opts.prompts.reason;
 
@@ -218,47 +222,56 @@ export function createLLMScorer(opts: LLMScorerOptions) {
     name: opts.name,
     description: opts.description,
     metadata: opts,
-    extract: async (run) => {
-      const extractPrompt = await llm.generate(renderTemplate(opts.prompts.extract.prompt, {
-        ...run,
-      }), {
-        output: z.object({
-          extractedElements: z.object({
-            statements: z.array(z.string()),
-          })
-        })
-      });
+    extract: async run => {
+      const extractPrompt = await llm.generate(
+        renderTemplate(opts.prompts.extract.prompt, {
+          ...run,
+        }),
+        {
+          output: z.object({
+            extractedElements: z.object({
+              statements: z.array(z.string()),
+            }),
+          }),
+        },
+      );
 
-      return extractPrompt.object
+      return extractPrompt.object.extractedElements;
     },
-    score: async (run) => {
-      const scorePrompt = await llm.generate(renderTemplate(opts.prompts.score.prompt, {
-        statements: run.extractedElements.statements,
-        ...run,
-      }), {
-        output: resultSchema
-      });
+    score: async run => {
+      const scorePrompt = await llm.generate(
+        renderTemplate(opts.prompts.score.prompt, {
+          statements: run.extractedElements.statements,
+          ...run,
+        }),
+        {
+          output: resultSchema,
+        },
+      );
 
       if (opts.prompts.score.transform) {
-        return opts.prompts.score.transform(scorePrompt.object);
+        return opts.prompts.score.transform({ results: scorePrompt.object });
       }
 
-      return scorePrompt.object
+      return { results: scorePrompt.object };
     },
-    reason: hasReason ? (
-      async (run) => {
-        const reasonPromptTemplate = opts.prompts.reason?.prompt!;
-        const reasonPrompt = await llm.generate(renderTemplate(reasonPromptTemplate, {
-          ...run,
-        }), {
-          output: z.object({
-            reason: z.string(),
-          })
-        });
+    reason: hasReason
+      ? async run => {
+          const reasonPromptTemplate = opts.prompts.reason?.prompt!;
+          const reasonPrompt = await llm.generate(
+            renderTemplate(reasonPromptTemplate, {
+              ...run,
+            }),
+            {
+              output: z.object({
+                reason: z.string(),
+              }),
+            },
+          );
 
-        return reasonPrompt.object
-      }
-    ) : undefined,
+          return reasonPrompt.object;
+        }
+      : undefined,
   });
 
   return scorer;
