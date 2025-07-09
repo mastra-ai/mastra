@@ -407,7 +407,7 @@ export abstract class MastraMemory extends MastraBase {
 
   /**
    * Retrieves working memory template for a specific thread
-   * @param threadId - The unique identifier of the thread
+   * @param memoryConfig - Optional memory configuration
    * @returns Promise resolving to working memory template or null if not found
    */
   abstract getWorkingMemoryTemplate({

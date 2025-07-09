@@ -48,17 +48,20 @@ export function generateEmptyFromSchema(schema: string) {
     const parsedSchema = JSON.parse(schema);
     if (!parsedSchema || parsedSchema.type !== 'object' || !parsedSchema.properties) return {};
     const obj: Record<string, any> = {};
+    const TYPE_DEFAULTS = {
+      string: '',
+      array: [],
+      object: {},
+      number: 0,
+      integer: 0,
+      boolean: false,
+    };
     for (const [key, prop] of Object.entries<any>(parsedSchema.properties)) {
-      if (prop.type === 'string') obj[key] = '';
-      else if (prop.type === 'array') obj[key] = [];
-      else if (prop.type === 'object') obj[key] = {};
-      else if (prop.type === 'number' || prop.type === 'integer') obj[key] = 0;
-      else if (prop.type === 'boolean') obj[key] = false;
-      else obj[key] = null;
+      obj[key] = TYPE_DEFAULTS[prop.type as keyof typeof TYPE_DEFAULTS] ?? null;
     }
     return obj;
   } catch {
-    return null;
+    return {};
   }
 }
 

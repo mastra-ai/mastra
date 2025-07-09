@@ -4,14 +4,22 @@ import { useAgentWorkingMemory } from '@/domains/agents/hooks/use-agent-working-
 type AgentWorkingMemoryContextType = {
   threadExists: boolean;
   workingMemoryData: string | null;
-  workingMemorySource: 'thread' | 'resource' | null;
+  workingMemorySource: 'thread' | 'resource';
   isLoading: boolean;
   isUpdating: boolean;
   updateWorkingMemory: (newMemory: string) => Promise<void>;
   refetch: () => Promise<void>;
 };
 
-export const WorkingMemoryContext = createContext<AgentWorkingMemoryContextType>({} as AgentWorkingMemoryContextType);
+export const WorkingMemoryContext = createContext<AgentWorkingMemoryContextType>({
+  threadExists: false,
+  workingMemoryData: null,
+  workingMemorySource: 'thread',
+  isLoading: false,
+  isUpdating: false,
+  updateWorkingMemory: () => Promise.resolve(),
+  refetch: () => Promise.resolve(),
+});
 
 export interface AgentWorkingMemoryProviderProps {
   children: ReactNode;

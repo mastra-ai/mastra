@@ -191,6 +191,7 @@ export async function updateWorkingMemoryHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
     const threadId = c.req.param('threadId');
+    const networkId = c.req.query('networkId');
     const body = await c.req.json();
 
     const result = await getOriginalUpdateWorkingMemoryHandler({
@@ -198,6 +199,7 @@ export async function updateWorkingMemoryHandler(c: Context) {
       agentId,
       threadId,
       body,
+      networkId,
     });
 
     return c.json(result);
@@ -212,12 +214,14 @@ export async function getWorkingMemoryHandler(c: Context) {
     const agentId = c.req.query('agentId');
     const threadId = c.req.param('threadId');
     const resourceId = c.req.query('resourceId');
+    const networkId = c.req.query('networkId');
 
     const result = await getOriginalGetWorkingMemoryHandler({
       mastra,
       agentId,
       threadId,
       resourceId,
+      networkId,
     });
 
     return c.json(result);

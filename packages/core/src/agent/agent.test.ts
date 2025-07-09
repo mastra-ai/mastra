@@ -122,7 +122,7 @@ class MockMemory extends MastraMemory {
   }
 
   async updateWorkingMemory() {
-    return;
+    return null;
   }
 }
 

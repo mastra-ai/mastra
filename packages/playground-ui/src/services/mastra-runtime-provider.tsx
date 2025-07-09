@@ -430,12 +430,15 @@ export function MastraRuntimeProvider({
               }
               return currentConversation;
             });
-            const toolName = toolCallIdToName.current[value.toolCallId];
-            if (toolName === 'updateWorkingMemory' && value.result?.success) {
-              refreshWorkingMemory?.();
+            try {
+              const toolName = toolCallIdToName.current[value.toolCallId];
+              if (toolName === 'updateWorkingMemory' && value.result?.success) {
+                await refreshWorkingMemory?.();
+              }
+            } finally {
+              // Clean up
+              delete toolCallIdToName.current[value.toolCallId];
             }
-            // Clean up
-            delete toolCallIdToName.current[value.toolCallId];
           },
           onErrorPart(error) {
             throw new Error(error);

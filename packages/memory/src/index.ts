@@ -721,6 +721,8 @@ export class Memory extends MastraMemory {
   }) {
     const emptyWorkingMemoryTemplateObject =
       template.format === 'json' ? generateEmptyFromSchema(template.content) : null;
+    const hasEmptyWorkingMemoryTemplateObject =
+      emptyWorkingMemoryTemplateObject && Object.keys(emptyWorkingMemoryTemplateObject).length > 0;
 
     return `WORKING_MEMORY_SYSTEM_INSTRUCTION:
 Store and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!
@@ -737,8 +739,8 @@ Guidelines:
 WORKING MEMORY TEMPLATE:
 ${template.content}
 
-${!!emptyWorkingMemoryTemplateObject ? 'When working with json data, the object format below represents the template:' : ''}
-${!!emptyWorkingMemoryTemplateObject ? JSON.stringify(emptyWorkingMemoryTemplateObject) : ''}
+${hasEmptyWorkingMemoryTemplateObject ? 'When working with json data, the object format below represents the template:' : ''}
+${hasEmptyWorkingMemoryTemplateObject ? JSON.stringify(emptyWorkingMemoryTemplateObject) : ''}
 
 WORKING MEMORY DATA:
 ${data}
