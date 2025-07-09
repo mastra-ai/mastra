@@ -1,4 +1,4 @@
-import { AgentChat as Chat, MainContentContent } from '@mastra/playground-ui';
+import { AgentChat as Chat, MainContentContent, AgentSettingsProvider } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
