@@ -29,7 +29,6 @@ The next-generation telemetry system for Mastra, designed to address the limitat
 3. **Type System (`types.ts`)**
    - AI-specific span types and metadata interfaces
    - Event-driven architecture with `TelemetryEvent` union
-   - Comprehensive scoring and annotation types
    - Configuration and capability detection interfaces
 
 4. **Decorator System (`decorators.ts`)**
@@ -83,7 +82,7 @@ interface LLMGenerationMetadata {
 
 ### Basic Setup
 
-TBD... use the default tracing implementation.  Coming soon.
+TBD... use the default tracing implementation. Coming soon.
 
 ### Decorator Usage
 
@@ -92,9 +91,9 @@ import { withSpan, InstrumentClass, SpanType } from '@mastra/core/telemetry_vnex
 
 // Method-level instrumentation
 class AgentService {
-  @withSpan({ 
+  @withSpan({
     spanType: SpanType.LLM_GENERATION,
-    attributes: { 'ai.model.name': 'gpt-4' }
+    attributes: { 'ai.model.name': 'gpt-4' },
   })
   async generateResponse(prompt: string) {
     // Implementation
@@ -102,9 +101,9 @@ class AgentService {
 }
 
 // Class-level instrumentation
-@InstrumentClass({ 
+@InstrumentClass({
   prefix: 'workflow',
-  spanType: SpanType.WORKFLOW_STEP 
+  spanType: SpanType.WORKFLOW_STEP,
 })
 class WorkflowEngine {
   // All methods automatically traced
@@ -126,9 +125,6 @@ class MyExporter implements TelemetryExporter {
       case 'trace_ended':
         // Handle completed trace
         break;
-      case 'score_added':
-        // Handle evaluation scores
-        break;
     }
   }
 
@@ -145,57 +141,26 @@ class MyExporter implements TelemetryExporter {
 All telemetry data flows as events:
 
 ```typescript
-type TelemetryEvent = 
+type TelemetryEvent =
   | { type: 'trace_started'; trace: Trace }
   | { type: 'trace_ended'; trace: Trace }
   | { type: 'span_started'; span: AISpan }
-  | { type: 'span_ended'; span: AISpan }
-  | { type: 'score_added'; targetType: 'trace' | 'span'; targetId: string; score: EvaluationScore }
-  | { type: 'annotation_added'; targetType: 'trace' | 'span'; targetId: string; annotation: HumanAnnotation | LLMAnnotation };
+  | { type: 'span_ended'; span: AISpan };
 ```
 
 ### 2. Flexible Export Strategy
 
 Exporters control their own batching and delivery optimization:
+
 - **Console Exporter**: Immediate output for development
 - **HTTP API Exporter**: Batch requests with retry logic
 - **File Exporter**: Buffer writes and compression
 - **Storage Exporter**: Database persistence with transactions
 
-### 3. Comprehensive Scoring System
-
-Support for evaluation and feedback:
-
-```typescript
-// Evaluation scores
-interface EvaluationScore {
-  name: string;
-  value: number | null;
-  range?: [number, number];
-  category?: string;
-  scorer: {
-    type: 'human' | 'llm' | 'code';
-    name: string;
-    model?: string;
-  };
-  reasoning?: string;
-}
-
-// Human annotations
-interface HumanAnnotation {
-  annotator: { userId: string; name?: string; role?: string };
-  content: {
-    comment?: string;
-    rating?: number;
-    tags?: string[];
-    feedback?: Record<string, any>;
-  };
-}
-```
-
-### 4. Context Propagation
+### 3. Context Propagation
 
 Built-in support for OpenTelemetry context patterns:
+
 - Parent-child span relationships
 - Trace context propagation
 - Baggage for cross-cutting concerns
@@ -221,7 +186,7 @@ interface TelemetryConfig {
 ### Sampling Strategies
 
 ```typescript
-type SamplingStrategy = 
+type SamplingStrategy =
   | { type: 'always_on' }
   | { type: 'always_off' }
   | { type: 'ratio'; probability: number }
@@ -261,7 +226,7 @@ type SamplingStrategy =
 Incorporates patterns from leading AI observability platforms:
 
 - **Langfuse**: Rich metadata, hierarchical observations, production-ready error handling
-- **Braintrust**: Evaluation-first architecture, automatic scoring, distributed tracing
+- **Braintrust**: Distributed tracing, comprehensive metadata
 - **OpenLLMetry**: OpenTelemetry compatibility, semantic conventions, context propagation
 
 ## Outstanding Implementation Items
@@ -272,7 +237,8 @@ Incorporates patterns from leading AI observability platforms:
 
 **Impact**: Makes it harder for implementers to understand expected behavior.
 
-**Recommendation**: 
+**Recommendation**:
+
 - Provide detailed JSDoc documentation for abstract methods
 - Create reference implementation in `implementations/` directory
 - Add integration tests showing expected behavior
@@ -284,11 +250,13 @@ Incorporates patterns from leading AI observability platforms:
 **Impact**: Parent-child relationships may be lost across async boundaries.
 
 **Missing Components**:
+
 - AsyncLocalStorage integration for Node.js
 - Context propagation across await boundaries
 - Current span/trace context maintenance
 
 **Recommendation**:
+
 - Implement OpenTelemetry-compatible context API
 - Add async context propagation helpers
 - Provide context management utilities
@@ -300,11 +268,13 @@ Incorporates patterns from leading AI observability platforms:
 **Impact**: Difficult to integrate with existing OTel instrumentations.
 
 **Missing Components**:
+
 - Mapping between AI span types and OTel semantic conventions
 - Context propagation compatibility
 - Interoperability with OTel SDKs
 
 **Recommendation**:
+
 - Define AI semantic conventions mapping
 - Implement OTel context bridge
 - Add integration examples
@@ -316,11 +286,13 @@ Incorporates patterns from leading AI observability platforms:
 **Impact**: Breaking changes for existing users.
 
 **Consideration Points**:
+
 - Backwards compatibility requirements
 - Migration strategy documentation
 - Deprecation timeline for current system
 
 **Recommendation**:
+
 - Design compatibility layer
 - Create migration guide
 - Implement feature flags for gradual adoption
@@ -332,11 +304,13 @@ Incorporates patterns from leading AI observability platforms:
 **Impact**: Inconsistent error reporting across implementations.
 
 **Missing Components**:
+
 - Automatic exception capture in traced methods
 - Error propagation through span hierarchies
 - Structured error reporting standards
 
 **Recommendation**:
+
 - Implement automatic error capture decorators
 - Define error metadata standards
 - Add error correlation across spans

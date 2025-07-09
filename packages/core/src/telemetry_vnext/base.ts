@@ -1,6 +1,6 @@
 /**
  * MastraTelemetry - Abstract base class for telemetry implementations
- * 
+ *
  * Follows Mastra's architectural patterns while providing a comprehensive
  * telemetry interface that addresses the limitations of the current system.
  */
@@ -22,9 +22,6 @@ import type {
   SpanMetadata,
   TelemetrySupports,
   TelemetryEvent,
-  EvaluationScore,
-  HumanAnnotation,
-  LLMAnnotation,
 } from './types';
 
 // ============================================================================
@@ -54,7 +51,7 @@ export const telemetryDefaultOptions: TelemetryConfig = {
 
 /**
  * Abstract base class for all telemetry implementations in Mastra.
- * 
+ *
  * Follows Mastra's patterns:
  * - Extends MastraBase for consistent logging and component registration
  * - Uses dependency injection pattern
@@ -69,17 +66,17 @@ export abstract class MastraTelemetry extends MastraBase {
 
   constructor(config: { name: string } & SharedTelemetryConfig) {
     super({ component: RegisteredLogger.TELEMETRY, name: config.name });
-    
+
     this.config = this.getMergedTelemetryConfig(config.options);
-    
+
     if (config.exporters) {
       this.exporters = [...config.exporters];
     }
-    
+
     if (config.processors) {
       this.processors = [...config.processors];
     }
-    
+
     if (config.samplers) {
       this.samplers = [...config.samplers];
     }
@@ -94,11 +91,14 @@ export abstract class MastraTelemetry extends MastraBase {
   /**
    * Start a new trace (handles sampling)
    */
-  startTrace(name: string, options?: {
-    user?: { id?: string; sessionId?: string; [key: string]: any };
-    attributes?: Record<string, any>;
-    tags?: string[];
-  }): Trace {
+  startTrace(
+    name: string,
+    options?: {
+      user?: { id?: string; sessionId?: string; [key: string]: any };
+      attributes?: Record<string, any>;
+      tags?: string[];
+    },
+  ): Trace {
     if (!this.isEnabled()) {
       return this.createNoOpTrace(name);
     }
@@ -121,28 +121,24 @@ export abstract class MastraTelemetry extends MastraBase {
 
     // For spans, we typically inherit the trace sampling decision
     // But we could add span-level sampling here if needed
-    
+
     // Set up lifecycle callbacks
     const optionsWithCallbacks: SpanOptions = {
       ...options,
       _callbacks: {
         onEnd: (span: AISpan) => this.emitSpanEnded(span),
         onUpdate: (span: AISpan) => this.emitSpanUpdated(span),
-        onScoreAdded: (span: AISpan, score: EvaluationScore) => 
-          this.emitScoreAdded('span', span.id, score),
-        onAnnotationAdded: (span: AISpan, annotation: HumanAnnotation | LLMAnnotation) => 
-          this.emitAnnotationAdded('span', span.id, annotation),
       },
     };
-    
+
     const span = this._startSpan(optionsWithCallbacks);
-    
+
     // Add to trace if it's a root span
     this.addSpanToTrace(span);
-    
+
     // Emit span started event
     this.emitSpanStarted(span);
-    
+
     return span;
   }
 
@@ -153,25 +149,28 @@ export abstract class MastraTelemetry extends MastraBase {
   /**
    * Start a new trace (called after sampling)
    */
-  protected abstract _startTrace(name: string, options?: {
-    user?: { id?: string; sessionId?: string; [key: string]: any };
-    attributes?: Record<string, any>;
-    tags?: string[];
-  }): Trace;
+  protected abstract _startTrace(
+    name: string,
+    options?: {
+      user?: { id?: string; sessionId?: string; [key: string]: any };
+      attributes?: Record<string, any>;
+      tags?: string[];
+    },
+  ): Trace;
 
   /**
    * Start a new span (called after sampling)
-   * 
+   *
    * Implementations should:
    * 1. Create a span with the provided metadata
    * 2. Set span.trace to the appropriate trace
    * 3. Set span.parent to options.parent (if any)
    * 4. Use createSpanWithCallbacks() helper to automatically wire up lifecycle callbacks
-   * 
+   *
    * The base class will automatically:
    * - Add the span to trace.rootSpans if it has no parent
    * - Emit span_started event
-   * 
+   *
    * Example:
    * ```typescript
    * protected _startSpan(options: SpanOptions): AISpan {
@@ -189,10 +188,7 @@ export abstract class MastraTelemetry extends MastraBase {
   /**
    * Trace a class instance with automatic instrumentation (handles sampling)
    */
-  traceClass<T extends object>(
-    instance: T,
-    options?: TracingOptions
-  ): T {
+  traceClass<T extends object>(instance: T, options?: TracingOptions): T {
     if (!this.isEnabled()) {
       return instance; // Return unwrapped instance if disabled
     }
@@ -208,7 +204,7 @@ export abstract class MastraTelemetry extends MastraBase {
       spanName: string;
       spanType?: SpanType;
       attributes?: Record<string, any>;
-    }
+    },
   ): TMethod {
     if (!this.isEnabled()) {
       return method; // Return unwrapped method if disabled
@@ -219,10 +215,7 @@ export abstract class MastraTelemetry extends MastraBase {
   /**
    * Trace a class instance (called after sampling)
    */
-  protected abstract _traceClass<T extends object>(
-    instance: T,
-    options?: TracingOptions
-  ): T;
+  protected abstract _traceClass<T extends object>(instance: T, options?: TracingOptions): T;
 
   /**
    * Trace a method (called after sampling)
@@ -233,7 +226,7 @@ export abstract class MastraTelemetry extends MastraBase {
       spanName: string;
       spanType?: SpanType;
       attributes?: Record<string, any>;
-    }
+    },
   ): TMethod;
 
   /**
@@ -254,10 +247,6 @@ export abstract class MastraTelemetry extends MastraBase {
       tracing: true,
       /** AI-specific span types */
       aiSpanTypes: true,
-      /** Human annotations */
-      humanAnnotations: true,
-      /** LLM annotations */
-      llmAnnotations: true,
       /** Context propagation */
       contextPropagation: true,
       /** OpenTelemetry compatibility */
@@ -289,9 +278,8 @@ export abstract class MastraTelemetry extends MastraBase {
     return { ...this.config };
   }
 
-
   // ============================================================================
-  // Plugin Access - Following Mastra patterns  
+  // Plugin Access - Following Mastra patterns
   // ============================================================================
 
   /**
@@ -355,9 +343,6 @@ export abstract class MastraTelemetry extends MastraBase {
       parent: options.parent,
       trace: noOpTrace,
       end: () => {},
-      addScore: () => {},
-      addHumanAnnotation: () => {},
-      addLLMAnnotation: () => {},
       createChildSpan: () => noOpSpan,
       updateMetadata: () => {},
       export: async () => '',
@@ -382,60 +367,24 @@ export abstract class MastraTelemetry extends MastraBase {
    * Create a span that automatically calls lifecycle callbacks
    * This is a helper for concrete implementations to wire up callbacks correctly
    */
-  protected createSpanWithCallbacks(
-    options: SpanOptions,
-    createSpanFn: (opts: SpanOptions) => AISpan
-  ): AISpan {
+  protected createSpanWithCallbacks(options: SpanOptions, createSpanFn: (opts: SpanOptions) => AISpan): AISpan {
     const span = createSpanFn(options);
-    
+
     // Store original methods
     const originalEnd = span.end.bind(span);
-    const originalAddScore = span.addScore.bind(span);
-    const originalAddHumanAnnotation = span.addHumanAnnotation.bind(span);
-    const originalAddLLMAnnotation = span.addLLMAnnotation.bind(span);
     const originalUpdateMetadata = span.updateMetadata.bind(span);
-    
+
     // Wrap methods to call callbacks
     span.end = (endTime?: Date) => {
       originalEnd(endTime);
       options._callbacks?.onEnd?.(span);
     };
-    
-    span.addScore = (score) => {
-      originalAddScore(score);
-      const fullScore: EvaluationScore = {
-        ...score,
-        id: `score-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-        createdAt: new Date(),
-      };
-      options._callbacks?.onScoreAdded?.(span, fullScore);
-    };
-    
-    span.addHumanAnnotation = (annotation) => {
-      originalAddHumanAnnotation(annotation);
-      const fullAnnotation: HumanAnnotation = {
-        ...annotation,
-        id: `annotation-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-        createdAt: new Date(),
-      };
-      options._callbacks?.onAnnotationAdded?.(span, fullAnnotation);
-    };
-    
-    span.addLLMAnnotation = (annotation) => {
-      originalAddLLMAnnotation(annotation);
-      const fullAnnotation: LLMAnnotation = {
-        ...annotation,
-        id: `annotation-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-        createdAt: new Date(),
-      };
-      options._callbacks?.onAnnotationAdded?.(span, fullAnnotation);
-    };
-    
-    span.updateMetadata = (updates) => {
+
+    span.updateMetadata = updates => {
       originalUpdateMetadata(updates);
       options._callbacks?.onUpdate?.(span);
     };
-    
+
     return span;
   }
 
@@ -449,7 +398,6 @@ export abstract class MastraTelemetry extends MastraBase {
   isEnabled(): boolean {
     return this.config.enabled ?? true;
   }
-
 
   /**
    * Check if a trace should be sampled
@@ -486,7 +434,6 @@ export abstract class MastraTelemetry extends MastraBase {
     }
   }
 
-
   /**
    * Process a span through all processors
    */
@@ -497,7 +444,7 @@ export abstract class MastraTelemetry extends MastraBase {
       if (!processedSpan) {
         break;
       }
-      
+
       try {
         processedSpan = processor.process(processedSpan);
       } catch (error) {
@@ -508,7 +455,6 @@ export abstract class MastraTelemetry extends MastraBase {
 
     return processedSpan;
   }
-
 
   // ============================================================================
   // Event-driven Export Methods
@@ -581,35 +527,10 @@ export abstract class MastraTelemetry extends MastraBase {
   }
 
   /**
-   * Emit a score added event
-   */
-  protected emitScoreAdded(targetType: 'trace' | 'span', targetId: string, score: EvaluationScore): void {
-    const event: TelemetryEvent = { type: 'score_added', targetType, targetId, score };
-    this.exportEvent(event).catch(error => {
-      this.logger.error('Failed to export score_added event', error);
-    });
-  }
-
-  /**
-   * Emit an annotation added event
-   */
-  protected emitAnnotationAdded(
-    targetType: 'trace' | 'span', 
-    targetId: string, 
-    annotation: HumanAnnotation | LLMAnnotation
-  ): void {
-    const event: TelemetryEvent = { type: 'annotation_added', targetType, targetId, annotation };
-    this.exportEvent(event).catch(error => {
-      this.logger.error('Failed to export annotation_added event', error);
-    });
-  }
-
-
-  /**
    * Export telemetry event through all exporters (realtime mode)
    */
   protected async exportEvent(event: TelemetryEvent): Promise<void> {
-    const exportPromises = this.exporters.map(async (exporter) => {
+    const exportPromises = this.exporters.map(async exporter => {
       try {
         if (exporter.exportEvent) {
           await exporter.exportEvent(event);
@@ -624,7 +545,6 @@ export abstract class MastraTelemetry extends MastraBase {
     await Promise.allSettled(exportPromises);
   }
 
-
   // ============================================================================
   // Lifecycle Management
   // ============================================================================
@@ -634,10 +554,10 @@ export abstract class MastraTelemetry extends MastraBase {
    */
   async init(): Promise<void> {
     this.logger.debug(`Telemetry initialization started [name=${this.name}]`);
-    
+
     // Any initialization logic for the telemetry system
     // This could include setting up queues, starting background processes, etc.
-    
+
     this.logger.info(`Telemetry initialized successfully [name=${this.name}]`);
   }
 
@@ -648,14 +568,10 @@ export abstract class MastraTelemetry extends MastraBase {
     this.logger.debug(`Telemetry shutdown started [name=${this.name}]`);
 
     // Shutdown all components
-    const shutdownPromises = [
-      ...this.exporters.map(e => e.shutdown()),
-      ...this.processors.map(p => p.shutdown()),
-    ];
+    const shutdownPromises = [...this.exporters.map(e => e.shutdown()), ...this.processors.map(p => p.shutdown())];
 
     await Promise.allSettled(shutdownPromises);
 
     this.logger.info(`Telemetry shutdown completed [name=${this.name}]`);
   }
-
 }

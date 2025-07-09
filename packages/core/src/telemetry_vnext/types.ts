@@ -1,6 +1,6 @@
 /**
  * New Telemetry Interface Design for Mastra
- * 
+ *
  * This file contains the new telemetry interface types that address the limitations
  * of the current system while incorporating best practices from Langfuse, Braintrust,
  * and OpenLLMetry.
@@ -404,11 +404,10 @@ export interface EvalExecutionMetadata extends BaseSpanMetadata {
   llmCallsCount?: number;
 }
 
-
 /**
  * Union type for all span metadata
  */
-export type SpanMetadata = 
+export type SpanMetadata =
   | AgentRunMetadata
   | WorkflowRunMetadata
   | LLMGenerationMetadata
@@ -421,107 +420,6 @@ export type SpanMetadata =
   | EvalExecutionMetadata
   | WorkflowStepMetadata
   | (BaseSpanMetadata & { type: SpanType.GENERIC });
-
-// ============================================================================
-// Scoring and Annotation Types
-// ============================================================================
-
-/**
- * Evaluation score that can be attached to spans or traces
- */
-export interface EvaluationScore {
-  /** Unique identifier for this score */
-  id: string;
-  /** Name of the score/metric */
-  name: string;
-  /** Numerical score value */
-  value: number | null;
-  /** Score range (e.g., [0, 1] or [0, 100]) */
-  range?: [number, number];
-  /** Categorical rating (e.g., 'good', 'bad', 'excellent') */
-  category?: string;
-  /** Scorer metadata */
-  scorer: {
-    /** Type of scorer (human, llm, code) */
-    type: 'human' | 'llm' | 'code';
-    /** Name/identifier of the scorer */
-    name: string;
-    /** Version of the scorer */
-    version?: string;
-    /** Model used (for LLM scorers) */
-    model?: string;
-  };
-  /** When this score was created */
-  createdAt: Date;
-  /** Optional reasoning/explanation */
-  reasoning?: string;
-  /** Additional metadata */
-  metadata?: Record<string, any>;
-}
-
-/**
- * Human annotation for spans
- */
-export interface HumanAnnotation {
-  /** Unique identifier */
-  id: string;
-  /** Annotator information */
-  annotator: {
-    /** User ID */
-    userId: string;
-    /** Display name */
-    name?: string;
-    /** User role */
-    role?: string;
-  };
-  /** Annotation content */
-  content: {
-    /** Text comment */
-    comment?: string;
-    /** Rating/score */
-    rating?: number;
-    /** Tags */
-    tags?: string[];
-    /** Structured feedback */
-    feedback?: Record<string, any>;
-  };
-  /** When annotation was created */
-  createdAt: Date;
-  /** Last modification time */
-  updatedAt?: Date;
-}
-
-/**
- * LLM-generated annotation for spans
- */
-export interface LLMAnnotation {
-  /** Unique identifier */
-  id: string;
-  /** LLM that generated this annotation */
-  model: {
-    /** Model name */
-    name: string;
-    /** Provider */
-    provider: string;
-    /** Model version */
-    version?: string;
-  };
-  /** Annotation content */
-  content: {
-    /** Generated comment/feedback */
-    comment: string;
-    /** Confidence in the annotation */
-    confidence?: number;
-    /** Structured evaluation */
-    evaluation?: Record<string, any>;
-    /** Reasoning trace */
-    reasoning?: string[];
-  };
-  /** When annotation was generated */
-  createdAt: Date;
-  /** Prompt used to generate annotation */
-  prompt?: string;
-}
 
 // ============================================================================
 // Trace and Span Interfaces
@@ -551,12 +449,6 @@ export interface Trace {
   attributes?: Record<string, any>;
   /** Tags for categorization */
   tags?: string[];
-  /** Associated scores */
-  scores?: EvaluationScore[];
-  /** Human annotations */
-  humanAnnotations?: HumanAnnotation[];
-  /** LLM annotations */
-  llmAnnotations?: LLMAnnotation[];
   /** Root spans (spans with no parent span) */
   rootSpans: AISpan[];
   /** Additional metadata */
@@ -573,28 +465,16 @@ export interface AISpan {
   otelSpan?: OTelSpan;
   /** AI-specific metadata */
   metadata: SpanMetadata;
-  /** Associated scores */
-  scores?: EvaluationScore[];
-  /** Human annotations */
-  humanAnnotations?: HumanAnnotation[];
-  /** LLM annotations */
-  llmAnnotations?: LLMAnnotation[];
   /** Child spans */
   children: AISpan[];
   /** Parent span reference (undefined for root spans) */
   parent?: AISpan;
   /** Trace this span belongs to */
   trace: Trace;
-  
+
   // Methods for span lifecycle
   /** End the span */
   end(endTime?: Date): void;
-  /** Add a score to this span */
-  addScore(score: Omit<EvaluationScore, 'id' | 'createdAt'>): void;
-  /** Add human annotation */
-  addHumanAnnotation(annotation: Omit<HumanAnnotation, 'id' | 'createdAt'>): void;
-  /** Add LLM annotation */
-  addLLMAnnotation(annotation: Omit<LLMAnnotation, 'id' | 'createdAt'>): void;
   /** Create child span */
   createChildSpan(metadata: Omit<SpanMetadata, 'traceId' | 'parentSpanId' | 'createdAt'>): AISpan;
   /** Update span metadata */
@@ -610,7 +490,7 @@ export interface AISpan {
 /**
  * Sampling strategy configuration
  */
-export type SamplingStrategy = 
+export type SamplingStrategy =
   | { type: 'always_on' }
   | { type: 'always_off' }
   | { type: 'ratio'; probability: number }
@@ -674,10 +554,6 @@ export interface TelemetrySupports {
   tracing: boolean;
   /** AI-specific span types */
   aiSpanTypes: boolean;
-  /** Human annotations on spans */
-  humanAnnotations: boolean;
-  /** LLM annotations on spans */
-  llmAnnotations: boolean;
   /** Context propagation */
   contextPropagation: boolean;
   /** OpenTelemetry compatibility */
@@ -697,15 +573,13 @@ export interface TelemetrySupports {
 /**
  * Telemetry events that can be exported
  */
-export type TelemetryEvent = 
+export type TelemetryEvent =
   | { type: 'trace_started'; trace: Trace }
   | { type: 'trace_updated'; trace: Trace }
   | { type: 'trace_ended'; trace: Trace }
   | { type: 'span_started'; span: AISpan }
   | { type: 'span_updated'; span: AISpan }
-  | { type: 'span_ended'; span: AISpan }
-  | { type: 'score_added'; targetType: 'trace' | 'span'; targetId: string; score: EvaluationScore }
-  | { type: 'annotation_added'; targetType: 'trace' | 'span'; targetId: string; annotation: HumanAnnotation | LLMAnnotation };
+  | { type: 'span_ended'; span: AISpan };
 
 /**
  * Interface for telemetry exporters
@@ -713,10 +587,10 @@ export type TelemetryEvent =
 export interface TelemetryExporter {
   /** Exporter name */
   name: string;
-  
+
   /** Export telemetry events */
   exportEvent(event: TelemetryEvent): Promise<void>;
-  
+
   /** Shutdown exporter */
   shutdown(): Promise<void>;
 }
@@ -765,8 +639,6 @@ export interface SpanOptions {
   _callbacks?: {
     onEnd?: (span: AISpan) => void;
     onUpdate?: (span: AISpan) => void;
-    onScoreAdded?: (span: AISpan, score: EvaluationScore) => void;
-    onAnnotationAdded?: (span: AISpan, annotation: HumanAnnotation | LLMAnnotation) => void;
   };
 }
 
