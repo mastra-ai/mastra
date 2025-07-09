@@ -183,11 +183,7 @@ export type LLMScorerOptions = {
       prompt: string;
       description: string;
       judge?: LLMJudge;
-      transform?: ({
-        results,
-      }: {
-        results: z.infer<typeof resultSchema>;
-      }) => { results: z.infer<typeof resultSchema> } & { score?: number };
+      transform?: ({ results }: { results: z.infer<typeof resultSchema> }) => z.infer<typeof scoreResultSchema>;
     };
     reason?: {
       prompt: string;
