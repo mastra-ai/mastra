@@ -204,15 +204,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      json-schema:
-        specifier: ^0.4.0
-        version: 0.4.0
       rxjs:
         specifier: 7.8.1
         version: 7.8.1
-      zod:
-        specifier: ^3.25.67
-        version: 3.25.67
       zod-to-json-schema:
         specifier: ^3.24.5
         version: 3.24.6(zod@3.25.67)
@@ -226,15 +220,15 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
-      '@tsconfig/recommended':
-        specifier: ^1.0.9
-        version: 1.0.10
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15
       '@types/node':
         specifier: ^20.17.57
         version: 20.19.2
+      json-schema:
+        specifier: ^0.4.0
+        version: 0.4.0
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.2))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
@@ -244,6 +238,9 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.2)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
+      zod:
+        specifier: ^3.25.67
+        version: 3.25.67
 
   deployers/cloudflare:
     dependencies:
@@ -9524,9 +9521,6 @@ packages:
 
   '@tsconfig/node16@1.0.4':
     resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
-
-  '@tsconfig/recommended@1.0.10':
-    resolution: {integrity: sha512-cGvydvg03lONp5Z9yaplW493Vw9/um7k588mvDkm+VFPF2PZUVPx0uswq4PFpeEySsLbQRETrDRhzh4Dmxaslw==}
 
   '@turbopuffer/turbopuffer@0.6.17':
     resolution: {integrity: sha512-E658zBLNTMhUidAdFsNSbzBo0LzWLWO7x9G9BHIazgE6IiJVUHiSd4kBqcc9NnlZ7Yq4O63lqlQTQD+uLmPaXQ==}
@@ -25371,8 +25365,6 @@ snapshots:
   '@tsconfig/node14@1.0.3': {}
 
   '@tsconfig/node16@1.0.4': {}
-
-  '@tsconfig/recommended@1.0.10': {}
 
   '@turbopuffer/turbopuffer@0.6.17':
     dependencies:
