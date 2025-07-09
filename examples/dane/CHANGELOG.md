@@ -1,5 +1,12 @@
 # @mastra/dane
 
+## 0.0.33-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4a9811]
+  - @mastra/core@0.10.12-alpha.0
+
 ## 0.0.32
 
 ### Patch Changes

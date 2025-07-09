@@ -1,5 +1,14 @@
 # @mastra/client-js
 
+## 0.10.11-alpha.0
+
+### Patch Changes
+
+- 9468be4: Fix error on agent generate while using antropic
+- 44731a4: Client SDK - Expose processTextStream util for agent textstream with structured output
+- Updated dependencies [b4a9811]
+  - @mastra/core@0.10.12-alpha.0
+
 ## 0.10.10
 
 ### Patch Changes

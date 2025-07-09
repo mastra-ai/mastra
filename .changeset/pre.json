@@ -70,5 +70,12 @@
     "@mastra/voice-speechify": "0.10.4",
     "@mastra/inngest": "0.11.3"
   },
-  "changesets": []
+  "changesets": [
+    "afraid-pumas-love",
+    "better-baths-rhyme",
+    "kind-carrots-grab",
+    "lovely-oranges-dream",
+    "tasty-rings-mate",
+    "two-candies-play"
+  ]
 }
