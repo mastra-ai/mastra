@@ -10,7 +10,8 @@ import type {
 } from 'ai';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
+import { z } from 'zod';
+import type { ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -32,7 +33,7 @@ import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import { MessageList } from './message-list';
-import type { MessageInput } from './message-list';
+import type { MastraMessageV2, MessageInput } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import type {
   AgentConfig,
@@ -828,6 +829,65 @@ export class Agent<
     return convertedMemoryTools;
   }
 
+  private getSemanticRecallTool({
+    runId,
+    resourceId,
+    threadId,
+    userContent,
+    messages,
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    userContent: string;
+    messages: MastraMessageV2[];
+  }): CoreTool {
+    const semanticRecallTool = {
+      description: 'This tool returns semantic recall messages from memory. ALWAYS call this tool.',
+      parameters: z.object({
+        input: z
+          .string()
+          .describe(
+            'The input for the semantic recall tool. Should always be the default value provided by the system.',
+          )
+          .default(userContent),
+      }),
+      execute: async (args: any, _options: any) => {
+        try {
+          this.logger.debug(`[Agent:${this.name}] - Executing memory tool semanticRecall`, {
+            name: 'semanticRecall',
+            description: 'This tool returns semantic recall messages from memory. ALWAYS call this tool.',
+            args,
+            runId,
+            threadId,
+            resourceId,
+          });
+          return { messages };
+        } catch (err) {
+          const mastraError = new MastraError(
+            {
+              id: 'AGENT_MEMORY_TOOL_EXECUTION_FAILED',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              details: {
+                agentName: this.name,
+                runId: runId || '',
+                threadId: threadId || '',
+                resourceId: resourceId || '',
+              },
+              text: `[Agent:${this.name}] - Failed memory tool execution`,
+            },
+            err,
+          );
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+      },
+    };
+    return semanticRecallTool;
+  }
+
   private async getAssignedTools({
     runtimeContext,
     runId,
@@ -1290,6 +1350,8 @@ export class Agent<
           });
         }
 
+        const userContent = new MessageList().add(messages, `user`).getLatestUserContent() || '';
+
         let [memoryMessages, memorySystemMessage] =
           thread.id && memory
             ? await Promise.all([
@@ -1299,12 +1361,22 @@ export class Agent<
                     resourceId,
                     config: memoryConfig,
                     // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
-                    vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
+                    vectorMessageSearch: userContent,
                   })
                   .then(r => r.messagesV2),
                 memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
               ])
-            : [[], null, null];
+            : [[], null];
+
+        if (memoryMessages.length > 0) {
+          convertedTools.semanticRecall = this.getSemanticRecallTool({
+            runId,
+            resourceId,
+            threadId,
+            userContent,
+            messages: memoryMessages,
+          });
+        }
 
         this.logger.debug('Fetched messages from memory', {
           threadId: threadObject.id,
