@@ -29,26 +29,26 @@ export class CohereRelevanceScorer implements RelevanceScoreProvider {
     const response = await fetch(`https://api.cohere.com/v2/rerank`, {
       method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        Authorization: `bearer ${this.apiKey}`
+        'Content-Type': 'application/json',
+        Authorization: `bearer ${this.apiKey}`,
       },
       body: JSON.stringify({
         query,
         documents: [text],
         model: this.model,
         top_n: 1,
-      })
+      }),
     });
 
     if (!response.ok) {
       throw new Error(`Cohere API error: ${response}`);
     }
 
-    const data = await response.json() as CohereRerankingResponse;
+    const data = (await response.json()) as CohereRerankingResponse;
     const relevanceScore = data.results[0]?.relevance_score;
 
     if (!relevanceScore) {
-      throw new Error("No relevance score found on Cohere response");
+      throw new Error('No relevance score found on Cohere response');
     }
 
     return relevanceScore;
