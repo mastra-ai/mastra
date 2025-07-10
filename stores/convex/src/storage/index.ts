@@ -1,4 +1,5 @@
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2, Trace } from '@mastra/core';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
   EvalRow,
   PaginationInfo,
@@ -47,7 +48,7 @@ export class ConvexStorage extends MastraStorage {
   }
 
   /**
-   * Create a table in the database
+   * Create a table in the database, Convex doesn't support dynamic table creation at runtime
    * @param params Table name and schema
    * @returns Promise that resolves when complete
    */
@@ -58,11 +59,21 @@ export class ConvexStorage extends MastraStorage {
       // This is a no-op for compatibility with the MastraStorage interface
       await this.ensureTables();
     } catch (error) {
-      throw new Error(`Failed to create table ${tableName}: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_CREATE_TABLE_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
     }
   }
   /**
-   * Clear all data from a table
+   * Clear all data from a table, Convex doesn't support dynamic table deletion at runtime
    * @param params Table name
    * @returns Promise that resolves when complete
    */
@@ -72,11 +83,21 @@ export class ConvexStorage extends MastraStorage {
       // In Convex, we simulate this by fetching all records and deleting them
       await this.client.mutation(this.api.system.clearTable, { tableName });
     } catch (error) {
-      throw new Error(`Failed to clear table: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_CLEAR_TABLE_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
     }
   }
   /**
-   * Alter table schema
+   * Alter table schema, Convex doesn't support dynamic schema changes at runtime
    * @param args Table name, schema, and columns to conditionally add
    * @returns Promise that resolves when complete
    */
@@ -90,8 +111,16 @@ export class ConvexStorage extends MastraStorage {
       // This is a no-op for compatibility with the MastraStorage interface
       await this.ensureTables();
     } catch (error) {
-      throw new Error(
-        `Failed to alter table ${args.tableName}: ${error instanceof Error ? error.message : String(error)}`,
+      throw new MastraError(
+        {
+          id: 'STORAGE_ALTER_TABLE_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName: args.tableName,
+          },
+        },
+        error,
       );
     }
   }
@@ -104,7 +133,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       await this.httpClient.mutation(this.api.system.insert, { tableName, record });
     } catch (error) {
-      throw new Error(`Failed to insert record: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_INSERT_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
     }
   }
   /**
@@ -114,9 +153,20 @@ export class ConvexStorage extends MastraStorage {
    */
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     try {
-      await this.client.mutation(this.api.system.batchInsert, { tableName, records });
+      await this.httpClient.mutation(this.api.system.batchInsert, { tableName, records });
     } catch (error) {
-      throw new Error(`Failed to batch insert records: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_BATCH_INSERT_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+            recordCount: records.length,
+          },
+        },
+        error,
+      );
     }
   }
   /**
@@ -128,7 +178,18 @@ export class ConvexStorage extends MastraStorage {
     try {
       return (await this.httpClient.query(this.api.system.load, { tableName, keys })) as R | null;
     } catch (error) {
-      throw new Error(`Failed to load record: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_LOAD_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+            keys: JSON.stringify(keys),
+          },
+        },
+        error,
+      );
     }
   }
   /**
@@ -140,7 +201,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       await this.client.mutation(this.api.threads.deleteThread, { threadId });
     } catch (error) {
-      throw new Error(`Failed to delete thread: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_DELETE_THREAD_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+          },
+        },
+        error,
+      );
     }
   }
   /**
@@ -153,7 +224,17 @@ export class ConvexStorage extends MastraStorage {
       const result = await this.httpClient.query(this.api.traces.getPaginated, args);
       return result.traces;
     } catch (error) {
-      throw new Error(`Failed to get traces: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_TRACES_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            args: JSON.stringify(args),
+          },
+        },
+        error,
+      );
     }
   }
   /**
@@ -166,7 +247,18 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.query(this.api.evals.getByAgentName, { agentName, type });
     } catch (error) {
-      throw new Error(`Failed to get evals by agent name: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_EVALS_BY_AGENT_NAME_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            agentName,
+            type: type || 'live',
+          },
+        },
+        error,
+      );
     }
   }
   /**
@@ -185,7 +277,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.query(this.api.workflowRuns.getPaginated, args || {});
     } catch (error) {
-      throw new Error(`Failed to get workflow runs: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_WORKFLOW_RUNS_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            args: JSON.stringify(args || {}),
+          },
+        },
+        error,
+      );
     }
   }
   /**
@@ -204,7 +306,17 @@ export class ConvexStorage extends MastraStorage {
 
       return run || null;
     } catch (error) {
-      throw new Error(`Failed to get workflow run by ID: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_WORKFLOW_RUN_BY_ID_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            args: JSON.stringify(args),
+          },
+        },
+        error,
+      );
     }
   }
   /**
@@ -230,7 +342,17 @@ export class ConvexStorage extends MastraStorage {
         hasMore,
       };
     } catch (error) {
-      throw new Error(`Failed to get paginated messages: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_MESSAGES_PAGINATED_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            args: JSON.stringify(args),
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -257,7 +379,17 @@ export class ConvexStorage extends MastraStorage {
         resourceId: result.resourceId,
       };
     } catch (error) {
-      throw new Error(`Failed to get thread by ID: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_THREAD_BY_ID_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -279,8 +411,16 @@ export class ConvexStorage extends MastraStorage {
         resourceId: thread.resourceId,
       }));
     } catch (error) {
-      throw new Error(
-        `Failed to get threads by resource ID: ${error instanceof Error ? error.message : String(error)}`,
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_THREADS_BY_RESOURCE_ID_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            resourceId,
+          },
+        },
+        error,
       );
     }
   }
@@ -299,7 +439,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.client.mutation(this.api.threads.save, { thread: threadToSave });
     } catch (error) {
-      throw new Error(`Failed to save thread: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_SAVE_THREAD_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId: thread.id,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -329,7 +479,17 @@ export class ConvexStorage extends MastraStorage {
         resourceId: updatedThread.resourceId,
       };
     } catch (error) {
-      throw new Error(`Failed to update thread: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPDATE_THREAD_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId: id,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -342,7 +502,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.query(this.api.messages.get, { id });
     } catch (error) {
-      throw new Error(`Failed to get message: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_MESSAGE_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            messageId: id,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -400,7 +570,19 @@ export class ConvexStorage extends MastraStorage {
 
       return messages;
     } catch (error) {
-      throw new Error(`Failed to get messages: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_MESSAGES_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+            resourceId: resourceId || 'N/A',
+            format,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -413,7 +595,19 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.mutation(this.api.messages.save, { message });
     } catch (error) {
-      throw new Error(`Failed to save message: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_SAVE_MESSAGE_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            messageId: message.id || 'N/A',
+            threadId: message.threadId || 'N/A',
+            resourceId: message.resourceId || 'N/A',
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -429,7 +623,18 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.mutation(this.api.messages.update, args);
     } catch (error) {
-      throw new Error(`Failed to update messages: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPDATE_MESSAGES_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            messageCount: args.messages.length,
+            messageIds: JSON.stringify(args.messages.map(msg => msg.id || 'N/A')),
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -510,7 +715,18 @@ export class ConvexStorage extends MastraStorage {
         });
       }
     } catch (error) {
-      throw new Error(`Failed to save messages: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_SAVE_MESSAGES_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            messageCount: args.messages.length,
+            format: args.format || 'v2',
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -523,7 +739,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.mutation(this.api.traces.save, { trace });
     } catch (error) {
-      throw new Error(`Failed to save trace: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_SAVE_TRACE_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            traceId: trace.id,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -536,7 +762,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.query(this.api.traces.getByThreadId, { threadId });
     } catch (error) {
-      throw new Error(`Failed to get traces: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_TRACES_BY_THREAD_ID_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -549,7 +785,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.query(this.api.traces.getPaginated, args);
     } catch (error) {
-      throw new Error(`Failed to get paginated traces: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_TRACES_PAGINATED_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            args: JSON.stringify(args),
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -566,7 +812,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.query(this.api.threads.getByResourceIdPaginated, args);
     } catch (error) {
-      throw new Error(`Failed to get paginated threads: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            args: JSON.stringify(args),
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -579,7 +835,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.mutation(this.api.evals.save, { evalData });
     } catch (error) {
-      throw new Error(`Failed to save eval: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_SAVE_EVAL_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            evalData: JSON.stringify(evalData),
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -592,7 +858,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.query(this.api.evals.get, { evalId });
     } catch (error) {
-      throw new Error(`Failed to get eval: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_EVAL_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            evalId: evalId,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -605,7 +881,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.query(this.api.evals.getByThreadId, { threadId });
     } catch (error) {
-      throw new Error(`Failed to get evals by thread ID: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_EVALS_BY_THREAD_ID_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId: threadId,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -618,7 +904,18 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.mutation(this.api.workflowRuns.save, { workflowRun });
     } catch (error) {
-      throw new Error(`Failed to save workflow run: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_SAVE_WORKFLOW_RUN_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            runId: workflowRun.runId,
+            workflowName: workflowRun.workflowName,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -631,8 +928,16 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.query(this.api.workflowRuns.getByStateType, { stateType });
     } catch (error) {
-      throw new Error(
-        `Failed to get workflow runs by state type: ${error instanceof Error ? error.message : String(error)}`,
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_WORKFLOW_RUNS_BY_STATE_TYPE_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            stateType: stateType,
+          },
+        },
+        error,
       );
     }
   }
@@ -646,7 +951,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.query(this.api.workflowRuns.get, { runId });
     } catch (error) {
-      throw new Error(`Failed to get workflow run: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_WORKFLOW_RUN_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            runId: runId,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -659,7 +974,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.mutation(this.api.workflowRuns.update, { runs });
     } catch (error) {
-      throw new Error(`Failed to update workflow runs: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPDATE_WORKFLOW_RUNS_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            runsCount: runs.runs.length,
+          },
+        },
+        error,
+      );
     }
   }
 
@@ -670,7 +995,15 @@ export class ConvexStorage extends MastraStorage {
     try {
       await this.httpClient.mutation(this.api.system.dropAllTables);
     } catch (error) {
-      throw new Error(`Failed to drop tables: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_DROP_ALL_TABLES_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {},
+        },
+        error,
+      );
     }
   }
 
@@ -681,7 +1014,15 @@ export class ConvexStorage extends MastraStorage {
     try {
       await this.httpClient.mutation(this.api.system.ensureTables);
     } catch (error) {
-      throw new Error(`Failed to ensure tables: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_ENSURE_TABLES_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {},
+        },
+        error,
+      );
     }
   }
 
@@ -694,7 +1035,17 @@ export class ConvexStorage extends MastraStorage {
     try {
       return await this.httpClient.query(this.api.system.getTableColumns, { tableName });
     } catch (error) {
-      throw new Error(`Failed to get table columns: ${error instanceof Error ? error.message : String(error)}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_GET_TABLE_COLUMNS_ERROR',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
     }
   }
 
