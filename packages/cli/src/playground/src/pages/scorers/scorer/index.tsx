@@ -2,7 +2,7 @@ import { Breadcrumb, Crumb, Header, MainContentLayout } from '@mastra/playground
 import { useParams, Link } from 'react-router';
 import { useScorer, useScoresByEntityId } from '@/hooks/use-scorers';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from 'lucide-react';
+import { Angry, ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from 'lucide-react';
 import { format, isToday } from 'date-fns';
 import { useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
@@ -141,7 +141,7 @@ function ScorerHeader({ scorer, scorerAgents }: { scorer: any; scorerAgents?: { 
           <ArrowRightIcon />
           <div>
             {scorerAgents?.map(agent => {
-              return <span>{agent.name}</span>;
+              return <span key={agent.id}>{agent.name}</span>;
             })}
           </div>
         </div>
@@ -215,11 +215,11 @@ function ScoreList({
   selectedScore,
   onItemClick,
 }: {
-  scorer: any;
+  scorer: GetScorerResponse;
   filteredByEntityId: string;
   selectedScore: any;
-  setSelectedScore: (value: any) => void;
-  onItemClick?: (score: any) => void;
+  setSelectedScore: (value: ScoreRowData) => void;
+  onItemClick?: (score: ScoreRowData) => void;
 }) {
   return (
     <ul className="grid border border-border1f bg-surface3 rounded-xl mb-[5rem]">
