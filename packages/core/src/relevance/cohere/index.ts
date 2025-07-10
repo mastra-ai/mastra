@@ -41,7 +41,7 @@ export class CohereRelevanceScorer implements RelevanceScoreProvider {
     });
 
     if (!response.ok) {
-      throw new Error(`Cohere API error: ${response}`);
+      throw new Error(`Cohere API error: ${response.status} ${response.statusText}`);
     }
 
     const data = (await response.json()) as CohereRerankingResponse;
