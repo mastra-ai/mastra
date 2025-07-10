@@ -30,7 +30,7 @@ export class CohereRelevanceScorer implements RelevanceScoreProvider {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `bearer ${this.apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify({
         query,
