@@ -281,22 +281,7 @@ export function MastraRuntimeProvider({
             },
             { role: 'assistant', content: [] } as ThreadMessageLike,
           );
-          setMessages(currentConversation => [
-            ...currentConversation,
-            latestMessage,
-            // {
-            //   ...latestMessage,
-            //   ...(generateResponse.reasoning
-            //     ? {
-            //         metadata: {
-            //           custom: {
-            //             reasonings: [generateResponse.reasoning],
-            //           },
-            //         },
-            //       }
-            //     : {}),
-            // },
-          ]);
+          setMessages(currentConversation => [...currentConversation, latestMessage]);
           handleFinishReason(generateResponse.finishReason);
         }
       } else {
@@ -475,30 +460,7 @@ export function MastraRuntimeProvider({
               reasoning += value;
             }
 
-            console.log('full reasoning=', reasoning);
             updater();
-            // setMessages(currentConversation => {
-            //   const lastMessage = currentConversation[currentConversation.length - 1];
-
-            //   if (lastMessage && lastMessage.role === 'assistant') {
-            //     const prevReasonings = (lastMessage?.metadata?.custom?.reasonings as string[]) ?? [];
-            //     // const prevContentReasonings = lastMessage?.content;
-            //     const updatedMessage = {
-            //       ...lastMessage,
-
-            //       metadata: {
-            //         ...lastMessage.metadata,
-            //         custom: {
-            //           ...(lastMessage?.metadata?.custom || {}),
-            //           reasonings: [...prevReasonings, reasoning],
-            //         },
-            //       },
-            //     };
-
-            //     return [...currentConversation.slice(0, -1), updatedMessage];
-            //   }
-            //   return currentConversation;
-            // });
           },
         });
       }
