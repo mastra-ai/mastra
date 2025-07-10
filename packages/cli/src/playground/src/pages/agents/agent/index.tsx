@@ -1,9 +1,4 @@
-import {
-  AgentSettingsProvider,
-  AgentChat as Chat,
-  MainContentContent,
-  ScorerSettingsProvider,
-} from '@mastra/playground-ui';
+import { AgentSettingsProvider, AgentChat as Chat, MainContentContent } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
@@ -49,27 +44,25 @@ function Agent() {
 
   return (
     <AgentSettingsProvider agentId={agentId!}>
-      <ScorerSettingsProvider entityType="AGENT" entityId={agentId!}>
-        <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
-          {withSidebar && (
-            <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
-          )}
+      <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
+        {withSidebar && (
+          <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
+        )}
 
-          <div className="grid overflow-y-auto relative bg-surface1 py-4">
-            <Chat
-              agentId={agentId!}
-              agentName={agent?.name}
-              threadId={threadId!}
-              initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
-              memory={memory?.result}
-              refreshThreadList={refreshThreads}
-              showFileSupport={isCliShowMultiModal}
-            />
-          </div>
+        <div className="grid overflow-y-auto relative bg-surface1 py-4">
+          <Chat
+            agentId={agentId!}
+            agentName={agent?.name}
+            threadId={threadId!}
+            initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
+            memory={memory?.result}
+            refreshThreadList={refreshThreads}
+            showFileSupport={isCliShowMultiModal}
+          />
+        </div>
 
-          <AgentInformation agentId={agentId!} />
-        </MainContentContent>
-      </ScorerSettingsProvider>
+        <AgentInformation agentId={agentId!} />
+      </MainContentContent>
     </AgentSettingsProvider>
   );
 }

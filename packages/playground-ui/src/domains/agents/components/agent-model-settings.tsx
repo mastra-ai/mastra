@@ -13,7 +13,6 @@ import { Icon } from '@/ds/icons/Icon';
 import { Txt } from '@/ds/components/Txt/Txt';
 
 import { AgentAdvancedSettings } from './agent-advanced-settings';
-import { ScorerSettings } from './scorer-settings';
 
 export function AgentModelSettings() {
   const { modelSettings, setModelSettings, chatWithGenerate, setChatWithGenerate, resetModelSettings } =
@@ -100,16 +99,6 @@ export function AgentModelSettings() {
           Reset
         </Button>
       </div>
-
-      <section className="pt-4 border-t-sm border-border1">
-        <Txt as="h3" variant="ui-md" className="text-icon6 pb-3 px-5">
-          Scorers Settings
-        </Txt>
-
-        <div className="px-5">
-          <ScorerSettings />
-        </div>
-      </section>
     </div>
   );
 }
