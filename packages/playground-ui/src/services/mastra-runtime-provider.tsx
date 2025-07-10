@@ -212,17 +212,20 @@ export function MastraRuntimeProvider({
                   ...acc,
                   content: [
                     ..._content,
+                    ...(generateResponse.reasoning ? [{ type: 'reasoning', text: generateResponse.reasoning }] : []),
                     {
                       type: 'text',
                       text: message.content,
                     },
-                    ...(generateResponse.reasoning ? [{ type: 'reasoning', text: generateResponse.reasoning }] : [{}]),
                   ],
                 } as ThreadMessageLike;
               }
               if (message.role === 'assistant') {
                 const toolCallContent = Array.isArray(message.content)
                   ? message.content.find(content => content.type === 'tool-call')
+                  : undefined;
+                const reasoningContent = Array.isArray(message.content)
+                  ? message.content.find(content => content.type === 'reasoning')
                   : undefined;
 
                 if (toolCallContent) {
@@ -236,7 +239,9 @@ export function MastraRuntimeProvider({
                   const containsToolCall = newContent.some(c => c.type === 'tool-call');
                   return {
                     ...acc,
-                    content: containsToolCall ? newContent : [..._content, toolCallContent],
+                    content: containsToolCall
+                      ? [...(reasoningContent ? [reasoningContent] : []), ...newContent]
+                      : [..._content, ...(reasoningContent ? [reasoningContent] : []), toolCallContent],
                   } as ThreadMessageLike;
                 }
 
@@ -247,13 +252,7 @@ export function MastraRuntimeProvider({
                 if (textContent) {
                   return {
                     ...acc,
-                    content: [
-                      ..._content,
-                      textContent,
-                      ...(generateResponse.reasoning
-                        ? [{ type: 'reasoning', text: generateResponse.reasoning }]
-                        : [{}]),
-                    ],
+                    content: [..._content, ...(reasoningContent ? [reasoningContent] : []), textContent],
                   } as ThreadMessageLike;
                 }
               }
