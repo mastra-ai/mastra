@@ -92,7 +92,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@babel/core": "^7.27.7",
+    "@babel/core": "^7.28.0",
     "@babel/helper-module-imports": "^7.27.1",
     "@mastra/server": "workspace:^",
     "@neon-rs/load": "^0.1.82",
