@@ -1,4 +1,4 @@
-import type { StorageThreadType, MastraMessageV2, Trace } from '@mastra/core';
+import type { StorageThreadType, MastraMessageV1, MastraMessageV2, Trace } from '@mastra/core';
 import type {
   EvalRow,
   PaginationInfo,
@@ -10,7 +10,7 @@ import type {
   WorkflowRuns,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
-import { ConvexHttpClient } from 'convex/browser';
+import { ConvexClient, ConvexHttpClient } from 'convex/browser';
 
 /**
  * Configuration options for ConvexStorage
@@ -33,19 +33,205 @@ export interface ConvexStorageConfig {
  * Provides both standard storage operations and real-time subscription capabilities.
  */
 export class ConvexStorage extends MastraStorage {
-  private client: ConvexHttpClient;
+  private httpClient: ConvexHttpClient;
+  private client: ConvexClient;
   private api: any;
 
-  /**
-   * Create a new ConvexStorage instance
-   * @param config Configuration options for Convex
-   */
   constructor(config: ConvexStorageConfig) {
     super({
       name: 'convex',
     });
-    this.client = new ConvexHttpClient(config.convexUrl);
+    this.httpClient = new ConvexHttpClient(config.convexUrl);
+    this.client = new ConvexClient(config.convexUrl);
     this.api = config.api;
+  }
+
+  /**
+   * Create a table in the database
+   * @param params Table name and schema
+   * @returns Promise that resolves when complete
+   */
+  async createTable({ tableName }: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void> {
+    try {
+      // Convex doesn't support dynamic table creation at runtime
+      // Tables are defined in schema.ts and deployed with the application
+      // This is a no-op for compatibility with the MastraStorage interface
+      await this.ensureTables();
+    } catch (error) {
+      throw new Error(`Failed to create table ${tableName}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  /**
+   * Clear all data from a table
+   * @param params Table name
+   * @returns Promise that resolves when complete
+   */
+  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    try {
+      // Use system API to clear a specific table
+      // In Convex, we simulate this by fetching all records and deleting them
+      await this.client.mutation(this.api.system.clearTable, { tableName });
+    } catch (error) {
+      throw new Error(`Failed to clear table: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  /**
+   * Alter table schema
+   * @param args Table name, schema, and columns to conditionally add
+   * @returns Promise that resolves when complete
+   */
+  async alterTable(args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    try {
+      // Convex doesn't support dynamic schema changes at runtime
+      // This is a no-op for compatibility with the MastraStorage interface
+      await this.ensureTables();
+    } catch (error) {
+      throw new Error(
+        `Failed to alter table ${args.tableName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  /**
+   * Insert a record into a table
+   * @param params Table name and record to insert
+   * @returns Promise that resolves when complete
+   */
+  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    try {
+      await this.httpClient.mutation(this.api.system.insert, { tableName, record });
+    } catch (error) {
+      throw new Error(`Failed to insert record: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  /**
+   * Insert multiple records into a table
+   * @param params Table name and records to insert
+   * @returns Promise that resolves when complete
+   */
+  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    try {
+      await this.client.mutation(this.api.system.batchInsert, { tableName, records });
+    } catch (error) {
+      throw new Error(`Failed to batch insert records: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  /**
+   * Load a record by its keys
+   * @param params Table name and key values
+   * @returns Record if found, null otherwise
+   */
+  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
+    try {
+      return (await this.httpClient.query(this.api.system.load, { tableName, keys })) as R | null;
+    } catch (error) {
+      throw new Error(`Failed to load record: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  /**
+   * Delete a thread and all associated messages
+   * @param params Thread ID
+   * @returns Promise that resolves when complete
+   */
+  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    try {
+      await this.client.mutation(this.api.threads.delete, { threadId });
+    } catch (error) {
+      throw new Error(`Failed to delete thread: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  /**
+   * Get traces with filtering
+   * @param args Trace filter arguments
+   * @returns Array of traces
+   */
+  async getTraces(args: StorageGetTracesArg): Promise<Trace[]> {
+    try {
+      const result = await this.httpClient.query(this.api.traces.getPaginated, args);
+      return result.traces;
+    } catch (error) {
+      throw new Error(`Failed to get traces: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  /**
+   * Get evaluations by agent name
+   * @param agentName Agent name to filter by
+   * @param type Optional type to filter by ('test' or 'live')
+   * @returns Array of evaluations
+   */
+  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    try {
+      return await this.httpClient.query(this.api.evals.getByAgentName, { agentName, type });
+    } catch (error) {
+      throw new Error(`Failed to get evals by agent name: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  /**
+   * Get workflow runs with filtering and pagination
+   * @param args Optional filter and pagination parameters
+   * @returns Workflow runs with pagination info
+   */
+  async getWorkflowRuns(args?: {
+    workflowName?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+    resourceId?: string;
+  }): Promise<WorkflowRuns> {
+    try {
+      return await this.httpClient.query(this.api.workflowRuns.getPaginated, args || {});
+    } catch (error) {
+      throw new Error(`Failed to get workflow runs: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  /**
+   * Get a workflow run by ID
+   * @param args Run ID and optional workflow name
+   * @returns Workflow run if found, null otherwise
+   */
+  async getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
+    try {
+      const run = await this.httpClient.query(this.api.workflowRuns.get, { runId: args.runId });
+
+      // Filter by workflow name if provided
+      if (run && args.workflowName && run.workflowName !== args.workflowName) {
+        return null;
+      }
+
+      return run || null;
+    } catch (error) {
+      throw new Error(`Failed to get workflow run by ID: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  /**
+   * Get messages with pagination
+   * @param args Thread ID, pagination, and format options
+   * @returns Paginated messages
+   */
+  async getMessagesPaginated(
+    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
+  ): Promise<PaginationInfo & { messages: MastraMessageV2[] }> {
+    try {
+      // In Convex implementation we only support v2 format
+      const result = await this.httpClient.query(this.api.messages.getPaginated, args);
+
+      // Calculate hasMore based on total and current page info
+      const hasMore = result.page * result.perPage < result.total;
+
+      return {
+        messages: result.messages,
+        total: result.total,
+        page: result.page,
+        perPage: result.perPage,
+        hasMore,
+      };
+    } catch (error) {
+      throw new Error(`Failed to get paginated messages: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
@@ -55,7 +241,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      return await this.client.query(this.api.threads.getById, { threadId });
+      return await this.httpClient.query(this.api.threads.getById, { threadId });
     } catch (error) {
       throw new Error(`Failed to get thread by ID: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -68,7 +254,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
     try {
-      return await this.client.query(this.api.threads.getByResourceId, { resourceId });
+      return await this.httpClient.query(this.api.threads.getByResourceId, { resourceId });
     } catch (error) {
       throw new Error(
         `Failed to get threads by resource ID: ${error instanceof Error ? error.message : String(error)}`,
@@ -117,20 +303,65 @@ export class ConvexStorage extends MastraStorage {
    */
   async getMessage({ id }: { id: string }): Promise<MastraMessageV2 | null> {
     try {
-      return await this.client.query(this.api.messages.get, { id });
+      return await this.httpClient.query(this.api.messages.get, { id });
     } catch (error) {
       throw new Error(`Failed to get message: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   /**
-   * Gets all messages for a thread
-   * @param params - Thread ID
-   * @returns Array of messages
+   * Gets all messages for a thread with v1 format
+   * @param params - Thread ID and optional format
+   * @returns Array of v1 messages
    */
-  async getMessages(args: StorageGetMessagesArg): Promise<MastraMessageV2[]> {
+  async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+
+  /**
+   * Gets all messages for a thread with v2 format
+   * @param params - Thread ID and format
+   * @returns Array of v2 messages
+   */
+  async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+
+  /**
+   * Gets all messages for a thread with either format
+   * @param params - Thread ID and optional format
+   * @returns Array of messages in the requested format
+   */
+  async getMessages({
+    threadId,
+    resourceId,
+    selectBy,
+    format = 'v2',
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
-      return await this.client.query(this.api.messages.getByThreadId, args);
+      const messages = await this.httpClient.query(this.api.messages.getByThreadId, { threadId, resourceId, selectBy });
+
+      if (format === 'v1') {
+        // Convert MastraMessageV2[] to MastraMessageV1[]
+        return messages.map((msg: MastraMessageV2) => {
+          // Create a basic MastraMessageV1 from a MastraMessageV2
+          const v1Msg: MastraMessageV1 = {
+            id: msg.id,
+            threadId: msg.threadId,
+            createdAt: msg.createdAt,
+            role: msg.role,
+            // Convert structured content to string format
+            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+            // Default to 'text' type
+            type: 'text',
+          };
+
+          // Copy optional resourceId if exists
+          if (msg.resourceId) {
+            v1Msg.resourceId = msg.resourceId;
+          }
+
+          return v1Msg;
+        });
+      }
+
+      return messages;
     } catch (error) {
       throw new Error(`Failed to get messages: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -143,7 +374,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async saveMessage({ message }: { message: MastraMessageV2 }): Promise<MastraMessageV2> {
     try {
-      return await this.client.mutation(this.api.messages.save, { message });
+      return await this.httpClient.mutation(this.api.messages.save, { message });
     } catch (error) {
       throw new Error(`Failed to save message: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -159,20 +390,88 @@ export class ConvexStorage extends MastraStorage {
       { id: string; content?: { metadata?: Record<string, unknown> | undefined; content?: string | undefined } }[];
   }): Promise<MastraMessageV2[]> {
     try {
-      return await this.client.mutation(this.api.messages.update, args);
+      return await this.httpClient.mutation(this.api.messages.update, args);
     } catch (error) {
       throw new Error(`Failed to update messages: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   /**
-   * Saves multiple messages
-   * @param params - Array of messages to save
-   * @returns Array of saved messages
+   * Saves multiple messages with format 'v1'
+   * @param args - Object containing messages array and optional format
+   * @returns Array of saved messages in v1 format
    */
-  async saveMessages({ messages }: { messages: MastraMessageV2[] }): Promise<MastraMessageV2[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+
+  /**
+   * Saves multiple messages with format 'v2'
+   * @param args - Object containing messages array and format
+   * @returns Array of saved messages in v2 format
+   */
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+
+  /**
+   * Implementation of saveMessages
+   * @param args - Object containing messages and optional format
+   * @returns Array of saved messages in the requested format
+   */
+  async saveMessages(
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
+  ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
-      return await this.client.mutation(this.api.messages.save, { messages });
+      const { messages, format = 'v1' } = args;
+
+      if (format === 'v2') {
+        // Save MastraMessageV2[] directly
+        return await this.httpClient.mutation(this.api.messages.save, { messages });
+      } else {
+        // Convert MastraMessageV1[] to MastraMessageV2[] for storage
+        const v2Messages = (messages as MastraMessageV1[]).map(msg => {
+          // Ensure role is compatible with MastraMessageV2
+          const role = msg.role === 'system' || msg.role === 'tool' ? 'assistant' : msg.role;
+
+          // Create basic v2 message
+          const v2Msg: MastraMessageV2 = {
+            id: msg.id,
+            role: role as 'user' | 'assistant',
+            createdAt: msg.createdAt,
+            content: {
+              format: 2,
+              parts: typeof msg.content === 'string' ? [{ type: 'text', text: msg.content }] : [], // We'll need a more complex conversion for complex content types
+            },
+          };
+
+          if (msg.threadId) v2Msg.threadId = msg.threadId;
+          if (msg.resourceId) v2Msg.resourceId = msg.resourceId;
+          if (msg.type) v2Msg.type = msg.type;
+
+          return v2Msg;
+        });
+
+        // Save the converted messages
+        const savedV2Messages = await this.httpClient.mutation(this.api.messages.save, { messages: v2Messages });
+
+        // Convert back to MastraMessageV1[] for return
+        return savedV2Messages.map((msg: MastraMessageV2) => {
+          // Create a basic MastraMessageV1 from a MastraMessageV2
+          const v1Msg: MastraMessageV1 = {
+            id: msg.id,
+            // MastraMessageV1 supports more role types than MastraMessageV2
+            role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
+            createdAt: msg.createdAt,
+            // Convert structured content to string format
+            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+            // Default to 'text' type if not specified
+            type: 'text',
+          };
+
+          // Copy optional properties if they exist
+          if (msg.threadId) v1Msg.threadId = msg.threadId;
+          if (msg.resourceId) v1Msg.resourceId = msg.resourceId;
+
+          return v1Msg;
+        });
+      }
     } catch (error) {
       throw new Error(`Failed to save messages: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -185,7 +484,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async saveTrace({ trace }: { trace: Trace }): Promise<Trace> {
     try {
-      return await this.client.mutation(this.api.traces.save, { trace });
+      return await this.httpClient.mutation(this.api.traces.save, { trace });
     } catch (error) {
       throw new Error(`Failed to save trace: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -198,7 +497,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async getTracesByThreadId({ threadId }: { threadId: string }): Promise<Trace[]> {
     try {
-      return await this.client.query(this.api.traces.getByThreadId, { threadId });
+      return await this.httpClient.query(this.api.traces.getByThreadId, { threadId });
     } catch (error) {
       throw new Error(`Failed to get traces: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -211,7 +510,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async getTracesPaginated(args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
     try {
-      return await this.client.query(this.api.traces.getPaginated, args);
+      return await this.httpClient.query(this.api.traces.getPaginated, args);
     } catch (error) {
       throw new Error(`Failed to get paginated traces: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -228,7 +527,7 @@ export class ConvexStorage extends MastraStorage {
     perPage: number;
   }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     try {
-      return await this.client.query(this.api.threads.getByResourceIdPaginated, args);
+      return await this.httpClient.query(this.api.threads.getByResourceIdPaginated, args);
     } catch (error) {
       throw new Error(`Failed to get paginated threads: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -241,7 +540,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async saveEval({ evalData }: { evalData: EvalRow }): Promise<EvalRow> {
     try {
-      return await this.client.mutation(this.api.evals.save, { evalData });
+      return await this.httpClient.mutation(this.api.evals.save, { evalData });
     } catch (error) {
       throw new Error(`Failed to save eval: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -254,7 +553,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async getEval({ evalId }: { evalId: string }): Promise<EvalRow | null> {
     try {
-      return await this.client.query(this.api.evals.get, { evalId });
+      return await this.httpClient.query(this.api.evals.get, { evalId });
     } catch (error) {
       throw new Error(`Failed to get eval: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -267,7 +566,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async getEvalsByThreadId({ threadId }: { threadId: string }): Promise<EvalRow[]> {
     try {
-      return await this.client.query(this.api.evals.getByThreadId, { threadId });
+      return await this.httpClient.query(this.api.evals.getByThreadId, { threadId });
     } catch (error) {
       throw new Error(`Failed to get evals by thread ID: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -280,7 +579,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async saveWorkflowRun({ workflowRun }: { workflowRun: WorkflowRun }): Promise<WorkflowRun> {
     try {
-      return await this.client.mutation(this.api.workflowRuns.save, { workflowRun });
+      return await this.httpClient.mutation(this.api.workflowRuns.save, { workflowRun });
     } catch (error) {
       throw new Error(`Failed to save workflow run: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -293,7 +592,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async getWorkflowRunsByStateType({ stateType }: { stateType: string }): Promise<WorkflowRun[]> {
     try {
-      return await this.client.query(this.api.workflowRuns.getByStateType, { stateType });
+      return await this.httpClient.query(this.api.workflowRuns.getByStateType, { stateType });
     } catch (error) {
       throw new Error(
         `Failed to get workflow runs by state type: ${error instanceof Error ? error.message : String(error)}`,
@@ -308,7 +607,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async getWorkflowRun({ runId }: { runId: string }): Promise<WorkflowRun | undefined> {
     try {
-      return await this.client.query(this.api.workflowRuns.get, { runId });
+      return await this.httpClient.query(this.api.workflowRuns.get, { runId });
     } catch (error) {
       throw new Error(`Failed to get workflow run: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -321,7 +620,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async updateWorkflowRuns({ runs }: { runs: WorkflowRuns }): Promise<number> {
     try {
-      return await this.client.mutation(this.api.workflowRuns.update, { runs });
+      return await this.httpClient.mutation(this.api.workflowRuns.update, { runs });
     } catch (error) {
       throw new Error(`Failed to update workflow runs: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -332,7 +631,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async dropAllTables(): Promise<void> {
     try {
-      await this.client.mutation(this.api.system.dropAllTables);
+      await this.httpClient.mutation(this.api.system.dropAllTables);
     } catch (error) {
       throw new Error(`Failed to drop tables: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -343,7 +642,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async ensureTables(): Promise<void> {
     try {
-      await this.client.mutation(this.api.system.ensureTables);
+      await this.httpClient.mutation(this.api.system.ensureTables);
     } catch (error) {
       throw new Error(`Failed to ensure tables: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -356,7 +655,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async getTableColumns({ tableName }: { tableName: TABLE_NAMES }): Promise<StorageColumn[] | null> {
     try {
-      return await this.client.query(this.api.system.getTableColumns, { tableName });
+      return await this.httpClient.query(this.api.system.getTableColumns, { tableName });
     } catch (error) {
       throw new Error(`Failed to get table columns: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -371,8 +670,26 @@ export class ConvexStorage extends MastraStorage {
    * @returns Function to unsubscribe
    */
   subscribeToThread(threadId: string, callback: (thread: StorageThreadType | null) => void): () => void {
-    const subscription = this.client.onQuery(this.api.threads.getById, { threadId }, callback);
-    return () => subscription.localQueryLogs.clear();
+    try {
+      // Use ConvexClient's onUpdate for real-time subscription
+      const unsubscribe = this.client.onUpdate(this.api.threads.getById, { threadId }, thread =>
+        callback(thread as StorageThreadType | null),
+      );
+
+      return () => {
+        try {
+          unsubscribe();
+        } catch (err: unknown) {
+          const error = err instanceof Error ? err.message : String(err);
+          this.logger.error('Error unsubscribing from thread', { threadId, error });
+        }
+      };
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err.message : String(err);
+      this.logger.error('Failed to create thread subscription', { threadId, error });
+      // Return a no-op function in case of error
+      return () => {};
+    }
   }
 
   /**
@@ -382,7 +699,25 @@ export class ConvexStorage extends MastraStorage {
    * @returns Function to unsubscribe
    */
   subscribeToThreadMessages(threadId: string, callback: (messages: MastraMessageV2[]) => void): () => void {
-    const subscription = this.client.onQuery(this.api.messages.getByThreadId, { threadId }, callback);
-    return () => subscription.localQueryLogs.clear();
+    try {
+      // Use ConvexClient's onUpdate for real-time subscription
+      const unsubscribe = this.client.onUpdate(this.api.messages.getByThreadId, { threadId }, messages =>
+        callback(messages as MastraMessageV2[]),
+      );
+
+      return () => {
+        try {
+          unsubscribe();
+        } catch (err: unknown) {
+          const error = err instanceof Error ? err.message : String(err);
+          this.logger.error('Error unsubscribing from thread messages', { threadId, error });
+        }
+      };
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err.message : String(err);
+      this.logger.error('Failed to create thread messages subscription', { threadId, error });
+      // Return a no-op function in case of error
+      return () => {};
+    }
   }
 }
