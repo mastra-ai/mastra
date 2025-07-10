@@ -15,7 +15,7 @@ import { useCodemirrorTheme } from '@/components/syntax-highlighter';
 import { jsonLanguage } from '@codemirror/lang-json';
 
 export const AgentAdvancedSettings = () => {
-  const { modelSettings, setModelSettings } = useAgentSettings();
+  const { settings, setSettings } = useAgentSettings();
   const [isOpen, setIsOpen] = useState(false);
   const [providerOptionsValue, setProviderOptionsValue] = useState('');
   const [saved, setSaved] = useState(false);
@@ -25,7 +25,7 @@ export const AgentAdvancedSettings = () => {
 
   const { handleCopy } = useCopyToClipboard({ text: providerOptionsValue });
 
-  const providerOptionsStr = JSON.stringify(modelSettings?.providerOptions ?? {});
+  const providerOptionsStr = JSON.stringify(settings?.modelSettings?.providerOptions ?? {});
 
   useEffect(() => {
     const run = async () => {
@@ -55,7 +55,13 @@ export const AgentAdvancedSettings = () => {
     try {
       const parsedContext = JSON.parse(providerOptionsValue);
       setError(null);
-      setModelSettings({ ...modelSettings, providerOptions: parsedContext });
+      setSettings({
+        ...settings,
+        modelSettings: {
+          ...settings.modelSettins,
+          providerOptions: parsedContext,
+        },
+      });
       setSaved(true);
 
       setTimeout(() => {
@@ -90,9 +96,15 @@ export const AgentAdvancedSettings = () => {
             <Input
               id="top-k"
               type="number"
-              value={modelSettings?.topK || ''}
+              value={settings?.modelSettings?.topK || ''}
               onChange={e =>
-                setModelSettings({ ...modelSettings, topK: e.target.value ? Number(e.target.value) : undefined })
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    topK: e.target.value ? Number(e.target.value) : undefined,
+                  },
+                })
               }
             />
           </div>
@@ -104,11 +116,14 @@ export const AgentAdvancedSettings = () => {
             <Input
               id="frequency-penalty"
               type="number"
-              value={modelSettings?.frequencyPenalty || ''}
+              value={settings?.modelSettings?.frequencyPenalty || ''}
               onChange={e =>
-                setModelSettings({
-                  ...modelSettings,
-                  frequencyPenalty: e.target.value ? Number(e.target.value) : undefined,
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    frequencyPenalty: e.target.value ? Number(e.target.value) : undefined,
+                  },
                 })
               }
             />
@@ -121,11 +136,14 @@ export const AgentAdvancedSettings = () => {
             <Input
               id="presence-penalty"
               type="number"
-              value={modelSettings?.presencePenalty || ''}
+              value={settings?.modelSettings?.presencePenalty || ''}
               onChange={e =>
-                setModelSettings({
-                  ...modelSettings,
-                  presencePenalty: e.target.value ? Number(e.target.value) : undefined,
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    presencePenalty: e.target.value ? Number(e.target.value) : undefined,
+                  },
                 })
               }
             />
@@ -138,11 +156,14 @@ export const AgentAdvancedSettings = () => {
             <Input
               id="max-tokens"
               type="number"
-              value={modelSettings?.maxTokens || ''}
+              value={settings?.modelSettings?.maxTokens || ''}
               onChange={e =>
-                setModelSettings({
-                  ...modelSettings,
-                  maxTokens: e.target.value ? Number(e.target.value) : undefined,
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    maxTokens: e.target.value ? Number(e.target.value) : undefined,
+                  },
                 })
               }
             />
@@ -155,11 +176,14 @@ export const AgentAdvancedSettings = () => {
             <Input
               id="max-steps"
               type="number"
-              value={modelSettings?.maxSteps || ''}
+              value={settings?.modelSettings?.maxSteps || ''}
               onChange={e =>
-                setModelSettings({
-                  ...modelSettings,
-                  maxSteps: e.target.value ? Number(e.target.value) : undefined,
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    maxSteps: e.target.value ? Number(e.target.value) : undefined,
+                  },
                 })
               }
             />
@@ -172,11 +196,14 @@ export const AgentAdvancedSettings = () => {
             <Input
               id="max-retries"
               type="number"
-              value={modelSettings?.maxRetries || ''}
+              value={settings?.modelSettings?.maxRetries || ''}
               onChange={e =>
-                setModelSettings({
-                  ...modelSettings,
-                  maxRetries: e.target.value ? Number(e.target.value) : undefined,
+                setSettings({
+                  ...settings,
+                  modelSettings: {
+                    ...settings?.modelSettings,
+                    maxRetries: e.target.value ? Number(e.target.value) : undefined,
+                  },
                 })
               }
             />

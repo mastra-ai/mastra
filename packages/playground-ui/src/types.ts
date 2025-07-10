@@ -48,6 +48,11 @@ export interface ModelSettings {
   topP?: number;
   instructions?: string;
   providerOptions?: Record<string, unknown>;
+  chatWithGenerate?: boolean;
+}
+
+export interface AgentSettingsType {
+  modelSettings: ModelSettings;
 }
 
 export interface ChatProps {
@@ -57,10 +62,8 @@ export interface ChatProps {
   initialMessages?: Message[];
   memory?: boolean;
   refreshThreadList?: () => void;
-  modelSettings?: ModelSettings;
-  chatWithGenerate?: boolean;
+  settings?: AgentSettingsType;
   runtimeContext?: Record<string, any>;
-  showFileSupport?: boolean;
 }
 
 export type SpanStatus = {

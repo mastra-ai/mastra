@@ -80,12 +80,10 @@ export function MastraRuntimeProvider({
   children,
   agentId,
   initialMessages,
-  agentName,
   memory,
   threadId,
   refreshThreadList,
-  modelSettings = {},
-  chatWithGenerate,
+  settings,
   runtimeContext,
 }: Readonly<{
   children: ReactNode;
@@ -105,8 +103,9 @@ export function MastraRuntimeProvider({
     topK,
     topP,
     instructions,
+    chatWithGenerate,
     providerOptions,
-  } = modelSettings;
+  } = settings?.modelSettings ?? {};
 
   const runtimeContextInstance = new RuntimeContext();
   Object.entries(runtimeContext ?? {}).forEach(([key, value]) => {

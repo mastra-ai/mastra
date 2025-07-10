@@ -3,7 +3,7 @@ import { useAgent } from '@/hooks/use-agents';
 import { AgentEndpoints } from './agent-endpoints';
 import { AgentLogs } from './agent-logs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge, MemoryIcon, Txt, AgentIcon, Icon, AgentModelSettings } from '@mastra/playground-ui';
+import { Badge, MemoryIcon, Txt, AgentIcon, Icon, AgentSettings } from '@mastra/playground-ui';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { CopyIcon } from 'lucide-react';
 import { Link } from 'react-router';
@@ -110,7 +110,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
           </TabsContent>
           <TabsContent value="model-settings">
             {isLoading && <Skeleton className="h-full" />}
-            {agent && <AgentModelSettings />}
+            {agent && <AgentSettings />}
           </TabsContent>
           <TabsContent value="endpoints">
             {isLoading ? <Skeleton className="h-full" /> : <AgentEndpoints agentId={agentId} />}

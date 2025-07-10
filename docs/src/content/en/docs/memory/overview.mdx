@@ -156,6 +156,14 @@ const agent = new Agent({
 - [Postgres](/examples/memory/memory-with-pg)
 - [Upstash](/examples/memory/memory-with-upstash)
 
+## Viewing Retrieved Messages
+
+If tracing is enabled in your Mastra deployment and memory is configured either with `lastMessages` and/or `semanticRecall`, the agent’s trace output will show all messages retrieved for context—including both recent conversation history and messages recalled via semantic recall.
+
+This is helpful for debugging, understanding agent decisions, and verifying that the agent is retrieving the right information for each request.
+
+For more details on enabling and configuring tracing, see [Tracing](../observability/tracing).
+
 ## Next Steps
 
 Now that you understand the core concepts, continue to [semantic recall](./semantic-recall.mdx) to learn how to add RAG memory to your Mastra agents.
