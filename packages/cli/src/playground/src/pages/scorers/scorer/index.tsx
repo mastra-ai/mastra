@@ -2,7 +2,7 @@ import { Breadcrumb, Crumb, Header, MainContentLayout } from '@mastra/playground
 import { useParams, Link } from 'react-router';
 import { useScorer, useScoresByEntityId } from '@/hooks/use-scorers';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Angry, ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from 'lucide-react';
+import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from 'lucide-react';
 import { format, isToday } from 'date-fns';
 import { useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
@@ -265,9 +265,9 @@ function AgentScore({
   const isTodayDate = isToday(new Date(score.createdAt));
   const dateStr = format(new Date(score.createdAt), 'MMM d yyyy');
   const timeStr = format(new Date(score.createdAt), 'h:mm:ss bb');
-  const inputPrev = score.input?.[0]?.content || '';
-  const outputPrev = score.output?.text || '';
-  const scorePrev = score.result.score || `N/A`;
+  const inputPrev = score?.input?.[0]?.content || '';
+  const outputPrev = score?.output?.text || '';
+  const scorePrev = score?.score || `N/A`;
 
   return (
     <li
@@ -344,11 +344,11 @@ function ScoreDetails({ isOpen, score, onClose }: { isOpen: boolean; score: Scor
               <em>
                 Score <ArrowRightIcon />
               </em>
-              <b>{score.result?.score ? score.result.score : 'n/a'}</b>
+              <b>{score?.score || 'n/a'}</b>
               <em>
                 Reason <ArrowRightIcon />
               </em>
-              <MarkdownRenderer>{score.result?.reason ? score.result?.reason : 'n/a'}</MarkdownRenderer>
+              <MarkdownRenderer>{score?.reason || 'n/a'}</MarkdownRenderer>
             </section>
             <section className="border border-border1 rounded-lg">
               <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">Input</h3>
