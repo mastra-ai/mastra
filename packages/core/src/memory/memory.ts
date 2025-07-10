@@ -412,7 +412,7 @@ export abstract class MastraMemory extends MastraBase {
    */
   abstract getWorkingMemoryTemplate({
     memoryConfig,
-  }: {
+  }?: {
     memoryConfig?: MemoryConfig;
   }): Promise<WorkingMemoryTemplate | null>;
 
