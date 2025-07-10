@@ -828,6 +828,32 @@ export class Agent<
     return convertedMemoryTools;
   }
 
+  private async getMemoryMessages({
+    resourceId,
+    threadId,
+    vectorMessageSearch,
+    memoryConfig,
+  }: {
+    resourceId?: string;
+    threadId: string;
+    vectorMessageSearch: string;
+    memoryConfig?: MemoryConfig;
+  }) {
+    const memory = this.getMemory();
+    if (!memory) {
+      return [];
+    }
+    return memory
+      .rememberMessages({
+        threadId,
+        resourceId,
+        config: memoryConfig,
+        // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
+        vectorMessageSearch,
+      })
+      .then(r => r.messagesV2);
+  }
+
   private async getAssignedTools({
     runtimeContext,
     runId,
@@ -1293,18 +1319,15 @@ export class Agent<
         let [memoryMessages, memorySystemMessage] =
           thread.id && memory
             ? await Promise.all([
-                memory
-                  .rememberMessages({
-                    threadId: threadObject.id,
-                    resourceId,
-                    config: memoryConfig,
-                    // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
-                    vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
-                  })
-                  .then(r => r.messagesV2),
+                this.getMemoryMessages({
+                  resourceId,
+                  threadId: threadObject.id,
+                  vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
+                  memoryConfig,
+                }),
                 memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
               ])
-            : [[], null, null];
+            : [[], null];
 
         this.logger.debug('Fetched messages from memory', {
           threadId: threadObject.id,
