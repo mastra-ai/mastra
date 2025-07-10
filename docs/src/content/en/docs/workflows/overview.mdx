@@ -5,11 +5,13 @@ description: "Workflows in Mastra help you orchestrate complex sequences of oper
 
 import { Steps } from "nextra/components";
 
-# Workflows Overview
+# Workflows overview
 
 Workflows let you define and orchestrate complex sequences of tasks as **typed steps** connected by data flows. Each step has clearly defined inputs and outputs validated by Zod schemas.
 
 A workflow manages execution order, dependencies, branching, parallelism, and error handling — enabling you to build robust, reusable processes. Steps can be nested or cloned to compose larger workflows.
+
+![Workflows overview](/image/workflows/workflows-overview.jpg)
 
 You create workflows by:
 
@@ -20,7 +22,7 @@ You create workflows by:
 This structure provides full type safety and runtime validation, ensuring data integrity across the entire workflow.
 
 
-## Getting Started
+## Getting started
 
 To use workflows, first import the necessary functions from the workflows module:
 
@@ -29,7 +31,7 @@ import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 ```
 
-### Create Step
+### Create step
 
 Steps are the building blocks of workflows. Create a step using `createStep`:
 
@@ -39,7 +41,7 @@ const step1 = createStep({...});
 
 > See [createStep](/reference/workflows/step) for more information.
 
-### Create Workflow
+### Create workflow
 
 Create a workflow using `createWorkflow` and complete it with `.commit()`.
 
@@ -65,7 +67,7 @@ export const testWorkflow = createWorkflow({
 
 > See [workflow](/reference/workflows/workflow) for more information.
 
-#### Composing Steps
+#### Composing steps
 
 Workflow steps can be composed and executed sequentially using `.then()`.
 
@@ -93,8 +95,7 @@ export const testWorkflow = createWorkflow({
 
 > Steps can be composed using a number of different methods. See [Control Flow](/docs/workflows/control-flow)  for more information.
 
-
-#### Cloning Steps
+#### Cloning steps
 
 Workflow steps can be cloned using `cloneStep()`, and used with any workflow method.
 
@@ -122,7 +123,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-### Register Workflow
+### Register workflow
 
 Register a workflow using `workflows` in the main Mastra instance:
 
@@ -146,7 +147,7 @@ export const mastra = new Mastra({
 });
 ```
 
-### Run Workflow
+### Run workflow
 There are two ways to run and test workflows.
 
 <Steps>
@@ -182,7 +183,7 @@ npx tsx src/test-workflow.ts
 
 </Steps>
 
-#### Run Workflow Results
+#### Run workflow results
 
 The result of running a workflow using either `start()` or `resume()` will look like one of the following, depending on the outcome.
 
@@ -250,7 +251,7 @@ The result of running a workflow using either `start()` or `resume()` will look 
 ```
 - **error**: An optional field that includes the error message if the workflow fails
 
-### Stream Workflow
+### Stream workflow
 
 Similar to the run method shown above, workflows can also be streamed:
 
@@ -294,7 +295,7 @@ const result = await run.start({
 
 > See [watch](/reference/workflows/watch) for more information.
 
-## More Resources
+## More resources
 
 - The [Workflow Guide](../../guides/guide/ai-recruiter.mdx) in the Guides section is a tutorial that covers the main concepts.
 - [Parallel Steps workflow example](../../examples/workflows/parallel-steps.mdx)

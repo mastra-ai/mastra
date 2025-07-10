@@ -16,7 +16,7 @@ You can pause execution using:
 
 When using any of these methods, the workflow status is set to `waiting` until execution resumes.
 
-## sleep
+## Pausing with `.sleep()`
 
 The `sleep()` method pauses execution between steps for a specified number of milliseconds.
 
@@ -34,7 +34,7 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-## sleepUntil
+## Pausing with `.sleepUntil()`
 
 The `sleepUntil()` method pauses execution between steps until a specified date.
 
@@ -54,9 +54,11 @@ export const testWorkflow = createWorkflow({...})
 
 > `Date.now()` is evaluated when the workflow starts, not at the moment the `sleepUntil()` method is called.
 
-## waitForEvent
+## Pausing with `.waitForEvent()`
 
 The `waitForEvent()` method pauses execution until a specific event is received. Use `run.sendEvent()` to send the event. You must provide both the event name and the step to resume.
+
+![Pausing with .waitForEvent()](/image/workflows/workflows-sleep-events-waitforevent.jpg)
 
 ```typescript {10} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
@@ -72,7 +74,7 @@ export const testWorkflow = createWorkflow({...})
   .then(step3)
   .commit();
 ```
-## sendEvent
+## Sending an event with `.sendEvent()`
 
 The `.sendEvent()` method sends an event to the workflow. It accepts the event name and optional event data, which can be any JSON-serializable value.
 

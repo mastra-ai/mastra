@@ -1,5 +1,32 @@
 # @mastra/deployer
 
+## 0.10.12
+
+### Patch Changes
+
+- 53e3f58: Add support for custom instrumentation files
+- Updated dependencies [b4a9811]
+- Updated dependencies [4d5583d]
+  - @mastra/core@0.10.12
+  - @mastra/server@0.10.12
+
+## 0.10.12-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [4d5583d]
+  - @mastra/core@0.10.12-alpha.1
+  - @mastra/server@0.10.12-alpha.1
+
+## 0.10.12-alpha.0
+
+### Patch Changes
+
+- 53e3f58: Add support for custom instrumentation files
+- Updated dependencies [b4a9811]
+  - @mastra/core@0.10.12-alpha.0
+  - @mastra/server@0.10.12-alpha.0
+
 ## 0.10.11
 
 ### Patch Changes
