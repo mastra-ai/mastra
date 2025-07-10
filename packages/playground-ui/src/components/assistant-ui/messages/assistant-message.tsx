@@ -4,6 +4,7 @@ import { CheckIcon, CopyIcon } from 'lucide-react';
 import { MarkdownText } from './markdown-text';
 import { TooltipIconButton } from '../tooltip-icon-button';
 import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
+import { Reasoning } from './reasoning';
 
 export interface AssistantMessageProps {
   ToolFallback?: ToolCallContentPartComponent;
@@ -20,6 +21,7 @@ export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom }: Assistant
           components={{
             Text: MarkdownText,
             tools: { Fallback: ToolFallbackCustom || ToolFallback },
+            Reasoning: Reasoning,
           }}
         />
       </div>

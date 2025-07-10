@@ -12,7 +12,7 @@ import {
 import { useState, ReactNode, useEffect } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
 
-import { ChatProps } from '@/types';
+import { ChatProps, Message } from '@/types';
 
 import { CoreUserMessage } from '@mastra/core';
 import { fileToBase64 } from '@/lib/file';
@@ -131,12 +131,18 @@ export function MastraRuntimeProvider({
               image: image.url,
             }));
 
+            const reasoning = message?.parts
+              ?.find(({ type }: { type: string }) => type === 'reasoning')
+              ?.details?.map((detail: { type: 'text'; text: string }) => detail?.text)
+              ?.join(' ');
+
             return {
               ...message,
               content: [
                 ...(typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : []),
                 ...toolInvocationsAsContentParts,
                 ...attachmentsAsContentParts,
+                ...(reasoning ? [{ type: 'reasoning', text: reasoning }] : []),
               ],
             };
           })
@@ -199,6 +205,7 @@ export function MastraRuntimeProvider({
                       type: 'text',
                       text: message.content,
                     },
+                    ...(generateResponse.reasoning ? [{ type: 'reasoning', text: generateResponse.reasoning }] : [{}]),
                   ],
                 } as ThreadMessageLike;
               }
@@ -229,7 +236,13 @@ export function MastraRuntimeProvider({
                 if (textContent) {
                   return {
                     ...acc,
-                    content: [..._content, textContent],
+                    content: [
+                      ..._content,
+                      textContent,
+                      ...(generateResponse.reasoning
+                        ? [{ type: 'reasoning', text: generateResponse.reasoning }]
+                        : [{}]),
+                    ],
                   } as ThreadMessageLike;
                 }
               }
@@ -268,7 +281,22 @@ export function MastraRuntimeProvider({
             },
             { role: 'assistant', content: [] } as ThreadMessageLike,
           );
-          setMessages(currentConversation => [...currentConversation, latestMessage]);
+          setMessages(currentConversation => [
+            ...currentConversation,
+            latestMessage,
+            // {
+            //   ...latestMessage,
+            //   ...(generateResponse.reasoning
+            //     ? {
+            //         metadata: {
+            //           custom: {
+            //             reasonings: [generateResponse.reasoning],
+            //           },
+            //         },
+            //       }
+            //     : {}),
+            // },
+          ]);
           handleFinishReason(generateResponse.finishReason);
         }
       } else {
@@ -299,6 +327,7 @@ export function MastraRuntimeProvider({
         }
 
         let content = '';
+        let reasoning = '';
         let assistantMessageAdded = false;
         let assistantToolCallAddedForUpdater = false;
         let assistantToolCallAddedForContent = false;
@@ -307,7 +336,10 @@ export function MastraRuntimeProvider({
           setMessages(currentConversation => {
             const message: ThreadMessageLike = {
               role: 'assistant',
-              content: [{ type: 'text', text: content }],
+              content: [
+                { type: 'text', text: content },
+                { type: 'reasoning', text: reasoning },
+              ],
             };
 
             if (!assistantMessageAdded) {
@@ -384,6 +416,7 @@ export function MastraRuntimeProvider({
                 role: 'assistant',
                 content: [
                   { type: 'text', text: content },
+                  { type: 'reasoning', text: reasoning },
                   {
                     type: 'tool-call',
                     toolCallId: value.toolCallId,
@@ -431,23 +464,41 @@ export function MastraRuntimeProvider({
             throw new Error(error);
           },
           onFinishMessagePart({ finishReason }) {
-            console.log('finishMessagePart===', finishReason);
             handleFinishReason(finishReason);
           },
-          onReasoningPart(streamPart) {
-            console.log('reasoningPart===', streamPart);
-          },
-          onReasoningSignaturePart(streamPart) {
-            console.log('reasoningSignaturePart===', streamPart);
-          },
-          onRedactedReasoningPart(streamPart) {
-            console.log('redactedReasoningPart===', streamPart);
-          },
-          onSourcePart(streamPart) {
-            console.log('sourcePart===', streamPart);
-          },
-          onFinishStepPart(streamPart) {
-            console.log('finishStepPart===', streamPart);
+          onReasoningPart(value) {
+            if (assistantToolCallAddedForContent) {
+              // start new content value to add as next message item in messages array
+              assistantToolCallAddedForContent = false;
+              reasoning = value;
+            } else {
+              reasoning += value;
+            }
+
+            console.log('full reasoning=', reasoning);
+            updater();
+            // setMessages(currentConversation => {
+            //   const lastMessage = currentConversation[currentConversation.length - 1];
+
+            //   if (lastMessage && lastMessage.role === 'assistant') {
+            //     const prevReasonings = (lastMessage?.metadata?.custom?.reasonings as string[]) ?? [];
+            //     // const prevContentReasonings = lastMessage?.content;
+            //     const updatedMessage = {
+            //       ...lastMessage,
+
+            //       metadata: {
+            //         ...lastMessage.metadata,
+            //         custom: {
+            //           ...(lastMessage?.metadata?.custom || {}),
+            //           reasonings: [...prevReasonings, reasoning],
+            //         },
+            //       },
+            //     };
+
+            //     return [...currentConversation.slice(0, -1), updatedMessage];
+            //   }
+            //   return currentConversation;
+            // });
           },
         });
       }

@@ -303,16 +303,6 @@ export async function streamGenerateHandler({
       signal: abortSignal,
     });
 
-    for await (const chunk of streamResult.fullStream) {
-      if (chunk.type === 'reasoning') {
-        console.log('reasoning===', chunk);
-      } else if (chunk.type === 'source') {
-        console.log('source===', chunk);
-      } else if (chunk.type === 'finish') {
-        console.log('finish===', chunk);
-      }
-    }
-
     const streamResponse = rest.output
       ? streamResult.toTextStreamResponse({
           headers: {
