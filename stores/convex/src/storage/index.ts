@@ -138,7 +138,7 @@ export class ConvexStorage extends MastraStorage {
    */
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     try {
-      await this.client.mutation(this.api.threads.delete, { threadId });
+      await this.client.mutation(this.api.threads.deleteThread, { threadId });
     } catch (error) {
       throw new Error(`Failed to delete thread: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -241,7 +241,21 @@ export class ConvexStorage extends MastraStorage {
    */
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      return await this.httpClient.query(this.api.threads.getById, { threadId });
+      const result = await this.httpClient.query(this.api.threads.getById, { threadId });
+
+      // If the thread doesn't exist (was deleted or never existed), return null
+      if (!result) {
+        return null;
+      }
+
+      return {
+        id: result.threadId,
+        title: result.title,
+        createdAt: result.createdAt,
+        updatedAt: result.updatedAt,
+        metadata: result.metadata,
+        resourceId: result.resourceId,
+      };
     } catch (error) {
       throw new Error(`Failed to get thread by ID: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -254,7 +268,16 @@ export class ConvexStorage extends MastraStorage {
    */
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
     try {
-      return await this.httpClient.query(this.api.threads.getByResourceId, { resourceId });
+      const result = await this.httpClient.query(this.api.threads.getByResourceId, { resourceId });
+
+      return result.map((thread: any) => ({
+        id: thread.threadId,
+        title: thread.title,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+        metadata: thread.metadata,
+        resourceId: thread.resourceId,
+      }));
     } catch (error) {
       throw new Error(
         `Failed to get threads by resource ID: ${error instanceof Error ? error.message : String(error)}`,
@@ -268,8 +291,13 @@ export class ConvexStorage extends MastraStorage {
    * @returns The saved thread
    */
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+    const threadToSave = {
+      ...thread,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
     try {
-      return await this.client.mutation(this.api.threads.save, { thread });
+      return await this.client.mutation(this.api.threads.save, { thread: threadToSave });
     } catch (error) {
       throw new Error(`Failed to save thread: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -290,7 +318,16 @@ export class ConvexStorage extends MastraStorage {
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     try {
-      return await this.client.mutation(this.api.threads.update, { id, title, metadata });
+      const updatedThread = await this.client.mutation(this.api.threads.update, { id, title, metadata });
+
+      return {
+        id: updatedThread.id,
+        title: updatedThread.title,
+        createdAt: updatedThread.createdAt,
+        updatedAt: updatedThread.updatedAt,
+        metadata: updatedThread.metadata,
+        resourceId: updatedThread.resourceId,
+      };
     } catch (error) {
       throw new Error(`Failed to update thread: ${error instanceof Error ? error.message : String(error)}`);
     }

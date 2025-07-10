@@ -146,3 +146,22 @@ export const update = mutation({
     };
   },
 });
+
+/**
+ * Delete a thread
+ */
+export const deleteThread = mutation({
+  args: { threadId: v.string() },
+  handler: async (ctx, args) => {
+    const thread = await ctx.db
+      .query('threads')
+      .withIndex('by_threadId', q => q.eq('threadId', args.threadId))
+      .first();
+
+    if (!thread) {
+      throw new Error(`Thread with ID ${args.threadId} not found`);
+    }
+
+    await ctx.db.delete(thread._id);
+  },
+});
