@@ -1137,7 +1137,7 @@ export class Workflow<
     }, 'watch');
 
     if (runCount && runCount > 0 && resume?.steps?.length && runtimeContext) {
-      runtimeContext.set('wflow__inputData', inputData);
+      runtimeContext.set('__mastraWorflowInputData', inputData);
     }
 
     const res = resume?.steps?.length
@@ -1531,10 +1531,9 @@ export class Run<
 
     let runtimeContextInput;
     if (params.runCount && params.runCount > 0 && params.runtimeContext) {
-      runtimeContextInput = params.runtimeContext.get('wflow__inputData');
+      runtimeContextInput = params.runtimeContext.get('__mastraWorflowInputData');
+      params.runtimeContext.delete('__mastraWorflowInputData');
     }
-
-    const inputData = runtimeContextInput ?? params.resumeData;
 
     const stepResults = { ...(snapshot?.context ?? {}), input: runtimeContextInput ?? snapshot?.context?.input } as any;
 
@@ -1544,7 +1543,7 @@ export class Run<
         runId: this.runId,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
-        input: inputData,
+        input: params.resumeData,
         resume: {
           steps,
           stepResults,
