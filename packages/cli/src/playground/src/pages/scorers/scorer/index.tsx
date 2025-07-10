@@ -1,171 +1,20 @@
-import { Breadcrumb, Crumb, Header, /*MainContentContent*/ MainContentLayout } from '@mastra/playground-ui';
+import { Breadcrumb, Crumb, Header, MainContentLayout } from '@mastra/playground-ui';
 import { useParams, Link } from 'react-router';
 import { useScorer, useScoresByEntityId } from '@/hooks/use-scorers';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowRightIcon, ChevronDownIcon, EyeIcon, XIcon } from 'lucide-react';
-import { format } from 'date-fns';
+import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from 'lucide-react';
+import { format, isToday } from 'date-fns';
 import { useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
 import { cn } from '@/lib/utils';
-import * as Tabs from '@radix-ui/react-tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { type GetScorerResponse, type ScoreRowData } from '@mastra/client-js';
 
 import * as Dialog from '@radix-ui/react-dialog';
 
 import MarkdownRenderer from '@/components/ui/markdown-renderer';
 import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/components/ui/select';
-
-function AgentScore({ score }: { score: any }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-
-  return (
-    <>
-      <article
-        key={score.id}
-        className={cn('scorerListItem border-b text-[#ccc] border-border1 last:border-b-0 text-[0.875rem]', {
-          'expanded rounded-[0.75rem] shadow-[inset_0_0_0_2px_#444444] bg-surface4': isExpanded,
-        })}
-      >
-        <div
-          className={cn('grid', {
-            'grid-cols-[1fr_4rem]': isExpanded,
-            'grid-cols-[1fr]': !isExpanded,
-          })}
-        >
-          <button onClick={() => setIsExpanded(!isExpanded)} className={cn('grid w-full  px-[1.5rem] ', {})}>
-            <div
-              className={cn(
-                'grid gap-[1rem] text-left items-center min-h-[4rem] grid-cols-[8rem_6rem_1fr_9rem_3rem_5rem] ',
-                '[&>svg]:w-[1.2rem] [&>svg]:h-[1.2rem] [&>svg]:text-icon3',
-                { '[&>svg]:rotate-180 grid-cols-[8rem_6rem_1fr_9rem_3rem_1rem]': isExpanded },
-              )}
-            >
-              <span className="text-icon4">{score.id.split('-').pop()}</span>
-              <span className="text-icon4">{format(new Date(score.createdAt), 'h:mm:ss bb')}</span>
-              {/* <span className="truncate pr-[1rem]">{score.input}</span> */}
-              <span className="truncate pr-[1rem]">{score.entityId}</span>
-              <span>{score.score}</span>
-              <ChevronDownIcon className="justify-self-end" />
-            </div>
-          </button>
-
-          {isExpanded && (
-            <button
-              onClick={() => setIsDialogOpen(true)}
-              className={cn(
-                'flex items-center justify-center mt-[2px] mr-[2px] relative  bg-surface5 rounded-tr-[.6rem]',
-                // 'after:absolute after:top-[0.75rem] after:left-0 after:w-[0px] after:bottom-[0.75rem] after:content-[""] after:border-l after:border-border1',
-              )}
-            >
-              <EyeIcon />
-            </button>
-          )}
-        </div>
-        {/* {isExpanded && (
-          <div className="leading-[1.5] m-[1.75rem] mt-0 border-t border-border1 pt-[1rem] text-icon4">
-            <dl className="grid  grid-cols-[7rem_1fr] gap-x-[2rem] gap-y-[1rem] [&>dt]:text-icon3 [&>dd]:max-w-[80ch] ">
-              <dt>Entity: </dt>
-              <dd>
-                {score.entityType} / {score.entityId}
-              </dd>
-              <dt>Input:</dt>
-              {/* <dd>
-                {score.output.length > 200 ? (
-                  <>{score.result.input.substring(0, 200)} [...]</>
-                ) : (
-                  score.result.input
-                )}
-              </dd>
-              <dt>Output:</dt>
-              <dd>
-                {score.result.output.length > 200 ? (
-                  <>{score.result.output.substring(0, 200)} [...]</>
-                ) : (
-                  score.result.output
-                )}
-              </dd>
-              <dt>Score:</dt>
-              <dd className="text-[#ddd] font-bold bg-surface5 justify-self-start p-[0.5rem] rounded-md px-[.75rem]">
-                {score.result.score}
-              </dd>
-              <dt>Reason:</dt>
-              <dd className="text-[#ccc]">{score.reason}</dd>
-            </dl>
-          </div>
-        )} */}
-      </article>
-
-      <Dialog.Root open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="bg-black top-0 bottom-0 right-0 left-0 fixed z-[10] opacity-[0.65]" />
-          <Dialog.Content
-            className={cn(
-              'overflow-y-scroll text-[0.875rem] text-icon4 w-[80%] fixed transform: left-1/2 top-0 bottom-0 max-w-[60rem] -translate-x-1/2 z-[10] bg-transparent flex items-start focus:outline-none p-0',
-            )}
-          >
-            <div
-              className={cn(
-                'border border-border1 bg-surface4 content-start rounded-[.5rem]',
-                '[&>section]:grid [&>section]:gap-[1rem]',
-                '[&_h2]:text-icon5 [&_h2]:text-[1rem] [&_h2]:font-semibold [&_h2]:mb-0',
-                'mt-auto mb-auto',
-                'grid grid-rows-[auto_1fr] max-h-[85vh]',
-              )}
-            >
-              <div className="bg-surface4 border-b border-border1 flex items-center p-[2rem]">
-                <h2 className=" w-full !text-[0.875rem] !text-icon3 !font-normal flex items-center gap-[1rem]">
-                  <span>{score.id}</span>|<span>{format(new Date(score.createdAt), 'h:mm:ss bb')}</span>
-                </h2>
-                <Dialog.Close asChild>
-                  <button
-                    className="inline-flex bg-surface5 appearance-none items-center justify-center rounded-md p-[.2rem] focus:shadow-[0_0_0_2px] focus:outline-none"
-                    aria-label="Close"
-                  >
-                    <XIcon />
-                  </button>
-                </Dialog.Close>
-              </div>
-              <div className="overflow-y-scroll grid gap-[2rem] p-[2rem] [&>section]:grid [&>section]:gap-[1rem]">
-                <section
-                  className={cn(
-                    'p-[1.5rem] rounded-lg px-[2rem] bg-surface5 grid grid-cols-[5rem_1fr] gap-x-[2rem]',
-                    '[&>em]:flex [&>em]:justify-between',
-                    '[&_svg]:w-[1.1em] [&>svg]:h-[1.1em] [&_svg]:text-icon3 ',
-                    '[&_b]:text-icon6 [&_b]:font-semibold',
-                  )}
-                >
-                  <em>
-                    Score <ArrowRightIcon />
-                  </em>
-                  <b>{score.score}</b>
-                  <em>
-                    Reason <ArrowRightIcon />
-                  </em>
-                  <MarkdownRenderer>{score.reason}</MarkdownRenderer>
-                </section>
-                {/* <section>
-                  <h2>Input</h2>
-                  <MarkdownRenderer>{score.input}</MarkdownRenderer>
-                </section>
-                <section>
-                  <h2>Output</h2>
-                  <MarkdownRenderer>{score.output}</MarkdownRenderer>
-                </section> */}
-              </div>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-    </>
-  );
-}
-
-function AgentScores({ agentId }: { agentId: string }) {
-  const { scores, isLoading } = useScoresByEntityId(agentId, 'AGENT');
-  console.log({ scores, agentId });
-
-  return scores?.scores.map(score => <AgentScore score={score} />);
-}
+import { Button } from '@/components/ui/button';
 
 export default function Scorer() {
   const { scorerId } = useParams();
@@ -177,16 +26,27 @@ export default function Scorer() {
     }) || [];
   const isLoading = isLoadingScorer || isLoadingAgents;
   const [filteredByEntityId, setFilteredByEntityId] = useState<string>('all');
+  const [selectedScore, setSelectedScore] = useState<any>(null);
+  const [detailsIsOpened, setDetailsIsOpened] = useState<boolean>(false);
 
-  const [visiblePrompt, setVisiblePrompt] = useState<string>('');
+  // if (scorer) {
+  //   scorer.prompts = {
+  //     extract: { prompt: 'prompt string', description: 'prompt description' },
+  //     score: { prompt: 'prompt string', description: 'prompt description' },
+  //     reason: { prompt: 'prompt string', description: 'prompt description' },
+  //   };
+  // }
 
-  const handlePromptChange = (prompt: string) => {
-    if (prompt === visiblePrompt) {
-      setVisiblePrompt('');
-      return;
+  const handleOnListItemClick = (score: any) => {
+    if (score.id === selectedScore?.id) {
+      setSelectedScore(null);
+    } else {
+      setSelectedScore(score);
+      setDetailsIsOpened(true);
     }
-    setVisiblePrompt(prompt);
   };
+
+  const hasPrompts = Object.keys(scorer?.prompts || {}).length > 0;
 
   if (isLoading) {
     return null;
@@ -207,230 +67,349 @@ export default function Scorer() {
       </Header>
 
       {scorer?.scorer ? (
-        <MainContent>
-          <MainContentLeftColumn>
-            <div
-              className={cn(
-                'grid z-[1] 3xl:sticky top-0 gap-y-[0.5rem] text-icon4 bg-surface2 py-[3rem]',
-                '3xl:h-full 3xl:content-start 3xl:grid-rows-[auto_1fr] h-full 3xl:overflow-y-auto',
-              )}
-            >
-              <div className="grid gap-[1rem] w">
-                <h1 className="text-icon6 text-[1.25rem]">{scorer.scorer.name}</h1>
-                <p className="m-0">{scorer.scorer.description}</p>
-                <div
+        <>
+          <div className={cn(`h-full overflow-y-scroll `)}>
+            <div className={cn('max-w-[100rem] px-[3rem] mx-auto')}>
+              <ScorerHeader scorer={scorer} scorerAgents={scorerAgents} />
+              <Tabs defaultValue="scores">
+                <TabsList
                   className={cn(
-                    'flex gap-[1rem] mt-[1rem] text-[0.875rem] items-center mb-[0.25rem]',
-                    '[&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-icon3',
+                    'flex border-b group',
+                    '[&>button]:text-icon3 [&>button]:text-[1rem] [&>button]:px-[1.5rem] [&>button]:py-[0.75rem] [&>button]:border-b-2 [&>button]:border-transparent ',
+                    '[&>button[data-state=active]]:bg-surface2 [&>button[data-state=active]]:text-icon5 [&>button[data-state=active]]:border-icon5',
                   )}
                 >
-                  <span>Agents</span>
-                  <ArrowRightIcon />
-                  <div>
-                    {scorerAgents.map(agent => {
-                      return <span>{agent.name}</span>;
+                  <TabsTrigger value="scores" className="group">
+                    Scores
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="prompts"
+                    className={cn('group', {
+                      'cursor-not-allowed': !hasPrompts,
                     })}
-                  </div>
-                </div>
-                <div
-                  className={cn(
-                    'flex gap-[1rem] text-[0.875rem] items-center',
-                    '[&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-icon3',
-                  )}
-                >
-                  <span>Sampling</span>
-                  <ArrowRightIcon />
-                  <div>
-                    Type: <b>{scorer?.sampling?.type}</b>
-                  </div>
-                  <span className="text-icon2 text-[0.75rem]">|</span>
-                  <div className="flex gap-[.25rem] ">
-                    Rate: <b>{scorer?.sampling?.type === 'ratio' ? scorer?.sampling?.rate : 'None'}</b>
-                  </div>
-                </div>
-                <div
-                  className={cn(
-                    'flex gap-[1rem] text-[0.875rem] items-center',
-                    '3xl:overflow-y-auto ',
-                    '[&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-icon3',
-                  )}
-                >
-                  <span>Prompts</span>
-                  <ArrowRightIcon />
-                  <div className={cn(' flex items-center border border-b-0 border-border1 rounded-md', '')}>
-                    {Object.entries(scorer?.prompts || {}).map(([key]) => (
-                      <button
-                        onClick={() => handlePromptChange(key)}
-                        className={cn(
-                          'px-[1rem] py-[0.4rem] border capitalize font-semibold justify-center border-r border-border1 flex items-center text-[0.8125rem] ',
-                          {
-                            'bg-surface1  text-icon5': visiblePrompt === key,
-                            'hover:bg-surface5 ': visiblePrompt !== key,
-                          },
-                        )}
-                      >
-                        {key}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="relative mt-[.5rem] 3xl:h-full 3xl:overflow-y-auto">
-                <Tabs.Root value={visiblePrompt} className="h-full">
-                  {Object.entries(scorer?.prompts || {}).map(([key, value]) => (
-                    <Tabs.Content
-                      value={key}
-                      className={`CCC rounded-md border border-border1 bg-surface1 h-[15rem] 3xl:h-full  overflow-y-auto`}
-                    >
-                      <pre className="text-[0.8125rem] text-[#ccc] p-[1rem] whitespace-pre-wrap font-mono ">
-                        {value.prompt}
-                      </pre>
-                    </Tabs.Content>
-                  ))}
-                </Tabs.Root>
-                {visiblePrompt && (
-                  <button
-                    onClick={() => setVisiblePrompt('')}
-                    className="absolute top-[1rem] right-[1rem] rounded-md z-[1] p-[0.5rem] hover:bg-surface5"
+                    disabled={!hasPrompts}
                   >
-                    <XIcon />
-                  </button>
-                )}
-              </div>
-            </div>
-          </MainContentLeftColumn>
-          <MainContentRightColumn>
-            <div className={cn('sticky top-0 bg-surface2 z-[1] pt-[1rem] mt-[3rem]')}>
-              <div className="mb-[1rem] inline-flex items-baseline gap-[1rem] ">
-                <label
-                  htmlFor="filter-by-agent"
-                  className="text-icon3 text-[0.875rem] font-semibold mb-[0.5rem] whitespace-nowrap"
-                >
-                  Filter by agent:
-                </label>
-                <Select
-                  name="filter-by-agent"
-                  onValueChange={value => {
-                    setFilteredByEntityId(value);
-                  }}
-                  defaultValue={'all'}
-                  value={filteredByEntityId}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem key="all" value="all">
-                      All Agents
-                    </SelectItem>
-                    {(scorerAgents || []).map(agent => (
-                      <SelectItem key={agent.id} value={agent.id}>
-                        {agent.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                    Prompts
+                  </TabsTrigger>
+                </TabsList>
 
-              <div
-                className={cn(
-                  'grid gap-[1rem] bg-surface3 rounded-lg mb-[0.5rem] px-[1.5rem] py-[1rem] grid-cols-[8rem_6rem_1fr_9rem_3rem_5rem] text-left text-[0.75rem] text-icon3 uppercase',
-                )}
-              >
-                <span>id</span>
-                <span>Created At</span>
-                <span>Input</span>
-                <span>Agent</span>
-                <span>Score</span>
-                <span className="w-[1.5rem]"></span>
-              </div>
+                <TabsContent value="scores">
+                  <ScoreListHeader
+                    setFilteredByEntityId={setFilteredByEntityId}
+                    filteredByEntityId={filteredByEntityId}
+                    scorerAgents={scorerAgents}
+                  />
+                  <ScoreList
+                    scorer={scorer}
+                    filteredByEntityId={filteredByEntityId}
+                    selectedScore={selectedScore}
+                    setSelectedScore={setSelectedScore}
+                    onItemClick={handleOnListItemClick}
+                  />
+                </TabsContent>
+                <TabsContent value="prompts">
+                  <ScorerPrompts prompts={scorer?.prompts} />
+                </TabsContent>
+              </Tabs>
             </div>
-            <div className={cn('mx-auto overflow-y-auto pb-[3rem] relative')}>
-              <div className="grid border border-border1f bg-surface3 rounded-xl ">
-                {scorer?.agentIds.map((agentId: string) => {
-                  if (filteredByEntityId !== 'all' && filteredByEntityId !== agentId) {
-                    return null;
-                  }
-                  return <AgentScores agentId={agentId} />;
-                })}
-              </div>
-            </div>
-          </MainContentRightColumn>
-        </MainContent>
+          </div>
+          <ScoreDetails score={selectedScore} isOpen={detailsIsOpened} onClose={() => setDetailsIsOpened(false)} />
+        </>
       ) : null}
     </MainContentLayout>
   );
 }
 
-const MAX_CONTENT_WIDTH = '85rem';
-
-type MainContentProps = {
-  children: React.ReactNode;
-  className?: string;
-};
-
-export function MainContent({ children, className }: MainContentProps) {
+function ScorerHeader({ scorer, scorerAgents }: { scorer: any; scorerAgents?: { id: string; name: string }[] }) {
   return (
     <div
       className={cn(
-        'MainContent',
-        'grid px-[3rem] overflow-y-scroll h-full',
-        '3xl:px-0 3xl:grid-cols-[auto_auto] 3xl:gap-[3rem] 3xl:h-full 3xl:overflow-y-hidden',
-        //  'border-2 border-red-400',
-        className,
+        'grid z-[1] top-0 gap-y-[0.5rem] text-icon4 bg-surface2 py-[3rem]',
+        '3xl:h-full 3xl:content-start 3xl:grid-rows-[auto_1fr] h-full 3xl:overflow-y-auto',
       )}
     >
-      {children}
-    </div>
-  );
-}
-
-export function MainContentLeftColumn({ children, className }: MainContentProps) {
-  return (
-    <div
-      className={cn(
-        'LeftColumn',
-        'flex min-w-[full] mx-auto w-full',
-        '3xl:w-auto 3xl:mx-0 3xl:justify-end 3xl:overflow-y-auto 3xl:pl-[3rem]',
-        //   'border-2 border-blue-500',
-        className,
-      )}
-    >
-      <div
-        className={cn(
-          'Inner',
-          `w-full max-w-[${MAX_CONTENT_WIDTH}] mx-auto`,
-          '3xl:mx-0 3xl:overflow-y-auto 3xl:h-full 3xl:w-[30rem] 3xl:min-w-[20rem]',
-          //    'border-2 border-green-500',
-        )}
-      >
-        {children}
+      <div className="grid gap-[1rem] w">
+        <h1 className="text-icon6 text-[1.25rem]">{scorer.scorer.name}</h1>
+        <p className="m-0">{scorer.scorer.description}</p>
+        <div
+          className={cn(
+            'flex gap-[1rem] mt-[1rem] text-[0.875rem] items-center mb-[0.25rem]',
+            '[&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-icon3',
+          )}
+        >
+          <span>Agents</span>
+          <ArrowRightIcon />
+          <div>
+            {scorerAgents?.map(agent => {
+              return <span>{agent.name}</span>;
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-export function MainContentRightColumn({ children, className }: MainContentProps) {
+function ScoreListHeader({
+  setFilteredByEntityId,
+  filteredByEntityId,
+  scorerAgents,
+}: {
+  setFilteredByEntityId: (value: string) => void;
+  filteredByEntityId: string;
+  scorerAgents?: { id: string; name: string }[];
+}) {
   return (
-    <div
-      className={cn(
-        'RightColumn',
-        'flex mx-auto w-full',
-        '3xl:flex 3xl:mx-0 3xl:justify-start 3xl:overflow-y-scroll 3xl:pr-[3rem] 3xl:h-full',
-        //   'border-2 border-blue-500',
-        className,
-      )}
-    >
+    <div className={cn('sticky top-0 bg-surface2 z-[1] pt-[1rem] mt-[3rem]')}>
+      <div className="mb-[1rem] inline-flex items-baseline gap-[1rem] ">
+        <label
+          htmlFor="filter-by-agent"
+          className="text-icon3 text-[0.875rem] font-semibold mb-[0.5rem] whitespace-nowrap"
+        >
+          Filter by agent:
+        </label>
+        <Select
+          name="filter-by-agent"
+          onValueChange={value => {
+            setFilteredByEntityId(value);
+          }}
+          defaultValue={'all'}
+          value={filteredByEntityId}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem key="all" value="all">
+              All Agents
+            </SelectItem>
+            {(scorerAgents || []).map(agent => (
+              <SelectItem key={agent.id} value={agent.id}>
+                {agent.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div
         className={cn(
-          'Inner',
-          `max-w-[${MAX_CONTENT_WIDTH}] mx-auto`,
-          '3xl:mx-0', // 'border-2 border-green-500'
+          'grid gap-[1rem] bg-surface3 rounded-lg mb-[0.5rem] px-[1.5rem] py-[1rem] grid-cols-[7rem_7rem_1fr_2fr_9rem_3rem] text-left text-[0.75rem] text-icon3 uppercase',
         )}
       >
-        {children}
+        <span>Date</span>
+        <span>Time</span>
+        <span>Input</span>
+        <span>Output</span>
+        <span>Agent</span>
+        <span>Score</span>
+        <span className="w-[1.5rem]"></span>
       </div>
+    </div>
+  );
+}
+
+function ScoreList({
+  scorer,
+  filteredByEntityId,
+  selectedScore,
+  onItemClick,
+}: {
+  scorer: any;
+  filteredByEntityId: string;
+  selectedScore: any;
+  setSelectedScore: (value: any) => void;
+  onItemClick?: (score: any) => void;
+}) {
+  return (
+    <ul className="grid border border-border1f bg-surface3 rounded-xl mb-[5rem]">
+      {scorer?.agentIds.map((agentId: string) => {
+        if (filteredByEntityId !== 'all' && filteredByEntityId !== agentId) {
+          return null;
+        }
+        return <AgentScores agentId={agentId} selectedScore={selectedScore} onItemClick={onItemClick} />;
+      })}
+    </ul>
+  );
+}
+
+function AgentScores({
+  agentId,
+  selectedScore,
+  onItemClick,
+}: {
+  agentId: string;
+  selectedScore: any;
+  onItemClick?: (score: any) => void;
+}) {
+  const { scores, isLoading } = useScoresByEntityId(agentId, 'AGENT');
+
+  return scores?.scores.map(score => <AgentScore score={score} selectedScore={selectedScore} onClick={onItemClick} />);
+}
+
+function AgentScore({
+  score,
+  selectedScore,
+  onClick,
+}: {
+  score: ScoreRowData;
+  selectedScore: any | null;
+  onClick?: (score: any) => void;
+}) {
+  const isSelected = selectedScore?.id === score.id;
+
+  const handleClick = () => {
+    return onClick && onClick(score);
+  };
+
+  const isTodayDate = isToday(new Date(score.createdAt));
+  const dateStr = format(new Date(score.createdAt), 'MMM d yyyy');
+  const timeStr = format(new Date(score.createdAt), 'h:mm:ss bb');
+  const inputPrev = score.input?.[0]?.content || '';
+  const outputPrev = score.output?.text || '';
+  const scorePrev = score.result.score || `N/A`;
+
+  return (
+    <li
+      key={score.id}
+      className={cn('scorerListItem border-b text-[#ccc] border-border1 last:border-b-0 text-[0.875rem]', {
+        'bg-surface5': isSelected,
+      })}
+    >
+      <button
+        onClick={handleClick}
+        className={cn(
+          'grid w-full px-[1.5rem] gap-[1rem] text-left items-center min-h-[4rem] grid-cols-[7rem_7rem_1fr_2fr_9rem_3rem] ',
+        )}
+      >
+        <span className="text-icon4">{isTodayDate ? 'Today' : dateStr}</span>
+        <span className="text-icon4">{timeStr}</span>
+        <span className="truncate pr-[1rem]">{inputPrev}</span>
+        <span className="truncate pr-[1rem]">{outputPrev}</span>
+        <span className="truncate pr-[1rem]">{score.entityId}</span>
+        <span>{scorePrev}</span>
+      </button>
+    </li>
+  );
+}
+
+function ScoreDetails({ isOpen, score, onClose }: { isOpen: boolean; score: ScoreRowData; onClose?: () => void }) {
+  if (!score) {
+    return null;
+  }
+
+  return (
+    <Dialog.Root open={isOpen} onOpenChange={onClose}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="bg-black top-0 bottom-0 right-0 left-0 fixed z-[10] opacity-[0.1]" />
+        <Dialog.Content
+          className={cn(
+            'fixed top-0 bottom-0 right-0 border-l border-border1 w-[70rem] max-w-[calc(100vw-15rem)] z-[100] bg-surface4 px-[1rem] overflow-y-scroll',
+          )}
+        >
+          <div className="bg-surface4 border-b-2 border-border1 flex items-center py-[1.5rem] px-[1rem] top-0 sticky">
+            <h2 className=" w-full text-[0.875rem] !text-icon5 !font-normal flex items-center gap-[1rem]">
+              <span>{score.id}</span>|<span>{format(new Date(score.createdAt), 'LLL do yyyy, hh:mm:ss bb')}</span>
+            </h2>
+            <div className="flex gap-[1rem]">
+              <Button variant={'outline'} onClick={() => alert('Previous score action not implemented')}>
+                Previous
+                <ArrowUpIcon />
+              </Button>
+              <Button variant={'outline'} onClick={() => alert('Next score action not implemented')}>
+                Next
+                <ArrowDownIcon />
+              </Button>
+              <Dialog.Close asChild>
+                <button
+                  className="inline-flex bg-surface5 appearance-none items-center justify-center rounded-md p-[.2rem] focus:shadow-[0_0_0_2px] focus:outline-none"
+                  aria-label="Close"
+                >
+                  <XIcon />
+                </button>
+              </Dialog.Close>
+            </div>
+          </div>
+
+          <div className="grid gap-[2rem] px-[1rem] py-[2rem] pb-[4rem] ">
+            <section
+              className={cn(
+                'p-[1.5rem] rounded-lg px-[2rem] bg-surface5 grid grid-cols-[5rem_1fr] gap-x-[2rem]',
+                '[&>em]:flex [&>em]:justify-between',
+                '[&_svg]:w-[1.1em] [&>svg]:h-[1.1em] [&_svg]:text-icon3 ',
+                '[&_b]:text-icon6 [&_b]:font-semibold',
+                'text-[0.875rem]',
+              )}
+            >
+              <em>
+                Score <ArrowRightIcon />
+              </em>
+              <b>{score.result?.score ? score.result.score : 'n/a'}</b>
+              <em>
+                Reason <ArrowRightIcon />
+              </em>
+              <MarkdownRenderer>{score.result?.reason ? score.result?.reason : 'n/a'}</MarkdownRenderer>
+            </section>
+            <section className="border border-border1 rounded-lg">
+              <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">Input</h3>
+              {(score.input || []).map((input: any, index: number) => (
+                <div
+                  key={index}
+                  className="border-b border-border1 last:border-b-0 py-[1rem] px-[1.5rem] text-[0.875rem] text-icon5"
+                >
+                  <MarkdownRenderer>{input.content}</MarkdownRenderer>
+                </div>
+              ))}
+            </section>
+            <section className="border border-border1 rounded-lg">
+              <div className="border-b border-border1 last:border-b-0">
+                <div className="flex items-center justify-between border-b border-border1 p-[1rem] px-[1.5rem]">
+                  <h3>Output</h3>
+                  <div className="flex gap-[1rem] text-[0.875rem] text-icon4 [&_b]:text-icon5">
+                    <span>Token usage</span>|
+                    <span>
+                      Completion: <b>{score.output?.usage?.completionTokens}</b>
+                    </span>
+                    <span>
+                      Prompt: <b>{score.output?.usage?.promptTokens}</b>
+                    </span>
+                    |
+                    <span>
+                      Total: <b>{score.output?.usage?.totalTokens}</b>
+                    </span>
+                  </div>
+                </div>
+                <div className="text-icon5 text-[0.875rem] p-[1.5rem] pt-[0.5rem] ">
+                  <MarkdownRenderer>{score.output?.text}</MarkdownRenderer>
+                </div>
+              </div>
+            </section>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function ScorerPrompts({ prompts }: { prompts: GetScorerResponse['prompts'] | undefined }) {
+  if (!prompts) {
+    return null;
+  }
+
+  return (
+    <div className="grid gap-[2rem] my-[2rem] items-start">
+      {Object.entries(prompts || {}).map(([key, value]) => (
+        <div className="" key={key}>
+          <div className="flex gap-[1rem] mb-[.5rem]">
+            <span className="text-icon5 font-bold">{key}</span>
+            <span className="text-icon2">{value?.description && `|`}</span>
+            <span className="text-icon4">{value?.description || ''}</span>
+          </div>
+          <div className={`rounded-md border border-border1 bg-surface1 `}>
+            <pre className="text-[0.875rem] text-[#ccc] p-[1rem] whitespace-pre-wrap font-mono">{value.prompt}</pre>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
