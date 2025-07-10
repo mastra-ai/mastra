@@ -4,7 +4,7 @@ import { useScorer, useScoresByEntityId } from '@/hooks/use-scorers';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from 'lucide-react';
 import { format, isToday } from 'date-fns';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -29,6 +29,17 @@ export default function Scorer() {
   const [selectedScore, setSelectedScore] = useState<any>(null);
   const [detailsIsOpened, setDetailsIsOpened] = useState<boolean>(false);
 
+  // temporary solution to get all scores for the scorer, replace with fetching api getScoresByScorerId when available
+  const [allScores, setAllScores] = useState<ScoreRowData[]>([]);
+  const addToAllScores = (scores: ScoreRowData[]) => {
+    if (!scores || scores.length === 0) return;
+    const existingIds = new Set(allScores.map(score => score.id));
+    const newScores = scores.filter(score => !existingIds.has(score.id));
+    if (newScores.length > 0) {
+      setAllScores([...allScores, ...newScores]);
+    }
+  };
+
   // if (scorer) {
   //   scorer.prompts = {
   //     extract: { prompt: 'prompt string', description: 'prompt description' },
@@ -44,6 +55,23 @@ export default function Scorer() {
       setSelectedScore(score);
       setDetailsIsOpened(true);
     }
+  };
+
+  const toPreviousScore = (currentScore: ScoreRowData) => {
+    const currentIndex = allScores.findIndex(score => score?.id === currentScore?.id);
+    if (currentIndex === -1 || currentIndex === allScores.length - 1) {
+      return null; // No next score
+    }
+
+    return () => setSelectedScore(allScores[currentIndex + 1]);
+  };
+
+  const toNextScore = (currentScore: ScoreRowData) => {
+    const currentIndex = allScores.findIndex(score => score?.id === currentScore?.id);
+    if (currentIndex <= 0) {
+      return null; // No previous score
+    }
+    return () => setSelectedScore(allScores[currentIndex - 1]);
   };
 
   const hasPrompts = Object.keys(scorer?.prompts || {}).length > 0;
@@ -105,6 +133,7 @@ export default function Scorer() {
                     selectedScore={selectedScore}
                     setSelectedScore={setSelectedScore}
                     onItemClick={handleOnListItemClick}
+                    addToAllScores={addToAllScores}
                   />
                 </TabsContent>
                 <TabsContent value="prompts">
@@ -113,7 +142,13 @@ export default function Scorer() {
               </Tabs>
             </div>
           </div>
-          <ScoreDetails score={selectedScore} isOpen={detailsIsOpened} onClose={() => setDetailsIsOpened(false)} />
+          <ScoreDetails
+            score={selectedScore}
+            isOpen={detailsIsOpened}
+            onClose={() => setDetailsIsOpened(false)}
+            onNext={toNextScore(selectedScore)}
+            onPrevious={toPreviousScore(selectedScore)}
+          />
         </>
       ) : null}
     </MainContentLayout>
@@ -214,12 +249,14 @@ function ScoreList({
   filteredByEntityId,
   selectedScore,
   onItemClick,
+  addToAllScores,
 }: {
   scorer: GetScorerResponse;
   filteredByEntityId: string;
   selectedScore: any;
   setSelectedScore: (value: ScoreRowData) => void;
   onItemClick?: (score: ScoreRowData) => void;
+  addToAllScores?: (scores: ScoreRowData[]) => void;
 }) {
   return (
     <ul className="grid border border-border1f bg-surface3 rounded-xl mb-[5rem]">
@@ -227,7 +264,14 @@ function ScoreList({
         if (filteredByEntityId !== 'all' && filteredByEntityId !== agentId) {
           return null;
         }
-        return <AgentScores agentId={agentId} selectedScore={selectedScore} onItemClick={onItemClick} />;
+        return (
+          <AgentScores
+            agentId={agentId}
+            selectedScore={selectedScore}
+            onItemClick={onItemClick}
+            addToAllScores={addToAllScores}
+          />
+        );
       })}
     </ul>
   );
@@ -237,12 +281,22 @@ function AgentScores({
   agentId,
   selectedScore,
   onItemClick,
+  addToAllScores,
 }: {
   agentId: string;
   selectedScore: any;
   onItemClick?: (score: any) => void;
+  addToAllScores?: (scores: ScoreRowData[]) => void;
 }) {
+  const [scoresAdded, setScoresAdded] = useState(false);
   const { scores, isLoading } = useScoresByEntityId(agentId, 'AGENT');
+
+  useEffect(() => {
+    if (!scoresAdded && scores?.scores && scores?.scores.length > 0) {
+      addToAllScores?.(scores?.scores || []);
+      setScoresAdded(true);
+    }
+  }, [scores, addToAllScores, isLoading]);
 
   return scores?.scores.map(score => <AgentScore score={score} selectedScore={selectedScore} onClick={onItemClick} />);
 }
@@ -293,10 +347,34 @@ function AgentScore({
   );
 }
 
-function ScoreDetails({ isOpen, score, onClose }: { isOpen: boolean; score: ScoreRowData; onClose?: () => void }) {
+function ScoreDetails({
+  isOpen,
+  score,
+  onClose,
+  onPrevious,
+  onNext,
+}: {
+  isOpen: boolean;
+  score: ScoreRowData;
+  onClose?: () => void;
+  onNext?: (() => void) | null;
+  onPrevious?: (() => void) | null;
+}) {
   if (!score) {
     return null;
   }
+
+  const handleOnNext = () => {
+    if (onNext) {
+      onNext();
+    }
+  };
+
+  const handleOnPrevious = () => {
+    if (onPrevious) {
+      onPrevious();
+    }
+  };
 
   return (
     <Dialog.Root open={isOpen} onOpenChange={onClose}>
@@ -312,12 +390,12 @@ function ScoreDetails({ isOpen, score, onClose }: { isOpen: boolean; score: Scor
               <span>{score.id}</span>|<span>{format(new Date(score.createdAt), 'LLL do yyyy, hh:mm:ss bb')}</span>
             </h2>
             <div className="flex gap-[1rem]">
-              <Button variant={'outline'} onClick={() => alert('Previous score action not implemented')}>
-                Previous
+              <Button variant={'outline'} onClick={handleOnNext} disabled={!onNext}>
+                Next
                 <ArrowUpIcon />
               </Button>
-              <Button variant={'outline'} onClick={() => alert('Next score action not implemented')}>
-                Next
+              <Button variant={'outline'} onClick={handleOnPrevious} disabled={!onPrevious}>
+                Previous
                 <ArrowDownIcon />
               </Button>
               <Dialog.Close asChild>
