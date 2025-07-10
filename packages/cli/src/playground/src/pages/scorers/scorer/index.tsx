@@ -264,8 +264,10 @@ function ScoreList({
         if (filteredByEntityId !== 'all' && filteredByEntityId !== agentId) {
           return null;
         }
+
         return (
           <AgentScores
+            key={agentId}
             agentId={agentId}
             selectedScore={selectedScore}
             onItemClick={onItemClick}
@@ -298,7 +300,9 @@ function AgentScores({
     }
   }, [scores, addToAllScores, isLoading]);
 
-  return scores?.scores.map(score => <AgentScore score={score} selectedScore={selectedScore} onClick={onItemClick} />);
+  return scores?.scores.map(score => (
+    <AgentScore key={score.id} score={score} selectedScore={selectedScore} onClick={onItemClick} />
+  ));
 }
 
 function AgentScore({
