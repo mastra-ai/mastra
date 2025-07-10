@@ -7,7 +7,6 @@ description: "Suspend and resume in Mastra workflows allows you to pause executi
 
 Workflows can be paused at any step, with their current state persisted as a snapshot in storage. Execution can then be resumed from this saved snapshot when ready. Persisting the snapshot ensures the workflow state is maintained across sessions, deployments, and server restarts, essential for workflows that may remain suspended while awaiting external input or resources.
 
-
 Common scenarios for suspending workflows include:
 
 - Waiting for human approval or input
@@ -16,7 +15,7 @@ Common scenarios for suspending workflows include:
 - Rate limiting or throttling expensive operations
 - Handling event-driven processes with external triggers
 
-## Workflow Status
+## Workflow status types
 
 When running a workflow, its `status` can be one of the following:
 
@@ -25,11 +24,13 @@ When running a workflow, its `status` can be one of the following:
 - `success` - The workflow has completed
 - `failed` - The workflow has failed
 
-## Suspend
+## Suspending a workflow with `suspend()`
 
 When the state is `suspended`, you can identify any and all steps that have been suspended by looking at the `suspended` array of the workflow result output.
 
-```typescript {17} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+![Suspending a workflow with suspend()](/image/workflows/workflows-suspend-resume-suspend.jpg)
+
+```typescript {18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
   id: "step-1",
   description: "Test suspend",
@@ -44,14 +45,14 @@ const step1 = createStep({
     city: z.string()
   }),
   execute: async ({ resumeData, suspend }) => {
-    if (!(resumeData ?? {}).city) {
+    const { city } = resumeData ?? {};
+
+    if (!city) {
       await suspend({});
       return { output: "" };
     }
 
-    return {
-      output: ""
-    };
+    return { output: "" };
   }
 });
 
@@ -62,11 +63,11 @@ export const testWorkflow = createWorkflow({})
 
 > See [Define Suspendable workflow](/examples/workflows/human-in-the-loop#define-suspendable-workflow) for more information.
 
-### Identifying Suspended steps
+### Identifying suspended steps
 
 To resume a suspended workflow, inspect the `suspended` array in the result to determine which step needs input:
 
-```typescript {15} filename="src/test-workflow.ts" showLineNumbers copy
+```typescript {15} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
 const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
@@ -112,11 +113,11 @@ In this case, the logic resumes the first step listed in the `suspended` array. 
 
 > See [Run Workflow Results](/workflows/overview#run-workflow-results) for more details.
 
-## Resume
+## Resuming a workflow with `resume()`
 
 A workflow can be resumed by calling `resume` and providing the required `resumeData`.
 
-```typescript {16-18} filename="src/test-workflow.ts" showLineNumbers copy
+```typescript {16-18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
 const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
@@ -141,11 +142,11 @@ if (result.status === "suspended") {
 }
 ```
 
-### Nested Workflow
+### Resuming nested workflows
 
 To resume a suspended nested workflow pass the workflow instance to the `step` parameter of the `resume` function.
 
-```typescript {3} filename="src/test-workflow.ts" showLineNumbers copy
+```typescript {33-34} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const dowhileWorkflow = createWorkflow({
   id: 'dowhile-workflow',
   inputSchema: z.object({ value: z.number() }),
@@ -186,12 +187,12 @@ if (result.status === "suspended") {
 }
 ```
 
-## RuntimeContext
+## Using `RuntimeContext` with suspend/resume
 
 When using suspend/resume with `RuntimeContext`, you can create the instance yourself, and pass it to the `start` and `resume` functions.
 `RuntimeContext` is not automatically shared on a workflow run.
 
-```typescript {1,4,9,16} filename="src/test-workflow.ts" showLineNumbers copy
+```typescript {1,4,9,16} filename="src/mastra/workflows/test-workflow.tss" showLineNumbers copy
 import { RuntimeContext } from "@mastra/core/di";
 import { mastra } from "./mastra";
 
