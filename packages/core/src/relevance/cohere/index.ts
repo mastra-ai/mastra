@@ -17,14 +17,17 @@ interface CohereRerankingResponse {
   };
 }
 
+/** @deprecated Import from `@mastra/rag` instead */
 export class CohereRelevanceScorer implements RelevanceScoreProvider {
   private model: string;
   private apiKey?: string;
   constructor(model: string, apiKey?: string) {
+    console.warn(
+      'CohereRelevanceScorer exported from @mastra/core is deprecated. Please import from "@mastra/rag" instead.',
+    );
     this.apiKey = apiKey;
     this.model = model;
   }
-
   async getRelevanceScore(query: string, text: string): Promise<number> {
     const response = await fetch(`https://api.cohere.com/v2/rerank`, {
       method: 'POST',
