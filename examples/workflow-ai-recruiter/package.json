@@ -20,7 +20,7 @@
     "zod": "^3.25.67"
   },
   "dependencies": {
-    "@ai-sdk/openai": "latest",
+    "@ai-sdk/openai": "2.0.0-beta.6",
     "@mastra/core": "latest",
     "ai": "latest",
     "mastra": "latest"

@@ -7,8 +7,8 @@ import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
-import type { CoreMessage, LanguageModel, Schema } from 'ai';
-import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
+import type { ModelMessage, Schema, StopCondition } from 'ai';
+import { generateObject, generateText, jsonSchema, stepCountIs, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
@@ -20,22 +20,27 @@ import type {
   LLMStreamOptions,
   LLMTextObjectOptions,
   LLMTextOptions,
+  StopConditionArgs,
   StreamReturn,
 } from '../';
 import type { MastraPrimitives } from '../../action';
+import type { MastraLanguageModel } from '../../agent/types';
+import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
+import { createCompatibleToolSet } from '../../tools/ai-sdk-v5-compat';
 import { delay } from '../../utils';
 
-import { MastraLLMBase } from './base';
+type MessageInput = string | string[] | ModelMessage | ModelMessage[];
 
-export class MastraLLM extends MastraLLMBase {
-  #model: LanguageModel;
+export class MastraLLM extends MastraBase {
+  #model: MastraLanguageModel;
   #mastra?: Mastra;
 
-  constructor({ model, mastra }: { model: LanguageModel; mastra?: Mastra }) {
-    super({ name: 'aisdk' });
+  constructor({ model, mastra }: { model: MastraLanguageModel; mastra?: Mastra }) {
+    super({ name: 'aisdk', component: RegisteredLogger.LLM });
 
     this.#model = model;
 
@@ -73,6 +78,16 @@ export class MastraLLM extends MastraLLMBase {
     return this.#model;
   }
 
+  // AI SDK v5 removed maxSteps and replaced with stopWhen: stepCountIs(number)
+  // This method allows us to keep using maxSteps for now.
+  private getStopWhen(args: StopConditionArgs): StopCondition<any> | StopCondition<any>[] | undefined {
+    if (args.stopWhen) return args.stopWhen;
+    if (args.maxSteps) {
+      return stepCountIs(args.maxSteps);
+    }
+    return stepCountIs(5); // our previous default maxSteps
+  }
+
   private _applySchemaCompat(schema: ZodSchema | JSONSchema7): Schema {
     const model = this.#model;
 
@@ -99,7 +114,8 @@ export class MastraLLM extends MastraLLMBase {
   async __text<Z extends ZodSchema | JSONSchema7 | undefined>({
     runId,
     messages,
-    maxSteps = 5,
+    maxSteps,
+    stopWhen,
     tools = {},
     temperature,
     toolChoice = 'auto',
@@ -110,6 +126,8 @@ export class MastraLLM extends MastraLLMBase {
     resourceId,
     memory,
     runtimeContext,
+    experimental_activeTools,
+    activeTools,
     ...rest
   }: LLMTextOptions<Z> & { memory?: MastraMemory }) {
     const model = this.#model;
@@ -122,60 +140,6 @@ export class MastraLLM extends MastraLLMBase {
       resourceId,
       tools: Object.keys(tools),
     });
-
-    const argsForExecute = {
-      model,
-      temperature,
-      tools: {
-        ...tools,
-      },
-      toolChoice,
-      maxSteps,
-      onStepFinish: async (props: any) => {
-        try {
-          await onStepFinish?.(props);
-        } catch (e: unknown) {
-          const mastraError = new MastraError(
-            {
-              id: 'LLM_TEXT_ON_STEP_FINISH_CALLBACK_EXECUTION_FAILED',
-              domain: ErrorDomain.LLM,
-              category: ErrorCategory.USER,
-              details: {
-                modelId: model.modelId,
-                modelProvider: model.provider,
-                runId: runId ?? 'unknown',
-                threadId: threadId ?? 'unknown',
-                resourceId: resourceId ?? 'unknown',
-                finishReason: props?.finishReason,
-                toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
-                toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
-                usage: props?.usage ? JSON.stringify(props.usage) : '',
-              },
-            },
-            e,
-          );
-          throw mastraError;
-        }
-
-        this.logger.debug('[LLM] - Step Change:', {
-          text: props?.text,
-          toolCalls: props?.toolCalls,
-          toolResults: props?.toolResults,
-          finishReason: props?.finishReason,
-          usage: props?.usage,
-          runId,
-        });
-
-        if (
-          props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
-          parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
-        ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
-          await delay(10 * 1000);
-        }
-      },
-      ...rest,
-    };
 
     let schema: z.ZodType<Z> | Schema<Z> | undefined;
 
@@ -195,8 +159,57 @@ export class MastraLLM extends MastraLLMBase {
 
     try {
       return await generateText({
-        messages,
-        ...argsForExecute,
+        ...rest,
+        messages: this.inputMessagesToModelMessages(messages),
+        stopWhen: this.getStopWhen({ maxSteps, stopWhen }),
+        model,
+        temperature,
+        tools: createCompatibleToolSet(tools),
+        toolChoice,
+        onStepFinish: async (props: any) => {
+          try {
+            await onStepFinish?.(props);
+          } catch (e: unknown) {
+            const mastraError = new MastraError(
+              {
+                id: 'LLM_TEXT_ON_STEP_FINISH_CALLBACK_EXECUTION_FAILED',
+                domain: ErrorDomain.LLM,
+                category: ErrorCategory.USER,
+                details: {
+                  modelId: model.modelId,
+                  modelProvider: model.provider,
+                  runId: runId ?? 'unknown',
+                  threadId: threadId ?? 'unknown',
+                  resourceId: resourceId ?? 'unknown',
+                  finishReason: props?.finishReason,
+                  toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
+                  toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
+                  usage: props?.usage ? JSON.stringify(props.usage) : '',
+                },
+              },
+              e,
+            );
+            this.logger.trackException(mastraError);
+            throw mastraError;
+          }
+
+          this.logger.debug('[LLM] - Step Change:', {
+            text: props?.text,
+            toolCalls: props?.toolCalls,
+            toolResults: props?.toolResults,
+            finishReason: props?.finishReason,
+            usage: props?.usage,
+            runId,
+          });
+
+          if (
+            props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
+            parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
+          ) {
+            this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
+            await delay(10 * 1000);
+          }
+        },
         experimental_telemetry: {
           ...this.experimental_telemetry,
           ...telemetry,
@@ -229,75 +242,21 @@ export class MastraLLM extends MastraLLMBase {
 
   async __textObject<T extends ZodSchema | JSONSchema7 | undefined>({
     messages,
-    onStepFinish,
-    maxSteps = 5,
-    tools = {},
     structuredOutput,
     runId,
     temperature,
-    toolChoice = 'auto',
     telemetry,
     threadId,
     resourceId,
     memory,
     runtimeContext,
+    onStepFinish,
+    experimental_output,
     ...rest
   }: LLMTextObjectOptions<T> & { memory?: MastraMemory }) {
     const model = this.#model;
 
     this.logger.debug(`[LLM] - Generating a text object`, { runId });
-
-    const argsForExecute = {
-      model,
-      temperature,
-      tools: {
-        ...tools,
-      },
-      maxSteps,
-      toolChoice,
-      onStepFinish: async (props: any) => {
-        try {
-          await onStepFinish?.(props);
-        } catch (e: unknown) {
-          const mastraError = new MastraError(
-            {
-              id: 'LLM_TEXT_OBJECT_ON_STEP_FINISH_CALLBACK_EXECUTION_FAILED',
-              domain: ErrorDomain.LLM,
-              category: ErrorCategory.USER,
-              details: {
-                runId: runId ?? 'unknown',
-                threadId: threadId ?? 'unknown',
-                resourceId: resourceId ?? 'unknown',
-                finishReason: props?.finishReason,
-                toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
-                toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
-                usage: props?.usage ? JSON.stringify(props.usage) : '',
-              },
-            },
-            e,
-          );
-          throw mastraError;
-        }
-
-        this.logger.debug('[LLM] - Step Change:', {
-          text: props?.text,
-          toolCalls: props?.toolCalls,
-          toolResults: props?.toolResults,
-          finishReason: props?.finishReason,
-          usage: props?.usage,
-          runId,
-        });
-
-        if (
-          props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
-          parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
-        ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
-          await delay(10 * 1000);
-        }
-      },
-      ...rest,
-    };
 
     let output: any = 'object';
     if (structuredOutput instanceof z.ZodArray) {
@@ -308,16 +267,27 @@ export class MastraLLM extends MastraLLMBase {
     try {
       const processedSchema = this._applySchemaCompat(structuredOutput!);
 
-      return await generateObject({
+      const result = await generateObject({
+        ...rest,
+        temperature,
+        model,
         messages,
-        ...argsForExecute,
         output,
-        schema: processedSchema as Schema<T>,
+        schema: processedSchema,
         experimental_telemetry: {
           ...this.experimental_telemetry,
           ...telemetry,
         },
       });
+
+      this.logger.debug('[LLM] - __textObject result:', {
+        text: JSON.stringify(result?.object),
+        finishReason: result?.finishReason,
+        usage: result?.usage,
+        runId,
+      });
+
+      return result;
     } catch (e: unknown) {
       const mastraError = new MastraError(
         {
@@ -342,7 +312,8 @@ export class MastraLLM extends MastraLLMBase {
     messages,
     onStepFinish,
     onFinish,
-    maxSteps = 5,
+    maxSteps,
+    stopWhen,
     tools = {},
     runId,
     temperature,
@@ -356,6 +327,7 @@ export class MastraLLM extends MastraLLMBase {
     ...rest
   }: LLMInnerStreamOptions<Z> & { memory?: MastraMemory }) {
     const model = this.#model;
+
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
       threadId,
@@ -364,99 +336,6 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       tools: Object.keys(tools || {}),
     });
-
-    const argsForExecute = {
-      model,
-      temperature,
-      tools: {
-        ...tools,
-      },
-      maxSteps,
-      toolChoice,
-      onStepFinish: async (props: any) => {
-        try {
-          await onStepFinish?.(props);
-        } catch (e: unknown) {
-          const mastraError = new MastraError(
-            {
-              id: 'LLM_STREAM_ON_STEP_FINISH_CALLBACK_EXECUTION_FAILED',
-              domain: ErrorDomain.LLM,
-              category: ErrorCategory.USER,
-              details: {
-                modelId: model.modelId,
-                modelProvider: model.provider,
-                runId: runId ?? 'unknown',
-                threadId: threadId ?? 'unknown',
-                resourceId: resourceId ?? 'unknown',
-                finishReason: props?.finishReason,
-                toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
-                toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
-                usage: props?.usage ? JSON.stringify(props.usage) : '',
-              },
-            },
-            e,
-          );
-          this.logger.trackException(mastraError);
-          throw mastraError;
-        }
-
-        this.logger.debug('[LLM] - Stream Step Change:', {
-          text: props?.text,
-          toolCalls: props?.toolCalls,
-          toolResults: props?.toolResults,
-          finishReason: props?.finishReason,
-          usage: props?.usage,
-          runId,
-        });
-
-        if (
-          props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
-          parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
-        ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
-          await delay(10 * 1000);
-        }
-      },
-      onFinish: async (props: any) => {
-        try {
-          await onFinish?.(props);
-        } catch (e: unknown) {
-          const mastraError = new MastraError(
-            {
-              id: 'LLM_STREAM_ON_FINISH_CALLBACK_EXECUTION_FAILED',
-              domain: ErrorDomain.LLM,
-              category: ErrorCategory.USER,
-              details: {
-                modelId: model.modelId,
-                modelProvider: model.provider,
-                runId: runId ?? 'unknown',
-                threadId: threadId ?? 'unknown',
-                resourceId: resourceId ?? 'unknown',
-                finishReason: props?.finishReason,
-                toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
-                toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
-                usage: props?.usage ? JSON.stringify(props.usage) : '',
-              },
-            },
-            e,
-          );
-          this.logger.trackException(mastraError);
-          throw mastraError;
-        }
-
-        this.logger.debug('[LLM] - Stream Finished:', {
-          text: props?.text,
-          toolCalls: props?.toolCalls,
-          toolResults: props?.toolResults,
-          finishReason: props?.finishReason,
-          usage: props?.usage,
-          runId,
-          threadId,
-          resourceId,
-        });
-      },
-      ...rest,
-    };
 
     let schema: z.ZodType<Z> | Schema<Z> | undefined;
 
@@ -476,8 +355,100 @@ export class MastraLLM extends MastraLLMBase {
 
     try {
       return streamText({
-        messages,
-        ...argsForExecute,
+        ...rest,
+        model,
+        messages: this.inputMessagesToModelMessages(messages),
+
+        // TODO: without removing these here there's a type error
+        experimental_activeTools: undefined,
+        activeTools: undefined,
+
+        temperature,
+        tools: createCompatibleToolSet(tools),
+        stopWhen: this.getStopWhen({ maxSteps, stopWhen }),
+        toolChoice,
+        onStepFinish: async (props: any) => {
+          try {
+            await onStepFinish?.(props);
+          } catch (e: unknown) {
+            const mastraError = new MastraError(
+              {
+                id: 'LLM_STREAM_ON_STEP_FINISH_CALLBACK_EXECUTION_FAILED',
+                domain: ErrorDomain.LLM,
+                category: ErrorCategory.USER,
+                details: {
+                  modelId: model.modelId,
+                  modelProvider: model.provider,
+                  runId: runId ?? 'unknown',
+                  threadId: threadId ?? 'unknown',
+                  resourceId: resourceId ?? 'unknown',
+                  finishReason: props?.finishReason,
+                  toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
+                  toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
+                  usage: props?.usage ? JSON.stringify(props.usage) : '',
+                },
+              },
+              e,
+            );
+            this.logger.trackException(mastraError);
+            throw mastraError;
+          }
+
+          this.logger.debug('[LLM] - Stream Step Change:', {
+            text: props?.text,
+            toolCalls: props?.toolCalls,
+            toolResults: props?.toolResults,
+            finishReason: props?.finishReason,
+            usage: props?.usage,
+            runId,
+          });
+
+          if (
+            props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
+            parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
+          ) {
+            this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
+            await delay(10 * 1000);
+          }
+        },
+        onFinish: async (props: any) => {
+          try {
+            await onFinish?.(props);
+          } catch (e: unknown) {
+            const mastraError = new MastraError(
+              {
+                id: 'LLM_STREAM_ON_FINISH_CALLBACK_EXECUTION_FAILED',
+                domain: ErrorDomain.LLM,
+                category: ErrorCategory.USER,
+                details: {
+                  modelId: model.modelId,
+                  modelProvider: model.provider,
+                  runId: runId ?? 'unknown',
+                  threadId: threadId ?? 'unknown',
+                  resourceId: resourceId ?? 'unknown',
+                  finishReason: props?.finishReason,
+                  toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
+                  toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
+                  usage: props?.usage ? JSON.stringify(props.usage) : '',
+                },
+              },
+              e,
+            );
+            this.logger.trackException(mastraError);
+            throw mastraError;
+          }
+
+          this.logger.debug('[LLM] - Stream Finished:', {
+            text: props?.text,
+            toolCalls: props?.toolCalls,
+            toolResults: props?.toolResults,
+            finishReason: props?.finishReason,
+            usage: props?.usage,
+            runId,
+            threadId,
+            resourceId,
+          });
+        },
         experimental_telemetry: {
           ...this.experimental_telemetry,
           ...telemetry,
@@ -511,9 +482,6 @@ export class MastraLLM extends MastraLLMBase {
   __streamObject<T extends ZodSchema | JSONSchema7 | undefined>({
     messages,
     runId,
-    tools = {},
-    maxSteps = 5,
-    toolChoice = 'auto',
     runtimeContext,
     threadId,
     resourceId,
@@ -529,106 +497,7 @@ export class MastraLLM extends MastraLLMBase {
     this.logger.debug(`[LLM] - Streaming structured output`, {
       runId,
       messages,
-      maxSteps,
-      tools: Object.keys(tools || {}),
     });
-
-    const finalTools = tools;
-
-    const argsForExecute = {
-      model,
-      temperature,
-      tools: {
-        ...finalTools,
-      },
-      maxSteps,
-      toolChoice,
-      onStepFinish: async (props: any) => {
-        try {
-          await onStepFinish?.(props);
-        } catch (e: unknown) {
-          const mastraError = new MastraError(
-            {
-              id: 'LLM_STREAM_OBJECT_ON_STEP_FINISH_CALLBACK_EXECUTION_FAILED',
-              domain: ErrorDomain.LLM,
-              category: ErrorCategory.USER,
-              details: {
-                modelId: model.modelId,
-                modelProvider: model.provider,
-                runId: runId ?? 'unknown',
-                threadId: threadId ?? 'unknown',
-                resourceId: resourceId ?? 'unknown',
-                usage: props?.usage ? JSON.stringify(props.usage) : '',
-                toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
-                toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
-                finishReason: props?.finishReason,
-              },
-            },
-            e,
-          );
-          this.logger.trackException(mastraError);
-          throw mastraError;
-        }
-
-        this.logger.debug('[LLM] - Stream Step Change:', {
-          text: props?.text,
-          toolCalls: props?.toolCalls,
-          toolResults: props?.toolResults,
-          finishReason: props?.finishReason,
-          usage: props?.usage,
-          runId,
-          threadId,
-          resourceId,
-        });
-
-        if (
-          props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
-          parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
-        ) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
-          await delay(10 * 1000);
-        }
-      },
-      onFinish: async (props: any) => {
-        try {
-          await onFinish?.(props);
-        } catch (e: unknown) {
-          const mastraError = new MastraError(
-            {
-              id: 'LLM_STREAM_OBJECT_ON_FINISH_CALLBACK_EXECUTION_FAILED',
-              domain: ErrorDomain.LLM,
-              category: ErrorCategory.USER,
-              details: {
-                modelId: model.modelId,
-                modelProvider: model.provider,
-                runId: runId ?? 'unknown',
-                threadId: threadId ?? 'unknown',
-                resourceId: resourceId ?? 'unknown',
-                toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
-                toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
-                finishReason: props?.finishReason,
-                usage: props?.usage ? JSON.stringify(props.usage) : '',
-              },
-            },
-            e,
-          );
-          this.logger.trackException(mastraError);
-          throw mastraError;
-        }
-
-        this.logger.debug('[LLM] - Stream Finished:', {
-          text: props?.text,
-          toolCalls: props?.toolCalls,
-          toolResults: props?.toolResults,
-          finishReason: props?.finishReason,
-          usage: props?.usage,
-          runId,
-          threadId,
-          resourceId,
-        });
-      },
-      ...rest,
-    };
 
     let output: any = 'object';
     if (structuredOutput instanceof z.ZodArray) {
@@ -640,14 +509,101 @@ export class MastraLLM extends MastraLLMBase {
       const processedSchema = this._applySchemaCompat(structuredOutput!);
 
       return streamObject({
+        ...rest,
         messages,
-        ...argsForExecute,
         output,
-        schema: processedSchema as Schema<T>,
+        schema: processedSchema,
         experimental_telemetry: {
           ...this.experimental_telemetry,
           ...telemetry,
         },
+        temperature,
+        // TODO: this doesn't exist anymore
+        // onStepFinish: async (props: any) => {
+        //   try {
+        //     await onStepFinish?.(props);
+        //   } catch (e: unknown) {
+        //     const mastraError = new MastraError(
+        //       {
+        //         id: 'LLM_STREAM_OBJECT_ON_STEP_FINISH_CALLBACK_EXECUTION_FAILED',
+        //         domain: ErrorDomain.LLM,
+        //         category: ErrorCategory.USER,
+        //         details: {
+        //           modelId: model.modelId,
+        //           modelProvider: model.provider,
+        //           runId: runId ?? 'unknown',
+        //           threadId: threadId ?? 'unknown',
+        //           resourceId: resourceId ?? 'unknown',
+        //           usage: props?.usage ? JSON.stringify(props.usage) : '',
+        //           toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
+        //           toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
+        //           finishReason: props?.finishReason,
+        //         },
+        //       },
+        //       e,
+        //     );
+        //     this.logger.trackException(mastraError);
+        //     throw mastraError;
+        //   }
+        //
+        //   this.logger.debug('[LLM] - Stream Step Change:', {
+        //     text: props?.text,
+        //     toolCalls: props?.toolCalls,
+        //     toolResults: props?.toolResults,
+        //     finishReason: props?.finishReason,
+        //     usage: props?.usage,
+        //     runId,
+        //     threadId,
+        //     resourceId,
+        //   });
+        //
+        //   if (
+        //     props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
+        //     parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
+        //   ) {
+        //     this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
+        //     await delay(10 * 1000);
+        //   }
+        // },
+        onFinish: async (props: any) => {
+          try {
+            await onFinish?.(props);
+          } catch (e: unknown) {
+            const mastraError = new MastraError(
+              {
+                id: 'LLM_STREAM_OBJECT_ON_FINISH_CALLBACK_EXECUTION_FAILED',
+                domain: ErrorDomain.LLM,
+                category: ErrorCategory.USER,
+                details: {
+                  modelId: model.modelId,
+                  modelProvider: model.provider,
+                  runId: runId ?? 'unknown',
+                  threadId: threadId ?? 'unknown',
+                  resourceId: resourceId ?? 'unknown',
+                  toolCalls: props?.toolCalls ? JSON.stringify(props.toolCalls) : '',
+                  toolResults: props?.toolResults ? JSON.stringify(props.toolResults) : '',
+                  finishReason: props?.finishReason,
+                  usage: props?.usage ? JSON.stringify(props.usage) : '',
+                },
+              },
+              e,
+            );
+            this.logger.trackException(mastraError);
+            throw mastraError;
+          }
+
+          this.logger.debug('[LLM] - Stream Finished:', {
+            text: props?.text,
+            toolCalls: props?.toolCalls,
+            toolResults: props?.toolResults,
+            finishReason: props?.finishReason,
+            usage: props?.usage,
+            runId,
+            threadId,
+            resourceId,
+          });
+        },
+        model,
       });
     } catch (e: unknown) {
       const mastraError = new MastraError(
@@ -670,45 +626,44 @@ export class MastraLLM extends MastraLLMBase {
   }
 
   async generate<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
-    { maxSteps = 5, output, ...rest }: LLMStreamOptions<Z> & { memory?: MastraMemory },
+    messages: MessageInput,
+    { output, ...rest }: LLMStreamOptions<Z> & { memory?: MastraMemory },
   ): Promise<GenerateReturn<Z>> {
-    const msgs = this.convertToMessages(messages);
-
     if (!output) {
       return (await this.__text({
-        messages: msgs,
-        maxSteps,
+        messages: this.inputMessagesToModelMessages(messages),
         ...rest,
       })) as unknown as GenerateReturn<Z>;
     }
 
     return (await this.__textObject({
-      messages: msgs,
+      messages: this.inputMessagesToModelMessages(messages),
       structuredOutput: output,
-      maxSteps,
       ...rest,
     })) as unknown as GenerateReturn<Z>;
   }
 
+  private inputMessagesToModelMessages(messages: MessageInput): ModelMessage[] {
+    const arrayMessages = Array.isArray(messages) ? messages : [messages];
+    return arrayMessages.map(m => {
+      if (typeof m === `string`) return { role: 'user' as const, content: m };
+      return m;
+    });
+  }
   stream<Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[],
-    { maxSteps = 5, output, ...rest }: LLMStreamOptions<Z> & { memory?: MastraMemory },
+    messages: MessageInput,
+    { output, ...rest }: LLMStreamOptions<Z> & { memory?: MastraMemory },
   ) {
-    const msgs = this.convertToMessages(messages);
-
     if (!output) {
       return this.__stream({
-        messages: msgs as CoreMessage[],
-        maxSteps,
+        messages: this.inputMessagesToModelMessages(messages),
         ...rest,
       }) as unknown as StreamReturn<Z>;
     }
 
     return this.__streamObject({
-      messages: msgs,
+      messages: this.inputMessagesToModelMessages(messages),
       structuredOutput: output,
-      maxSteps,
       ...rest,
     }) as unknown as StreamReturn<Z>;
   }

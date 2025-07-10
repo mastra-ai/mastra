@@ -62,7 +62,7 @@ class Test {
       role: 'user',
       type: 'text',
       threadId,
-      content: [{ type: 'text', text: content }],
+      content,
       createdAt: new Date(),
       resourceId,
     };

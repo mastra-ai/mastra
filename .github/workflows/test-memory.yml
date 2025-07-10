@@ -31,6 +31,7 @@ jobs:
           - working-memory
           - agent-memory
           - processors
+          - ai-sdk-compat
     services:
       postgres:
         image: pgvector/pgvector:pg16

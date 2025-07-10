@@ -57,6 +57,7 @@ export class MemoryThread extends BaseResource {
     const query = new URLSearchParams({
       agentId: this.agentId,
       ...(params?.limit ? { limit: params.limit.toString() } : {}),
+      ...(params?.format ? { format: params.format } : {}),
     });
     return this.request(`/api/memory/threads/${this.threadId}/messages?${query.toString()}`);
   }

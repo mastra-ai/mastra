@@ -19,7 +19,7 @@
     "zod": "^3.25.67"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "latest",
+    "@ai-sdk/openai": "2.0.0-beta.6",
     "@types/node": "^20.17.57",
     "mastra": "latest",
     "tsx": "^4.19.3",

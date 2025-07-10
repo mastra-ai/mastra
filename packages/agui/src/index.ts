@@ -91,7 +91,7 @@ export class AGUIAdapter extends AbstractAgent {
           finalMessages.push(assistantMessage);
 
           return processDataStream({
-            stream: response.toDataStreamResponse().body!,
+            stream: response.toUIMessageStreamResponse().body!,
             onTextPart: text => {
               assistantMessage.content += text;
               const event: TextMessageChunkEvent = {
@@ -215,7 +215,10 @@ export function convertMessagesToMastraMessages(messages: Message[]): CoreMessag
             type: 'tool-result',
             toolCallId: message.toolCallId,
             toolName: toolName,
-            result: message.content,
+            output: {
+              type: 'text',
+              value: message.content,
+            },
           },
         ],
       });
