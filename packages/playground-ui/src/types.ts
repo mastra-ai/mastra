@@ -47,6 +47,7 @@ export interface ModelSettings {
   topK?: number;
   topP?: number;
   instructions?: string;
+  providerOptions?: Record<string, unknown>;
 }
 
 export interface ChatProps {

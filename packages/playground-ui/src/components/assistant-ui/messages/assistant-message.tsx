@@ -12,7 +12,8 @@ export interface AssistantMessageProps {
 
 export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom }: AssistantMessageProps) => {
   const data = useMessage();
-  const isSolelyToolCall = data.content.length === 1 && data.content[0].type === 'tool-call';
+
+  const isToolCallAndOrReasoning = data.content.every(({ type }) => type === 'tool-call' || type === 'reasoning');
 
   return (
     <MessagePrimitive.Root className="max-w-full">
@@ -26,7 +27,11 @@ export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom }: Assistant
         />
       </div>
 
-      <div className="h-6 pt-1">{!isSolelyToolCall && <AssistantActionBar />}</div>
+      {!isToolCallAndOrReasoning && (
+        <div className="h-6 pt-1">
+          <AssistantActionBar />
+        </div>
+      )}
     </MessagePrimitive.Root>
   );
 };

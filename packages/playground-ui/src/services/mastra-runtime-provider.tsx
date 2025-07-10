@@ -95,8 +95,18 @@ export function MastraRuntimeProvider({
   const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
 
-  const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
-    modelSettings;
+  const {
+    frequencyPenalty,
+    presencePenalty,
+    maxRetries,
+    maxSteps,
+    maxTokens,
+    temperature,
+    topK,
+    topP,
+    instructions,
+    providerOptions,
+  } = modelSettings;
 
   const runtimeContextInstance = new RuntimeContext();
   Object.entries(runtimeContext ?? {}).forEach(([key, value]) => {
@@ -191,6 +201,7 @@ export function MastraRuntimeProvider({
           instructions,
           runtimeContext: runtimeContextInstance,
           ...(memory ? { threadId, resourceId: agentId } : {}),
+          providerOptions: providerOptions as any,
         });
         if (generateResponse.response) {
           const latestMessage = generateResponse.response.messages.reduce(
@@ -305,11 +316,7 @@ export function MastraRuntimeProvider({
           instructions,
           runtimeContext: runtimeContextInstance,
           ...(memory ? { threadId, resourceId: agentId } : {}),
-          providerOptions: {
-            anthropic: {
-              thinking: { type: 'enabled', budgetTokens: 12000 },
-            },
-          },
+          providerOptions: providerOptions as any,
         });
 
         if (!response.body) {

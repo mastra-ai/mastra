@@ -6,7 +6,7 @@ import { BrainIcon, ChevronUpIcon } from 'lucide-react';
 import { useState } from 'react';
 
 export const Reasoning = ({ text }: ReasoningContentPart) => {
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
     <div className="mb-2 space-y-2">
