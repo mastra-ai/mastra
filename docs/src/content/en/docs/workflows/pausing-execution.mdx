@@ -34,6 +34,27 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
+### Pausing with `.sleep(callback)`
+
+The `sleep()` method also accepts a callback that returns the number of milliseconds to pause. The callback receives `inputData`, allowing the delay to be computed dynamically.
+
+```typescript {9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .sleep(async ({ inputData }) => {
+    const { delayInMs }  = inputData
+    return delayInMs;
+  })
+  .then(step2)
+  .commit();
+```
+
 ## Pausing with `.sleepUntil()`
 
 The `sleepUntil()` method pauses execution between steps until a specified date.
@@ -51,6 +72,28 @@ export const testWorkflow = createWorkflow({...})
   .then(step2)
   .commit();
 ```
+
+### Pausing with `.sleepUntil(callback)`
+
+The `sleepUntil()` method also accepts a callback that returns a `Date` object. The callback receives `inputData`, allowing the target time to be computed dynamically.
+
+```typescript {9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .sleepUntil(async ({ inputData }) => {
+    const { delayInMs }  = inputData
+    return new Date(Date.now() + delayInMs);
+  })
+  .then(step2)
+  .commit();
+```
+
 
 > `Date.now()` is evaluated when the workflow starts, not at the moment the `sleepUntil()` method is called.
 
