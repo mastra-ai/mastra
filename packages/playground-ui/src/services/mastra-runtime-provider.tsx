@@ -139,10 +139,10 @@ export function MastraRuntimeProvider({
             return {
               ...message,
               content: [
+                ...(reasoning ? [{ type: 'reasoning', text: reasoning }] : []),
                 ...(typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : []),
                 ...toolInvocationsAsContentParts,
                 ...attachmentsAsContentParts,
-                ...(reasoning ? [{ type: 'reasoning', text: reasoning }] : []),
               ],
             };
           })
@@ -305,6 +305,11 @@ export function MastraRuntimeProvider({
           instructions,
           runtimeContext: runtimeContextInstance,
           ...(memory ? { threadId, resourceId: agentId } : {}),
+          providerOptions: {
+            anthropic: {
+              thinking: { type: 'enabled', budgetTokens: 12000 },
+            },
+          },
         });
 
         if (!response.body) {
@@ -312,7 +317,6 @@ export function MastraRuntimeProvider({
         }
 
         let content = '';
-        let reasoning = '';
         let assistantMessageAdded = false;
         let assistantToolCallAddedForUpdater = false;
         let assistantToolCallAddedForContent = false;
@@ -321,10 +325,7 @@ export function MastraRuntimeProvider({
           setMessages(currentConversation => {
             const message: ThreadMessageLike = {
               role: 'assistant',
-              content: [
-                { type: 'text', text: content },
-                { type: 'reasoning', text: reasoning },
-              ],
+              content: [{ type: 'text', text: content }],
             };
 
             if (!assistantMessageAdded) {
@@ -401,7 +402,6 @@ export function MastraRuntimeProvider({
                 role: 'assistant',
                 content: [
                   { type: 'text', text: content },
-                  { type: 'reasoning', text: reasoning },
                   {
                     type: 'tool-call',
                     toolCallId: value.toolCallId,
@@ -452,15 +452,45 @@ export function MastraRuntimeProvider({
             handleFinishReason(finishReason);
           },
           onReasoningPart(value) {
-            if (assistantToolCallAddedForContent) {
-              // start new content value to add as next message item in messages array
-              assistantToolCallAddedForContent = false;
-              reasoning = value;
-            } else {
-              reasoning += value;
-            }
+            setMessages(currentConversation => {
+              // Get the last message (should be the assistant's message)
+              const lastMessage = currentConversation[currentConversation.length - 1];
 
-            updater();
+              // Only process if the last message is from the assistant
+              if (lastMessage && lastMessage.role === 'assistant' && Array.isArray(lastMessage.content)) {
+                // Find and update the reasoning content type
+                const updatedContent = lastMessage.content.map(part => {
+                  if (typeof part === 'object' && part.type === 'reasoning') {
+                    return {
+                      ...part,
+                      text: part.text + value,
+                    };
+                  }
+                  return part;
+                });
+                // Create a new message with the updated reasoning content
+                const updatedMessage: ThreadMessageLike = {
+                  ...lastMessage,
+                  content: updatedContent,
+                };
+
+                // Replace the last message with the updated one
+                return [...currentConversation.slice(0, -1), updatedMessage];
+              }
+
+              // If there's no assistant message yet, create one
+              const newMessage: ThreadMessageLike = {
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'reasoning',
+                    text: value,
+                  },
+                  { type: 'text', text: content },
+                ],
+              };
+              return [...currentConversation, newMessage];
+            });
           },
         });
       }

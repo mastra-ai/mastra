@@ -1,31 +1,25 @@
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
+import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
+import { cn } from '@/lib/utils';
 import { ReasoningContentPart } from '@assistant-ui/react';
-import clsx from 'clsx';
-import { BrainIcon, ChevronDown } from 'lucide-react';
+import { BrainIcon, ChevronUpIcon } from 'lucide-react';
 import { useState } from 'react';
 
 export const Reasoning = ({ text }: ReasoningContentPart) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
   return (
-    <div className="space-y-2 border-t border-border1 pt-2">
-      <Button onClick={() => setIsExpanded(!isExpanded)}>
+    <div className="mb-2 space-y-2">
+      <button onClick={() => setIsCollapsed(s => !s)} className="flex items-center gap-2">
         <Icon>
-          <BrainIcon />
+          <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
         </Icon>
-        Show Reasoning
-        <Icon className="ml-2">
-          <ChevronDown className={clsx('transition-transform -rotate-90', isExpanded && 'rotate-0')} />
-        </Icon>
-      </Button>
+        <Badge icon={<BrainIcon />}>Show reasoning</Badge>
+      </button>
 
-      {isExpanded ? (
-        <div className="rounded-lg bg-surface4 p-2">
-          <Txt variant="ui-sm" className="text-icon6">
-            {text}
-          </Txt>
+      {!isCollapsed ? (
+        <div className="rounded-lg bg-surface4 p-2 border-sm border-border-1">
+          <pre className="whitespace-pre-wrap text-ui-sm leading-ui-sm text-icon6">{text}</pre>
         </div>
       ) : null}
     </div>
