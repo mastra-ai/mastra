@@ -381,7 +381,10 @@ export const useStreamWorkflow = () => {
               const { output: valueOutput, ...rest } = value.payload;
 
               const output =
-                valueOutput && Object.keys(valueOutput).length > 0
+                valueOutput &&
+                typeof valueOutput === 'object' &&
+                !Array.isArray(valueOutput) &&
+                Object.keys(valueOutput).length > 0
                   ? Object.entries(valueOutput).reduce(
                       (_acc, [_key, _value]) => {
                         const val = _value as { type: string; data: unknown };
