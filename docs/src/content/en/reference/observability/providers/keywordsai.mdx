@@ -3,24 +3,29 @@ title: "Reference: Keywords AI Integration | Mastra Observability Docs"
 description: Documentation for integrating Keywords AI (an observability platform for LLM applications) with Mastra.
 ---
 
-## Keywords AI
+# Keywords AI
 
-[Keywords AI](https://docs.keywordsai.co/get-started/overview) is a full-stack LLM engineering platform that helps developers and PMs build reliable AI products faster. 
+[Keywords AI](https://docs.keywordsai.co/get-started/overview) is a full-stack LLM engineering platform that helps developers and PMs build reliable AI products faster.
 
-To help you get started quickly, we’ve provided a pre-built example. You can find the code [on GitHub](https://github.com/Keywords-AI/keywordsai-example-projects/tree/main/mastra-ai-weather-agent).
+To help you get started quickly, we've provided a pre-built example. You can find the code [on GitHub](https://github.com/Keywords-AI/keywordsai-example-projects/tree/main/mastra-ai-weather-agent).
 
+## Configuration
 
-## Setup
+To use Keywords AI with Mastra, you'll need to configure the following environment variables:
 
-Here's the tutorial about the Mastra Weather Agent example.
+```env
+OPENAI_API_KEY=your-openai-api-key
+KEYWORDSAI_API_KEY=your-keywordsai-api-key
+KEYWORDSAI_BASE_URL=https://api.keywordsai.co
+```
 
-### 1. Install Dependencies
+1. **Install Dependencies**
 
 ```bash copy
 pnpm install
 ```
 
-### 2. Environment Variables
+2. **Environment Variables**
 
 Copy the example environment file and add your API keys:
 
@@ -28,7 +33,7 @@ Copy the example environment file and add your API keys:
 cp .env.local.example .env.local
 ```
 
-Update .env.local with your credentials: 
+Update .env.local with your credentials:
 
 ```bash .env.local copy
 OPENAI_API_KEY=your-openai-api-key
@@ -36,36 +41,39 @@ KEYWORDSAI_API_KEY=your-keywordsai-api-key
 KEYWORDSAI_BASE_URL=https://api.keywordsai.co
 ```
 
-### 3. Setup Mastra client with Keywords AI tracing
+## Implementation
 
-Configure with KeywordsAI telemetry in `src/mastra/index.ts`:
+Here's how to configure Mastra to use Keywords AI:
 
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
-
 import { Mastra } from "@mastra/core/mastra";
 import { KeywordsAIExporter } from "@keywordsai/exporter-vercel";
 
-telemetry: {
-  serviceName: "keywordai-mastra-example",
-  enabled: true,
-  export: {
-    type: "custom",
-    exporter: new KeywordsAIExporter({
-      apiKey: process.env.KEYWORDSAI_API_KEY,
-      baseUrl: process.env.KEYWORDSAI_BASE_URL,
-      debug: true,
-    })
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    serviceName: "keywordai-mastra-example",
+    enabled: true,
+    export: {
+      type: "custom",
+      exporter: new KeywordsAIExporter({
+        apiKey: process.env.KEYWORDSAI_API_KEY,
+        baseUrl: process.env.KEYWORDSAI_BASE_URL,
+        debug: true,
+      })
+    }
   }
-}
+});
 ```
 
-### 3. Run the Project
+3. **Run the Project**
 
 ```bash copy
 mastra dev
 ```
+
 This opens the Mastra playground where you can interact with the weather agent.
 
-## Observability
+## Dashboard
 
 Once configured, you can view your traces and analytics in the [Keywords AI platform](https://platform.keywordsai.co/platform/traces).

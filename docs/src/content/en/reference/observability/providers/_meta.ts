@@ -9,6 +9,7 @@ const meta = {
   "new-relic": "New Relic",
   traceloop: "Traceloop",
   laminar: "Laminar",
+  keywordsai: "Keywords AI",
 };
 
 export default meta;
