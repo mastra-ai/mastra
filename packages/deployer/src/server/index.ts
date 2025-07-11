@@ -7,6 +7,7 @@ import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core';
 import { Telemetry } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { Tool } from '@mastra/core/tools';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -55,8 +56,10 @@ import {
   getMessagesHandler,
   getThreadByIdHandler,
   getThreadsHandler,
+  getWorkingMemoryHandler,
   saveMessagesHandler,
   updateThreadHandler,
+  updateWorkingMemoryHandler,
 } from './handlers/memory';
 import {
   generateHandler as generateNetworkHandler,
@@ -88,6 +91,7 @@ import {
   getWorkflowsHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
+  sendWorkflowRunEventHandler,
   startAsyncWorkflowHandler,
   startWorkflowRunHandler,
   streamWorkflowHandler,
@@ -114,20 +118,14 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
   let tools: Record<string, any> = {};
   try {
-    const toolsPath = './tools.mjs';
-    const mastraToolsPaths = (await import(toolsPath)).tools;
-    const toolImports = mastraToolsPaths
-      ? await Promise.all(
-          // @ts-ignore
-          mastraToolsPaths.map(async toolPath => {
-            return import(toolPath);
-          }),
-        )
-      : [];
+    // @ts-expect-error Tools is generated dependency
+    const toolImports = (await import('#tools')).tools as Record<string, Function>[];
 
     tools = toolImports.reduce((acc, toolModule) => {
       Object.entries(toolModule).forEach(([key, tool]) => {
-        acc[key] = tool;
+        if (tool instanceof Tool) {
+          acc[key] = tool;
+        }
       });
       return acc;
     }, {});
@@ -164,7 +162,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
     }
   });
 
-  app.onError(errorHandler);
+  app.onError((err, c) => errorHandler(err, c, options.isDev));
 
   // Add Mastra to context
   app.use('*', async function setContext(c, next) {
@@ -2386,6 +2384,90 @@ ${err.stack.split('\n').slice(1).join('\n')}
     getMessagesHandler,
   );
 
+  app.get(
+    '/api/memory/threads/:threadId/working-memory',
+    describeRoute({
+      description: 'Get working memory for a thread',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'resourceId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Working memory details',
+        },
+        404: {
+          description: 'Thread not found',
+        },
+      },
+    }),
+    getWorkingMemoryHandler,
+  );
+
+  app.post(
+    '/api/memory/threads/:threadId/working-memory',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Update working memory for a thread',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                workingMemory: { type: 'string' },
+                resourceId: { type: 'string' },
+              },
+              required: ['workingMemory'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Working memory updated successfully',
+        },
+        404: {
+          description: 'Thread not found',
+        },
+      },
+    }),
+    updateWorkingMemoryHandler,
+  );
+
   app.post(
     '/api/memory/threads',
     bodyLimit(bodyLimitOptions),
@@ -3297,6 +3379,42 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     cancelWorkflowRunHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/runs/:runId/send-event',
+    describeRoute({
+      description: 'Send an event to a workflow run',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { type: 'object', properties: { event: { type: 'string' }, data: { type: 'object' } } },
+          },
+        },
+      },
+      tags: ['workflows'],
+      responses: {
+        200: {
+          description: 'workflow run event sent',
+        },
+      },
+    }),
+    sendWorkflowRunEventHandler,
   );
   // Log routes
   app.get(

@@ -89,6 +89,14 @@ response.processDataStream({
   },
 });
 
+// Process text stream with the processTextStream util 
+// (used with structured output)
+ response.processTextStream({
+      onTextPart: text => {
+        process.stdout.write(text);
+      },
+});
+
 // You can also read from response body directly
 const reader = response.body.getReader();
 while (true) {

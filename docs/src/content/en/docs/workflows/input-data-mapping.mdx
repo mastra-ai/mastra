@@ -12,78 +12,75 @@ Input data mapping allows explicit mapping of values for the inputs of the next 
 - A constant value
 - The initial input of the workflow
 
-## Map
+## Mapping with `.map()`
 
 In this example the `output` from `step1` is transformed to match the `inputSchema` required for the `step2`. The value from `step1` is available using the `inputData` parameter of the `.map` function.
 
-```typescript {18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+![Mapping with .map()](/image/workflows/workflows-data-mapping-map.jpg)
+
+```typescript {9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({...});
 const step2 = createStep({...});
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.object({
-    input: z.number()
-  }),
-  outputSchema: z.object({
-    output: z.string()
-  })
-})
+export const testWorkflow = createWorkflow({...})
   .then(step1)
-  .map(({ inputData }) => {
+  .map(async ({ inputData }) => {
     const { value } = inputData;
     return {
-      output: `${value}`
+      output: `new ${value}`
     };
   })
   .then(step2)
   .commit();
 ```
 
-### inputData
+## Using `inputData`
 
 Use `inputData` to access the full output of the previous step:
 
-```typescript {2} showLineNumbers
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
   .map(({ inputData }) => {
-    const { value} = inputData;
-    ...
+    console.log(inputData);
   })
 ```
 
-### getStepResult
+## Using `getStepResult()`
 
 Use `getStepResult` to access the full output of a specific step by referencing the step's instance:
 
-```typescript {3} showLineNumbers
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
   .then(step1)
-  .map(({ getStepResult }) => {
+  .map(async ({ getStepResult }) => {
     console.log(getStepResult(step1));
-    ...
   })
 ```
 
-### getInitData
+## Using `getInitData()`
 
 Use `getInitData` to access the initial input data provided to the workflow:
 
-```typescript {3} showLineNumbers
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
   .then(step1)
-  .map(({ getInitData }) => {
+  .map(async ({ getInitData }) => {
       console.log(getInitData());
-    ...
   })
 ```
 
-## Renaming Outputs
+## Using `mapVariable()`
 
-### Step Outputs
+To use `mapVariable` import the necessary function from the workflows module:
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { mapVariable } from "@mastra/core/workflows";
+```
+
+### Renaming step with `mapVariable()`
 
 You can rename step outputs using the object syntax in `.map()`. In the example below, the `value` output from `step1` is renamed to `details`:
 
-```typescript {3} showLineNumbers
-  .then(step)
+```typescript {3-6} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
   .map({
     details: mapVariable({
       step: step,
@@ -92,24 +89,15 @@ You can rename step outputs using the object syntax in `.map()`. In the example 
   })
 ```
 
-### Workflow Outputs
+### Renaming workflows with `mapVariable()`
 
 You can rename workflow outputs by using **referential composition**. This involves passing the workflow instance as the `initData`.
 
-```typescript {12, 16} showLineNumbers
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.object({
-    input: z.string()
-  }),
-  outputSchema: z.object({
-    output: z.string()
-  })
-});
+```typescript {6-9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+export const testWorkflow = createWorkflow({...});
 
 testWorkflow
-  .then(cityCoordinatesStep)
+  .then(step1)
   .map({
     details: mapVariable({
       initData: testWorkflow,

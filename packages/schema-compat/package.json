@@ -1,6 +1,6 @@
 {
   "name": "@mastra/schema-compat",
-  "version": "0.10.3",
+  "version": "0.10.4",
   "description": "Tool schema compatibility layer for Mastra.ai",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
     "zod"
   ],
   "author": "",
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "json-schema": "^0.4.0",
     "zod-from-json-schema": "^0.0.5",
@@ -50,7 +50,7 @@
     "eslint": "^9.29.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.3",
+    "vitest": "^3.2.4",
     "zod": "^3.25.67"
   }
 }

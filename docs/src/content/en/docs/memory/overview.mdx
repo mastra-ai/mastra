@@ -96,7 +96,7 @@ const memory = new Memory({
 });
 ```
 
-By default, title generation uses the same model as your agent. For cost optimization, you can specify a cheaper model specifically for title generation:
+By default, title generation uses the same model and default instructions as your agent. For customization or cost optimization, you can specify a different model or provide custom instructions specifically for title generation:
 
 ```typescript {5-7}
 const memory = new Memory({
@@ -104,6 +104,7 @@ const memory = new Memory({
     threads: {
       generateTitle: {
         model: openai("gpt-4.1-nano"), // Use cheaper model for titles
+        instructions: "Generate a concise title for this conversation based on the first user message.",
       },
     },
   },
@@ -154,6 +155,14 @@ const agent = new Agent({
 - [LibSQL](/examples/memory/memory-with-libsql)
 - [Postgres](/examples/memory/memory-with-pg)
 - [Upstash](/examples/memory/memory-with-upstash)
+
+## Viewing Retrieved Messages
+
+If tracing is enabled in your Mastra deployment and memory is configured either with `lastMessages` and/or `semanticRecall`, the agent’s trace output will show all messages retrieved for context—including both recent conversation history and messages recalled via semantic recall.
+
+This is helpful for debugging, understanding agent decisions, and verifying that the agent is retrieving the right information for each request.
+
+For more details on enabling and configuring tracing, see [Tracing](../observability/tracing).
 
 ## Next Steps
 

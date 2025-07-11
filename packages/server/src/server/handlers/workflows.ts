@@ -62,7 +62,7 @@ export async function getWorkflowsHandler({ mastra }: WorkflowContext) {
     }, {});
     return _workflows;
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error getting workflows' });
+    return handleError(error, 'Error getting workflows');
   }
 }
 
@@ -158,7 +158,7 @@ export async function getWorkflowByIdHandler({ mastra, workflowId }: WorkflowCon
       outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
     };
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error getting workflow' });
+    return handleError(error, 'Error getting workflow');
   }
 }
 
@@ -190,7 +190,7 @@ export async function getWorkflowRunByIdHandler({
 
     return run;
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error getting workflow run' });
+    return handleError(error, 'Error getting workflow run');
   }
 }
 
@@ -222,9 +222,7 @@ export async function getWorkflowRunExecutionResultHandler({
 
     return executionResult;
   } catch (error) {
-    throw new HTTPException(500, {
-      message: (error as Error)?.message || 'Error getting workflow run execution result',
-    });
+    return handleError(error, 'Error getting workflow run execution result');
   }
 }
 
@@ -248,7 +246,7 @@ export async function createWorkflowRunHandler({
 
     return { runId: run.runId };
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error creating workflow run' });
+    return handleError(error, 'Error creating workflow run');
   }
 }
 
@@ -280,7 +278,7 @@ export async function startAsyncWorkflowHandler({
     });
     return result;
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error executing workflow' });
+    return handleError(error, 'Error starting async workflow');
   }
 }
 
@@ -589,5 +587,46 @@ export async function cancelWorkflowRunHandler({
     return { message: 'Workflow run cancelled' };
   } catch (error) {
     return handleError(error, 'Error canceling workflow run');
+  }
+}
+
+export async function sendWorkflowRunEventHandler({
+  mastra,
+  workflowId,
+  runId,
+  event,
+  data,
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
+  event: string;
+  data: unknown;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to send workflow run event' });
+    }
+
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const run = await workflow.getWorkflowRunById(runId);
+
+    if (!run) {
+      throw new HTTPException(404, { message: 'Workflow run not found' });
+    }
+
+    const _run = await workflow.createRunAsync({ runId });
+
+    await _run.sendEvent(event, data);
+
+    return { message: 'Workflow run event sent' };
+  } catch (error) {
+    return handleError(error, 'Error sending workflow run event');
   }
 }

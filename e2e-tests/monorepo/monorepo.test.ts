@@ -5,7 +5,7 @@ import { setupMonorepo } from './prepare';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
-import { execa } from 'execa';
+import { execa, execaNode } from 'execa';
 
 const timeout = 5 * 60 * 1000;
 
@@ -73,6 +73,13 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(res.status).toBe(200);
       expect(body).toEqual({ message: 'Hello, POST!' });
     });
+
+    it('should return tools from the api', async () => {
+      const res = await fetch(`http://localhost:${port}/api/tools`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(Object.keys(body)).toEqual(['calculatorTool', 'lodashTool']);
+    });
   }
 
   describe('dev', async () => {
@@ -122,7 +129,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
     beforeAll(async () => {
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
-      proc = execa('node', ['index.mjs'], {
+      proc = execaNode('index.mjs', {
         cwd: inputFile,
         cancelSignal,
         gracefulCancel: true,

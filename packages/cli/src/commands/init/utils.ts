@@ -67,14 +67,16 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
   const { providerImport, modelItem } = getProviderImportAndModelItem(llmProvider);
 
   const instructions = `
-      You are a helpful weather assistant that provides accurate weather information.
+      You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
 
       Your primary function is to help users get weather details for specific locations. When responding:
       - Always ask for a location if none is provided
-      - If the location name isn’t in English, please translate it
+      - If the location name isn't in English, please translate it
       - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
       - Include relevant details like humidity, wind conditions, and precipitation
       - Keep responses concise but informative
+      - If the user asks for activities and provides the weather forecast, suggest activities based on the weather forecast.
+      - If the user asks for activities, respond in the format they request.
 
       ${addExampleTool ? 'Use the weatherTool to fetch current weather data.' : ''}
 `;
@@ -106,63 +108,9 @@ export const weatherAgent = new Agent({
   await fs.writeFile(destPath, formattedContent);
 }
 
-export async function writeWorkflowSample(destPath: string, llmProvider: LLMProvider) {
-  const { providerImport, modelItem } = getProviderImportAndModelItem(llmProvider);
-
-  const content = `${providerImport}
-import { Agent } from '@mastra/core/agent';
-import { createStep, createWorkflow } from '@mastra/core/workflows';
+export async function writeWorkflowSample(destPath: string) {
+  const content = `import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
-
-const llm = ${modelItem};
-
-const agent = new Agent({
-  name: 'Weather Agent',
-  model: llm,
-  instructions: \`
-        You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
-
-        For each day in the forecast, structure your response exactly as follows:
-
-        📅 [Day, Month Date, Year]
-        ═══════════════════════════
-
-        🌡️ WEATHER SUMMARY
-        • Conditions: [brief description]
-        • Temperature: [X°C/Y°F to A°C/B°F]
-        • Precipitation: [X% chance]
-
-        🌅 MORNING ACTIVITIES
-        Outdoor:
-        • [Activity Name] - [Brief description including specific location/route]
-          Best timing: [specific time range]
-          Note: [relevant weather consideration]
-
-        🌞 AFTERNOON ACTIVITIES
-        Outdoor:
-        • [Activity Name] - [Brief description including specific location/route]
-          Best timing: [specific time range]
-          Note: [relevant weather consideration]
-
-        🏠 INDOOR ALTERNATIVES
-        • [Activity Name] - [Brief description including specific venue]
-          Ideal for: [weather condition that would trigger this alternative]
-
-        ⚠️ SPECIAL CONSIDERATIONS
-        • [Any relevant weather warnings, UV index, wind conditions, etc.]
-
-        Guidelines:
-        - Suggest 2-3 time-specific outdoor activities per day
-        - Include 1-2 indoor backup options
-        - For precipitation >50%, lead with indoor activities
-        - All activities must be specific to the location
-        - Include specific venues, trails, or locations
-        - Consider activity intensity based on temperature
-        - Keep descriptions concise but informative
-
-        Maintain this exact formatting for consistency, using the emoji and section headers as shown.
-      \`,
-});
 
 const forecastSchema = z.object({
   date: z.string(),
@@ -257,16 +205,59 @@ const planActivities = createStep({
   outputSchema: z.object({
     activities: z.string(),
   }),
-  execute: async ({ inputData }) => {
+  execute: async ({ inputData, mastra }) => {
     const forecast = inputData
 
     if (!forecast) {
       throw new Error('Forecast data not found')
     }
 
+    const agent = mastra?.getAgent('weatherAgent');
+    if (!agent) {
+      throw new Error('Weather agent not found');
+    }
+
     const prompt = \`Based on the following weather forecast for \${forecast.location}, suggest appropriate activities:
       \${JSON.stringify(forecast, null, 2)}
-      \`;
+      For each day in the forecast, structure your response exactly as follows:
+
+      📅 [Day, Month Date, Year]
+      ═══════════════════════════
+
+      🌡️ WEATHER SUMMARY
+      • Conditions: [brief description]
+      • Temperature: [X°C/Y°F to A°C/B°F]
+      • Precipitation: [X% chance]
+
+      🌅 MORNING ACTIVITIES
+      Outdoor:
+      • [Activity Name] - [Brief description including specific location/route]
+        Best timing: [specific time range]
+        Note: [relevant weather consideration]
+
+      🌞 AFTERNOON ACTIVITIES
+      Outdoor:
+      • [Activity Name] - [Brief description including specific location/route]
+        Best timing: [specific time range]
+        Note: [relevant weather consideration]
+
+      🏠 INDOOR ALTERNATIVES
+      • [Activity Name] - [Brief description including specific venue]
+        Ideal for: [weather condition that would trigger this alternative]
+
+      ⚠️ SPECIAL CONSIDERATIONS
+      • [Any relevant weather warnings, UV index, wind conditions, etc.]
+
+      Guidelines:
+      - Suggest 2-3 time-specific outdoor activities per day
+      - Include 1-2 indoor backup options
+      - For precipitation >50%, lead with indoor activities
+      - All activities must be specific to the location
+      - Include specific venues, trails, or locations
+      - Consider activity intensity based on temperature
+      - Keep descriptions concise but informative
+
+      Maintain this exact formatting for consistency, using the emoji and section headers as shown.\`;
 
     const response = await agent.stream([
       {
@@ -330,7 +321,7 @@ export async function writeCodeSampleForComponents(
     case 'tools':
       return writeToolSample(destPath);
     case 'workflows':
-      return writeWorkflowSample(destPath, llmprovider);
+      return writeWorkflowSample(destPath);
     default:
       return '';
   }

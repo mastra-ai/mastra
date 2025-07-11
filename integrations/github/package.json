@@ -58,7 +58,7 @@
     "@rollup/plugin-image": "^3.0.3",
     "@size-limit/preset-small-lib": "^11.2.0",
     "@types/jest": "^29.5.14",
-    "@types/lodash": "^4.17.17",
+    "@types/lodash": "^4.17.20",
     "@types/node": "^20.19.0",
     "cross-env": "^7.0.3",
     "dts-cli": "^2.0.5",
@@ -72,7 +72,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.4",
     "ts-to-zod": "^3.15.0",

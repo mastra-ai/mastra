@@ -441,7 +441,8 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       });
     } else if (audioData instanceof Int16Array) {
       try {
-        this.sendEvent('input_audio_buffer.append', { audio: audioData, event_id: eventId });
+        const base64Audio = this.int16ArrayToBase64(audioData);
+        this.sendEvent('input_audio_buffer.append', { audio: base64Audio, event_id: eventId });
       } catch (err) {
         this.emit('error', err);
       }
@@ -616,6 +617,9 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       await this.handleFunctionCalls(ev);
       this.emit('response.done', ev);
       speakerStreams.delete(ev.response.id);
+    });
+    this.client.on('error', async ev => {
+      this.emit('error', ev);
     });
   }
 
