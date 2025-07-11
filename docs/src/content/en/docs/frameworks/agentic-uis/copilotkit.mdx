@@ -3,7 +3,7 @@ title: "Using with CopilotKit"
 description: "Learn how Mastra leverages the CopilotKit's AGUI library and how you can leverage it to build user experiences"
 ---
 
-import { Tabs } from "nextra/components";
+import { Tabs, FileTree } from "nextra/components";
 import Image from "next/image";
 
 # Using with CopilotKit in React
@@ -11,188 +11,38 @@ import Image from "next/image";
 CopilotKit provides React components to quickly integrate customizable AI copilots into your application.
 Combined with Mastra, you can build sophisticated AI apps featuring bidirectional state synchronization and interactive UIs.
 
-## Create a Mastra Project
-{/*
-LLM CONTEXT:
-This Tabs component shows commands for creating a new Mastra project using different package managers.
-Each tab displays the command for that specific package manager to create a Mastra project.
-This is the first step in setting up Mastra with CopilotKit for building AI copilot applications.
-All commands create the same Mastra project but use different package manager syntax.
-*/}
+## React Frontend Setup
 
-<Tabs items={["npx", "npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>
-    ```bash copy
-    npx create-mastra@latest
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    npm create mastra
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    yarn create mastra
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    pnpm create mastra
-    ```
-  </Tabs.Tab>
-</Tabs>
-
-
-Select the agent example when scaffolding your project. This will give you a weather agent.
-
-For detailed setup instructions, see the [installation guide](/docs/getting-started/installation).
-
-## Basic Setup
-
-Integrating Mastra with CopilotKit involves two main steps: setting up the backend runtime and configuring your frontend components.
-{/*
-LLM CONTEXT: This Tabs component shows installation commands for the CopilotKit runtime package.
-Each tab displays the installation command for that specific package manager.
-This installs the core CopilotKit runtime needed for backend integration with Mastra.
-All commands install the same @copilotkit/runtime package but use different package manager syntax.
-*/}
+Set up a CopilotKit component in your React frontend
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
-    ```bash copy
-    npm install @copilotkit/runtime
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    yarn add @copilotkit/runtime
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    pnpm add @copilotkit/runtime
-    ```
-  </Tabs.Tab>
-</Tabs>
-
-## Set up the runtime
-
-You can leverage Mastra's custom API routes to add CopilotKit's runtime to your Mastra server.
-
-The current version of the integration leverages `MastraClient` to format Mastra agents into the AGUI format of CopilotKit.
-
-{/*
-LLM CONTEXT: This Tabs component shows installation commands for the Mastra AGUI package.
-Each tab displays the installation command for that specific package manager.
-This installs the alpha version of @ag-ui/mastra which provides CopilotKit integration capabilities.
-All commands install the same @ag-ui/mastra package but use different package manager syntax.
-*/}
-
-<Tabs items={["npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>
-    ```bash copy
-    npm install @ag-ui/mastra
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    yarn add @ag-ui/mastra
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    pnpm add @ag-ui/mastra
-    ```
-  </Tabs.Tab>
-</Tabs>
-
-Next, let's update the Mastra instance with a custom API route for CopilotKit.
-
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { PinoLogger } from "@mastra/loggers";
-import { LibSQLStore } from "@mastra/libsql";
-import { CopilotRuntime, copilotRuntimeNodeHttpEndpoint, ExperimentalEmptyAdapter } from "@copilotkit/runtime";
-import { registerCopilotKit } from "@ag-ui/mastra";
-import { weatherAgent } from "./agents/weather-agent";
-
-const serviceAdapter = new ExperimentalEmptyAdapter();
-
-export const mastra = new Mastra({
-  agents: { weatherAgent },
-  storage: new LibSQLStore({
-    // stores telemetry, evals, ... into memory storage,
-    // if you need to persist, change to file:../mastra.db
-    url: ":memory:"
-  }),
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info"
-  }),
-  server: {
-    // We will be calling this from a Vite App. Allow CORS
-    cors: {
-      origin: "*",
-      allowMethods: ["*"],
-      allowHeaders: ["*"]
-    },
-    apiRoutes: [
-      registerCopilotKit({
-        path: "/copilotkit",
-        resourceId: "weatherAgent",
-        setContext: (c, runtimeContext) => {
-          // Add whatever you need to the runtimeContext
-          runtimeContext.set("user-id", c.req.header("X-User-ID"));
-          runtimeContext.set("temperature-scale", "celsius");
-        }
-      })
-    ]
-  }
-});
-```
-
-With this setup you now have CopilotKit running on your Mastra server. You can start your Mastra server with `mastra dev`.
-
-## Set up the UI
-
-Install CopilotKit's React components:
-{/*
-LLM CONTEXT: This Tabs component shows installation commands for CopilotKit's React UI components.
-Each tab displays the installation command for that specific package manager.
-This installs the React components needed for the frontend CopilotKit integration.
-All commands install the same @copilotkit/react-core and @copilotkit/react-ui packages but use different package manager syntax.
-*/}
-
-<Tabs items={["npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>
-    ```bash copy
+    ```bash copy filename="terminal"
     npm install @copilotkit/react-core @copilotkit/react-ui
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy
+    ```bash copy filename="terminal"
     yarn add @copilotkit/react-core @copilotkit/react-ui
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy
+    ```bash copy filename="terminal"
     pnpm add @copilotkit/react-core @copilotkit/react-ui
     ```
   </Tabs.Tab>
 </Tabs>
 
-Next, add CopilotKit's React components to your frontend.
-
-```jsx copy
+```tsx filename="components/CopilotKitComponent.tsx" showLineNumbers copy
+'use client';
 import { CopilotChat } from "@copilotkit/react-ui";
 import { CopilotKit } from "@copilotkit/react-core";
 import "@copilotkit/react-ui/styles.css";
 
-export function CopilotKitComponent() {
+export function CopilotKitComponent({ runtimeUrl }: { runtimeUrl: string}) {
   return (
     <CopilotKit
-      runtimeUrl="http://localhost:4111/copilotkit"
+      runtimeUrl={runtimeUrl}
       agent="weatherAgent"
     >
       <CopilotChat
@@ -206,8 +56,137 @@ export function CopilotKitComponent() {
 }
 ```
 
-Render the component and start building the future!
+## Mastra Server Integration
 
+This approach registers CopilotKit directly on your Mastra server, making it React framework-agnostic for your frontend.
+
+Create Mastra project.
+
+<Tabs items={["npx", "npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    npx create-mastra@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    npm create mastra mastra-server
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    yarn create mastra mastra-server
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    pnpm create mastra mastra-server
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Install additional packages.
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    npm install @copilotkit/runtime @ag-ui/mastra
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    yarn add @copilotkit/runtime @ag-ui/mastra
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    pnpm add @copilotkit/runtime @ag-ui/mastra
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Configure your Mastra instance to include CopilotKit's runtime endpoint with an optional typed runtime context:
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy {7-12,23-41}
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
+import { registerCopilotKit } from "@ag-ui/mastra";
+import { weatherAgent } from "./agents/weather-agent";
+
+// Define your runtime context type
+// This is optional, but adds typesafety
+type WeatherRuntimeContext = {
+  "user-id": string;
+  "temperature-scale": "celsius" | "fahrenheit";
+};
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+  storage: new LibSQLStore({
+    url: ":memory:"
+  }),
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info"
+  }),
+  server: {
+    // calling from a seperate frontend app, allow CORS
+    cors: {
+      origin: "*",
+      allowMethods: ["*"],
+      allowHeaders: ["*"]
+    },
+    apiRoutes: [
+      // optional type parameter if using a runtime context type
+      registerCopilotKit<WeatherRuntimeContext>({
+        path: "/copilotkit",
+        resourceId: "weatherAgent",
+        setContext: (c, runtimeContext) => {
+          runtimeContext.set("user-id", c.req.header("X-User-ID") || "anonymous");
+          runtimeContext.set("temperature-scale", "celsius");
+        }
+      })
+    ]
+  }
+});
+```
+
+Start your Mastra server:
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    npm run dev
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    yarn dev
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    pnpm dev
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+In your React app, use the component with your Mastra server URL:
+
+```tsx filename="App.tsx" showLineNumbers copy {5}
+import { CopilotKitComponent } from "./components/CopilotKitComponent";
+
+function App() {
+  return (
+    <CopilotKitComponent runtimeUrl="http://localhost:4111/copilotkit" />
+  );
+}
+
+export default App;
+```
+
+Start building the future!
 <br />
 
 <Image
@@ -218,31 +197,55 @@ Render the component and start building the future!
   height={700}
 />
 
-## Using with other frameworks (NextJS)
+## An Alternative to using the Mastra Server
 
-You can still leverage AGUI without going through Mastra Server.
+You can still leverage AGUI without going through the Mastra server.
 
-```typescript copy
-// import your mastra instance from dir
-import { mastra } from "../path/to/mastra";
+### Next.js with Direct Access to Mastra Instance
+
+This approach embeds the CopilotKit runtime in your Next.js API routes with direct access to your Mastra instance.
+
+Install Additional Dependencies:
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    npm install @copilotkit/runtime @ag-ui/mastra
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    yarn add @copilotkit/runtime @ag-ui/mastra
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    pnpm add @copilotkit/runtime @ag-ui/mastra
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Create API Route:
+
+```typescript filename="app/api/copilotkit/route.ts" showLineNumbers copy {1-7,16-19,21-31}
+import { mastra } from "@/mastra";
 import {
   CopilotRuntime,
   ExperimentalEmptyAdapter,
   copilotRuntimeNextJSAppRouterEndpoint,
 } from "@copilotkit/runtime";
-import { NextRequest } from "next/server";
 import { MastraAgent } from "@ag-ui/mastra";
+import { NextRequest } from "next/server";
 
 export const POST = async (req: NextRequest) => {
-  // Clone the request before reading the body
+  // clone req if necessary
+  // e.g obtaining a value from the request body
   const clonedReq = req.clone();
   const body = await clonedReq.json();
-  const resourceId = body.resourceId || "TEST";
 
   const mastraAgents = MastraAgent.getLocalAgents({
-    resourceId,
     mastra,
-    runtimeContext,
+    agentId: "weatherAgent",
   });
 
   const runtime = new CopilotRuntime({
@@ -255,33 +258,49 @@ export const POST = async (req: NextRequest) => {
     endpoint: "/api/copilotkit",
   });
 
-  // Use the original request for handleRequest
   return handleRequest(req);
 };
 ```
 
-## Using with Mastra Client SDK
+### Next.js with Remote Mastra Server and Mastra Client SDK
 
-```typescript copy
+This approach connects to a separate Mastra server using the Mastra client SDK.
+
+Install Additional Dependencies:
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    npm install @copilotkit/runtime @ag-ui/mastra @mastra/client-js
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    yarn add @copilotkit/runtime @ag-ui/mastra @mastra/client-js
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy filename="terminal"
+    pnpm add @copilotkit/runtime @ag-ui/mastra @mastra/client-js
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Create API Route:
+
+```typescript filename="app/api/copilotkit/route.ts" showLineNumbers copy {1-7,12-26}
 import { MastraClient } from "@mastra/client-js";
 import {
   CopilotRuntime,
   ExperimentalEmptyAdapter,
   copilotRuntimeNextJSAppRouterEndpoint,
 } from "@copilotkit/runtime";
-import { NextRequest } from "next/server";
 import { MastraAgent } from "@ag-ui/mastra";
+import { NextRequest } from "next/server";
 
 export const POST = async (req: NextRequest) => {
-  // Clone the request before reading the body
-  const clonedReq = req.clone();
-  const body = await clonedReq.json();
-  const resourceId = body.resourceId || "TEST";
-
   const baseUrl = process.env.MASTRA_BASE_URL || "http://localhost:4111";
-  const mastraClient = new MastraClient({
-    baseUrl,
-  });
+  const mastraClient = new MastraClient({ baseUrl });
 
   const mastraAgents = await MastraAgent.getRemoteAgents({ mastraClient });
 
@@ -295,66 +314,27 @@ export const POST = async (req: NextRequest) => {
     endpoint: "/api/copilotkit",
   });
 
-  // Use the original request for handleRequest
   return handleRequest(req);
 };
 ```
 
+### Use the Component
 
-## Using Typed Runtime Context
+Use the same CopilotKit component from the [React Frontend Setup](#react-frontend-setup) section, but with the local API endpoint:
 
-For better type safety, you can specify the type of your runtime context:
+```tsx filename="App.tsx" showLineNumbers copy {5}
+import { CopilotKitComponent } from "./components/CopilotKitComponent";
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { PinoLogger } from "@mastra/loggers";
-import { LibSQLStore } from "@mastra/libsql";
-import { registerCopilotKit } from "@ag-ui/mastra";
-import { weatherAgent } from "./agents";
+function App() {
+  return (
+      <CopilotKitComponent runtimeUrl="/api/copilotkit" />
+  );
+}
 
-// Define your runtime context type
-type WeatherRuntimeContext = {
-  "user-id": string;
-  "temperature-scale": "celsius" | "fahrenheit";
-  "api-key": string;
-};
-
-export const mastra = new Mastra({
-  agents: { weatherAgent },
-  storage: new LibSQLStore({
-    url: ":memory:",
-  }),
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
-  }),
-  server: {
-    cors: {
-      origin: "*",
-      allowMethods: ["*"],
-      allowHeaders: ["*"],
-    },
-    apiRoutes: [
-      registerCopilotKit<WeatherRuntimeContext>({
-        path: "/copilotkit",
-        resourceId: "weatherAgent",
-        setContext: (c, runtimeContext) => {
-          // TypeScript will enforce the correct types here
-          runtimeContext.set("user-id", c.req.header("X-User-ID") || "anonymous");
-          runtimeContext.set("temperature-scale", "celsius"); // Only "celsius" | "fahrenheit" allowed
-          runtimeContext.set("api-key", process.env.WEATHER_API_KEY || "");
-
-          // This would cause a TypeScript error:
-          // runtimeContext.set("invalid-key", "value"); // ❌ Error: invalid key
-          // runtimeContext.set("temperature-scale", "kelvin"); // ❌ Error: invalid value
-        }
-      }),
-    ],
-  },
-});
+export default App;
 ```
 
-## Further Reading
+## Next Steps
 
-- [CopilotKit Documentation](https://docs.copilotkit.ai)
-- [React Hooks with CopilotKit](https://docs.copilotkit.ai/reference/hooks/useCoAgent)
+- [CopilotKit Documentation](https://docs.copilotkit.ai) - Complete CopilotKit reference
+- [React Hooks with CopilotKit](https://docs.copilotkit.ai/reference/hooks/useCoAgent) - Advanced React integration patterns
