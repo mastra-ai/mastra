@@ -7,6 +7,7 @@ import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from
 import { GetScorerResponse } from '@mastra/client-js';
 import { ThumbsUpIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
+import { Badge } from '@/ds/components/Badge';
 
 export interface ScorerListProps {
   entityId: string;
@@ -89,6 +90,13 @@ const ScorerEntity = ({ scorer }: ScorerEntityProps) => {
           </Link>
         </EntityName>
         <EntityDescription>{scorer.scorer.description}</EntityDescription>
+
+        {scorer.sampling?.type === 'ratio' && (
+          <Badge>
+            <span className="text-icon3">Sample rate:</span>
+            <span className="text-icon6">{scorer.sampling.rate}</span>
+          </Badge>
+        )}
       </EntityContent>
     </Entity>
   );
