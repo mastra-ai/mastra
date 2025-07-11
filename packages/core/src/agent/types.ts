@@ -1,13 +1,6 @@
-import type {
-  GenerateTextOnStepFinishCallback,
-  LanguageModelV1,
-  StreamObjectOnFinishCallback,
-  StreamTextOnFinishCallback,
-  StreamTextOnStepFinishCallback,
-  TelemetrySettings,
-} from 'ai';
+import type { GenerateTextOnStepFinishCallback, LanguageModelV1, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod';
 
 import type { Metric } from '../eval';
 import type {
@@ -18,6 +11,11 @@ import type {
   DefaultLLMTextOptions,
   OutputType,
 } from '../llm';
+import type {
+  StreamTextOnFinishCallback,
+  StreamTextOnStepFinishCallback,
+  StreamObjectOnFinishCallback,
+} from '../llm/model/base.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
@@ -89,11 +87,7 @@ export type AgentGenerateOptions<
   /** Unique ID for this generation run */
   runId?: string;
   /** Callback fired after each generation step completes */
-  onStepFinish?: OUTPUT extends undefined
-    ? EXPERIMENTAL_OUTPUT extends undefined
-      ? GenerateTextOnStepFinishCallback<any>
-      : GenerateTextOnStepFinishCallback<any>
-    : never;
+  onStepFinish?: OUTPUT extends undefined ? GenerateTextOnStepFinishCallback<any> : never;
   /** Maximum number of steps allowed for generation */
   maxSteps?: number;
   /** Schema for structured output, does not work with tools, use experimental_output instead */
@@ -160,17 +154,9 @@ export type AgentStreamOptions<
   /** Unique ID for this generation run */
   runId?: string;
   /** Callback fired when streaming completes */
-  onFinish?: OUTPUT extends undefined
-    ? StreamTextOnFinishCallback<any>
-    : OUTPUT extends ZodSchema
-      ? StreamObjectOnFinishCallback<z.infer<OUTPUT>>
-      : StreamObjectOnFinishCallback<any>;
+  onFinish?: OUTPUT extends undefined ? StreamTextOnFinishCallback<any> : StreamObjectOnFinishCallback<OUTPUT>;
   /** Callback fired after each generation step completes */
-  onStepFinish?: OUTPUT extends undefined
-    ? EXPERIMENTAL_OUTPUT extends undefined
-      ? StreamTextOnStepFinishCallback<any>
-      : StreamTextOnStepFinishCallback<any>
-    : never;
+  onStepFinish?: OUTPUT extends undefined ? StreamTextOnStepFinishCallback<any> : never;
   /** Maximum number of steps allowed for generation */
   maxSteps?: number;
   /** Schema for structured output */

@@ -19,6 +19,7 @@ import { fileToBase64 } from '@/lib/file';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachments/pdfs-adapter';
+import { z } from 'zod';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -205,7 +206,7 @@ export function MastraRuntimeProvider({
           ...(memory ? { threadId, resourceId: agentId } : {}),
           providerOptions: providerOptions as any,
         });
-        if (generateResponse.response) {
+        if (generateResponse.response && 'messages' in generateResponse.response) {
           const latestMessage = generateResponse.response.messages.reduce(
             (acc, message) => {
               const _content = Array.isArray(acc.content) ? acc.content : [];
