@@ -18,7 +18,7 @@
     "@mastra/memory": "latest",
     "mastra": "latest",
     "@ai-sdk/openai": "1.3.22",
-    "zod": "^3.25.67",
+    "zod": "^3.25.76",
     "next": "15.2.4"
   },
   "pnpm": {
