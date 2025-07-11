@@ -1,11 +1,22 @@
-import { AnchorHTMLAttributes, createContext, useContext } from 'react';
+import {
+  AnchorHTMLAttributes,
+  createContext,
+  forwardRef,
+  ForwardRefExoticComponent,
+  RefAttributes,
+  useContext,
+} from 'react';
 
-export type LinkComponent = (props: AnchorHTMLAttributes<HTMLAnchorElement>) => React.ReactNode;
+// Define the props type for your Link component
+export type LinkComponentProps = AnchorHTMLAttributes<HTMLAnchorElement>;
+
+// Define the actual component type with ref attributes
+export type LinkComponent = ForwardRefExoticComponent<LinkComponentProps & RefAttributes<HTMLAnchorElement>>;
 
 const LinkComponentContext = createContext<{
   Link: LinkComponent;
 }>({
-  Link: () => null,
+  Link: forwardRef<HTMLAnchorElement, LinkComponentProps>(() => null),
 });
 
 export interface LinkComponentProviderProps {

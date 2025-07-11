@@ -10,6 +10,7 @@ const meta = {
   },
   workflows_legacy: {
     title: "Workflows (Legacy)",
+    display: "hidden",
   },
   rag: {
     title: "RAG",
