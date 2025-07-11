@@ -66,13 +66,11 @@ export const AgentOverview = ({ agent, agentId }: AgentOverviewProps) => {
 
       <hr className="border-border1 border-sm my-5" />
       <div className="px-5 pb-5">
-        <div>
-          <Txt as="h3" variant="ui-md" className="text-icon3 pb-1">
-            Agent Scorers
-          </Txt>
+        <Txt as="h3" variant="ui-md" className="text-icon3 pb-1">
+          Agent Scorers
+        </Txt>
 
-          <ScorerList entityId={agentId} entityType="AGENT" />
-        </div>
+        <ScorerList entityId={agentId} entityType="AGENT" />
       </div>
     </div>
   );
