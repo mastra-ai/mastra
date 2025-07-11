@@ -1,5 +1,7 @@
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
+import { SpanType } from '../telemetry_vnext/types';
+import type { AISpan } from '../telemetry_vnext/types';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { EMITTER_SYMBOL } from './constants';
@@ -8,6 +10,7 @@ import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
 import type { Emitter, StepFailure, StepResult, StepSuccess } from './types';
 import type { DefaultEngineType, SerializedStepFlowEntry, StepFlowEntry } from './workflow';
+import { api } from '@opentelemetry/sdk-node';
 
 export type ExecutionContext = {
   workflowId: string;
@@ -19,6 +22,7 @@ export type ExecutionContext = {
     delay: number;
   };
   executionSpan: Span;
+  aiSpan?: AISpan;
 };
 
 /**
@@ -162,15 +166,46 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
+    // VNext telemetry span - running alongside legacy span
+    let aiSpan: AISpan | undefined;
+    const vnextTelemetry = this.mastra?.getTelemetryVNext();
+    if (vnextTelemetry) {
+      // Start a trace for the workflow execution
+      const trace = vnextTelemetry.startTrace(`workflow-${workflowId}`, {
+        attributes: { workflowId, runId },
+        tags: ['workflow', 'execution'],
+      });
+
+      aiSpan = vnextTelemetry.startWorkflowRunSpan(
+        `workflow.${workflowId}.execute`,
+        {
+          workflowId,
+          input,
+        },
+        {},
+      );
+    }
+
     if (steps.length === 0) {
-      throw new MastraError({
+      const empty_graph_error = new MastraError({
         id: 'WORKFLOW_EXECUTE_EMPTY_GRAPH',
         text: 'Workflow must have at least one step',
         domain: ErrorDomain.MASTRA_WORKFLOW,
         category: ErrorCategory.USER,
       });
+
+      aiSpan?.end({
+        metadata: {
+          error: {
+            message: empty_graph_error.message,
+          },
+        },
+      });
+
+      throw empty_graph_error;
     }
 
+    // Legacy telemetry span
     const executionSpan = this.mastra?.getTelemetry()?.tracer.startSpan(`workflow.${workflowId}.execute`, {
       attributes: { componentName: workflowId, runId },
     });
@@ -202,6 +237,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: {},
             retryConfig: { attempts, delay },
             executionSpan: executionSpan as Span,
+            aiSpan,
           },
           abortController: params.abortController,
           emitter: params.emitter,
@@ -247,6 +283,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         this.logger?.trackException(error);
         this.logger?.error(`Error executing step: ${error?.stack}`);
+
+        // End span with error status
+        aiSpan?.end({
+          metadata: {
+            status: 'failed',
+            error: {
+              message: error?.message || 'Unknown error',
+              code: (error as any)?.code,
+              stack: error?.stack,
+            },
+          },
+        });
+
         const result = (await this.fmtReturnValue(
           executionSpan,
           params.emitter,
@@ -267,6 +316,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         return result;
       }
     }
+
+    // End vnext span with final success status
+    aiSpan?.end({
+      metadata: {
+        status: 'completed',
+        output: lastOutput.result,
+      },
+    });
 
     const result = (await this.fmtReturnValue(executionSpan, params.emitter, stepResults, lastOutput.result)) as any;
     await this.persistStepUpdate({
@@ -764,6 +821,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
+            aiSpan: executionContext.aiSpan,
           },
           emitter,
           abortController,
@@ -909,6 +967,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
+            aiSpan: executionContext.aiSpan,
           },
           emitter,
           abortController,

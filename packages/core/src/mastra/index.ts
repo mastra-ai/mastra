@@ -13,6 +13,10 @@ import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
+import { DefaultTelemetry } from '../telemetry_vnext/default';
+import { registerTelemetry } from '../telemetry_vnext/registry';
+import type { TelemetryConfig } from '../telemetry_vnext/types';
+import { MastraTelemetry } from '../telemetry_vnext/base';
 import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
@@ -39,6 +43,7 @@ export interface Config<
   workflows?: TWorkflows;
   tts?: TTTS;
   telemetry?: OtelConfig;
+  telemetryVNext?: TelemetryConfig | MastraTelemetry;
   deployer?: MastraDeployer;
   server?: ServerConfig;
   mcpServers?: TMCPServers;
@@ -60,7 +65,7 @@ export interface Config<
 
 @InstrumentClass({
   prefix: 'mastra',
-  excludeMethods: ['getLogger', 'getTelemetry'],
+  excludeMethods: ['getLogger', 'getTelemetry', 'getTelemetryVNext'],
 })
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
@@ -85,6 +90,7 @@ export class Mastra<
     path: string;
   }> = [];
   #telemetry?: Telemetry;
+  #telemetryVNext?: MastraTelemetry;
   #storage?: MastraStorage;
   #memory?: MastraMemory;
   #networks?: TNetworks;
@@ -157,6 +163,25 @@ export class Mastra<
 
     if (storage) {
       storage = augmentWithInit(storage);
+    }
+
+    /*
+    Telemetry VNext - Running alongside existing telemetry
+    */
+    if (config?.telemetryVNext) {
+      if (config.telemetryVNext instanceof MastraTelemetry) {
+        // User provided their own telemetry implementation
+        this.#telemetryVNext = config.telemetryVNext;
+      } else {
+        // User provided config, create DefaultTelemetry
+        this.#telemetryVNext = new DefaultTelemetry({
+          name: 'mastra-vnext',
+          ...config.telemetryVNext,
+        });
+      }
+
+      // Register with the global registry following best practices
+      registerTelemetry('mastra-vnext', this.#telemetryVNext, true);
     }
 
     /*
@@ -615,6 +640,14 @@ do:
 
   public getTelemetry() {
     return this.#telemetry;
+  }
+
+  /**
+   * Get the vnext telemetry instance
+   * @returns DefaultTelemetry instance for the new telemetry system
+   */
+  public getTelemetryVNext() {
+    return this.#telemetryVNext;
   }
 
   public getMemory() {
