@@ -193,7 +193,7 @@ function assertNoDuplicateParts(parts: any[]) {
 describe('agent', () => {
   const integration = new TestIntegration();
 
-  let dummyModel;
+  let dummyModel: MockLanguageModelV1;
   beforeEach(() => {
     dummyModel = new MockLanguageModelV1({
       doGenerate: async () => ({
@@ -1747,7 +1747,7 @@ describe('agent', () => {
 });
 
 describe('agent memory with metadata', () => {
-  let dummyModel;
+  let dummyModel: MockLanguageModelV1;
   beforeEach(() => {
     dummyModel = new MockLanguageModelV1({
       doGenerate: async () => ({
