@@ -25,20 +25,21 @@ export default function Scorer() {
   const isLoading = scorerLoading || agentsLoading || workflowsLoading;
 
   // the useScoresByScorerId returns an empty []
-  // const { scores: allScores, isLoading: scoresLoading } = useScoresByScorerId(scorerId);
+  const { scores: allScores, isLoading: scoresLoading } = useScoresByScorerId(scorerId);
   // so here is a temporary hack to get scores by entityId to record a demo
-  const { scores: agentScores, isLoading: agentScoresLoading } = useScoresByEntityId('evalAgent', 'AGENT');
-  const { scores: workflowScores, isLoading: workflowScoresLoading } = useScoresByEntityId('myWorkflow', 'WORKFLOW');
-  const allScores = [...(agentScores?.scores || []), ...(workflowScores?.scores || [])];
-  const scoresLoading = agentScoresLoading || workflowScoresLoading;
-
+  // console.log(`scorerId`, scorerId);
+  // console.log(`useScoresByScorerId`, useScoresByScorerId(scorerId));
+  // const { scores: agentScores, isLoading: agentScoresLoading } = useScoresByEntityId('evalAgent', 'AGENT');
+  // const { scores: workflowScores, isLoading: workflowScoresLoading } = useScoresByEntityId('myWorkflow', 'WORKFLOW');
+  // const allScores = [...(agentScores?.scores || []), ...(workflowScores?.scores || [])];
+  // const scoresLoading = agentScoresLoading || workflowScoresLoading;
+  console.log(`Lets see all the scores`, JSON.stringify(allScores, null, 2));
   const [filteredByEntityId, setFilteredByEntityId] = useState<string>('all');
   const [selectedScore, setSelectedScore] = useState<any>(null);
   const [detailsIsOpened, setDetailsIsOpened] = useState<boolean>(false);
 
-  const filteredScores = allScores.filter(
-    score => score.entityId === filteredByEntityId || filteredByEntityId === 'all',
-  );
+  const filteredScores =
+    allScores?.scores?.filter(score => score.entityId === filteredByEntityId || filteredByEntityId === 'all') || [];
 
   const scorerAgents =
     scorer?.agentIds.map(agentId => {
@@ -66,24 +67,25 @@ export default function Scorer() {
   };
 
   const toPreviousScore = (currentScore: ScoreRowData) => {
-    const currentIndex = allScores.findIndex(score => score?.id === currentScore?.id);
-    if (currentIndex === -1 || currentIndex === allScores.length - 1) {
+    const currentIndex = allScores?.scores?.findIndex(score => score?.id === currentScore?.id);
+    if (currentIndex === -1 || currentIndex === (allScores?.scores?.length || 0) - 1) {
       return null; // No next score
     }
 
-    return () => setSelectedScore(allScores[currentIndex + 1]);
+    return () => setSelectedScore(allScores?.scores[(currentIndex || 0) + 1]);
   };
 
   const toNextScore = (currentScore: ScoreRowData) => {
-    const currentIndex = allScores.findIndex(score => score?.id === currentScore?.id);
-    if (currentIndex <= 0) {
+    const currentIndex = allScores?.scores?.findIndex(score => score?.id === currentScore?.id);
+    if ((currentIndex || 0) <= 0) {
       return null; // No previous score
     }
-    return () => setSelectedScore(allScores[currentIndex - 1]);
+    return () => setSelectedScore(allScores?.scores[(currentIndex || 0) - 1]);
   };
 
-  const hasPrompts = Object.keys(scorer?.prompts || {}).length > 0;
+  // const hasPrompts = Object.keys(scorer?.scorer || {}).length > 0;
 
+  const hasPrompts = false;
   if (isLoading) {
     return null;
   }
