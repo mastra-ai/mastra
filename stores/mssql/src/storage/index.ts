@@ -1736,7 +1736,6 @@ export class MSSQLStore extends MastraStorage {
     });
 
     const threadIdsToUpdate = new Set<string>();
-    const sql = require('mssql');
     const transaction = this.pool.transaction();
 
     try {
