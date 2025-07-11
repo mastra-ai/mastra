@@ -25,9 +25,8 @@ import type {
   PaginationArgs,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { ConnectionPool, type IOptions } from 'mssql';
 import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
-import * as sql from 'mssql';
+import sql from 'mssql';
 
 export type MSSQLConfigType = {
   schemaName?: string;
@@ -38,7 +37,7 @@ export type MSSQLConfigType = {
       database: string;
       user: string;
       password: string;
-      options?: IOptions;
+      options?: sql.IOptions;
     }
   | {
       connectionString: string;
@@ -77,8 +76,8 @@ export class MSSQLStore extends MastraStorage {
       this.schema = config.schemaName;
       this.pool =
         'connectionString' in config
-          ? new ConnectionPool(config.connectionString)
-          : new ConnectionPool({
+          ? new sql.ConnectionPool(config.connectionString)
+          : new sql.ConnectionPool({
               server: config.server,
               database: config.database,
               user: config.user,
