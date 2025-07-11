@@ -6,6 +6,7 @@ import { useRef } from 'react';
 import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
 import { GetScorerResponse } from '@mastra/client-js';
 import { ThumbsUpIcon } from 'lucide-react';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface ScorerListProps {
   entityId: string;
@@ -73,7 +74,9 @@ interface ScorerEntityProps {
 }
 
 const ScorerEntity = ({ scorer }: ScorerEntityProps) => {
+  const { Link } = useLinkComponent();
   const linkRef = useRef<HTMLAnchorElement>(null);
+
   return (
     <Entity onClick={() => linkRef.current?.click()}>
       <EntityIcon>
@@ -81,9 +84,9 @@ const ScorerEntity = ({ scorer }: ScorerEntityProps) => {
       </EntityIcon>
       <EntityContent>
         <EntityName>
-          <a ref={linkRef} href={`/scorers/${scorer.id}`}>
+          <Link ref={linkRef} href={`/scorers/${scorer.id}`}>
             {scorer.scorer.name}
-          </a>
+          </Link>
         </EntityName>
         <EntityDescription>{scorer.scorer.description}</EntityDescription>
       </EntityContent>
