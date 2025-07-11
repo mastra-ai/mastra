@@ -170,7 +170,7 @@ export const ScrollableContainer = ({
   }, []);
 
   return (
-    <div ref={containerRef} className={clsx('xxxx relative max-h-full overflow-auto', className)}>
+    <div ref={containerRef} className={clsx('relative max-h-full overflow-auto', className)}>
       {children}
       <ScrollIndicator
         isVisible={showLeftIndicator}
