@@ -23,6 +23,7 @@ export interface AgentsTableProps {
 
 export function AgentsTable({ agents, isLoading, onClickRow }: AgentsTableProps) {
   const _agents = agents || {};
+
   const projectData: AgentTableData[] = Object.keys(_agents).map(key => {
     const agent = _agents[key];
 

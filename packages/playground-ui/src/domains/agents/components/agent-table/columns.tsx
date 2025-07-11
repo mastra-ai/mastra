@@ -15,6 +15,7 @@ import { GroqIcon } from '@/ds/icons/GroqIcon';
 import { XGroqIcon } from '@/ds/icons/XGroqIcon';
 import { MistralIcon } from '@/ds/icons/MistralIcon';
 import { AgentTableData } from './types';
+import { useLinkComponent } from '@/lib/framework';
 
 export const providerMapToIcon = {
   'openai.chat': <OpenaiChatIcon />,
@@ -37,6 +38,7 @@ export type AgentTableColumn = {
 } & AgentTableData;
 
 const NameCell = ({ row }: { row: Row<AgentTableColumn> }) => {
+  const { Link } = useLinkComponent();
   return (
     <EntryCell
       icon={<AgentIcon />}
