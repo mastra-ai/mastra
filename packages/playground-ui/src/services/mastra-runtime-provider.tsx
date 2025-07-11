@@ -9,7 +9,7 @@ import {
   CompositeAttachmentAdapter,
   SimpleTextAttachmentAdapter,
 } from '@assistant-ui/react';
-import { useState, ReactNode, useEffect } from 'react';
+import { useState, ReactNode, useEffect, useRef } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
 
 import { ChatProps } from '@/types';
@@ -17,6 +17,7 @@ import { ChatProps } from '@/types';
 import { CoreUserMessage } from '@mastra/core';
 import { fileToBase64 } from '@/lib/file';
 import { useMastraClient } from '@/contexts/mastra-client-context';
+import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachments/pdfs-adapter';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
@@ -92,6 +93,7 @@ export function MastraRuntimeProvider({
   const [isRunning, setIsRunning] = useState(false);
   const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
+  const { refetch: refreshWorkingMemory } = useWorkingMemory();
 
   const {
     frequencyPenalty,
@@ -105,6 +107,7 @@ export function MastraRuntimeProvider({
     instructions,
     chatWithGenerate,
   } = settings?.modelSettings ?? {};
+  const toolCallIdToName = useRef<Record<string, string>>({});
 
   const runtimeContextInstance = new RuntimeContext();
   Object.entries(runtimeContext ?? {}).forEach(([key, value]) => {
@@ -404,6 +407,7 @@ export function MastraRuntimeProvider({
               assistantToolCallAddedForContent = true;
               return [...currentConversation, newMessage];
             });
+            toolCallIdToName.current[value.toolCallId] = value.toolName;
           },
           async onToolResultPart(value: any) {
             // Update the messages state
@@ -434,6 +438,15 @@ export function MastraRuntimeProvider({
               }
               return currentConversation;
             });
+            try {
+              const toolName = toolCallIdToName.current[value.toolCallId];
+              if (toolName === 'updateWorkingMemory' && value.result?.success) {
+                await refreshWorkingMemory?.();
+              }
+            } finally {
+              // Clean up
+              delete toolCallIdToName.current[value.toolCallId];
+            }
           },
           onErrorPart(error) {
             throw new Error(error);
