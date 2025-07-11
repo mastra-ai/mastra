@@ -423,6 +423,7 @@ export class NewAgentNetwork extends MastraBase {
             }),
             threadId: initData?.threadId ?? runId,
             resourceId: initData?.threadResourceId ?? this.name,
+            runtimeContext: runtimeContextToUse,
           });
 
           if (completionResult.object.isComplete) {
@@ -473,6 +474,7 @@ export class NewAgentNetwork extends MastraBase {
             }),
             threadId: initData?.threadId ?? runId,
             resourceId: initData?.threadResourceId ?? this.name,
+            runtimeContext: runtimeContextToUse,
           },
         );
 
@@ -540,6 +542,7 @@ export class NewAgentNetwork extends MastraBase {
         const { fullStream } = await agent.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,
+          runtimeContext: runtimeContextToUse,
           onFinish: result => {
             streamPromise.resolve(result.text);
           },

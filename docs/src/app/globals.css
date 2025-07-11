@@ -699,3 +699,11 @@ table td code.nextra-code:not([class*="twoslash-"]) {
   justify-content: center;
   width: fit-content;
 }
+
+/* Reposition theme switcher*/
+
+@media screen and (min-width: 1024px) {
+  button[title="Change theme"] {
+    display: none;
+  }
+}
