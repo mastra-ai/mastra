@@ -108,7 +108,9 @@ export type GenerateObjectWithMessagesArgs<Output extends ZodSchema | JSONSchema
 } & GenerateObjectOptions<Output>;
 
 export type GenerateObjectResult<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
-  OriginalGenerateObjectResult<inferOutput<Output>>;
+  OriginalGenerateObjectResult<inferOutput<Output>> & {
+    readonly reasoning?: never;
+  };
 
 export type GenerateReturn<
   Tools extends ToolSet,
