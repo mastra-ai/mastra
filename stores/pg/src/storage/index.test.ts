@@ -258,7 +258,10 @@ describe('PostgresStore', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [createSampleMessageV1({ threadId: thread.id, resourceId: thread.resourceId }), createSampleMessageV1({ threadId: thread.id, resourceId: thread.resourceId })];
+      const messages = [
+        createSampleMessageV1({ threadId: thread.id, resourceId: thread.resourceId }),
+        createSampleMessageV1({ threadId: thread.id, resourceId: thread.resourceId }),
+      ];
 
       // Save messages
       const savedMessages = await store.saveMessages({ messages });
