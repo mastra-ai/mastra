@@ -22,7 +22,7 @@ import {
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
-、
+
 import { PostgresStore } from '.';
 import type { PostgresConfig } from '.';
 
@@ -267,11 +267,7 @@ describe('PostgresStore', () => {
       // Retrieve messages
       const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v1' });
       expect(retrievedMessages).toHaveLength(2);
-      const checkMessages = messages.map(m => {
-        const { ...rest } = m;
-        return rest;
-      });
-      expect(retrievedMessages).toEqual(expect.arrayContaining(checkMessages));
+      expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
     });
 
     it('should handle empty message array', async () => {
@@ -1821,8 +1817,8 @@ describe('PostgresStore', () => {
         await store.saveThread({ thread });
 
         const messages = [
-          createSampleMessageV1({ threadId: thread.id }),
-          createSampleMessageV1({ threadId: thread.id }),
+          createSampleMessageV1({ threadId: thread.id, resourceId: thread.resourceId }),
+          createSampleMessageV1({ threadId: thread.id, resourceId: thread.resourceId }),
         ];
 
         // Save messages
@@ -1832,11 +1828,7 @@ describe('PostgresStore', () => {
         // Retrieve messages
         const retrievedMessages = await store.getMessagesPaginated({ threadId: thread.id, format: 'v1' });
         expect(retrievedMessages.messages).toHaveLength(2);
-        const checkMessages = messages.map(m => {
-          const { resourceId, ...rest } = m;
-          return rest;
-        });
-        expect(retrievedMessages.messages).toEqual(expect.arrayContaining(checkMessages));
+        expect(retrievedMessages.messages).toEqual(expect.arrayContaining(messages));
       });
 
       it('should maintain message order', async () => {
