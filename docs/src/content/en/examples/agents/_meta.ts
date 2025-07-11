@@ -8,6 +8,7 @@ const meta = {
   "adding-voice-capabilities": "Give your Agent a voice",
   "deploying-mcp-server": "Deploying an MCPServer",
   "dynamic-agents": "Dynamic Agents",
+  "ai-sdk-v5-integration": "AI SDK v5 Integration",
 };
 
 export default meta;
