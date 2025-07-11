@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useRef } from 'react';
 import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
 import { GetScorerResponse } from '@mastra/client-js';
-import { ThumbsUpIcon } from 'lucide-react';
+import { GaugeIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 import { Badge } from '@/ds/components/Badge';
 
@@ -81,7 +81,7 @@ const ScorerEntity = ({ scorer }: ScorerEntityProps) => {
   return (
     <Entity onClick={() => linkRef.current?.click()}>
       <EntityIcon>
-        <ThumbsUpIcon className="group-hover/entity:text-accent3" />
+        <GaugeIcon className="group-hover/entity:text-accent3" />
       </EntityIcon>
       <EntityContent>
         <EntityName>
