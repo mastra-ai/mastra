@@ -463,6 +463,7 @@ export interface SaveScoreResponse {
 
 export type GetScorerResponse = MastraScorer & {
   agentIds: string[];
+  workflowIds: string[];
 };
 
 export interface GetScorersResponse {
