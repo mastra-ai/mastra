@@ -19,29 +19,19 @@ class MockSchemaCompatibility extends SchemaCompatLayer {
   }
 
   processZodType(value: z.ZodTypeAny): z.ZodTypeAny {
-    console.log('processZodType called with:', value.constructor.name, 'description:', value.description);
-    
     if (isObj(value)) {
-      console.log('Processing object schema');
       return this.defaultZodObjectHandler(value);
     } else if (isArr(value)) {
-      console.log('Processing array schema');
       // For these tests, we will handle all checks by converting them to descriptions.
       return this.defaultZodArrayHandler(value, ['min', 'max', 'length']);
     } else if (isOptional(value)) {
-      console.log('Processing optional schema');
       return this.defaultZodOptionalHandler(value);
     } else if (isUnion(value)) {
-      console.log('Processing union schema');
       return this.defaultZodUnionHandler(value);
     } else if (isString(value)) {
-      console.log('Processing string schema, original description:', value.description);
       // Add a marker to confirm it was processed
-      const result = z.string().describe(`${value.description || 'string'}:processed`);
-      console.log('String processing result description:', result.description);
-      return result;
+      return z.string().describe(`${value.description || 'string'}:processed`);
     } else {
-      console.log('No processing needed for:', value.constructor.name);
       return value;
     }
   }
@@ -427,22 +417,7 @@ describe('SchemaCompatLayer', () => {
   describe('Top-level schema processing (processToAISDKSchema)', () => {
     it('should process a simple object schema', () => {
       const objectSchema = z.object({ user: z.string().describe('user name') });
-      
-      // Debug: Check what happens during processing
-      console.log('=== BEFORE PROCESSING ===');
-      console.log('Original object schema:', objectSchema.shape.user.description);
-      
-      // Process the schema manually to see what happens
-      const processedSchema = compatibility.processZodType(objectSchema);
-      console.log('=== AFTER PROCESSING ===');
-      console.log('Processed schema shape:', processedSchema.shape);
-      console.log('Processed user schema:', processedSchema.shape.user);
-      console.log('Processed user description:', processedSchema.shape.user.description);
-      
       const result = compatibility.processToAISDKSchema(objectSchema);
-      
-      console.log('=== FINAL JSON SCHEMA ===');
-      console.log('Result jsonSchema:', JSON.stringify(result.jsonSchema, null, 2));
       
       const userProp = result.jsonSchema.properties?.user as any;
       expect(userProp.description).toBe('user name:processed');

@@ -9,10 +9,14 @@ import type { SchemaCompatLayer } from './schema-compatibility';
 // Supports both v3 and v4 through proper import handling
 import { z } from 'zod';
 
-// Version detection following official guidance
+// Version detection following official guidance - cached for performance
+let _isV4Runtime: boolean | null = null;
 function isZodV4Runtime(): boolean {
-  const testSchema = z.string();
-  return '_zod' in testSchema;
+  if (_isV4Runtime === null) {
+    const testSchema = z.string();
+    _isV4Runtime = '_zod' in testSchema;
+  }
+  return _isV4Runtime;
 }
 
 // TypeName constants to prevent magic string errors (addressing review comment)
@@ -91,14 +95,17 @@ function preserveDescriptions(jsonSchema: JSONSchema7, zodSchema: ZodSchema): vo
   
   // Recursively preserve descriptions for object properties
   if (jsonSchema.type === 'object' && jsonSchema.properties && zodSchema.shape) {
-    Object.keys(jsonSchema.properties).forEach(key => {
-      const propertyJsonSchema = jsonSchema.properties![key] as JSONSchema7;
-      const propertyZodSchema = zodSchema.shape[key];
+    const properties = jsonSchema.properties;
+    const shape = zodSchema.shape;
+    
+    for (const key in properties) {
+      const propertyJsonSchema = properties[key] as JSONSchema7;
+      const propertyZodSchema = shape[key];
       
       if (propertyZodSchema && propertyJsonSchema) {
         preserveDescriptions(propertyJsonSchema, propertyZodSchema);
       }
-    });
+    }
   }
   
   // Recursively preserve descriptions for array items
@@ -112,7 +119,26 @@ function preserveDescriptions(jsonSchema: JSONSchema7, zodSchema: ZodSchema): vo
   }
 }
 
-export function safeToJSONSchema(zodSchema: ZodSchema, options?: any): JSONSchema7 {
+/**
+ * Converts Zod schemas to JSON Schema with automatic v3/v4 compatibility.
+ * 
+ * Automatically detects Zod version at runtime and uses the appropriate conversion method:
+ * - v4: Uses native `z.toJSONSchema()` with fallback to v3 library for edge cases
+ * - v3: Uses `zod-to-json-schema` library
+ * - Both: Preserves nested property descriptions (fixes known v3/v4 limitation)
+ * 
+ * @param zodSchema - The Zod schema to convert
+ * @param options - Options passed to the underlying conversion function
+ * @returns JSONSchema7 object with preserved descriptions and graceful fallbacks
+ * 
+ * @example
+ * ```typescript
+ * const schema = z.object({ name: z.string().describe('User name') });
+ * const jsonSchema = safeToJSONSchema(schema);
+ * // Result preserves nested descriptions across v3/v4
+ * ```
+ */
+export function safeToJSONSchema(zodSchema: ZodSchema, options?: Parameters<typeof z.toJSONSchema>[1]): JSONSchema7 {
   try {
     let result: JSONSchema7;
     
@@ -148,7 +174,25 @@ export function safeToJSONSchema(zodSchema: ZodSchema, options?: any): JSONSchem
 
 
 /**
- * Standard validation that preserves Zod's validation behavior
+ * Validates values against Zod schemas with corruption-resistant error handling.
+ * 
+ * Provides the same interface as Zod's `safeParse()` but with protection against
+ * schema corruption that can occur during v3/v4 migration or complex schema processing.
+ * 
+ * @param zodSchema - The Zod schema to validate against
+ * @param value - The value to validate
+ * @returns Validation result with success/error information
+ * 
+ * @example
+ * ```typescript
+ * const schema = z.string().min(3);
+ * const result = safeValidate(schema, "hello");
+ * if (result.success) {
+ *   console.log("Valid:", result.value);
+ * } else {
+ *   console.log("Invalid:", result.error);
+ * }
+ * ```
  */
 export function safeValidate(zodSchema: ZodSchema, value: unknown): { success: boolean; value?: any; error?: any } {
   try {
@@ -166,7 +210,7 @@ export function safeValidate(zodSchema: ZodSchema, value: unknown): { success: b
 /**
  * Direct property access with v3/v4 compatibility
  */
-export function safeGetSchemaProperty(schema: any, property: string, defaultValue: any = undefined): any {
+export function safeGetSchemaProperty<T = unknown>(schema: ZodTypeAny | null | undefined, property: string, defaultValue?: T): T | undefined {
   try {
     if (!schema || typeof schema !== 'object') {
       return defaultValue;
@@ -176,12 +220,12 @@ export function safeGetSchemaProperty(schema: any, property: string, defaultValu
     if (isZodV4Schema(schema)) {
       // v4 property access
       if (property === 'typeName') {
-        return schema.constructor?.name || defaultValue;
+        return (schema.constructor?.name as T) ?? defaultValue;
       }
-      return schema._zod?.def?.[property] ?? defaultValue;
+      return (schema._zod?.def?.[property] as T) ?? defaultValue;
     } else {
       // v3 property access
-      return schema._def?.[property] ?? defaultValue;
+      return (schema._def?.[property] as T) ?? defaultValue;
     }
   } catch (error) {
     console.warn(`Property access failed for '${property}', using default:`, error);
