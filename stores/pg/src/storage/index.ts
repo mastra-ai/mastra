@@ -1015,7 +1015,7 @@ export class PostgresStore extends MastraStorage {
     const fromDate = dateRange?.start;
     const toDate = dateRange?.end;
 
-    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId"`;
+    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"`;
     const orderByStatement = `ORDER BY "createdAt" DESC`;
 
     const messages: MastraMessageV2[] = [];

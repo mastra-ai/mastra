@@ -22,7 +22,7 @@ import {
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
-
+、
 import { PostgresStore } from '.';
 import type { PostgresConfig } from '.';
 
@@ -258,7 +258,7 @@ describe('PostgresStore', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
+      const messages = [createSampleMessageV1({ threadId: thread.id, resourceId: thread.resourceId }), createSampleMessageV1({ threadId: thread.id, resourceId: thread.resourceId })];
 
       // Save messages
       const savedMessages = await store.saveMessages({ messages });
@@ -268,7 +268,7 @@ describe('PostgresStore', () => {
       const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v1' });
       expect(retrievedMessages).toHaveLength(2);
       const checkMessages = messages.map(m => {
-        const { resourceId, ...rest } = m;
+        const { ...rest } = m;
         return rest;
       });
       expect(retrievedMessages).toEqual(expect.arrayContaining(checkMessages));
