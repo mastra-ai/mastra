@@ -148,17 +148,23 @@ export class MSSQLStore extends MastraStorage {
   }
 
   private transformEvalRow(row: Record<string, any>): EvalRow {
-    let testInfoValue = null;
+    let testInfoValue = null,
+      resultValue = null;
     if (row.test_info) {
       try {
         testInfoValue = typeof row.test_info === 'string' ? JSON.parse(row.test_info) : row.test_info;
+      } catch (e) {}
+    }
+    if (row.test_info) {
+      try {
+        resultValue = typeof row.result === 'string' ? JSON.parse(row.result) : row.result;
       } catch (e) {}
     }
     return {
       agentName: row.agent_name as string,
       input: row.input as string,
       output: row.output as string,
-      result: row.result as MetricResult,
+      result: resultValue as MetricResult,
       metricName: row.metric_name as string,
       instructions: row.instructions as string,
       testInfo: testInfoValue,
@@ -363,10 +369,10 @@ export class MSSQLStore extends MastraStorage {
         name: row.name,
         scope: row.scope,
         kind: row.kind,
-        status: row.status,
-        events: row.events,
-        links: row.links,
-        attributes: row.attributes,
+        status: JSON.parse(row.status),
+        events: JSON.parse(row.events),
+        links: JSON.parse(row.links),
+        attributes: JSON.parse(row.attributes),
         startTime: row.startTime,
         endTime: row.endTime,
         other: row.other,
