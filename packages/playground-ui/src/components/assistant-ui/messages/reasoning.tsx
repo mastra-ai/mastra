@@ -14,7 +14,7 @@ export const Reasoning = ({ text }: ReasoningContentPart) => {
         <Icon>
           <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
         </Icon>
-        <Badge icon={<BrainIcon />}>Show reasoning</Badge>
+        <Badge icon={<BrainIcon />}>{isCollapsed ? 'Show' : 'Hide'} reasoning</Badge>
       </button>
 
       {!isCollapsed ? (

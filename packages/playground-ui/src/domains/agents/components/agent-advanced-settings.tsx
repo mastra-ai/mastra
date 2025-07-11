@@ -58,7 +58,7 @@ export const AgentAdvancedSettings = () => {
       setSettings({
         ...settings,
         modelSettings: {
-          ...settings.modelSettins,
+          ...settings?.modelSettings,
           providerOptions: parsedContext,
         },
       });
