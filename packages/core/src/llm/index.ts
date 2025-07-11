@@ -6,10 +6,6 @@ import type {
   CoreUserMessage as AiCoreUserMessage,
   EmbedManyResult as AiEmbedManyResult,
   EmbedResult as AiEmbedResult,
-  GenerateObjectResult,
-  GenerateTextResult,
-  StreamObjectResult,
-  StreamTextResult,
   TelemetrySettings,
   streamText,
   streamObject,
@@ -73,13 +69,14 @@ export type StructuredOutput = {
       };
 };
 
-export type GenerateReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends undefined
-  ? GenerateTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
-  : GenerateObjectResult<Z extends ZodSchema ? z.infer<Z> : unknown>;
-
-export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Z extends undefined
-  ? StreamTextResult<any, Z extends ZodSchema ? z.infer<Z> : unknown>
-  : StreamObjectResult<any, Z extends ZodSchema ? z.infer<Z> : unknown, any>;
+export type {
+  GenerateReturn,
+  StreamReturn,
+  GenerateObjectResult,
+  GenerateTextResult,
+  StreamObjectResult,
+  StreamTextResult,
+} from './model/base.types';
 
 export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
 

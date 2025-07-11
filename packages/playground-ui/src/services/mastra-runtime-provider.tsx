@@ -216,7 +216,7 @@ export function MastraRuntimeProvider({
           ...(memory ? { threadId, resourceId: agentId } : {}),
           providerOptions: providerOptions as any,
         });
-        if (generateResponse.response) {
+        if (generateResponse.response && 'messages' in generateResponse.response) {
           const latestMessage = generateResponse.response.messages.reduce(
             (acc, message) => {
               const _content = Array.isArray(acc.content) ? acc.content : [];
@@ -289,9 +289,9 @@ export function MastraRuntimeProvider({
                     content: containsToolCall
                       ? newContent
                       : [
-                          ..._content,
-                          { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.result },
-                        ],
+                        ..._content,
+                        { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.result },
+                      ],
                   } as ThreadMessageLike;
                 }
 
@@ -388,25 +388,25 @@ export function MastraRuntimeProvider({
                   ...lastMessage,
                   content: Array.isArray(lastMessage.content)
                     ? [
-                        ...lastMessage.content,
-                        {
-                          type: 'tool-call',
-                          toolCallId: value.toolCallId,
-                          toolName: value.toolName,
-                          args: value.args,
-                        },
-                      ]
+                      ...lastMessage.content,
+                      {
+                        type: 'tool-call',
+                        toolCallId: value.toolCallId,
+                        toolName: value.toolName,
+                        args: value.args,
+                      },
+                    ]
                     : [
-                        ...(typeof lastMessage.content === 'string'
-                          ? [{ type: 'text', text: lastMessage.content }]
-                          : []),
-                        {
-                          type: 'tool-call',
-                          toolCallId: value.toolCallId,
-                          toolName: value.toolName,
-                          args: value.args,
-                        },
-                      ],
+                      ...(typeof lastMessage.content === 'string'
+                        ? [{ type: 'text', text: lastMessage.content }]
+                        : []),
+                      {
+                        type: 'tool-call',
+                        toolCallId: value.toolCallId,
+                        toolName: value.toolName,
+                        args: value.args,
+                      },
+                    ],
                 };
 
                 assistantToolCallAddedForUpdater = true;
