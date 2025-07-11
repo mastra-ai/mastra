@@ -380,8 +380,7 @@ export class MessageList {
       messageV2.role === 'assistant' &&
       latestMessage.threadId === messageV2.threadId;
     // If neither the latest message or the new message is a memory message, merge them together
-    const shouldMergeNewMessages =
-      latestMessage && !this.memoryMessages.has(latestMessage) && messageSource !== 'memory';
+    const shouldMergeNewMessages = latestMessage && messageSource !== 'memory';
     const shouldAppendToLastAssistantMessageParts =
       shouldAppendToLastAssistantMessage &&
       newMessageFirstPartType &&
@@ -427,6 +426,13 @@ export class MessageList {
             ) {
               latestMessage.content.toolInvocations.push(existingCallPart.toolInvocation);
             }
+          } else if (latestMessage.id === messageV2.id) {
+            // If the latest message is the same as the new message, we can just push the tool invocation part
+            if (!latestMessage.content.toolInvocations) {
+              latestMessage.content.toolInvocations = [];
+            }
+            latestMessage.content.toolInvocations.push(part.toolInvocation);
+            latestMessage.content.parts.push(part);
           }
         } else if (
           // if there's no part at this index yet in the existing message we're merging into
