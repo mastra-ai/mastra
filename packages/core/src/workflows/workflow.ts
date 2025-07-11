@@ -1093,6 +1093,7 @@ export class Workflow<
     runtimeContext,
     abort,
     abortSignal,
+    runCount,
   }: {
     inputData: z.infer<TInput>;
     resumeData?: any;
@@ -1112,6 +1113,7 @@ export class Workflow<
     abortSignal: AbortSignal;
     bail: (result: any) => any;
     abort: () => any;
+    runCount?: number;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
@@ -1133,8 +1135,18 @@ export class Workflow<
     const unwatch = run.watch(event => {
       emitter.emit('nested-watch', { event, workflowId: this.id, runId: run.runId, isResume: !!resume?.steps?.length });
     }, 'watch');
+
+    if (runCount && runCount > 0 && resume?.steps?.length && runtimeContext) {
+      runtimeContext.set('__mastraWorflowInputData', inputData);
+    }
+
     const res = resume?.steps?.length
-      ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext })
+      ? await run.resume({
+          resumeData,
+          step: resume.steps as any,
+          runtimeContext,
+          runCount,
+        })
       : await run.start({ inputData, runtimeContext });
     unwatch();
     unwatchV2();
@@ -1489,6 +1501,7 @@ export class Run<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
+    runCount?: number;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
@@ -1502,17 +1515,27 @@ export class Run<
       throw new Error('No snapshot found for this workflow run');
     }
 
-    if (snapshot.status !== 'suspended') {
-      throw new Error('This workflow run was not suspended');
+    if (!params.runCount) {
+      if (snapshot.status !== 'suspended') {
+        throw new Error('This workflow run was not suspended');
+      }
+
+      const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
+
+      const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
+
+      if (!isStepSuspended) {
+        throw new Error('This workflow step was not suspended');
+      }
     }
 
-    const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
-
-    const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
-
-    if (!isStepSuspended) {
-      throw new Error('This workflow step was not suspended');
+    let runtimeContextInput;
+    if (params.runCount && params.runCount > 0 && params.runtimeContext) {
+      runtimeContextInput = params.runtimeContext.get('__mastraWorflowInputData');
+      params.runtimeContext.delete('__mastraWorflowInputData');
     }
+
+    const stepResults = { ...(snapshot?.context ?? {}), input: runtimeContextInput ?? snapshot?.context?.input } as any;
 
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
@@ -1523,7 +1546,7 @@ export class Run<
         input: params.resumeData,
         resume: {
           steps,
-          stepResults: snapshot?.context as any,
+          stepResults,
           resumePayload: params.resumeData,
           // @ts-ignore
           resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
