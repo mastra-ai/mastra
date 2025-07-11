@@ -42,19 +42,19 @@ export const AgentAdvancedSettings = () => {
   }, [providerOptionsStr]);
 
   const formatProviderOptions = async () => {
+    setError(null);
     if (!isValidJson(providerOptionsValue)) {
       setError('Invalid JSON');
       return;
     }
-    setError(null);
     const formatted = await formatJSON(providerOptionsValue);
     setProviderOptionsValue(formatted);
   };
 
   const saveProviderOptions = async () => {
     try {
-      const parsedContext = JSON.parse(providerOptionsValue);
       setError(null);
+      const parsedContext = JSON.parse(providerOptionsValue);
       setSettings({
         ...settings,
         modelSettings: {
@@ -211,7 +211,7 @@ export const AgentAdvancedSettings = () => {
 
           <div className="space-y-1 col-span-2">
             <div className="flex justify-between items-center">
-              <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="max-retries">
+              <Txt as="label" className="text-icon3" variant="ui-sm" htmlFor="provider-options">
                 Provider Options
               </Txt>
 
@@ -235,7 +235,7 @@ export const AgentAdvancedSettings = () => {
                       </Icon>
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>Copy Provoder Options</TooltipContent>
+                  <TooltipContent>Copy Provider Options</TooltipContent>
                 </Tooltip>
 
                 <Tooltip>
@@ -253,7 +253,7 @@ export const AgentAdvancedSettings = () => {
               onChange={setProviderOptionsValue}
               theme={theme}
               extensions={[jsonLanguage]}
-              className="h-[300px] overflow-y-scroll overflow-hidden rounded-lg border bg-transparent shadow-sm focus-visible:ring-ring transition-colors focus-visible:outline-none focus-visible:ring-1 p-2"
+              className="h-[300px] overflow-scroll rounded-lg border bg-transparent shadow-sm focus-visible:ring-ring transition-colors focus-visible:outline-none focus-visible:ring-1 p-2"
             />
             {error && (
               <Txt variant="ui-md" className="text-accent2">
