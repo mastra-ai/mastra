@@ -1,4 +1,4 @@
-import { useScorers } from '@/hooks/use-scorers';
+import { useScorers } from '@mastra/playground-ui';
 import { DataTable, Header, HeaderTitle, MainContentLayout } from '@mastra/playground-ui';
 import { scorersTableColumns } from '@/domains/agents/table.columns';
 

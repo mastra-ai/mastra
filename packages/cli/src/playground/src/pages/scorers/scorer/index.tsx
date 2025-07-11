@@ -1,6 +1,6 @@
 import { Breadcrumb, Crumb, Header, MainContentLayout } from '@mastra/playground-ui';
 import { useParams, Link } from 'react-router';
-import { useScorer, useScoresByScorerId } from '@/hooks/use-scorers';
+import { useScorer, useScoresByScorerId } from '@mastra/playground-ui';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from 'lucide-react';
 import { format, isToday } from 'date-fns';

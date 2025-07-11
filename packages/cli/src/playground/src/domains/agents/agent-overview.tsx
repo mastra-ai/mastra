@@ -1,7 +1,7 @@
 import { GetAgentResponse } from '@mastra/client-js';
 import { AgentPromptEnhancer } from './agent-instructions-enhancer';
 import { ToolList } from './tool-list';
-import { Txt } from '@mastra/playground-ui';
+import { ScorerList, Txt } from '@mastra/playground-ui';
 import { WorkflowList } from './workflow-list';
 import { Link } from 'react-router';
 
@@ -20,12 +20,6 @@ export const AgentOverview = ({ agent, agentId }: AgentOverviewProps) => {
   const workflows = Object.entries(agent?.workflows ?? {}).map(([workflowKey, workflow]) => ({
     id: workflowKey,
     description: `Contains ${Object.keys(workflow.steps || {}).length} steps`,
-  }));
-
-  const scorers = Object.entries(agent?.scorers ?? {}).map(([scorerKey, scorer]) => ({
-    id: scorerKey,
-    name: scorer.name,
-    description: scorer.description,
   }));
 
   return (
@@ -68,21 +62,17 @@ export const AgentOverview = ({ agent, agentId }: AgentOverviewProps) => {
             No workflows were attached to this agent.
           </Txt>
         )}
+      </div>
 
-        {scorers?.length > 0 && (
-          <div>
-            <Txt as="h3" variant="ui-md" className="text-icon3 pb-1">
-              Agent Scorers
-            </Txt>
-            {scorers.map(scorer => (
-              <div key={scorer.id}>
-                <Txt as="p" variant="ui-lg" className="text-icon6">
-                  {scorer.name}
-                </Txt>
-              </div>
-            ))}
-          </div>
-        )}
+      <hr className="border-border1 border-sm my-5" />
+      <div className="px-5 pb-5">
+        <div>
+          <Txt as="h3" variant="ui-md" className="text-icon3 pb-1">
+            Agent Scorers
+          </Txt>
+
+          <ScorerList entityId={agentId} entityType="AGENT" />
+        </div>
       </div>
     </div>
   );
