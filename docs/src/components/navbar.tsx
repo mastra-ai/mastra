@@ -14,6 +14,7 @@ import { useState } from "react";
 import { CustomSearch } from "./custom-search";
 import { getSearchPlaceholder } from "./search-placeholder";
 import { Button } from "./ui/button";
+import { ThemeSwitcher } from "./theme-switcher";
 
 export const Logo = () => {
   return (
@@ -87,6 +88,7 @@ export const Nav = ({ stars, locale }: { stars: number; locale: string }) => {
       >
         Docs
       </Link>
+      <ThemeSwitcher />
       <SearchWrapperMobile locale={locale} />
     </Navbar>
   );
