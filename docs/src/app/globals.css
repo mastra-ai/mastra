@@ -704,6 +704,6 @@ table td code.nextra-code:not([class*="twoslash-"]) {
 
 @media screen and (min-width: 1024px) {
   button[title="Change theme"] {
-  display: none;
+    display: none;
   }
 }
