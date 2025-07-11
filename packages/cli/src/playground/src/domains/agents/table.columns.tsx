@@ -88,11 +88,4 @@ export const scorersTableColumns: DataTableProps<any, any>['columns'] = [
     header: 'Name',
     cell: ScorerNameCell,
   },
-  {
-    id: 'description',
-    header: 'Description',
-    cell: ({ row }: { row: any }) => {
-      return <Cell>{row.original.description}</Cell>;
-    },
-  },
 ];

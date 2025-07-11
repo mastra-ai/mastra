@@ -19,8 +19,10 @@ export const useScoresByEntityId = (entityId: string, entityType: string) => {
           perPage: 10,
         });
         setScores(res);
+        setIsLoading(false);
       } catch (error) {
         setScores(null);
+        setIsLoading(false);
       }
     };
 
@@ -35,6 +37,8 @@ export const useScoresByScorerId = (scorerId: string) => {
   const [scores, setScores] = useState<GetScoresResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  console.log('******', scores);
+
   useEffect(() => {
     const fetchScores = async () => {
       setIsLoading(true);
@@ -45,8 +49,10 @@ export const useScoresByScorerId = (scorerId: string) => {
           perPage: 10,
         });
         setScores(res);
+        setIsLoading(false);
       } catch (error) {
         setScores(null);
+        setIsLoading(false);
       }
     };
 

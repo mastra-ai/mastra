@@ -1,10 +1,10 @@
-import { Breadcrumb, Crumb, Header, MainContentLayout } from '@mastra/playground-ui';
+import { AgentIcon, Breadcrumb, Crumb, Header, MainContentLayout, WorkflowIcon } from '@mastra/playground-ui';
 import { useParams, Link } from 'react-router';
-import { useScorer, useScoresByScorerId } from '@mastra/playground-ui';
+import { useScorer, useScoresByEntityId, useScoresByScorerId } from '@mastra/playground-ui';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from 'lucide-react';
 import { format, isToday } from 'date-fns';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -15,38 +15,46 @@ import * as Dialog from '@radix-ui/react-dialog';
 import MarkdownRenderer from '@/components/ui/markdown-renderer';
 import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { useWorkflows } from '@/hooks/use-workflows';
 
 export default function Scorer() {
-  const { scorerId } = useParams();
-  const { scorer, isLoading: isLoadingScorer } = useScorer(scorerId!);
-  const { agents, isLoading: isLoadingAgents } = useAgents();
-  const scorerAgents =
-    scorer?.agentIds.map(agentId => {
-      return { id: agentId, name: agents?.[agentId]?.name };
-    }) || [];
-  const isLoading = isLoadingScorer || isLoadingAgents;
+  const { scorerId } = useParams()! as { scorerId: string };
+  const { scorer, isLoading: scorerLoading } = useScorer(scorerId!);
+  const { agents, isLoading: agentsLoading } = useAgents();
+  const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
+  const isLoading = scorerLoading || agentsLoading || workflowsLoading;
+
+  // the useScoresByScorerId returns an empty []
+  // const { scores: allScores, isLoading: scoresLoading } = useScoresByScorerId(scorerId);
+  // so here is a temporary hack to get scores by entityId to record a demo
+  const { scores: agentScores, isLoading: agentScoresLoading } = useScoresByEntityId('evalAgent', 'AGENT');
+  const { scores: workflowScores, isLoading: workflowScoresLoading } = useScoresByEntityId('myWorkflow', 'WORKFLOW');
+  const allScores = [...(agentScores?.scores || []), ...(workflowScores?.scores || [])];
+  const scoresLoading = agentScoresLoading || workflowScoresLoading;
+
   const [filteredByEntityId, setFilteredByEntityId] = useState<string>('all');
   const [selectedScore, setSelectedScore] = useState<any>(null);
   const [detailsIsOpened, setDetailsIsOpened] = useState<boolean>(false);
 
-  // temporary solution to get all scores for the scorer, replace with fetching api getScoresByScorerId when available
-  const [allScores, setAllScores] = useState<ScoreRowData[]>([]);
-  const addToAllScores = (scores: ScoreRowData[]) => {
-    if (!scores || scores.length === 0) return;
-    const existingIds = new Set(allScores.map(score => score.id));
-    const newScores = scores.filter(score => !existingIds.has(score.id));
-    if (newScores.length > 0) {
-      setAllScores([...allScores, ...newScores]);
-    }
-  };
+  const filteredScores = allScores.filter(
+    score => score.entityId === filteredByEntityId || filteredByEntityId === 'all',
+  );
 
-  // if (scorer) {
-  //   scorer.prompts = {
-  //     extract: { prompt: 'prompt string', description: 'prompt description' },
-  //     score: { prompt: 'prompt string', description: 'prompt description' },
-  //     reason: { prompt: 'prompt string', description: 'prompt description' },
-  //   };
-  // }
+  const scorerAgents =
+    scorer?.agentIds.map(agentId => {
+      return { id: agentId, name: agents?.[agentId]?.name };
+    }) || [];
+
+  const scorerWorkflows =
+    scorer?.workflowIds.map(workflowId => {
+      const legacy = workflows?.[0] || {};
+      const current = workflows?.[1] || {};
+
+      return {
+        id: workflowId,
+        name: legacy[workflowId]?.name || current[workflowId]?.name,
+      };
+    }) || [];
 
   const handleOnListItemClick = (score: any) => {
     if (score.id === selectedScore?.id) {
@@ -98,7 +106,7 @@ export default function Scorer() {
         <>
           <div className={cn(`h-full overflow-y-scroll `)}>
             <div className={cn('max-w-[100rem] px-[3rem] mx-auto')}>
-              <ScorerHeader scorer={scorer} scorerAgents={scorerAgents} />
+              <ScorerHeader scorer={scorer} agents={scorerAgents} workflows={scorerWorkflows} />
               <Tabs defaultValue="scores">
                 <TabsList
                   className={cn(
@@ -126,15 +134,14 @@ export default function Scorer() {
                     setFilteredByEntityId={setFilteredByEntityId}
                     filteredByEntityId={filteredByEntityId}
                     scorerAgents={scorerAgents}
+                    scorerWorkflows={scorerWorkflows}
                   />
                   <ScoreList
-                    scorerId={scorerId}
-                    scorer={scorer}
+                    scores={filteredScores}
                     filteredByEntityId={filteredByEntityId}
                     selectedScore={selectedScore}
-                    setSelectedScore={setSelectedScore}
                     onItemClick={handleOnListItemClick}
-                    addToAllScores={addToAllScores}
+                    isLoading={scoresLoading}
                   />
                 </TabsContent>
                 <TabsContent value="prompts">
@@ -156,7 +163,17 @@ export default function Scorer() {
   );
 }
 
-function ScorerHeader({ scorer, scorerAgents }: { scorer: any; scorerAgents?: { id: string; name: string }[] }) {
+function ScorerHeader({
+  scorer,
+  agents,
+  workflows,
+}: {
+  scorer: any;
+  agents?: { id: string; name: string }[];
+  workflows?: { id: string; name: string }[];
+}) {
+  console.log({ agents, workflows });
+
   return (
     <div
       className={cn(
@@ -166,18 +183,29 @@ function ScorerHeader({ scorer, scorerAgents }: { scorer: any; scorerAgents?: { 
     >
       <div className="grid gap-[1rem] w">
         <h1 className="text-icon6 text-[1.25rem]">{scorer.scorer.name}</h1>
-        <p className="m-0">{scorer.scorer.description}</p>
+        <p className="m-0 text-[0.875rem]">{scorer.scorer.description}</p>
         <div
           className={cn(
             'flex gap-[1rem] mt-[1rem] text-[0.875rem] items-center mb-[0.25rem]',
             '[&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-icon3',
           )}
         >
-          <span>Agents</span>
+          <span>Entities</span>
           <ArrowRightIcon />
-          <div>
-            {scorerAgents?.map(agent => {
-              return <span key={agent.id}>{agent.name}</span>;
+          <div className="flex  gap-[1rem] [&>a]:text-icon4 [&>a:hover]:text-icon5 [&>a]:transition-colors [&>a]:flex [&>a]:items-center [&>a]:gap-[0.5rem] [&>a]:border [&>a]:border-border1 [&>a]:p-[0.25rem] [&>a]:px-[0.5rem] [&>a]:rounded-md [&>a]:text-[0.875rem]">
+            {agents?.map(agent => {
+              return (
+                <Link to={`/agents/${agent.id}/chat`} key={agent.id}>
+                  <AgentIcon /> {agent.name || agent.id}
+                </Link>
+              );
+            })}
+            {workflows?.map(workflow => {
+              return (
+                <Link to={`/workflows/${workflow.id}/graph`} key={workflow.id}>
+                  <WorkflowIcon /> {workflow.name || workflow.id}
+                </Link>
+              );
             })}
           </div>
         </div>
@@ -190,19 +218,18 @@ function ScoreListHeader({
   setFilteredByEntityId,
   filteredByEntityId,
   scorerAgents,
+  scorerWorkflows,
 }: {
   setFilteredByEntityId: (value: string) => void;
   filteredByEntityId: string;
   scorerAgents?: { id: string; name: string }[];
+  scorerWorkflows?: { id: string; name: string }[];
 }) {
   return (
-    <div className={cn('sticky top-0 bg-surface2 z-[1] pt-[1rem] mt-[3rem]')}>
-      <div className="mb-[1rem] inline-flex items-baseline gap-[1rem] ">
-        <label
-          htmlFor="filter-by-agent"
-          className="text-icon3 text-[0.875rem] font-semibold mb-[0.5rem] whitespace-nowrap"
-        >
-          Filter by agent:
+    <div className={cn('sticky top-0 bg-surface4 z-[1] mt-[2rem] mb-[1rem] rounded-lg px-[1.5rem]')}>
+      <div className="inline-flex items-baseline gap-[1rem] py-[.75rem]">
+        <label htmlFor="filter-by-agent" className="text-icon3 text-[0.875rem] font-semibold whitespace-nowrap">
+          Filter by entity:
         </label>
         <Select
           name="filter-by-agent"
@@ -220,8 +247,17 @@ function ScoreListHeader({
               All Agents
             </SelectItem>
             {(scorerAgents || []).map(agent => (
-              <SelectItem key={agent.id} value={agent.id}>
+              // #todo: revert the commented code below when backend if fixed
+              // <SelectItem key={agent.id} value={agent.id}>
+              <SelectItem key={agent.id} value={agent.name}>
                 {agent.name}
+              </SelectItem>
+            ))}
+            {(scorerWorkflows || []).map(workflow => (
+              // #todo: revert the commented code below when backend if fixed
+              // <SelectItem key={workflow.id} value={workflow.id}>
+              <SelectItem key={workflow.id} value={workflow.name}>
+                {workflow.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -230,73 +266,58 @@ function ScoreListHeader({
 
       <div
         className={cn(
-          'grid gap-[1rem] bg-surface3 rounded-lg mb-[0.5rem] px-[1.5rem] py-[1rem] grid-cols-[7rem_7rem_1fr_2fr_9rem_3rem] text-left text-[0.75rem] text-icon3 uppercase',
+          'grid gap-[1rem] grid-cols-[7rem_7rem_1fr_2fr_9rem_3rem] text-left text-[0.75rem] text-icon3 uppercase py-[1rem] border-t border-border1 ',
         )}
       >
         <span>Date</span>
         <span>Time</span>
         <span>Input</span>
         <span>Output</span>
-        <span>Agent</span>
+        <span>Entity</span>
         <span>Score</span>
-        <span className="w-[1.5rem]"></span>
       </div>
     </div>
   );
 }
 
 function ScoreList({
-  scorerId,
-  scorer,
+  scores,
   filteredByEntityId,
   selectedScore,
   onItemClick,
-  addToAllScores,
+  isLoading,
 }: {
-  scorer: GetScorerResponse;
+  scores: ScoreRowData[];
   filteredByEntityId: string;
   selectedScore: any;
-  setSelectedScore: (value: ScoreRowData) => void;
   onItemClick?: (score: ScoreRowData) => void;
-  addToAllScores?: (scores: ScoreRowData[]) => void;
+  isLoading?: boolean;
 }) {
+  if (isLoading) {
+    return (
+      <div className="flex border border-border1 w-full h-[3.5rem] items-center justify-center text-[0.875rem] text-icon3 rounded-lg">
+        Loading...
+      </div>
+    );
+  }
+
   return (
     <ul className="grid border border-border1f bg-surface3 rounded-xl mb-[5rem]">
-      <ScoresForScorer
-        key={scorerId}
-        scorerId={scorerId}
-        selectedScore={selectedScore}
-        onItemClick={onItemClick}
-        addToAllScores={addToAllScores}
-      />
+      {scores?.length === 0 && (
+        <li className="text-icon3 text-[0.875rem] text-center h-[3.5rem] items-center flex justify-center">
+          No scores found for this scorer.
+        </li>
+      )}
+      {scores?.length > 0 &&
+        scores.map(score => {
+          if (filteredByEntityId !== 'all' && filteredByEntityId !== score.entityId) {
+            return null;
+          }
+
+          return <ScoreItem key={score.id} score={score} selectedScore={selectedScore} onClick={onItemClick} />;
+        })}
     </ul>
   );
-}
-
-function ScoresForScorer({
-  scorerId,
-  selectedScore,
-  onItemClick,
-  addToAllScores,
-}: {
-  agentId: string;
-  selectedScore: any;
-  onItemClick?: (score: any) => void;
-  addToAllScores?: (scores: ScoreRowData[]) => void;
-}) {
-  const [scoresAdded, setScoresAdded] = useState(false);
-  const { scores, isLoading } = useScoresByScorerId(scorerId);
-
-  useEffect(() => {
-    if (!scoresAdded && scores?.scores && scores?.scores.length > 0) {
-      addToAllScores?.(scores?.scores || []);
-      setScoresAdded(true);
-    }
-  }, [scores, addToAllScores, isLoading]);
-
-  return scores?.scores.map(score => (
-    <ScoreItem key={score.id} score={score} selectedScore={selectedScore} onClick={onItemClick} />
-  ));
 }
 
 function ScoreItem({
@@ -317,9 +338,10 @@ function ScoreItem({
   const isTodayDate = isToday(new Date(score.createdAt));
   const dateStr = format(new Date(score.createdAt), 'MMM d yyyy');
   const timeStr = format(new Date(score.createdAt), 'h:mm:ss bb');
-  const inputPrev = score?.input?.[0]?.content || '';
-  const outputPrev = score?.output?.text || '';
-  const scorePrev = score?.score || `N/A`;
+  const inputPrev = score?.input?.[0]?.content || score?.input?.[0]?.ingredient || '';
+  const outputPrev = score?.output?.text || score?.output?.object?.result || '';
+  const scorePrev = score?.score ? Math.round(score?.score * 100) / 100 : 'n/a';
+  const entityIcon = score?.entityType === 'WORKFLOW' ? <WorkflowIcon /> : <AgentIcon />; // score?.score?.toFixed(2) || `N/A`;
 
   return (
     <li
@@ -331,14 +353,16 @@ function ScoreItem({
       <button
         onClick={handleClick}
         className={cn(
-          'grid w-full px-[1.5rem] gap-[1rem] text-left items-center min-h-[4rem] grid-cols-[7rem_7rem_1fr_2fr_9rem_3rem] ',
+          'grid w-full px-[1.5rem] gap-[1rem] text-left items-center min-h-[3.5rem] grid-cols-[7rem_7rem_1fr_2fr_9rem_3rem] ',
         )}
       >
         <span className="text-icon4">{isTodayDate ? 'Today' : dateStr}</span>
         <span className="text-icon4">{timeStr}</span>
         <span className="truncate pr-[1rem]">{inputPrev}</span>
         <span className="truncate pr-[1rem]">{outputPrev}</span>
-        <span className="truncate pr-[1rem]">{score.entityId}</span>
+        <span className="truncate pr-[1rem] flex gap-[0.5rem] items-center [&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-icon3 text-[0.875rem]">
+          {entityIcon} {score.entityId}
+        </span>
         <span>{scorePrev}</span>
       </button>
     </li>
@@ -433,7 +457,8 @@ function ScoreDetails({
                   key={index}
                   className="border-b border-border1 last:border-b-0 py-[1rem] px-[1.5rem] text-[0.875rem] text-icon5"
                 >
-                  <MarkdownRenderer>{input.content}</MarkdownRenderer>
+                  {input?.content && <MarkdownRenderer>{input.content}</MarkdownRenderer>}
+                  {input?.ingredient && <MarkdownRenderer>{input.ingredient}</MarkdownRenderer>}
                 </div>
               ))}
             </section>
@@ -441,22 +466,25 @@ function ScoreDetails({
               <div className="border-b border-border1 last:border-b-0">
                 <div className="flex items-center justify-between border-b border-border1 p-[1rem] px-[1.5rem]">
                   <h3>Output</h3>
-                  <div className="flex gap-[1rem] text-[0.875rem] text-icon4 [&_b]:text-icon5">
-                    <span>Token usage</span>|
-                    <span>
-                      Completion: <b>{score.output?.usage?.completionTokens}</b>
-                    </span>
-                    <span>
-                      Prompt: <b>{score.output?.usage?.promptTokens}</b>
-                    </span>
-                    |
-                    <span>
-                      Total: <b>{score.output?.usage?.totalTokens}</b>
-                    </span>
-                  </div>
+                  {score.output?.usage && (
+                    <div className="flex gap-[1rem] text-[0.875rem] text-icon4 [&_b]:text-icon5">
+                      <span>Token usage</span>|
+                      <span>
+                        Completion: <b>{score.output?.usage?.completionTokens}</b>
+                      </span>
+                      <span>
+                        Prompt: <b>{score.output?.usage?.promptTokens}</b>
+                      </span>
+                      |
+                      <span>
+                        Total: <b>{score.output?.usage?.totalTokens}</b>
+                      </span>
+                    </div>
+                  )}
                 </div>
-                <div className="text-icon5 text-[0.875rem] p-[1.5rem] pt-[0.5rem] ">
-                  <MarkdownRenderer>{score.output?.text}</MarkdownRenderer>
+                <div className="text-icon5 text-[0.875rem] p-[1.5rem] py-[1rem]">
+                  {score.output?.text && <MarkdownRenderer>{score.output.text}</MarkdownRenderer>}
+                  {score.output?.object?.result && <MarkdownRenderer>{score.output.object.result}</MarkdownRenderer>}
                 </div>
               </div>
             </section>
