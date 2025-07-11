@@ -60,22 +60,22 @@ describe('MSSQLStore', () => {
       } catch {}
     });
   
-    it('should expose db field as public', () => {
-      expect(testDB.db).toBeDefined();
+    it('should expose pool field as public', () => {
+      expect(testDB.pool).toBeDefined();
       // For mssql, db is likely a pool or connection
-      expect(typeof testDB.db).toBe('object');
-      expect(typeof testDB.db.request).toBe('function');
+      expect(typeof testDB.pool).toBe('object');
+      expect(typeof testDB.pool.request).toBe('function');
     });
   
-    it('should allow direct database queries via public db field', async () => {
-      const result = await testDB.db.request().query('SELECT 1 as test');
+    it('should allow direct database queries via public pool field', async () => {
+      const result = await testDB.pool.request().query('SELECT 1 as test');
       expect(result.recordset[0].test).toBe(1);
     });
   
-    it('should maintain connection state through public db field', async () => {
+    it('should maintain connection state through public pool field', async () => {
       // MSSQL: Use SYSDATETIME() for current timestamp
-      const result1 = await testDB.db.request().query('SELECT SYSDATETIME() as timestamp1');
-      const result2 = await testDB.db.request().query('SELECT SYSDATETIME() as timestamp2');
+      const result1 = await testDB.pool.request().query('SELECT SYSDATETIME() as timestamp1');
+      const result2 = await testDB.pool.request().query('SELECT SYSDATETIME() as timestamp2');
   
       expect(result1.recordset[0].timestamp1).toBeDefined();
       expect(result2.recordset[0].timestamp2).toBeDefined();
@@ -85,7 +85,7 @@ describe('MSSQLStore', () => {
   
     it('should throw error when pool is used after disconnect', async () => {
       await testDB.close();
-      await expect(testDB.db.request().query('SELECT 1')).rejects.toThrow();
+      await expect(testDB.pool.request().query('SELECT 1')).rejects.toThrow();
     });
   });
 
@@ -1214,26 +1214,26 @@ describe('MSSQLStore', () => {
     beforeEach(async () => {
       // Always try to drop the table before each test, ignore errors if it doesn't exist
       try {
-        await store['db'].query(`DROP TABLE IF EXISTS ${tempTable}`);
+        await store.pool.query(`DROP TABLE IF EXISTS ${tempTable}`);
       } catch {
         /* ignore */
       }
     });
 
     it('returns true if the column exists', async () => {
-      await store['db'].query(`CREATE TABLE ${tempTable} (id INT IDENTITY(1,1) PRIMARY KEY, resourceId NVARCHAR(MAX))`);
+      await store.pool.query(`CREATE TABLE ${tempTable} (id INT IDENTITY(1,1) PRIMARY KEY, resourceId NVARCHAR(MAX))`);
       expect(await store['hasColumn'](tempTable, 'resourceId')).toBe(true);
     });
 
     it('returns false if the column does not exist', async () => {
-      await store['db'].query(`CREATE TABLE ${tempTable} (id INT IDENTITY(1,1) PRIMARY KEY)`);
+      await store.pool.query(`CREATE TABLE ${tempTable} (id INT IDENTITY(1,1) PRIMARY KEY)`);
       expect(await store['hasColumn'](tempTable, 'resourceId')).toBe(false);
     });
 
     afterEach(async () => {
       // Always try to drop the table after each test, ignore errors if it doesn't exist
       try {
-        await store['db'].query(`DROP TABLE IF EXISTS ${tempTable}`);
+        await store.pool.query(`DROP TABLE IF EXISTS ${tempTable}`);
       } catch {
         /* ignore */
       }

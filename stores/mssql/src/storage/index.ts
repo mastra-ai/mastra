@@ -55,7 +55,6 @@ export class MSSQLStore extends MastraStorage {
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
   private isConnected: Promise<boolean> | null = null;
-  public db: any;
 
   constructor(config: MSSQLConfigType) {
     super({ name: 'MSSQLStore' });
@@ -98,7 +97,6 @@ export class MSSQLStore extends MastraStorage {
               options:
                 config.options || { encrypt: true, trustServerCertificate: true },
             });
-      this.db = this.pool;
     } catch (e) {
       throw new MastraError(
         {
