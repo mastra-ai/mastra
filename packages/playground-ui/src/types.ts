@@ -3,10 +3,20 @@ export interface Message {
   role: 'user' | 'assistant';
   content: any;
   isError?: boolean;
-  parts?: Array<{
-    type: 'text' | 'step-start';
-    text?: string;
-  }>;
+  parts?: Array<
+    | {
+        type: 'text';
+        text: string;
+      }
+    | {
+        type: 'step-start';
+      }
+    | {
+        type: 'reasoning';
+        reasoning: string;
+        details: Array<{ type: 'text'; text: string }>;
+      }
+  >;
 }
 
 export interface AssistantMessage {
@@ -37,6 +47,7 @@ export interface ModelSettings {
   topK?: number;
   topP?: number;
   instructions?: string;
+  providerOptions?: Record<string, unknown>;
   chatWithGenerate?: boolean;
 }
 
