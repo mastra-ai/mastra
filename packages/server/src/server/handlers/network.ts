@@ -1,3 +1,4 @@
+import type { AgentStreamOptions } from '@mastra/core/agent';
 import type { AgentNetwork } from '@mastra/core/network';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { HTTPException } from '../http-exception';
@@ -147,7 +148,7 @@ export async function streamGenerateHandler({
       output: output as any,
       ...rest,
       runtimeContext,
-    });
+    } as AgentStreamOptions<any, any>);
 
     const streamResponse = output
       ? streamResult.toTextStreamResponse()
