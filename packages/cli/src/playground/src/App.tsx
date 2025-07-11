@@ -1,4 +1,4 @@
-import { Routes, Route, BrowserRouter, Outlet } from 'react-router';
+import { Routes, Route, BrowserRouter, Outlet, Link } from 'react-router';
 
 import { Layout } from '@/components/layout';
 
@@ -30,7 +30,7 @@ import { useState } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import { WorkflowGraphLayout } from './pages/workflows/layouts/workflow-graph-layout';
-import { MastraClientProvider } from '@mastra/playground-ui';
+import { LinkComponentProvider, MastraClientProvider } from '@mastra/playground-ui';
 import VNextNetwork from './pages/networks/network/v-next';
 import { NavigateTo } from './lib/react-router';
 
@@ -41,123 +41,125 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <PostHogProvider>
         <MastraClientProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
-                <Route path="/networks" element={<Networks />} />
+          <LinkComponentProvider Link={Link}>
+            <BrowserRouter>
+              <Routes>
                 <Route
-                  path="/networks/v-next/:networkId"
-                  element={<NavigateTo to="/networks/v-next/:networkId/chat" />}
-                />
-                <Route
-                  path="/networks/v-next/:networkId"
                   element={
-                    <NetworkLayout isVNext>
+                    <Layout>
                       <Outlet />
-                    </NetworkLayout>
+                    </Layout>
                   }
                 >
-                  <Route path="chat" element={<VNextNetwork />} />
-                  <Route path="chat/:threadId" element={<VNextNetwork />} />
-                </Route>
-                <Route path="/networks/:networkId" element={<NavigateTo to="/networks/:networkId/chat" />} />
-                <Route
-                  path="/networks/:networkId"
-                  element={
-                    <NetworkLayout>
-                      <Outlet />
-                    </NetworkLayout>
-                  }
-                >
-                  <Route path="chat" element={<Network />} />
-                </Route>
-              </Route>
-
-              <Route
-                element={
-                  <Layout>
-                    <Outlet />
-                  </Layout>
-                }
-              >
-                <Route path="/agents" element={<Agents />} />
-                <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
-                <Route
-                  path="/agents/:agentId"
-                  element={
-                    <AgentLayout>
-                      <Outlet />
-                    </AgentLayout>
-                  }
-                >
-                  <Route path="chat" element={<Agent />} />
-                  <Route path="chat/:threadId" element={<Agent />} />
-                  <Route path="evals" element={<AgentEvalsPage />} />
-                  <Route path="traces" element={<AgentTracesPage />} />
-                </Route>
-                <Route path="/tools" element={<Tools />} />
-                <Route path="/tools/:agentId/:toolId" element={<AgentTool />} />
-                <Route path="/tools/all/:toolId" element={<Tool />} />
-                <Route path="/mcps" element={<MCPs />} />
-
-                <Route path="/mcps/:serverId" element={<McpServerPage />} />
-                <Route path="/mcps/:serverId/tools/:toolId" element={<MCPServerToolExecutor />} />
-
-                <Route path="/workflows" element={<Workflows />} />
-                <Route path="/workflows/:workflowId" element={<NavigateTo to="/workflows/:workflowId/graph" />} />
-
-                <Route path="/workflows/:workflowId" element={<Outlet />}>
+                  <Route path="/networks" element={<Networks />} />
                   <Route
-                    path="traces"
-                    element={
-                      <WorkflowLayout>
-                        <WorkflowTracesPage />
-                      </WorkflowLayout>
-                    }
+                    path="/networks/v-next/:networkId"
+                    element={<NavigateTo to="/networks/v-next/:networkId/chat" />}
                   />
-
                   <Route
-                    path="/workflows/:workflowId/graph"
+                    path="/networks/v-next/:networkId"
                     element={
-                      <WorkflowLayout>
-                        <WorkflowGraphLayout>
-                          <Outlet />
-                        </WorkflowGraphLayout>
-                      </WorkflowLayout>
+                      <NetworkLayout isVNext>
+                        <Outlet />
+                      </NetworkLayout>
                     }
                   >
-                    <Route path="/workflows/:workflowId/graph" element={<Workflow />} />
-                    <Route path="/workflows/:workflowId/graph/:runId" element={<Workflow />} />
+                    <Route path="chat" element={<VNextNetwork />} />
+                    <Route path="chat/:threadId" element={<VNextNetwork />} />
+                  </Route>
+                  <Route path="/networks/:networkId" element={<NavigateTo to="/networks/:networkId/chat" />} />
+                  <Route
+                    path="/networks/:networkId"
+                    element={
+                      <NetworkLayout>
+                        <Outlet />
+                      </NetworkLayout>
+                    }
+                  >
+                    <Route path="chat" element={<Network />} />
                   </Route>
                 </Route>
 
                 <Route
-                  path="/workflows/legacy/:workflowId"
-                  element={<NavigateTo to="/workflows/legacy/:workflowId/graph" />}
-                />
-
-                <Route
-                  path="/workflows/legacy/:workflowId"
                   element={
-                    <LegacyWorkflowLayout>
+                    <Layout>
                       <Outlet />
-                    </LegacyWorkflowLayout>
+                    </Layout>
                   }
                 >
-                  <Route path="graph" element={<LegacyWorkflow />} />
-                  <Route path="traces" element={<LegacyWorkflowTracesPage />} />
+                  <Route path="/agents" element={<Agents />} />
+                  <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
+                  <Route
+                    path="/agents/:agentId"
+                    element={
+                      <AgentLayout>
+                        <Outlet />
+                      </AgentLayout>
+                    }
+                  >
+                    <Route path="chat" element={<Agent />} />
+                    <Route path="chat/:threadId" element={<Agent />} />
+                    <Route path="evals" element={<AgentEvalsPage />} />
+                    <Route path="traces" element={<AgentTracesPage />} />
+                  </Route>
+                  <Route path="/tools" element={<Tools />} />
+                  <Route path="/tools/:agentId/:toolId" element={<AgentTool />} />
+                  <Route path="/tools/all/:toolId" element={<Tool />} />
+                  <Route path="/mcps" element={<MCPs />} />
+
+                  <Route path="/mcps/:serverId" element={<McpServerPage />} />
+                  <Route path="/mcps/:serverId/tools/:toolId" element={<MCPServerToolExecutor />} />
+
+                  <Route path="/workflows" element={<Workflows />} />
+                  <Route path="/workflows/:workflowId" element={<NavigateTo to="/workflows/:workflowId/graph" />} />
+
+                  <Route path="/workflows/:workflowId" element={<Outlet />}>
+                    <Route
+                      path="traces"
+                      element={
+                        <WorkflowLayout>
+                          <WorkflowTracesPage />
+                        </WorkflowLayout>
+                      }
+                    />
+
+                    <Route
+                      path="/workflows/:workflowId/graph"
+                      element={
+                        <WorkflowLayout>
+                          <WorkflowGraphLayout>
+                            <Outlet />
+                          </WorkflowGraphLayout>
+                        </WorkflowLayout>
+                      }
+                    >
+                      <Route path="/workflows/:workflowId/graph" element={<Workflow />} />
+                      <Route path="/workflows/:workflowId/graph/:runId" element={<Workflow />} />
+                    </Route>
+                  </Route>
+
+                  <Route
+                    path="/workflows/legacy/:workflowId"
+                    element={<NavigateTo to="/workflows/legacy/:workflowId/graph" />}
+                  />
+
+                  <Route
+                    path="/workflows/legacy/:workflowId"
+                    element={
+                      <LegacyWorkflowLayout>
+                        <Outlet />
+                      </LegacyWorkflowLayout>
+                    }
+                  >
+                    <Route path="graph" element={<LegacyWorkflow />} />
+                    <Route path="traces" element={<LegacyWorkflowTracesPage />} />
+                  </Route>
+                  <Route path="/" element={<NavigateTo to="/agents" />} />
+                  <Route path="/runtime-context" element={<RuntimeContext />} />
                 </Route>
-                <Route path="/" element={<NavigateTo to="/agents" />} />
-                <Route path="/runtime-context" element={<RuntimeContext />} />
-              </Route>
-            </Routes>
-          </BrowserRouter>
+              </Routes>
+            </BrowserRouter>
+          </LinkComponentProvider>
         </MastraClientProvider>
       </PostHogProvider>
     </QueryClientProvider>
