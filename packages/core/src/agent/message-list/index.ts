@@ -377,6 +377,7 @@ export class MessageList {
       latestMessage?.role === 'assistant' &&
       messageV2.role === 'assistant' &&
       latestMessage.threadId === messageV2.threadId &&
+      // If the message is from memory, don't append to the last assistant message
       messageSource !== 'memory';
     if (shouldAppendToLastAssistantMessage) {
       latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
@@ -430,6 +431,7 @@ export class MessageList {
         // Match what AI SDK does - content string is always the latest text part.
         latestMessage.content.content = messageV2.content.content;
       }
+      // If latest message gets appended to, it should be added to the new response messages set to ensure it gets saved
       this.newResponseMessages.add(latestMessage);
     }
     // Else the last message and this message are not both assistant messages OR an existing message has been updated and should be replaced. add a new message to the array or update an existing one.
