@@ -1,4 +1,4 @@
-import { deepMerge } from '@mastra/core';
+import { deepMerge, generateEmptyFromSchema } from '@mastra/core';
 import type { CoreTool, MastraMessageV1 } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
@@ -258,35 +258,22 @@ export class Memory extends MastraMemory {
 
     if (config.workingMemory?.enabled) {
       const scope = config.workingMemory.scope || 'thread';
-
+      const workingMemory = await this.getWorkingMemoryTemplate({ memoryConfig: config });
       if (scope === 'resource' && thread.resourceId) {
         // For resource scope, initialize working memory in resource table
         const existingResource = await this.storage.getResourceById({ resourceId: thread.resourceId });
-
         if (!existingResource?.workingMemory) {
-          let workingMemory = config.workingMemory.template || this.defaultWorkingMemoryTemplate;
-
-          if (config.workingMemory.schema) {
-            workingMemory = JSON.stringify(zodToJsonSchema(config.workingMemory.schema));
-          }
-
           await this.storage.updateResource({
             resourceId: thread.resourceId,
-            workingMemory,
+            workingMemory: workingMemory?.content,
           });
         }
       } else if (scope === 'thread' && !thread?.metadata?.workingMemory) {
         // For thread scope, initialize working memory in thread metadata (existing behavior)
-        let workingMemory = config.workingMemory.template || this.defaultWorkingMemoryTemplate;
-
-        if (config.workingMemory.schema) {
-          workingMemory = JSON.stringify(zodToJsonSchema(config.workingMemory.schema));
-        }
-
         return this.storage.saveThread({
           thread: deepMerge(thread, {
             metadata: {
-              workingMemory,
+              workingMemory: workingMemory?.content,
             },
           }),
         });
@@ -654,15 +641,21 @@ export class Memory extends MastraMemory {
     return workingMemoryData;
   }
 
-  public async getWorkingMemoryTemplate(): Promise<WorkingMemoryTemplate | null> {
-    if (!this.threadConfig.workingMemory?.enabled) {
+  public async getWorkingMemoryTemplate({
+    memoryConfig,
+  }: {
+    memoryConfig?: MemoryConfig;
+  }): Promise<WorkingMemoryTemplate | null> {
+    const config = this.getMergedThreadConfig(memoryConfig || {});
+
+    if (!config.workingMemory?.enabled) {
       return null;
     }
 
     // Get thread from storage
-    if (this.threadConfig?.workingMemory?.schema) {
+    if (config.workingMemory?.schema) {
       try {
-        const schema = this.threadConfig.workingMemory.schema;
+        const schema = config.workingMemory.schema;
         const convertedSchema = zodToJsonSchema(schema, {
           $refStrategy: 'none',
         });
@@ -675,8 +668,7 @@ export class Memory extends MastraMemory {
     }
 
     // Return working memory from metadata
-    const memory = this.threadConfig.workingMemory.template || this.defaultWorkingMemoryTemplate;
-
+    const memory = config.workingMemory.template || this.defaultWorkingMemoryTemplate;
     return { format: 'markdown', content: memory.trim() };
   }
 
@@ -694,7 +686,7 @@ export class Memory extends MastraMemory {
       return null;
     }
 
-    const workingMemoryTemplate = await this.getWorkingMemoryTemplate();
+    const workingMemoryTemplate = await this.getWorkingMemoryTemplate({ memoryConfig: config });
     const workingMemoryData = await this.getWorkingMemory({ threadId, resourceId, memoryConfig: config });
 
     if (!workingMemoryTemplate) {
@@ -727,6 +719,11 @@ export class Memory extends MastraMemory {
     template: WorkingMemoryTemplate;
     data: string | null;
   }) {
+    const emptyWorkingMemoryTemplateObject =
+      template.format === 'json' ? generateEmptyFromSchema(template.content) : null;
+    const hasEmptyWorkingMemoryTemplateObject =
+      emptyWorkingMemoryTemplateObject && Object.keys(emptyWorkingMemoryTemplateObject).length > 0;
+
     return `WORKING_MEMORY_SYSTEM_INSTRUCTION:
 Store and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!
 
@@ -735,9 +732,15 @@ Guidelines:
 2. Update proactively when information changes, no matter how small
 3. Use ${template.format === 'json' ? 'JSON' : 'Markdown'} format for all data
 4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for "information about yourself"
+5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. 
+6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.
+7. IMPORTANT: Data must only be sent as a string no matter which format is used.
 
 WORKING MEMORY TEMPLATE:
 ${template.content}
+
+${hasEmptyWorkingMemoryTemplateObject ? 'When working with json data, the object format below represents the template:' : ''}
+${hasEmptyWorkingMemoryTemplateObject ? JSON.stringify(emptyWorkingMemoryTemplateObject) : ''}
 
 WORKING MEMORY DATA:
 ${data}
