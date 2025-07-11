@@ -19,7 +19,7 @@ export const ToolFallback: ToolCallContentPartComponent = ({ toolName, argsText,
   }
 
   return (
-    <div>
+    <div className="mb-2">
       <button onClick={() => setIsCollapsed(s => !s)} className="flex items-center gap-2">
         <Icon>
           <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
