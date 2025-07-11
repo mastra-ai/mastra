@@ -10,6 +10,8 @@ import type {
 } from '../types';
 
 import { BaseResource } from './base';
+import { parseClientRuntimeContext } from '../utils';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 
 const RECORD_SEPARATOR = '\x1E';
 
@@ -37,7 +39,10 @@ export class VNextNetwork extends BaseResource {
   generate(params: GenerateOrStreamVNextNetworkParams): Promise<GenerateVNextNetworkResponse> {
     return this.request(`/api/networks/v-next/${this.networkId}/generate`, {
       method: 'POST',
-      body: params,
+      body: {
+        ...params,
+        runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      },
     });
   }
 
@@ -46,10 +51,16 @@ export class VNextNetwork extends BaseResource {
    * @param params - Generation parameters including message
    * @returns Promise containing the generated response
    */
-  loop(params: { message: string }): Promise<LoopVNextNetworkResponse> {
+  loop(params: {
+    message: string;
+    runtimeContext?: RuntimeContext | Record<string, any>;
+  }): Promise<LoopVNextNetworkResponse> {
     return this.request(`/api/networks/v-next/${this.networkId}/loop`, {
       method: 'POST',
-      body: params,
+      body: {
+        ...params,
+        runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      },
     });
   }
 
@@ -125,7 +136,10 @@ export class VNextNetwork extends BaseResource {
   async stream(params: GenerateOrStreamVNextNetworkParams, onRecord: (record: WatchEvent) => void) {
     const response: Response = await this.request(`/api/networks/v-next/${this.networkId}/stream`, {
       method: 'POST',
-      body: params,
+      body: {
+        ...params,
+        runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      },
       stream: true,
     });
 
@@ -154,7 +168,10 @@ export class VNextNetwork extends BaseResource {
   async loopStream(params: LoopStreamVNextNetworkParams, onRecord: (record: WatchEvent) => void) {
     const response: Response = await this.request(`/api/networks/v-next/${this.networkId}/loop-stream`, {
       method: 'POST',
-      body: params,
+      body: {
+        ...params,
+        runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      },
       stream: true,
     });
 
