@@ -71,6 +71,7 @@
     "@radix-ui/react-tabs": "^1.1.12",
     "@radix-ui/react-toggle": "^1.1.9",
     "@radix-ui/react-tooltip": "^1.2.7",
+    "@tanstack/react-query": "^5.81.5",
     "@tanstack/react-table": "^8.21.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@uiw/codemirror-theme-dracula": "^4.23.14",
