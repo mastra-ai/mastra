@@ -373,34 +373,12 @@ export class MessageList {
       }
     }
     // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
-    const latestMessagePartType = latestMessage?.content?.parts?.filter(p => p.type !== `step-start`)?.at?.(-1)?.type;
-    const newMessageFirstPartType = messageV2.content.parts.filter(p => p.type !== `step-start`).at(0)?.type;
     const shouldAppendToLastAssistantMessage =
       latestMessage?.role === 'assistant' &&
       messageV2.role === 'assistant' &&
-      latestMessage.threadId === messageV2.threadId;
-    // If neither the latest message or the new message is a memory message, merge them together
-    const shouldMergeNewMessages =
-      latestMessage && !this.memoryMessages.has(latestMessage) && messageSource !== 'memory';
-    const shouldAppendToLastAssistantMessageParts =
-      shouldAppendToLastAssistantMessage &&
-      newMessageFirstPartType &&
-      ((newMessageFirstPartType === `tool-invocation` && latestMessagePartType !== `text`) ||
-        (newMessageFirstPartType === latestMessagePartType && shouldMergeNewMessages));
-
-    if (
-      // backwards compat check!
-      // this condition can technically be removed and it will make it so all new assistant parts will be added to the last assistant message parts instead of creating new db entries.
-      // however, for any downstream code that isn't based around using message parts yet, this may cause tool invocations to show up in the wrong order in their UI, because they use the message.toolInvocations and message.content properties which do not indicate how each is ordered in relation to each other.
-      // this code check then causes any tool invocation to be created as a new message and not update the previous assistant message parts.
-      // without this condition we will see something like
-      // parts: [{type:"step-start"}, {type: "text", text: "let me check the weather"}, {type: "tool-invocation", toolInvocation: x}, {type: "text", text: "the weather in x is y"}]
-      // with this condition we will see
-      // message1.parts: [{type:"step-start"}, {type: "text", text: "let me check the weather"}]
-      // message2.parts: [{type: "tool-invocation", toolInvocation: x}]
-      // message3.parts: [{type: "text", text: "the weather in x is y"}]
-      shouldAppendToLastAssistantMessageParts
-    ) {
+      latestMessage.threadId === messageV2.threadId &&
+      messageSource !== 'memory';
+    if (shouldAppendToLastAssistantMessage) {
       latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
 
       for (const [index, part] of messageV2.content.parts.entries()) {
@@ -452,22 +430,10 @@ export class MessageList {
         // Match what AI SDK does - content string is always the latest text part.
         latestMessage.content.content = messageV2.content.content;
       }
-      // This code would combine attachment only messages onto the prev message,
-      // but for anyone using CoreMessage or MastraMessageV1 still they would lose the ordering in multi-step interactions
-      // } else if (couldMoveAttachmentsToPreviousMessage && messageV2.content.experimental_attachments?.length) {
-      //   latestMessage.content.experimental_attachments ||= [];
-      //   latestMessage.content.experimental_attachments.push(...messageV2.content.experimental_attachments);
-      //   if (latestMessage.createdAt.getTime() < messageV2.createdAt.getTime()) {
-      //     latestMessage.createdAt = messageV2.createdAt;
-      //   }
+      this.newResponseMessages.add(latestMessage);
     }
     // Else the last message and this message are not both assistant messages OR an existing message has been updated and should be replaced. add a new message to the array or update an existing one.
     else {
-      if (messageV2.role === 'assistant' && messageV2.content.parts[0]?.type !== `step-start`) {
-        // Add step-start part for new assistant messages
-        messageV2.content.parts.unshift({ type: 'step-start' });
-      }
-
       const existingIndex = (shouldReplace && this.messages.findIndex(m => m.id === id)) || -1;
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
 
