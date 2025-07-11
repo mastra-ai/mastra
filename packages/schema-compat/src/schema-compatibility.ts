@@ -2,7 +2,11 @@ import type { Schema, LanguageModelV1 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import { z, ZodOptional, ZodObject, ZodArray, ZodUnion, ZodString, ZodNumber, ZodDate, ZodDefault, ZodNull } from 'zod';
 import type { ZodTypeAny } from 'zod';
-import { convertZodSchemaToAISDKSchema, safeGetSchemaProperty } from './utils';
+import { 
+  convertZodSchemaToAISDKSchema, 
+  safeGetSchemaProperty,
+  safeToJSONSchema
+} from './utils';
 
 /**
  * Utility functions for introspecting Zod v4 schemas using validation-based testing
@@ -785,42 +789,63 @@ export abstract class SchemaCompatLayer {
    * @returns A Zod string schema representing the date in ISO format
    */
   public defaultZodDateHandler(value: ZodDate): ZodString {
-    const constraints: DateConstraints = {};
+    const constraints: DateConstraints = { dateFormat: 'date-time' };
     
-    // Use v3/v4 compatible access pattern
-    let checks: any[] = [];
-    if ("_zod" in value) {
-      // Zod v4
-      checks = value._zod.def.checks || [];
-    } else {
-      // Zod v3 (fallback)
-      checks = (value as any)._def.checks || [];
-    }
+    // Simple approach: Test the schema to find constraints
+    let minDate: Date | undefined;
+    let maxDate: Date | undefined;
     
-    type ZodDateCheck = (typeof checks)[number];
-    const newChecks: ZodDateCheck[] = [];
-    for (const check of checks) {
-      if ('kind' in check) {
-        switch (check.kind) {
-          case 'min':
-            const minDate = new Date(check.value);
-            if (!isNaN(minDate.getTime())) {
-              constraints.minDate = minDate.toISOString();
-            }
-            break;
-          case 'max':
-            const maxDate = new Date(check.value);
-            if (!isNaN(maxDate.getTime())) {
-              constraints.maxDate = maxDate.toISOString();
-            }
-            break;
-          default:
-            newChecks.push(check);
-        }
+    // Test for min constraint by trying a very old date
+    const testOldDate = new Date('1900-01-01');
+    const oldResult = value.safeParse(testOldDate);
+    if (!oldResult.success) {
+      const minError = oldResult.error.issues.find(issue => 
+        issue.code === 'too_small' && 'minimum' in issue
+      );
+      if (minError && 'minimum' in minError) {
+        minDate = new Date(minError.minimum as number);
+        constraints.minDate = minDate.toISOString();
       }
     }
-    constraints.dateFormat = 'date-time';
+    
+    // Test for max constraint by trying a very future date
+    const testFutureDate = new Date('2100-01-01');
+    const futureResult = value.safeParse(testFutureDate);
+    if (!futureResult.success) {
+      const maxError = futureResult.error.issues.find(issue => 
+        issue.code === 'too_big' && 'maximum' in issue
+      );
+      if (maxError && 'maximum' in maxError) {
+        maxDate = new Date(maxError.maximum as number);
+        constraints.maxDate = maxDate.toISOString();
+      }
+    }
+    
     let result = z.string().describe('date-time');
+    
+    // Apply date constraints as refinements
+    if (minDate) {
+      result = result.refine(dateStr => {
+        try {
+          const date = new Date(dateStr);
+          return date >= minDate!;
+        } catch {
+          return false;
+        }
+      }, { message: `Date must be >= ${minDate.toISOString()}` });
+    }
+    
+    if (maxDate) {
+      result = result.refine(dateStr => {
+        try {
+          const date = new Date(dateStr);
+          return date <= maxDate!;
+        } catch {
+          return false;
+        }
+      }, { message: `Date must be <= ${maxDate.toISOString()}` });
+    }
+    
     const description = this.mergeParameterDescription(value.description, constraints);
     if (description) {
       result = result.describe(description);

@@ -13,7 +13,7 @@ import {
   isString,
   isUnion,
 } from '../schema-compatibility';
-import { safeGetSchemaProperty } from '../utils';
+import { safeGetSchemaProperty, ZOD_TYPE_NAMES } from '../utils';
 
 export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: LanguageModelV1) {
@@ -72,7 +72,7 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
       return this.defaultZodStringHandler(value);
     } else if (isDate(value)) {
       return this.defaultZodDateHandler(value);
-    } else if (safeGetSchemaProperty(value, 'typeName') === 'ZodAny') {
+    } else if (safeGetSchemaProperty(value, 'typeName') === ZOD_TYPE_NAMES.ZodAny) {
       // It's bad practice in the tool to use any, it's not reasonable for models that don't support that OOTB, to cast every single possible type
       // in the schema. Usually when it's "any" it could be a json object or a union of specific types.
       return z

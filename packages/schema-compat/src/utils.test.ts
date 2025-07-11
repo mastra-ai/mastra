@@ -442,7 +442,6 @@ describe('Builder Functions', () => {
       const { jsonSchema } = result;
       expect(jsonSchema.type).toBe('string');
       // Description processing may vary with our selective reconstruction approach
-      expect(jsonSchema.type).toBe('string');
     });
   });
 });

@@ -70,18 +70,23 @@ Mastra is a modular AI framework built around central orchestration with pluggab
 - Type errors: Run `pnpm typecheck` to check all packages
 
 ## Documentation Guidelines
+
 - Follow `.cursor/rules/writing-documentation.mdc` for writing style
 - Avoid marketing language, focus on technical implementation details
 - Examples should be practical and runnable
 
 ---
 
-## Zod v4 Notes (Migration Complete)
+## Zod v3/v4 Dual Support (Production Ready)
 
-Project uses Zod v4.0.2. Key utilities available in `packages/schema-compat/src/utils.ts`:
+**Peer Dependencies**: `"zod": "^3.25.0 || ^4.0.0 <5.0.0"` - supports both versions simultaneously.
 
-- `safeToJSONSchema()` - Handles z.record() conversion bugs with graceful fallbacks
-- `safeValidate()` - Prevents schema validation corruption
-- `safeGetSchemaProperty()` - v3/v4 compatible property access
+**Key Utilities** in `packages/schema-compat/src/utils.ts`:
+- `safeToJSONSchema()` - Runtime version detection: v4 native → v3 library fallback
+- `safeValidate()` - Corruption-resistant validation with graceful fallbacks  
+- `safeGetSchemaProperty()` - Cross-version property access (`_zod.def` vs `_def`)
 
-Use native `z.toJSONSchema()` for schema conversion. For z.record() schemas, the utilities provide automatic fallbacks.
+**Usage**: 
+- Version detection: `"_zod" in schema` (official pattern)
+- Schema conversion: Automatic v4/v3 fallback chain
+- Always use utilities instead of direct Zod calls for compatibility

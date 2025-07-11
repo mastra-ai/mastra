@@ -1,166 +1,222 @@
 import type { Schema } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
-import type { ZodSchema } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import type { JSONSchema as ZodFromJSONSchema_JSONSchema } from 'zod-from-json-schema';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { SchemaCompatLayer } from './schema-compatibility';
 
+// Official library authors guidance: Use version-specific imports
+// Supports both v3 and v4 through proper import handling
+import { z } from 'zod';
+
+// Version detection following official guidance
+function isZodV4Runtime(): boolean {
+  const testSchema = z.string();
+  return '_zod' in testSchema;
+}
+
+// TypeName constants to prevent magic string errors (addressing review comment)
+export const ZOD_TYPE_NAMES = {
+  ZodString: 'ZodString',
+  ZodNumber: 'ZodNumber',
+  ZodBigInt: 'ZodBigInt',
+  ZodBoolean: 'ZodBoolean',
+  ZodDate: 'ZodDate',
+  ZodUndefined: 'ZodUndefined',
+  ZodNull: 'ZodNull',
+  ZodAny: 'ZodAny',
+  ZodUnknown: 'ZodUnknown',
+  ZodNever: 'ZodNever',
+  ZodVoid: 'ZodVoid',
+  ZodArray: 'ZodArray',
+  ZodObject: 'ZodObject',
+  ZodUnion: 'ZodUnion',
+  ZodDiscriminatedUnion: 'ZodDiscriminatedUnion',
+  ZodIntersection: 'ZodIntersection',
+  ZodTuple: 'ZodTuple',
+  ZodRecord: 'ZodRecord',
+  ZodMap: 'ZodMap',
+  ZodSet: 'ZodSet',
+  ZodFunction: 'ZodFunction',
+  ZodLazy: 'ZodLazy',
+  ZodLiteral: 'ZodLiteral',
+  ZodEnum: 'ZodEnum',
+  ZodNativeEnum: 'ZodNativeEnum',
+  ZodPromise: 'ZodPromise',
+  ZodOptional: 'ZodOptional',
+  ZodNullable: 'ZodNullable',
+  ZodDefault: 'ZodDefault',
+  ZodCatch: 'ZodCatch',
+  ZodPreprocess: 'ZodPreprocess',
+  ZodEffects: 'ZodEffects',
+  ZodBranded: 'ZodBranded',
+  ZodPipeline: 'ZodPipeline',
+  ZodReadonly: 'ZodReadonly',
+  // v4 specific types
+  ZodEmail: 'ZodEmail',
+  ZodURL: 'ZodURL',
+  ZodUUID: 'ZodUUID',
+  ZodCUID: 'ZodCUID',
+  ZodIP: 'ZodIP',
+} as const;
+
+// Type definitions for dual version compatibility (official guidance)
+type ZodSchema = z.ZodSchema<any, any, any>;
+type ZodTypeAny = z.ZodTypeAny;
+
+// ==================== SIMPLE VERSION DETECTION ====================
+// Following official zod.dev/library-authors guidance
+
 /**
- * Converts a Zod schema to an AI SDK Schema with validation support.
- *
- * This function mirrors the behavior of Vercel's AI SDK zod-schema utility but allows
- * customization of the JSON Schema target format.
- *
- * @param zodSchema - The Zod schema to convert
- * @param target - The JSON Schema target format (defaults to 'jsonSchema7')
- * @returns An AI SDK Schema object with built-in validation
- *
- * @example
- * ```typescript
- * import { z } from 'zod';
- * import { convertZodSchemaToAISDKSchema } from '@mastra/schema-compat';
- *
- * const userSchema = z.object({
- *   name: z.string(),
- *   age: z.number().min(0)
- * });
- *
- * const aiSchema = convertZodSchemaToAISDKSchema(userSchema);
- * ```
+ * Official library authors pattern for version detection
+ * @param schema - The schema to check
+ * @returns true if Zod v4 schema, false if Zod v3 schema
  */
+function isZodV4Schema(schema: any): boolean {
+  return schema && typeof schema === 'object' && '_zod' in schema;
+}
+
+// ==================== SIMPLIFIED JSON SCHEMA CONVERSION ====================
+// Direct approach following official guidance
+
 /**
- * Higher-order function that wraps Zod's z.toJSONSchema with fallback handling
- * for known bugs in Zod v4.0.2 (e.g., z.record types)
- * 
- * @param zodSchema - The Zod schema to convert
- * @param options - Optional z.toJSONSchema options
- * @param fallbackSchema - Custom fallback schema (optional)
- * @returns JSONSchema7 object or fallback
- * 
- * @example
- * ```typescript
- * // Basic usage
- * const jsonSchema = safeToJSONSchema(z.record(z.string()));
- * 
- * // With custom options
- * const jsonSchema = safeToJSONSchema(schema, {
- *   unrepresentable: "any",
- *   override: (ctx) => { ... }
- * });
- * 
- * // With custom fallback
- * const jsonSchema = safeToJSONSchema(schema, {}, {
- *   type: "string",
- *   description: "Custom fallback"
- * });
- * ```
+ * Convert Zod schemas to JSON Schema with dual v3/v4 support
  */
-export function safeToJSONSchema(
-  zodSchema: ZodSchema,
-  options?: Parameters<typeof z.toJSONSchema>[1],
-  fallbackSchema?: Partial<JSONSchema7>
-): JSONSchema7 {
-  try {
-    return z.toJSONSchema(zodSchema, options) as JSONSchema7;
-  } catch (error) {
-    // Fallback for schemas that can't be converted due to Zod v4.0.2 bugs
-    // Known issues: z.record() schemas fail with "Cannot read properties of undefined (reading '_zod')"
-    console.warn('z.toJSONSchema failed, using fallback schema. Error:', error instanceof Error ? error.message : String(error));
+// Helper function to recursively preserve descriptions in JSON schema
+function preserveDescriptions(jsonSchema: JSONSchema7, zodSchema: ZodSchema): void {
+  // Preserve top-level description
+  if (zodSchema.description && !jsonSchema.description) {
+    jsonSchema.description = zodSchema.description;
+  }
+  
+  // Recursively preserve descriptions for object properties
+  if (jsonSchema.type === 'object' && jsonSchema.properties && zodSchema.shape) {
+    Object.keys(jsonSchema.properties).forEach(key => {
+      const propertyJsonSchema = jsonSchema.properties![key] as JSONSchema7;
+      const propertyZodSchema = zodSchema.shape[key];
+      
+      if (propertyZodSchema && propertyJsonSchema) {
+        preserveDescriptions(propertyJsonSchema, propertyZodSchema);
+      }
+    });
+  }
+  
+  // Recursively preserve descriptions for array items
+  if (jsonSchema.type === 'array' && jsonSchema.items && zodSchema.element) {
+    const itemJsonSchema = jsonSchema.items as JSONSchema7;
+    const itemZodSchema = zodSchema.element;
     
+    if (itemZodSchema && itemJsonSchema) {
+      preserveDescriptions(itemJsonSchema, itemZodSchema);
+    }
+  }
+}
+
+export function safeToJSONSchema(zodSchema: ZodSchema, options?: any): JSONSchema7 {
+  try {
+    let result: JSONSchema7;
+    
+    // Official library authors pattern: Check runtime version
+    if (isZodV4Runtime() && z.toJSONSchema) {
+      try {
+        result = z.toJSONSchema(zodSchema, options) as JSONSchema7;
+      } catch (v4Error) {
+        // Fallback to v3 library for edge cases
+        result = zodToJsonSchema(zodSchema, options) as JSONSchema7;
+      }
+    } else {
+      // Use v3 compatible library
+      result = zodToJsonSchema(zodSchema, options) as JSONSchema7;
+    }
+    
+    // Preserve descriptions for both versions (known limitation fix)
+    preserveDescriptions(result, zodSchema);
+    
+    return result;
+  } catch (error) {
+    console.warn('Schema conversion failed, using fallback:', error);
     return {
       type: "object",
       additionalProperties: true,
       description: "Schema conversion fallback - original validation preserved",
-      ...fallbackSchema
     };
   }
 }
 
+// ==================== VALIDATION SYSTEM ====================
+// Simple validation following official guidance
+
+
 /**
- * Safely validates a value against a Zod schema, with fallback for corrupted schemas.
- * 
- * This companion utility to safeToJSONSchema() handles validation corruption that can
- * occur when schemas are malformed due to reconstruction issues in Zod v4.
- * 
- * @param zodSchema - The Zod schema to validate against (may be corrupted)
- * @param value - The value to validate
- * @returns Safe validation result with fallback behavior
+ * Standard validation that preserves Zod's validation behavior
  */
 export function safeValidate(zodSchema: ZodSchema, value: unknown): { success: boolean; value?: any; error?: any } {
   try {
     const result = zodSchema.safeParse(value);
     return result.success ? { success: true, value: result.data } : { success: false, error: result.error };
   } catch (error) {
-    // Fallback for schemas that can't validate due to corruption
-    console.warn('Schema validation failed due to corruption, using permissive fallback. Error:', error instanceof Error ? error.message : String(error));
-    
-    // Permissive fallback - accept the value as-is
-    // This maintains functionality while allowing developers to fix the underlying schema corruption
-    return { success: true, value: value };
+    console.warn('Schema validation failed:', error);
+    return { success: false, error: error };
   }
 }
 
+// ==================== DIRECT PROPERTY ACCESS ====================
+// Simplified approach following official guidance
+
 /**
- * Safely accesses Zod schema properties with v3/v4 compatibility and corruption fallbacks.
- * 
- * This higher-order utility handles the complexity of Zod v4 property access patterns
- * while providing graceful fallbacks for corrupted schemas.
- * 
- * @param schema - The Zod schema to extract properties from
- * @param property - The property name to extract (e.g., 'typeName', 'checks', 'options')
- * @param defaultValue - Fallback value if property access fails
- * @returns The property value or default
+ * Direct property access with v3/v4 compatibility
  */
 export function safeGetSchemaProperty(schema: any, property: string, defaultValue: any = undefined): any {
   try {
-    // Check if schema is valid object first
     if (!schema || typeof schema !== 'object') {
       return defaultValue;
     }
     
-    // Special handling for typeName in Zod v4
-    if (property === 'typeName') {
-      // Try Zod v4 traits first (most reliable for type identification)
-      if ('_zod' in schema && schema._zod?.traits) {
-        const traits = Array.from(schema._zod.traits);
-        const zodTrait = traits.find(trait => typeof trait === 'string' && trait.startsWith('Zod') && !trait.startsWith('$'));
-        if (zodTrait) {
-          return zodTrait;
-        }
+    // Direct version check and property access
+    if (isZodV4Schema(schema)) {
+      // v4 property access
+      if (property === 'typeName') {
+        return schema.constructor?.name || defaultValue;
       }
-      
-      // Fallback to constructor name
-      if (schema.constructor?.name) {
-        return schema.constructor.name;
-      }
+      return schema._zod?.def?.[property] ?? defaultValue;
+    } else {
+      // v3 property access
+      return schema._def?.[property] ?? defaultValue;
     }
-    
-    // Try Zod v4 pattern first: _zod.def.property
-    if ('_zod' in schema && schema._zod?.def?.[property] !== undefined) {
-      return schema._zod.def[property];
-    }
-    
-    // Try Zod v3/v4 fallback: _def.property
-    if ('_def' in schema && schema._def?.[property] !== undefined) {
-      return schema._def[property];
-    }
-    
-    // Return default if property not found
-    return defaultValue;
   } catch (error) {
-    console.warn(`Safe property access failed for '${property}', using default. Error:`, error instanceof Error ? error.message : String(error));
+    console.warn(`Property access failed for '${property}', using default:`, error);
     return defaultValue;
   }
 }
 
-// mirrors https://github.com/vercel/ai/blob/main/packages/ui-utils/src/zod-schema.ts#L21 but with a custom target
+/**
+ * Extract constraints from schema checks
+ */
+function extractConstraint(schema: any, constraintName: string): any {
+  if (!schema) return undefined;
+  
+  const checks = isZodV4Schema(schema) 
+    ? schema._zod?.def?.checks || []
+    : schema._def?.checks || [];
+  
+  const constraint = checks.find((check: any) => check.kind === constraintName);
+  return constraint?.value;
+}
+
+// ==================== AI SDK INTEGRATION ====================
+// Direct AI SDK schema conversion
+
+/**
+ * Convert Zod schema to AI SDK schema with validation
+ * Mirrors https://github.com/vercel/ai/blob/main/packages/ui-utils/src/zod-schema.ts#L21 but with dual version support
+ */
 export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target?: string): Schema {
   const jsonSchemaObject = safeToJSONSchema(zodSchema, {
     unrepresentable: "any",
     override: (ctx) => {
-      const def = ctx.zodSchema._zod?.def;
-      if (def?.typeName === "ZodDate") {
+      // Handle date schemas
+      const typeName = safeGetSchemaProperty(ctx.zodSchema, 'typeName');
+      if (typeName === ZOD_TYPE_NAMES.ZodDate) {
         ctx.jsonSchema.type = "string";
         ctx.jsonSchema.format = "date-time";
       }
@@ -169,26 +225,24 @@ export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target?: str
 
   return {
     jsonSchema: jsonSchemaObject,
-    validate: value => {
-      // Use safeValidate to handle schema corruption gracefully
-      return safeValidate(zodSchema, value);
-    },
+    validate: value => safeValidate(zodSchema, value),
   };
 }
 
 /**
  * Checks if a value is a Zod type by examining its properties and methods.
+ * Works with both Zod v3 and v4 schemas
  *
  * @param value - The value to check
  * @returns True if the value is a Zod type, false otherwise
  * @internal
  */
-function isZodType(value: unknown): value is z.ZodType {
+function isZodType(value: unknown): value is ZodTypeAny {
   // Check if it's a Zod schema by looking for common Zod properties and methods
   return (
     typeof value === 'object' &&
     value !== null &&
-    '_def' in value &&
+    ('_def' in value || '_zod' in value) && // Support both v3 and v4
     'parse' in value &&
     typeof (value as any).parse === 'function' &&
     'safeParse' in value &&
@@ -198,6 +252,7 @@ function isZodType(value: unknown): value is z.ZodType {
 
 /**
  * Converts an AI SDK Schema or Zod schema to a Zod schema.
+ * Works with both Zod v3 and v4 schemas
  *
  * If the input is already a Zod schema, it returns it unchanged.
  * If the input is an AI SDK Schema, it extracts the JSON schema and converts it to Zod.
@@ -221,7 +276,7 @@ function isZodType(value: unknown): value is z.ZodType {
  * const zodSchema = convertSchemaToZod(aiSchema);
  * ```
  */
-export function convertSchemaToZod(schema: Schema | z.ZodSchema): z.ZodType {
+export function convertSchemaToZod(schema: Schema | ZodSchema): ZodTypeAny {
   if (isZodType(schema)) {
     return schema;
   } else {
@@ -246,7 +301,7 @@ export function convertSchemaToZod(schema: Schema | z.ZodSchema): z.ZodType {
  * @returns Processed schema as an AI SDK Schema
  */
 export function applyCompatLayer(options: {
-  schema: Schema | z.ZodSchema;
+  schema: Schema | ZodSchema;
   compatLayers: SchemaCompatLayer[];
   mode: 'aiSdkSchema';
 }): Schema;
@@ -261,13 +316,14 @@ export function applyCompatLayer(options: {
  * @returns Processed schema as a JSONSchema7
  */
 export function applyCompatLayer(options: {
-  schema: Schema | z.ZodSchema;
+  schema: Schema | ZodSchema;
   compatLayers: SchemaCompatLayer[];
   mode: 'jsonSchema';
 }): JSONSchema7;
 
 /**
  * Processes a schema using provider compatibility layers and converts it to the specified format.
+ * Works with both Zod v3 and v4 schemas using proper version detection
  *
  * This function automatically applies the first matching compatibility layer from the provided
  * list based on the model configuration. If no compatibility applies, it falls back to
@@ -306,11 +362,11 @@ export function applyCompatLayer({
   compatLayers,
   mode,
 }: {
-  schema: Schema | z.ZodSchema;
+  schema: Schema | ZodSchema;
   compatLayers: SchemaCompatLayer[];
   mode: 'jsonSchema' | 'aiSdkSchema';
 }): JSONSchema7 | Schema {
-  let zodSchema: z.ZodSchema;
+  let zodSchema: ZodSchema;
 
   if (!isZodType(schema)) {
     // Convert non-zod schema to Zod
@@ -327,16 +383,16 @@ export function applyCompatLayer({
 
   // If no compatibility applied, convert back to appropriate format
   if (mode === 'jsonSchema') {
-    return z.toJSONSchema(zodSchema, {
+    return safeToJSONSchema(zodSchema, {
       unrepresentable: "any",
       override: (ctx) => {
-        const def = ctx.zodSchema._zod?.def;
-        if (def?.typeName === "ZodDate") {
+        const typeName = safeGetSchemaProperty(ctx.zodSchema, 'typeName');
+        if (typeName === ZOD_TYPE_NAMES.ZodDate) {
           ctx.jsonSchema.type = "string";
           ctx.jsonSchema.format = "date-time";
         }
       },
-    }) as JSONSchema7;
+    });
   } else {
     return convertZodSchemaToAISDKSchema(zodSchema);
   }

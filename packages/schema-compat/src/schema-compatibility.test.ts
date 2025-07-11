@@ -19,19 +19,29 @@ class MockSchemaCompatibility extends SchemaCompatLayer {
   }
 
   processZodType(value: z.ZodTypeAny): z.ZodTypeAny {
+    console.log('processZodType called with:', value.constructor.name, 'description:', value.description);
+    
     if (isObj(value)) {
+      console.log('Processing object schema');
       return this.defaultZodObjectHandler(value);
     } else if (isArr(value)) {
+      console.log('Processing array schema');
       // For these tests, we will handle all checks by converting them to descriptions.
       return this.defaultZodArrayHandler(value, ['min', 'max', 'length']);
     } else if (isOptional(value)) {
+      console.log('Processing optional schema');
       return this.defaultZodOptionalHandler(value);
     } else if (isUnion(value)) {
+      console.log('Processing union schema');
       return this.defaultZodUnionHandler(value);
     } else if (isString(value)) {
+      console.log('Processing string schema, original description:', value.description);
       // Add a marker to confirm it was processed
-      return z.string().describe(`${value.description || 'string'}:processed`);
+      const result = z.string().describe(`${value.description || 'string'}:processed`);
+      console.log('String processing result description:', result.description);
+      return result;
     } else {
+      console.log('No processing needed for:', value.constructor.name);
       return value;
     }
   }
@@ -177,9 +187,18 @@ describe('SchemaCompatLayer', () => {
       expect(result.description).not.toContain('maxLength');
       
       // Test that the max constraint is preserved functionally
-      const largeArray = Array(15).fill('test');
-      const largeResult = result.safeParse(largeArray);
-      expect(largeResult.success).toBe(false); // Should fail due to preserved max constraint
+      // Add boundary value tests for array constraints (addressing review comment)
+      const exactArray = Array(10).fill('test');
+      const exactResult = result.safeParse(exactArray);
+      expect(exactResult.success).toBe(true); // Should pass at exact boundary
+      
+      const underArray = Array(9).fill('test');
+      const underResult = result.safeParse(underArray);
+      expect(underResult.success).toBe(true); // Should pass under max
+      
+      const overArray = Array(11).fill('test');
+      const overResult = result.safeParse(overArray);
+      expect(overResult.success).toBe(false); // Should fail over max constraint
     });
 
     it('should handle exact length constraint', () => {
@@ -362,11 +381,15 @@ describe('SchemaCompatLayer', () => {
 
       expect(result).toBeInstanceOf(z.ZodString);
       expect(result.description).toContain('dateFormat');
-      // Date constraint extraction may not be fully implemented yet
-      if (result.description && result.description.includes('minDate')) {
-        expect(result.description).toContain('2023-01-01');
-        expect(result.description).toContain('2023-12-31');
-      }
+      
+      // Use safeParse() with actual dates instead of checking description strings (addressing review comment)
+      const testBeforeMin = new Date('2022-12-31');
+      const testWithinRange = new Date('2023-06-15');
+      const testAfterMax = new Date('2024-01-01');
+      
+      expect(result.safeParse(testBeforeMin.toISOString()).success).toBe(false);
+      expect(result.safeParse(testWithinRange.toISOString()).success).toBe(true);
+      expect(result.safeParse(testAfterMax.toISOString()).success).toBe(false);
     });
   });
 
@@ -404,7 +427,23 @@ describe('SchemaCompatLayer', () => {
   describe('Top-level schema processing (processToAISDKSchema)', () => {
     it('should process a simple object schema', () => {
       const objectSchema = z.object({ user: z.string().describe('user name') });
+      
+      // Debug: Check what happens during processing
+      console.log('=== BEFORE PROCESSING ===');
+      console.log('Original object schema:', objectSchema.shape.user.description);
+      
+      // Process the schema manually to see what happens
+      const processedSchema = compatibility.processZodType(objectSchema);
+      console.log('=== AFTER PROCESSING ===');
+      console.log('Processed schema shape:', processedSchema.shape);
+      console.log('Processed user schema:', processedSchema.shape.user);
+      console.log('Processed user description:', processedSchema.shape.user.description);
+      
       const result = compatibility.processToAISDKSchema(objectSchema);
+      
+      console.log('=== FINAL JSON SCHEMA ===');
+      console.log('Result jsonSchema:', JSON.stringify(result.jsonSchema, null, 2));
+      
       const userProp = result.jsonSchema.properties?.user as any;
       expect(userProp.description).toBe('user name:processed');
     });
