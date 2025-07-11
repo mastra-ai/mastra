@@ -7,7 +7,7 @@ async function main() {
     id: 'Crawl Webpage',
     description: 'Crawls a webpage and extracts the text content',
     inputSchema: z.object({
-      url: z.string().url(),
+      url: z.url(),
     }),
     outputSchema: z.object({
       rawText: z.string(),

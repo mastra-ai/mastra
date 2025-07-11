@@ -29,10 +29,10 @@ const allSchemas = {
   string: z.string(),
   stringMin: z.string().min(1),
   stringMax: z.string().max(10),
-  stringEmail: z.string().email(),
+  stringEmail: z.email(),
   stringEmoji: z.string().emoji(),
-  stringUrl: z.string().url(),
-  stringUuid: z.string().uuid(),
+  stringUrl: z.url(),
+  stringUuid: z.uuid(),
   stringCuid: z.string().cuid(),
   stringRegex: z.string().regex(/^test-/),
 

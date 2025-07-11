@@ -453,7 +453,7 @@ export const startMastraCourse = {
   description:
     'Starts the Mastra Course. If the user is not registered, they will be prompted to register first. Otherwise, it will start at the first lesson or pick up where they last left off. ALWAYS ask the user for their email address if they are not registered. DO NOT assume their email address, they must confirm their email and that they want to register.',
   parameters: z.object({
-    email: z.string().email().optional().describe('Email address for registration if not already registered. '),
+    email: z.email().optional().describe('Email address for registration if not already registered. '),
   }),
   execute: async (args: { email?: string }) => {
     try {

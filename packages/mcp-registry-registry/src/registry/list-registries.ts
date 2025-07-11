@@ -7,8 +7,8 @@ const RegistryEntrySchema = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string(),
-  url: z.string().url(),
-  servers_url: z.string().url().optional(),
+  url: z.url(),
+  servers_url: z.url().optional(),
   tags: z.array(z.string()).optional(),
   count: z.union([z.number(), z.string()]).optional(),
 });
