@@ -133,7 +133,6 @@
     "@opentelemetry/semantic-conventions": "^1.34.0",
     "@sindresorhus/slugify": "^2.2.1",
     "ai": "^4.3.16",
-    "cohere-ai": "^7.17.1",
     "date-fns": "^3.6.0",
     "dotenv": "^16.6.1",
     "hono": "^4.8.4",
