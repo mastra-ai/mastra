@@ -600,7 +600,7 @@ export default withGT(
       },
       {
         source: "/docs/guide/local-dev/integrations",
-        destination: "/docs/local-dev/mastra-dev",
+        destination: "/docs/server-db/local-dev-playground",
         permanent: true,
       },
       {
