@@ -5,24 +5,24 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult } from '@mastra/core/eval';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
-    MastraStorage,
-    TABLE_MESSAGES,
-    TABLE_THREADS,
-    TABLE_TRACES,
-    TABLE_RESOURCES,
-    TABLE_WORKFLOW_SNAPSHOT,
-    TABLE_EVALS,
+  MastraStorage,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_TRACES,
+  TABLE_RESOURCES,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
 } from '@mastra/core/storage';
 import type {
-    EvalRow,
-    PaginationInfo,
-    StorageColumn,
-    StorageGetMessagesArg,
-    StorageResourceType,
-    TABLE_NAMES,
-    WorkflowRun,
-    WorkflowRuns,
-    PaginationArgs,
+  EvalRow,
+  PaginationInfo,
+  StorageColumn,
+  StorageGetMessagesArg,
+  StorageResourceType,
+  TABLE_NAMES,
+  WorkflowRun,
+  WorkflowRuns,
+  PaginationArgs,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { ConnectionPool, type IOptions } from 'mssql';
@@ -30,26 +30,24 @@ import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
 import * as sql from 'mssql';
 
 export type MSSQLConfigType = {
-    schemaName?: string;
+  schemaName?: string;
 } & (
-        | {
-            server: string;
-            port: number;
-            database: string;
-            user: string;
-            password: string;
-            options?: IOptions;
-        }
-        | {
-            connectionString: string;
-        }
-    );
+  | {
+      server: string;
+      port: number;
+      database: string;
+      user: string;
+      password: string;
+      options?: IOptions;
+    }
+  | {
+      connectionString: string;
+    }
+);
 
 export type MSSQLConfig = MSSQLConfigType;
 
 export class MSSQLStore extends MastraStorage {
-  
-
   public pool: sql.ConnectionPool;
   private schema?: string;
   private setupSchemaPromise: Promise<void> | null = null;
@@ -65,21 +63,13 @@ export class MSSQLStore extends MastraStorage {
           typeof config.connectionString !== 'string' ||
           config.connectionString.trim() === ''
         ) {
-          throw new Error(
-            'MSSQLStore: connectionString must be provided and cannot be empty.'
-          );
+          throw new Error('MSSQLStore: connectionString must be provided and cannot be empty.');
         }
       } else {
         const required = ['server', 'database', 'user', 'password'];
         for (const key of required) {
-          if (
-            !(key in config) ||
-            typeof (config as any)[key] !== 'string' ||
-            (config as any)[key].trim() === ''
-          ) {
-            throw new Error(
-              `MSSQLStore: ${key} must be provided and cannot be empty.`
-            );
+          if (!(key in config) || typeof (config as any)[key] !== 'string' || (config as any)[key].trim() === '') {
+            throw new Error(`MSSQLStore: ${key} must be provided and cannot be empty.`);
           }
         }
       }
@@ -94,8 +84,7 @@ export class MSSQLStore extends MastraStorage {
               user: config.user,
               password: config.password,
               port: config.port,
-              options:
-                config.options || { encrypt: true, trustServerCertificate: true },
+              options: config.options || { encrypt: true, trustServerCertificate: true },
             });
     } catch (e) {
       throw new MastraError(
@@ -164,7 +153,7 @@ export class MSSQLStore extends MastraStorage {
     if (row.test_info) {
       try {
         testInfoValue = typeof row.test_info === 'string' ? JSON.parse(row.test_info) : row.test_info;
-      } catch(e) {}
+      } catch (e) {}
     }
     return {
       agentName: row.agent_name as string,
@@ -196,15 +185,10 @@ export class MSSQLStore extends MastraStorage {
       const result = await request.query(query);
       const rows = result.recordset;
       return typeof this.transformEvalRow === 'function'
-        ? rows?.map((row: any) => this.transformEvalRow(row)) ?? []
-        : rows ?? [];
+        ? (rows?.map((row: any) => this.transformEvalRow(row)) ?? [])
+        : (rows ?? []);
     } catch (error: any) {
-      if (
-        error &&
-        error.number === 208 &&
-        error.message &&
-        error.message.includes('Invalid object name')
-      ) {
+      if (error && error.number === 208 && error.message && error.message.includes('Invalid object name')) {
         return [];
       }
       console.error('Failed to get evals for the specified agent: ' + error?.message);
@@ -436,7 +420,7 @@ export class MSSQLStore extends MastraStorage {
               this.logger?.error?.(`Failed to create schema "${this.schema}"`, { error });
               throw new Error(
                 `Unable to create schema "${this.schema}". This requires CREATE privilege on the database. ` +
-                  `Either create the schema manually or grant CREATE privilege to the user.`
+                  `Either create the schema manually or grant CREATE privilege to the user.`,
               );
             }
           }
@@ -471,13 +455,11 @@ export class MSSQLStore extends MastraStorage {
       case 'bigint':
         return 'BIGINT';
       default:
-        throw new MastraError(
-          {
-            id: 'MASTRA_STORAGE_MSSQL_STORE_TYPE_NOT_SUPPORTED',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-          },
-        );
+        throw new MastraError({
+          id: 'MASTRA_STORAGE_MSSQL_STORE_TYPE_NOT_SUPPORTED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        });
     }
   }
 
@@ -489,9 +471,7 @@ export class MSSQLStore extends MastraStorage {
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
     try {
-      const uniqueConstraintColumns = (tableName === TABLE_WORKFLOW_SNAPSHOT)
-        ? ['workflow_name', 'run_id']
-        : [];
+      const uniqueConstraintColumns = tableName === TABLE_WORKFLOW_SNAPSHOT ? ['workflow_name', 'run_id'] : [];
 
       const columns = Object.entries(schema)
         .map(([name, def]) => {
@@ -622,7 +602,6 @@ export class MSSQLStore extends MastraStorage {
     }
   }
 
-
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     const fullTableName = this.getTableName(tableName);
     try {
@@ -633,14 +612,10 @@ export class MSSQLStore extends MastraStorage {
         FROM sys.foreign_keys fk
         WHERE fk.referenced_object_id = OBJECT_ID(@fullTableName)
       `;
-      const fkResult = await this.pool.request()
-        .input('fullTableName', fullTableName)
-        .query(fkQuery);
+      const fkResult = await this.pool.request().input('fullTableName', fullTableName).query(fkQuery);
       const childTables: { schema_name: string; table_name: string }[] = fkResult.recordset || [];
       for (const child of childTables) {
-        const childTableName = this.schema
-          ? `[${child.schema_name}].[${child.table_name}]`
-          : `[${child.table_name}]`;
+        const childTableName = this.schema ? `[${child.schema_name}].[${child.table_name}]` : `[${child.table_name}]`;
         await this.clearTable({ tableName: childTableName as TABLE_NAMES });
       }
       await this.pool.request().query(`TRUNCATE TABLE ${fullTableName}`);
@@ -675,7 +650,7 @@ export class MSSQLStore extends MastraStorage {
           request.input(`param${i}`, value);
         }
       });
-      
+
       await request.query(insertSql);
     } catch (error) {
       throw new MastraError(
@@ -1024,21 +999,21 @@ export class MSSQLStore extends MastraStorage {
   }) {
     const include = selectBy?.include;
     if (!include) return null;
-  
+
     const unionQueries: string[] = [];
     const paramValues: any[] = [];
     let paramIdx = 1;
     const paramNames: string[] = [];
-  
+
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
       const searchId = inc.threadId || threadId;
-  
+
       const pThreadId = `@p${paramIdx}`;
       const pId = `@p${paramIdx + 1}`;
       const pPrev = `@p${paramIdx + 2}`;
       const pNext = `@p${paramIdx + 3}`;
-  
+
       unionQueries.push(
         `
           SELECT
@@ -1070,41 +1045,38 @@ export class MSSQLStore extends MastraStorage {
               (m.row_num >= target.row_num - ${pNext} AND m.row_num < target.row_num)
             )
           )
-        `
+        `,
       );
-  
+
       paramValues.push(searchId, id, withPreviousMessages, withNextMessages);
       paramNames.push(`p${paramIdx}`, `p${paramIdx + 1}`, `p${paramIdx + 2}`, `p${paramIdx + 3}`);
       paramIdx += 4;
     }
-  
+
     const finalQuery = `
       SELECT * FROM (
         ${unionQueries.join(' UNION ALL ')}
       ) AS union_result
       ORDER BY [seq_id] ASC
     `;
-  
+
     const req = this.pool.request();
     for (let i = 0; i < paramValues.length; ++i) {
-      req.input(paramNames[i], paramValues[i]);
+      req.input(paramNames[i] as string, paramValues[i]);
     }
-    
+
     const result = await req.query(finalQuery);
     const includedRows = result.recordset || [];
-  
+
     const seen = new Set<string>();
     const dedupedRows = includedRows.filter((row: any) => {
       if (seen.has(row.id)) return false;
       seen.add(row.id);
       return true;
     });
-  
+
     return dedupedRows;
   }
-  
-
-  
 
   /**
    * @deprecated use getMessagesPaginated instead
@@ -1134,7 +1106,7 @@ export class MSSQLStore extends MastraStorage {
       let query = `${selectStatement} FROM ${this.getTableName(TABLE_MESSAGES)} WHERE [thread_id] = @threadId`;
       const request = this.pool.request();
       request.input('threadId', threadId);
-      
+
       if (excludeIds.length > 0) {
         const excludeParams = excludeIds.map((_, idx) => `@id${idx}`);
         query += ` AND id NOT IN (${excludeParams.join(', ')})`;
@@ -1142,14 +1114,14 @@ export class MSSQLStore extends MastraStorage {
           request.input(`id${idx}`, id);
         });
       }
-      
+
       query += ` ${orderByStatement} OFFSET 0 ROWS FETCH NEXT @limit ROWS ONLY`;
       request.input('limit', limit);
       const result = await request.query(query);
       const remainingRows = result.recordset || [];
       rows.push(...remainingRows);
       rows.sort((a, b) => {
-        const timeDiff = (a.seq_id) - (b.seq_id);
+        const timeDiff = a.seq_id - b.seq_id;
         return timeDiff;
       });
       rows = rows.map(({ seq_id, ...rest }) => rest);
@@ -1168,11 +1140,7 @@ export class MSSQLStore extends MastraStorage {
             message.content = [{ type: 'text', text: '' }];
           }
         } else {
-          if (
-            typeof message.content !== 'object' ||
-            !message.content ||
-            !('parts' in message.content)
-          ) {
+          if (typeof message.content !== 'object' || !message.content || !('parts' in message.content)) {
             message.content = { format: 2, parts: [{ type: 'text', text: '' }] };
           }
         }
@@ -1223,80 +1191,81 @@ export class MSSQLStore extends MastraStorage {
     }
     try {
       const { threadId, format, selectBy } = args;
-    const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
-    const fromDate = dateRange?.start;
-    const toDate = dateRange?.end;
+      const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
+      const fromDate = dateRange?.start;
+      const toDate = dateRange?.end;
 
-    const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId`;
-    const orderByStatement = `ORDER BY [seq_id] DESC`;
+      const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId`;
+      const orderByStatement = `ORDER BY [seq_id] DESC`;
 
-    let messages: any[] = [];
+      let messages: any[] = [];
 
-    if (selectBy?.include?.length) {
-      const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
-      if (includeMessages) messages.push(...includeMessages);
-    }
+      if (selectBy?.include?.length) {
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy, orderByStatement });
+        if (includeMessages) messages.push(...includeMessages);
+      }
 
-    const perPage = perPageInput !== undefined
-      ? perPageInput
-      : this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-    const currentOffset = page * perPage;
+      const perPage =
+        perPageInput !== undefined
+          ? perPageInput
+          : this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
+      const currentOffset = page * perPage;
 
-    const conditions: string[] = ['[thread_id] = @threadId'];
-    const request = this.pool.request();
-    request.input('threadId', threadId);
+      const conditions: string[] = ['[thread_id] = @threadId'];
+      const request = this.pool.request();
+      request.input('threadId', threadId);
 
-    if (fromDate instanceof Date && !isNaN(fromDate.getTime())) {
-      conditions.push('[createdAt] >= @fromDate');
-      request.input('fromDate', fromDate.toISOString());
-    }
-    if (toDate instanceof Date && !isNaN(toDate.getTime())) {
-      conditions.push('[createdAt] <= @toDate');
-      request.input('toDate', toDate.toISOString());
-    }
+      if (fromDate instanceof Date && !isNaN(fromDate.getTime())) {
+        conditions.push('[createdAt] >= @fromDate');
+        request.input('fromDate', fromDate.toISOString());
+      }
+      if (toDate instanceof Date && !isNaN(toDate.getTime())) {
+        conditions.push('[createdAt] <= @toDate');
+        request.input('toDate', toDate.toISOString());
+      }
 
-    const whereClause = `WHERE ${conditions.join(' AND ')}`;
-    const countQuery = `SELECT COUNT(*) as total FROM ${this.getTableName(TABLE_MESSAGES)} ${whereClause}`;
-    const countResult = await request.query(countQuery);
-    const total = parseInt(countResult.recordset[0]?.total, 10) || 0;
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+      const countQuery = `SELECT COUNT(*) as total FROM ${this.getTableName(TABLE_MESSAGES)} ${whereClause}`;
+      const countResult = await request.query(countQuery);
+      const total = parseInt(countResult.recordset[0]?.total, 10) || 0;
 
-    if (total === 0 && messages.length > 0) {
-      const parsedIncluded = this._parseAndFormatMessages(messages, format);
+      if (total === 0 && messages.length > 0) {
+        const parsedIncluded = this._parseAndFormatMessages(messages, format);
+        return {
+          messages: parsedIncluded,
+          total: parsedIncluded.length,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      const excludeIds = messages.map(m => m.id);
+      if (excludeIds.length > 0) {
+        const excludeParams = excludeIds.map((_, idx) => `@id${idx}`);
+        conditions.push(`id NOT IN (${excludeParams.join(', ')})`);
+        excludeIds.forEach((id, idx) => request.input(`id${idx}`, id));
+      }
+
+      const finalWhereClause = `WHERE ${conditions.join(' AND ')}`;
+      const dataQuery = `${selectStatement} FROM ${this.getTableName(TABLE_MESSAGES)} ${finalWhereClause} ${orderByStatement} OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
+
+      request.input('offset', currentOffset);
+      request.input('limit', perPage);
+
+      const rowsResult = await request.query(dataQuery);
+      const rows = rowsResult.recordset || [];
+      rows.sort((a, b) => a.seq_id - b.seq_id);
+      messages.push(...rows);
+
+      const parsed = this._parseAndFormatMessages(messages, format);
       return {
-        messages: parsedIncluded,
-        total: parsedIncluded.length,
+        messages: parsed,
+        total: total + excludeIds.length,
         page,
         perPage,
-        hasMore: false,
+        hasMore: currentOffset + rows.length < total,
       };
-    }
-
-    const excludeIds = messages.map(m => m.id);
-    if (excludeIds.length > 0) {
-      const excludeParams = excludeIds.map((_, idx) => `@id${idx}`);
-      conditions.push(`id NOT IN (${excludeParams.join(', ')})`);
-      excludeIds.forEach((id, idx) => request.input(`id${idx}`, id));
-    }
-
-    const finalWhereClause = `WHERE ${conditions.join(' AND ')}`;
-    const dataQuery = `${selectStatement} FROM ${this.getTableName(TABLE_MESSAGES)} ${finalWhereClause} ${orderByStatement} OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
-
-    request.input('offset', currentOffset);
-    request.input('limit', perPage);
-
-    const rowsResult = await request.query(dataQuery);
-    const rows = rowsResult.recordset || [];
-    rows.sort((a, b) => a.seq_id - b.seq_id);
-    messages.push(...rows);
-
-    const parsed = this._parseAndFormatMessages(messages, format);
-    return {
-      messages: parsed,
-      total: total + excludeIds.length,
-      page,
-      perPage,
-      hasMore: currentOffset + rows.length < total,
-    };
     } catch (error) {
       const mastraError = new MastraError(
         {
@@ -1324,7 +1293,7 @@ export class MSSQLStore extends MastraStorage {
           parsed = { ...parsed, content: JSON.parse(parsed.content) };
         } catch {}
       }
-  
+
       if (format === 'v1') {
         if (Array.isArray(parsed.content)) {
         } else if (parsed.content?.parts) {
@@ -1337,14 +1306,13 @@ export class MSSQLStore extends MastraStorage {
           parsed = { ...parsed, content: { format: 2, parts: [{ type: 'text', text: '' }] } };
         }
       }
-  
+
       return parsed;
     });
-  
+
     const list = new MessageList().add(parsedMessages, 'memory');
     return format === 'v2' ? list.get.all.v2() : list.get.all.v1();
   }
-  
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
   async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
@@ -1382,15 +1350,22 @@ export class MSSQLStore extends MastraStorage {
       try {
         for (const message of messages) {
           if (!message.threadId) {
-            throw new Error(`Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`);
+            throw new Error(
+              `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
+            );
           }
           if (!message.resourceId) {
-            throw new Error(`Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`);
+            throw new Error(
+              `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
+            );
           }
           const request = transaction.request();
           request.input('id', message.id);
           request.input('thread_id', message.threadId);
-          request.input('content', typeof message.content === 'string' ? message.content : JSON.stringify(message.content));
+          request.input(
+            'content',
+            typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+          );
           request.input('createdAt', message.createdAt.toISOString() || new Date().toISOString());
           request.input('role', message.role);
           request.input('type', message.type || 'v2');
@@ -1412,9 +1387,7 @@ export class MSSQLStore extends MastraStorage {
         const threadReq = transaction.request();
         threadReq.input('updatedAt', new Date().toISOString());
         threadReq.input('id', threadId);
-        await threadReq.query(
-          `UPDATE ${tableThreads} SET [updatedAt] = @updatedAt WHERE id = @id`
-        );
+        await threadReq.query(`UPDATE ${tableThreads} SET [updatedAt] = @updatedAt WHERE id = @id`);
         await transaction.commit();
       } catch (error) {
         await transaction.rollback();
@@ -1532,7 +1505,7 @@ export class MSSQLStore extends MastraStorage {
     request.input('column', column);
     request.input('columnLower', column.toLowerCase());
     const result = await request.query(
-      `SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table AND (COLUMN_NAME = @column OR COLUMN_NAME = @columnLower)`
+      `SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table AND (COLUMN_NAME = @column OR COLUMN_NAME = @columnLower)`,
     );
     return result.recordset.length > 0;
   }
@@ -1777,7 +1750,9 @@ export class MSSQLStore extends MastraStorage {
         }
       }
       if (threadIdsToUpdate.size > 0) {
-        const threadIdParams = Array.from(threadIdsToUpdate).map((_, i) => `@tid${i}`).join(', ');
+        const threadIdParams = Array.from(threadIdsToUpdate)
+          .map((_, i) => `@tid${i}`)
+          .join(', ');
         const threadReq = transaction.request();
         Array.from(threadIdsToUpdate).forEach((tid, i) => threadReq.input(`tid${i}`, tid));
         threadReq.input('updatedAt', new Date().toISOString());
@@ -1787,11 +1762,14 @@ export class MSSQLStore extends MastraStorage {
       await transaction.commit();
     } catch (error) {
       await transaction.rollback();
-      throw new MastraError({
-        id: 'MASTRA_STORAGE_MSSQL_UPDATE_MESSAGES_FAILED',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.THIRD_PARTY,
-      }, error);
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_MSSQL_UPDATE_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
 
     const refetchReq = this.pool.request();
@@ -1817,10 +1795,7 @@ export class MSSQLStore extends MastraStorage {
           await this.pool.close();
         }
       } catch (err: any) {
-        if (
-          err.message &&
-          err.message.includes('Cannot close a pool while it is connecting')
-        ) {
+        if (err.message && err.message.includes('Cannot close a pool while it is connecting')) {
         } else {
           throw err;
         }
@@ -1944,7 +1919,7 @@ export class MSSQLStore extends MastraStorage {
       req.input('updatedAt', resource.updatedAt.toISOString());
 
       await req.query(
-        `INSERT INTO ${tableName} (id, workingMemory, metadata, createdAt, updatedAt) VALUES (@id, @workingMemory, @metadata, @createdAt, @updatedAt)`
+        `INSERT INTO ${tableName} (id, workingMemory, metadata, createdAt, updatedAt) VALUES (@id, @workingMemory, @metadata, @createdAt, @updatedAt)`,
       );
 
       return resource;
@@ -2016,9 +1991,7 @@ export class MSSQLStore extends MastraStorage {
 
       req.input('id', resourceId);
 
-      await req.query(
-        `UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = @id`
-      );
+      await req.query(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = @id`);
 
       return updatedResource;
     } catch (error) {
@@ -2042,9 +2015,7 @@ export class MSSQLStore extends MastraStorage {
     try {
       const req = this.pool.request();
       req.input('resourceId', resourceId);
-      const result = (await req.query(
-        `SELECT * FROM ${tableName} WHERE id = @resourceId`
-      )).recordset[0];
+      const result = (await req.query(`SELECT * FROM ${tableName} WHERE id = @resourceId`)).recordset[0];
 
       if (!result) {
         return null;
@@ -2053,13 +2024,8 @@ export class MSSQLStore extends MastraStorage {
       return {
         ...result,
         workingMemory:
-          typeof result.workingMemory === 'object'
-            ? JSON.stringify(result.workingMemory)
-            : result.workingMemory,
-        metadata:
-          typeof result.metadata === 'string'
-            ? JSON.parse(result.metadata)
-            : result.metadata,
+          typeof result.workingMemory === 'object' ? JSON.stringify(result.workingMemory) : result.workingMemory,
+        metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
       };
     } catch (error) {
       const mastraError = new MastraError(
@@ -2076,5 +2042,4 @@ export class MSSQLStore extends MastraStorage {
       throw mastraError;
     }
   }
-
-};
+}
