@@ -65,7 +65,7 @@ export const columns: ColumnDef<AgentTableColumn>[] = [
     cell: ({ row }) => {
       return (
         <Cell>
-          <Badge variant="default" icon={row.original.provider?.includes('openai') ? <OpenAIIcon /> : undefined}>
+          <Badge variant="default" icon={providerMapToIcon[row.original.provider as keyof typeof providerMapToIcon] || <OpenAIIcon />}>
             {row.original.modelId || 'N/A'}
           </Badge>
         </Cell>
