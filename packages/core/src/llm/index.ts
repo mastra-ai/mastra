@@ -16,6 +16,8 @@ import type {
   generateText,
   generateObject,
   UIMessage,
+  StreamTextOnFinishCallback,
+  StreamObjectOnFinishCallback,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
@@ -124,17 +126,17 @@ export type LLMTextObjectOptions<T extends ZodSchema | JSONSchema7 | undefined =
 
 export type LLMStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   output?: OutputType | Z;
-  onFinish?: (result: string) => Promise<void> | void;
+  onFinish?: StreamTextOnFinishCallback<any>;
 } & MastraCustomLLMOptions<Z> &
   DefaultLLMStreamOptions;
 
 export type LLMInnerStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   messages: UIMessage[] | CoreMessage[];
-  onFinish?: (result: string) => Promise<void> | void;
 } & MastraCustomLLMOptions<Z> &
   DefaultLLMStreamOptions;
 
-export type LLMStreamObjectOptions<T extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
-} & LLMInnerStreamOptions<T> &
+export type LLMStreamObjectOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+  structuredOutput: JSONSchema7 | z.ZodType<Z> | StructuredOutput;
+  onFinish?: StreamObjectOnFinishCallback<any>;
+} & LLMInnerStreamOptions<Z> &
   DefaultLLMStreamObjectOptions;
