@@ -24,6 +24,7 @@ import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 export const mastra = new Mastra({
   // ...
   deployer: new CloudflareDeployer({
+    scope: "your-account-id",
     projectName: "hello-mastra",
     scope: "",
     auth: {
@@ -46,7 +47,7 @@ With the Wrangler CLI installed, login and authenticate with your Cloudflare log
 npx wrangler login
 ```
 
-Run the following to build and deploy you application to Cloudflare
+Run the following to build and deploy your application to Cloudflare
 
 ```bash copy
 npm run build && wrangler deploy --config .mastra/output/wrangler.json
