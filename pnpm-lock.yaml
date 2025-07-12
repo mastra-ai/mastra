@@ -906,8 +906,8 @@ importers:
         specifier: ^2.2.2
         version: 2.2.2
       swr:
-        specifier: ^2.3.3
-        version: 2.3.3(react@19.1.0)
+        specifier: ^2.3.4
+        version: 2.3.4(react@19.1.0)
       tcp-port-used:
         specifier: ^1.0.2
         version: 1.0.2
@@ -2241,8 +2241,8 @@ importers:
         specifier: ^2.2.2
         version: 2.2.2
       swr:
-        specifier: ^2.3.3
-        version: 2.3.3(react@19.1.0)
+        specifier: ^2.3.4
+        version: 2.3.4(react@19.1.0)
       tailwindcss-animate:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@20.19.2)(typescript@5.8.3)))
@@ -16538,8 +16538,8 @@ packages:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
 
-  swr@2.3.3:
-    resolution: {integrity: sha512-dshNvs3ExOqtZ6kJBaAsabhPdHyeY4P2cKwRCniDVifBMoG/SVI7tfLWqPXriVspf2Rg4tPzXJTnwaihIeFw2A==}
+  swr@2.3.4:
+    resolution: {integrity: sha512-bYd2lrhc+VarcpkgWclcUi92wYCpOgMws9Sd1hG1ntAu0NEy+14CbotuFjshBU2kt9rYj9TSmDcybpxpeTU1fg==}
     peerDependencies:
       react: ^16.11.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
@@ -17801,7 +17801,7 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.67)
       '@ai-sdk/ui-utils': 1.2.11(zod@3.25.67)
       react: 19.1.0
-      swr: 2.3.3(react@19.1.0)
+      swr: 2.3.4(react@19.1.0)
       throttleit: 2.1.0
     optionalDependencies:
       zod: 3.25.67
@@ -19940,7 +19940,7 @@ snapshots:
       glob-to-regexp: 0.4.1
       js-cookie: 3.0.5
       std-env: 3.9.0
-      swr: 2.3.3(react@19.1.0)
+      swr: 2.3.4(react@19.1.0)
     optionalDependencies:
       react: 19.1.0
       react-dom: 19.1.0(react@19.1.0)
@@ -33876,7 +33876,7 @@ snapshots:
 
   supports-preserve-symlinks-flag@1.0.0: {}
 
-  swr@2.3.3(react@19.1.0):
+  swr@2.3.4(react@19.1.0):
     dependencies:
       dequal: 2.0.3
       react: 19.1.0
