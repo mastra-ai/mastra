@@ -500,7 +500,18 @@ export class ConvexStorage extends MastraStorage {
    */
   async getMessage({ id }: { id: string }): Promise<MastraMessageV2 | null> {
     try {
-      return await this.httpClient.query(this.api.messages.get, { id });
+      const message = await this.httpClient.query(this.api.messages.get, { id });
+      if (!message) {
+        return null;
+      }
+
+      return {
+        id: message.messageId,
+        threadId: message.threadId,
+        content: message.content,
+        role: message.messageType,
+        createdAt: message.createdAt,
+      };
     } catch (error) {
       throw new MastraError(
         {
@@ -542,19 +553,35 @@ export class ConvexStorage extends MastraStorage {
     format = 'v2',
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
-      const messages = await this.httpClient.query(this.api.messages.getByThreadId, { threadId, resourceId, selectBy });
+      const result = await this.httpClient.query(this.api.messages.getByThreadId, { threadId, resourceId, selectBy });
+
+      // Extract the messages array from the pagination result
+      const rawMessages = result.page || [];
+
+      // Transform the raw database messages to the expected MastraMessageV2 format
+      const messages = rawMessages.map((rawMsg: Record<string, any>) => ({
+        id: rawMsg.messageId,
+        threadId: rawMsg.threadId,
+        content: rawMsg.content.content,
+        role: rawMsg.messageType,
+        createdAt: rawMsg.createdAt,
+      }));
 
       if (format === 'v1') {
         // Convert MastraMessageV2[] to MastraMessageV1[]
         return messages.map((msg: MastraMessageV2) => {
           // Create a basic MastraMessageV1 from a MastraMessageV2
+          const contentV1 = msg.content.parts.map((part: any) => {
+            return part.text.concat();
+          });
+          const contentString = contentV1.join('');
           const v1Msg: MastraMessageV1 = {
             id: msg.id,
             threadId: msg.threadId,
             createdAt: msg.createdAt,
             role: msg.role,
             // Convert structured content to string format
-            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+            content: contentString,
             // Default to 'text' type
             type: 'text',
           };
@@ -593,7 +620,12 @@ export class ConvexStorage extends MastraStorage {
    */
   async saveMessage({ message }: { message: MastraMessageV2 }): Promise<MastraMessageV2> {
     try {
-      return await this.httpClient.mutation(this.api.messages.save, { message });
+      const messageToSave = {
+        ...message,
+        createdAt: message.createdAt.getTime(),
+        updatedAt: Date.now(),
+      };
+      return await this.httpClient.mutation(this.api.messages.save, { message: messageToSave });
     } catch (error) {
       throw new MastraError(
         {
@@ -665,7 +697,14 @@ export class ConvexStorage extends MastraStorage {
 
       if (format === 'v2') {
         // Save MastraMessageV2[] directly
-        return await this.httpClient.mutation(this.api.messages.save, { messages });
+        const messageToSave = messages.map(msg => {
+          return {
+            ...msg,
+            createdAt: msg.createdAt.getTime(),
+            updatedAt: Date.now(),
+          };
+        });
+        return await this.httpClient.mutation(this.api.messages.save, { messages: messageToSave });
       } else {
         // Convert MastraMessageV1[] to MastraMessageV2[] for storage
         const v2Messages = (messages as MastraMessageV1[]).map(msg => {
@@ -690,11 +729,21 @@ export class ConvexStorage extends MastraStorage {
           return v2Msg;
         });
 
+        const v2MessagesToSave = v2Messages.map(msg => {
+          return {
+            ...msg,
+            createdAt: msg.createdAt.getTime(),
+            updatedAt: Date.now(),
+          };
+        });
+
         // Save the converted messages
-        const savedV2Messages = await this.httpClient.mutation(this.api.messages.save, { messages: v2Messages });
+        const savedV2Messages = await this.httpClient.mutation(this.api.messages.save, { messages: v2MessagesToSave });
 
         // Convert back to MastraMessageV1[] for return
         return savedV2Messages.map((msg: MastraMessageV2) => {
+          const content = msg.content.parts.map((part: any) => part.text).join('');
+
           // Create a basic MastraMessageV1 from a MastraMessageV2
           const v1Msg: MastraMessageV1 = {
             id: msg.id,
@@ -702,7 +751,7 @@ export class ConvexStorage extends MastraStorage {
             role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
             createdAt: msg.createdAt,
             // Convert structured content to string format
-            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+            content,
             // Default to 'text' type if not specified
             type: 'text',
           };
@@ -810,7 +859,49 @@ export class ConvexStorage extends MastraStorage {
     perPage: number;
   }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     try {
-      return await this.httpClient.query(this.api.threads.getByResourceIdPaginated, args);
+      // Transform parameters to match the Convex API format
+      // The API expects paginationOpts with cursor and numItems
+      const { resourceId, page, perPage } = args;
+
+      // Calculate cursor based on page and perPage
+      // For the first page, use null cursor
+      // For subsequent pages, we're simulating pagination by setting numItems
+      // to handle the appropriate number of items
+      const transformedArgs = {
+        resourceId,
+        paginationOpts: {
+          cursor: null, // Using null for cursor as we're relying on numItems and skip
+          numItems: perPage * page, // Get all items up to this page
+        },
+        sortDirection: 'desc', // Default sort direction
+      };
+
+      const result = await this.httpClient.query(this.api.threads.getByResourceIdPaginated, transformedArgs);
+
+      // Process the result to match the expected format with correct pagination
+      // We need to slice the results to get just the current page
+      const startIndex = (page - 1) * perPage;
+      const endIndex = startIndex + perPage;
+
+      const paginatedThreads = result.page ? result.page.slice(startIndex, endIndex) : [];
+
+      // Transform Convex thread format to StorageThreadType
+      const threads = paginatedThreads.map((thread: any) => ({
+        id: thread.threadId,
+        title: thread.title,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+        metadata: thread.metadata,
+        resourceId: thread.resourceId,
+      }));
+
+      return {
+        threads,
+        total: result.total || 0,
+        page,
+        perPage,
+        hasMore: endIndex < (result.total || 0),
+      };
     } catch (error) {
       throw new MastraError(
         {

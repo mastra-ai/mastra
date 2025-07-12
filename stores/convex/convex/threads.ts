@@ -47,16 +47,19 @@ export const getByResourceIdPaginated = query({
     const sortOrder = args.sortDirection === 'asc' ? 'asc' : 'desc';
 
     // Build query with resource ID filter and sort order
-    const query = ctx.db
+    const paginationQuery = ctx.db
       .query('threads')
       .withIndex('by_resourceId', q => q.eq('resourceId', args.resourceId))
       .order(sortOrder);
 
     // Apply pagination using Convex's built-in pagination API
-    const paginatedResults = await query.paginate(args.paginationOpts);
+    const paginatedResults = await paginationQuery.paginate(args.paginationOpts);
+
+    // Create a separate query for total count
+    const countQuery = ctx.db.query('threads').withIndex('by_resourceId', q => q.eq('resourceId', args.resourceId));
 
     // Get total count for pagination metadata
-    const total = await query.collect().then(results => results.length);
+    const total = await countQuery.collect().then(results => results.length);
 
     return {
       ...paginatedResults,

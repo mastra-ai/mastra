@@ -25,7 +25,7 @@ export const getByThreadId = query({
   args: {
     threadId: v.string(),
     sortDirection: v.optional(v.union(v.literal('asc'), v.literal('desc'))),
-    paginationOpts: paginationOptsValidator,
+    paginationOpts: v.optional(paginationOptsValidator),
   },
   handler: async (ctx, args) => {
     // Determine the sort order (defaulting to ascending)
@@ -37,12 +37,17 @@ export const getByThreadId = query({
       .withIndex('by_threadId', q => q.eq('threadId', args.threadId))
       .order(sortOrder);
 
-    // Apply pagination using Convex's built-in pagination support
-    // This will handle the cursor-based pagination efficiently
-    const paginationResult = await query.paginate(args.paginationOpts);
-
-    // Return the paginated result directly
-    return paginationResult;
+    // Apply pagination using Convex's built-in pagination support if pagination options are provided
+    // Otherwise, just collect all results
+    if (args.paginationOpts) {
+      // This will handle the cursor-based pagination efficiently
+      const paginationResult = await query.paginate(args.paginationOpts);
+      return paginationResult;
+    } else {
+      // Return all results when no pagination is requested
+      const messages = await query.collect();
+      return { page: messages, isDone: true, continueCursor: null };
+    }
   },
 });
 
@@ -51,7 +56,7 @@ export const getByThreadId = query({
  */
 export const save = mutation({
   args: {
-    message: v.any(),
+    message: v.optional(v.any()),
     messages: v.optional(v.array(v.any())),
   },
   handler: async (ctx, args) => {
@@ -62,7 +67,7 @@ export const save = mutation({
       const messageData = {
         messageId: message.id,
         threadId: message.threadId,
-        messageType: message.type || 'assistant', // default to assistant if not specified
+        messageType: message.role || 'assistant', // Use role property for message type
         content: {
           content: message.content,
           metadata: message.metadata || {},
@@ -95,7 +100,7 @@ export const save = mutation({
         const messageData = {
           messageId: message.id,
           threadId: message.threadId,
-          messageType: message.type || 'assistant',
+          messageType: message.role || 'assistant', // Use role property for message type
           content: {
             content: message.content,
             metadata: message.metadata || {},
@@ -183,5 +188,95 @@ export const update = mutation({
     }
 
     return updatedMessages;
+  },
+});
+
+// Helper functions removed as we're now using a simpler in-memory pagination approach
+
+/**
+ * Get paginated messages for a thread
+ *
+ * Supports pagination with page number and items per page
+ * Returns messages with metadata about pagination status
+ */
+export const getPaginated = query({
+  args: {
+    threadId: v.string(),
+    selectBy: v.object({
+      pagination: v.object({
+        page: v.number(),
+        perPage: v.number(),
+      }),
+    }),
+    format: v.string(),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    messages: Array<{
+      id: string;
+      threadId: string;
+      role: string;
+      content: any; // Using any here as the content structure varies
+      metadata?: Record<string, any>;
+      createdAt: number; // Using number (timestamp) instead of Date to be compatible with Convex
+    }>;
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }> => {
+    const { threadId, selectBy } = args;
+    const { page, perPage } = selectBy.pagination;
+
+    // Get all messages for this thread
+    const allMessages = await ctx.db
+      .query('messages')
+      .withIndex('by_threadId', q => q.eq('threadId', threadId))
+      .order('desc')
+      .collect();
+
+    // Calculate total count
+    const total = allMessages.length;
+
+    // Manually calculate pagination
+    const startIndex = (page - 1) * perPage;
+    const endIndex = startIndex + perPage;
+    const paginatedMessages = allMessages.slice(startIndex, endIndex);
+
+    // Transform the Convex document format to match expected MastraMessageV2 format
+    type ConvexMessage = Doc<'messages'> & {
+      messageId: string;
+      threadId: string;
+      messageType: string;
+      content: {
+        content: any;
+        metadata?: Record<string, any>;
+      };
+      createdAt: number;
+    };
+
+    const messages = paginatedMessages.map((doc: ConvexMessage) => {
+      return {
+        id: doc.messageId,
+        threadId: doc.threadId,
+        role: doc.messageType,
+        content: doc.content.content,
+        metadata: doc.content.metadata || {},
+        createdAt: doc.createdAt, // Return as timestamp (number) instead of Date object
+      };
+    });
+
+    // Calculate if there are more messages
+    const hasMore = total > endIndex;
+
+    return {
+      messages,
+      total,
+      page,
+      perPage,
+      hasMore,
+    };
   },
 });

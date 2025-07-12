@@ -142,3 +142,29 @@ export const getTableColumns = query({
     return tableSchemas[tableName] || null;
   },
 });
+
+export const clearTable = mutation({
+  args: {
+    tableName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { tableName } = args;
+
+    try {
+      // This assumes the table name provided is valid in the database schema
+      const records = await ctx.db.query(tableName as any).collect();
+
+      // Delete each record from the table
+      for (const record of records) {
+        await ctx.db.delete(record._id);
+      }
+
+      return { success: true, count: records.length };
+    } catch (error: unknown) {
+      console.error(`Error clearing table ${tableName}:`, error);
+      // Handle error.message safely with type checking
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return { success: false, error: errorMessage };
+    }
+  },
+});

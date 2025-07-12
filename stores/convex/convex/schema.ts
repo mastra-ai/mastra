@@ -22,10 +22,7 @@ export default defineSchema({
     messageId: v.string(),
     threadId: v.string(),
     messageType: v.string(), // 'user', 'assistant', 'system'
-    content: v.object({
-      content: v.optional(v.string()),
-      metadata: v.optional(v.any()),
-    }),
+    content: v.any(),
     createdAt: v.number(),
   })
     .index('by_messageId', ['messageId'])
