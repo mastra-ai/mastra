@@ -1,5 +1,19 @@
 # @mastra/voice-openai-realtime
 
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- 8c07105: bugfix: OpenAIRealtimeVoice cannot handle error from openai
+
+  issue: https://github.com/mastra-ai/mastra/issues/5648
+
+- Updated dependencies [5237998]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [626b0f4]
+  - @mastra/core@0.10.13-alpha.0
+
 ## 0.10.3
 
 ### Patch Changes

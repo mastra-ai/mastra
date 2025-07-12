@@ -1,5 +1,14 @@
 # @mastra/core
 
+## 0.10.13-alpha.0
+
+### Patch Changes
+
+- 5237998: Fix foreach output
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- 89ec9d4: remove cohere-ai client dependency and just make a fetch call
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+
 ## 0.10.12
 
 ### Patch Changes
