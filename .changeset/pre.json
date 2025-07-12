@@ -70,5 +70,20 @@
     "@mastra/voice-speechify": "0.10.4",
     "@mastra/inngest": "0.11.3"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_playground-ui-5777-dependencies",
+    "blue-pets-invent",
+    "curly-adults-sing",
+    "dry-grapes-trade",
+    "empty-jars-yawn",
+    "fancy-insects-sell",
+    "giant-jars-show",
+    "itchy-needles-turn",
+    "mastra-5777-dependencies",
+    "odd-boxes-study",
+    "rotten-books-vanish",
+    "six-crews-smell",
+    "slick-trees-train",
+    "sweet-planets-remain"
+  ]
 }

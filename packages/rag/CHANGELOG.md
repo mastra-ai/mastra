@@ -1,5 +1,16 @@
 # @mastra/rag
 
+## 1.0.3-alpha.0
+
+### Patch Changes
+
+- 89ec9d4: remove cohere-ai client dependency and just make a fetch call
+- Updated dependencies [5237998]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [626b0f4]
+  - @mastra/core@0.10.13-alpha.0
+
 ## 1.0.2
 
 ### Patch Changes

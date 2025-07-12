@@ -1,5 +1,16 @@
 # @mastra/memory
 
+## 0.11.3-alpha.0
+
+### Patch Changes
+
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- Updated dependencies [5237998]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [626b0f4]
+  - @mastra/core@0.10.13-alpha.0
+
 ## 0.11.2
 
 ### Patch Changes
