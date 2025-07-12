@@ -10,19 +10,22 @@ export const save = mutation({
     const { evalData } = args;
 
     const evalRecord = {
-      evalId: evalData.id,
-      threadId: evalData.threadId,
+      input: evalData.input,
+      output: evalData.output,
+      result: evalData.result,
       agentName: evalData.agentName,
-      type: evalData.type || 'live', // Default to live
-      metadata: evalData.metadata || {},
-      data: evalData.data || {},
-      createdAt: evalData.createdAt || Date.now(),
+      createdAt: evalData.createdAt,
+      metricName: evalData.metricName,
+      instructions: evalData.instructions,
+      runId: evalData.runId,
+      globalRunId: evalData.globalRunId,
+      testInfo: evalData.testInfo,
     };
 
     // Check if evaluation already exists
     const existingEval = await ctx.db
       .query('evals')
-      .withIndex('by_evalId', q => q.eq('evalId', evalData.id))
+      .withIndex('by_runId', q => q.eq('runId', evalData.runId))
       .first();
 
     if (existingEval) {
@@ -41,11 +44,11 @@ export const save = mutation({
  * Get an evaluation by ID
  */
 export const get = query({
-  args: { evalId: v.string() },
+  args: { runId: v.string() },
   handler: async (ctx, args) => {
     const evalRecord = await ctx.db
       .query('evals')
-      .withIndex('by_evalId', q => q.eq('evalId', args.evalId))
+      .withIndex('by_runId', q => q.eq('runId', args.runId))
       .first();
 
     return evalRecord || null;
@@ -55,12 +58,12 @@ export const get = query({
 /**
  * Get evaluations by thread ID
  */
-export const getByThreadId = query({
-  args: { threadId: v.string() },
+export const getByGlobalRunId = query({
+  args: { globalRunId: v.string() },
   handler: async (ctx, args) => {
     const evals = await ctx.db
       .query('evals')
-      .withIndex('by_threadId', q => q.eq('threadId', args.threadId))
+      .withIndex('by_globalRunId', q => q.eq('globalRunId', args.globalRunId))
       .collect();
 
     return evals;
@@ -80,7 +83,7 @@ export const getByAgentName = query({
 
     // Apply type filter if provided
     if (args.type) {
-      query = query.filter(q => q.eq(q.field('type'), args.type));
+      query = query.filter(q => q.eq(q.field('metricName'), args.type));
     }
 
     const evals = await query.collect();

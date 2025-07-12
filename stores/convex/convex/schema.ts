@@ -46,16 +46,19 @@ export default defineSchema({
 
   // Evals table
   evals: defineTable({
-    evalId: v.string(),
-    threadId: v.optional(v.string()),
-    agentName: v.optional(v.string()),
-    type: v.optional(v.string()), // 'test' or 'live'
-    metadata: v.any(),
-    data: v.any(),
+    input: v.string(),
+    output: v.string(),
+    result: v.any(),
+    agentName: v.string(),
     createdAt: v.number(),
+    metricName: v.string(),
+    instructions: v.string(),
+    runId: v.string(),
+    globalRunId: v.string(),
+    testInfo: v.optional(v.any()),
   })
-    .index('by_evalId', ['evalId'])
-    .index('by_threadId', ['threadId'])
+    .index('by_runId', ['runId'])
+    .index('by_globalRunId', ['globalRunId'])
     .index('by_agentName', ['agentName']),
 
   // WorkflowRuns table

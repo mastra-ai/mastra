@@ -1,4 +1,4 @@
-import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core';
+import type { StorageThreadType, MastraMessageV1, MastraMessageV2, EvalRow } from '@mastra/core';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { describe, test, expect, afterAll } from 'vitest';
@@ -652,6 +652,251 @@ describe('ConvexStorage Tests', () => {
         expect(firstPageIds.has(id)).toBe(false);
         expect(secondPageIds.has(id)).toBe(false);
       }
+    });
+  });
+
+  describe('ConvexStorage Evals Tests', () => {
+    const storage = new ConvexStorage({
+      convexUrl: 'http://localhost:3210',
+      api,
+    });
+
+    test('should save a new evaluation', async () => {
+      // Create EvalRow with required fields based on the structure in evals.ts
+      const evalData: EvalRow = {
+        input: 'test input',
+        output: 'test output',
+        result: {
+          score: 0.95,
+        },
+        agentName: 'test-agent',
+        createdAt: new Date().toISOString(),
+        metricName: 'test-metric',
+        instructions: 'test instructions',
+        runId: 'test-run-id',
+        globalRunId: 'test-global-run-id',
+        testInfo: {},
+      };
+      const savedEval: EvalRow = await storage.saveEval({ evalData });
+
+      expect(savedEval).toBeDefined();
+      expect(savedEval.input).toBe(evalData.input);
+      expect(savedEval.output).toBe(evalData.output);
+      expect(savedEval.result).toEqual(evalData.result);
+      expect(savedEval.agentName).toBe(evalData.agentName);
+      expect(savedEval.metricName).toBe(evalData.metricName);
+      expect(savedEval.instructions).toBe(evalData.instructions);
+      expect(savedEval.runId).toBe(evalData.runId);
+      expect(savedEval.globalRunId).toBe(evalData.globalRunId);
+      expect(savedEval.testInfo).toEqual(evalData.testInfo);
+    });
+
+    test('should update an existing evaluation', async () => {
+      const runId = 'test-run-id-update';
+
+      // Create initial evaluation
+      const initialEvalData: EvalRow = {
+        input: 'test input',
+        output: 'test output',
+        result: {
+          score: 0.95,
+        },
+        agentName: 'test-agent',
+        createdAt: new Date().toISOString(),
+        metricName: 'test-metric',
+        instructions: 'test instructions',
+        runId,
+        globalRunId: 'test-global-run-id',
+        testInfo: {},
+      };
+
+      await storage.saveEval({ evalData: initialEvalData });
+
+      // Update the evaluation
+      const updatedEvalData: EvalRow = {
+        input: 'updated input',
+        output: 'updated output',
+        result: {
+          score: 0.95,
+        },
+        agentName: 'test-agent',
+        createdAt: new Date().toISOString(),
+        metricName: 'test-metric',
+        instructions: 'test instructions',
+        runId,
+        globalRunId: 'test-global-run-id',
+        testInfo: {
+          testName: 'updated test',
+        },
+      };
+
+      await storage.saveEval({ evalData: updatedEvalData });
+
+      const updatedEval: EvalRow | null = await storage.getEval({ runId });
+
+      expect(updatedEval).toBeDefined();
+      expect(updatedEval?.input).toBe(updatedEvalData.input);
+      expect(updatedEval?.output).toBe(updatedEvalData.output);
+      expect(updatedEval?.result).toEqual(updatedEvalData.result);
+      expect(updatedEval?.agentName).toBe(updatedEvalData.agentName);
+      expect(updatedEval?.metricName).toBe(updatedEvalData.metricName);
+      expect(updatedEval?.instructions).toBe(updatedEvalData.instructions);
+      expect(updatedEval?.runId).toBe(updatedEvalData.runId);
+      expect(updatedEval?.globalRunId).toBe(updatedEvalData.globalRunId);
+      expect(updatedEval?.testInfo).toEqual(updatedEvalData.testInfo);
+    });
+
+    test('should get an evaluation by ID', async () => {
+      const evalData: EvalRow = {
+        input: 'test input',
+        output: 'test output',
+        result: {
+          score: 0.85,
+        },
+        agentName: 'test-agent',
+        createdAt: Date.now().toString(),
+        metricName: 'test-metric',
+        instructions: 'test instructions',
+        runId: 'test-run-id',
+        globalRunId: 'test-global-run-id',
+        testInfo: {
+          testName: 'test',
+        },
+      };
+
+      await storage.saveEval({ evalData });
+
+      const fetchedEval = await storage.getEval({ runId: evalData.runId });
+
+      expect(fetchedEval).toBeDefined();
+      expect(fetchedEval?.input).toBe(evalData.input);
+      expect(fetchedEval?.output).toBe(evalData.output);
+      expect(fetchedEval?.result).toEqual(evalData.result);
+      expect(fetchedEval?.agentName).toBe(evalData.agentName);
+      expect(fetchedEval?.metricName).toBe(evalData.metricName);
+      expect(fetchedEval?.instructions).toBe(evalData.instructions);
+      expect(fetchedEval?.runId).toBe(evalData.runId);
+      expect(fetchedEval?.globalRunId).toBe(evalData.globalRunId);
+      expect(fetchedEval?.testInfo).toEqual(evalData.testInfo);
+    });
+
+    test('should return null when getting non-existent evaluation', async () => {
+      const fetchedEval = await storage.getEval({ runId: 'non-existent-eval-id' });
+      expect(fetchedEval).toBeNull();
+    });
+
+    test('should get evaluations by agent name', async () => {
+      const agentName = 'special-test-agent';
+
+      // Create evals for the agent with different types
+      const evalData1: EvalRow = {
+        input: 'agent input 1',
+        output: 'agent output 1',
+        result: {
+          score: 0.91,
+        },
+        agentName,
+        createdAt: Date.now().toString(),
+        metricName: 'test-metric',
+        instructions: 'test instructions',
+        runId: 'test-run-id-1',
+        globalRunId: 'test-global-run-id-1',
+        testInfo: {
+          testName: 'test',
+        },
+      };
+
+      const evalData2: EvalRow = {
+        input: 'agent input 2',
+        output: 'agent output 2',
+        result: {
+          score: 0.92,
+        },
+        agentName,
+        createdAt: Date.now().toString(),
+        metricName: 'test-metric',
+        instructions: 'test instructions',
+        runId: 'test-run-id-2',
+        globalRunId: 'test-global-run-id-2',
+        testInfo: {
+          testName: 'test',
+        },
+      };
+
+      await storage.saveEval({ evalData: evalData1 });
+      await storage.saveEval({ evalData: evalData2 });
+
+      const fetchedAgentEvals = await storage.getEvalsByAgentName(agentName);
+      expect(fetchedAgentEvals).toBeDefined();
+      expect(fetchedAgentEvals.length).toBe(2);
+    });
+
+    test('should get evaluations by agent name and type', async () => {
+      const agentName = 'special-test-agent';
+      const evalData1: EvalRow = {
+        input: 'agent input 1',
+        output: 'agent output 1',
+        result: {
+          score: 0.91,
+        },
+        agentName,
+        createdAt: Date.now().toString(),
+        metricName: 'live',
+        instructions: 'test instructions',
+        runId: 'test-run-id-1',
+        globalRunId: 'test-global-run-id-1',
+        testInfo: {
+          testName: 'test',
+        },
+      };
+
+      const evalData2: EvalRow = {
+        input: 'agent input 2',
+        output: 'agent output 2',
+        result: {
+          score: 0.92,
+        },
+        agentName,
+        createdAt: Date.now().toString(),
+        metricName: 'test',
+        instructions: 'test instructions',
+        runId: 'test-run-id-2',
+        globalRunId: 'test-global-run-id-2',
+        testInfo: {
+          testName: 'test',
+        },
+      };
+
+      await storage.saveEval({ evalData: evalData1 });
+      await storage.saveEval({ evalData: evalData2 });
+
+      // Get all evals for agent
+      const allAgentEvals = await storage.getEvalsByAgentName(agentName);
+      expect(allAgentEvals).toBeDefined();
+      expect(allAgentEvals.length).toBe(2);
+
+      // Get only live evals
+      const liveEvals = await storage.getEvalsByAgentName(agentName, 'live');
+      expect(liveEvals).toBeDefined();
+      expect(liveEvals.length).toBe(1);
+      expect(liveEvals[0].runId).toBe(evalData1.runId);
+      expect(liveEvals[0].globalRunId).toBe(evalData1.globalRunId);
+
+      // Get only batch evals
+      const batchEvals = await storage.getEvalsByAgentName(agentName, 'test');
+      expect(batchEvals).toBeDefined();
+      expect(batchEvals.length).toBe(1);
+      expect(batchEvals[0].runId).toBe(evalData2.runId);
+      expect(batchEvals[0].globalRunId).toBe(evalData2.globalRunId);
+    });
+
+    test('should handle empty array results for getEvalsByAgentName', async () => {
+      const nonExistentAgent = 'agent-with-no-evals';
+      const emptyResults = await storage.getEvalsByAgentName(nonExistentAgent);
+
+      expect(emptyResults).toBeDefined();
+      expect(Array.isArray(emptyResults)).toBeTruthy();
+      expect(emptyResults.length).toBe(0);
     });
   });
 });

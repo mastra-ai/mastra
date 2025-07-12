@@ -924,7 +924,12 @@ export class ConvexStorage extends MastraStorage {
    */
   async saveEval({ evalData }: { evalData: EvalRow }): Promise<EvalRow> {
     try {
-      return await this.httpClient.mutation(this.api.evals.save, { evalData });
+      const evalToSave = {
+        ...evalData,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      return await this.httpClient.mutation(this.api.evals.save, { evalData: evalToSave });
     } catch (error) {
       throw new MastraError(
         {
@@ -945,9 +950,13 @@ export class ConvexStorage extends MastraStorage {
    * @param params - Evaluation ID
    * @returns Evaluation data or null
    */
-  async getEval({ evalId }: { evalId: string }): Promise<EvalRow | null> {
+  async getEval({ runId }: { runId: string }): Promise<EvalRow | null> {
     try {
-      return await this.httpClient.query(this.api.evals.get, { evalId });
+      const evalData = await this.httpClient.query(this.api.evals.get, { runId });
+      if (!evalData) {
+        return null;
+      }
+      return evalData;
     } catch (error) {
       throw new MastraError(
         {
@@ -955,30 +964,7 @@ export class ConvexStorage extends MastraStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            evalId: evalId,
-          },
-        },
-        error,
-      );
-    }
-  }
-
-  /**
-   * Gets evaluations for a thread
-   * @param params - Thread ID
-   * @returns Array of evaluations
-   */
-  async getEvalsByThreadId({ threadId }: { threadId: string }): Promise<EvalRow[]> {
-    try {
-      return await this.httpClient.query(this.api.evals.getByThreadId, { threadId });
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'STORAGE_GET_EVALS_BY_THREAD_ID_ERROR',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            threadId: threadId,
+            runId,
           },
         },
         error,
