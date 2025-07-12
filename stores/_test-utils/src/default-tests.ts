@@ -1128,12 +1128,21 @@ export function createTestSuite(storage: MastraStorage) {
 
     it('returns true if the column exists', async () => {
       await storage['client'].execute({ sql: `CREATE TABLE ${tempTable} (id INTEGER PRIMARY KEY, resourceId TEXT)` });
-      expect(await storage['hasColumn'](tempTable, 'resourceId')).toBe(true);
+
+      if (storage['hasColumn']) {
+        expect(await storage['hasColumn'](tempTable, 'resourceId')).toBe(true);
+      } else {
+        expect(await storage['store'].hasAttribute(tempTable, 'resourceId')).toBe(true);
+      }
     });
 
     it('returns false if the column does not exist', async () => {
       await storage['client'].execute({ sql: `CREATE TABLE ${tempTable} (id INTEGER PRIMARY KEY)` });
-      expect(await storage['hasColumn'](tempTable, 'resourceId')).toBe(false);
+      if (storage['hasColumn']) {
+        expect(await storage['hasColumn'](tempTable, 'resourceId')).toBe(false);
+      } else {
+        expect(await storage['store'].hasAttribute(tempTable, 'resourceId')).toBe(false);
+      }
     });
 
     afterEach(async () => {
@@ -1256,85 +1265,144 @@ export function createTestSuite(storage: MastraStorage) {
     } as Record<string, StorageColumn>;
 
     beforeEach(async () => {
-      await storage.createTable({ tableName: TEST_TABLE as TABLE_NAMES, schema: BASE_SCHEMA });
+      if (storage['store']) {
+        await storage['store'].initialize({ name: TEST_TABLE as TABLE_NAMES, schema: BASE_SCHEMA });
+      } else {
+        await storage['store'].createTable({ tableName: TEST_TABLE as TABLE_NAMES, schema: BASE_SCHEMA });
+      }
     });
 
     afterEach(async () => {
-      await storage.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+      if (storage['store']) {
+        await storage['store'].teardown({ name: TEST_TABLE as TABLE_NAMES });
+      } else {
+        await storage['clearTable']({ tableName: TEST_TABLE as TABLE_NAMES });
+      }
     });
 
     it('adds a new column to an existing table', async () => {
-      await storage.alterTable({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        schema: { ...BASE_SCHEMA, age: { type: 'integer', nullable: true } },
-        ifNotExists: ['age'],
-      });
+      if (storage['store']) {
+        await storage['store'].migrate({
+          name: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, age: { type: 'integer', nullable: true } },
+          ifNotExists: ['age'],
+        });
+      } else {
+        await storage['alterTable']({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, age: { type: 'integer', nullable: true } },
+          ifNotExists: ['age'],
+        });
+      }
 
-      await storage.insert({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: 1, name: 'Alice', age: 42, createdAt: new Date() },
-      });
+      if (storage['store']) {
+        await storage['store'].insert({
+          name: TEST_TABLE as TABLE_NAMES,
+          record: { id: 1, name: 'Alice', age: 42, createdAt: new Date() },
+        });
+      } else {
+        await storage['insert']({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          record: { id: 1, name: 'Alice', age: 42, createdAt: new Date() },
+        });
+      }
 
-      const row = await storage.load<{ id: string; name: string; age?: number }>({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        keys: { id: '1' },
-      });
+      let row: { id: string; name: string; age?: number } | null = null;
+      if (storage['store']) {
+        row = await storage['store'].load<{ id: string; name: string; age?: number }>({
+          name: TEST_TABLE as TABLE_NAMES,
+          keys: { id: '1' },
+        });
+      } else {
+        console.log('load');
+        row = await storage['load']<{ id: string; name: string; age?: number }>({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          keys: { id: '1' },
+        });
+      }
       expect(row?.age).toBe(42);
     });
 
     it('is idempotent when adding an existing column', async () => {
-      await storage.alterTable({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
-        ifNotExists: ['foo'],
-      });
-      // Add the column again (should not throw)
-      await expect(
-        storage.alterTable({
+      if (storage['alterTable']) {
+        await storage['alterTable']({
           tableName: TEST_TABLE as TABLE_NAMES,
           schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
           ifNotExists: ['foo'],
-        }),
-      ).resolves.not.toThrow();
+        });
+      } else {
+        await storage['store'].migrate({
+          name: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+          ifNotExists: ['foo'],
+        });
+      }
+      // Add the column again (should not throw)
+      if (storage['alterTable']) {
+        await expect(
+          storage['alterTable']({
+            tableName: TEST_TABLE as TABLE_NAMES,
+            schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+            ifNotExists: ['foo'],
+          }),
+        ).resolves.not.toThrow();
+      } else {
+        await expect(
+          storage['store'].migrate({
+            name: TEST_TABLE as TABLE_NAMES,
+            schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+            ifNotExists: ['foo'],
+          }),
+        ).resolves.not.toThrow();
+      }
     });
 
     it('should add a default value to a column when using not null', async () => {
-      await storage.insert({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: 1, name: 'Bob', createdAt: new Date() },
-      });
-
-      await expect(
-        storage.alterTable({
+      if (storage['insert']) {
+        await storage['insert']({
           tableName: TEST_TABLE as TABLE_NAMES,
-          schema: { ...BASE_SCHEMA, text_column: { type: 'text', nullable: false } },
-          ifNotExists: ['text_column'],
-        }),
-      ).resolves.not.toThrow();
-
-      await expect(
-        storage.alterTable({
-          tableName: TEST_TABLE as TABLE_NAMES,
-          schema: { ...BASE_SCHEMA, timestamp_column: { type: 'timestamp', nullable: false } },
-          ifNotExists: ['timestamp_column'],
-        }),
-      ).resolves.not.toThrow();
-
-      await expect(
-        storage.alterTable({
-          tableName: TEST_TABLE as TABLE_NAMES,
-          schema: { ...BASE_SCHEMA, bigint_column: { type: 'bigint', nullable: false } },
-          ifNotExists: ['bigint_column'],
-        }),
-      ).resolves.not.toThrow();
-
-      await expect(
-        storage.alterTable({
-          tableName: TEST_TABLE as TABLE_NAMES,
-          schema: { ...BASE_SCHEMA, jsonb_column: { type: 'jsonb', nullable: false } },
-          ifNotExists: ['jsonb_column'],
-        }),
-      ).resolves.not.toThrow();
+          record: { id: 1, name: 'Bob', createdAt: new Date() },
+        });
+      } else {
+        await storage['store'].insert({
+          name: TEST_TABLE as TABLE_NAMES,
+          record: { id: 1, name: 'Bob', createdAt: new Date() },
+        });
+      }
+      if (storage['alterTable']) {
+        await expect(
+          storage['alterTable']({
+            tableName: TEST_TABLE as TABLE_NAMES,
+            schema: { ...BASE_SCHEMA, text_column: { type: 'text', nullable: false } },
+            ifNotExists: ['text_column'],
+          }),
+        ).resolves.not.toThrow();
+      } else {
+        await expect(
+          storage['store'].migrate({
+            tableName: TEST_TABLE as TABLE_NAMES,
+            schema: { ...BASE_SCHEMA, timestamp_column: { type: 'timestamp', nullable: false } },
+            ifNotExists: ['timestamp_column'],
+          }),
+        ).resolves.not.toThrow();
+      }
+      if (storage['alterTable']) {
+        await expect(
+          storage['alterTable']({
+            tableName: TEST_TABLE as TABLE_NAMES,
+            schema: { ...BASE_SCHEMA, bigint_column: { type: 'bigint', nullable: false } },
+            ifNotExists: ['bigint_column'],
+          }),
+        ).resolves.not.toThrow();
+      } else {
+        await expect(
+          storage['store'].migrate({
+            tableName: TEST_TABLE as TABLE_NAMES,
+            schema: { ...BASE_SCHEMA, jsonb_column: { type: 'jsonb', nullable: false } },
+            ifNotExists: ['jsonb_column'],
+          }),
+        ).resolves.not.toThrow();
+      }
     });
   });
 

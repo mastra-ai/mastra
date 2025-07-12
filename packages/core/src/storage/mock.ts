@@ -6,6 +6,7 @@ import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
 import type {
   EvalRow,
+  PaginationArgs,
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
@@ -246,6 +247,37 @@ export class MockStore extends MastraStorage {
     const start = page * perPage;
     const end = start + perPage;
     return traces.slice(start, end);
+  }
+
+  async getEvals(args: {
+    agentName?: string;
+    type?: 'test' | 'live';
+  } & PaginationArgs): Promise<PaginationInfo & { evals: EvalRow[] }> {
+    this.logger.debug(`MockStore: getEvals called`);
+    const { agentName, type, page = 0, perPage = 100, dateRange } = args;
+    const fromDate = dateRange?.start;
+    const toDate = dateRange?.end;
+
+    let evals = Object.values(this.data.mastra_evals).filter((e: any) => e.agentName === agentName);
+
+    if (agentName) evals = evals.filter((e: any) => e.agentName === agentName);
+    if (type === 'test') {
+      evals = evals.filter((e: any) => e.testInfo && e.testInfo.testPath);
+    } else if (type === 'live') {
+      evals = evals.filter((e: any) => !e.testInfo || !e.testInfo.testPath);
+    }
+    if (fromDate) evals = evals.filter((e: any) => new Date(e.createdAt) >= fromDate);
+    if (toDate) evals = evals.filter((e: any) => new Date(e.createdAt) <= toDate);
+
+    const total = evals.length;
+
+    // Sort by createdAt  
+    evals.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // Apply pagination
+    const start = page * perPage;
+    const end = start + perPage;
+    return { evals: evals.slice(start, end), total, page, perPage, hasMore: evals.length > end };
   }
 
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {

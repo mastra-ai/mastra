@@ -16,6 +16,7 @@ import {
 import type { TABLE_NAMES } from './constants';
 import type {
   EvalRow,
+  PaginationArgs,
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
@@ -26,17 +27,6 @@ import type {
 } from './types';
 
 export abstract class MastraStorage extends MastraBase {
-  /** @deprecated import from { TABLE_WORKFLOW_SNAPSHOT } '@mastra/core/storage' instead */
-  static readonly TABLE_WORKFLOW_SNAPSHOT = TABLE_WORKFLOW_SNAPSHOT;
-  /** @deprecated import from { TABLE_EVALS } '@mastra/core/storage' instead */
-  static readonly TABLE_EVALS = TABLE_EVALS;
-  /** @deprecated import from { TABLE_MESSAGES } '@mastra/core/storage' instead */
-  static readonly TABLE_MESSAGES = TABLE_MESSAGES;
-  /** @deprecated import from { TABLE_THREADS } '@mastra/core/storage' instead */
-  static readonly TABLE_THREADS = TABLE_THREADS;
-  /** @deprecated import { TABLE_TRACES } from '@mastra/core/storage' instead */
-  static readonly TABLE_TRACES = TABLE_TRACES;
-
   protected hasInitialized: null | Promise<boolean> = null;
   protected shouldCacheInit = true;
 
@@ -122,7 +112,13 @@ export abstract class MastraStorage extends MastraBase {
     }
   }
 
-  abstract createTable({ tableName }: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void>;
+  abstract createTable({
+    tableName,
+    schema,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+  }): Promise<void>;
 
   abstract clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void>;
 
@@ -169,16 +165,16 @@ export abstract class MastraStorage extends MastraBase {
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(
       `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
+      `To use per-resource working memory, switch to one of these supported storage adapters.`,
     );
   }
 
   async saveResource(_: { resource: StorageResourceType }): Promise<StorageResourceType> {
     throw new Error(
       `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
+      `To use per-resource working memory, switch to one of these supported storage adapters.`,
     );
   }
 
@@ -189,8 +185,8 @@ export abstract class MastraStorage extends MastraBase {
   }): Promise<StorageResourceType> {
     throw new Error(
       `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
+      `To use per-resource working memory, switch to one of these supported storage adapters.`,
     );
   }
 
@@ -211,10 +207,10 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract updateMessages(args: {
     messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
-      {
-        id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-      }[];
+    {
+      id: string;
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+    }[];
   }): Promise<MastraMessageV2[]>;
 
   abstract getTraces(args: StorageGetTracesArg): Promise<any[]>;
@@ -316,6 +312,11 @@ export abstract class MastraStorage extends MastraBase {
 
     return d ? d.snapshot : null;
   }
+
+  abstract getEvals(args: {
+    agentName?: string;
+    type?: 'test' | 'live';
+  } & PaginationArgs): Promise<PaginationInfo & { evals: EvalRow[] }>;
 
   abstract getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]>;
 
