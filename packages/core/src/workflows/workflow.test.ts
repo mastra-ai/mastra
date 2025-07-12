@@ -2702,7 +2702,63 @@ describe('Workflow', () => {
 
       expect(endTime - startTime).toBeGreaterThan(900);
     });
-  });
+
+    it('should only update workflow status to success after all steps have run successfully', async () => {
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(incrementStep)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData }) => {
+              await new Promise(resolve => setTimeout(resolve, 6000));
+              return { value: inputData.value };
+            },
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRunAsync();
+      const { stream, getWorkflowState } = run.stream({ inputData: { value: 0 } });
+
+      for await (const data of stream) {
+        if (data.type === 'step-finish' && (data as any).payload.id === 'increment') {
+          setTimeout(async () => {
+            const currentExecResult = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+            expect(currentExecResult?.status).toBe('running');
+          }, 500);
+        }
+      }
+      const finalResult = await getWorkflowState();
+      expect(finalResult.status).toBe('success');
+    });
+  }, 10000); //we have a 5 second timeout for the final step in the workflow
 
   describe('abort', () => {
     it('should be able to abort workflow execution in between steps', async () => {
@@ -5509,6 +5565,137 @@ describe('Workflow', () => {
       expect(lastResumeResult.steps['simple-resume-workflow']).toMatchObject({
         status: 'success',
       });
+    });
+
+    it('should throw error when you try to resume a workflow that is not suspended', async () => {
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(incrementStep)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData }) => ({ value: inputData.value }),
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRunAsync();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('success');
+
+      try {
+        await run.resume({
+          resumeData: { value: 2 },
+          step: ['increment'],
+        });
+      } catch (error) {
+        const errMessage = (error as { message: string })?.message;
+        expect(errMessage).toBe('This workflow run was not suspended');
+      }
+    });
+
+    it('should throw error when you try to resume a workflow step that is not suspended', async () => {
+      const resumeStep = createStep({
+        id: 'resume',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        resumeSchema: z.object({ value: z.number() }),
+        suspendSchema: z.object({ message: z.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          const finalValue = (resumeData?.value ?? 0) + inputData.value;
+
+          if (!resumeData?.value || finalValue < 10) {
+            return await suspend({ message: `Please provide additional information. now value is ${inputData.value}` });
+          }
+
+          return { value: finalValue };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(incrementStep)
+        .then(resumeStep)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData }) => ({ value: inputData.value }),
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRunAsync();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('suspended');
+
+      try {
+        await run.resume({
+          resumeData: { value: 2 },
+          step: ['increment'],
+        });
+      } catch (error) {
+        const errMessage = (error as { message: string })?.message;
+        expect(errMessage).toBe('This workflow step was not suspended');
+      }
+
+      const resumeResult = await run.resume({
+        resumeData: { value: 21 },
+        step: ['resume'],
+      });
+
+      expect(resumeResult.status).toBe('success');
     });
   });
 
