@@ -37,8 +37,6 @@ export const useScoresByScorerId = (scorerId: string) => {
   const [scores, setScores] = useState<GetScoresResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  console.log('******', scores);
-
   useEffect(() => {
     const fetchScores = async () => {
       setIsLoading(true);

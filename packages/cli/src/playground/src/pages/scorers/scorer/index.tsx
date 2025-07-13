@@ -2,7 +2,7 @@ import { AgentIcon, Breadcrumb, Crumb, Header, MainContentLayout, WorkflowIcon }
 import { useParams, Link } from 'react-router';
 import { useScorer, useScoresByEntityId, useScoresByScorerId } from '@mastra/playground-ui';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from 'lucide-react';
+import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from 'lucide-react';
 import { format, isToday } from 'date-fns';
 import { useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
@@ -15,6 +15,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import MarkdownRenderer from '@/components/ui/markdown-renderer';
 import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+
 import { useWorkflows } from '@/hooks/use-workflows';
 
 export default function Scorer() {
@@ -24,22 +25,8 @@ export default function Scorer() {
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
   const isLoading = scorerLoading || agentsLoading || workflowsLoading;
 
-  // the useScoresByScorerId returns an empty []
-  const { scores: allScores, isLoading: scoresLoading } = useScoresByScorerId(scorerId);
-  // so here is a temporary hack to get scores by entityId to record a demo
-  // console.log(`scorerId`, scorerId);
-  // console.log(`useScoresByScorerId`, useScoresByScorerId(scorerId));
-  // const { scores: agentScores, isLoading: agentScoresLoading } = useScoresByEntityId('evalAgent', 'AGENT');
-  // const { scores: workflowScores, isLoading: workflowScoresLoading } = useScoresByEntityId('myWorkflow', 'WORKFLOW');
-  // const allScores = [...(agentScores?.scores || []), ...(workflowScores?.scores || [])];
-  // const scoresLoading = agentScoresLoading || workflowScoresLoading;
-  console.log(`Lets see all the scores`, JSON.stringify(allScores, null, 2));
-  const [filteredByEntityId, setFilteredByEntityId] = useState<string>('all');
   const [selectedScore, setSelectedScore] = useState<any>(null);
   const [detailsIsOpened, setDetailsIsOpened] = useState<boolean>(false);
-
-  const filteredScores =
-    allScores?.scores?.filter(score => score.entityId === filteredByEntityId || filteredByEntityId === 'all') || [];
 
   const scorerAgents =
     scorer?.agentIds.map(agentId => {
@@ -56,6 +43,40 @@ export default function Scorer() {
         name: legacy[workflowId]?.name || current[workflowId]?.name,
       };
     }) || [];
+
+  const scorerEntities = [
+    ...scorerAgents.map(agent => ({ id: agent.id, name: agent.name, type: 'AGENT' })),
+    ...scorerWorkflows.map(workflow => ({ id: workflow.id, name: workflow.name, type: 'WORKFLOW' })),
+  ];
+
+  const { scores: allScores, isLoading: scoresLoading } = useScoresByScorerId(scorerId);
+  const [filteredByEntity, setFilteredByEntity] = useState<string>('');
+  const { scores: entityScores, isLoading: entityScoresLoading } = useScoresByEntityId(
+    filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.name : '',
+    filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.type : '',
+  );
+
+  const scoresTotal = allScores?.pagination?.total || 0;
+  const filteredScores = filteredByEntity !== '' ? entityScores?.scores : allScores?.scores;
+  const filteredScoresTotal = filteredByEntity !== '' ? entityScores?.pagination.total : allScores?.pagination.total;
+  const filteredScoresPage = filteredByEntity !== '' ? entityScores?.pagination.page : allScores?.pagination.page;
+  const filteredScoresHasMore =
+    filteredByEntity !== '' ? entityScores?.pagination.hasMore : allScores?.pagination.hasMore;
+
+  console.log('--->>>', allScores, filteredScoresTotal, filteredScoresPage, filteredScoresHasMore);
+
+  const handleFilterChange = (value: string) => {
+    if (value === 'all') {
+      setFilteredByEntity('');
+    } else {
+      const entity = scorerEntities?.[parseInt(value)];
+      if (entity) {
+        setFilteredByEntity(value);
+      } else {
+        console.warn('Entity not found for value:', value);
+      }
+    }
+  };
 
   const handleOnListItemClick = (score: any) => {
     if (score.id === selectedScore?.id) {
@@ -133,17 +154,20 @@ export default function Scorer() {
 
                 <TabsContent value="scores">
                   <ScoreListHeader
-                    setFilteredByEntityId={setFilteredByEntityId}
-                    filteredByEntityId={filteredByEntityId}
-                    scorerAgents={scorerAgents}
-                    scorerWorkflows={scorerWorkflows}
+                    filteredByEntity={filteredByEntity}
+                    onFilterChange={handleFilterChange}
+                    scorerEntities={scorerEntities}
+                    scoresTotal={scoresTotal}
+                    filteredScoresTotal={filteredByEntity ? filteredScoresTotal : undefined}
                   />
                   <ScoreList
-                    scores={filteredScores}
-                    filteredByEntityId={filteredByEntityId}
+                    scores={filteredScores || []}
                     selectedScore={selectedScore}
                     onItemClick={handleOnListItemClick}
-                    isLoading={scoresLoading}
+                    isLoading={filteredByEntity !== '' ? entityScoresLoading : scoresLoading || false}
+                    total={filteredScoresTotal}
+                    page={filteredScoresPage}
+                    hasMore={filteredScoresHasMore}
                   />
                 </TabsContent>
                 <TabsContent value="prompts">
@@ -174,8 +198,6 @@ function ScorerHeader({
   agents?: { id: string; name: string }[];
   workflows?: { id: string; name: string }[];
 }) {
-  console.log({ agents, workflows });
-
   return (
     <div
       className={cn(
@@ -217,53 +239,62 @@ function ScorerHeader({
 }
 
 function ScoreListHeader({
-  setFilteredByEntityId,
-  filteredByEntityId,
-  scorerAgents,
-  scorerWorkflows,
+  filteredByEntity,
+  onFilterChange,
+  scorerEntities,
+  scoresTotal,
+  filteredScoresTotal,
 }: {
-  setFilteredByEntityId: (value: string) => void;
-  filteredByEntityId: string;
-  scorerAgents?: { id: string; name: string }[];
-  scorerWorkflows?: { id: string; name: string }[];
+  filteredByEntity: string;
+  onFilterChange: (value: string) => void;
+  scorerEntities?: { id: string; name: string; type: string }[];
+  scoresTotal?: number;
+  filteredScoresTotal?: number;
 }) {
   return (
     <div className={cn('sticky top-0 bg-surface4 z-[1] mt-[2rem] mb-[1rem] rounded-lg px-[1.5rem]')}>
-      <div className="inline-flex items-baseline gap-[1rem] py-[.75rem]">
-        <label htmlFor="filter-by-agent" className="text-icon3 text-[0.875rem] font-semibold whitespace-nowrap">
-          Filter by entity:
-        </label>
-        <Select
-          name="filter-by-agent"
-          onValueChange={value => {
-            setFilteredByEntityId(value);
-          }}
-          defaultValue={'all'}
-          value={filteredByEntityId}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem key="all" value="all">
-              All Agents
-            </SelectItem>
-            {(scorerAgents || []).map(agent => (
-              // #todo: revert the commented code below when backend if fixed
-              // <SelectItem key={agent.id} value={agent.id}>
-              <SelectItem key={agent.id} value={agent.name}>
-                {agent.name}
+      <div className="flex items-center justify-between">
+        <div className="inline-flex items-baseline gap-[1rem] py-[.75rem]">
+          <label htmlFor="filter-by-agent" className="text-icon3 text-[0.875rem] font-semibold whitespace-nowrap">
+            Filter by entity:
+          </label>
+          <Select
+            name="filter-by-agent"
+            onValueChange={value => {
+              onFilterChange(value);
+            }}
+            defaultValue={'all'}
+            value={filteredByEntity || 'all'}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem key="all" value="all">
+                All
               </SelectItem>
-            ))}
-            {(scorerWorkflows || []).map(workflow => (
-              // #todo: revert the commented code below when backend if fixed
-              // <SelectItem key={workflow.id} value={workflow.id}>
-              <SelectItem key={workflow.id} value={workflow.name}>
-                {workflow.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+              {(scorerEntities || []).map((entity, idx) => (
+                <SelectItem key={entity.id} value={`${idx}`}>
+                  <div className="flex items-center gap-[0.5rem] [&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:text-icon3">
+                    {entity.type === 'WORKFLOW' ? <WorkflowIcon /> : <AgentIcon />}
+                    {entity.name}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="text-icon3 text-[0.875rem] flex gap-[1rem] [&_b]:text-icon5 [&>span]:flex [&>span]:gap-[0.5rem]">
+          {filteredScoresTotal && (
+            <span>
+              Filtered: <b>{filteredScoresTotal}</b>
+            </span>
+          )}
+          <span>
+            Total: <b>{scoresTotal}</b>
+          </span>
+        </div>
       </div>
 
       <div
@@ -284,16 +315,20 @@ function ScoreListHeader({
 
 function ScoreList({
   scores,
-  filteredByEntityId,
   selectedScore,
   onItemClick,
   isLoading,
+  total,
+  page,
+  hasMore,
 }: {
   scores: ScoreRowData[];
-  filteredByEntityId: string;
   selectedScore: any;
   onItemClick?: (score: ScoreRowData) => void;
   isLoading?: boolean;
+  total?: number;
+  page?: number;
+  hasMore?: boolean;
 }) {
   if (isLoading) {
     return (
@@ -304,21 +339,41 @@ function ScoreList({
   }
 
   return (
-    <ul className="grid border border-border1f bg-surface3 rounded-xl mb-[5rem]">
-      {scores?.length === 0 && (
-        <li className="text-icon3 text-[0.875rem] text-center h-[3.5rem] items-center flex justify-center">
-          No scores found for this scorer.
-        </li>
-      )}
-      {scores?.length > 0 &&
-        scores.map(score => {
-          if (filteredByEntityId !== 'all' && filteredByEntityId !== score.entityId) {
-            return null;
-          }
+    <div className="grid gap-[2rem] mb-[3rem]">
+      <ul className="grid border border-border1f bg-surface3 rounded-xl ">
+        {scores?.length === 0 && (
+          <li className="text-icon3 text-[0.875rem] text-center h-[3.5rem] items-center flex justify-center">
+            No scores found for this scorer.
+          </li>
+        )}
+        {scores?.length > 0 &&
+          scores.map(score => {
+            return <ScoreItem key={score.id} score={score} selectedScore={selectedScore} onClick={onItemClick} />;
+          })}
+      </ul>
 
-          return <ScoreItem key={score.id} score={score} selectedScore={selectedScore} onClick={onItemClick} />;
-        })}
-    </ul>
+      <div className={cn('flex items-center justify-center text-icon3 text-[0.875rem] gap-[2rem]')}>
+        <span>
+          Page {page ? page + 1 : '1'} of {total ? Math.ceil(total / 10) : 0}
+        </span>
+        <div
+          className={cn(
+            'flex gap-[1rem]',
+            '[&>a]:flex [&>a]:items-center [&>a]:gap-[0.5rem] [&>a]:text-icon4 [&>a:hover]:text-icon5 [&>a]:transition-colors [&>a]:border [&>a]:border-border1 [&>a]:p-[0.25rem] [&>a]:px-[0.5rem] [&>a]:rounded-md',
+            ' [&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-icon3',
+          )}
+        >
+          <Link to="">
+            <ArrowLeftIcon />
+            Previous
+          </Link>
+          <Link to="/">
+            Next
+            <ArrowRightIcon />
+          </Link>
+        </div>
+      </div>
+    </div>
   );
 }
 
