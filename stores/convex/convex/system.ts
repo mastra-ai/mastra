@@ -2,9 +2,9 @@ import { v } from 'convex/values';
 import { query, mutation } from './_generated/server';
 
 /**
- * Drop all tables and recreate schema
+ * Clear all tables
  */
-export const dropAllTables = mutation({
+export const clearAllTables = mutation({
   args: {},
   handler: async ctx => {
     // This is a no-op in Convex as we can't dynamically drop tables

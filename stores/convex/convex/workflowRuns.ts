@@ -1,7 +1,25 @@
+import type { WorkflowRunState, WorkflowRunStatus } from '@mastra/core';
 import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 import type { Doc } from './_generated/dataModel';
 import { query, mutation } from './_generated/server';
+
+/**
+ * Convert a database workflow run to an app model
+ */
+function convertDbToAppModel(run: Doc<'workflowRuns'>): any {
+  const snapshot = typeof run.snapshot === 'string' ? run.snapshot : (run.snapshot as WorkflowRunState | {});
+
+  // IMPORTANT: Keep createdAt and updatedAt as numbers for Convex compatibility
+  // The ConvexStorage class will convert them to Date objects on the client side
+  return {
+    ...run,
+    snapshot,
+    // Ensure fields are number type to avoid Convex serialization errors
+    createdAt: Number(run.createdAt),
+    updatedAt: Number(run.updatedAt),
+  };
+}
 
 /**
  * Save a workflow run
@@ -11,22 +29,23 @@ export const save = mutation({
   handler: async (ctx, args) => {
     const { workflowRun } = args;
 
+    // For stateType-based queries, respect explicit stateType or status from state/snapshot
+    const status = workflowRun.stateType || workflowRun.state?.status || workflowRun.snapshot?.status || 'pending';
+
     const runData = {
-      runId: workflowRun.id,
-      workflowName: workflowRun.workflowName,
+      runId: workflowRun.runId,
+      workflowName: workflowRun.workflowName || 'unknown',
       resourceId: workflowRun.resourceId,
-      stateType: workflowRun.stateType,
-      state: workflowRun.state || {},
-      error: workflowRun.error,
-      createdAt: workflowRun.createdAt || Date.now(),
-      updatedAt: workflowRun.updatedAt || Date.now(),
-      completedAt: workflowRun.completedAt,
+      snapshot: workflowRun.state || workflowRun.snapshot || {},
+      status: status as WorkflowRunStatus,
+      createdAt: new Date(workflowRun.createdAt).getTime(),
+      updatedAt: new Date(workflowRun.updatedAt).getTime(),
     };
 
     // Check if workflow run already exists
     const existingRun = await ctx.db
       .query('workflowRuns')
-      .withIndex('by_runId', q => q.eq('runId', workflowRun.id))
+      .withIndex('by_runId', q => q.eq('runId', workflowRun.runId))
       .first();
 
     if (existingRun) {
@@ -55,22 +74,56 @@ export const get = query({
       .withIndex('by_runId', q => q.eq('runId', args.runId))
       .first();
 
-    return run || null;
+    if (run) {
+      // Use helper to convert database record to application model
+      return convertDbToAppModel(run);
+    }
+
+    return null;
   },
 });
 
 /**
- * Get workflow runs by state type
+ * Get workflow runs by status
+ */
+export const getByStatus = query({
+  args: {
+    status: v.union(
+      v.literal('running'),
+      v.literal('success'),
+      v.literal('failed'),
+      v.literal('suspended'),
+      v.literal('waiting'),
+      v.literal('pending'),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const runs = await ctx.db
+      .query('workflowRuns')
+      .withIndex('by_status', q => q.eq('status', args.status))
+      .collect();
+
+    // Convert database records to application model
+    return runs.map(convertDbToAppModel);
+  },
+});
+
+/**
+ * Legacy function for backward compatibility
  */
 export const getByStateType = query({
   args: { stateType: v.string() },
   handler: async (ctx, args) => {
+    // Map old stateType to new status field
+    const status = args.stateType as WorkflowRunStatus;
+
     const runs = await ctx.db
       .query('workflowRuns')
-      .withIndex('by_stateType', q => q.eq('stateType', args.stateType))
+      .withIndex('by_status', q => q.eq('status', status))
       .collect();
 
-    return runs;
+    // Convert database records to application model
+    return runs.map(convertDbToAppModel);
   },
 });
 
@@ -87,29 +140,47 @@ export const update = mutation({
       // Find the run by ID
       const existingRun = await ctx.db
         .query('workflowRuns')
-        .withIndex('by_runId', q => q.eq('runId', run.id))
+        .withIndex('by_runId', q => q.eq('runId', run.runId || run.id))
         .first();
 
       if (existingRun) {
-        // Update run
+        // Update run - ensure timestamp is a number (already using Date.now() which returns milliseconds)
         const updateData: Partial<Doc<'workflowRuns'>> = {
-          updatedAt: Date.now(),
+          updatedAt: Date.now(), // This already returns milliseconds as a number
         };
 
+        // Handle state field mapping to snapshot
         if (run.state !== undefined) {
-          updateData.state = run.state;
+          updateData.snapshot = run.state;
         }
 
+        // Handle snapshot field directly
+        if (run.snapshot !== undefined) {
+          updateData.snapshot = run.snapshot;
+        }
+
+        // Handle stateType field mapping to status
         if (run.stateType !== undefined) {
-          updateData.stateType = run.stateType;
+          updateData.status = run.stateType as WorkflowRunStatus;
         }
 
+        // Handle status field directly
+        if (run.status !== undefined) {
+          updateData.status = run.status as WorkflowRunStatus;
+        }
+
+        // Handle any error in the snapshot
         if (run.error !== undefined) {
-          updateData.error = run.error;
-        }
-
-        if (run.completedAt !== undefined) {
-          updateData.completedAt = run.completedAt;
+          // Store error in the snapshot if there's an existing snapshot
+          if (existingRun.snapshot && typeof existingRun.snapshot === 'object') {
+            updateData.snapshot = {
+              ...(existingRun.snapshot as object),
+              error: run.error,
+            };
+          } else {
+            // Create new snapshot with just the error
+            updateData.snapshot = { error: run.error };
+          }
         }
 
         await ctx.db.patch(existingRun._id, updateData);
@@ -124,11 +195,20 @@ export const update = mutation({
 /**
  * Get workflow runs with filters
  */
-
 export const getWithFilters = query({
   args: {
     workflowName: v.optional(v.string()),
     resourceId: v.optional(v.string()),
+    status: v.optional(
+      v.union(
+        v.literal('running'),
+        v.literal('success'),
+        v.literal('failed'),
+        v.literal('suspended'),
+        v.literal('waiting'),
+        v.literal('pending'),
+      ),
+    ),
     fromDate: v.optional(v.number()),
     toDate: v.optional(v.number()),
     paginationOpts: paginationOptsValidator,
@@ -144,14 +224,33 @@ export const getWithFilters = query({
         queryBuilder = ctx.db
           .query('workflowRuns')
           .withIndex('by_resourceId', q => q.eq('resourceId', args.resourceId));
+      } else if (args.workflowName) {
+        // Use the by_workflowName index when filtering by workflowName
+        // We know workflowName is defined here because of the if condition
+        const workflowName = args.workflowName;
+        queryBuilder = ctx.db
+          .query('workflowRuns')
+          .withIndex('by_workflowName', q => q.eq('workflowName', workflowName));
+      } else if (args.status) {
+        // Use the by_status index when filtering by status
+        // We know status is defined here because of the if condition
+        const status = args.status;
+        queryBuilder = ctx.db.query('workflowRuns').withIndex('by_status', q => q.eq('status', status));
       } else {
         // Otherwise use the default index
         queryBuilder = ctx.db.query('workflowRuns');
       }
 
-      // Apply workflow name filter if provided
-      if (args.workflowName) {
+      // Apply additional workflow name filter if needed and not already used in index
+      if (args.workflowName && args.resourceId !== undefined) {
         queryBuilder = queryBuilder.filter(q => q.eq(q.field('workflowName'), args.workflowName));
+      }
+
+      // Apply additional status filter if needed and not already used in index
+      if (args.status && (args.resourceId !== undefined || args.workflowName !== undefined)) {
+        // We know status is defined here because of the if condition
+        const status = args.status;
+        queryBuilder = queryBuilder.filter(q => q.eq(q.field('status'), status));
       }
 
       // Apply date range filters
@@ -180,8 +279,13 @@ export const getWithFilters = query({
     // Get total count (this will be an additional query)
     const totalResults = await buildQuery().collect();
 
+    // Convert the results to application model with proper date handling
+    const items = paginationResult.page.map(convertDbToAppModel);
+
     return {
-      ...paginationResult,
+      runs: items,
+      isDone: paginationResult.isDone,
+      continueCursor: paginationResult.continueCursor,
       total: totalResults.length,
     };
   },

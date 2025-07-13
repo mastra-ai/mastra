@@ -1,4 +1,13 @@
-import type { StorageThreadType, MastraMessageV1, MastraMessageV2, EvalRow, Trace } from '@mastra/core';
+import type {
+  StorageThreadType,
+  MastraMessageV1,
+  MastraMessageV2,
+  EvalRow,
+  Trace,
+  WorkflowRun,
+  WorkflowRunState,
+  WorkflowRunStatus,
+} from '@mastra/core';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { describe, test, expect, afterAll } from 'vitest';
@@ -13,7 +22,7 @@ describe('ConvexStorage Tests', () => {
   });
 
   afterAll(async () => {
-    await storage.dropAllTables();
+    await storage.clearAllTables();
   });
 
   describe('Table Operations', () => {
@@ -1437,6 +1446,245 @@ describe('ConvexStorage Tests', () => {
         // traceData1 is older, so should come first in asc order
         expect(fetchedIds.indexOf(traceData1.id)).toBeLessThan(fetchedIds.indexOf(traceData2.id));
       }
+    });
+  });
+
+  describe('ConvexStorage WorkflowRuns Tests', () => {
+    const storage = new ConvexStorage({
+      convexUrl: 'http://localhost:3210',
+      api,
+    });
+
+    test('should save and get a workflow run', async () => {
+      const createdAt = new Date();
+      const updatedAt = new Date();
+      const runId = `wf-run-${Date.now()}`;
+
+      const state: WorkflowRunState = {
+        runId,
+        status: 'running',
+        value: { key: 'value' },
+        context: {} as WorkflowRunState['context'],
+        serializedStepGraph: [],
+        activePaths: [],
+        suspendedPaths: {},
+        timestamp: Date.now(),
+      };
+
+      const workflowRun: WorkflowRun = {
+        runId,
+        workflowName: 'test-workflow',
+        resourceId: 'test-resource',
+        snapshot: state,
+        createdAt,
+        updatedAt,
+      };
+
+      const savedRun = await storage.saveWorkflowRun({ workflowRun });
+
+      expect(savedRun).toBeDefined();
+      expect(savedRun.runId).toBe(workflowRun.runId);
+      expect(savedRun.workflowName).toBe(workflowRun.workflowName);
+      if (typeof savedRun.snapshot === 'object') {
+        expect(savedRun.snapshot.status).toBe(state.status);
+      }
+
+      const retrievedRun = await storage.getWorkflowRun({ runId: workflowRun.runId });
+
+      expect(retrievedRun).toBeDefined();
+      if (retrievedRun) {
+        expect(retrievedRun.runId).toBe(workflowRun.runId);
+        expect(retrievedRun.workflowName).toBe(workflowRun.workflowName);
+        if (typeof retrievedRun.snapshot === 'object') {
+          expect(retrievedRun.snapshot.status).toBe(state.status);
+        }
+        // Verify dates are converted properly
+        expect(retrievedRun.createdAt).toBeInstanceOf(Date);
+        expect(retrievedRun.updatedAt).toBeInstanceOf(Date);
+      }
+    });
+
+    test('should get workflow runs by status', async () => {
+      const status: WorkflowRunStatus = 'pending';
+      const runs: WorkflowRun[] = [];
+
+      for (let i = 0; i < 3; i++) {
+        const runId = `wf-status-324-${Date.now()}-${i}`;
+
+        const state: WorkflowRunState = {
+          runId,
+          status,
+          value: { key: 'value' },
+          context: {} as WorkflowRunState['context'],
+          serializedStepGraph: [],
+          activePaths: [],
+          suspendedPaths: {},
+          timestamp: Date.now(),
+        };
+
+        const workflowRun: WorkflowRun = {
+          runId,
+          workflowName: 'status-324-workflow',
+          resourceId: 'test-resource-234',
+          snapshot: state,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        runs.push(workflowRun);
+        await storage.saveWorkflowRun({ workflowRun });
+      }
+
+      const retrievedRuns = await storage.getWorkflowRunsByStateType({ stateType: status });
+
+      expect(retrievedRuns.length).toBeGreaterThanOrEqual(3);
+
+      // Verify all runs have the correct status in their snapshot
+      for (const run of retrievedRuns) {
+        if (typeof run.snapshot === 'object') {
+          expect(run.snapshot.status).toBe(status);
+        }
+      }
+
+      // Verify our runs are included
+      for (const createdRun of runs) {
+        const found = retrievedRuns.some(run => run.runId === createdRun.runId);
+        expect(found).toBe(true);
+      }
+    });
+
+    test('should update workflow runs', async () => {
+      // Create a workflow run with initial status
+      const runId = `wf-update-${Date.now()}`;
+
+      const state: WorkflowRunState = {
+        runId,
+        status: 'running' as WorkflowRunStatus,
+        value: { key: 'initial' },
+        context: {} as WorkflowRunState['context'],
+        serializedStepGraph: [],
+        activePaths: [],
+        suspendedPaths: {},
+        timestamp: Date.now(),
+      };
+
+      const workflowRun: WorkflowRun = {
+        runId,
+        workflowName: 'update-test-workflow',
+        resourceId: 'test-resource',
+        snapshot: state,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // Save the initial run
+      await storage.saveWorkflowRun({ workflowRun });
+
+      // Create updated state
+      const updatedState: WorkflowRunState = {
+        ...state,
+        status: 'success' as WorkflowRunStatus,
+        value: { key: 'updated' },
+      };
+
+      // Create updated version of the workflow run
+      const updatedRun: WorkflowRun = {
+        ...workflowRun,
+        snapshot: updatedState,
+        updatedAt: new Date(), // Update the timestamp
+      };
+
+      // Update the run
+      const updatedCount = await storage.updateWorkflowRuns({ runs: [updatedRun] });
+
+      // Verify update count
+      expect(updatedCount).toBe(1);
+
+      // Retrieve the updated run
+      const retrievedRun = await storage.getWorkflowRun({ runId: workflowRun.runId });
+
+      // Verify the run was updated
+      expect(retrievedRun).toBeDefined();
+      if (retrievedRun) {
+        if (typeof retrievedRun.snapshot === 'object') {
+          expect(retrievedRun.snapshot.status).toBe('success');
+          expect(retrievedRun.snapshot.value).toEqual({ key: 'updated' });
+        }
+      }
+    });
+
+    test('should get workflow runs with filters', async () => {
+      const workflowName = `filter-workflow-${Date.now()}`;
+      const baseTime = Date.now();
+      const runs: WorkflowRun[] = [];
+
+      // Create runs with specific workflow name and timestamps
+      for (let i = 0; i < 5; i++) {
+        const createdAt = new Date(baseTime + i * 1000); // Each run 1 second apart
+        const runId = `wf-filter-${baseTime}-${i}`;
+
+        // Alternate between success and failed statuses
+        const status: WorkflowRunStatus = i % 2 === 0 ? 'success' : 'failed';
+
+        const state: WorkflowRunState = {
+          runId,
+          status,
+          value: { key: `value-${i}` },
+          context: {} as WorkflowRunState['context'],
+          serializedStepGraph: [],
+          activePaths: [],
+          suspendedPaths: {},
+          timestamp: createdAt.getTime(),
+        };
+
+        const workflowRun: WorkflowRun = {
+          runId,
+          workflowName,
+          resourceId: 'test-resource',
+          snapshot: state,
+          createdAt,
+          updatedAt: createdAt,
+        };
+
+        runs.push(workflowRun);
+        await storage.saveWorkflowRun({ workflowRun });
+      }
+
+      // Get runs with workflow name filter
+      // Use a proper WorkflowRuns type with total property
+      const workflowRuns = await storage.getWorkflowRuns({
+        workflowName,
+        perPage: 10,
+        page: 0,
+      });
+
+      // Verify pagination info
+      expect(workflowRuns).toHaveProperty('total');
+      expect(workflowRuns).toHaveProperty('isDone');
+      expect(workflowRuns).toHaveProperty('runs');
+      expect(workflowRuns.runs?.length).toBeGreaterThanOrEqual(5);
+
+      // Verify our runs are included
+      for (const createdRun of runs) {
+        const found = workflowRuns.runs?.some(run => run.runId === createdRun.runId);
+        expect(found).toBe(true);
+      }
+
+      // Test date range filter
+      const midTime = new Date(baseTime + 2500); // Middle of our run timestamps
+      // Use a proper WorkflowRuns type with total property
+      const laterRuns = await storage.getWorkflowRuns({
+        workflowName,
+        fromDate: midTime,
+        perPage: 10,
+        page: 0,
+      });
+
+      // Should get only the later runs (index 3 and 4)
+      expect(laterRuns.runs.some(run => run.runId === runs[0].runId)).toBe(false);
+      expect(laterRuns.runs.some(run => run.runId === runs[1].runId)).toBe(false);
+      expect(laterRuns.runs.some(run => run.runId === runs[2].runId)).toBe(false);
+      expect(laterRuns.runs.some(run => run.runId === runs[3].runId || run.runId === runs[4].runId)).toBe(true);
     });
   });
 });

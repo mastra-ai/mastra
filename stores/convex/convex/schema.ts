@@ -68,16 +68,22 @@ export default defineSchema({
   // WorkflowRuns table
   workflowRuns: defineTable({
     runId: v.string(),
-    workflowName: v.optional(v.string()),
+    workflowName: v.string(),
     resourceId: v.optional(v.string()),
-    stateType: v.string(),
-    state: v.any(),
-    error: v.optional(v.any()),
-    createdAt: v.number(),
-    updatedAt: v.optional(v.number()),
-    completedAt: v.optional(v.number()),
+    snapshot: v.any(), // Holds WorkflowRunState or string
+    status: v.union(
+      v.literal('running'),
+      v.literal('success'),
+      v.literal('failed'),
+      v.literal('suspended'),
+      v.literal('waiting'),
+      v.literal('pending'),
+    ),
+    createdAt: v.number(), // Store as number but convert to/from Date in code
+    updatedAt: v.number(), // Store as number but convert to/from Date in code
   })
     .index('by_runId', ['runId'])
-    .index('by_stateType', ['stateType'])
-    .index('by_resourceId', ['resourceId']),
+    .index('by_status', ['status'])
+    .index('by_resourceId', ['resourceId'])
+    .index('by_workflowName', ['workflowName']),
 });

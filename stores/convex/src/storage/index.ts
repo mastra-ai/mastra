@@ -270,12 +270,23 @@ export class ConvexStorage extends MastraStorage {
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
-    limit?: number;
-    offset?: number;
+    perPage?: number;
+    page?: number;
     resourceId?: string;
   }): Promise<WorkflowRuns> {
     try {
-      return await this.httpClient.query(this.api.workflowRuns.getPaginated, args || {});
+      // Structure args for the Convex getWithFilters query
+      const queryArgs = {
+        workflowName: args?.workflowName,
+        resourceId: args?.resourceId,
+        fromDate: args?.fromDate ? args.fromDate.getTime() : undefined,
+        toDate: args?.toDate ? args.toDate.getTime() : undefined,
+        paginationOpts: {
+          cursor: null,
+          numItems: args?.perPage || 10,
+        },
+      };
+      return await this.httpClient.query(this.api.workflowRuns.getWithFilters, queryArgs);
     } catch (error) {
       throw new MastraError(
         {
@@ -997,7 +1008,14 @@ export class ConvexStorage extends MastraStorage {
    */
   async saveWorkflowRun({ workflowRun }: { workflowRun: WorkflowRun }): Promise<WorkflowRun> {
     try {
-      return await this.httpClient.mutation(this.api.workflowRuns.save, { workflowRun });
+      // Simple date conversion matching the pattern used in saveTrace
+      const workflowRunToSave = {
+        ...workflowRun,
+        createdAt: new Date(workflowRun.createdAt).getTime(),
+        updatedAt: new Date(workflowRun.updatedAt).getTime(),
+      };
+
+      return await this.httpClient.mutation(this.api.workflowRuns.save, { workflowRun: workflowRunToSave });
     } catch (error) {
       throw new MastraError(
         {
@@ -1042,9 +1060,21 @@ export class ConvexStorage extends MastraStorage {
    * @param params - Run ID
    * @returns Workflow run data
    */
-  async getWorkflowRun({ runId }: { runId: string }): Promise<WorkflowRun | undefined> {
+  async getWorkflowRun({ runId }: { runId: string }): Promise<WorkflowRun | null> {
     try {
-      return await this.httpClient.query(this.api.workflowRuns.get, { runId });
+      // Fetch the workflow run from Convex
+      const run = await this.httpClient.query(this.api.workflowRuns.get, { runId });
+
+      // If no run was found, return null
+      if (!run) {
+        return null;
+      }
+
+      return {
+        ...run,
+        createdAt: new Date(run.createdAt),
+        updatedAt: new Date(run.updatedAt),
+      };
     } catch (error) {
       throw new MastraError(
         {
@@ -1065,9 +1095,14 @@ export class ConvexStorage extends MastraStorage {
    * @param params - Updates for workflow runs
    * @returns The number of runs updated
    */
-  async updateWorkflowRuns({ runs }: { runs: WorkflowRuns }): Promise<number> {
+  async updateWorkflowRuns({ runs }: { runs: WorkflowRun[] }): Promise<number> {
     try {
-      return await this.httpClient.mutation(this.api.workflowRuns.update, { runs });
+      const runsToSave = runs.map(run => ({
+        ...run,
+        createdAt: run.createdAt.getTime(),
+        updatedAt: run.updatedAt.getTime(),
+      }));
+      return await this.httpClient.mutation(this.api.workflowRuns.update, { runs: runsToSave });
     } catch (error) {
       throw new MastraError(
         {
@@ -1075,7 +1110,7 @@ export class ConvexStorage extends MastraStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            runsCount: runs.runs.length,
+            runsCount: runs.length,
           },
         },
         error,
@@ -1084,15 +1119,15 @@ export class ConvexStorage extends MastraStorage {
   }
 
   /**
-   * Drops tables and recreates them with new schema
+   * Clears all tables
    */
-  async dropAllTables(): Promise<void> {
+  async clearAllTables(): Promise<void> {
     try {
-      await this.httpClient.mutation(this.api.system.dropAllTables);
+      await this.httpClient.mutation(this.api.system.clearAllTables);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DROP_ALL_TABLES_ERROR',
+          id: 'STORAGE_CLEAR_ALL_TABLES_ERROR',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {},
