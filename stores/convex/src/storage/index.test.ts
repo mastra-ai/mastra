@@ -1,4 +1,4 @@
-import type { StorageThreadType, MastraMessageV1, MastraMessageV2, EvalRow } from '@mastra/core';
+import type { StorageThreadType, MastraMessageV1, MastraMessageV2, EvalRow, Trace } from '@mastra/core';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { describe, test, expect, afterAll } from 'vitest';
@@ -897,6 +897,498 @@ describe('ConvexStorage Tests', () => {
       expect(emptyResults).toBeDefined();
       expect(Array.isArray(emptyResults)).toBeTruthy();
       expect(emptyResults.length).toBe(0);
+    });
+  });
+
+  describe('ConvexStorage Traces Tests', () => {
+    const storage = new ConvexStorage({
+      convexUrl: 'http://localhost:3210',
+      api,
+    });
+
+    test('should save a new trace', async () => {
+      const traceData: Trace = {
+        id: `trace-${Date.now()}`,
+        parentSpanId: `parent-span-${Date.now()}`,
+        name: `test-span-${Date.now()}`,
+        traceId: `trace-id-${Date.now()}`,
+        scope: `scope-${Date.now()}`,
+        attributes: {},
+        status: {
+          code: 0,
+          message: 'test',
+        },
+        kind: 0,
+        events: [],
+        links: [],
+        other: {},
+        startTime: Date.now(),
+        endTime: Date.now(),
+        createdAt: Date.now().toString(),
+      };
+
+      const savedTrace = await storage.saveTrace({ trace: traceData });
+
+      expect(savedTrace).toBeDefined();
+      expect(savedTrace.id).toBe(traceData.id);
+      expect(savedTrace.parentSpanId).toBe(traceData.parentSpanId);
+      expect(savedTrace.name).toBe(traceData.name);
+      expect(savedTrace.traceId).toBe(traceData.traceId);
+      expect(savedTrace.scope).toBe(traceData.scope);
+      expect(savedTrace.kind).toBe(traceData.kind);
+      expect(savedTrace.attributes).toEqual(traceData.attributes);
+      expect(savedTrace.status).toEqual(traceData.status);
+      expect(savedTrace.events).toEqual(traceData.events);
+      expect(savedTrace.links).toEqual(traceData.links);
+      expect(savedTrace.other).toEqual(traceData.other);
+      expect(savedTrace.startTime).toBe(traceData.startTime);
+      expect(savedTrace.endTime).toBe(traceData.endTime);
+      expect(new Date(savedTrace.createdAt).getTime()).toBe(new Date(traceData.createdAt).getTime());
+    });
+
+    test('should update an existing trace', async () => {
+      const traceId = `trace-update-${Date.now()}`;
+
+      // Create initial trace
+      const initialTraceData: Trace = {
+        id: traceId,
+        parentSpanId: `parent-span-${Date.now()}`,
+        name: `test-span-${Date.now()}`,
+        traceId: `trace-id-${Date.now()}`,
+        scope: `scope-${Date.now()}`,
+        attributes: {},
+        status: {
+          code: 0,
+          message: 'test',
+        },
+        kind: 0,
+        events: [],
+        links: [],
+        other: {},
+        startTime: Date.now(),
+        endTime: Date.now(),
+        createdAt: Date.now().toString(),
+      };
+
+      await storage.saveTrace({ trace: initialTraceData });
+
+      // Update the trace with same ID but different properties
+      const updatedTraceData: Trace = {
+        id: traceId,
+        parentSpanId: `parent-span-${Date.now()}`,
+        name: `test-span-${Date.now()}`,
+        traceId: `trace-id-${Date.now()}`,
+        scope: `scope-${Date.now()}`,
+        attributes: {},
+        status: {
+          code: 0,
+          message: 'updated test',
+        },
+        kind: 1,
+        events: [],
+        links: [],
+        other: {},
+        startTime: Date.now(),
+        endTime: Date.now(),
+        createdAt: Date.now().toString(),
+      };
+
+      const updatedTrace = await storage.saveTrace({ trace: updatedTraceData });
+
+      expect(updatedTrace).toBeDefined();
+      expect(updatedTrace.id).toBe(traceId);
+      expect(updatedTrace.parentSpanId).toEqual(updatedTraceData.parentSpanId);
+      expect(updatedTrace.name).toEqual(updatedTraceData.name);
+      expect(updatedTrace.traceId).toEqual(updatedTraceData.traceId);
+      expect(updatedTrace.scope).toEqual(updatedTraceData.scope);
+      expect(updatedTrace.attributes).toEqual(updatedTraceData.attributes);
+      expect(updatedTrace.status).toEqual(updatedTraceData.status);
+      expect(updatedTrace.kind).toEqual(updatedTraceData.kind);
+      expect(updatedTrace.events).toEqual(updatedTraceData.events);
+      expect(updatedTrace.links).toEqual(updatedTraceData.links);
+      expect(updatedTrace.other).toEqual(updatedTraceData.other);
+      expect(updatedTrace.startTime).toEqual(updatedTraceData.startTime);
+      expect(updatedTrace.endTime).toEqual(updatedTraceData.endTime);
+      expect(new Date(updatedTrace.createdAt).getTime()).toBe(new Date(updatedTraceData.createdAt).getTime());
+    });
+
+    test('should get traces by trace ID', async () => {
+      const traceId = `trace-get-${Date.now()}`;
+
+      // Create multiple traces with same traceId
+      const traceData1: Trace = {
+        id: `trace-thread-1-${Date.now()}`,
+        traceId,
+        parentSpanId: `parent-span-${Date.now()}`,
+        name: `test-span-${Date.now()}`,
+        scope: `scope-${Date.now()}`,
+        attributes: {},
+        status: {
+          code: 0,
+          message: 'test',
+        },
+        kind: 0,
+        events: [],
+        links: [],
+        other: {},
+        startTime: Date.now(),
+        endTime: Date.now(),
+        createdAt: Date.now().toString(),
+      };
+
+      const traceData2: Trace = {
+        id: `trace-thread-2-${Date.now()}`,
+        traceId,
+        parentSpanId: `parent-span-${Date.now()}`,
+        name: `test-span-${Date.now()}`,
+        scope: `scope-${Date.now()}`,
+        attributes: {},
+        status: {
+          code: 0,
+          message: 'test',
+        },
+        kind: 0,
+        events: [],
+        links: [],
+        other: {},
+        startTime: Date.now() + 1000,
+        endTime: Date.now() + 1000,
+        createdAt: Date.now().toString(),
+      };
+
+      await storage.saveTrace({ trace: traceData1 });
+      await storage.saveTrace({ trace: traceData2 });
+
+      const fetchedTraces = await storage.getTracesByTraceId({ traceId });
+
+      expect(fetchedTraces).toBeDefined();
+      expect(Array.isArray(fetchedTraces)).toBeTruthy();
+      expect(fetchedTraces.length).toBeGreaterThanOrEqual(2);
+
+      // Verify the traces we created are in the result
+      const traceIds = fetchedTraces.map(trace => trace.id);
+      expect(traceIds).toContain(traceData1.id);
+      expect(traceIds).toContain(traceData2.id);
+    });
+
+    test('should return empty array when getting traces for non-existent trace ID', async () => {
+      const nonExistentTraceId = `trace-non-existent-${Date.now()}`;
+
+      const fetchedTraces = await storage.getTracesByTraceId({ traceId: nonExistentTraceId });
+
+      expect(fetchedTraces).toBeDefined();
+      expect(Array.isArray(fetchedTraces)).toBeTruthy();
+      expect(fetchedTraces.length).toBe(0);
+    });
+
+    test('should get traces with pagination by trace ID', async () => {
+      const sharedTraceId = `trace-paginated-${Date.now()}`;
+      const totalTraces = 5;
+      const traceIds: string[] = [];
+
+      // Create multiple traces for pagination testing
+      for (let i = 0; i < totalTraces; i++) {
+        const traceId = `trace-paginated-${i}-${Date.now()}`;
+        traceIds.push(traceId);
+
+        const traceData: Trace = {
+          id: traceId,
+          parentSpanId: `parent-span-${Date.now()}`,
+          name: `test-span-${Date.now()}`,
+          traceId: sharedTraceId, // Use the shared traceId for filtering,
+          scope: `scope-${Date.now()}`,
+          attributes: {},
+          status: {
+            code: 0,
+            message: 'test',
+          },
+          kind: 0,
+          events: [],
+          links: [],
+          other: {},
+          startTime: Date.now(),
+          endTime: Date.now(),
+          createdAt: Date.now().toString(),
+        };
+
+        await storage.saveTrace({ trace: traceData });
+      }
+
+      // Test first page (2 items)
+      const firstPageResult = await storage.getTracesPaginated({
+        page: 1,
+        perPage: 2,
+        filters: {
+          traceId: sharedTraceId,
+        },
+        attributes: {
+          sortDirection: 'desc',
+        },
+      });
+
+      expect(firstPageResult).toBeDefined();
+      expect(firstPageResult.traces).toBeDefined();
+      expect(firstPageResult.traces.length).toBe(2);
+
+      // Test second page
+      const secondPageResult = await storage.getTracesPaginated({
+        page: 2,
+        perPage: 2,
+        filters: {
+          traceId: sharedTraceId,
+        },
+      });
+
+      expect(secondPageResult).toBeDefined();
+      expect(secondPageResult.traces).toBeDefined();
+      expect(secondPageResult.traces.length).toBe(2);
+
+      // Ensure no overlap between pages
+      const firstPageIds = new Set(firstPageResult.traces.map(t => t.id));
+      const secondPageIds = new Set(secondPageResult.traces.map(t => t.id));
+
+      for (const id of secondPageIds) {
+        expect(firstPageIds.has(id)).toBe(false);
+      }
+    });
+
+    test('should get traces with pagination by runId', async () => {
+      const runId = `run-paginated-${Date.now()}`;
+      const traceData1 = {
+        id: `trace-run-1-${Date.now()}`,
+        threadId: `thread-${Date.now()}`,
+        transportId: 'test-transport',
+        runId,
+        rootRunId: 'test-root-run-id',
+        timestamp: Date.now(),
+        properties: { testProperty: 'value-1' },
+        spans: [],
+        spanDurations: {},
+      };
+
+      const traceData2 = {
+        id: `trace-run-2-${Date.now()}`,
+        threadId: `thread-${Date.now()}`,
+        transportId: 'test-transport',
+        runId,
+        rootRunId: 'test-root-run-id',
+        timestamp: Date.now() + 1000,
+        properties: { testProperty: 'value-2' },
+        spans: [],
+        spanDurations: {},
+      };
+
+      await storage.saveTrace({ trace: traceData1 });
+      await storage.saveTrace({ trace: traceData2 });
+
+      const result = await storage.getTracesPaginated({
+        runId,
+        paginationOpts: {
+          numToFetch: 10,
+          cursor: null,
+        },
+      });
+
+      expect(result).toBeDefined();
+      expect(result.traces).toBeDefined();
+      expect(result.traces.length).toBeGreaterThanOrEqual(2);
+
+      // Verify the traces we created are in the result
+      const traceIds = result.traces.map(trace => trace.id);
+      expect(traceIds).toContain(traceData1.id);
+      expect(traceIds).toContain(traceData2.id);
+    });
+
+    test('should get traces with date filters', async () => {
+      const threadId = `thread-date-${Date.now()}`;
+      const baseTimestamp = Date.now();
+
+      // Create traces with different timestamps
+      const traceData1 = {
+        id: `trace-date-1-${baseTimestamp}`,
+        threadId,
+        transportId: 'test-transport',
+        runId: 'test-run-id-1',
+        rootRunId: 'test-root-run-id',
+        timestamp: baseTimestamp,
+        properties: {},
+        spans: [],
+        spanDurations: {},
+      };
+
+      const traceData2 = {
+        id: `trace-date-2-${baseTimestamp}`,
+        threadId,
+        transportId: 'test-transport',
+        runId: 'test-run-id-2',
+        rootRunId: 'test-root-run-id',
+        timestamp: baseTimestamp + 5000,
+        properties: {},
+        spans: [],
+        spanDurations: {},
+      };
+
+      const traceData3 = {
+        id: `trace-date-3-${baseTimestamp}`,
+        threadId,
+        transportId: 'test-transport',
+        runId: 'test-run-id-3',
+        rootRunId: 'test-root-run-id',
+        timestamp: baseTimestamp + 10000,
+        properties: {},
+        spans: [],
+        spanDurations: {},
+      };
+
+      await storage.saveTrace({ trace: traceData1 });
+      await storage.saveTrace({ trace: traceData2 });
+      await storage.saveTrace({ trace: traceData3 });
+
+      // Get traces in a specific date range
+      const dateFilterResult = await storage.getTracesPaginated({
+        threadId,
+        startDate: baseTimestamp + 1000, // After trace1
+        endDate: baseTimestamp + 9000, // Before trace3
+        paginationOpts: {
+          numToFetch: 10,
+          cursor: null,
+        },
+      });
+
+      expect(dateFilterResult).toBeDefined();
+      expect(dateFilterResult.traces).toBeDefined();
+
+      // Should only contain trace2
+      const filteredIds = dateFilterResult.traces.map(t => t.id);
+      expect(filteredIds).not.toContain(traceData1.id);
+      expect(filteredIds).toContain(traceData2.id);
+      expect(filteredIds).not.toContain(traceData3.id);
+    });
+
+    test('should handle traces with minimal required fields', async () => {
+      // Test with only required fields based on schema
+      const minimalTraceData = {
+        id: `trace-minimal-${Date.now()}`,
+        threadId: `thread-minimal-${Date.now()}`,
+        transportId: 'test-transport',
+        runId: 'test-run-id',
+        rootRunId: 'test-root-run-id',
+        timestamp: Date.now(),
+        // Other fields should be defaulted by the backend
+      };
+
+      const savedTrace = await storage.saveTrace({ trace: minimalTraceData });
+
+      expect(savedTrace).toBeDefined();
+      expect(savedTrace.id).toBe(minimalTraceData.id);
+      expect(savedTrace.threadId).toBe(minimalTraceData.threadId);
+      expect(savedTrace.transportId).toBe(minimalTraceData.transportId);
+      expect(savedTrace.runId).toBe(minimalTraceData.runId);
+      expect(savedTrace.rootRunId).toBe(minimalTraceData.rootRunId);
+
+      // Backend should provide defaults for missing fields
+      expect(savedTrace.properties).toBeDefined();
+      expect(savedTrace.spans).toBeDefined();
+      expect(savedTrace.spanDurations).toBeDefined();
+    });
+
+    test('should sort traces in descending order by default', async () => {
+      const threadId = `thread-sort-${Date.now()}`;
+      const baseTimestamp = Date.now();
+
+      const traceData1 = {
+        id: `trace-sort-1-${baseTimestamp}`,
+        threadId,
+        transportId: 'test-transport',
+        runId: 'test-run-id-1',
+        rootRunId: 'test-root-run-id',
+        timestamp: baseTimestamp,
+        properties: {},
+        spans: [],
+        spanDurations: {},
+      };
+
+      const traceData2 = {
+        id: `trace-sort-2-${baseTimestamp}`,
+        threadId,
+        transportId: 'test-transport',
+        runId: 'test-run-id-2',
+        rootRunId: 'test-root-run-id',
+        timestamp: baseTimestamp + 5000,
+        properties: {},
+        spans: [],
+        spanDurations: {},
+      };
+
+      await storage.saveTrace({ trace: traceData1 });
+      await storage.saveTrace({ trace: traceData2 });
+
+      // Get traces with default sort (desc)
+      const result = await storage.getTracesPaginated({
+        threadId,
+        paginationOpts: {
+          numToFetch: 10,
+          cursor: null,
+        },
+      });
+
+      // Should be ordered newest first (desc)
+      const fetchedIds = result.traces.filter(t => t.id === traceData1.id || t.id === traceData2.id).map(t => t.id);
+
+      if (fetchedIds.length >= 2) {
+        // traceData2 is newer, so should come first in desc order
+        expect(fetchedIds.indexOf(traceData2.id)).toBeLessThan(fetchedIds.indexOf(traceData1.id));
+      }
+    });
+
+    test('should sort traces in ascending order when specified', async () => {
+      const threadId = `thread-sort-asc-${Date.now()}`;
+      const baseTimestamp = Date.now();
+
+      const traceData1 = {
+        id: `trace-sort-asc-1-${baseTimestamp}`,
+        threadId,
+        transportId: 'test-transport',
+        runId: 'test-run-id-1',
+        rootRunId: 'test-root-run-id',
+        timestamp: baseTimestamp,
+        properties: {},
+        spans: [],
+        spanDurations: {},
+      };
+
+      const traceData2 = {
+        id: `trace-sort-asc-2-${baseTimestamp}`,
+        threadId,
+        transportId: 'test-transport',
+        runId: 'test-run-id-2',
+        rootRunId: 'test-root-run-id',
+        timestamp: baseTimestamp + 5000,
+        properties: {},
+        spans: [],
+        spanDurations: {},
+      };
+
+      await storage.saveTrace({ trace: traceData1 });
+      await storage.saveTrace({ trace: traceData2 });
+
+      // Get traces with ascending sort
+      const result = await storage.getTracesPaginated({
+        threadId,
+        sortDirection: 'asc',
+        paginationOpts: {
+          numToFetch: 10,
+          cursor: null,
+        },
+      });
+
+      // Should be ordered oldest first (asc)
+      const fetchedIds = result.traces.filter(t => t.id === traceData1.id || t.id === traceData2.id).map(t => t.id);
+
+      if (fetchedIds.length >= 2) {
+        // traceData1 is older, so should come first in asc order
+        expect(fetchedIds.indexOf(traceData1.id)).toBeLessThan(fetchedIds.indexOf(traceData2.id));
+      }
     });
   });
 });

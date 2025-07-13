@@ -786,7 +786,12 @@ export class ConvexStorage extends MastraStorage {
    */
   async saveTrace({ trace }: { trace: Trace }): Promise<Trace> {
     try {
-      return await this.httpClient.mutation(this.api.traces.save, { trace });
+      const traceToSave = {
+        ...trace,
+        createdAt: new Date(trace.createdAt).getTime(),
+        updatedAt: Date.now(),
+      };
+      return await this.httpClient.mutation(this.api.traces.save, { trace: traceToSave });
     } catch (error) {
       throw new MastraError(
         {
@@ -807,9 +812,9 @@ export class ConvexStorage extends MastraStorage {
    * @param params - Thread ID
    * @returns Array of traces
    */
-  async getTracesByThreadId({ threadId }: { threadId: string }): Promise<Trace[]> {
+  async getTracesByTraceId({ traceId }: { traceId: string }): Promise<Trace[]> {
     try {
-      return await this.httpClient.query(this.api.traces.getByThreadId, { threadId });
+      return await this.httpClient.query(this.api.traces.getByTraceId, { traceId });
     } catch (error) {
       throw new MastraError(
         {
@@ -817,7 +822,7 @@ export class ConvexStorage extends MastraStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId,
+            traceId,
           },
         },
         error,
@@ -832,7 +837,20 @@ export class ConvexStorage extends MastraStorage {
    */
   async getTracesPaginated(args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
     try {
-      return await this.httpClient.query(this.api.traces.getPaginated, args);
+      const queryArgs = {
+        paginationOpts: {
+          cursor: null,
+          numItems: args.perPage, // Only request the items for the current page
+        },
+        skipCount: args.perPage * (args.page - 1), // Skip previous pages as a separate parameter
+        traceId: args.filters?.traceId,
+        parentSpanId: args.filters?.parentSpanId,
+        startDate: args.filters?.startDate,
+        endDate: args.filters?.endDate,
+        sortDirection: args.attributes?.sortDirection,
+      };
+
+      return await this.httpClient.query(this.api.traces.getPaginated, queryArgs);
     } catch (error) {
       throw new MastraError(
         {

@@ -30,19 +30,23 @@ export default defineSchema({
 
   // Traces table
   traces: defineTable({
+    id: v.string(),
+    parentSpanId: v.string(),
+    name: v.string(),
     traceId: v.string(),
-    threadId: v.string(),
-    transportId: v.string(),
-    runId: v.string(),
-    rootRunId: v.string(),
-    timestamp: v.number(),
-    properties: v.any(),
-    spans: v.array(v.any()),
-    spanDurations: v.any(),
+    scope: v.string(),
+    attributes: v.any(),
+    status: v.any(),
+    kind: v.number(),
+    events: v.array(v.any()),
+    links: v.array(v.any()),
+    other: v.any(),
+    startTime: v.number(),
+    endTime: v.number(),
+    createdAt: v.number(),
   })
     .index('by_traceId', ['traceId'])
-    .index('by_threadId', ['threadId'])
-    .index('by_runId', ['runId']),
+    .index('by_parentSpanId', ['parentSpanId']),
 
   // Evals table
   evals: defineTable({
