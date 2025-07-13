@@ -1152,41 +1152,57 @@ describe('ConvexStorage Tests', () => {
       }
     });
 
-    test('should get traces with pagination by runId', async () => {
-      const runId = `run-paginated-${Date.now()}`;
-      const traceData1 = {
+    test('should get traces with pagination by parent span id', async () => {
+      const parentSpanId = `run-paginated-${Date.now()}`;
+      const traceData1: Trace = {
         id: `trace-run-1-${Date.now()}`,
-        threadId: `thread-${Date.now()}`,
-        transportId: 'test-transport',
-        runId,
-        rootRunId: 'test-root-run-id',
-        timestamp: Date.now(),
-        properties: { testProperty: 'value-1' },
-        spans: [],
-        spanDurations: {},
+        traceId: 'trace-1',
+        parentSpanId,
+        name: `test-span-${Date.now()}`,
+        scope: `scope-${Date.now()}`,
+        attributes: {},
+        status: {
+          code: 0,
+          message: 'test',
+        },
+        kind: 0,
+        events: [],
+        links: [],
+        other: {},
+        startTime: Date.now(),
+        endTime: Date.now(),
+        createdAt: Date.now().toString(),
       };
 
-      const traceData2 = {
+      const traceData2: Trace = {
         id: `trace-run-2-${Date.now()}`,
-        threadId: `thread-${Date.now()}`,
-        transportId: 'test-transport',
-        runId,
-        rootRunId: 'test-root-run-id',
-        timestamp: Date.now() + 1000,
-        properties: { testProperty: 'value-2' },
-        spans: [],
-        spanDurations: {},
+        traceId: 'trace-2',
+        parentSpanId,
+        name: `test-span-${Date.now()}`,
+        scope: `scope-${Date.now()}`,
+        attributes: {},
+        status: {
+          code: 0,
+          message: 'test',
+        },
+        kind: 0,
+        events: [],
+        links: [],
+        other: {},
+        startTime: Date.now(),
+        endTime: Date.now(),
+        createdAt: Date.now().toString(),
       };
 
       await storage.saveTrace({ trace: traceData1 });
       await storage.saveTrace({ trace: traceData2 });
 
       const result = await storage.getTracesPaginated({
-        runId,
-        paginationOpts: {
-          numToFetch: 10,
-          cursor: null,
+        filters: {
+          parentSpanId,
         },
+        page: 1,
+        perPage: 2,
       });
 
       expect(result).toBeDefined();
@@ -1200,44 +1216,66 @@ describe('ConvexStorage Tests', () => {
     });
 
     test('should get traces with date filters', async () => {
-      const threadId = `thread-date-${Date.now()}`;
       const baseTimestamp = Date.now();
-
-      // Create traces with different timestamps
-      const traceData1 = {
-        id: `trace-date-1-${baseTimestamp}`,
-        threadId,
-        transportId: 'test-transport',
-        runId: 'test-run-id-1',
-        rootRunId: 'test-root-run-id',
-        timestamp: baseTimestamp,
-        properties: {},
-        spans: [],
-        spanDurations: {},
+      const parentSpanId = `run-paginated-${Date.now()}`;
+      const traceData1: Trace = {
+        id: `trace-run-1-${Date.now()}`,
+        traceId: 'trace-1',
+        parentSpanId,
+        name: `test-span-${Date.now()}`,
+        scope: `scope-${Date.now()}`,
+        attributes: {},
+        status: {
+          code: 0,
+          message: 'test',
+        },
+        kind: 0,
+        events: [],
+        links: [],
+        other: {},
+        startTime: baseTimestamp,
+        endTime: baseTimestamp,
+        createdAt: Date.now().toString(),
       };
 
-      const traceData2 = {
-        id: `trace-date-2-${baseTimestamp}`,
-        threadId,
-        transportId: 'test-transport',
-        runId: 'test-run-id-2',
-        rootRunId: 'test-root-run-id',
-        timestamp: baseTimestamp + 5000,
-        properties: {},
-        spans: [],
-        spanDurations: {},
+      const traceData2: Trace = {
+        id: `trace-run-2-${Date.now()}`,
+        traceId: 'trace-2',
+        parentSpanId,
+        name: `test-span-${Date.now()}`,
+        scope: `scope-${Date.now()}`,
+        attributes: {},
+        status: {
+          code: 0,
+          message: 'test',
+        },
+        kind: 0,
+        events: [],
+        links: [],
+        other: {},
+        startTime: baseTimestamp + 5000,
+        endTime: baseTimestamp + 5000,
+        createdAt: Date.now().toString(),
       };
 
       const traceData3 = {
         id: `trace-date-3-${baseTimestamp}`,
-        threadId,
-        transportId: 'test-transport',
-        runId: 'test-run-id-3',
-        rootRunId: 'test-root-run-id',
-        timestamp: baseTimestamp + 10000,
-        properties: {},
-        spans: [],
-        spanDurations: {},
+        traceId: 'trace-3',
+        parentSpanId,
+        name: `test-span-${Date.now()}`,
+        scope: `scope-${Date.now()}`,
+        attributes: {},
+        status: {
+          code: 0,
+          message: 'test',
+        },
+        kind: 0,
+        events: [],
+        links: [],
+        other: {},
+        startTime: baseTimestamp + 10000,
+        endTime: baseTimestamp + 10000,
+        createdAt: Date.now().toString(),
       };
 
       await storage.saveTrace({ trace: traceData1 });
@@ -1246,13 +1284,12 @@ describe('ConvexStorage Tests', () => {
 
       // Get traces in a specific date range
       const dateFilterResult = await storage.getTracesPaginated({
-        threadId,
-        startDate: baseTimestamp + 1000, // After trace1
-        endDate: baseTimestamp + 9000, // Before trace3
-        paginationOpts: {
-          numToFetch: 10,
-          cursor: null,
+        filters: {
+          startDate: baseTimestamp + 1000, // After trace1
+          endDate: baseTimestamp + 9000, // Before trace3
         },
+        page: 1,
+        perPage: 10,
       });
 
       expect(dateFilterResult).toBeDefined();
@@ -1265,59 +1302,47 @@ describe('ConvexStorage Tests', () => {
       expect(filteredIds).not.toContain(traceData3.id);
     });
 
-    test('should handle traces with minimal required fields', async () => {
-      // Test with only required fields based on schema
-      const minimalTraceData = {
-        id: `trace-minimal-${Date.now()}`,
-        threadId: `thread-minimal-${Date.now()}`,
-        transportId: 'test-transport',
-        runId: 'test-run-id',
-        rootRunId: 'test-root-run-id',
-        timestamp: Date.now(),
-        // Other fields should be defaulted by the backend
-      };
-
-      const savedTrace = await storage.saveTrace({ trace: minimalTraceData });
-
-      expect(savedTrace).toBeDefined();
-      expect(savedTrace.id).toBe(minimalTraceData.id);
-      expect(savedTrace.threadId).toBe(minimalTraceData.threadId);
-      expect(savedTrace.transportId).toBe(minimalTraceData.transportId);
-      expect(savedTrace.runId).toBe(minimalTraceData.runId);
-      expect(savedTrace.rootRunId).toBe(minimalTraceData.rootRunId);
-
-      // Backend should provide defaults for missing fields
-      expect(savedTrace.properties).toBeDefined();
-      expect(savedTrace.spans).toBeDefined();
-      expect(savedTrace.spanDurations).toBeDefined();
-    });
-
     test('should sort traces in descending order by default', async () => {
-      const threadId = `thread-sort-${Date.now()}`;
       const baseTimestamp = Date.now();
 
       const traceData1 = {
         id: `trace-sort-1-${baseTimestamp}`,
-        threadId,
-        transportId: 'test-transport',
-        runId: 'test-run-id-1',
-        rootRunId: 'test-root-run-id',
-        timestamp: baseTimestamp,
-        properties: {},
-        spans: [],
-        spanDurations: {},
+        traceId: 'trace-1',
+        parentSpanId: `parent-span-sort-1-${Date.now()}`,
+        name: `test-span-${Date.now()}`,
+        scope: `scope-${Date.now()}`,
+        attributes: {},
+        status: {
+          code: 0,
+          message: 'test',
+        },
+        kind: 0,
+        events: [],
+        links: [],
+        other: {},
+        startTime: baseTimestamp,
+        endTime: baseTimestamp,
+        createdAt: Date.now().toString(),
       };
 
       const traceData2 = {
         id: `trace-sort-2-${baseTimestamp}`,
-        threadId,
-        transportId: 'test-transport',
-        runId: 'test-run-id-2',
-        rootRunId: 'test-root-run-id',
-        timestamp: baseTimestamp + 5000,
-        properties: {},
-        spans: [],
-        spanDurations: {},
+        traceId: 'trace-2',
+        parentSpanId: `parent-span-sort-2-${Date.now()}`,
+        name: `test-span-${Date.now()}`,
+        scope: `scope-${Date.now()}`,
+        attributes: {},
+        status: {
+          code: 0,
+          message: 'test',
+        },
+        kind: 0,
+        events: [],
+        links: [],
+        other: {},
+        startTime: baseTimestamp + 5000,
+        endTime: baseTimestamp + 5000,
+        createdAt: Date.now().toString(),
       };
 
       await storage.saveTrace({ trace: traceData1 });
@@ -1325,11 +1350,11 @@ describe('ConvexStorage Tests', () => {
 
       // Get traces with default sort (desc)
       const result = await storage.getTracesPaginated({
-        threadId,
-        paginationOpts: {
-          numToFetch: 10,
-          cursor: null,
+        filters: {
+          parentSpanId: traceData1.parentSpanId,
         },
+        page: 1,
+        perPage: 10,
       });
 
       // Should be ordered newest first (desc)
@@ -1342,16 +1367,26 @@ describe('ConvexStorage Tests', () => {
     });
 
     test('should sort traces in ascending order when specified', async () => {
-      const threadId = `thread-sort-asc-${Date.now()}`;
       const baseTimestamp = Date.now();
 
       const traceData1 = {
         id: `trace-sort-asc-1-${baseTimestamp}`,
-        threadId,
-        transportId: 'test-transport',
-        runId: 'test-run-id-1',
-        rootRunId: 'test-root-run-id',
-        timestamp: baseTimestamp,
+        traceId: 'trace-1',
+        parentSpanId: `parent-span-sort-asc-1-${Date.now()}`,
+        name: `test-span-${Date.now()}`,
+        scope: `scope-${Date.now()}`,
+        attributes: {},
+        status: {
+          code: 0,
+          message: 'test',
+        },
+        kind: 0,
+        events: [],
+        links: [],
+        other: {},
+        startTime: baseTimestamp,
+        endTime: baseTimestamp,
+        createdAt: Date.now().toString(),
         properties: {},
         spans: [],
         spanDurations: {},
@@ -1359,11 +1394,22 @@ describe('ConvexStorage Tests', () => {
 
       const traceData2 = {
         id: `trace-sort-asc-2-${baseTimestamp}`,
-        threadId,
-        transportId: 'test-transport',
-        runId: 'test-run-id-2',
-        rootRunId: 'test-root-run-id',
-        timestamp: baseTimestamp + 5000,
+        traceId: 'trace-2',
+        parentSpanId: `parent-span-sort-asc-2-${Date.now()}`,
+        name: `test-span-${Date.now()}`,
+        scope: `scope-${Date.now()}`,
+        attributes: {},
+        status: {
+          code: 0,
+          message: 'test',
+        },
+        kind: 0,
+        events: [],
+        links: [],
+        other: {},
+        startTime: baseTimestamp + 5000,
+        endTime: baseTimestamp + 5000,
+        createdAt: Date.now().toString(),
         properties: {},
         spans: [],
         spanDurations: {},
@@ -1374,12 +1420,14 @@ describe('ConvexStorage Tests', () => {
 
       // Get traces with ascending sort
       const result = await storage.getTracesPaginated({
-        threadId,
-        sortDirection: 'asc',
-        paginationOpts: {
-          numToFetch: 10,
-          cursor: null,
+        filters: {
+          parentSpanId: traceData1.parentSpanId,
         },
+        attributes: {
+          sortDirection: 'asc',
+        },
+        page: 1,
+        perPage: 10,
       });
 
       // Should be ordered oldest first (asc)

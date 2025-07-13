@@ -83,12 +83,9 @@ export const getPaginated = query({
 
     // Choose the appropriate index based on the provided filters
     if (args.traceId !== undefined) {
-      // Extract to a local const to satisfy TypeScript that it's not undefined
       const traceId = args.traceId;
-      // When traceId is provided, use the by_traceId index
       query = ctx.db.query('traces').withIndex('by_traceId', q => q.eq('traceId', traceId));
     } else if (args.parentSpanId !== undefined) {
-      // Extract to a local const to satisfy TypeScript that it's not undefined
       const parentSpanId = args.parentSpanId;
       // When parentSpanId is provided, use the by_parentSpanId index
       query = ctx.db.query('traces').withIndex('by_parentSpanId', q => q.eq('parentSpanId', parentSpanId));
@@ -106,13 +103,13 @@ export const getPaginated = query({
 
     // Apply date range filters
     if (args.startDate !== undefined) {
-      const startDate = args.startDate; // Extract to a local const to satisfy TypeScript
-      query = query.filter(q => q.gte(q.field('createdAt'), startDate));
+      const startDate = args.startDate;
+      query = query.filter(q => q.gte(q.field('startTime'), startDate));
     }
 
     if (args.endDate !== undefined) {
-      const endDate = args.endDate; // Extract to a local const to satisfy TypeScript
-      query = query.filter(q => q.lte(q.field('createdAt'), endDate));
+      const endDate = args.endDate;
+      query = query.filter(q => q.lte(q.field('startTime'), endDate));
     }
 
     // Apply sorting for pagination query
@@ -140,10 +137,10 @@ export const getPaginated = query({
 
     // Choose the appropriate index based on the provided filters
     if (args.traceId !== undefined) {
-      const traceId = args.traceId; // Local const to satisfy TypeScript
+      const traceId = args.traceId;
       countQuery = ctx.db.query('traces').withIndex('by_traceId', q => q.eq('traceId', traceId));
     } else if (args.parentSpanId !== undefined) {
-      const parentSpanId = args.parentSpanId; // Local const to satisfy TypeScript
+      const parentSpanId = args.parentSpanId;
       countQuery = ctx.db.query('traces').withIndex('by_parentSpanId', q => q.eq('parentSpanId', parentSpanId));
     } else {
       countQuery = ctx.db.query('traces');
@@ -156,13 +153,13 @@ export const getPaginated = query({
 
     // Apply date range filters for count query
     if (args.startDate !== undefined) {
-      const startDate = args.startDate; // Local const to satisfy TypeScript
-      countQuery = countQuery.filter(q => q.gte(q.field('createdAt'), startDate));
+      const startDate = args.startDate;
+      countQuery = countQuery.filter(q => q.gte(q.field('startTime'), startDate));
     }
 
     if (args.endDate !== undefined) {
-      const endDate = args.endDate; // Local const to satisfy TypeScript
-      countQuery = countQuery.filter(q => q.lte(q.field('createdAt'), endDate));
+      const endDate = args.endDate;
+      countQuery = countQuery.filter(q => q.lte(q.field('startTime'), endDate));
     }
 
     // Get total count
