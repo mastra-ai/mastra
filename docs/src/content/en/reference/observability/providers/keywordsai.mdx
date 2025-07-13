@@ -13,7 +13,7 @@ To help you get started quickly, we've provided a pre-built example. You can fin
 
 To use Keywords AI with Mastra, you'll need to configure the following environment variables:
 
-```env
+```bash .env.local copy
 OPENAI_API_KEY=your-openai-api-key
 KEYWORDSAI_API_KEY=your-keywordsai-api-key
 KEYWORDSAI_BASE_URL=https://api.keywordsai.co
@@ -31,14 +31,6 @@ Copy the example environment file and add your API keys:
 
 ```bash copy
 cp .env.local.example .env.local
-```
-
-Update .env.local with your credentials:
-
-```bash .env.local copy
-OPENAI_API_KEY=your-openai-api-key
-KEYWORDSAI_API_KEY=your-keywordsai-api-key
-KEYWORDSAI_BASE_URL=https://api.keywordsai.co
 ```
 
 ## Implementation
@@ -66,7 +58,7 @@ export const mastra = new Mastra({
 });
 ```
 
-3. **Run the Project**
+Run the Project
 
 ```bash copy
 mastra dev
