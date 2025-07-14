@@ -291,7 +291,7 @@ export abstract class MastraStorage extends MastraBase {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    this.logger.debug('Persisting workflow snapshot', { workflowName, runId, data });
+    //this.logger.debug('Persisting workflow snapshot', { workflowName, runId, data });
     await this.insert({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       record: data,

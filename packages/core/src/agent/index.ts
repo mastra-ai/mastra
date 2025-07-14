@@ -26,7 +26,7 @@ import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { RuntimeContext } from '../runtime-context';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
-import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties, type ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
@@ -45,6 +45,13 @@ import type {
   DynamicArgument,
   AgentMemoryOption,
 } from './types';
+import {
+  SpanType,
+  type AgentRunMetadata,
+  type AISpan,
+  type ToolCallMetadata,
+  type WorkflowRunMetadata,
+} from '../telemetry_vnext';
 
 export { MessageList };
 export * from './types';
@@ -746,12 +753,14 @@ export class Agent<
     threadId,
     runtimeContext,
     mastraProxy,
+    agentSpan,
   }: {
     runId?: string;
     resourceId?: string;
     threadId?: string;
     runtimeContext: RuntimeContext;
     mastraProxy?: MastraUnion;
+    agentSpan?: AISpan<AgentRunMetadata>;
   }) {
     let convertedMemoryTools: Record<string, CoreTool> = {};
     // Get memory tools if available
@@ -769,6 +778,12 @@ export class Agent<
               execute:
                 typeof tool?.execute === 'function'
                   ? async (args: any, options: any) => {
+                      const metadata: ToolCallMetadata = {
+                        toolId: k,
+                        toolType: 'memory',
+                        input: args,
+                      };
+                      const toolSpan = agentSpan?.createChildSpan(SpanType.TOOL_CALL, metadata);
                       try {
                         this.logger.debug(`[Agent:${this.name}] - Executing memory tool ${k}`, {
                           name: k,
@@ -778,7 +793,7 @@ export class Agent<
                           threadId,
                           resourceId,
                         });
-                        return (
+                        const result =
                           tool?.execute?.(
                             {
                               context: args,
@@ -792,8 +807,8 @@ export class Agent<
                               runtimeContext,
                             },
                             options,
-                          ) ?? undefined
-                        );
+                          ) ?? undefined;
+                        toolSpan?.end({ metadata: { output: result } });
                       } catch (err) {
                         const mastraError = new MastraError(
                           {
@@ -812,6 +827,7 @@ export class Agent<
                         );
                         this.logger.trackException(mastraError);
                         this.logger.error(mastraError.toString());
+                        toolSpan?.end({ metadata: { error: { message: mastraError.message } } });
                         throw mastraError;
                       }
                     }
@@ -834,12 +850,14 @@ export class Agent<
     resourceId,
     threadId,
     mastraProxy,
+    agentSpan,
   }: {
     runId?: string;
     resourceId?: string;
     threadId?: string;
     runtimeContext: RuntimeContext;
     mastraProxy?: MastraUnion;
+    agentSpan?: AISpan<AgentRunMetadata>;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
@@ -853,13 +871,15 @@ export class Agent<
 
     const assignedToolEntries = Object.entries(assignedTools || {});
 
+    this.logger.debug(`[Agents:${this.name}] - Assigned tools`, { tools: Object.keys(assignedToolEntries) });
+
     const assignedCoreToolEntries = await Promise.all(
       assignedToolEntries.map(async ([k, tool]) => {
         if (!tool) {
           return;
         }
 
-        const options = {
+        const options: ToolOptions = {
           name: k,
           runId,
           threadId,
@@ -870,6 +890,7 @@ export class Agent<
           agentName: this.name,
           runtimeContext,
           model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
+          agentSpan,
         };
 
         return [k, makeCoreTool(tool, options)];
@@ -894,6 +915,7 @@ export class Agent<
     toolsets,
     runtimeContext,
     mastraProxy,
+    agentSpan,
   }: {
     runId?: string;
     threadId?: string;
@@ -901,6 +923,7 @@ export class Agent<
     toolsets: ToolsetsInput;
     runtimeContext: RuntimeContext;
     mastraProxy?: MastraUnion;
+    agentSpan?: AISpan<AgentRunMetadata>;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
@@ -914,7 +937,7 @@ export class Agent<
       for (const toolset of toolsFromToolsets) {
         for (const [toolName, tool] of Object.entries(toolset)) {
           const toolObj = tool;
-          const options = {
+          const options: ToolOptions = {
             name: toolName,
             runId,
             threadId,
@@ -925,6 +948,7 @@ export class Agent<
             agentName: this.name,
             runtimeContext,
             model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
+            agentSpan,
           };
           const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
           toolsForRequest[toolName] = convertedToCoreTool;
@@ -941,6 +965,7 @@ export class Agent<
     resourceId,
     runtimeContext,
     mastraProxy,
+    agentSpan,
     clientTools,
   }: {
     runId?: string;
@@ -948,6 +973,7 @@ export class Agent<
     resourceId?: string;
     runtimeContext: RuntimeContext;
     mastraProxy?: MastraUnion;
+    agentSpan?: AISpan<AgentRunMetadata>;
     clientTools?: ToolsInput;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -960,7 +986,7 @@ export class Agent<
       });
       for (const [toolName, tool] of clientToolsForInput) {
         const { execute, ...rest } = tool;
-        const options = {
+        const options: ToolOptions = {
           name: toolName,
           runId,
           threadId,
@@ -971,6 +997,7 @@ export class Agent<
           agentName: this.name,
           runtimeContext,
           model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
+          agentSpan,
         };
         const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
         toolsForRequest[toolName] = convertedToCoreTool;
@@ -985,11 +1012,13 @@ export class Agent<
     threadId,
     resourceId,
     runtimeContext,
+    agentSpan,
   }: {
     runId?: string;
     threadId?: string;
     resourceId?: string;
     runtimeContext: RuntimeContext;
+    agentSpan?: AISpan<AgentRunMetadata>;
   }) {
     let convertedWorkflowTools: Record<string, CoreTool> = {};
     const workflows = await this.getWorkflows({ runtimeContext });
@@ -1000,6 +1029,13 @@ export class Agent<
             description: workflow.description || `Workflow: ${workflowName}`,
             parameters: workflow.inputSchema || { type: 'object', properties: {} },
             execute: async (args: any) => {
+              const metadata: ToolCallMetadata = {
+                toolId: workflowName,
+                toolType: 'workflow',
+                input: args,
+              };
+              const toolSpan = agentSpan?.createChildSpan(SpanType.TOOL_CALL, metadata);
+
               try {
                 this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
                   name: workflowName,
@@ -1016,6 +1052,7 @@ export class Agent<
                   inputData: args,
                   runtimeContext,
                 });
+                toolSpan?.end({ metadata: { output: result } });
                 return result;
               } catch (err) {
                 const mastraError = new MastraError(
@@ -1035,6 +1072,7 @@ export class Agent<
                 );
                 this.logger.trackException(mastraError);
                 this.logger.error(mastraError.toString());
+                toolSpan?.end({ metadata: { error: { message: mastraError.message } } });
                 throw mastraError;
               }
             },
@@ -1055,6 +1093,7 @@ export class Agent<
     resourceId,
     runId,
     runtimeContext,
+    agentSpan,
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -1062,6 +1101,7 @@ export class Agent<
     resourceId?: string;
     runId?: string;
     runtimeContext: RuntimeContext;
+    agentSpan?: AISpan<AgentRunMetadata>;
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -1076,6 +1116,7 @@ export class Agent<
       threadId,
       runtimeContext,
       mastraProxy,
+      agentSpan,
     });
 
     const memoryTools = await this.getMemoryTools({
@@ -1084,6 +1125,7 @@ export class Agent<
       threadId,
       runtimeContext,
       mastraProxy,
+      agentSpan,
     });
 
     const toolsetTools = await this.getToolsets({
@@ -1092,6 +1134,7 @@ export class Agent<
       threadId,
       runtimeContext,
       mastraProxy,
+      agentSpan,
       toolsets: toolsets!,
     });
 
@@ -1101,6 +1144,7 @@ export class Agent<
       threadId,
       runtimeContext,
       mastraProxy,
+      agentSpan,
       clientTools: clientTools!,
     });
 
@@ -1109,6 +1153,7 @@ export class Agent<
       resourceId,
       threadId,
       runtimeContext,
+      agentSpan,
     });
 
     return {
@@ -1192,6 +1237,28 @@ export class Agent<
           this.logger.debug(`[Agents:${this.name}] - Starting generation`, { runId });
         }
 
+        let agentSpan: AISpan<AgentRunMetadata> | undefined;
+        const vnextTelemetry = this.#mastra?.getTelemetryVNext();
+        if (vnextTelemetry) {
+          agentSpan = vnextTelemetry.startAgentRunSpan(
+            `agent.${this.id}.execute`,
+            {
+              agentId: this.id,
+              instructions,
+              availableTools: [
+                ...(toolsets ? Object.keys(toolsets) : []),
+                ...(clientTools ? Object.keys(clientTools) : []),
+              ],
+              attributes: {
+                runId,
+                resourceId,
+                threadId: thread?.id,
+              },
+            },
+            {},
+          );
+        }
+
         const memory = this.getMemory();
 
         const toolEnhancements = [
@@ -1222,6 +1289,7 @@ export class Agent<
           resourceId,
           runId,
           runtimeContext,
+          agentSpan,
         });
 
         const messageList = new MessageList({ threadId, resourceId, generateMessageId })
@@ -1237,6 +1305,7 @@ export class Agent<
             messageObjects: messageList.get.all.prompt(),
             convertedTools,
             messageList,
+            agentSpan,
           };
         }
         if (!threadId || !resourceId) {
@@ -1253,6 +1322,8 @@ export class Agent<
           });
           this.logger.trackException(mastraError);
           this.logger.error(mastraError.toString());
+
+          agentSpan?.end({ metadata: { error: { message: mastraError.message } } });
           throw mastraError;
         }
         const store = memory.constructor.name;
@@ -1367,6 +1438,7 @@ export class Agent<
           messageList,
           // add old processed messages + new input messages
           messageObjects: processedList,
+          agentSpan,
         };
       },
       after: async ({
@@ -1377,6 +1449,7 @@ export class Agent<
         outputText,
         runId,
         messageList,
+        agentSpan,
       }: {
         runId: string;
         result: Record<string, any>;
@@ -1385,6 +1458,7 @@ export class Agent<
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
         messageList: MessageList;
+        agentSpan?: AISpan;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -1408,6 +1482,7 @@ export class Agent<
           result: resToLog,
           threadId,
         });
+        agentSpan?.end({ metadata: { output: resToLog } });
         const memory = this.getMemory();
         const messageListResponses = new MessageList({ threadId, resourceId })
           .add(result.response.messages, 'response')
@@ -1617,7 +1692,7 @@ export class Agent<
       saveQueueManager,
     });
 
-    const { thread, messageObjects, convertedTools, messageList } = await before();
+    const { thread, messageObjects, convertedTools, messageList, agentSpan } = await before();
 
     const threadId = thread?.id;
 
@@ -1648,6 +1723,7 @@ export class Agent<
         memory: this.getMemory(),
         runtimeContext,
         telemetry,
+        aiSpan: agentSpan,
         ...args,
       });
 
@@ -1661,6 +1737,7 @@ export class Agent<
         outputText,
         runId,
         messageList,
+        agentSpan,
       });
 
       const newResult = result as any;
@@ -1696,6 +1773,7 @@ export class Agent<
         resourceId,
         memory: this.getMemory(),
         runtimeContext,
+        aiSpan: agentSpan,
         ...args,
       });
 
@@ -1709,6 +1787,7 @@ export class Agent<
         outputText,
         runId,
         messageList,
+        agentSpan,
       });
 
       return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1751,6 +1830,7 @@ export class Agent<
       outputText,
       runId,
       messageList,
+      agentSpan,
     });
 
     return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1854,7 +1934,7 @@ export class Agent<
       saveQueueManager,
     });
 
-    const { thread, messageObjects, convertedTools, messageList } = await before();
+    const { thread, messageObjects, convertedTools, messageList, agentSpan } = await before();
 
     const threadId = thread?.id;
 
@@ -1891,6 +1971,7 @@ export class Agent<
               outputText,
               runId,
               messageList,
+              agentSpan,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1947,6 +2028,7 @@ export class Agent<
               outputText,
               runId,
               messageList,
+              agentSpan,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -2001,6 +2083,7 @@ export class Agent<
             outputText,
             runId,
             messageList,
+            agentSpan,
           });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {

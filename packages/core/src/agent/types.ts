@@ -25,6 +25,7 @@ import type { RuntimeContext } from '../runtime-context';
 import type { ToolAction, VercelTool } from '../tools';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
+import type { AITrace } from '../telemetry_vnext';
 
 export type { MastraMessageV2, MastraMessageContentV2, MessageList } from './message-list/index.ts';
 export type { Message as AiMessageType } from 'ai';
@@ -111,6 +112,8 @@ export type AgentGenerateOptions<
    * @default false
    */
   savePerStep?: boolean;
+  /** The AI trace to attach append this generation to. Created if not provided. */
+  aiTrace?: AITrace;
 } & (
   | {
       /**
@@ -190,6 +193,8 @@ export type AgentStreamOptions<
    * @default false
    */
   savePerStep?: boolean;
+  /** The AI trace to attach append this generation to. Created if not provided. */
+  aiTrace?: AITrace;
 } & (
   | {
       /**

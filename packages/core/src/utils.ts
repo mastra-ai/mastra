@@ -11,6 +11,7 @@ import type { RuntimeContext } from './runtime-context';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
+import type { AgentRunMetadata, AISpan } from './telemetry_vnext';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -201,6 +202,7 @@ export interface ToolOptions {
   memory?: MastraMemory;
   agentName?: string;
   model?: LanguageModelV1;
+  agentSpan?: AISpan<AgentRunMetadata>;
 }
 
 type ToolToConvert = VercelTool | ToolAction<any, any, any>;

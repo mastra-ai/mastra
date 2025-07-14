@@ -26,6 +26,7 @@ import type {
   StreamEvent,
   WorkflowRunState,
 } from './types';
+import type { AITelemetry, AITrace } from '../telemetry_vnext';
 
 export type DefaultEngineType = {};
 
@@ -1093,6 +1094,7 @@ export class Workflow<
     runtimeContext,
     abort,
     abortSignal,
+    aiTelemetry,
   }: {
     inputData: z.infer<TInput>;
     resumeData?: any;
@@ -1112,10 +1114,13 @@ export class Workflow<
     abortSignal: AbortSignal;
     bail: (result: any) => any;
     abort: () => any;
+    /** The AI telemetry to attach append this workflow to. Created if not provided. */
+    aiTelemetry?: AITelemetry;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
-    const run = resume?.steps?.length
+    const isResume = !!(resume?.steps && resume.steps.length > 0);
+    const run = isResume
       ? await this.createRunAsync({ runId: resume.runId })
       : await this.createRunAsync();
     const nestedAbortCb = () => {
@@ -1131,9 +1136,19 @@ export class Workflow<
       emitter.emit('nested-watch-v2', { event, workflowId: this.id });
     }, 'watch-v2');
     const unwatch = run.watch(event => {
-      emitter.emit('nested-watch', { event, workflowId: this.id, runId: run.runId, isResume: !!resume?.steps?.length });
+      emitter.emit('nested-watch', { event, workflowId: this.id, runId: run.runId, isResume });
     }, 'watch');
-    const res = resume?.steps?.length
+
+    const vnextTelemetry = this.mastra?.getTelemetryVNext();
+    if (vnextTelemetry) {
+      //Start a trace for the workflow execution
+      const trace = vnextTelemetry.startTrace(`workflow-${workflowId}`, {
+        attributes: { workflowId, runId },
+        tags: ['workflow', 'execution'],
+      });
+
+
+    const res = isResume
       ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext })
       : await run.start({ inputData, runtimeContext });
     unwatch();

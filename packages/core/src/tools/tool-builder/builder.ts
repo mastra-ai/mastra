@@ -16,6 +16,7 @@ import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import type { CoreTool, ToolAction, VercelTool } from '../types';
+import { SpanType, type AISpan, type ToolCallMetadata } from '../../telemetry_vnext';
 
 export type ToolToConvert = VercelTool | ToolAction<any, any, any>;
 export type LogType = 'tool' | 'toolset' | 'client-tool';
@@ -80,6 +81,7 @@ export class CoreToolBuilder extends MastraBase {
               this.originalTool,
               { ...this.options, description: this.originalTool.description },
               this.logType,
+              tool.id,
             )
           : undefined,
       };
@@ -106,9 +108,16 @@ export class CoreToolBuilder extends MastraBase {
     };
   }
 
-  private createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset' | 'client-tool') {
+  private createExecute(
+    tool: ToolToConvert,
+    options: ToolOptions,
+    logType?: 'tool' | 'toolset' | 'client-tool',
+    toolId?: string,
+  ) {
     // dont't add memory or mastra to logging
-    const { logger, mastra: _mastra, memory: _memory, runtimeContext, ...rest } = options;
+    const { logger, mastra: _mastra, memory: _memory, runtimeContext, agentSpan, ...rest } = options;
+
+    console.log("Creating tool: %s with agentSpan: %s", toolId, agentSpan ? "true":"false");
 
     const { start, error } = this.createLogMessageOptions({
       agentName: options.agentName,
@@ -139,9 +148,18 @@ export class CoreToolBuilder extends MastraBase {
 
     return async (args: any, execOptions?: any) => {
       let logger = options.logger || this.logger;
+      const metadata: ToolCallMetadata = {
+        toolId,
+        input: args,
+        attributes: rest,
+      };
+      console.log("starting tool span with agentSpan: %s", agentSpan ? "true": "false");
+      const toolSpan = agentSpan?.createChildSpan(SpanType.TOOL_CALL, metadata);
       try {
         logger.debug(start, { ...rest, args });
-        return await execFunction(args, execOptions);
+        const result = await execFunction(args, execOptions);
+        toolSpan?.end({ metadata: { output: result } });
+        return result;
       } catch (err) {
         const mastraError = new MastraError(
           {
@@ -158,6 +176,8 @@ export class CoreToolBuilder extends MastraBase {
         );
         logger.trackException(mastraError);
         logger.error(error, { ...rest, error: mastraError, args });
+        //TODO: add better handling of mastra error messages.
+        toolSpan?.end({ metadata: { error: { message: mastraError.message } } });
         return mastraError;
       }
     };
@@ -179,6 +199,7 @@ export class CoreToolBuilder extends MastraBase {
             this.originalTool,
             { ...this.options, description: this.originalTool.description },
             this.logType,
+            this.originalTool.description,
           )
         : undefined,
     };

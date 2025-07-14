@@ -126,6 +126,8 @@ export type StreamEvent =
 
 export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
 
+export type WorkflowStepStatus = 'running' | 'success' | 'failed' | 'suspended' | 'bailed';
+
 export type WatchEvent = {
   type: 'watch';
   payload: {

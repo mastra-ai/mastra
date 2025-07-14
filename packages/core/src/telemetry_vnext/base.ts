@@ -10,7 +10,7 @@ import { RegisteredLogger } from '../logger/constants';
 import { deepMerge } from '../utils';
 import type {
   TelemetryConfig,
-  Trace,
+  AITrace,
   AISpan,
   SpanOptions,
   TracingOptions,
@@ -97,7 +97,7 @@ export abstract class MastraTelemetry extends MastraBase {
       attributes?: Record<string, any>;
       tags?: string[];
     },
-  ): Trace {
+  ): AITrace {
     if (!this.isEnabled()) {
       return this.createNoOpTrace(name);
     }
@@ -149,7 +149,6 @@ export abstract class MastraTelemetry extends MastraBase {
         metadata: metadata,
         parent: options.parent,
         context: options.context,
-        attributes: options.attributes,
       };
       return this.createNoOpSpan(spanOptions) as AISpan<T>;
     }
@@ -159,7 +158,6 @@ export abstract class MastraTelemetry extends MastraBase {
       metadata: metadata,
       parent: options.parent,
       context: options.context,
-      attributes: options.attributes,
       _callbacks: {
         onEnd: (span: AISpan) => this.emitSpanEnded(span),
         onUpdate: (span: AISpan) => this.emitSpanUpdated(span),
@@ -191,7 +189,7 @@ export abstract class MastraTelemetry extends MastraBase {
       attributes?: Record<string, any>;
       tags?: string[];
     },
-  ): Trace;
+  ): AITrace;
 
   /**
    * Start a new span (called after sampling)
@@ -222,7 +220,7 @@ export abstract class MastraTelemetry extends MastraBase {
   protected abstract _startSpan(spanType: SpanType, options: SpanOptions): AISpan;
 
   /**
-   * Trace a class instance with automatic instrumentation (handles sampling)
+   * AITrace a class instance with automatic instrumentation (handles sampling)
    */
   traceClass<T extends object>(instance: T, options?: TracingOptions): T {
     if (!this.isEnabled()) {
@@ -232,7 +230,7 @@ export abstract class MastraTelemetry extends MastraBase {
   }
 
   /**
-   * Trace a method with manual instrumentation (handles sampling)
+   * AITrace a method with manual instrumentation (handles sampling)
    */
   traceMethod<TMethod extends Function>(
     method: TMethod,
@@ -249,12 +247,12 @@ export abstract class MastraTelemetry extends MastraBase {
   }
 
   /**
-   * Trace a class instance (called after sampling)
+   * AITrace a class instance (called after sampling)
    */
   protected abstract _traceClass<T extends object>(instance: T, options?: TracingOptions): T;
 
   /**
-   * Trace a method (called after sampling)
+   * AITrace a method (called after sampling)
    */
   protected abstract _traceMethod<TMethod extends Function>(
     method: TMethod,
@@ -346,7 +344,7 @@ export abstract class MastraTelemetry extends MastraBase {
   /**
    * Create a no-op trace for disabled/un-sampled operations
    */
-  protected createNoOpTrace(name: string): Trace {
+  protected createNoOpTrace(name: string): AITrace {
     return {
       id: 'noop',
       name,
@@ -360,7 +358,7 @@ export abstract class MastraTelemetry extends MastraBase {
    * Create a no-op span for disabled/un-sampled operations
    */
   protected createNoOpSpan(options: SpanOptions): AISpan {
-    const noOpTrace: Trace = {
+    const noOpTrace: AITrace = {
       id: 'noop',
       name: 'noop',
       startTime: new Date(),
@@ -497,7 +495,7 @@ export abstract class MastraTelemetry extends MastraBase {
   /**
    * Emit a trace started event
    */
-  protected emitTraceStarted(trace: Trace): void {
+  protected emitTraceStarted(trace: AITrace): void {
     this.exportEvent({ type: 'trace_started', trace }).catch(error => {
       this.logger.error('Failed to export trace_started event', error);
     });
@@ -506,7 +504,7 @@ export abstract class MastraTelemetry extends MastraBase {
   /**
    * Emit a trace updated event
    */
-  protected emitTraceUpdated(trace: Trace): void {
+  protected emitTraceUpdated(trace: AITrace): void {
     this.exportEvent({ type: 'trace_updated', trace }).catch(error => {
       this.logger.error('Failed to export trace_updated event', error);
     });
@@ -515,7 +513,7 @@ export abstract class MastraTelemetry extends MastraBase {
   /**
    * Emit a trace ended event
    */
-  protected emitTraceEnded(trace: Trace): void {
+  protected emitTraceEnded(trace: AITrace): void {
     this.exportEvent({ type: 'trace_ended', trace }).catch(error => {
       this.logger.error('Failed to export trace_ended event', error);
     });

@@ -7,6 +7,7 @@
  */
 
 import type { Context, Span as OTelSpan } from '@opentelemetry/api';
+import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows';
 
 // ============================================================================
 // Core AI-Specific Span Types
@@ -69,18 +70,16 @@ export interface BaseMetadata {
 export interface AgentRunMetadata extends BaseMetadata {
   /** Agent identifier */
   agentId: string;
-  /** Agent name/type */
-  agentName?: string;
+  /** Agent Instructions **/
+  instructions?: string;
+  /** Agent Prompt **/
+  prompt?: string;
   /** Available tools for this execution */
   availableTools?: string[];
   /** Input to the agent */
   input?: any;
   /** Agent's output */
   output?: any;
-  /** Execution status */
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'suspended';
-  /** Memory thread ID if using memory */
-  threadId?: string;
   /** Maximum steps allowed */
   maxSteps?: number;
   /** Current step number */
@@ -132,15 +131,10 @@ export interface LLMGenerationMetadata extends BaseMetadata {
  * Tool Call metadata
  */
 export interface ToolCallMetadata extends BaseMetadata {
-  /** Name of the tool/function */
-  toolName: string;
-  /** Tool provider/source */
-  toolProvider?: string;
-  /** Input arguments */
+  toolId?: string;
+  toolType?: string;
   input?: any;
-  /** Tool output */
   output?: any;
-  /** Whether tool execution was successful */
   success?: boolean;
 }
 
@@ -288,12 +282,12 @@ export interface EmbeddingGenerationMetadata extends BaseMetadata {
 export interface WorkflowRunMetadata extends BaseMetadata {
   /** Workflow identifier */
   workflowId: string;
-  /** Workflow version */
-  version?: string;
   /** Input to the workflow */
   input?: any;
   /** Workflow output */
   output?: any;
+  /** Workflow status */
+  status?: WorkflowRunStatus;
 }
 
 /**
@@ -302,12 +296,12 @@ export interface WorkflowRunMetadata extends BaseMetadata {
 export interface WorkflowStepMetadata extends BaseMetadata {
   /** Step identifier */
   stepId: string;
-  /** Step name/identifier */
-  stepName: string;
   /** Input data for this step */
   input?: any;
   /** Output data from this step */
   output?: any;
+  /** Step status */
+  status?: WorkflowStepStatus;
 }
 
 /**
@@ -378,7 +372,7 @@ export type SpanMetadata =
 /**
  * Represents a trace - the top-level execution unit
  */
-export interface Trace {
+export interface AITrace {
   /** Unique trace identifier */
   id: string;
   /** Trace name/operation */
@@ -424,7 +418,7 @@ export interface AISpan<TMetadata extends SpanMetadata = SpanMetadata> {
   /** Parent span reference (undefined for root spans) */
   parent?: AISpan;
   /** Trace this span belongs to */
-  trace: Trace;
+  trace: AITrace;
 
   // Methods for span lifecycle
   /** End the span */
@@ -439,10 +433,16 @@ export interface AISpan<TMetadata extends SpanMetadata = SpanMetadata> {
   export(): Promise<string>;
 }
 
+export interface AITraceSpan {
+  /** The overall trace for the AI execution (workflow, agent, ect...) */
+  trace: AITrace;
+  /** The parent span for the current item. If not set, then the trace is the parent. */
+  parentSpan?: AISpan;
+}
+
 export interface StartSpanOptions {
   parent?: AISpan;
   context?: Context;
-  attributes?: Record<string, any>;
 }
 
 // ============================================================================
@@ -492,6 +492,7 @@ export interface TelemetryConfig {
 /**
  * Telemetry capabilities that implementations can support
  */
+
 export interface TelemetrySupports {
   /** Basic tracing capabilities */
   tracing: boolean;
@@ -517,9 +518,9 @@ export interface TelemetrySupports {
  * Telemetry events that can be exported
  */
 export type TelemetryEvent =
-  | { type: 'trace_started'; trace: Trace }
-  | { type: 'trace_updated'; trace: Trace }
-  | { type: 'trace_ended'; trace: Trace }
+  | { type: 'trace_started'; trace: AITrace }
+  | { type: 'trace_updated'; trace: AITrace }
+  | { type: 'trace_ended'; trace: AITrace }
   | { type: 'span_started'; span: AISpan }
   | { type: 'span_updated'; span: AISpan }
   | { type: 'span_ended'; span: AISpan };
@@ -572,8 +573,6 @@ export interface SpanOptions {
   parent?: AISpan;
   /** OpenTelemetry context */
   context?: Context;
-  /** Custom attributes */
-  attributes?: Record<string, any>;
   /** Internal callback for span lifecycle events (set by telemetry instance) */
   _callbacks?: {
     onEnd?: (span: AISpan) => void;

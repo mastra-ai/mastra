@@ -24,6 +24,7 @@ import type { MastraLanguageModel } from '../agent/types';
 import type { Run } from '../run/types';
 import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
+import type { AISpan } from '../telemetry_vnext';
 
 export { createMockModel } from './model/mock';
 
@@ -110,6 +111,7 @@ type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = unde
   threadId?: string;
   resourceId?: string;
   runtimeContext: RuntimeContext;
+  aiSpan?: AISpan;
 } & Run;
 
 export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {

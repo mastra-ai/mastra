@@ -5,6 +5,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { chefAgent, chefAgentResponses, dynamicAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { myWorkflow } from './workflows';
+import { DefaultConsoleExporter } from '@mastra/core/telemetry_vnext';
 
 const storage = new LibSQLStore({
   url: 'file:./mastra.db',
@@ -22,9 +23,13 @@ export const mastra = new Mastra({
   serverMiddleware: [
     {
       handler: (c, next) => {
-        console.log('Middleware called');
         return next();
       },
     },
   ],
+  telemetryVNext: {
+    enabled: true,
+    serviceName: 'quickstart-example',
+    exporters: [new DefaultConsoleExporter()],
+  },
 });

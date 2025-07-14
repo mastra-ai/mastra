@@ -1,7 +1,7 @@
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import { SpanType } from '../telemetry_vnext/types';
-import type { AISpan } from '../telemetry_vnext/types';
+import type { AISpan, AITrace, WorkflowRunMetadata, WorkflowStepMetadata } from '../telemetry_vnext/types';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { EMITTER_SYMBOL } from './constants';
@@ -160,17 +160,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       delay?: number;
     };
     runtimeContext: RuntimeContext;
+    aiTrace?: AITrace;
     abortController: AbortController;
   }): Promise<TOutput> {
-    const { workflowId, runId, graph, input, resume, retryConfig } = params;
+    const { workflowId, runId, graph, input, resume, retryConfig, aiTrace } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
-    // VNext telemetry span - running alongside legacy span
-    let aiSpan: AISpan | undefined;
+    let aiSpan: AISpan<WorkflowRunMetadata> | undefined;
     const vnextTelemetry = this.mastra?.getTelemetryVNext();
-    if (vnextTelemetry) {
-      // Start a trace for the workflow execution
+    if (aiTrace) {
+      //Start a trace for the workflow execution
       const trace = vnextTelemetry.startTrace(`workflow-${workflowId}`, {
         attributes: { workflowId, runId },
         tags: ['workflow', 'execution'],
@@ -284,18 +284,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         this.logger?.trackException(error);
         this.logger?.error(`Error executing step: ${error?.stack}`);
 
-        // End span with error status
-        aiSpan?.end({
-          metadata: {
-            status: 'failed',
-            error: {
-              message: error?.message || 'Unknown error',
-              code: (error as any)?.code,
-              stack: error?.stack,
-            },
-          },
-        });
-
         const result = (await this.fmtReturnValue(
           executionSpan,
           params.emitter,
@@ -313,17 +301,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           result: result.result,
           error: result.error,
         });
+
+        aiSpan?.end({
+          metadata: {
+            status: result.status,
+            output: result.result,
+            error: result.error,
+          },
+        });
+
         return result;
       }
     }
-
-    // End vnext span with final success status
-    aiSpan?.end({
-      metadata: {
-        status: 'completed',
-        output: lastOutput.result,
-      },
-    });
 
     const result = (await this.fmtReturnValue(executionSpan, params.emitter, stepResults, lastOutput.result)) as any;
     await this.persistStepUpdate({
@@ -336,6 +325,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       result: result.result,
       error: result.error,
     });
+
+    aiSpan?.end({
+      metadata: {
+        status: result.status,
+        output: result.result,
+        error: result.error,
+      },
+    });
+
     return result;
   }
 
@@ -566,6 +564,22 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
     const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
 
+    let aiSpan: AISpan<WorkflowStepMetadata> | undefined;
+    const vnextTelemetry = this.mastra?.getTelemetryVNext();
+    if (vnextTelemetry) {
+      aiSpan = vnextTelemetry.startWorkflowStepSpan(
+        `workflow.${workflowId}.step.${step.id}`,
+        {
+          stepId: step.id,
+          input: prevOutput,
+        },
+        {
+          parent: executionContext.aiSpan,
+        },
+      );
+      executionContext.aiSpan?.children.push(aiSpan);
+    }
+
     const stepInfo = {
       ...stepResults[step.id],
       ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
@@ -763,6 +777,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
       });
     }
+
+    aiSpan?.end({
+      metadata: {
+        status: execResults.status,
+        output: execResults.output,
+      },
+    });
 
     return { ...stepInfo, ...execResults };
   }

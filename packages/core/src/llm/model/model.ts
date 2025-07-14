@@ -7,7 +7,7 @@ import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
-import type { CoreMessage, LanguageModel, Schema } from 'ai';
+import type { CoreMessage, LanguageModel, Schema, ToolExecutionOptions } from 'ai';
 import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -29,6 +29,9 @@ import type { MastraMemory } from '../../memory/memory';
 import { delay } from '../../utils';
 
 import { MastraLLMBase } from './base';
+import { SpanType, type AISpan, type ToolCallMetadata } from '../../telemetry_vnext';
+import type { CoreTool } from '../../tools';
+import { openAPISpecs } from 'hono-openapi';
 
 export class MastraLLM extends MastraLLMBase {
   #model: LanguageModel;
@@ -96,6 +99,30 @@ export class MastraLLM extends MastraLLMBase {
     });
   }
 
+  private wrapTool(tool: CoreTool, aiSpan?: AISpan) : CoreTool {
+    console.log("Wrapping tool: %s : %s with aiSpan: %s", tool.id, tool.description, aiSpan ? "exists": "false");
+    if (!aiSpan || !tool.execute) {
+      return tool;
+    }
+
+    const wrappedExecute = async (params: any, options: ToolExecutionOptions) => {
+      console.log("EXECUTING TOOL: %s : %s", tool.id, tool.description)
+      const metadata: ToolCallMetadata = {
+        input: params,
+      };
+
+      const toolSpan = aiSpan.createChildSpan(SpanType.TOOL_CALL, metadata);
+      const result = await tool.execute?.(params, options);
+      toolSpan.end({metadata: {output: result}});
+      return result;
+    }
+
+    return {
+      ...tool,
+      execute: wrappedExecute,
+    };
+  }
+
   async __text<Z extends ZodSchema | JSONSchema7 | undefined>({
     runId,
     messages,
@@ -110,6 +137,7 @@ export class MastraLLM extends MastraLLMBase {
     resourceId,
     memory,
     runtimeContext,
+    aiSpan,
     ...rest
   }: LLMTextOptions<Z> & { memory?: MastraMemory }) {
     const model = this.#model;
@@ -121,14 +149,17 @@ export class MastraLLM extends MastraLLMBase {
       threadId,
       resourceId,
       tools: Object.keys(tools),
+      agentSpan: aiSpan? "exists" : "missing"
     });
 
     const argsForExecute = {
       model,
       temperature,
-      tools: {
-        ...tools,
-      },
+      tools: Object.fromEntries(
+        Object.entries(tools).map(
+          ([key, tool]) => [key, this.wrapTool(tool, aiSpan)]
+        )
+      ),
       toolChoice,
       maxSteps,
       onStepFinish: async (props: any) => {
@@ -158,7 +189,7 @@ export class MastraLLM extends MastraLLMBase {
           throw mastraError;
         }
 
-        this.logger.debug('[LLM] - Step Change:', {
+        this.logger.debug('[LLM] - Text Step Change:', {
           text: props?.text,
           toolCalls: props?.toolCalls,
           toolResults: props?.toolResults,
@@ -282,7 +313,7 @@ export class MastraLLM extends MastraLLMBase {
           throw mastraError;
         }
 
-        this.logger.debug('[LLM] - Step Change:', {
+        this.logger.debug('[LLM] - Text Object Step Change:', {
           text: props?.text,
           toolCalls: props?.toolCalls,
           toolResults: props?.toolResults,
@@ -575,7 +606,7 @@ export class MastraLLM extends MastraLLMBase {
           throw mastraError;
         }
 
-        this.logger.debug('[LLM] - Stream Step Change:', {
+        this.logger.debug('[LLM] - Stream Object Step Change:', {
           text: props?.text,
           toolCalls: props?.toolCalls,
           toolResults: props?.toolResults,
