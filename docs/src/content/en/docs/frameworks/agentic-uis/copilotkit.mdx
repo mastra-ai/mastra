@@ -82,7 +82,7 @@ We'll start with setting up the React frontend components, then walk through the
 
 ## React Frontend Setup
 
-Set up a CopilotKit component in your React frontend. Start with installing the required packages in your React frontend.
+Set up a CopilotKit component in your React frontend by installing the required packages in your React frontend.
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
@@ -178,15 +178,13 @@ Install additional packages.
 
 Configure your Mastra instance to include CopilotKit's runtime endpoint with an optional typed runtime context:
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy {7-12,23-41}
+```typescript filename="src/mastra/index.ts" showLineNumbers copy {7-10,21-37}
 import { Mastra } from "@mastra/core/mastra";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
 import { registerCopilotKit } from "@ag-ui/mastra";
 import { weatherAgent } from "./agents/weather-agent";
 
-// Define your runtime context type
-// This is optional, but adds typesafety
 type WeatherRuntimeContext = {
   "user-id": string;
   "temperature-scale": "celsius" | "fahrenheit";
@@ -202,14 +200,12 @@ export const mastra = new Mastra({
     level: "info"
   }),
   server: {
-    // calling from a seperate frontend app, allow CORS
     cors: {
       origin: "*",
       allowMethods: ["*"],
       allowHeaders: ["*"]
     },
     apiRoutes: [
-      // optional type parameter if using a runtime context type
       registerCopilotKit<WeatherRuntimeContext>({
         path: "/copilotkit",
         resourceId: "weatherAgent",
@@ -298,7 +294,7 @@ Install Additional Dependencies:
 
 Create API Route:
 
-```typescript filename="app/api/copilotkit/route.ts" showLineNumbers copy {1-7,16-19,21-31}
+```typescript filename="app/api/copilotkit/route.ts" showLineNumbers copy {1-7,11-26}
 import { mastra } from "@/mastra";
 import {
   CopilotRuntime,
@@ -309,11 +305,6 @@ import { MastraAgent } from "@ag-ui/mastra";
 import { NextRequest } from "next/server";
 
 export const POST = async (req: NextRequest) => {
-  // clone req if necessary
-  // e.g obtaining a value from the request body
-  // const clonedReq = req.clone();
-  // const body = await clonedReq.json();
-
   const mastraAgents = MastraAgent.getLocalAgents({
     mastra,
     agentId: "weatherAgent",
