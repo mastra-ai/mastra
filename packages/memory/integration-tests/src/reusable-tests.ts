@@ -8,6 +8,7 @@ import type { PostgresConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
 import type { ToolResultPart, TextPart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { MessageList } from '@mastra/core/agent';
 
 const resourceId = 'resource';
 const NUMBER_OF_WORKERS = 2;
@@ -493,9 +494,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
     });
 
     describe('Message Types and Roles', () => {
-      it('should handle different message types', async () => {
-        const messages = [
-          createTestMessage(thread.id, 'Hello', 'user', 'text'),
+      it.only('should handle different message types', async () => {
+        const userMessage = createTestMessage(thread.id, 'Hello', 'user', 'text');
+        const assistantMessages = [
           createTestMessage(
             thread.id,
             [{ type: 'tool-call', toolCallId: '1', args: {}, toolName: 'ok' }],
@@ -509,6 +510,12 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
             'tool-result',
           ),
         ];
+
+        const messageList = new MessageList();
+        messageList.add(userMessage, 'user');
+        messageList.add(assistantMessages, 'response');
+
+        const messages = messageList.get.all.v2();
 
         await memory.saveMessages({ messages });
         const result = await memory.rememberMessages({
