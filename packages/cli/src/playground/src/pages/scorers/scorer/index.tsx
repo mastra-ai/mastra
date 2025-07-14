@@ -6,17 +6,13 @@ import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from
 import { format, isToday } from 'date-fns';
 import { useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
+import { useWorkflows } from '@/hooks/use-workflows';
 import { cn } from '@/lib/utils';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { type GetScorerResponse, type ScoreRowData } from '@mastra/client-js';
-
+import type { ScoreRowData } from '@mastra/core/eval';
 import * as Dialog from '@radix-ui/react-dialog';
-
 import MarkdownRenderer from '@/components/ui/markdown-renderer';
 import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-
-import { useWorkflows } from '@/hooks/use-workflows';
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
@@ -120,7 +116,6 @@ export default function Scorer() {
     }
   };
 
-  const hasPrompts = false;
   if (isLoading) {
     return null;
   }
@@ -144,53 +139,25 @@ export default function Scorer() {
           <div className={cn(`h-full overflow-y-scroll `)}>
             <div className={cn('max-w-[100rem] px-[3rem] mx-auto')}>
               <ScorerHeader scorer={scorer} agents={scorerAgents} workflows={scorerWorkflows} />
-              <Tabs defaultValue="scores">
-                <TabsList
-                  className={cn(
-                    'flex border-b group',
-                    '[&>button]:text-icon3 [&>button]:text-[1rem] [&>button]:px-[1.5rem] [&>button]:py-[0.75rem] [&>button]:border-b-2 [&>button]:border-transparent ',
-                    '[&>button[data-state=active]]:bg-surface2 [&>button[data-state=active]]:text-icon5 [&>button[data-state=active]]:border-icon5',
-                  )}
-                >
-                  <TabsTrigger value="scores" className="group">
-                    Scores
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="prompts"
-                    className={cn('group', {
-                      'cursor-not-allowed': !hasPrompts,
-                    })}
-                    disabled={!hasPrompts}
-                  >
-                    Prompts
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="scores">
-                  <ScoreListHeader
-                    filteredByEntity={filteredByEntity}
-                    onFilterChange={handleFilterChange}
-                    scorerEntities={scorerEntities}
-                    scoresTotal={scoresTotal}
-                    filteredScoresTotal={filteredByEntity ? filteredScoresTotal : undefined}
-                  />
-                  <ScoreList
-                    scores={filteredScores || []}
-                    selectedScore={selectedScore}
-                    onItemClick={handleOnListItemClick}
-                    isLoading={filteredByEntity !== '' ? entityScoresLoading : scoresLoading || false}
-                    total={filteredScoresTotal}
-                    page={filteredScoresPage}
-                    perPage={filteredScoresPerPage}
-                    hasMore={filteredScoresHasMore}
-                    onNextPage={handleNextPage}
-                    onPrevPage={handlePrevPage}
-                  />
-                </TabsContent>
-                <TabsContent value="prompts">
-                  <ScorerPrompts prompts={scorer?.prompts} />
-                </TabsContent>
-              </Tabs>
+              <ScoreListHeader
+                filteredByEntity={filteredByEntity}
+                onFilterChange={handleFilterChange}
+                scorerEntities={scorerEntities}
+                scoresTotal={scoresTotal}
+                filteredScoresTotal={filteredByEntity ? filteredScoresTotal : undefined}
+              />
+              <ScoreList
+                scores={filteredScores || []}
+                selectedScore={selectedScore}
+                onItemClick={handleOnListItemClick}
+                isLoading={filteredByEntity !== '' ? entityScoresLoading : scoresLoading || false}
+                total={filteredScoresTotal}
+                page={filteredScoresPage}
+                perPage={filteredScoresPerPage}
+                hasMore={filteredScoresHasMore}
+                onNextPage={handleNextPage}
+                onPrevPage={handlePrevPage}
+              />
             </div>
           </div>
           <ScoreDetails
@@ -269,7 +236,7 @@ function ScoreListHeader({
   filteredScoresTotal?: number;
 }) {
   return (
-    <div className={cn('sticky top-0 bg-surface4 z-[1] mt-[2rem] mb-[1rem] rounded-lg px-[1.5rem]')}>
+    <div className={cn('sticky top-0 bg-surface4 z-[1] mt-[1rem] mb-[1rem] rounded-lg px-[1.5rem]')}>
       <div className="flex items-center justify-between">
         <div className="inline-flex items-baseline gap-[1rem] py-[.75rem]">
           <label htmlFor="filter-by-agent" className="text-icon3 text-[0.875rem] font-semibold whitespace-nowrap">
@@ -472,6 +439,8 @@ function ScoreDetails({
     return null;
   }
 
+  console.log('-->>', score);
+
   const handleOnNext = () => {
     if (onNext) {
       onNext();
@@ -482,6 +451,23 @@ function ScoreDetails({
     if (onPrevious) {
       onPrevious();
     }
+  };
+
+  // Mock prompts for demonstration purposes
+  // When backend is updated, these would be get from score property
+  const mockPrompts = {
+    extract: {
+      prompt: 'Extract the ingredients from the input text.',
+      description: 'Extracts ingredients from the input text.',
+    },
+    score: {
+      prompt: 'Score the recipe based on the extracted ingredients.',
+      description: 'Scores the recipe based on the extracted ingredients.',
+    },
+    reason: {
+      prompt: 'Provide a reason for the score given to the recipe.',
+      description: 'Provides a reason for the score given to the recipe.',
+    },
   };
 
   return (
@@ -541,7 +527,7 @@ function ScoreDetails({
               {(score.input || []).map((input: any, index: number) => (
                 <div
                   key={index}
-                  className="border-b border-border1 last:border-b-0 py-[1rem] px-[1.5rem] text-[0.875rem] text-icon5"
+                  className="border-b border-border1 last:border-b-0 py-[1rem] px-[1.5rem] text-[0.875rem] text-icon4"
                 >
                   {input?.content && <MarkdownRenderer>{input.content}</MarkdownRenderer>}
                   {input?.ingredient && <MarkdownRenderer>{input.ingredient}</MarkdownRenderer>}
@@ -568,38 +554,35 @@ function ScoreDetails({
                     </div>
                   )}
                 </div>
-                <div className="text-icon5 text-[0.875rem] p-[1.5rem] py-[1rem]">
+                <div className="text-icon4 text-[0.875rem] p-[1.5rem] py-[1rem] ">
                   {score.output?.text && <MarkdownRenderer>{score.output.text}</MarkdownRenderer>}
                   {score.output?.object?.result && <MarkdownRenderer>{score.output.object.result}</MarkdownRenderer>}
                 </div>
               </div>
             </section>
+            {mockPrompts && (
+              <section className="border border-border1 rounded-lg">
+                <div className="flex items-center justify-between  p-[1rem] ">
+                  <h3 className="px-[.5rem]">Prompts</h3>
+                </div>
+
+                {Object.entries(mockPrompts || {}).map(([key, value]) => (
+                  <>
+                    <div className="flex gap-[1rem] text-[]  py-[1rem] px-[1.5rem] border-y border-border1" key={key}>
+                      <span className="text-icon5 font-bold text-[0.875rem]">{key}</span>
+                      <span className="text-icon2 text-[0.75rem]">{value?.description && `|`}</span>
+                      <span className="text-icon4 text-[0.875rem]">{value?.description || ''}</span>
+                    </div>
+                    <div className="text-icon4 text-[0.875rem] py-[1rem] mx-[1.5rem] px-[1rem] font-mono ">
+                      {value?.prompt && <MarkdownRenderer>{value.prompt}</MarkdownRenderer>}
+                    </div>
+                  </>
+                ))}
+              </section>
+            )}
           </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
-  );
-}
-
-function ScorerPrompts({ prompts }: { prompts: GetScorerResponse['prompts'] | undefined }) {
-  if (!prompts) {
-    return null;
-  }
-
-  return (
-    <div className="grid gap-[2rem] my-[2rem] items-start">
-      {Object.entries(prompts || {}).map(([key, value]) => (
-        <div className="" key={key}>
-          <div className="flex gap-[1rem] mb-[.5rem]">
-            <span className="text-icon5 font-bold">{key}</span>
-            <span className="text-icon2">{value?.description && `|`}</span>
-            <span className="text-icon4">{value?.description || ''}</span>
-          </div>
-          <div className={`rounded-md border border-border1 bg-surface1 `}>
-            <pre className="text-[0.875rem] text-[#ccc] p-[1rem] whitespace-pre-wrap font-mono">{value.prompt}</pre>
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
