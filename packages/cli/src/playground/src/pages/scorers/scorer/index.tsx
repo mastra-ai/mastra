@@ -49,11 +49,13 @@ export default function Scorer() {
     ...scorerWorkflows.map(workflow => ({ id: workflow.id, name: workflow.name, type: 'WORKFLOW' })),
   ];
 
-  const { scores: allScores, isLoading: scoresLoading } = useScoresByScorerId(scorerId);
+  const [scoresPage, setScoresPage] = useState<number>(0);
+  const { scores: allScores, isLoading: scoresLoading } = useScoresByScorerId(scorerId, scoresPage);
   const [filteredByEntity, setFilteredByEntity] = useState<string>('');
   const { scores: entityScores, isLoading: entityScoresLoading } = useScoresByEntityId(
     filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.name : '',
     filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.type : '',
+    scoresPage,
   );
 
   const scoresTotal = allScores?.pagination?.total || 0;
@@ -62,16 +64,18 @@ export default function Scorer() {
   const filteredScoresPage = filteredByEntity !== '' ? entityScores?.pagination.page : allScores?.pagination.page;
   const filteredScoresHasMore =
     filteredByEntity !== '' ? entityScores?.pagination.hasMore : allScores?.pagination.hasMore;
-
-  console.log('--->>>', allScores, filteredScoresTotal, filteredScoresPage, filteredScoresHasMore);
+  const filteredScoresPerPage =
+    filteredByEntity !== '' ? entityScores?.pagination.perPage : allScores?.pagination.perPage;
 
   const handleFilterChange = (value: string) => {
     if (value === 'all') {
       setFilteredByEntity('');
+      setScoresPage(0); // Reset to first page when filtering by all
     } else {
       const entity = scorerEntities?.[parseInt(value)];
       if (entity) {
         setFilteredByEntity(value);
+        setScoresPage(0);
       } else {
         console.warn('Entity not found for value:', value);
       }
@@ -104,7 +108,17 @@ export default function Scorer() {
     return () => setSelectedScore(allScores?.scores[(currentIndex || 0) - 1]);
   };
 
-  // const hasPrompts = Object.keys(scorer?.scorer || {}).length > 0;
+  const handleNextPage = () => {
+    if (filteredScoresHasMore) {
+      setScoresPage(prev => prev + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (scoresPage > 0) {
+      setScoresPage(prev => prev - 1);
+    }
+  };
 
   const hasPrompts = false;
   if (isLoading) {
@@ -167,7 +181,10 @@ export default function Scorer() {
                     isLoading={filteredByEntity !== '' ? entityScoresLoading : scoresLoading || false}
                     total={filteredScoresTotal}
                     page={filteredScoresPage}
+                    perPage={filteredScoresPerPage}
                     hasMore={filteredScoresHasMore}
+                    onNextPage={handleNextPage}
+                    onPrevPage={handlePrevPage}
                   />
                 </TabsContent>
                 <TabsContent value="prompts">
@@ -299,7 +316,7 @@ function ScoreListHeader({
 
       <div
         className={cn(
-          'grid gap-[1rem] grid-cols-[7rem_7rem_1fr_2fr_9rem_3rem] text-left text-[0.75rem] text-icon3 uppercase py-[1rem] border-t border-border1 ',
+          'grid gap-[1rem] grid-cols-[7rem_7rem_1fr_2fr_10rem_3rem] text-left text-[0.75rem] text-icon3 uppercase py-[1rem] border-t border-border1 ',
         )}
       >
         <span>Date</span>
@@ -321,6 +338,9 @@ function ScoreList({
   total,
   page,
   hasMore,
+  onNextPage,
+  onPrevPage,
+  perPage,
 }: {
   scores: ScoreRowData[];
   selectedScore: any;
@@ -329,6 +349,9 @@ function ScoreList({
   total?: number;
   page?: number;
   hasMore?: boolean;
+  onNextPage?: () => void;
+  onPrevPage?: () => void;
+  perPage?: number;
 }) {
   if (isLoading) {
     return (
@@ -352,27 +375,33 @@ function ScoreList({
           })}
       </ul>
 
-      <div className={cn('flex items-center justify-center text-icon3 text-[0.875rem] gap-[2rem]')}>
-        <span>
-          Page {page ? page + 1 : '1'} of {total ? Math.ceil(total / 10) : 0}
-        </span>
-        <div
-          className={cn(
-            'flex gap-[1rem]',
-            '[&>a]:flex [&>a]:items-center [&>a]:gap-[0.5rem] [&>a]:text-icon4 [&>a:hover]:text-icon5 [&>a]:transition-colors [&>a]:border [&>a]:border-border1 [&>a]:p-[0.25rem] [&>a]:px-[0.5rem] [&>a]:rounded-md',
-            ' [&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-icon3',
-          )}
-        >
-          <Link to="">
-            <ArrowLeftIcon />
-            Previous
-          </Link>
-          <Link to="/">
-            Next
-            <ArrowRightIcon />
-          </Link>
+      {typeof page === 'number' && typeof perPage === 'number' && typeof total === 'number' && (
+        <div className={cn('flex items-center justify-center text-icon3 text-[0.875rem] gap-[2rem]')}>
+          <span>
+            Page {page ? page + 1 : '1'} of {total ? Math.ceil(total / perPage) : 0}
+          </span>
+          <div
+            className={cn(
+              'flex gap-[1rem]',
+              '[&>button]:flex [&>button]:items-center [&>button]:gap-[0.5rem] [&>button]:text-icon4 [&>button:hover]:text-icon5 [&>button]:transition-colors [&>button]:border [&>button]:border-border1 [&>button]:p-[0.25rem] [&>button]:px-[0.5rem] [&>button]:rounded-md',
+              ' [&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-icon3',
+            )}
+          >
+            {typeof page === 'number' && page > 0 && (
+              <button onClick={onPrevPage} disabled={page === 0}>
+                <ArrowLeftIcon />
+                Previous
+              </button>
+            )}
+            {hasMore && (
+              <button onClick={onNextPage} disabled={!hasMore}>
+                Next
+                <ArrowRightIcon />
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -410,15 +439,15 @@ function ScoreItem({
       <button
         onClick={handleClick}
         className={cn(
-          'grid w-full px-[1.5rem] gap-[1rem] text-left items-center min-h-[3.5rem] grid-cols-[7rem_7rem_1fr_2fr_9rem_3rem] ',
+          'grid w-full px-[1.5rem] gap-[1rem] text-left items-center min-h-[3.5rem] grid-cols-[7rem_7rem_1fr_2fr_10rem_3rem] ',
         )}
       >
         <span className="text-icon4">{isTodayDate ? 'Today' : dateStr}</span>
         <span className="text-icon4">{timeStr}</span>
         <span className="truncate pr-[1rem]">{inputPrev}</span>
         <span className="truncate pr-[1rem]">{outputPrev}</span>
-        <span className="truncate pr-[1rem] flex gap-[0.5rem] items-center [&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-icon3 text-[0.875rem]">
-          {entityIcon} {score.entityId}
+        <span className="pr-[1rem] flex gap-[0.5rem] items-center [&>svg]:shrink-0 [&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-icon3 text-[0.875rem]">
+          {entityIcon} <span className="truncate">{score.entityId}</span>
         </span>
         <span>{scorePrev}</span>
       </button>

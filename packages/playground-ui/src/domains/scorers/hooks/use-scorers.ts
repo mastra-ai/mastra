@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { GetScorerResponse, GetScoresResponse } from '@mastra/client-js';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 
-export const useScoresByEntityId = (entityId: string, entityType: string) => {
+export const useScoresByEntityId = (entityId: string, entityType: string, page: number = 0) => {
   const client = useMastraClient();
   const [scores, setScores] = useState<GetScoresResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -15,7 +15,7 @@ export const useScoresByEntityId = (entityId: string, entityType: string) => {
         const res = await client.getScoresByEntityId({
           entityId,
           entityType,
-          page: 0,
+          page: page || 0,
           perPage: 10,
         });
         setScores(res);
@@ -27,12 +27,12 @@ export const useScoresByEntityId = (entityId: string, entityType: string) => {
     };
 
     fetchScores();
-  }, [entityId, entityType]);
+  }, [entityId, entityType, page]);
 
   return { scores, isLoading };
 };
 
-export const useScoresByScorerId = (scorerId: string) => {
+export const useScoresByScorerId = (scorerId: string, page: number = 0) => {
   const client = useMastraClient();
   const [scores, setScores] = useState<GetScoresResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,7 +43,7 @@ export const useScoresByScorerId = (scorerId: string) => {
       try {
         const res = await client.getScoresByScorerId({
           scorerId,
-          page: 0,
+          page: page || 0,
           perPage: 10,
         });
         setScores(res);
@@ -55,7 +55,7 @@ export const useScoresByScorerId = (scorerId: string) => {
     };
 
     fetchScores();
-  }, [scorerId]);
+  }, [scorerId, page]);
 
   return { scores, isLoading };
 };
