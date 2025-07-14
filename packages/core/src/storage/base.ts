@@ -310,6 +310,16 @@ export abstract class MastraStorage extends MastraBase {
     result: StepResult<any, any, any, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>>;
 
+  abstract updateWorkflowState({
+    workflowName,
+    runId,
+    result,
+  }: {
+    workflowName: string;
+    runId: string;
+    result: StepResult<any, any, any, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>>;
+
   async loadWorkflowSnapshot({
     workflowName,
     runId,

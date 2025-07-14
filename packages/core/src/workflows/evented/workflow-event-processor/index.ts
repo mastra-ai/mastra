@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import EventEmitter from 'events';
-import type { Mastra, Step, StepFlowEntry, StepResult, Workflow } from '../../..';
+import type { Mastra, StepFlowEntry, StepResult, Workflow } from '../../..';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { Event, PubSub } from '../../../events';
 import { EventProcessor } from '../../../events/processor';
@@ -124,7 +124,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     resumeData,
     parentWorkflow,
     activeSteps,
+    runId,
   }: ProcessorArgs) {
+    await this.mastra.getStorage()?.updateWorkflowState({
+      workflowName: workflowId,
+      runId,
+      result: prevResult,
+    });
+
     // handle nested workflow
     if (parentWorkflow) {
       console.log('ending nested', workflowId, parentWorkflow);
@@ -148,12 +155,19 @@ export class WorkflowEventProcessor extends EventProcessor {
 
   protected async processWorkflowFail({
     workflowId,
+    runId,
     resume,
     prevResult,
     resumeData,
     parentWorkflow,
     activeSteps,
   }: ProcessorArgs) {
+    await this.mastra.getStorage()?.updateWorkflowState({
+      workflowName: workflowId,
+      runId,
+      result: prevResult,
+    });
+
     // handle nested workflow
     if (parentWorkflow) {
       console.log('failing nested', workflowId, parentWorkflow);

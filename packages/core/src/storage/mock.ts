@@ -90,6 +90,46 @@ export class MockStore extends MastraStorage {
     return snapshot.snapshot.context;
   }
 
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    result,
+  }: {
+    workflowName: string;
+    runId: string;
+    result: StepResult<any, any, any, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    const snapshot = this.data.mastra_workflow_snapshot[runId];
+
+    if (!snapshot) {
+      this.data.mastra_workflow_snapshot[runId] = {
+        run_id: runId,
+        workflow_name: workflowName,
+        snapshot: {
+          context: {},
+        },
+      };
+    }
+
+    if (!snapshot || !snapshot?.snapshot?.context) {
+      throw new Error(`Snapshot not found for runId ${runId}`);
+    }
+
+    if (result.status === 'success') {
+      snapshot.snapshot.status = 'success';
+      snapshot.snapshot.result = result.output;
+    } else if (result.status === 'failed') {
+      snapshot.snapshot.status = 'failed';
+      snapshot.snapshot.error = result.error;
+    } else if (result.status === 'suspended') {
+      snapshot.snapshot.status = 'suspended';
+    }
+
+    this.data.mastra_workflow_snapshot[runId] = snapshot;
+
+    return snapshot.snapshot.context;
+  }
+
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     this.logger.debug(`MockStore: batchInsert called for ${tableName} with ${records.length} records`);
     for (const record of records) {
