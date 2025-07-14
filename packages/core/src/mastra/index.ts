@@ -1,7 +1,10 @@
+import { checkEvalStorageFields } from '..';
 import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import { evaluate } from '../eval';
+import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
@@ -9,6 +12,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
 import type { NewAgentNetwork } from '../network/vNext';
 import type { Middleware, ServerConfig } from '../server/types';
+import { TABLE_EVALS } from '../storage';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
@@ -366,6 +370,8 @@ do:
     if (config?.server) {
       this.#server = config.server;
     }
+
+    this.registerEvals();
 
     this.setLogger({ logger });
   }
@@ -873,5 +879,55 @@ do:
       );
       return undefined;
     }
+  }
+
+  private registerEvals() {
+    registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
+      evaluate({
+        agentName,
+        input,
+        metric,
+        output,
+        runId,
+        globalRunId: runId,
+        instructions,
+      }).catch(e => {
+        const mastraError = new MastraError(
+          {
+            id: 'MASTRA_EVAL_HOOK_EVALUATE_EXECUTION_FAILED',
+            domain: ErrorDomain.EVAL,
+            category: ErrorCategory.USER,
+          },
+          e,
+        );
+        this.#logger?.trackException(mastraError);
+        this.#logger?.error(mastraError.toString());
+      });
+    });
+
+    registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
+      if (this.#storage) {
+        // Check for required fields
+        const logger = this.getLogger();
+        const areFieldsValid = checkEvalStorageFields(traceObject, logger);
+        if (!areFieldsValid) return;
+
+        await this.#storage.insert({
+          tableName: TABLE_EVALS,
+          record: {
+            input: traceObject.input,
+            output: traceObject.output,
+            result: JSON.stringify(traceObject.result || {}),
+            agent_name: traceObject.agentName,
+            metric_name: traceObject.metricName,
+            instructions: traceObject.instructions,
+            test_info: null,
+            global_run_id: traceObject.globalRunId,
+            run_id: traceObject.runId,
+            created_at: new Date().toISOString(),
+          },
+        });
+      }
+    });
   }
 }
