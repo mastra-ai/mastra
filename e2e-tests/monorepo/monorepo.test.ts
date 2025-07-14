@@ -155,6 +155,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           setImmediate(() => controller.abort());
           await proc;
         } catch (err) {
+          console.log('err', err);
           // @ts-expect-error - isCanceled is not typed
           if (!proc.isCanceled) {
             console.log('failed to kill build proc', err);
@@ -202,7 +203,9 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           setImmediate(() => controller.abort());
           await proc;
         } catch (err) {
-          if (!(await proc).isCanceled) {
+          console.log('err', err);
+          // @ts-expect-error - isCanceled is not typed
+          if (!proc.isCanceled) {
             console.log('failed to kill start proc', err);
           }
         }
