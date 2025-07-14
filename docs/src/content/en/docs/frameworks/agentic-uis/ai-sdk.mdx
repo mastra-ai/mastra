@@ -288,7 +288,6 @@ export const mastra = new Mastra({
           } catch {
           }
         }
-
         await next();
       },
     ],
@@ -467,7 +466,7 @@ export async function POST(req: Request) {
   const myAgent = mastra.getAgent("weatherAgent");
   const stream = await myAgent.stream(messages);
 
-    return createV4CompatibleResponse(stream.toUIMessageStreamResponse().body!);
+  return createV4CompatibleResponse(stream.toUIMessageStreamResponse().body!);
 }
 ```
 
