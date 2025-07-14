@@ -1,5 +1,25 @@
 # @mastra/deployer-cloudflare
 
+## 0.10.15-alpha.0
+
+### Patch Changes
+
+- 7776324: dependencies updates:
+  - Updated dependency [`rollup@^4.45.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.45.0) (from `^4.44.2`, in `dependencies`)
+- Updated dependencies [7776324]
+- Updated dependencies [db5cc15]
+- Updated dependencies [7b57e2c]
+- Updated dependencies [5237998]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/deployer@0.10.15-alpha.0
+  - @mastra/core@0.10.15-alpha.0
+
 ## 0.10.14
 
 ### Patch Changes

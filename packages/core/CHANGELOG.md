@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 0.10.15-alpha.0
+
+### Patch Changes
+
+- db5cc15: Create thread if it does not exist yet in agent network stream, generate and loopStream
+- 5237998: Fix foreach output
+- 37c1acd: Format semantic recall messages grouped by dates and labeled by if they're from a different thread or not, to improve longmemeval scores
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- 89ec9d4: remove cohere-ai client dependency and just make a fetch call
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- c22a91f: Fix nested workflow resume in loop workflow breaking
+- f7403ab: Only change workflow status to success after all steps are successful
+- 6c89d7f: Save runtimeContext in snapshot
+
 ## 0.10.14
 
 ### Patch Changes

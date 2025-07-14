@@ -1,5 +1,18 @@
 # create-mastra
 
+## 0.10.12-alpha.0
+
+### Patch Changes
+
+- 984887a: dependencies updates:
+  - Updated dependency [`prettier@^3.6.2` ↗︎](https://www.npmjs.com/package/prettier/v/3.6.2) (from `^3.5.3`, in `dependencies`)
+- 593631d: allow to pass ref to the link abstraction
+- 5237998: Fix foreach output
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- aa9528a: Display reasoning in playground
+- e1d0080: abstract Link component between cloud and core
+- f9b1508: add the same agent table as in cloud and export it from the playground
+
 ## 0.10.11
 
 ### Patch Changes
