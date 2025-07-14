@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
 import nextra from "nextra";
 import { initGT } from "gt-next/config";
-import theme from "./theme.json" assert { type: "json" };
 import { transformerNotationDiff } from "@shikijs/transformers";
+import path from "path";
+import { readFileSync } from "fs";
 
 const withNextra = nextra({
   search: {
@@ -10,7 +11,9 @@ const withNextra = nextra({
   },
   mdxOptions: {
     rehypePrettyCodeOptions: {
-      theme,
+      theme: JSON.parse(
+        readFileSync(path.join(process.cwd(), "theme.json"), "utf-8"),
+      ),
       transformers: [transformerNotationDiff()],
     },
   },
