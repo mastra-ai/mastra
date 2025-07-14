@@ -125,7 +125,7 @@ export const ThemeSwitcher = () => {
       onClick={cycleTheme}
       size="sm"
       variant="ghost"
-      className="w-fit hidden lg:block text-icons-3 hover:text-black  dark:hover:text-white transition-colors ease-linear"
+      className="w-fit hidden hover:bg-[var(--light-color-surface-3)] hover:dark:bg-[#121212] lg:block text-icons-3 hover:text-black  dark:hover:text-white transition-colors ease-linear"
       aria-label={getAriaLabel()}
     >
       {getIcon()}

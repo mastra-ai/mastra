@@ -45,7 +45,7 @@
     "lucide-react": "^0.522.0",
     "next-themes": "^0.4.6",
     "pnpm": "^10.12.4",
-    "posthog-js": "^1.255.1",
+    "posthog-js": "^1.257.0",
     "prism-react-renderer": "^2.4.1",
     "react": "^19.1.0",
     "react-code-block": "1.1.3",
