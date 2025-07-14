@@ -8,9 +8,9 @@ import type { StepFlowEntry } from '.';
 /**
  * Represents an execution graph for a workflow
  */
-export interface ExecutionGraph {
+export interface ExecutionGraph<TEngineType = any> {
   id: string;
-  steps: StepFlowEntry[];
+  steps: StepFlowEntry<TEngineType>[];
   // Additional properties will be added in future implementations
 }
 /**
@@ -45,6 +45,7 @@ export abstract class ExecutionEngine extends MastraBase {
       stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
+      snapshotRuntimeContext?: Record<string, any>;
     };
     emitter: Emitter;
     runtimeContext: RuntimeContext;

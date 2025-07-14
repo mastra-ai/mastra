@@ -11,7 +11,7 @@
     "@ai-sdk/react": "^1.2.12",
     "@mastra/client-js": "workspace:*",
     "@mastra/mcp": "workspace:*",
-    "dotenv": "^16.5.0",
+    "dotenv": "^16.6.1",
     "zod": "^3.25.67"
   },
   "devDependencies": {
@@ -21,7 +21,7 @@
     "get-port": "^7.1.0",
     "mastra": "workspace:*",
     "typescript": "^5.8.2",
-    "vitest": "^3.2.3"
+    "vitest": "^3.2.4"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.0-alpha.0"

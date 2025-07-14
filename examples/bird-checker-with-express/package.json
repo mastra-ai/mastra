@@ -15,7 +15,7 @@
     "@types/express": "^4.0.0",
     "@types/node": "^20.17.57",
     "concurrently": "^9.1.2",
-    "dotenv": "^16.5.0",
+    "dotenv": "^17.0.0",
     "express": "^4.21.2",
     "nodemon": "^3.1.9",
     "ts-node": "^10.9.2",

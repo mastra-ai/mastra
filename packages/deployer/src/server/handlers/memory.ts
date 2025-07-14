@@ -8,6 +8,8 @@ import {
   updateThreadHandler as getOriginalUpdateThreadHandler,
   deleteThreadHandler as getOriginalDeleteThreadHandler,
   getMessagesHandler as getOriginalGetMessagesHandler,
+  getWorkingMemoryHandler as getOriginalGetWorkingMemoryHandler,
+  updateWorkingMemoryHandler as getOriginalUpdateWorkingMemoryHandler,
 } from '@mastra/server/handlers/memory';
 import type { Context } from 'hono';
 
@@ -181,5 +183,49 @@ export async function getMessagesHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error getting messages');
+  }
+}
+
+export async function updateWorkingMemoryHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.query('agentId');
+    const threadId = c.req.param('threadId');
+    const networkId = c.req.query('networkId');
+    const body = await c.req.json();
+
+    const result = await getOriginalUpdateWorkingMemoryHandler({
+      mastra,
+      agentId,
+      threadId,
+      body,
+      networkId,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error updating working memory');
+  }
+}
+
+export async function getWorkingMemoryHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.query('agentId');
+    const threadId = c.req.param('threadId');
+    const resourceId = c.req.query('resourceId');
+    const networkId = c.req.query('networkId');
+
+    const result = await getOriginalGetWorkingMemoryHandler({
+      mastra,
+      agentId,
+      threadId,
+      resourceId,
+      networkId,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error getting working memory');
   }
 }

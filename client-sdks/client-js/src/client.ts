@@ -13,6 +13,8 @@ import {
   MCPTool,
   LegacyWorkflow,
 } from './resources';
+import { NetworkMemoryThread } from './resources/network-memory-thread';
+import { VNextNetwork } from './resources/vNextNetwork';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -38,8 +40,6 @@ import type {
   CreateNetworkMemoryThreadParams,
   SaveNetworkMessageToMemoryParams,
 } from './types';
-import { VNextNetwork } from './resources/vNextNetwork';
-import { NetworkMemoryThread } from './resources/network-memory-thread';
 
 export class MastraClient extends BaseResource {
   constructor(options: ClientOptions) {
@@ -476,5 +476,51 @@ export class MastraClient extends BaseResource {
    */
   public getA2A(agentId: string) {
     return new A2A(this.options, agentId);
+  }
+
+  /**
+   * Retrieves the working memory for a specific thread (optionally resource-scoped).
+   * @param agentId - ID of the agent.
+   * @param threadId - ID of the thread.
+   * @param resourceId - Optional ID of the resource.
+   * @returns Working memory for the specified thread or resource.
+   */
+  public getWorkingMemory({
+    agentId,
+    threadId,
+    resourceId,
+  }: {
+    agentId: string;
+    threadId: string;
+    resourceId?: string;
+  }) {
+    return this.request(`/api/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}`);
+  }
+
+  /**
+   * Updates the working memory for a specific thread (optionally resource-scoped).
+   * @param agentId - ID of the agent.
+   * @param threadId - ID of the thread.
+   * @param workingMemory - The new working memory content.
+   * @param resourceId - Optional ID of the resource.
+   */
+  public updateWorkingMemory({
+    agentId,
+    threadId,
+    workingMemory,
+    resourceId,
+  }: {
+    agentId: string;
+    threadId: string;
+    workingMemory: string;
+    resourceId?: string;
+  }) {
+    return this.request(`/api/memory/threads/${threadId}/working-memory?agentId=${agentId}`, {
+      method: 'POST',
+      body: {
+        workingMemory,
+        resourceId,
+      },
+    });
   }
 }

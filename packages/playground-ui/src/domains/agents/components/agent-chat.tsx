@@ -5,16 +5,8 @@ import { ChatProps } from '@/types';
 import { useAgentSettings } from '../context/agent-context';
 import { usePlaygroundStore } from '@/store/playground-store';
 
-export const AgentChat = ({
-  agentId,
-  agentName,
-  threadId,
-  initialMessages,
-  memory,
-  refreshThreadList,
-  showFileSupport,
-}: ChatProps) => {
-  const { modelSettings, chatWithGenerate } = useAgentSettings();
+export const AgentChat = ({ agentId, agentName, threadId, initialMessages, memory, refreshThreadList }: ChatProps) => {
+  const { settings } = useAgentSettings();
   const { runtimeContext } = usePlaygroundStore();
   return (
     <MastraRuntimeProvider
@@ -24,11 +16,10 @@ export const AgentChat = ({
       initialMessages={initialMessages}
       memory={memory}
       refreshThreadList={refreshThreadList}
-      modelSettings={modelSettings}
-      chatWithGenerate={chatWithGenerate}
+      settings={settings}
       runtimeContext={runtimeContext}
     >
-      <Thread agentName={agentName ?? ''} hasMemory={memory} showFileSupport={showFileSupport} />
+      <Thread agentName={agentName ?? ''} hasMemory={memory} />
     </MastraRuntimeProvider>
   );
 };

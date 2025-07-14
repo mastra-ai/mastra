@@ -381,7 +381,10 @@ export const useStreamWorkflow = () => {
               const { output: valueOutput, ...rest } = value.payload;
 
               const output =
-                valueOutput && Object.keys(valueOutput).length > 0
+                valueOutput &&
+                typeof valueOutput === 'object' &&
+                !Array.isArray(valueOutput) &&
+                Object.keys(valueOutput).length > 0
                   ? Object.entries(valueOutput).reduce(
                       (_acc, [_key, _value]) => {
                         const val = _value as { type: string; data: unknown };
@@ -594,4 +597,20 @@ export const useCancelWorkflowRun = () => {
   });
 
   return cancelWorkflowRun;
+};
+
+export const useSendWorkflowRunEvent = (workflowId: string) => {
+  const sendWorkflowRunEvent = useMutation({
+    mutationFn: async ({ runId, event, data }: { runId: string; event: string; data: unknown }) => {
+      try {
+        const response = await client.getWorkflow(workflowId).sendRunEvent({ runId, event, data });
+        return response;
+      } catch (error) {
+        console.error('Error sending workflow run event:', error);
+        throw error;
+      }
+    },
+  });
+
+  return sendWorkflowRunEvent;
 };

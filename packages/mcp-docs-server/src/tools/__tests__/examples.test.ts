@@ -1,4 +1,6 @@
+import fs from 'node:fs/promises';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { fromPackageRoot } from '../../utils.js';
 import { callTool, mcp } from './test-setup';
 
 describe('examplesTool', () => {
@@ -152,6 +154,41 @@ describe('examplesTool', () => {
       });
       // Should not throw, and should suggest or return content related to 'agent'
       expect(result.toLowerCase()).toMatch(/agent/);
+    });
+
+    it('should have all expected examples in the .docs/organized/code-examples directory', async () => {
+      // Get the path to the examples directory
+      const docsExamplesDir = fromPackageRoot('.docs/organized/code-examples');
+
+      // Get all .md files from the docs examples directory
+      const docsExampleFiles = await fs.readdir(docsExamplesDir);
+      const docsExamples = docsExampleFiles
+        .filter(file => file.endsWith('.md'))
+        .map(file => file.replace('.md', ''))
+        .sort();
+
+      // Check that each source example has a corresponding docs file
+      // (unless it was skipped due to size limits)
+      const skippedExamples = ['dane', 'travel-app', 'yc-directory']; // Known large examples that are skipped
+
+      for (const skipped of skippedExamples) {
+        expect(docsExamples).not.toContain(skipped);
+      }
+
+      // Also verify that we have at least some expected examples
+      const expectedExamples = [
+        'quick-start',
+        'agent',
+        'agent-network',
+        'bird-checker-with-express',
+        'bird-checker-with-nextjs',
+        'memory-todo-agent',
+        'weather-agent',
+      ];
+
+      for (const example of expectedExamples) {
+        expect(docsExamples).toContain(example);
+      }
     });
   });
 });
