@@ -118,7 +118,7 @@ describe('Memory with Processors', () => {
       processors: [new TokenLimiter(3000)], // High limit that should exceed total tokens
     });
 
-    const listed = new MessageList({ threadId: thread.id, resourceId }).add(allMessagesResult, 'memory').get.all.v2();
+    const listed = new MessageList({ threadId: thread.id, resourceId }).add(allMessagesResult, 'response').get.all.v2();
 
     // We should get all 20 messages
     expect(listed.length).toBe(20);
