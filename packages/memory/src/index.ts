@@ -7,8 +7,11 @@ import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemory
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
 import type { CoreMessage, TextPart, UIMessage } from 'ai';
+import type { JSONSchema7 } from 'json-schema';
 
 import xxhash from 'xxhash-wasm';
+import { ZodObject } from 'zod';
+import type { ZodTypeAny } from 'zod';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { updateWorkingMemoryTool } from './tools/working-memory';
 
@@ -17,6 +20,8 @@ const CHARS_PER_TOKEN = 4;
 
 const DEFAULT_MESSAGE_RANGE = { before: 2, after: 2 } as const;
 const DEFAULT_TOP_K = 2;
+
+const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -641,6 +646,13 @@ export class Memory extends MastraMemory {
     return workingMemoryData;
   }
 
+  /**
+   * Gets the working memory template for the current memory configuration.
+   * Supports both ZodObject and JSONSchema7 schemas.
+   *
+   * @param memoryConfig - The memory configuration containing the working memory settings
+   * @returns The working memory template with format and content, or null if working memory is disabled
+   */
   public async getWorkingMemoryTemplate({
     memoryConfig,
   }: {
@@ -656,9 +668,17 @@ export class Memory extends MastraMemory {
     if (config.workingMemory?.schema) {
       try {
         const schema = config.workingMemory.schema;
-        const convertedSchema = zodToJsonSchema(schema, {
-          $refStrategy: 'none',
-        });
+        let convertedSchema: JSONSchema7;
+
+        if (isZodObject(schema as ZodTypeAny)) {
+          // Convert ZodObject to JSON Schema
+          convertedSchema = zodToJsonSchema(schema as ZodTypeAny, {
+            $refStrategy: 'none',
+          }) as JSONSchema7;
+        } else {
+          // Already a JSON Schema
+          convertedSchema = schema as JSONSchema7;
+        }
 
         return { format: 'json', content: JSON.stringify(convertedSchema) };
       } catch (error) {
