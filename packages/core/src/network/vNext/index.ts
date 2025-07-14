@@ -239,6 +239,8 @@ export class NewAgentNetwork extends MastraBase {
       instructions,
       model: this.#model,
       memory: memoryToUse,
+      // @ts-ignore
+      _agentNetworkAppend: true,
     });
   }
 

@@ -60,16 +60,20 @@ export class MessageList {
   private userContextMessages = new Set<MastraMessageV2>();
 
   private generateMessageId?: IDGenerator;
+  private _agentNetworkAppend = false;
 
   constructor({
     threadId,
     resourceId,
     generateMessageId,
+    // @ts-ignore Flag for agent network messages
+    _agentNetworkAppend,
   }: { threadId?: string; resourceId?: string; generateMessageId?: IDGenerator } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
       this.generateMessageId = generateMessageId;
     }
+    this._agentNetworkAppend = _agentNetworkAppend || false;
   }
 
   public add(messages: string | string[] | MessageInput | MessageInput[], messageSource: MessageSource) {
@@ -379,7 +383,11 @@ export class MessageList {
       latestMessage.threadId === messageV2.threadId &&
       // If the message is from memory, don't append to the last assistant message
       messageSource !== 'memory';
-    if (shouldAppendToLastAssistantMessage) {
+    // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
+    const appendNetworkMessage =
+      (this._agentNetworkAppend && latestMessage && !this.memoryMessages.has(latestMessage)) ||
+      !this._agentNetworkAppend;
+    if (shouldAppendToLastAssistantMessage && appendNetworkMessage) {
       latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
 
       for (const [index, part] of messageV2.content.parts.entries()) {
