@@ -57,11 +57,7 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
         "The working memory string to find. Will be replaced with the newMemory string. If this is omitted or doesn't exist, the newMemory string will be appended to the end of your working memory. Replacing single lines at a time is encouraged for greater accuracy. If updateReason is not 'append-new-memory', this search string must be provided or the tool call will be rejected.",
       ),
     updateReason: z
-      .enum([
-        'append-new-memory',
-        'replace-search-string-with-new-memory',
-        'replace-irrelevant-search-string-with-new-memory',
-      ])
+      .enum(['append-new-memory', 'clarify-existing-memory', 'replace-irrelevant-memory'])
       .optional()
       .nullable()
       .describe(
@@ -90,7 +86,7 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
     if (
       context.searchString &&
       config.workingMemory?.scope === `resource` &&
-      context.updateReason === `replace-irrelevant-search-string-with-new-memory`
+      context.updateReason === `replace-irrelevant-memory`
     ) {
       // don't allow replacements due to something not being relevant to the current conversation
       // if there's no searchString, then we will append.
