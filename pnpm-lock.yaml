@@ -1944,6 +1944,9 @@ importers:
       js-tiktoken:
         specifier: ^1.0.20
         version: 1.0.20
+      json-schema:
+        specifier: ^0.4.0
+        version: 0.4.0
       pg:
         specifier: ^8.16.3
         version: 8.16.3
@@ -1978,6 +1981,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.2)
+      '@types/json-schema':
+        specifier: ^7.0.15
+        version: 7.0.15
       '@types/node':
         specifier: ^20.17.57
         version: 20.19.2
@@ -2029,6 +2035,9 @@ importers:
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
+      json-schema:
+        specifier: ^0.4.0
+        version: 0.4.0
       zod:
         specifier: ^3.24.3
         version: 3.25.67
@@ -2042,6 +2051,9 @@ importers:
       '@testing-library/react':
         specifier: ^16.2.0
         version: 16.3.0(@testing-library/dom@10.4.0)(@types/react-dom@19.1.6(@types/react@19.1.8))(@types/react@19.1.8)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@types/json-schema':
+        specifier: ^7.0.15
+        version: 7.0.15
       '@types/node':
         specifier: ^20.17.57
         version: 20.19.2
