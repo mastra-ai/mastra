@@ -253,32 +253,7 @@ export class Memory extends MastraMemory {
     return this.storage.getThreadsByResourceId({ resourceId });
   }
 
-  async saveThread({
-    thread,
-    memoryConfig,
-  }: {
-    thread: StorageThreadType;
-    memoryConfig?: MemoryConfig;
-  }): Promise<StorageThreadType> {
-    const config = this.getMergedThreadConfig(memoryConfig || {});
-
-    if (config.workingMemory?.enabled) {
-      const scope = config.workingMemory.scope || 'thread';
-      if (scope === 'resource' && thread.resourceId) {
-        // For resource scope, initialize working memory in resource table
-        const existingResource = await this.storage.getResourceById({ resourceId: thread.resourceId });
-        if (!existingResource?.workingMemory) {
-          await this.storage.updateResource({
-            resourceId: thread.resourceId,
-          });
-        }
-      } else if (scope === 'thread' && !thread?.metadata?.workingMemory) {
-        return this.storage.saveThread({
-          thread,
-        });
-      }
-    }
-
+  async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
     return this.storage.saveThread({ thread });
   }
 
