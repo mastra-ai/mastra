@@ -336,6 +336,15 @@ export class NewAgentNetwork extends MastraBase {
     const run = mainWorkflow.createRun();
 
     const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
+    //check if threadId is in memory, if not, create new thread with the id
+    let thread = await memory?.getThreadById({ threadId: threadId || run.runId });
+    if (!thread) {
+      thread = await memory?.createThread({
+        threadId: threadId || run.runId,
+        title: '',
+        resourceId: resourceId || this.name,
+      });
+    }
     await memory?.saveMessages({
       messages: [
         {
@@ -344,8 +353,8 @@ export class NewAgentNetwork extends MastraBase {
           role: 'user',
           content: { parts: [{ type: 'text', text: message }], format: 2 },
           createdAt: new Date(),
-          threadId: threadId || run.runId,
-          resourceId: resourceId || this.name,
+          threadId: thread?.id,
+          resourceId: thread?.resourceId,
         },
       ] as MastraMessageV2[],
       format: 'v2',
@@ -357,8 +366,8 @@ export class NewAgentNetwork extends MastraBase {
         resourceId: '',
         resourceType: 'none',
         iteration: 0,
-        threadResourceId: resourceId,
-        threadId,
+        threadResourceId: thread?.resourceId,
+        threadId: thread?.id,
         isOneOff: false,
         verboseIntrospection: true,
       },
@@ -947,6 +956,14 @@ export class NewAgentNetwork extends MastraBase {
     const run = networkWorkflow.createRun();
 
     const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
+    let thread = await memory?.getThreadById({ threadId: threadId || run.runId });
+    if (!thread) {
+      thread = await memory?.createThread({
+        threadId: threadId || run.runId,
+        title: '',
+        resourceId: resourceId || this.name,
+      });
+    }
     await memory?.saveMessages({
       messages: [
         {
@@ -955,8 +972,8 @@ export class NewAgentNetwork extends MastraBase {
           role: 'user',
           content: { parts: [{ type: 'text', text: message }], format: 2 },
           createdAt: new Date(),
-          threadId: threadId || run.runId,
-          resourceId: resourceId || this.name,
+          threadId: thread?.id,
+          resourceId: thread?.resourceId,
         },
       ] as MastraMessageV2[],
       format: 'v2',
@@ -968,8 +985,8 @@ export class NewAgentNetwork extends MastraBase {
         resourceId: '',
         resourceType: 'none',
         iteration: 0,
-        threadId,
-        threadResourceId: resourceId,
+        threadId: thread?.id,
+        threadResourceId: thread?.resourceId,
         isOneOff: true,
         verboseIntrospection: true,
       },
@@ -1003,6 +1020,16 @@ export class NewAgentNetwork extends MastraBase {
     const run = networkWorkflow.createRun();
 
     const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
+    //check if threadId is in memory, if not, create new thread with the id
+    let thread = await memory?.getThreadById({ threadId: threadId || run.runId });
+    if (!thread) {
+      thread = await memory?.createThread({
+        threadId: threadId || run.runId,
+        title: '',
+        resourceId: resourceId || this.name,
+      });
+    }
+
     await memory?.saveMessages({
       messages: [
         {
@@ -1011,8 +1038,8 @@ export class NewAgentNetwork extends MastraBase {
           role: 'user',
           content: { parts: [{ type: 'text', text: message }], format: 2 },
           createdAt: new Date(),
-          threadId: threadId || run.runId,
-          resourceId: resourceId || this.name,
+          threadId: thread?.id,
+          resourceId: thread?.resourceId,
         },
       ] as MastraMessageV2[],
       format: 'v2',
@@ -1024,8 +1051,8 @@ export class NewAgentNetwork extends MastraBase {
         resourceId: '',
         resourceType: 'none',
         iteration: 0,
-        threadResourceId: resourceId,
-        threadId,
+        threadResourceId: thread?.resourceId,
+        threadId: thread?.id,
         isOneOff: true,
         verboseIntrospection: true,
       },
