@@ -1249,15 +1249,39 @@ export class LibSQLStore extends MastraStorage {
 
   async getScoresByScorerId({
     scorerId,
+    entityId,
+    entityType,
     pagination,
   }: {
     scorerId: string;
+    entityId?: string;
+    entityType?: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const conditions: string[] = [];
+      const queryParams: InValue[] = [];
+
+      if (scorerId) {
+        conditions.push(`scorerId = ?`);
+        queryParams.push(scorerId);
+      }
+
+      if (entityId) {
+        conditions.push(`entityId = ?`);
+        queryParams.push(entityId);
+      }
+
+      if (entityType) {
+        conditions.push(`entityType = ?`);
+        queryParams.push(entityType);
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
       const result = await this.client.execute({
-        sql: `SELECT * FROM ${TABLE_SCORERS} WHERE scorerId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-        args: [scorerId, pagination.perPage + 1, pagination.page * pagination.perPage],
+        sql: `SELECT * FROM ${TABLE_SCORERS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        args: [...queryParams, pagination.perPage + 1, pagination.page * pagination.perPage],
       });
 
       return {
