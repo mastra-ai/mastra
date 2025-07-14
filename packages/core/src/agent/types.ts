@@ -35,7 +35,7 @@ export type ToolsetsInput = Record<string, ToolsInput>;
 
 export type MastraLanguageModel = LanguageModelV1;
 
-export type DynamicArgument<T> = T | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => T | Promise<T>);
+export type DynamicArgument<T> = T | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => Promise<T> | T);
 
 export interface AgentConfig<
   TAgentId extends string = string,
