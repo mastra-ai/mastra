@@ -568,7 +568,7 @@ describe('agent', () => {
     };
 
     // Add messages. addOne will merge toolCallTwo and toolResultTwo.
-    // toolResultOne is orphaned. toolCallThree is orphaned.
+    // toolCallThree is orphaned.
     messageList.add(toolResultOne_Core, 'memory');
     messageList.add(toolCallTwo_Core, 'memory');
     messageList.add(toolResultTwo_Core, 'memory');
@@ -576,27 +576,16 @@ describe('agent', () => {
 
     const finalCoreMessages = messageList.get.all.core();
 
-    // Expected: toolResultOne (orphaned tool result) should be gone.
-    // toolCallThree (orphaned assistant call) should be gone.
+    // Expected: toolCallThree (orphaned assistant call) should be gone.
+    // toolResultOne assumes the tool call was completed, so should be present
     // toolCallTwo and toolResultTwo should be present and correctly paired by convertToCoreMessages.
 
-    // Check that tool-1 (orphaned result) is not present
+    // Check that tool-1 is present, as a result assumes the tool call was completed
     expect(
       finalCoreMessages.find(
         m => m.role === 'tool' && (m.content as any[]).some(p => p.type === 'tool-result' && p.toolCallId === 'tool-1'),
       ),
-    ).toBeUndefined();
-    // Also check no lingering assistant message for tool-1 if it was an assistant message that only contained an orphaned result
-    expect(
-      finalCoreMessages.find(
-        m =>
-          m.role === 'assistant' &&
-          (m.content as any[]).some(p => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === 'tool-1') &&
-          (m.content as any[]).every(
-            p => p.type === 'tool-invocation' || p.type === 'step-start' || p.type === 'step-end',
-          ),
-      ),
-    ).toBeUndefined();
+    ).toBeDefined();
 
     // Check that tool-2 call and result are present
     const assistantCallForTool2 = finalCoreMessages.find(
@@ -628,7 +617,7 @@ describe('agent', () => {
       ),
     ).toBeUndefined();
 
-    expect(finalCoreMessages.length).toBe(2); // Assistant call for tool-2, Tool result for tool-2
+    expect(finalCoreMessages.length).toBe(4); // Assistant call for tool-1, Tool result for tool-1, Assistant call for tool-2, Tool result for tool-2
   });
 
   it('should preserve empty assistant messages after tool use', () => {

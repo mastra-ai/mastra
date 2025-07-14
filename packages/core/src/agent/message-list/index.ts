@@ -349,25 +349,6 @@ export class MessageList {
 
     const latestMessage = this.messages.at(-1);
 
-    // const singleToolResult =
-    //   messageV2.role === `assistant` &&
-    //   messageV2.content.parts.length === 1 &&
-    //   messageV2.content.parts[0]?.type === `tool-invocation` &&
-    //   messageV2.content.parts[0].toolInvocation.state === `result` &&
-    //   messageV2.content.parts[0];
-
-    // if (
-    //   singleToolResult &&
-    //   (latestMessage?.role !== `assistant` ||
-    //     !latestMessage.content.parts.some(
-    //       p =>
-    //         p.type === `tool-invocation` && p.toolInvocation.toolCallId === singleToolResult.toolInvocation.toolCallId,
-    //     ))
-    // ) {
-    //   // remove any tool results that aren't updating a tool call
-    //   return;
-    // }
-
     if (messageSource === `memory`) {
       for (const existingMessage of this.messages) {
         // don't double store any messages

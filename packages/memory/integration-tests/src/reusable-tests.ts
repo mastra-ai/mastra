@@ -2,13 +2,13 @@ import { randomUUID } from 'crypto';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
 import type { MastraMessageV1, SharedMemoryConfig } from '@mastra/core';
+import { MessageList } from '@mastra/core/agent';
 import type { LibSQLConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';
 import type { PostgresConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
 import type { ToolResultPart, TextPart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { MessageList } from '@mastra/core/agent';
 
 const resourceId = 'resource';
 const NUMBER_OF_WORKERS = 2;
