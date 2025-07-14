@@ -148,6 +148,34 @@ program
       // Check if dataset exists and download if needed
       await ensureDatasetExists(options.dataset);
 
+      // Show warning and ask for confirmation
+      console.log(chalk.yellow('\n⚠️  WARNING'));
+      console.log(chalk.yellow('━'.repeat(50)));
+      console.log(chalk.bold('\nPreparing this data can be very expensive!\n'));
+      console.log('This process will:');
+      console.log('  • Process many conversations through AI models');
+      console.log('  • Generate embeddings for semantic recall');
+      console.log('  • Potentially use significant API credits\n');
+      console.log(chalk.gray('Memory configs like "working-memory" and "combined" are especially costly.\n'));
+      
+      const readline = await import('readline');
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+
+      const answer = await new Promise<string>((resolve) => {
+        rl.question(chalk.bold('Are you sure you want to continue? (y/N): '), resolve);
+      });
+      rl.close();
+
+      if (answer.toLowerCase() !== 'y' && answer.toLowerCase() !== 'yes') {
+        console.log(chalk.gray('\nCancelled by user.'));
+        process.exit(0);
+      }
+
+      console.log(); // Add spacing before continuing
+
       // Run prepare command
       const prepareCommand = new PrepareCommand();
       await prepareCommand.run({
