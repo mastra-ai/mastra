@@ -391,20 +391,40 @@ export abstract class MastraMemory extends MastraBase {
   /**
    * Retrieves working memory for a specific thread
    * @param threadId - The unique identifier of the thread
-   * @param format - Optional format for the returned data ('json' or 'markdown')
+   * @param resourceId - The unique identifier of the resource
+   * @param memoryConfig - Optional memory configuration
    * @returns Promise resolving to working memory data or null if not found
    */
   abstract getWorkingMemory({
     threadId,
+    resourceId,
+    memoryConfig,
   }: {
     threadId: string;
-    format?: 'json' | 'markdown';
-  }): Promise<Record<string, any> | string | null>;
+    resourceId?: string;
+    memoryConfig?: MemoryConfig;
+  }): Promise<string | null>;
 
   /**
    * Retrieves working memory template for a specific thread
-   * @param threadId - The unique identifier of the thread
+   * @param memoryConfig - Optional memory configuration
    * @returns Promise resolving to working memory template or null if not found
    */
-  abstract getWorkingMemoryTemplate(): Promise<WorkingMemoryTemplate | null>;
+  abstract getWorkingMemoryTemplate({
+    memoryConfig,
+  }?: {
+    memoryConfig?: MemoryConfig;
+  }): Promise<WorkingMemoryTemplate | null>;
+
+  abstract updateWorkingMemory({
+    threadId,
+    resourceId,
+    workingMemory,
+    memoryConfig,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string;
+    memoryConfig?: MemoryConfig;
+  }): Promise<void>;
 }

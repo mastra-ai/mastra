@@ -15,6 +15,7 @@ import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { processClientTools } from '../utils/process-client-tools';
+import { v4 as uuid } from '@lukeed/uuid';
 
 import type {
   GenerateParams,
@@ -228,7 +229,7 @@ export class Agent extends BaseResource {
     const message: UIMessage = replaceLastMessage
       ? structuredClone(lastMessage)
       : {
-          id: crypto.randomUUID(),
+          id: uuid(),
           createdAt: getCurrentDate(),
           role: 'assistant',
           content: '',
@@ -288,7 +289,7 @@ export class Agent extends BaseResource {
         // changes. This is why we need to add a revision id to ensure that the message
         // is updated with SWR (without it, the changes get stuck in SWR and are not
         // forwarded to rendering):
-        revisionId: crypto.randomUUID(),
+        revisionId: uuid(),
       } as UIMessage;
 
       update({

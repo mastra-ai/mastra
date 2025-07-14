@@ -4,6 +4,7 @@ import { CheckIcon, CopyIcon } from 'lucide-react';
 import { MarkdownText } from './markdown-text';
 import { TooltipIconButton } from '../tooltip-icon-button';
 import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
+import { Reasoning } from './reasoning';
 
 export interface AssistantMessageProps {
   ToolFallback?: ToolCallContentPartComponent;
@@ -11,7 +12,8 @@ export interface AssistantMessageProps {
 
 export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom }: AssistantMessageProps) => {
   const data = useMessage();
-  const isSolelyToolCall = data.content.length === 1 && data.content[0].type === 'tool-call';
+
+  const isToolCallAndOrReasoning = data.content.every(({ type }) => type === 'tool-call' || type === 'reasoning');
 
   return (
     <MessagePrimitive.Root className="max-w-full">
@@ -20,11 +22,16 @@ export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom }: Assistant
           components={{
             Text: MarkdownText,
             tools: { Fallback: ToolFallbackCustom || ToolFallback },
+            Reasoning: Reasoning,
           }}
         />
       </div>
 
-      <div className="h-6 pt-1">{!isSolelyToolCall && <AssistantActionBar />}</div>
+      {!isToolCallAndOrReasoning && (
+        <div className="h-6 pt-1">
+          <AssistantActionBar />
+        </div>
+      )}
     </MessagePrimitive.Root>
   );
 };

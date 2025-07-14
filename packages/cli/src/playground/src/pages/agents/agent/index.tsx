@@ -1,4 +1,9 @@
-import { AgentChat as Chat, MainContentContent, AgentSettingsProvider } from '@mastra/playground-ui';
+import {
+  AgentChat as Chat,
+  MainContentContent,
+  AgentSettingsProvider,
+  WorkingMemoryProvider,
+} from '@mastra/playground-ui';
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
@@ -41,24 +46,26 @@ function Agent() {
 
   return (
     <AgentSettingsProvider agentId={agentId!}>
-      <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
-        {withSidebar && (
-          <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
-        )}
+      <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
+        <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
+          {withSidebar && (
+            <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
+          )}
 
-        <div className="grid overflow-y-auto relative bg-surface1 py-4">
-          <Chat
-            agentId={agentId!}
-            agentName={agent?.name}
-            threadId={threadId!}
-            initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
-            memory={memory?.result}
-            refreshThreadList={refreshThreads}
-          />
-        </div>
+          <div className="grid overflow-y-auto relative bg-surface1 py-4">
+            <Chat
+              agentId={agentId!}
+              agentName={agent?.name}
+              threadId={threadId!}
+              initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
+              memory={memory?.result}
+              refreshThreadList={refreshThreads}
+            />
+          </div>
 
-        <AgentInformation agentId={agentId!} />
-      </MainContentContent>
+          <AgentInformation agentId={agentId!} />
+        </MainContentContent>
+      </WorkingMemoryProvider>
     </AgentSettingsProvider>
   );
 }

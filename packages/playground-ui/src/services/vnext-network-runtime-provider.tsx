@@ -15,6 +15,7 @@ import { useVNextNetworkChat } from '@/services/vnext-network-chat-provider';
 import { useMessages } from './vnext-message-provider';
 import { formatJSON } from '@/lib/formatting';
 import { NetworkContext } from '@/domains/networks';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -31,6 +32,7 @@ export function VNextMastraNetworkRuntimeProvider({
   threadId,
   refreshThreadList,
   initialMessages,
+  runtimeContext,
 }: Readonly<{
   children: ReactNode;
 }> &
@@ -44,6 +46,11 @@ export function VNextMastraNetworkRuntimeProvider({
   const { chatWithLoop, maxIterations } = useContext(NetworkContext);
   const id = runIdRef.current;
   const currentState = id ? state[id] : undefined;
+
+  const runtimeContextInstance = new RuntimeContext();
+  Object.entries(runtimeContext ?? {}).forEach(([key, value]) => {
+    runtimeContextInstance.set(key, value);
+  });
 
   useEffect(() => {
     if (!currentState) return;
@@ -403,6 +410,7 @@ export function VNextMastraNetworkRuntimeProvider({
             threadId,
             resourceId: networkId,
             maxIterations,
+            runtimeContext: runtimeContextInstance,
           },
           async (record: any) => {
             if (
@@ -519,6 +527,7 @@ export function VNextMastraNetworkRuntimeProvider({
             message: input,
             threadId,
             resourceId: networkId,
+            runtimeContext: runtimeContextInstance,
           },
           (record: any) => {
             if (runIdRef.current) {
