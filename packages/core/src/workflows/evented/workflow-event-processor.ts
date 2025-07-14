@@ -266,6 +266,205 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
+  protected async processWorkflowParallel(
+    {
+      workflowId,
+      runId,
+      executionPath,
+      stepResults,
+      activeSteps,
+      resume,
+      prevResult,
+      resumeData,
+      parentWorkflow,
+    }: ProcessorArgs,
+    step: Extract<StepFlowEntry, { type: 'parallel' }>,
+  ) {
+    for (let i = 0; i < step.steps.length; i++) {
+      activeSteps.push(executionPath.concat([i]));
+    }
+
+    await Promise.all(
+      step.steps.map(async (_step, idx) => {
+        return this.pubsub.publish('workflows', {
+          type: 'workflow.step.run',
+          data: {
+            workflowId,
+            runId,
+            executionPath: executionPath.concat([idx]),
+            resume,
+            stepResults,
+            prevResult,
+            resumeData,
+            parentWorkflow,
+            activeSteps,
+          },
+        });
+      }),
+    );
+  }
+
+  protected async processWorkflowConditional(
+    {
+      workflowId,
+      runId,
+      executionPath,
+      stepResults,
+      activeSteps,
+      resume,
+      prevResult,
+      resumeData,
+      parentWorkflow,
+    }: ProcessorArgs,
+    step: Extract<StepFlowEntry, { type: 'conditional' }>,
+  ) {
+    console.log('conditional found');
+    const idxs = await this.stepExecutor.evaluateConditions({
+      step,
+      runId,
+      stepResults,
+      emitter: new EventEmitter() as any, // TODO
+      runtimeContext: new RuntimeContext(), // TODO
+      input: prevResult?.status === 'success' ? prevResult.output : undefined,
+      resumeData,
+    });
+    console.log('conditional idxs', idxs);
+
+    const truthyIdxs: Record<number, boolean> = {};
+    for (let i = 0; i < idxs.length; i++) {
+      activeSteps.push(executionPath.concat([idxs[i]!]));
+      truthyIdxs[idxs[i]!] = true;
+    }
+
+    await Promise.all(
+      step.steps.map(async (_step, idx) => {
+        if (truthyIdxs[idx]) {
+          console.log('suhh: running conditional step', executionPath.concat([idx]));
+          return this.pubsub.publish('workflows', {
+            type: 'workflow.step.run',
+            data: {
+              workflowId,
+              runId,
+              executionPath: executionPath.concat([idx]),
+              resume,
+              stepResults,
+              prevResult,
+              resumeData,
+              parentWorkflow,
+              activeSteps,
+            },
+          });
+        } else {
+          console.log('suhh: skipping conditional step', executionPath.concat([idx]));
+          return this.pubsub.publish('workflows', {
+            type: 'workflow.step.end',
+            data: {
+              workflowId,
+              runId,
+              executionPath: executionPath.concat([idx]),
+              resume,
+              stepResults,
+              prevResult: { status: 'skipped' },
+              resumeData,
+              parentWorkflow,
+              activeSteps,
+            },
+          });
+        }
+      }),
+    );
+  }
+
+  protected async processWorkflowSleep(
+    {
+      workflowId,
+      runId,
+      executionPath,
+      stepResults,
+      activeSteps,
+      resume,
+      prevResult,
+      resumeData,
+      parentWorkflow,
+    }: ProcessorArgs,
+    step: Extract<StepFlowEntry, { type: 'sleep' }>,
+  ) {
+    const duration = await this.stepExecutor.resolveSleep({
+      step,
+      runId,
+      stepResults,
+      emitter: new EventEmitter() as any, // TODO
+      runtimeContext: new RuntimeContext(), // TODO
+      input: prevResult?.status === 'success' ? prevResult.output : undefined,
+      resumeData,
+    });
+
+    setTimeout(
+      async () => {
+        return this.pubsub.publish('workflows', {
+          type: 'workflow.step.run',
+          data: {
+            workflowId,
+            runId,
+            executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+            resume,
+            stepResults,
+            prevResult,
+            resumeData,
+            parentWorkflow,
+            activeSteps,
+          },
+        });
+      },
+      duration < 0 ? 0 : duration,
+    );
+  }
+
+  protected async processWorkflowSleepUntil(
+    {
+      workflowId,
+      runId,
+      executionPath,
+      stepResults,
+      activeSteps,
+      resume,
+      prevResult,
+      resumeData,
+      parentWorkflow,
+    }: ProcessorArgs,
+    step: Extract<StepFlowEntry, { type: 'sleepUntil' }>,
+  ) {
+    const duration = await this.stepExecutor.resolveSleepUntil({
+      step,
+      runId,
+      stepResults,
+      emitter: new EventEmitter() as any, // TODO
+      runtimeContext: new RuntimeContext(), // TODO
+      input: prevResult?.status === 'success' ? prevResult.output : undefined,
+      resumeData,
+    });
+
+    setTimeout(
+      async () => {
+        return this.pubsub.publish('workflows', {
+          type: 'workflow.step.run',
+          data: {
+            workflowId,
+            runId,
+            executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+            resume,
+            stepResults,
+            prevResult,
+            resumeData,
+            parentWorkflow,
+            activeSteps,
+          },
+        });
+      },
+      duration < 0 ? 0 : duration,
+    );
+  }
+
   protected async processWorkflowStepRun({
     workflow,
     workflowId,
@@ -329,151 +528,69 @@ export class WorkflowEventProcessor extends EventProcessor {
     if ((step.type === 'parallel' || step.type === 'conditional') && executionPath.length > 1) {
       step = step.steps[executionPath[1]!] as StepFlowEntry;
     } else if (step.type === 'parallel') {
-      for (let i = 0; i < step.steps.length; i++) {
-        activeSteps.push(executionPath.concat([i]));
-      }
-
-      await Promise.all(
-        step.steps.map(async (_step, idx) => {
-          return this.pubsub.publish('workflows', {
-            type: 'workflow.step.run',
-            data: {
-              workflowId,
-              runId,
-              executionPath: executionPath.concat([idx]),
-              resume,
-              stepResults,
-              prevResult,
-              resumeData,
-              parentWorkflow,
-              activeSteps,
-            },
-          });
-        }),
+      return this.processWorkflowParallel(
+        {
+          workflow,
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resume,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+        },
+        step,
       );
-      return;
     } else if (step?.type === 'conditional') {
-      console.log('conditional found');
-      const idxs = await this.stepExecutor.evaluateConditions({
+      return this.processWorkflowConditional(
+        {
+          workflow,
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resume,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+        },
         step,
-        runId,
-        stepResults,
-        emitter: new EventEmitter() as any, // TODO
-        runtimeContext: new RuntimeContext(), // TODO
-        input: prevResult?.status === 'success' ? prevResult.output : undefined,
-        resumeData,
-      });
-      console.log('conditional idxs', idxs);
-
-      const truthyIdxs: Record<number, boolean> = {};
-      for (let i = 0; i < idxs.length; i++) {
-        activeSteps.push(executionPath.concat([idxs[i]!]));
-        truthyIdxs[idxs[i]!] = true;
-      }
-
-      await Promise.all(
-        step.steps.map(async (_step, idx) => {
-          if (truthyIdxs[idx]) {
-            console.log('suhh: running conditional step', executionPath.concat([idx]));
-            return this.pubsub.publish('workflows', {
-              type: 'workflow.step.run',
-              data: {
-                workflowId,
-                runId,
-                executionPath: executionPath.concat([idx]),
-                resume,
-                stepResults,
-                prevResult,
-                resumeData,
-                parentWorkflow,
-                activeSteps,
-              },
-            });
-          } else {
-            console.log('suhh: skipping conditional step', executionPath.concat([idx]));
-            return this.pubsub.publish('workflows', {
-              type: 'workflow.step.end',
-              data: {
-                workflowId,
-                runId,
-                executionPath: executionPath.concat([idx]),
-                resume,
-                stepResults,
-                prevResult: { status: 'skipped' },
-                resumeData,
-                parentWorkflow,
-                activeSteps,
-              },
-            });
-          }
-        }),
       );
-
-      return;
     } else if (step?.type === 'sleep') {
-      const duration = await this.stepExecutor.resolveSleep({
-        step,
-        runId,
-        stepResults,
-        emitter: new EventEmitter() as any, // TODO
-        runtimeContext: new RuntimeContext(), // TODO
-        input: prevResult?.status === 'success' ? prevResult.output : undefined,
-        resumeData,
-      });
-
-      setTimeout(
-        async () => {
-          return this.pubsub.publish('workflows', {
-            type: 'workflow.step.run',
-            data: {
-              workflowId,
-              runId,
-              executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
-              resume,
-              stepResults,
-              prevResult,
-              resumeData,
-              parentWorkflow,
-              activeSteps,
-            },
-          });
+      return this.processWorkflowSleep(
+        {
+          workflow,
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resume,
+          prevResult,
+          resumeData,
+          parentWorkflow,
         },
-        duration < 0 ? 0 : duration,
+        step,
       );
-
-      return;
     } else if (step?.type === 'sleepUntil') {
-      const duration = await this.stepExecutor.resolveSleepUntil({
-        step,
-        runId,
-        stepResults,
-        emitter: new EventEmitter() as any, // TODO
-        runtimeContext: new RuntimeContext(), // TODO
-        input: prevResult?.status === 'success' ? prevResult.output : undefined,
-        resumeData,
-      });
-
-      setTimeout(
-        async () => {
-          return this.pubsub.publish('workflows', {
-            type: 'workflow.step.run',
-            data: {
-              workflowId,
-              runId,
-              executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
-              resume,
-              stepResults,
-              prevResult,
-              resumeData,
-              parentWorkflow,
-              activeSteps,
-            },
-          });
+      return this.processWorkflowSleepUntil(
+        {
+          workflow,
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resume,
+          prevResult,
+          resumeData,
+          parentWorkflow,
         },
-        duration < 0 ? 0 : duration,
+        step,
       );
-
-      return;
     }
 
     if (step?.type !== 'step' && step?.type !== 'loop') {
