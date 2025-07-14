@@ -27,7 +27,7 @@ export const weatherReporterAgent = new Agent({
   name: "weatherExplainerAgent",
   model: openai("gpt-4o"),
   instructions: `
-  You are a weather explainer. You have access to input that will help you get weather-specific activities for any city. 
+  You are a weather explainer. You have access to input that will help you get weather-specific activities for any city.
   The tool uses agents to plan the activities, you just need to provide the city. Explain the weather report like a weather reporter.
   `,
 });
@@ -240,3 +240,11 @@ const run = await workflow.createRunAsync();
 const result = await run.start({ inputData: { location: "Lagos" } });
 console.dir(result, { depth: null });
 ```
+
+## Workflows (Legacy)
+
+The following links provide example documentation for legacy workflows:
+
+- [Calling an Agent From a Workflow (Legacy)](/examples/workflows_legacy/calling-agent)
+- [Tool as a Workflow step (Legacy)](/examples/workflows_legacy/using-a-tool-as-a-step)
+

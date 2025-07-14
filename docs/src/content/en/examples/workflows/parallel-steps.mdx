@@ -315,10 +315,10 @@ const synthesizeStep = createStep({
 
     const prompt = `Indoor activities:
       ${indoorActivities?.activities}
- 
+
       Outdoor activities:
       ${outdoorActivities?.activities}
- 
+
       There is a chance of rain so be prepared to do indoor activities if needed.`;
 
     const agent = mastra?.getAgent("synthesizeAgent");
@@ -414,3 +414,10 @@ const run = await workflow.createRunAsync();
 const result = await run.start({ inputData: { city: "Ibiza" } });
 console.dir(result, { depth: null });
 ```
+
+## Workflows (Legacy)
+
+The following links provide example documentation for legacy workflows:
+
+- [Parallel Execution with Steps](/examples/workflows_legacy/parallel-steps)
+
