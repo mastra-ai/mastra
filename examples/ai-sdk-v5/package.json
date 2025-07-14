@@ -1,0 +1,41 @@
+{
+  "name": "mastra-ai-sdk-v5-use-chat-example",
+  "version": "0.1.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "mastra-dev": "mastra dev"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "2.0.0-beta.1",
+    "@ai-sdk/react": "2.0.0-beta.1",
+    "@mastra/core": "0.0.0-ai-v5-20250625173645",
+    "@mastra/libsql": "0.0.0-ai-v5-20250625173645",
+    "@mastra/loggers": "0.0.0-ai-v5-20250625173645",
+    "@mastra/memory": "0.0.0-ai-v5-20250625173645",
+    "@mastra/pg": "0.0.0-ai-v5-20250625173645",
+    "@mastra/rag": "0.0.0-ai-v5-20250625173645",
+    "@mastra/server": "0.0.0-ai-v5-20250625173645",
+    "next": "15.1.7",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "swr": "^2.3.3",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.1.7",
+    "mastra": "0.0.0-ai-v5-20250625173645",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5"
+  },
+  "packageManager": "pnpm@10.12.4+sha512.5ea8b0deed94ed68691c9bad4c955492705c5eeb8a87ef86bc62c74a26b037b08ff9570f108b2e4dbd1dd1a9186fea925e527f141c648e85af45631074680184"
+}

@@ -19,8 +19,8 @@ const memory = new Memory({
     token: process.env.UPSTASH_REDIS_REST_TOKEN,
   }),
   vector: new UpstashVector({
-    url: process.env.UPSTASH_REDIS_REST_URL,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    url: process.env.UPSTASH_VECTOR_REST_URL,
+    token: process.env.UPSTASH_VECTOR_REST_TOKEN,
   }),
   options: {
     lastMessages: 10,
@@ -48,6 +48,8 @@ Make sure to set up your Upstash credentials in the environment variables:
 ```bash
 UPSTASH_REDIS_REST_URL=your-redis-url
 UPSTASH_REDIS_REST_TOKEN=your-redis-token
+UPSTASH_VECTOR_REST_URL=your-vector-index-url
+UPSTASH_VECTOR_REST_TOKEN=your-vector-index-token
 ```
 
 ## Usage Example

@@ -17,8 +17,14 @@ for (const packageJsonPath of packageJsonFiles) {
   // Check regular and dev dependencies for workspace: references
   hasWorkspaceDependencies = checkWorkspaceDependencies(packageJson, packageJsonPath) || hasWorkspaceDependencies;
 
-  // Validate mastra packages have correct pnpm overrides
-  hasMissingOverrides = validateMastraOverrides(packageJson, packageJsonPath) || hasMissingOverrides;
+  // This package uses a PR snapshot version as ai-sdk-v5 is not yet released on the main branch, so it won't use overrides
+  if (packageJson.name.includes('mastra-ai-sdk-v5-use-chat-example')) {
+    console.log('Skipping validation for mastra-ai-sdk-v5-use-chat-example');
+    hasMissingOverrides = false;
+  } else {
+    // Validate mastra packages have correct pnpm overrides
+    hasMissingOverrides = validateMastraOverrides(packageJson, packageJsonPath) || hasMissingOverrides;
+  }
 
   // Validate lock file exists
   hasLockFile = validateLockFile(join(dirname(packageJsonPath), 'pnpm-lock.yaml')) || hasLockFile;
