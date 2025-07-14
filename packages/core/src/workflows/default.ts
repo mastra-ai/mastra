@@ -1749,7 +1749,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       serializedStepGraph,
       stepResults,
       executionContext,
-      workflowStatus: execResults.status !== 'success' ? execResults.status : 'running',
+      workflowStatus: execResults.status === 'success' ?  'running' : execResults.status,
     });
 
     return { result: execResults, stepResults, executionContext };
