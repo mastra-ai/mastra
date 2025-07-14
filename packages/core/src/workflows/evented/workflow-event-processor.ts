@@ -70,6 +70,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowStart({
+    workflow,
     parentWorkflow,
     workflowId,
     runId,
@@ -77,6 +78,23 @@ export class WorkflowEventProcessor extends EventProcessor {
     prevResult,
     resumeData,
   }: ProcessorArgs) {
+    await this.mastra.getStorage()?.persistWorkflowSnapshot({
+      workflowName: workflow.id,
+      runId,
+      snapshot: {
+        activePaths: [],
+        suspendedPaths: {},
+        serializedStepGraph: workflow.serializedStepGraph,
+        timestamp: Date.now(),
+        runId,
+        status: 'running',
+        context: {
+          input: prevResult?.status === 'success' ? prevResult.output : undefined,
+        },
+        value: {},
+      },
+    });
+
     await this.pubsub.publish('workflows', {
       type: 'workflow.step.run',
       data: {
@@ -504,6 +522,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     const stepResult = await this.stepExecutor.execute({
+      workflowId,
       step: step.step,
       runId,
       stepResults,
@@ -610,11 +629,21 @@ export class WorkflowEventProcessor extends EventProcessor {
           ...prevResult,
           payload: parentContext.input?.output ?? {},
         };
-      } else {
-        stepResults[step.step.id] = prevResult;
       }
+
       console.log('saving data', step.step.id, stepResults);
-      await this.saveData({ workflow, runId, stepResults });
+      const newStepResults = await this.mastra.getStorage()?.updateWorkflowResults({
+        workflowName: workflow.id,
+        runId,
+        stepId: step.step.id,
+        result: prevResult,
+      });
+
+      if (!newStepResults) {
+        return;
+      }
+
+      stepResults = newStepResults;
     }
 
     if (!prevResult?.status || prevResult.status === 'failed') {
@@ -656,24 +685,11 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     step = workflow.stepGraph[executionPath[0]!];
     if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
-      let actualStep: { type: 'step'; step: Step } = step.steps[executionPath[1]!] as { type: 'step'; step: Step };
-
-      const newStepResults = await this.mastra.getStorage()?.updateWorkflowResults({
-        workflowName: workflow.id,
-        runId,
-        stepId: actualStep.step.id,
-        result: prevResult,
-      });
-
-      if (!newStepResults) {
-        return;
-      }
-
       let skippedCount = 0;
       const allResults: Record<string, any> = step.steps.reduce(
         (acc, step) => {
           if (step.type === 'step') {
-            const res = newStepResults?.[step.step.id];
+            const res = stepResults?.[step.step.id];
             if (res && res.status === 'success') {
               acc[step.step.id] = res?.output;
               // @ts-ignore
@@ -701,7 +717,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           executionPath: executionPath.slice(0, -1),
           resume,
-          stepResults: newStepResults,
+          stepResults,
           prevResult: { status: 'success', output: allResults },
           resumeData,
           activeSteps,
@@ -738,31 +754,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
       });
     }
-  }
-
-  async saveData({
-    workflow,
-    runId,
-    stepResults,
-  }: {
-    workflow: Workflow;
-    runId: string;
-    stepResults: Record<string, StepResult<any, any, any, any>>;
-  }) {
-    await this.mastra.getStorage()?.persistWorkflowSnapshot({
-      workflowName: workflow.id,
-      runId,
-      snapshot: {
-        activePaths: [],
-        suspendedPaths: {},
-        serializedStepGraph: workflow.serializedStepGraph,
-        timestamp: Date.now(),
-        runId,
-        status: 'running',
-        context: stepResults,
-        value: {},
-      },
-    });
   }
 
   async loadData({

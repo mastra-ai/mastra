@@ -18,6 +18,7 @@ export class StepExecutor extends MastraBase {
   }
 
   async execute(params: {
+    workflowId: string;
     step: Step<any, any, any, any>;
     runId: string;
     input?: any;

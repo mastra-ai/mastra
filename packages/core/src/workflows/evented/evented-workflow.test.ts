@@ -1031,7 +1031,7 @@ describe('Workflow', () => {
 
       workflow.then(step1).commit();
 
-      new Mastra({ workflows: { 'test-workflow': workflow } });
+      new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
 
       const run = await workflow.createRunAsync();
       const result = await run.start({ inputData: {} });
@@ -1276,7 +1276,7 @@ describe('Workflow', () => {
 
         workflow.then(step1).then(step2).commit();
 
-        new Mastra({ workflows: { 'test-workflow': workflow } });
+        new Mastra({ workflows: { 'test-workflow': workflow }, storage: testStorage });
 
         const run = await workflow.createRunAsync();
         const result = await run.start({ inputData: { inputValue: 'test-input' } });
