@@ -114,12 +114,16 @@ export async function getScoresByScorerIdHandler({
   mastra,
   scorerId,
   pagination,
-}: Context & { scorerId: string; pagination: StoragePagination }) {
+  entityId,
+  entityType,
+}: Context & { scorerId: string; pagination: StoragePagination; entityId?: string; entityType?: string }) {
   try {
     const scores =
       (await mastra.getStorage()?.getScoresByScorerId?.({
         scorerId,
         pagination,
+        entityId,
+        entityType,
       })) || [];
     return scores;
   } catch (error) {
