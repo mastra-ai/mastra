@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.10.14
+
+### Patch Changes
+
+- 71907f3: Pin rollup to fix breaking change
+  - @mastra/core@0.10.14
+  - @mastra/server@0.10.14
+
 ## 0.10.12
 
 ### Patch Changes

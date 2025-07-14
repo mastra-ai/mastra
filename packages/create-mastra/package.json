@@ -42,7 +42,7 @@
     "pino": "^9.7.0",
     "pino-pretty": "^13.0.0",
     "posthog-node": "^4.18.0",
-    "prettier": "^3.5.3"
+    "prettier": "^3.6.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -53,7 +53,7 @@
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.19.0",
     "esbuild": "^0.25.5",
-    "eslint": "^9.29.0",
+    "eslint": "^9.30.1",
     "mastra": "workspace:^",
     "rollup": "^4.42.0",
     "rollup-plugin-esbuild": "^6.2.1",
