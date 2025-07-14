@@ -47,9 +47,11 @@
     "react-hook-form": "^7.54.2",
     "sonner": "^2.0.1",
     "tailwind-merge": "^2.6.0",
-    "tailwindcss": "^4.0.17"
+    "tailwindcss": "^4.0.17",
+    "unist-util-visit": "^5.0.0"
   },
   "devDependencies": {
+    "@shikijs/transformers": "^3.8.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
