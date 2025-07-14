@@ -116,7 +116,6 @@ describe('MessageList', () => {
             },
           ],
           parts: [
-            { type: 'step-start' },
             {
               type: 'tool-invocation',
               toolInvocation: {
@@ -156,7 +155,6 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'step-start' },
               { type: 'text', text: 'Okay, checking the weather.' },
               {
                 type: 'tool-invocation',
@@ -228,7 +226,6 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'step-start' },
               { type: 'text', text: 'Okay, I can do that.' },
               {
                 type: 'tool-invocation',
@@ -300,7 +297,6 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'step-start' },
               { type: 'text', text: msg2.content[0].text },
               {
                 type: 'tool-invocation',
@@ -312,6 +308,10 @@ describe('MessageList', () => {
                   result: msg3.content[0].result,
                 },
               },
+              {
+                type: 'text',
+                text: msg4.content,
+              },
             ],
             toolInvocations: [
               {
@@ -320,24 +320,6 @@ describe('MessageList', () => {
                 toolCallId: msg2.content[1].toolCallId,
                 args: msg2.content[1].args,
                 result: msg3.content[0].result,
-              },
-            ],
-          },
-          threadId,
-          resourceId,
-        },
-        {
-          id: expect.any(String),
-          role: 'assistant',
-          createdAt: msg4.createdAt,
-          content: {
-            format: 2,
-            experimental_attachments: [],
-            parts: [
-              { type: 'step-start' },
-              {
-                type: 'text',
-                text: msg4.content,
               },
             ],
           },
@@ -418,7 +400,6 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'step-start' },
               {
                 type: 'reasoning',
                 reasoning: '',
@@ -488,7 +469,6 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'step-start' },
               {
                 type: 'reasoning',
                 reasoning: '',
@@ -568,7 +548,7 @@ describe('MessageList', () => {
 
       const messageSequence = [msg1, msg2, msg3, msg4, msg5];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
       expect(list.get.all.v2()).toEqual([
         {
@@ -576,9 +556,9 @@ describe('MessageList', () => {
           role: 'assistant',
           createdAt: expect.any(Date),
           content: {
+            content: 'Final response.',
             format: 2,
             parts: [
-              { type: 'step-start' },
               { type: 'text', text: 'Step 1: Call tool A' },
               {
                 type: 'tool-invocation',
@@ -590,28 +570,6 @@ describe('MessageList', () => {
                   result: 'Result A',
                 },
               },
-            ],
-            toolInvocations: [
-              {
-                state: 'result',
-                toolName: 'tool-a',
-                toolCallId: 'call-a-1',
-                args: {},
-                result: 'Result A',
-              },
-            ],
-          },
-          threadId,
-          resourceId,
-        } satisfies MastraMessageV2,
-        {
-          id: expect.any(String),
-          role: 'assistant',
-          createdAt: expect.any(Date),
-          content: {
-            format: 2,
-            parts: [
-              { type: 'step-start' },
               { type: 'text', text: 'Step 2: Call tool B' },
               {
                 type: 'tool-invocation',
@@ -623,8 +581,17 @@ describe('MessageList', () => {
                   result: 'Result B',
                 },
               },
+              { type: 'step-start' },
+              { type: 'text', text: 'Final response.' },
             ],
             toolInvocations: [
+              {
+                state: 'result',
+                toolName: 'tool-a',
+                toolCallId: 'call-a-1',
+                args: {},
+                result: 'Result A',
+              },
               {
                 state: 'result',
                 toolName: 'tool-b',
@@ -633,18 +600,6 @@ describe('MessageList', () => {
                 result: 'Result B',
               },
             ],
-          },
-          threadId,
-          resourceId,
-        } satisfies MastraMessageV2,
-        {
-          id: expect.any(String),
-          role: 'assistant',
-          createdAt: expect.any(Date),
-          content: {
-            format: 2,
-            parts: [{ type: 'step-start' }, { type: 'text', text: 'Final response.' }],
-            content: 'Final response.',
           },
           threadId,
           resourceId,
@@ -684,7 +639,7 @@ describe('MessageList', () => {
 
       const messageSequence = [userMsg, assistantMsgPart1, toolResultMsg, assistantMsgPart2];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
       expect(list.get.all.v2()).toEqual([
         {
@@ -706,7 +661,6 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'step-start' },
               {
                 type: 'reasoning',
                 reasoning: '',
@@ -723,6 +677,12 @@ describe('MessageList', () => {
                   result: '{"data": "gathered"}', // Result from the tool message
                 },
               },
+              {
+                type: 'reasoning',
+                reasoning: '',
+                details: [{ type: 'text', text: 'Data gathered, now processing.', signature: 'sig-process' }],
+              },
+              { type: 'text', text: 'Task completed successfully with gathered data.' },
             ],
             toolInvocations: [
               {
@@ -732,25 +692,6 @@ describe('MessageList', () => {
                 args: { query: 'required data' },
                 result: '{"data": "gathered"}', // Result from the tool message
               },
-            ],
-          },
-          threadId,
-          resourceId,
-        } satisfies MastraMessageV2,
-        {
-          id: expect.any(String), // Should be the ID of the first assistant message in the sequence
-          role: 'assistant',
-          createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
-          content: {
-            format: 2,
-            parts: [
-              { type: 'step-start' },
-              {
-                type: 'reasoning',
-                reasoning: '',
-                details: [{ type: 'text', text: 'Data gathered, now processing.', signature: 'sig-process' }],
-              },
-              { type: 'text', text: 'Task completed successfully with gathered data.' },
             ],
           },
           threadId,
@@ -969,7 +910,7 @@ describe('MessageList', () => {
 
       const messageSequence = [userMsgV1, assistantMsgV1, toolResultMsgV1, assistantMsgUIV2];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
       expect(list.get.all.v2()).toEqual([
         {
@@ -991,7 +932,6 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'step-start' },
               { type: 'text', text: 'Searching...' },
               {
                 type: 'tool-invocation',
@@ -1003,6 +943,7 @@ describe('MessageList', () => {
                   result: 'Found relevant data.', // Result from the tool message
                 },
               },
+              { type: 'text', text: 'Here is the information I found.' }, // Text from the Vercel UIMessage
             ],
             toolInvocations: [
               {
@@ -1013,21 +954,6 @@ describe('MessageList', () => {
                 result: 'Found relevant data.', // Result from the tool message
               },
             ],
-          },
-          threadId,
-          resourceId,
-        } satisfies MastraMessageV2,
-        {
-          id: assistantMsgUIV2.id, // Should retain the original assistant message ID
-          role: 'assistant',
-          createdAt: expect.any(Date),
-          content: {
-            format: 2,
-            parts: [
-              { type: 'step-start' },
-              { type: 'text', text: 'Here is the information I found.' }, // Text from the Vercel UIMessage
-            ],
-            experimental_attachments: [],
           },
           threadId,
           resourceId,
@@ -1068,7 +994,7 @@ describe('MessageList', () => {
 
       const messageSequence = [userMsg, assistantMsgWithToolCall, toolResultMsg, assistantMsgWithFinalText];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
       expect(list.get.all.v2()).toEqual([
         {
@@ -1090,7 +1016,6 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'step-start' },
               { type: 'text', text: 'Okay, I will perform the task.' },
               {
                 type: 'tool-invocation',
@@ -1102,6 +1027,8 @@ describe('MessageList', () => {
                   result: 'Task completed successfully.',
                 },
               },
+              { type: 'step-start' },
+              { type: 'text', text: 'The task is now complete.' },
             ],
             toolInvocations: [
               {
@@ -1112,17 +1039,6 @@ describe('MessageList', () => {
                 result: 'Task completed successfully.',
               },
             ],
-          },
-          threadId,
-          resourceId,
-        } satisfies MastraMessageV2,
-        {
-          id: expect.any(String), // Should be the ID of the first assistant message in the sequence
-          role: 'assistant',
-          createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
-          content: {
-            format: 2,
-            parts: [{ type: 'step-start' }, { type: 'text', text: 'The task is now complete.' }],
             content: 'The task is now complete.',
           },
           threadId,
@@ -1189,7 +1105,6 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'step-start' },
               {
                 type: 'reasoning',
                 reasoning: '',
@@ -1257,7 +1172,7 @@ describe('MessageList', () => {
         assistantMsgWithFinalText,
       ];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
       expect(list.get.all.v2()).toEqual([
         {
@@ -1278,9 +1193,8 @@ describe('MessageList', () => {
           createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
           content: {
             format: 2,
-            // content: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy.",
+            content: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy.",
             parts: [
-              { type: 'step-start' },
               { type: 'text', text: 'Okay, I will check the weather for both cities.' },
               {
                 type: 'tool-invocation',
@@ -1303,6 +1217,8 @@ describe('MessageList', () => {
                   result: '15°C, cloudy',
                 },
               },
+              { type: 'step-start' },
+              { type: 'text', text: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy." },
             ],
             toolInvocations: [
               {
@@ -1319,21 +1235,6 @@ describe('MessageList', () => {
                 args: { city: 'Paris' },
                 result: '15°C, cloudy',
               },
-            ],
-          },
-          threadId,
-          resourceId,
-        } satisfies MastraMessageV2,
-        {
-          id: expect.any(String), // Should be the ID of the first assistant message in the sequence
-          role: 'assistant',
-          createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
-          content: {
-            format: 2,
-            content: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy.",
-            parts: [
-              { type: 'step-start' },
-              { type: 'text', text: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy." },
             ],
           },
           threadId,
@@ -1362,7 +1263,6 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'step-start' },
               {
                 type: 'reasoning',
                 reasoning: '',
@@ -1528,11 +1428,11 @@ describe('MessageList', () => {
         createdAt: `createdAt` in m && m.createdAt ? new Date(m.createdAt) : new Date(),
       })) as MastraMessageV1[];
 
-      const list = new MessageList({ threadId: '68' }).add(history, 'memory');
+      const list = new MessageList({ threadId: '68' }).add(history, 'response');
 
       const uiMessages = list.get.all.ui();
 
-      expect(uiMessages.length).toBe(10);
+      expect(uiMessages.length).toBe(9);
       const expectedMessages = [
         {
           id: 'c59c844b-0f1a-409a-995e-3382a3ee1eaa',
@@ -1547,7 +1447,7 @@ describe('MessageList', () => {
           role: 'assistant',
           content: 'Hello! How can I assist you today?',
           createdAt: expect.any(Date),
-          parts: [{ type: 'step-start' }, { type: 'text', text: 'Hello! How can I assist you today?' }],
+          parts: [{ type: 'text', text: 'Hello! How can I assist you today?' }],
           reasoning: undefined,
           toolInvocations: undefined,
         },
@@ -1562,10 +1462,9 @@ describe('MessageList', () => {
         {
           id: '6a903ed0-1cf4-463d-8ea0-c13bd0896405',
           role: 'assistant',
-          content: '',
+          content: "Got it! You're in LA. What would you like to talk about or do today?",
           createdAt: expect.any(Date),
           parts: [
-            { type: 'step-start' },
             {
               type: 'tool-invocation',
               toolInvocation: {
@@ -1575,6 +1474,10 @@ describe('MessageList', () => {
                 args: { memory: '<user><location>LA</location></user>' },
                 result: { success: true },
               },
+            },
+            {
+              type: 'text',
+              text: "Got it! You're in LA. What would you like to talk about or do today?",
             },
           ],
           reasoning: undefined,
@@ -1589,22 +1492,6 @@ describe('MessageList', () => {
           ],
         },
         {
-          id: 'd1fc1d8e-2aca-47a8-8239-0bb761d63fd6',
-          role: 'assistant',
-          content: "Got it! You're in LA. What would you like to talk about or do today?",
-          createdAt: expect.any(Date),
-          parts: [
-            { type: 'step-start' },
-            {
-              type: 'text',
-              text: "Got it! You're in LA. What would you like to talk about or do today?",
-            },
-          ],
-          reasoning: undefined,
-          toolInvocations: undefined,
-        },
-
-        {
           id: '1b271c02-7762-4416-91e9-146a25ce9c73',
           role: 'user',
           content: 'Hello',
@@ -1617,7 +1504,7 @@ describe('MessageList', () => {
           role: 'assistant',
           content: 'Hello again! How can I help you today?',
           createdAt: expect.any(Date),
-          parts: [{ type: 'step-start' }, { type: 'text', text: 'Hello again! How can I help you today?' }],
+          parts: [{ type: 'text', text: 'Hello again! How can I help you today?' }],
           reasoning: undefined,
           toolInvocations: undefined,
         },
@@ -1634,7 +1521,7 @@ describe('MessageList', () => {
           role: 'assistant',
           content: "Hi there! What's on your mind?",
           createdAt: expect.any(Date),
-          parts: [{ type: 'step-start' }, { type: 'text', text: "Hi there! What's on your mind?" }],
+          parts: [{ type: 'text', text: "Hi there! What's on your mind?" }],
           reasoning: undefined,
           toolInvocations: undefined,
         },
@@ -1671,7 +1558,7 @@ describe('MessageList', () => {
           id: newId,
           content: 'As a large language model...',
           createdAt: expect.any(Date),
-          parts: [{ type: 'step-start' }, { type: 'text', text: 'As a large language model...' }],
+          parts: [{ type: 'text', text: 'As a large language model...' }],
           reasoning: undefined,
           toolInvocations: undefined,
         } satisfies UIMessage,

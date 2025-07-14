@@ -399,12 +399,13 @@ export class MessageList {
             if (!latestMessage.content.toolInvocations) {
               latestMessage.content.toolInvocations = [];
             }
-            if (
-              !latestMessage.content.toolInvocations.some(
-                t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
-              )
-            ) {
+            const toolInvocationIndex = latestMessage.content.toolInvocations.findIndex(
+              t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
+            );
+            if (toolInvocationIndex === -1) {
               latestMessage.content.toolInvocations.push(existingCallPart.toolInvocation);
+            } else {
+              latestMessage.content.toolInvocations[toolInvocationIndex] = existingCallPart.toolInvocation;
             }
           }
         } else if (
@@ -739,7 +740,7 @@ export class MessageList {
       if (part.type === `text`) {
         // TODO: we may need to hash this with something like xxhash instead of using length
         // for 99.999% of cases this will be fine though because we're comparing messages that have the same ID already.
-        key += part.text.length;
+        key += `${part.text.length}${part.text}`;
       }
       if (part.type === `tool-invocation`) {
         key += part.toolInvocation.toolCallId;
