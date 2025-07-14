@@ -200,7 +200,7 @@ function ScorerHeader({
         >
           <span>Entities</span>
           <ArrowRightIcon />
-          <div className="flex  gap-[1rem] [&>a]:text-icon4 [&>a:hover]:text-icon5 [&>a]:transition-colors [&>a]:flex [&>a]:items-center [&>a]:gap-[0.5rem] [&>a]:border [&>a]:border-border1 [&>a]:p-[0.25rem] [&>a]:px-[0.5rem] [&>a]:rounded-md [&>a]:text-[0.875rem]">
+          <div className="flex gap-[1rem] [&>a]:text-icon4 [&>a:hover]:text-icon5 [&>a]:transition-colors [&>a]:flex [&>a]:items-center [&>a]:gap-[0.5rem] [&>a]:border [&>a]:border-border1 [&>a]:p-[0.25rem] [&>a]:px-[0.5rem] [&>a]:rounded-md [&>a]:text-[0.875rem]">
             {agents?.map(agent => {
               return (
                 <Link to={`/agents/${agent.id}/chat`} key={agent.id}>
@@ -461,7 +461,8 @@ function ScoreDetails({
       description: 'Extracts ingredients from the input text.',
     },
     score: {
-      prompt: 'Score the recipe based on the extracted ingredients.',
+      prompt:
+        'Score the recipe based on the extracted ingredientsfasdfaodsijfaoidsjfaosdijfoasdijfoasdjfoaisingredientsfasdfaodsijfaoidsjfaosdijfoasdijfoasdjfoaisingredientsfasdfaodsijfaoidsjfaosdijfoasdijfoasdjfoais.',
       description: 'Scores the recipe based on the extracted ingredients.',
     },
     reason: {
@@ -510,7 +511,7 @@ function ScoreDetails({
                 '[&>em]:flex [&>em]:justify-between',
                 '[&_svg]:w-[1.1em] [&>svg]:h-[1.1em] [&_svg]:text-icon3 ',
                 '[&_b]:text-icon6 [&_b]:font-semibold',
-                'text-[0.875rem]',
+                'text-[0.875rem] break-all',
               )}
             >
               <em>
@@ -527,7 +528,7 @@ function ScoreDetails({
               {(score.input || []).map((input: any, index: number) => (
                 <div
                   key={index}
-                  className="border-b border-border1 last:border-b-0 py-[1rem] px-[1.5rem] text-[0.875rem] text-icon4"
+                  className="border-b border-border1 last:border-b-0 py-[1rem] px-[1.5rem] text-[0.875rem] text-icon4 break-all"
                 >
                   {input?.content && <MarkdownRenderer>{input.content}</MarkdownRenderer>}
                   {input?.ingredient && <MarkdownRenderer>{input.ingredient}</MarkdownRenderer>}
@@ -554,7 +555,7 @@ function ScoreDetails({
                     </div>
                   )}
                 </div>
-                <div className="text-icon4 text-[0.875rem] p-[1.5rem] py-[1rem] ">
+                <div className="text-icon4 text-[0.875rem] p-[1.5rem] py-[1rem] break-all">
                   {score.output?.text && <MarkdownRenderer>{score.output.text}</MarkdownRenderer>}
                   {score.output?.object?.result && <MarkdownRenderer>{score.output.object.result}</MarkdownRenderer>}
                 </div>
@@ -568,12 +569,12 @@ function ScoreDetails({
 
                 {Object.entries(mockPrompts || {}).map(([key, value]) => (
                   <>
-                    <div className="flex gap-[1rem] text-[]  py-[1rem] px-[1.5rem] border-y border-border1" key={key}>
+                    <div className="flex gap-[1rem] text-[] py-[1rem] px-[1.5rem] border-y border-border1" key={key}>
                       <span className="text-icon5 font-bold text-[0.875rem]">{key}</span>
                       <span className="text-icon2 text-[0.75rem]">{value?.description && `|`}</span>
                       <span className="text-icon4 text-[0.875rem]">{value?.description || ''}</span>
                     </div>
-                    <div className="text-icon4 text-[0.875rem] py-[1rem] mx-[1.5rem] px-[1rem] font-mono ">
+                    <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
                       {value?.prompt && <MarkdownRenderer>{value.prompt}</MarkdownRenderer>}
                     </div>
                   </>
