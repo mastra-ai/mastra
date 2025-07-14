@@ -324,9 +324,12 @@ aside {
 }
 
 article main a {
+  font-weight: 500;
   &:is(html[class~="light"] *) {
     --x-color-primary-600: var(--light-color-text-6);
-    text-decoration: underline var(--light-green-muted);
+    text-decoration-thickness: 1px;
+    text-decoration-line: underline;
+    text-decoration-color: var(--light-green-muted);
   }
 }
 

@@ -45,6 +45,7 @@ export abstract class ExecutionEngine extends MastraBase {
       stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
+      snapshotRuntimeContext?: Record<string, any>;
     };
     emitter: Emitter;
     runtimeContext: RuntimeContext;

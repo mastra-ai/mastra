@@ -69,6 +69,44 @@ export class NewAgentNetwork extends MastraBase {
     this.#mastra = mastra;
   }
 
+  private async beforeRun({
+    runtimeContext,
+    threadId,
+    resourceId,
+    message,
+  }: {
+    runtimeContext: RuntimeContext;
+    threadId: string;
+    resourceId: string;
+    message: string;
+  }) {
+    const memory = await this.getMemory({ runtimeContext });
+    let thread = await memory?.getThreadById({ threadId });
+    if (!thread) {
+      thread = await memory?.createThread({
+        threadId,
+        title: '',
+        resourceId,
+      });
+    }
+    await memory?.saveMessages({
+      messages: [
+        {
+          id: randomUUID() as string,
+          type: 'text',
+          role: 'user',
+          content: { parts: [{ type: 'text', text: message }], format: 2 },
+          createdAt: new Date(),
+          threadId: thread?.id,
+          resourceId: thread?.resourceId,
+        },
+      ] as MastraMessageV2[],
+      format: 'v2',
+    });
+
+    return thread;
+  }
+
   async getAgents({ runtimeContext }: { runtimeContext?: RuntimeContext }) {
     let agentsToUse: Record<string, Agent>;
 
@@ -335,20 +373,11 @@ export class NewAgentNetwork extends MastraBase {
 
     const run = mainWorkflow.createRun();
 
-    const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
-    await memory?.saveMessages({
-      messages: [
-        {
-          id: randomUUID() as string,
-          type: 'text',
-          role: 'user',
-          content: { parts: [{ type: 'text', text: message }], format: 2 },
-          createdAt: new Date(),
-          threadId: threadId || run.runId,
-          resourceId: resourceId || this.name,
-        },
-      ] as MastraMessageV2[],
-      format: 'v2',
+    const thread = await this.beforeRun({
+      runtimeContext: runtimeContext || new RuntimeContext(),
+      threadId: threadId || run.runId,
+      resourceId: resourceId || this.name,
+      message,
     });
 
     return run.stream({
@@ -357,8 +386,8 @@ export class NewAgentNetwork extends MastraBase {
         resourceId: '',
         resourceType: 'none',
         iteration: 0,
-        threadResourceId: resourceId,
-        threadId,
+        threadResourceId: thread?.resourceId,
+        threadId: thread?.id,
         isOneOff: false,
         verboseIntrospection: true,
       },
@@ -946,20 +975,11 @@ export class NewAgentNetwork extends MastraBase {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
     const run = networkWorkflow.createRun();
 
-    const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
-    await memory?.saveMessages({
-      messages: [
-        {
-          id: randomUUID() as string,
-          type: 'text',
-          role: 'user',
-          content: { parts: [{ type: 'text', text: message }], format: 2 },
-          createdAt: new Date(),
-          threadId: threadId || run.runId,
-          resourceId: resourceId || this.name,
-        },
-      ] as MastraMessageV2[],
-      format: 'v2',
+    const thread = await this.beforeRun({
+      runtimeContext: runtimeContext || new RuntimeContext(),
+      threadId: threadId || run.runId,
+      resourceId: resourceId || this.name,
+      message,
     });
 
     const result = await run.start({
@@ -968,8 +988,8 @@ export class NewAgentNetwork extends MastraBase {
         resourceId: '',
         resourceType: 'none',
         iteration: 0,
-        threadId,
-        threadResourceId: resourceId,
+        threadId: thread?.id,
+        threadResourceId: thread?.resourceId,
         isOneOff: true,
         verboseIntrospection: true,
       },
@@ -1002,20 +1022,11 @@ export class NewAgentNetwork extends MastraBase {
     const networkWorkflow = this.createWorkflow({ runtimeContext });
     const run = networkWorkflow.createRun();
 
-    const memory = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
-    await memory?.saveMessages({
-      messages: [
-        {
-          id: randomUUID() as string,
-          type: 'text',
-          role: 'user',
-          content: { parts: [{ type: 'text', text: message }], format: 2 },
-          createdAt: new Date(),
-          threadId: threadId || run.runId,
-          resourceId: resourceId || this.name,
-        },
-      ] as MastraMessageV2[],
-      format: 'v2',
+    const thread = await this.beforeRun({
+      runtimeContext: runtimeContext || new RuntimeContext(),
+      threadId: threadId || run.runId,
+      resourceId: resourceId || this.name,
+      message,
     });
 
     return run.stream({
@@ -1024,8 +1035,8 @@ export class NewAgentNetwork extends MastraBase {
         resourceId: '',
         resourceType: 'none',
         iteration: 0,
-        threadResourceId: resourceId,
-        threadId,
+        threadResourceId: thread?.resourceId,
+        threadId: thread?.id,
         isOneOff: true,
         verboseIntrospection: true,
       },
