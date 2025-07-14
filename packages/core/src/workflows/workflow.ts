@@ -1550,6 +1550,7 @@ export class Run<
           resumePayload: params.resumeData,
           // @ts-ignore
           resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
+          snapshotRuntimeContext: snapshot?.runtimeContext,
         },
         emitter: {
           emit: (event: string, data: any) => {

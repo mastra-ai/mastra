@@ -1376,6 +1376,7 @@ export class CloudflareStore extends MastraStorage {
       status: data.status,
       result: data.result,
       error: data.error,
+      runtimeContext: data.runtimeContext || {},
     };
   }
 
