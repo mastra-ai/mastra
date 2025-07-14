@@ -8,8 +8,9 @@ import { RuntimeContext } from '../../../runtime-context';
 import { StepExecutor } from '../step-executor';
 import { EventedWorkflow } from '../workflow';
 import { processWorkflowLoop } from './loop';
-import { processWorkflowSleep, processWorkflowSleepUntil } from './sleep';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
+import { processWorkflowSleep, processWorkflowSleepUntil } from './sleep';
+import { getNestedWorkflow } from './utils';
 
 export type ProcessorArgs = {
   activeSteps: number[][];
@@ -28,7 +29,7 @@ export type ProcessorArgs = {
   };
 };
 
-type ParentWorkflow = {
+export type ParentWorkflow = {
   workflowId: string;
   runId: string;
   executionPath: number[];
@@ -617,32 +618,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     return { ...(snapshot?.context ?? {}), ...stepResults };
   }
 
-  getNestedWorkflow({ workflowId, executionPath, parentWorkflow }: ParentWorkflow): Workflow | null {
-    let workflow: Workflow | null = null;
-
-    if (parentWorkflow) {
-      const nestedWorkflow = this.getNestedWorkflow(parentWorkflow);
-      if (!nestedWorkflow) {
-        return null;
-      }
-
-      workflow = nestedWorkflow;
-    }
-
-    workflow = workflow ?? this.mastra.getWorkflow(workflowId);
-    const stepGraph = workflow.stepGraph;
-    let parentStep = stepGraph[executionPath[0]!];
-    if (parentStep?.type === 'parallel' || parentStep?.type === 'conditional') {
-      parentStep = parentStep.steps[executionPath[1]!];
-    }
-
-    if (parentStep?.type === 'step' || parentStep?.type === 'loop') {
-      return parentStep.step as Workflow; // TODO: this is wrong
-    }
-
-    return null;
-  }
-
   async process(event: Event) {
     const { type, data } = event;
 
@@ -655,7 +630,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // });
 
     const workflow = workflowData.parentWorkflow
-      ? this.getNestedWorkflow(workflowData.parentWorkflow)
+      ? getNestedWorkflow(this.mastra, workflowData.parentWorkflow)
       : this.mastra.getWorkflow(workflowData.workflowId);
 
     if (!workflow) {
