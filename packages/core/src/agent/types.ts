@@ -37,12 +37,6 @@ export type MastraLanguageModel = LanguageModelV1;
 
 export type DynamicArgument<T> = T | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => T | Promise<T>);
 
-// Add support for unresolved tool promises that don't block initialization
-export type LazyDynamicArgument<T> =
-  | T
-  | Promise<T>
-  | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => T | Promise<T>);
-
 export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -52,7 +46,7 @@ export interface AgentConfig<
   description?: string;
   instructions: DynamicArgument<string>;
   model: DynamicArgument<MastraLanguageModel>;
-  tools?: LazyDynamicArgument<TTools>; // Support promises that don't block initialization
+  tools?: DynamicArgument<TTools>;
   workflows?: DynamicArgument<Record<string, Workflow>>;
   defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
   defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;

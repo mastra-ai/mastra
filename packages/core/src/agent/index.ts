@@ -43,7 +43,6 @@ import type {
   ToolsetsInput,
   ToolsInput,
   DynamicArgument,
-  LazyDynamicArgument,
   AgentMemoryOption,
 } from './types';
 
@@ -109,7 +108,7 @@ export class Agent<
   #workflows?: DynamicArgument<Record<string, Workflow>>;
   #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
-  #tools: LazyDynamicArgument<TTools>;
+  #tools: DynamicArgument<TTools>;
   /** @deprecated This property is deprecated. Use evals instead. */
   metrics: TMetrics;
   evals: TMetrics;
@@ -367,21 +366,6 @@ export class Agent<
   get tools() {
     this.logger.warn('The tools property is deprecated. Please use getTools() instead.');
 
-    if (this.#tools instanceof Promise) {
-      const mastraError = new MastraError({
-        id: 'AGENT_GET_TOOLS_PROMISE_INCOMPATIBLE_WITH_SYNC_GETTER',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-        },
-        text: 'Tools are not compatible when tools are a promise. Please use getTools() instead.',
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
     if (typeof this.#tools === 'function') {
       const mastraError = new MastraError({
         id: 'AGENT_GET_TOOLS_FUNCTION_INCOMPATIBLE_WITH_TOOL_FUNCTION_TYPE',
@@ -403,33 +387,10 @@ export class Agent<
   public getTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
     | TTools
     | Promise<TTools> {
-    // Handle direct Promise<T> case (lazy loading)
-    if (this.#tools instanceof Promise) {
-      return this.#tools.then(tools => {
-        if (!tools) {
-          const mastraError = new MastraError({
-            id: 'AGENT_GET_TOOLS_PROMISE_EMPTY_RETURN',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
-            details: {
-              agentName: this.name,
-            },
-            text: `[Agent:${this.name}] - Promise-based tools resolved to empty value`,
-          });
-          this.logger.trackException(mastraError);
-          this.logger.error(mastraError.toString());
-          throw mastraError;
-        }
-        return ensureToolProperties(tools) as TTools;
-      });
-    }
-
-    // Handle direct value case
     if (typeof this.#tools !== 'function') {
       return ensureToolProperties(this.#tools) as TTools;
     }
 
-    // Handle function case
     const result = this.#tools({ runtimeContext });
 
     return resolveMaybePromise(result, tools => {

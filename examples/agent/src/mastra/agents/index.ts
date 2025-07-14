@@ -5,6 +5,7 @@ import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
+import { MCPClient } from '@mastra/mcp';
 
 const memory = new Memory();
 
@@ -83,6 +84,15 @@ export const dynamicAgent = new Agent({
   },
 });
 
+const mcpInstance = new MCPClient({
+  id: 'myMcpServerTwo',
+  servers: {
+    myMcpServerTwo: {
+      url: new URL(`http://localhost:4111/api/mcp/myMcpServerTwo/mcp`),
+    },
+  },
+});
+
 export const chefAgentResponses = new Agent({
   name: 'Chef Agent Responses',
   instructions: `
@@ -91,8 +101,11 @@ export const chefAgentResponses = new Agent({
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
     `,
   model: openai.responses('gpt-4o'),
-  tools: {
-    web_search_preview: openai.tools.webSearchPreview(),
+  tools: async () => {
+    return {
+      ...(await mcpInstance.getTools()),
+      web_search_preview: openai.tools.webSearchPreview(),
+    };
   },
   workflows: {
     myWorkflow,
