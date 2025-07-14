@@ -11,9 +11,78 @@ import Image from "next/image";
 CopilotKit provides React components to quickly integrate customizable AI copilots into your application.
 Combined with Mastra, you can build sophisticated AI apps featuring bidirectional state synchronization and interactive UIs.
 
+Visit the [CopilotKit documentation](https://docs.copilotkit.ai/) to learn more about CopilotKit.
+
+## Core Concepts
+
+### What is a Copilot?
+
+A **copilot** is an AI assistant that works directly within your application, understanding your app's context and collaborating with users in real-time. Unlike traditional chatbots that operate in isolation, copilots are deeply integrated into your workflow, able to read your application state, take actions on behalf of users, and provide contextual assistance based on what's happening in your app.
+
+### CopilotKit's Pre-built UI Components
+
+CopilotKit provides a comprehensive suite of **ready-to-use React components** that eliminate the complexity of building AI interfaces from scratch:
+
+- [**CopilotChat**](https://docs.copilotkit.ai/reference/components/chat/CopilotChat) - A flexible chat interface that can be embedded anywhere in your app
+- [**CopilotPopup**](https://docs.copilotkit.ai/reference/components/chat/CopilotPopup) - A floating chat interface with toggle functionality  
+- [**CopilotSidebar**](https://docs.copilotkit.ai/reference/components/chat/CopilotSidebar) - A collapsible sidebar chat experience
+- [**CopilotTextarea**](https://docs.copilotkit.ai/reference/components/CopilotTextarea) - An AI-powered textarea with intelligent autosuggestions
+- [**Headless UI hooks**](https://docs.copilotkit.ai/guides/custom-look-and-feel/customize-built-in-ui-components) - Complete customization with `useCopilotChat` and other hooks
+
+These components handle the entire user experience, from message rendering to loading states, while remaining fully customizable to match your application's design.
+
+### App-Integrated Actions and Context
+
+CopilotKit copilots don't just chat—they **actively participate in your application**:
+
+- **Read Application State**: Copilots can access real-time data from your app using `useCopilotReadable`
+- **Execute Actions**: Copilots can trigger functions and update your app using `useCopilotAction`
+- **Frontend Actions**: Let the AI directly manipulate UI elements, update forms, or navigate between pages
+- **Bidirectional State Sync**: Changes made by the copilot are immediately reflected in your UI, and vice versa
+
+### The CopilotKit Runtime
+
+The **CopilotKit Runtime** is the orchestration engine that powers your copilot experiences. It acts as an intelligent middleware layer that:
+
+- **Manages Agent Communication**: Handles requests to your agent with streaming, error handling, and retries
+- **Coordinates Actions**: Routes and executes both frontend and backend actions triggered by the copilot
+- **Real-time Synchronization**: Ensures your UI and AI agent state stay perfectly synchronized
+
+## Integration Approaches
+
+This guide covers three flexible approaches to integrate CopilotKit with Mastra, each suited for different architectural needs. The difference between the three approaches is how the CopilotKit Runtime is set up:
+
+### 1. Direct Mastra Server Integration (Recommended)
+
+The primary approach registers CopilotKit directly on your Mastra server, creating a unified backend that serves both your AI workflows and copilot runtime. This method:
+
+- Makes your setup **framework-agnostic** for any React frontend.
+- Provides **direct access** to all Mastra agents, workflows, and context
+- Offers the **simplest deployment** with a single backend service
+- Enables **centralized configuration** of runtime context, workflow and agent routing
+
+### 2. Next.js API Route with Direct Mastra Access
+
+Perfect for **full-stack Next.js applications** where you want to embed the CopilotKit runtime directly in your API routes while maintaining direct access to your Mastra instance. This approach:
+
+- Keeps everything in a **single Next.js codebase**
+- Provides **direct access** to your Mastra configuration
+- Ideal for **rapid prototyping** and **monolithic architectures**
+
+### 3. Next.js API Route with Mastra Client SDK
+
+Best for **distributed architectures** where your Next.js frontend connects to a separate Mastra server using the client SDK. This approach:
+
+- Enables **a flexible architecture** with separate frontend and backend deployments
+- Provides **network isolation** between your frontend and Mastra server
+- Allows **multiple frontends** to connect to the same Mastra backend
+- Supports **independent scaling** of frontend and backend services
+
+We'll start with setting up the React frontend components, then walk through the Mastra server integration, followed by the Next.js alternatives for different architectural preferences.
+
 ## React Frontend Setup
 
-Set up a CopilotKit component in your React frontend
+Set up a CopilotKit component in your React frontend. Start with installing the required packages in your React frontend.
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
@@ -32,6 +101,8 @@ Set up a CopilotKit component in your React frontend
     ```
   </Tabs.Tab>
 </Tabs>
+
+We then create a `CopilotKitComponent` which takes in a `runtimeUrl` prop. This is will be the address pointing to where the CopilotKit Runtime is running.
 
 ```tsx filename="components/CopilotKitComponent.tsx" showLineNumbers copy
 'use client';
@@ -261,6 +332,8 @@ export const POST = async (req: NextRequest) => {
   return handleRequest(req);
 };
 ```
+
+For a full guide on how to integrate Mastra into your full-stack Next.js app, read the [Next.js integration documentation here](/docs/frameworks/web-frameworks/next-js)
 
 ### Next.js with Remote Mastra Server and Mastra Client SDK
 
