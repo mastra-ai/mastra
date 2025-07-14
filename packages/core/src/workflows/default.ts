@@ -162,6 +162,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
+    //clear runCounts
+    this.runCounts.clear();
+
     if (steps.length === 0) {
       throw new MastraError({
         id: 'WORKFLOW_EXECUTE_EMPTY_GRAPH',
@@ -1749,7 +1752,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       serializedStepGraph,
       stepResults,
       executionContext,
-      workflowStatus: execResults.status,
+      workflowStatus: execResults.status === 'success' ? 'running' : execResults.status,
     });
 
     return { result: execResults, stepResults, executionContext };

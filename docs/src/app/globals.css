@@ -327,7 +327,7 @@ aside {
 
 article main a {
   font-weight: 500;
-  &:is(html[class~='light'] *) {
+  &:is(html[class~="light"] *) {
     --x-color-primary-600: var(--light-color-text-6);
     text-decoration-thickness: 1px;
     text-decoration-line: underline;
