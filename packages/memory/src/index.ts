@@ -758,14 +758,8 @@ Notes:
   public getTools(config?: MemoryConfig): Record<string, CoreTool> {
     const mergedConfig = this.getMergedThreadConfig(config);
     if (mergedConfig.workingMemory?.enabled) {
-      if (mergedConfig.workingMemory.schema) {
-        return {
-          updateWorkingMemory: updateWorkingMemoryTool({ format: 'json' }),
-        };
-      }
-
       return {
-        updateWorkingMemory: updateWorkingMemoryTool({ format: 'markdown' }),
+        updateWorkingMemory: updateWorkingMemoryTool(config),
       };
     }
     return {};
