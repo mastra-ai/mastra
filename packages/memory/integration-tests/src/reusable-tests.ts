@@ -494,7 +494,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
     });
 
     describe('Message Types and Roles', () => {
-      it.only('should handle different message types', async () => {
+      it('should handle different message types', async () => {
         const userMessage = createTestMessage(thread.id, 'Hello', 'user', 'text');
         const assistantMessages = [
           createTestMessage(
