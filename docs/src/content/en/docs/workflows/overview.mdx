@@ -171,7 +171,13 @@ const result = await run.start({
   }
 });
 
+// Dump the complete workflow result (includes status, steps and result)
 console.log(JSON.stringify(result, null, 2));
+
+// Get the workflow output value
+if (result.status === 'success') {
+  console.log(`output value: ${result.result.output}`);
+}
 ```
 > see [createRunAsync](/reference/workflows/create-run) and [start](/reference/workflows/start) for more information.
 
