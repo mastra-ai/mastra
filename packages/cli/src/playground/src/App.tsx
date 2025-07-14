@@ -1,4 +1,4 @@
-import { Routes, Route, BrowserRouter, Navigate, Outlet } from 'react-router';
+import { Routes, Route, BrowserRouter, Outlet, Link } from 'react-router';
 
 import { Layout } from '@/components/layout';
 
@@ -34,7 +34,7 @@ import { WorkflowGraphLayout } from './pages/workflows/layouts/workflow-graph-la
 import { LinkComponentProvider, MastraClientProvider } from '@mastra/playground-ui';
 import VNextNetwork from './pages/networks/network/v-next';
 import Scorer from './pages/scorers/scorer';
-import { Link } from './lib/framework';
+import { NavigateTo } from './lib/react-router';
 
 function App() {
   const [queryClient] = useState(() => new QueryClient());
@@ -53,10 +53,21 @@ function App() {
                     </Layout>
                   }
                 >
+                  <Route path="/scorers" element={<Scorers />} />
+                  <Route path="/scorers/:scorerId" element={<Scorer />} />
+                </Route>
+
+                <Route
+                  element={
+                    <Layout>
+                      <Outlet />
+                    </Layout>
+                  }
+                >
                   <Route path="/networks" element={<Networks />} />
                   <Route
                     path="/networks/v-next/:networkId"
-                    element={<Navigate to="/networks/v-next/:networkId/chat" />}
+                    element={<NavigateTo to="/networks/v-next/:networkId/chat" />}
                   />
                   <Route
                     path="/networks/v-next/:networkId"
@@ -69,7 +80,7 @@ function App() {
                     <Route path="chat" element={<VNextNetwork />} />
                     <Route path="chat/:threadId" element={<VNextNetwork />} />
                   </Route>
-                  <Route path="/networks/:networkId" element={<Navigate to="/networks/:networkId/chat" />} />
+                  <Route path="/networks/:networkId" element={<NavigateTo to="/networks/:networkId/chat" />} />
                   <Route
                     path="/networks/:networkId"
                     element={
@@ -89,19 +100,8 @@ function App() {
                     </Layout>
                   }
                 >
-                  <Route path="/scorers" element={<Scorers />} />
-                  <Route path="/scorers/:scorerId" element={<Scorer />} />
-                </Route>
-
-                <Route
-                  element={
-                    <Layout>
-                      <Outlet />
-                    </Layout>
-                  }
-                >
                   <Route path="/agents" element={<Agents />} />
-                  <Route path="/agents/:agentId" element={<Navigate to="/agents/:agentId/chat" />} />
+                  <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
                   <Route
                     path="/agents/:agentId"
                     element={
@@ -124,7 +124,7 @@ function App() {
                   <Route path="/mcps/:serverId/tools/:toolId" element={<MCPServerToolExecutor />} />
 
                   <Route path="/workflows" element={<Workflows />} />
-                  <Route path="/workflows/:workflowId" element={<Navigate to="/workflows/:workflowId/graph" />} />
+                  <Route path="/workflows/:workflowId" element={<NavigateTo to="/workflows/:workflowId/graph" />} />
 
                   <Route path="/workflows/:workflowId" element={<Outlet />}>
                     <Route
@@ -153,7 +153,7 @@ function App() {
 
                   <Route
                     path="/workflows/legacy/:workflowId"
-                    element={<Navigate to="/workflows/legacy/:workflowId/graph" />}
+                    element={<NavigateTo to="/workflows/legacy/:workflowId/graph" />}
                   />
 
                   <Route
@@ -167,7 +167,7 @@ function App() {
                     <Route path="graph" element={<LegacyWorkflow />} />
                     <Route path="traces" element={<LegacyWorkflowTracesPage />} />
                   </Route>
-                  <Route path="/" element={<Navigate to="/agents" />} />
+                  <Route path="/" element={<NavigateTo to="/agents" />} />
                   <Route path="/runtime-context" element={<RuntimeContext />} />
                 </Route>
               </Routes>

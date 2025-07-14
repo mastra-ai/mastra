@@ -7,6 +7,7 @@ import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core';
 import { Telemetry } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { Tool } from '@mastra/core/tools';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -55,8 +56,10 @@ import {
   getMessagesHandler,
   getThreadByIdHandler,
   getThreadsHandler,
+  getWorkingMemoryHandler,
   saveMessagesHandler,
   updateThreadHandler,
+  updateWorkingMemoryHandler,
 } from './handlers/memory';
 import {
   generateHandler as generateNetworkHandler,
@@ -128,7 +131,9 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
     tools = toolImports.reduce((acc, toolModule) => {
       Object.entries(toolModule).forEach(([key, tool]) => {
-        acc[key] = tool;
+        if (tool instanceof Tool) {
+          acc[key] = tool;
+        }
       });
       return acc;
     }, {});
@@ -2385,6 +2390,90 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     getMessagesHandler,
+  );
+
+  app.get(
+    '/api/memory/threads/:threadId/working-memory',
+    describeRoute({
+      description: 'Get working memory for a thread',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'resourceId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Working memory details',
+        },
+        404: {
+          description: 'Thread not found',
+        },
+      },
+    }),
+    getWorkingMemoryHandler,
+  );
+
+  app.post(
+    '/api/memory/threads/:threadId/working-memory',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Update working memory for a thread',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                workingMemory: { type: 'string' },
+                resourceId: { type: 'string' },
+              },
+              required: ['workingMemory'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Working memory updated successfully',
+        },
+        404: {
+          description: 'Thread not found',
+        },
+      },
+    }),
+    updateWorkingMemoryHandler,
   );
 
   app.post(

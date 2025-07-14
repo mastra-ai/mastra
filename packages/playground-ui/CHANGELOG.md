@@ -1,5 +1,128 @@
 # @mastra/playground-ui
 
+## 5.1.12
+
+### Patch Changes
+
+- 640f47e: move agent model settings into agent settings
+- Updated dependencies [9468be4]
+- Updated dependencies [b4a9811]
+- Updated dependencies [4d5583d]
+- Updated dependencies [44731a4]
+  - @mastra/client-js@0.10.11
+  - @mastra/core@0.10.12
+
+## 5.1.12-alpha.0
+
+### Patch Changes
+
+- 640f47e: move agent model settings into agent settings
+- Updated dependencies [9468be4]
+- Updated dependencies [b4a9811]
+- Updated dependencies [44731a4]
+  - @mastra/client-js@0.10.11-alpha.0
+  - @mastra/core@0.10.12-alpha.0
+
+## 5.1.11
+
+### Patch Changes
+
+- 7fb0909: dependencies updates:
+  - Updated dependency [`@dagrejs/dagre@^1.1.5` ↗︎](https://www.npmjs.com/package/@dagrejs/dagre/v/1.1.5) (from `^1.1.4`, in `dependencies`)
+- 05ba777: dependencies updates:
+  - Updated dependency [`@xyflow/react@^12.8.1` ↗︎](https://www.npmjs.com/package/@xyflow/react/v/12.8.1) (from `^12.6.4`, in `dependencies`)
+- 7ccbf43: dependencies updates:
+  - Updated dependency [`motion@^12.23.0` ↗︎](https://www.npmjs.com/package/motion/v/12.23.0) (from `^12.16.0`, in `dependencies`)
+- 4b4b339: dependencies updates:
+  - Updated dependency [`@uiw/react-codemirror@^4.23.14` ↗︎](https://www.npmjs.com/package/@uiw/react-codemirror/v/4.23.14) (from `^4.23.13`, in `dependencies`)
+- f457d86: reset localstorage when resetting model settings
+- 8722d53: Fix multi modal remaining steps
+- 4219597: add JSON input close to form input
+- b790fd1: Use SerializedStepFlowEntry in playground
+- c1cceea: Bump peerdeps of @matra/core
+- a7a836a: Highlight send event button
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [565cc0c]
+- Updated dependencies [b790fd1]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [18da791]
+- Updated dependencies [cb16baf]
+- Updated dependencies [f36e4f1]
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11
+  - @mastra/client-js@0.10.10
+
+## 5.1.11-alpha.4
+
+### Patch Changes
+
+- c1cceea: Bump peerdeps of @matra/core
+  - @mastra/core@0.10.11-alpha.4
+  - @mastra/client-js@0.10.10-alpha.4
+
+## 5.1.11-alpha.3
+
+### Patch Changes
+
+- f457d86: reset localstorage when resetting model settings
+- 8722d53: Fix multi modal remaining steps
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [cb16baf]
+  - @mastra/core@0.10.11-alpha.3
+  - @mastra/client-js@0.10.10-alpha.3
+
+## 5.1.11-alpha.2
+
+### Patch Changes
+
+- 7fb0909: dependencies updates:
+  - Updated dependency [`@dagrejs/dagre@^1.1.5` ↗︎](https://www.npmjs.com/package/@dagrejs/dagre/v/1.1.5) (from `^1.1.4`, in `dependencies`)
+- 05ba777: dependencies updates:
+  - Updated dependency [`@xyflow/react@^12.8.1` ↗︎](https://www.npmjs.com/package/@xyflow/react/v/12.8.1) (from `^12.6.4`, in `dependencies`)
+- 7ccbf43: dependencies updates:
+  - Updated dependency [`motion@^12.23.0` ↗︎](https://www.npmjs.com/package/motion/v/12.23.0) (from `^12.16.0`, in `dependencies`)
+- 4b4b339: dependencies updates:
+  - Updated dependency [`@uiw/react-codemirror@^4.23.14` ↗︎](https://www.npmjs.com/package/@uiw/react-codemirror/v/4.23.14) (from `^4.23.13`, in `dependencies`)
+- 4219597: add JSON input close to form input
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [565cc0c]
+- Updated dependencies [18da791]
+  - @mastra/core@0.10.11-alpha.2
+  - @mastra/client-js@0.10.10-alpha.2
+
+## 5.1.11-alpha.1
+
+### Patch Changes
+
+- a7a836a: Highlight send event button
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11-alpha.1
+  - @mastra/client-js@0.10.10-alpha.1
+
+## 5.1.11-alpha.0
+
+### Patch Changes
+
+- b790fd1: Use SerializedStepFlowEntry in playground
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/core@0.10.11-alpha.0
+  - @mastra/client-js@0.10.10-alpha.0
+
 ## 5.1.10
 
 ### Patch Changes

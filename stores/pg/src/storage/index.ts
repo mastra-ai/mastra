@@ -940,7 +940,7 @@ export class PostgresStore extends MastraStorage {
   ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const { threadId, format, selectBy } = args;
 
-    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId"`;
+    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"`;
     const orderByStatement = `ORDER BY "createdAt" DESC`;
     const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
 
@@ -1017,7 +1017,7 @@ export class PostgresStore extends MastraStorage {
     const fromDate = dateRange?.start;
     const toDate = dateRange?.end;
 
-    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId"`;
+    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"`;
     const orderByStatement = `ORDER BY "createdAt" DESC`;
 
     const messages: MastraMessageV2[] = [];

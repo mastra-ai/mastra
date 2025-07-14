@@ -28,18 +28,18 @@
     "test:watch": "vitest watch",
     "lint": "eslint ."
   },
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "cloudflare": "^4.4.1",
     "zod": "^3.25.67"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250620.0",
+    "@cloudflare/workers-types": "^4.20250705.0",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
-    "eslint": "^9.29.0",
+    "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"

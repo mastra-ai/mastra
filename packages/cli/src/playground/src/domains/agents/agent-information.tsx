@@ -3,7 +3,7 @@ import { useAgent } from '@/hooks/use-agents';
 import { AgentEndpoints } from './agent-endpoints';
 import { AgentLogs } from './agent-logs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge, MemoryIcon, Txt, AgentIcon, Icon, AgentModelSettings } from '@mastra/playground-ui';
+import { Badge, MemoryIcon, Txt, AgentIcon, Icon, AgentSettings } from '@mastra/playground-ui';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { CopyIcon } from 'lucide-react';
 import { Link } from 'react-router';
@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { providerMapToIcon } from './table.columns';
 import { AgentOverview } from './agent-overview';
 import { useMemory } from '@/hooks/use-memory';
+import { AgentWorkingMemory } from './agent-working-memory';
 
 export function AgentInformation({ agentId }: { agentId: string }) {
   const { agent, isLoading } = useAgent(agentId);
@@ -101,6 +102,11 @@ export function AgentInformation({ agentId }: { agentId: string }) {
               Log&nbsp;Drains
             </p>
           </TabsTrigger>
+          <TabsTrigger value="working-memory" className="group">
+            <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
+              Working Memory
+            </p>
+          </TabsTrigger>
         </TabsList>
 
         <div className="overflow-y-auto">
@@ -110,13 +116,16 @@ export function AgentInformation({ agentId }: { agentId: string }) {
           </TabsContent>
           <TabsContent value="settings">
             {isLoading && <Skeleton className="h-full" />}
-            {agent && <AgentModelSettings />}
+            {agent && <AgentSettings />}
           </TabsContent>
           <TabsContent value="endpoints">
             {isLoading ? <Skeleton className="h-full" /> : <AgentEndpoints agentId={agentId} />}
           </TabsContent>
           <TabsContent value="logs">
             {isLoading ? <Skeleton className="h-full" /> : <AgentLogs agentId={agentId} />}
+          </TabsContent>
+          <TabsContent value="working-memory">
+            {isLoading ? <Skeleton className="h-full" /> : <AgentWorkingMemory />}
           </TabsContent>
         </div>
       </Tabs>

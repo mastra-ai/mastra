@@ -1,5 +1,97 @@
 # @mastra/deployer
 
+## 0.10.14
+
+### Patch Changes
+
+- @mastra/core@0.10.14
+
+## 0.10.12
+
+### Patch Changes
+
+- Updated dependencies [b4a9811]
+- Updated dependencies [4d5583d]
+  - @mastra/core@0.10.12
+
+## 0.10.12-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [4d5583d]
+  - @mastra/core@0.10.12-alpha.1
+
+## 0.10.12-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4a9811]
+  - @mastra/core@0.10.12-alpha.0
+
+## 0.10.11
+
+### Patch Changes
+
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [565cc0c]
+- Updated dependencies [b790fd1]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [cb16baf]
+- Updated dependencies [f36e4f1]
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11
+
+## 0.10.11-alpha.4
+
+### Patch Changes
+
+- @mastra/core@0.10.11-alpha.4
+
+## 0.10.11-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [cb16baf]
+  - @mastra/core@0.10.11-alpha.3
+
+## 0.10.11-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [565cc0c]
+  - @mastra/core@0.10.11-alpha.2
+
+## 0.10.11-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11-alpha.1
+
+## 0.10.11-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/core@0.10.11-alpha.0
+
 ## 0.10.10
 
 ### Patch Changes

@@ -7,7 +7,7 @@ import { Button } from '@/ds/components/Button';
 import { Braces, CopyIcon, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatJSON, isValidJson } from '@/lib/formatting';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Icon } from '@/ds/icons';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
@@ -31,6 +31,7 @@ export const WorkflowRunEventForm = ({ event, runId, onSendEvent }: WorkflowSend
     setIsLoading(true);
     setError(null);
     try {
+      setError(null);
       data = JSON.parse(eventData);
     } catch (error) {
       setError('Invalid JSON');
@@ -39,6 +40,7 @@ export const WorkflowRunEventForm = ({ event, runId, onSendEvent }: WorkflowSend
     }
 
     try {
+      setError(null);
       const result = await onSendEvent({ event, data, runId });
       toast.success(result.message);
     } catch (error) {
@@ -52,6 +54,7 @@ export const WorkflowRunEventForm = ({ event, runId, onSendEvent }: WorkflowSend
   const buttonClass = 'text-icon3 hover:text-icon6';
 
   const formatEventData = async () => {
+    setError(null);
     if (!isValidJson(eventData)) {
       setError('Invalid JSON');
       return;
@@ -62,7 +65,7 @@ export const WorkflowRunEventForm = ({ event, runId, onSendEvent }: WorkflowSend
   };
 
   return (
-    <div>
+    <TooltipProvider>
       <div className="space-y-2">
         <div className="flex items-center justify-between pb-2">
           <Txt as="label" variant="ui-md" className="text-icon3">
@@ -114,6 +117,6 @@ export const WorkflowRunEventForm = ({ event, runId, onSendEvent }: WorkflowSend
           {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send'}
         </Button>
       </div>
-    </div>
+    </TooltipProvider>
   );
 };

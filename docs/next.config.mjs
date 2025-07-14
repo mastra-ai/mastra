@@ -600,7 +600,7 @@ export default withGT(
       },
       {
         source: "/docs/guide/local-dev/integrations",
-        destination: "/docs/local-dev/mastra-dev",
+        destination: "/docs/server-db/local-dev-playground",
         permanent: true,
       },
       {
@@ -761,6 +761,36 @@ export default withGT(
       {
         source: "/docs/guides/:path*",
         destination: "/guides/guide/:path*",
+        permanent: true,
+      },
+      {
+        source: "/docs/client-js/overview",
+        destination: "/docs/server-db/mastra-client",
+        permanent: true,
+      },
+      {
+        source: "/docs/deployment/custom-api-routes",
+        destination: "/docs/server-db/custom-api-routes",
+        permanent: true,
+      },
+      {
+        source: "/docs/deployment/middleware",
+        destination: "/docs/server-db/middleware",
+        permanent: true,
+      },
+      {
+        source: "/docs/deployment/server",
+        destination: "/docs/deployment/server-deployment",
+        permanent: true,
+      },
+      {
+        source: "/docs/local-dev/mastra-dev",
+        destination: "/docs/server-db/local-dev-playground",
+        permanent: true,
+      },
+      {
+        source: "/docs/storage/overview",
+        destination: "/docs/server-db/storage",
         permanent: true,
       },
       {

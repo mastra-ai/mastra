@@ -1,4 +1,9 @@
-import { AgentSettingsProvider, AgentChat as Chat, MainContentContent } from '@mastra/playground-ui';
+import {
+  AgentChat as Chat,
+  MainContentContent,
+  AgentSettingsProvider,
+  WorkingMemoryProvider,
+} from '@mastra/playground-ui';
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
@@ -8,11 +13,8 @@ import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { useAgent } from '@/hooks/use-agents';
 import { useMemory, useMessages, useThreads } from '@/hooks/use-memory';
 import type { Message } from '@/types';
-import { useFeatureFlagEnabled } from 'posthog-js/react';
 
 function Agent() {
-  const isCliShowMultiModal = useFeatureFlagEnabled('cli_ShowMultiModal');
-
   const { agentId, threadId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { memory } = useMemory(agentId!);
@@ -44,25 +46,26 @@ function Agent() {
 
   return (
     <AgentSettingsProvider agentId={agentId!}>
-      <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
-        {withSidebar && (
-          <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
-        )}
+      <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
+        <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
+          {withSidebar && (
+            <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
+          )}
 
-        <div className="grid overflow-y-auto relative bg-surface1 py-4">
-          <Chat
-            agentId={agentId!}
-            agentName={agent?.name}
-            threadId={threadId!}
-            initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
-            memory={memory?.result}
-            refreshThreadList={refreshThreads}
-            showFileSupport={isCliShowMultiModal}
-          />
-        </div>
+          <div className="grid overflow-y-auto relative bg-surface1 py-4">
+            <Chat
+              agentId={agentId!}
+              agentName={agent?.name}
+              threadId={threadId!}
+              initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
+              memory={memory?.result}
+              refreshThreadList={refreshThreads}
+            />
+          </div>
 
-        <AgentInformation agentId={agentId!} />
-      </MainContentContent>
+          <AgentInformation agentId={agentId!} />
+        </MainContentContent>
+      </WorkingMemoryProvider>
     </AgentSettingsProvider>
   );
 }

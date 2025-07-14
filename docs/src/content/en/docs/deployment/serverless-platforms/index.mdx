@@ -19,7 +19,7 @@ For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/d
 
 Before you begin, ensure you have:
 
-- **Node.js** installed (version 18 or higher is recommended)
+- Node.js `v20.0` or higher
 - If using a platform-specific deployer:
   - An account with your chosen platform
   - Required API keys or credentials
@@ -29,7 +29,6 @@ Before you begin, ensure you have:
 `LibSQLStore` writes to the local filesystem, which is not supported in serverless environments due to their ephemeral nature. If you're deploying to a platform like Vercel, Netlify or Cloudflare, you **must remove** all usage of `LibSQLStore`.
 
 Specifically, ensure you've removed it from both `src/mastra/index.ts` and `src/mastra/agents/weather-agent.ts`:
-
 
 ```diff filename="src/mastra/index.ts" showLineNumbers
 export const mastra = new Mastra({

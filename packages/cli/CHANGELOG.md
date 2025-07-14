@@ -1,5 +1,137 @@
 # mastra
 
+## 0.10.12
+
+### Patch Changes
+
+- 640f47e: move agent model settings into agent settings
+- 5d0c163: Scaffold create-mastra projects with zod@^3 to prevent package version conflicts during install
+- 53e3f58: Add support for custom instrumentation files
+- Updated dependencies [b4a9811]
+- Updated dependencies [4d5583d]
+- Updated dependencies [53e3f58]
+  - @mastra/core@0.10.12
+  - @mastra/deployer@0.10.12
+
+## 0.10.12-alpha.0
+
+### Patch Changes
+
+- 640f47e: move agent model settings into agent settings
+- 5d0c163: Scaffold create-mastra projects with zod@^3 to prevent package version conflicts during install
+- 53e3f58: Add support for custom instrumentation files
+- Updated dependencies [b4a9811]
+- Updated dependencies [53e3f58]
+  - @mastra/core@0.10.12-alpha.0
+  - @mastra/deployer@0.10.12-alpha.0
+
+## 0.10.11
+
+### Patch Changes
+
+- ec77f83: Expose --inspect flag for mastra dev to start debugger
+- af9e40e: Map log level number to string value
+- f457d86: reset localstorage when resetting model settings
+- 8722d53: Fix multi modal remaining steps
+- 565cc0c: fix redirection when clicking on the playground breadcrumbs
+- 4219597: add JSON input close to form input
+- 2873c7f: dependencies updates:
+  - Updated dependency [`dotenv@^16.6.1` ↗︎](https://www.npmjs.com/package/dotenv/v/16.6.1) (from `^16.5.0`, in `dependencies`)
+- a9f51e4: Fix plaground get tools not including x-mastra-dev-header"
+- 3322d00: Fix tools watcher in dev
+- b790fd1: Use SerializedStepFlowEntry in playground
+- a7a836a: Highlight send event button
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [bc40cdd]
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [d9b26b5]
+- Updated dependencies [f5ec3a4]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [ab3bbff]
+- Updated dependencies [8c846b6]
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [565cc0c]
+- Updated dependencies [b790fd1]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [c0ba5e2]
+- Updated dependencies [18ca936]
+- Updated dependencies [cb16baf]
+- Updated dependencies [40cd025]
+- Updated dependencies [f36e4f1]
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11
+  - @mastra/deployer@0.10.11
+  - @mastra/mcp@0.10.6
+
+## 0.10.11-alpha.3
+
+### Patch Changes
+
+- f457d86: reset localstorage when resetting model settings
+- 8722d53: Fix multi modal remaining steps
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [c0ba5e2]
+- Updated dependencies [cb16baf]
+  - @mastra/core@0.10.11-alpha.3
+  - @mastra/mcp@0.10.6-alpha.1
+  - @mastra/deployer@0.10.11-alpha.3
+
+## 0.10.11-alpha.2
+
+### Patch Changes
+
+- ec77f83: Expose --inspect flag for mastra dev to start debugger
+- 565cc0c: fix redirection when clicking on the playground breadcrumbs
+- 4219597: add JSON input close to form input
+- 2873c7f: dependencies updates:
+  - Updated dependency [`dotenv@^16.6.1` ↗︎](https://www.npmjs.com/package/dotenv/v/16.6.1) (from `^16.5.0`, in `dependencies`)
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [d9b26b5]
+- Updated dependencies [f5ec3a4]
+- Updated dependencies [ab3bbff]
+- Updated dependencies [565cc0c]
+- Updated dependencies [18ca936]
+  - @mastra/core@0.10.11-alpha.2
+  - @mastra/deployer@0.10.11-alpha.2
+  - @mastra/mcp@0.10.6-alpha.0
+
+## 0.10.11-alpha.1
+
+### Patch Changes
+
+- a7a836a: Highlight send event button
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11-alpha.1
+  - @mastra/deployer@0.10.11-alpha.1
+
+## 0.10.11-alpha.0
+
+### Patch Changes
+
+- af9e40e: Map log level number to string value
+- a9f51e4: Fix plaground get tools not including x-mastra-dev-header"
+- 3322d00: Fix tools watcher in dev
+- b790fd1: Use SerializedStepFlowEntry in playground
+- Updated dependencies [bc40cdd]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/deployer@0.10.11-alpha.0
+  - @mastra/core@0.10.11-alpha.0
+
 ## 0.10.10
 
 ### Patch Changes

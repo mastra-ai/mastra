@@ -1,5 +1,93 @@
 # @mastra/core
 
+## 0.10.14
+
+### Patch Changes
+
+- Update @mastra/deployer
+
+## 0.10.12
+
+### Patch Changes
+
+- b4a9811: Remove async-await of stream inside llm base class
+- 4d5583d: [Cloud-195] added retrieved memory messages to agent traces
+
+## 0.10.12-alpha.1
+
+### Patch Changes
+
+- 4d5583d: [Cloud-195] added retrieved memory messages to agent traces
+
+## 0.10.12-alpha.0
+
+### Patch Changes
+
+- b4a9811: Remove async-await of stream inside llm base class
+
+## 0.10.11
+
+### Patch Changes
+
+- 2873c7f: dependencies updates:
+  - Updated dependency [`dotenv@^16.6.1` ↗︎](https://www.npmjs.com/package/dotenv/v/16.6.1) (from `^16.5.0`, in `dependencies`)
+- 1c1c6a1: dependencies updates:
+  - Updated dependency [`hono@^4.8.4` ↗︎](https://www.npmjs.com/package/hono/v/4.8.4) (from `^4.8.3`, in `dependencies`)
+- f8ce2cc: Add stepId to workflow executeStep error log
+- 8c846b6: Fixed a problem where per-resource working memory wasn't being queried properly
+- c7bbf1e: Implement workflow retry delay
+- 8722d53: Fix multi modal remaining steps
+- 565cc0c: fix redirection when clicking on the playground breadcrumbs
+- b790fd1: Ability to pass a function to .sleep()/.sleepUntil()
+- 132027f: Check if workflow and step is suspended before resuming
+- 0c85311: Fix Google models ZodNull tool schema handling
+- d7ed04d: make workflow execute use createRunAsync
+- cb16baf: Fix MCP tool output schema type and return value
+- f36e4f1: Allow passing custom instructions to generateTitle to override default instructions.
+- 7f6e403: [MASTRA-3765] Save Message parts - Add ability for user to save messages on step finish for stream and agent
+- Updated dependencies [0c85311]
+  - @mastra/schema-compat@0.10.4
+
+## 0.10.11-alpha.4
+
+## 0.10.11-alpha.3
+
+### Patch Changes
+
+- c7bbf1e: Implement workflow retry delay
+- 8722d53: Fix multi modal remaining steps
+- 132027f: Check if workflow and step is suspended before resuming
+- 0c85311: Fix Google models ZodNull tool schema handling
+- cb16baf: Fix MCP tool output schema type and return value
+- Updated dependencies [0c85311]
+  - @mastra/schema-compat@0.10.4-alpha.0
+
+## 0.10.11-alpha.2
+
+### Patch Changes
+
+- 2873c7f: dependencies updates:
+  - Updated dependency [`dotenv@^16.6.1` ↗︎](https://www.npmjs.com/package/dotenv/v/16.6.1) (from `^16.5.0`, in `dependencies`)
+- 1c1c6a1: dependencies updates:
+  - Updated dependency [`hono@^4.8.4` ↗︎](https://www.npmjs.com/package/hono/v/4.8.4) (from `^4.8.3`, in `dependencies`)
+- 565cc0c: fix redirection when clicking on the playground breadcrumbs
+
+## 0.10.11-alpha.1
+
+### Patch Changes
+
+- 7f6e403: [MASTRA-3765] Save Message parts - Add ability for user to save messages on step finish for stream and agent
+
+## 0.10.11-alpha.0
+
+### Patch Changes
+
+- f8ce2cc: Add stepId to workflow executeStep error log
+- 8c846b6: Fixed a problem where per-resource working memory wasn't being queried properly
+- b790fd1: Ability to pass a function to .sleep()/.sleepUntil()
+- d7ed04d: make workflow execute use createRunAsync
+- f36e4f1: Allow passing custom instructions to generateTitle to override default instructions.
+
 ## 0.10.10
 
 ### Patch Changes

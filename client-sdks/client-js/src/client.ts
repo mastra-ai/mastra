@@ -13,6 +13,8 @@ import {
   MCPTool,
   LegacyWorkflow,
 } from './resources';
+import { NetworkMemoryThread } from './resources/network-memory-thread';
+import { VNextNetwork } from './resources/vNextNetwork';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -45,8 +47,6 @@ import type {
   SaveScoreResponse,
   GetScorerResponse,
 } from './types';
-import { VNextNetwork } from './resources/vNextNetwork';
-import { NetworkMemoryThread } from './resources/network-memory-thread';
 
 export class MastraClient extends BaseResource {
   constructor(options: ClientOptions) {
@@ -503,8 +503,15 @@ export class MastraClient extends BaseResource {
   }
 
   public getScoresByScorerId(params: GetScoresByScorerIdParams): Promise<GetScoresResponse> {
-    const { page, perPage, scorerId } = params;
+    const { page, perPage, scorerId, entityId, entityType } = params;
     const searchParams = new URLSearchParams();
+
+    if (entityId) {
+      searchParams.set('entityId', entityId);
+    }
+    if (entityType) {
+      searchParams.set('entityType', entityType);
+    }
 
     if (page !== undefined) {
       searchParams.set('page', String(page));
@@ -565,6 +572,52 @@ export class MastraClient extends BaseResource {
     return this.request('/api/scores', {
       method: 'POST',
       body: params,
+    });
+  }
+
+  /**
+   * Retrieves the working memory for a specific thread (optionally resource-scoped).
+   * @param agentId - ID of the agent.
+   * @param threadId - ID of the thread.
+   * @param resourceId - Optional ID of the resource.
+   * @returns Working memory for the specified thread or resource.
+   */
+  public getWorkingMemory({
+    agentId,
+    threadId,
+    resourceId,
+  }: {
+    agentId: string;
+    threadId: string;
+    resourceId?: string;
+  }) {
+    return this.request(`/api/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}`);
+  }
+
+  /**
+   * Updates the working memory for a specific thread (optionally resource-scoped).
+   * @param agentId - ID of the agent.
+   * @param threadId - ID of the thread.
+   * @param workingMemory - The new working memory content.
+   * @param resourceId - Optional ID of the resource.
+   */
+  public updateWorkingMemory({
+    agentId,
+    threadId,
+    workingMemory,
+    resourceId,
+  }: {
+    agentId: string;
+    threadId: string;
+    workingMemory: string;
+    resourceId?: string;
+  }) {
+    return this.request(`/api/memory/threads/${threadId}/working-memory?agentId=${agentId}`, {
+      method: 'POST',
+      body: {
+        workingMemory,
+        resourceId,
+      },
     });
   }
 }
