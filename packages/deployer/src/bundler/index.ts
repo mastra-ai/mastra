@@ -426,7 +426,6 @@ export const tools = [${toolsExports.join(', ')}]`,
         await this.installDependencies(outputDirectory);
         this.logger.info('Done installing dependencies');
       }
-
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new MastraError(
