@@ -443,5 +443,5 @@ export abstract class MastraMemory extends MastraBase {
     workingMemory: string;
     searchString?: string;
     memoryConfig?: MemoryConfig;
-  }): Promise<void | { success: boolean; reason: string }>;
+  }): Promise<{ success: boolean; reason: string }>;
 }

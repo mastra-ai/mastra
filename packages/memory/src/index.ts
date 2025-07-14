@@ -336,7 +336,7 @@ export class Memory extends MastraMemory {
     workingMemory: string;
     searchString?: string;
     memoryConfig?: MemoryConfig;
-  }): Promise<void | { success: boolean; reason: string }> {
+  }): Promise<{ success: boolean; reason: string }> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
     if (!config.workingMemory?.enabled) {
@@ -421,9 +421,10 @@ export class Memory extends MastraMemory {
         });
       }
 
-      if (reason) {
-        return { success: true, reason };
-      }
+      return { success: true, reason };
+    } catch (e) {
+      this.logger.error(e instanceof Error ? e.stack || e.message : JSON.stringify(e));
+      return { success: false, reason: 'Tool error.' };
     } finally {
       release();
     }
