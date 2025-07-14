@@ -8,6 +8,7 @@ import {
   createSampleWorkflowSnapshot,
   resetRole,
   checkWorkflowSnapshot,
+  createSampleScoreRow,
 } from '@internal/storage-test-utils';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
@@ -18,6 +19,7 @@ import {
   TABLE_THREADS,
   TABLE_EVALS,
   TABLE_TRACES,
+  TABLE_SCORERS,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
@@ -2386,6 +2388,251 @@ describe('PostgresStore', () => {
           tempPgp.end(); // Clean up the verification connection
         }
       });
+    });
+  });
+
+  describe('Scorer Tests', () => {
+    let store: PostgresStore;
+    const scorerId = 'test-scorer-id';
+    const entityId = 'test-entity-id';
+    const entityType = 'AGENT';
+    const otherEntityType = 'WORKFLOW';
+    const runId = 'test-run-id';
+    const totalScores = 5;
+
+    beforeAll(async () => {
+      store = new PostgresStore(TEST_CONFIG);
+      await store.init();
+      await store.clearTable({ tableName: TABLE_SCORERS });
+
+      // Create multiple scores with the same scorer ID
+      for (let i = 0; i < totalScores; i++) {
+        const score = createSampleScoreRow({
+          scorerId: scorerId,
+        });
+        const { additionalContext, ...rest } = score;
+        await store.saveScore(rest);
+      }
+
+      // Create multiple scores with the same run ID
+      for (let i = 0; i < totalScores; i++) {
+        const score = createSampleScoreRow({
+          runId: runId,
+          id: `run-score-${i}-${randomUUID()}`,
+        });
+        await store.saveScore(score);
+      }
+
+      // Create multiple scores with the same entity ID and type
+      for (let i = 0; i < totalScores; i++) {
+        const score = createSampleScoreRow({
+          entityId,
+          entityType,
+          id: `entity-score-${i}-${randomUUID()}`,
+        });
+        await store.saveScore(score);
+      }
+
+      // Create some scores with the same entity ID but different type
+      for (let i = 0; i < 3; i++) {
+        const score = createSampleScoreRow({
+          entityId,
+          entityType: otherEntityType,
+          id: `other-type-score-${i}-${randomUUID()}`,
+        });
+        await store.saveScore(score);
+      }
+    });
+    it('should save and retrieve a scorer', async () => {
+      const scorer = createSampleScoreRow();
+      await store.saveScore(scorer);
+      const scorerFromDb = await store.getScoreById({ id: scorer.id });
+
+      expect(scorerFromDb?.score).toEqual(scorer.score);
+      expect(scorerFromDb?.reason).toEqual(scorer.reason);
+      expect(scorerFromDb?.extractStepResult).toEqual(scorer.extractStepResult);
+      expect(scorerFromDb?.analyzeStepResult).toEqual(scorer.analyzeStepResult);
+      expect(scorerFromDb?.metadata).toEqual(scorer.metadata);
+      expect(scorerFromDb?.additionalContext).toEqual(scorer.additionalContext);
+      expect(scorerFromDb?.runtimeContext).toEqual(scorer.runtimeContext);
+      expect(scorerFromDb?.entity).toEqual(scorer.entity);
+    });
+
+    it('should retrieve first page of scores by scorer ID', async () => {
+      const result = await store.getScoresByScorerId({
+        scorerId,
+        pagination: { page: 0, perPage: 2 },
+      });
+
+      expect(result.pagination.total).toBe(totalScores);
+      expect(result.pagination.page).toBe(0);
+      expect(result.pagination.perPage).toBe(2);
+      expect(result.pagination.hasMore).toBe(true);
+      expect(result.scores.length).toBe(2);
+    });
+
+    it('should retrieve second page of scores by scorer ID', async () => {
+      const result = await store.getScoresByScorerId({
+        scorerId,
+        pagination: { page: 1, perPage: 2 },
+      });
+
+      expect(result.pagination.total).toBe(totalScores);
+      expect(result.pagination.page).toBe(1);
+      expect(result.pagination.hasMore).toBe(true);
+      expect(result.scores.length).toBe(2);
+    });
+
+    it('should retrieve last page of scores by scorer ID', async () => {
+      const result = await store.getScoresByScorerId({
+        scorerId,
+        pagination: { page: 2, perPage: 2 },
+      });
+
+      expect(result.pagination.total).toBe(totalScores);
+      expect(result.pagination.page).toBe(2);
+      expect(result.pagination.hasMore).toBe(false);
+      expect(result.scores.length).toBe(1);
+    });
+
+    it('should return empty results for non-existent scorer ID', async () => {
+      const result = await store.getScoresByScorerId({
+        scorerId: 'non-existent-scorer-id',
+        pagination: { page: 0, perPage: 10 },
+      });
+
+      expect(result.pagination.total).toBe(0);
+      expect(result.pagination.hasMore).toBe(false);
+      expect(result.scores.length).toBe(0);
+    });
+
+    it('should retrieve first page of scores by run ID', async () => {
+      const result = await store.getScoresByRunId({
+        runId,
+        pagination: { page: 0, perPage: 2 },
+      });
+
+      expect(result.pagination.total).toBe(totalScores);
+      expect(result.pagination.page).toBe(0);
+      expect(result.pagination.perPage).toBe(2);
+      expect(result.pagination.hasMore).toBe(true);
+      expect(result.scores.length).toBe(2);
+      expect(result.scores[0].runId).toBe(runId);
+      expect(result.scores[1].runId).toBe(runId);
+    });
+
+    it('should retrieve second page of scores by run ID', async () => {
+      const result = await store.getScoresByRunId({
+        runId,
+        pagination: { page: 1, perPage: 2 },
+      });
+
+      expect(result.pagination.total).toBe(totalScores);
+      expect(result.pagination.page).toBe(1);
+      expect(result.pagination.hasMore).toBe(true);
+      expect(result.scores.length).toBe(2);
+      expect(result.scores[0].runId).toBe(runId);
+      expect(result.scores[1].runId).toBe(runId);
+    });
+
+    it('should retrieve last page of scores by run ID', async () => {
+      const result = await store.getScoresByRunId({
+        runId,
+        pagination: { page: 2, perPage: 2 },
+      });
+
+      expect(result.pagination.total).toBe(totalScores);
+      expect(result.pagination.page).toBe(2);
+      expect(result.pagination.hasMore).toBe(false);
+      expect(result.scores.length).toBe(1);
+      expect(result.scores[0].runId).toBe(runId);
+    });
+
+    it('should return empty results for non-existent run ID', async () => {
+      const result = await store.getScoresByRunId({
+        runId: 'non-existent-run-id',
+        pagination: { page: 0, perPage: 10 },
+      });
+
+      expect(result.pagination.total).toBe(0);
+      expect(result.pagination.hasMore).toBe(false);
+      expect(result.scores).toEqual([]);
+    });
+
+    it('should retrieve first page of scores by entity ID and type', async () => {
+      const result = await store.getScoresByEntityId({
+        entityId,
+        entityType,
+        pagination: { page: 0, perPage: 2 },
+      });
+
+      expect(result.pagination.total).toBe(totalScores);
+      expect(result.pagination.page).toBe(0);
+      expect(result.pagination.perPage).toBe(2);
+      expect(result.pagination.hasMore).toBe(true);
+      expect(result.scores.length).toBe(2);
+      expect(result.scores[0].entityId).toBe(entityId);
+      expect(result.scores[0].entityType).toBe(entityType);
+      expect(result.scores[1].entityId).toBe(entityId);
+      expect(result.scores[1].entityType).toBe(entityType);
+    });
+
+    it('should retrieve second page of scores by entity ID and type', async () => {
+      const result = await store.getScoresByEntityId({
+        entityId,
+        entityType,
+        pagination: { page: 1, perPage: 2 },
+      });
+
+      expect(result.pagination.total).toBe(totalScores);
+      expect(result.pagination.page).toBe(1);
+      expect(result.pagination.hasMore).toBe(true);
+      expect(result.scores.length).toBe(2);
+      expect(result.scores[0].entityId).toBe(entityId);
+      expect(result.scores[0].entityType).toBe(entityType);
+      expect(result.scores[1].entityId).toBe(entityId);
+      expect(result.scores[1].entityType).toBe(entityType);
+    });
+
+    it('should retrieve last page of scores by entity ID and type', async () => {
+      const result = await store.getScoresByEntityId({
+        entityId,
+        entityType,
+        pagination: { page: 2, perPage: 2 },
+      });
+
+      expect(result.pagination.total).toBe(totalScores);
+      expect(result.pagination.page).toBe(2);
+      expect(result.pagination.hasMore).toBe(false);
+      expect(result.scores.length).toBe(1);
+      expect(result.scores[0].entityId).toBe(entityId);
+      expect(result.scores[0].entityType).toBe(entityType);
+    });
+
+    it('should not retrieve scores with different entity type', async () => {
+      const result = await store.getScoresByEntityId({
+        entityId,
+        entityType,
+        pagination: { page: 0, perPage: 10 },
+      });
+
+      expect(result.pagination.total).toBe(totalScores);
+      expect(result.scores.length).toBe(totalScores);
+      result.scores.forEach(score => {
+        expect(score.entityType).toBe(entityType);
+      });
+    });
+
+    it('should return empty results for non-existent entity ID', async () => {
+      const result = await store.getScoresByEntityId({
+        entityId: 'non-existent-entity-id',
+        entityType,
+        pagination: { page: 0, perPage: 10 },
+      });
+
+      expect(result.pagination.total).toBe(0);
+      expect(result.pagination.hasMore).toBe(false);
+      expect(result.scores).toEqual([]);
     });
   });
 

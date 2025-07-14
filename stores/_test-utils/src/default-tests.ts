@@ -90,30 +90,38 @@ export const createSampleEval = (agentName: string, isTest = false, createdAt?: 
   };
 };
 
-export const createSampleScoreRow = (): ScoreRowData => {
+export const createSampleScoreRow = (overrides?: Partial<ScoreRowData>): ScoreRowData => {
   const entity = {
     id: randomUUID(),
-    type: 'test',
+    type: 'AGENT',
   };
   return {
     id: randomUUID(),
 
     runId: randomUUID(),
     scorer: { agentName: 'test-agent' },
-    result: { score: 0.8 },
-    metadata: {},
-    input: { text: 'Sample input' },
-    output: { text: 'Sample output' },
-    additionalLLMContext: {},
-    runtimeContext: {},
-    entityType: 'test',
+    extractPrompt: 'Sample extract prompt',
+    analyzePrompt: 'Sample analyze prompt',
+    reasonPrompt: 'Sample reason prompt',
+    reason: 'Sample reason',
+    extractStepResult: { extract: 'Sample extract' },
+    analyzeStepResult: { analyze: 'Sample analyze', num: 1 },
+    score: 0.8,
+    metadata: { some: 'test metadata' },
+    input: [{ content: 'Sample input', role: 'user' }],
+    output: { text: 'Sample output', role: 'assistant' },
+    additionalContext: { test: 'test' },
+    runtimeContext: { test: 'hi context' },
+    entityType: 'AGENT',
     entity,
     entityId: entity.id,
-    source: 'test',
+    scorerId: 'Test Scorer',
+    source: 'LIVE',
     resourceId: randomUUID(),
     threadId: randomUUID(),
     createdAt: new Date(),
     updatedAt: new Date(),
+    ...overrides,
   };
 };
 

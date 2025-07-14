@@ -77,6 +77,7 @@ export type ScoringRunWithExtractStepResultAndScore<
 
 export type ScoringRunWithExtractStepResultAndScoreAndReason = ScoringRunWithExtractStepResultAndScore & {
   reason: string;
+  reasonPrompt?: string;
 };
 
 export type ScoreRowData = ScoringRunWithExtractStepResultAndScoreAndReason & {

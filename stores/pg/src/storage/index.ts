@@ -11,6 +11,7 @@ import {
   TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
+  TABLE_SCORERS,
 } from '@mastra/core/storage';
 import type {
   EvalRow,
@@ -1804,76 +1805,215 @@ export class PostgresStore extends MastraStorage {
   /**
    * SCORERS - Not implemented
    */
-  async getScoreById({ id: _id }: { id: string }): Promise<ScoreRowData | null> {
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_PG_STORE_GET_SCORE_BY_ID_FAILED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.THIRD_PARTY,
-      details: {
-        id: _id,
-      },
-    });
+  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
+    try {
+      const result = await this.db.oneOrNone<ScoreRowData>(`SELECT * FROM ${TABLE_SCORERS} WHERE id = $1`, [id]);
+
+      return this.transformScoreRow(result!);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORE_BY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  private transformScoreRow(row: Record<string, any>): ScoreRowData {
+    let input = undefined;
+
+    if (row.input) {
+      try {
+        input = JSON.parse(row.input);
+      } catch (e) {
+        input = row.input;
+      }
+    }
+    return {
+      ...row,
+      input,
+    } as ScoreRowData;
   }
 
   async getScoresByScorerId({
-    scorerId: _scorerId,
-    pagination: _pagination,
+    scorerId,
+    pagination,
   }: {
     scorerId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.THIRD_PARTY,
-      details: {
-        scorerId: _scorerId,
-      },
-    });
+    try {
+      const total = await this.db.oneOrNone<{ count: string }>(
+        `SELECT COUNT(*) FROM ${TABLE_SCORERS} WHERE "scorerId" = $1`,
+        [scorerId],
+      );
+      if (total?.count === '0' || !total?.count) {
+        return {
+          pagination: {
+            total: 0,
+            page: pagination.page,
+            perPage: pagination.perPage,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+
+      const result = await this.db.manyOrNone<ScoreRowData>(
+        `SELECT * FROM ${TABLE_SCORERS} WHERE "scorerId" = $1 LIMIT $2 OFFSET $3`,
+        [scorerId, pagination.perPage, pagination.page * pagination.perPage],
+      );
+      return {
+        pagination: {
+          total: Number(total?.count) || 0,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
+        },
+        scores: result,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_PG_STORE_SAVE_SCORE_FAILED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.THIRD_PARTY,
-    });
+  async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    try {
+      const { input, ...rest } = score;
+      await this.insert({
+        tableName: TABLE_SCORERS,
+        record: {
+          ...rest,
+          input: JSON.stringify(input),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      });
+
+      const scoreFromDb = await this.getScoreById({ id: score.id });
+      return { score: scoreFromDb! };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_SAVE_SCORE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   async getScoresByRunId({
-    runId: _runId,
-    pagination: _pagination,
+    runId,
+    pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_RUN_ID_FAILED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.THIRD_PARTY,
-      details: {
-        runId: _runId,
-      },
-    });
+    try {
+      const total = await this.db.oneOrNone<{ count: string }>(
+        `SELECT COUNT(*) FROM ${TABLE_SCORERS} WHERE "runId" = $1`,
+        [runId],
+      );
+      console.log(`total: ${total?.count}`);
+      console.log(`typeof total: ${typeof total?.count}`);
+      if (total?.count === '0' || !total?.count) {
+        return {
+          pagination: {
+            total: 0,
+            page: pagination.page,
+            perPage: pagination.perPage,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+
+      const result = await this.db.manyOrNone<ScoreRowData>(
+        `SELECT * FROM ${TABLE_SCORERS} WHERE "runId" = $1 LIMIT $2 OFFSET $3`,
+        [runId, pagination.perPage, pagination.page * pagination.perPage],
+      );
+      return {
+        pagination: {
+          total: Number(total?.count) || 0,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
+        },
+        scores: result,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   async getScoresByEntityId({
-    entityId: _entityId,
-    entityType: _entityType,
-    pagination: _pagination,
+    entityId,
+    entityType,
+    pagination,
   }: {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.THIRD_PARTY,
-      details: {
-        entityId: _entityId,
-        entityType: _entityType,
-      },
-    });
+    try {
+      const total = await this.db.oneOrNone<{ count: string }>(
+        `SELECT COUNT(*) FROM ${TABLE_SCORERS} WHERE "entityId" = $1 AND "entityType" = $2`,
+        [entityId, entityType],
+      );
+
+      if (total?.count === '0' || !total?.count) {
+        return {
+          pagination: {
+            total: 0,
+            page: pagination.page,
+            perPage: pagination.perPage,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+
+      const result = await this.db.manyOrNone<ScoreRowData>(
+        `SELECT * FROM ${TABLE_SCORERS} WHERE "entityId" = $1 AND "entityType" = $2 LIMIT $3 OFFSET $4`,
+        [entityId, entityType, pagination.perPage, pagination.page * pagination.perPage],
+      );
+      return {
+        pagination: {
+          total: Number(total?.count) || 0,
+          page: pagination.page,
+          perPage: pagination.perPage,
+          hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
+        },
+        scores: result,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 }
