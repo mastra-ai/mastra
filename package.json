@@ -75,7 +75,8 @@
   },
   "resolutions": {
     "typescript": "^5.8.3",
-    "@types/node": "^20.17.57"
+    "@types/node": "^20.17.57",
+    "rollup": "4.44.2"
   },
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.12.4",
