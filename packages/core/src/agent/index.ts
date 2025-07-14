@@ -1858,6 +1858,12 @@ export class Agent<
     const resourceId = args.memory?.resource || resourceIdFromArgs;
     const memoryConfig = args.memory?.options || memoryConfigFromArgs;
 
+    if (resourceId && threadFromArgs && !this.getMemory()) {
+      this.logger.warn(
+        `[Agent:${this.name}] - No memory is configured but resourceId and threadId were passed in args. This will not work.`,
+      );
+    }
+
     const runId = args.runId || randomUUID();
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
