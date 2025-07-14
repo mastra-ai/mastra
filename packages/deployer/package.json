@@ -140,5 +140,8 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=0.10.9-0 <0.11.0-0"
+  },
+  "resolutions": {
+    "rollup": "4.44.2"
   }
 }
