@@ -1,3 +1,5 @@
+import type { Tool } from '@mastra/core';
+
 export interface ApiError extends Error {
   message: string;
   status?: number;
@@ -6,5 +8,5 @@ export interface ApiError extends Error {
 export type ServerBundleOptions = {
   playground?: boolean;
   isDev?: boolean;
-  tools: Record<string, any>;
+  tools: Record<string, Tool>;
 };
