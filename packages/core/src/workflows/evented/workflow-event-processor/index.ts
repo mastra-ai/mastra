@@ -153,6 +153,42 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
+  protected async processWorkflowSuspend({
+    workflowId,
+    resume,
+    prevResult,
+    resumeData,
+    parentWorkflow,
+    activeSteps,
+    runId,
+  }: ProcessorArgs) {
+    await this.mastra.getStorage()?.updateWorkflowState({
+      workflowName: workflowId,
+      runId,
+      result: prevResult,
+    });
+
+    // handle nested workflow
+    if (parentWorkflow) {
+      console.log('ending nested', workflowId, parentWorkflow);
+      await this.pubsub.publish('workflows', {
+        type: 'workflow.step.end',
+        data: {
+          workflowId: parentWorkflow.workflowId,
+          runId: parentWorkflow.runId,
+          executionPath: parentWorkflow.executionPath,
+          resume,
+          stepResults: parentWorkflow.stepResults,
+          prevResult,
+          resumeData,
+          activeSteps,
+          parentWorkflow: parentWorkflow.parentWorkflow,
+          parentContext: parentWorkflow,
+        },
+      });
+    }
+  }
+
   protected async processWorkflowFail({
     workflowId,
     runId,
@@ -691,8 +727,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
         break;
       case 'workflow.suspend':
-        break;
-      case 'workflow.bail':
+        await this.processWorkflowSuspend({
+          workflow,
+          ...workflowData,
+        });
         break;
       case 'workflow.fail':
         await this.processWorkflowFail({

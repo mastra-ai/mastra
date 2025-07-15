@@ -79,6 +79,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
           resolve(event.data);
         } else if (event.type === 'workflow.fail' && event.data.runId === params.runId) {
           resolve(event.data);
+        } else if (event.type === 'workflow.suspend' && event.data.runId === params.runId) {
+          resolve(event.data);
         }
       };
 
@@ -93,6 +95,11 @@ export class EventedExecutionEngine extends ExecutionEngine {
       return {
         status: 'failed',
         error: resultData.prevResult.error,
+        steps: resultData.stepResults,
+      } as TOutput;
+    } else if (resultData.prevResult.status === 'suspended') {
+      return {
+        status: 'suspended',
         steps: resultData.stepResults,
       } as TOutput;
     }
