@@ -8,7 +8,7 @@ import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React from 'react';
+import React, { useMemo } from 'react';
 
 import { ScrollableContainer } from '@/components/scrollable-container';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -16,29 +16,32 @@ import { columns } from './columns';
 import { AgentTableData } from './types';
 
 export interface AgentsTableProps {
-  agents?: Record<string, GetAgentResponse>;
+  agents: Record<string, GetAgentResponse>;
   isLoading: boolean;
   onClickRow: (agentId: string) => void;
 }
 
 export function AgentsTable({ agents, isLoading, onClickRow }: AgentsTableProps) {
-  const _agents = agents || {};
+  const projectData: AgentTableData[] = useMemo(
+    () =>
+      Object.keys(agents).map(key => {
+        const agent = agents[key];
 
-  const projectData: AgentTableData[] = Object.keys(_agents).map(key => {
-    const agent = _agents[key];
-
-    return {
-      id: key,
-      name: agent.name,
-      instructions: agent.instructions,
-      provider: agent.provider,
-      branch: undefined,
-      executedAt: undefined,
-      repoUrl: undefined,
-      tools: agent.tools,
-      modelId: agent.modelId,
-    };
-  });
+        return {
+          id: key,
+          name: agent.name,
+          instructions: agent.instructions,
+          provider: agent.provider,
+          branch: undefined,
+          executedAt: undefined,
+          repoUrl: undefined,
+          tools: agent.tools,
+          modelId: agent.modelId,
+          link: `/agents/${key}/chat/new`,
+        };
+      }),
+    [agents],
+  );
 
   const table = useReactTable({
     data: projectData,
