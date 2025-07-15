@@ -26,8 +26,9 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     emitter: EventEmitter;
     runtimeContext: RuntimeContext;
+    runCount: number;
   }): Promise<StepResult<any, any, any, any>> {
-    const { step, stepResults, runId, runtimeContext } = params;
+    const { step, stepResults, runId, runtimeContext, runCount } = params;
 
     const abortController = new AbortController();
 
@@ -59,7 +60,7 @@ export class StepExecutor extends MastraBase {
         mastra: this.mastra!,
         runtimeContext,
         inputData: params.input,
-        runCount: 0, // TODO: implement this
+        runCount: runCount - 1,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {

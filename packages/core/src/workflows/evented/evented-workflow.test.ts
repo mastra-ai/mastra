@@ -3794,8 +3794,7 @@ describe('Workflow', () => {
     });
   });
 
-  // TODO
-  describe.skip('Retry', () => {
+  describe('Retry', () => {
     it('should retry a step default 0 times', async () => {
       let err: Error | undefined;
       const step1 = createStep({
@@ -7658,9 +7657,8 @@ describe('Workflow', () => {
     });
   });
 
-  // TODO
-  describe.skip('Run count', () => {
-    it('runCount property should increment the run count when a step is executed multiple times', async () => {
+  describe('Run count', () => {
+    it.only('runCount property should increment the run count when a step is executed multiple times', async () => {
       const repeatingStep = createStep({
         id: 'repeatingStep',
         inputSchema: z.object({}),

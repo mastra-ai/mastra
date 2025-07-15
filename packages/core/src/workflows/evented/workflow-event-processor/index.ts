@@ -28,6 +28,7 @@ export type ProcessorArgs = {
     workflowId: string;
     input: any;
   };
+  runCount?: number;
 };
 
 export type ParentWorkflow = {
@@ -270,6 +271,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     resumeData,
     parentWorkflow,
     runtimeContext,
+    runCount = 0,
   }: ProcessorArgs) {
     let stepGraph: StepFlowEntry[] = workflow.stepGraph;
 
@@ -608,6 +610,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       runtimeContext: rc,
       input: prevResult?.status === 'success' ? prevResult.output : undefined,
       resumeData,
+      runCount,
     });
     runtimeContext = Object.fromEntries(rc.entries());
     console.dir({ stepId: step.step.id, stepResult, stepResults, runtimeContext }, { depth: null });
@@ -635,6 +638,41 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
       });
       return;
+    }
+
+    if (stepResult.status === 'failed') {
+      if (runCount >= (workflow.retryConfig.attempts ?? 0)) {
+        await this.pubsub.publish('workflows', {
+          type: 'workflow.step.end',
+          data: {
+            parentWorkflow,
+            workflowId,
+            runId,
+            executionPath,
+            resumeSteps,
+            stepResults,
+            prevResult: stepResult,
+            activeSteps,
+            runtimeContext,
+          },
+        });
+      } else {
+        return this.pubsub.publish('workflows', {
+          type: 'workflow.step.run',
+          data: {
+            parentWorkflow,
+            workflowId,
+            runId,
+            executionPath,
+            resumeSteps,
+            stepResults,
+            prevResult,
+            activeSteps,
+            runtimeContext,
+            runCount: runCount + 1,
+          },
+        });
+      }
     }
 
     if (step.type === 'loop') {

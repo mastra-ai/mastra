@@ -486,7 +486,7 @@ export class Workflow<
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
   protected executionGraph: ExecutionGraph;
-  protected retryConfig: {
+  public retryConfig: {
     attempts?: number;
     delay?: number;
   };
