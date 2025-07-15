@@ -5,6 +5,8 @@ import type {
   ClientOptions,
   UpdateMemoryThreadParams,
   GetMemoryThreadMessagesParams,
+  GetMemoryThreadMessagesPaginatedParams,
+  GetMemoryThreadMessagesPaginatedResponse,
 } from '../types';
 
 import { BaseResource } from './base';
@@ -59,5 +61,18 @@ export class MemoryThread extends BaseResource {
       ...(params?.limit ? { limit: params.limit.toString() } : {}),
     });
     return this.request(`/api/memory/threads/${this.threadId}/messages?${query.toString()}`);
+  }
+
+  /**
+ * Retrieves messages associated with the thread
+ * @param params - Optional parameters including limit for number of messages to retrieve
+ * @returns Promise containing thread messages and UI messages
+ */
+  getMessagesPaginated({ selectBy, ...rest }: GetMemoryThreadMessagesPaginatedParams): Promise<GetMemoryThreadMessagesPaginatedResponse> {
+    const query = new URLSearchParams({
+      ...rest,
+      selectBy: JSON.stringify(selectBy),
+    });
+    return this.request(`/api/memory/threads/${this.threadId}/messages/paginated?${query.toString()}`);
   }
 }

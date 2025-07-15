@@ -7,6 +7,9 @@ import type {
   WorkflowRuns,
   WorkflowRun,
   LegacyWorkflowRuns,
+  StorageGetMessagesArg,
+  PaginationInfo,
+  MastraMessageV2,
 } from '@mastra/core';
 import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput } from '@mastra/core/agent';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
@@ -46,12 +49,12 @@ export interface RequestOptions {
 
 type WithoutMethods<T> = {
   [K in keyof T as T[K] extends (...args: any[]) => any
-    ? never
-    : T[K] extends { (): any }
-      ? never
-      : T[K] extends undefined | ((...args: any[]) => any)
-        ? never
-        : K]: T[K];
+  ? never
+  : T[K] extends { (): any }
+  ? never
+  : T[K] extends undefined | ((...args: any[]) => any)
+  ? never
+  : K]: T[K];
 };
 
 export interface GetAgentResponse {
@@ -247,11 +250,15 @@ export interface GetMemoryThreadMessagesParams {
    */
   limit?: number;
 }
+export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg, 'threadConfig'>;
 
 export interface GetMemoryThreadMessagesResponse {
   messages: CoreMessage[];
   uiMessages: AiMessageType[];
 }
+
+// @TODO: SHOULD WE CLEAN THIS UP AND EXPORT SOMETHING
+export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] };
 
 export interface GetLogsParams {
   transportId: string;
