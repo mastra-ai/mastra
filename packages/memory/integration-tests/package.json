@@ -38,12 +38,14 @@
     "@mastra/pg": "workspace:*",
     "@mastra/upstash": "workspace:*",
     "dotenv": "^16.4.7",
+    "json-schema": "^0.4.0",
     "zod": "^3.24.3"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
     "@mastra/core": "workspace:*",
     "@testing-library/react": "^16.2.0",
+    "@types/json-schema": "^7.0.15",
     "@types/node": "^20.17.27",
     "ai": "^4.2.2",
     "jsdom": "^26.0.0",
