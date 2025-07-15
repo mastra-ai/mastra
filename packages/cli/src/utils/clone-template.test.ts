@@ -105,7 +105,7 @@ describe('clone-template', () => {
       });
 
       expect(result).toBe('/test-project');
-      expect(mockExec).toHaveBeenCalledWith('npx degit mastra-ai/template-test "/test-project"', {
+      expect(mockExec).toHaveBeenCalledWith('npx degit mastra-ai/template-test /test-project', {
         cwd: process.cwd(),
       });
     });
@@ -127,10 +127,10 @@ describe('clone-template', () => {
       });
 
       expect(result).toBe('/test-project');
-      expect(mockExec).toHaveBeenCalledWith('npx degit mastra-ai/template-test "/test-project"', {
+      expect(mockExec).toHaveBeenCalledWith('npx degit mastra-ai/template-test /test-project', {
         cwd: process.cwd(),
       });
-      expect(mockExec).toHaveBeenCalledWith('git clone "https://github.com/mastra-ai/template-test" "/test-project"', {
+      expect(mockExec).toHaveBeenCalledWith('git clone https\\://github.com/mastra-ai/template-test /test-project', {
         cwd: process.cwd(),
       });
     });
@@ -225,7 +225,7 @@ describe('clone-template', () => {
       });
 
       expect(result).toBe('/custom/path/test-project');
-      expect(mockExec).toHaveBeenCalledWith('npx degit mastra-ai/template-test "/custom/path/test-project"', {
+      expect(mockExec).toHaveBeenCalledWith('npx degit mastra-ai/template-test /custom/path/test-project', {
         cwd: process.cwd(),
       });
     });
