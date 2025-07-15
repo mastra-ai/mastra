@@ -251,7 +251,7 @@ export abstract class MastraMemory extends MastraBase {
    * @param orderBy - Which timestamp field to sort by (`'createdAt'` or `'updatedAt'`);
    *                  defaults to `'createdAt'`
    * @param sortDirection - Sort order for the results (`'ASC'` or `'DESC'`);
-   *                        defaults to `'ASC'`
+   *                        defaults to `'DESC'`
    * @returns Promise resolving to an array of matching threads; resolves to an empty array
    *          if the resource has no threads
    */
