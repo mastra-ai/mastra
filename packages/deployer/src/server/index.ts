@@ -111,14 +111,12 @@ type Variables = {
   isDev: boolean;
 };
 
-let tools: Record<string, any> = {};
-
-(async function importTools() {
+export async function importTools() {
   try {
     // @ts-expect-error Tools is generated dependency
     const toolImports = (await import('#tools')).tools as Record<string, Function>[];
 
-    tools = toolImports.reduce((acc, toolModule) => {
+    return toolImports.reduce((acc, toolModule) => {
       Object.entries(toolModule).forEach(([key, tool]) => {
         if (tool instanceof Tool) {
           acc[key] = tool;
@@ -135,9 +133,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
       err,
     );
   }
-})();
-
-export { tools };
+}
 
 export async function createHonoServer(
   mastra: Mastra,

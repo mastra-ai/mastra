@@ -43,9 +43,9 @@ export class BuildBundler extends Bundler {
     import { TABLE_EVALS } from '@mastra/core/storage';
     import { checkEvalStorageFields } from '@mastra/core/utils';
     import { mastra } from '#mastra';
-    import { createNodeServer } from '#server';
+    import { createNodeServer, importTools } from '#server';
     // @ts-ignore
-    await createNodeServer(mastra);
+    await createNodeServer(mastra, { tools: importTools() });
 
     registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
       evaluate({

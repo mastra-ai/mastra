@@ -7,7 +7,7 @@ import { createTool, Mastra, Telemetry } from '@mastra/core';
 import type { StreamEvent } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
-import { createHonoServer, tools } from '@mastra/deployer/server';
+import { createHonoServer, importTools } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
 import { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
 import { $ } from 'execa';
@@ -101,7 +101,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -190,7 +190,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -265,7 +265,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -346,7 +346,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -420,7 +420,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -514,7 +514,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -606,7 +606,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -700,7 +700,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -790,7 +790,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -884,7 +884,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -976,7 +976,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -1078,7 +1078,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -1167,7 +1167,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -1256,7 +1256,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -1324,7 +1324,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -1400,7 +1400,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -1483,7 +1483,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -1587,7 +1587,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -1664,7 +1664,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -1770,7 +1770,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -1854,7 +1854,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -1922,7 +1922,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -2006,7 +2006,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -2100,7 +2100,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -2228,7 +2228,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -2330,7 +2330,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -2433,7 +2433,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -2522,7 +2522,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -2675,7 +2675,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -2824,7 +2824,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -2996,7 +2996,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -3062,7 +3062,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -3194,7 +3194,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -3266,7 +3266,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -3452,7 +3452,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -3624,7 +3624,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -3774,7 +3774,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -3976,7 +3976,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -4171,7 +4171,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -4300,7 +4300,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -4404,7 +4404,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -4541,7 +4541,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -4684,7 +4684,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -4836,7 +4836,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -4993,7 +4993,7 @@ describe('MastraInngestWorkflow', () => {
           },
         });
 
-        const app = await createHonoServer(mastra, { tools });
+        const app = await createHonoServer(mastra, { tools: importTools() });
         app.use('*', async (ctx, next) => {
           await next();
         });
@@ -5153,7 +5153,7 @@ describe('MastraInngestWorkflow', () => {
           },
         });
 
-        const app = await createHonoServer(mastra, { tools });
+        const app = await createHonoServer(mastra, { tools: importTools() });
         app.use('*', async (ctx, next) => {
           await next();
         });
@@ -5351,7 +5351,7 @@ describe('MastraInngestWorkflow', () => {
           },
         });
 
-        const app = await createHonoServer(mastra, { tools });
+        const app = await createHonoServer(mastra, { tools: importTools() });
         app.use('*', async (ctx, next) => {
           await next();
         });
@@ -5508,7 +5508,7 @@ describe('MastraInngestWorkflow', () => {
           },
         });
 
-        const app = await createHonoServer(mastra, { tools });
+        const app = await createHonoServer(mastra, { tools: importTools() });
 
         const srv = (globServer = serve({
           fetch: app.fetch,
@@ -5656,7 +5656,7 @@ describe('MastraInngestWorkflow', () => {
           },
         });
 
-        const app = await createHonoServer(mastra, { tools });
+        const app = await createHonoServer(mastra, { tools: importTools() });
         app.use('*', async (ctx, next) => {
           await next();
         });
@@ -5841,7 +5841,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -6003,7 +6003,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -6078,7 +6078,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -6141,7 +6141,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -6267,7 +6267,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -6337,7 +6337,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -6509,7 +6509,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -6718,7 +6718,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -6921,7 +6921,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -7147,7 +7147,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
@@ -7336,7 +7336,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      const app = await createHonoServer(mastra, { tools });
+      const app = await createHonoServer(mastra, { tools: importTools() });
 
       const srv = (globServer = serve({
         fetch: app.fetch,
