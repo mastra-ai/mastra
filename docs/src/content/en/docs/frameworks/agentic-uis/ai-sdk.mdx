@@ -80,11 +80,7 @@ export function Chat() {
   });
   return (
     <div>
-      {messages.map((m) => (
-        <div key={m.id}>
-          {m.role}: {m.content}
-        </div>
-      ))}
+      <pre>{JSON.stringify(messages, null, 2)}</pre>
       <form onSubmit={handleSubmit}>
         <input value={input} onChange={handleInputChange} placeholder="Name of city" />
       </form>
@@ -224,11 +220,7 @@ export function ChatExtra() {
 
   return (
     <div>
-      {messages.map((m) => (
-        <div key={m.id}>
-          {m.role}: {m.content}
-        </div>
-      ))}
+      <pre>{JSON.stringify(messages, null, 2)}</pre>
       <form onSubmit={handleFormSubmit}>
         <input value={input} onChange={handleInputChange} placeholder="Name of city" />
       </form>
