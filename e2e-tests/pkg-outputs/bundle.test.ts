@@ -18,6 +18,7 @@ let allPackages = await globby(
     '!**/mcp-docs-server/**',
     '!**/mcp-registry-registry/**',
     '!**/stores/_test-utils/**',
+    '!**/explorations/**',
   ],
   {
     cwd: resolve(__dirname, '..', '..'),

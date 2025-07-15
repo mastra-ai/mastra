@@ -1,0 +1,22 @@
+# Data files
+/data
+
+# Temporary directories
+/.temp-longmemeval
+/.embedding-cache
+/prepared-data
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Results
+/results
+
+# Node modules
+node_modules
+
+# Environment files
+.env
+.env.local
