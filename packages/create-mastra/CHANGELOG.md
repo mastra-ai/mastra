@@ -1,5 +1,14 @@
 # create-mastra
 
+## 0.10.12-alpha.1
+
+### Patch Changes
+
+- d49334d: export tool list for usage in cloud
+- 9cdfcb5: fix infinite rerenders on agents table + share runtime context for cloud
+- 45174f3: share network list between core and cloud
+- 48f5532: export workflow list for usage in cloud
+
 ## 0.10.12-alpha.0
 
 ### Patch Changes
