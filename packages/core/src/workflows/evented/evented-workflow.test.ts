@@ -7445,8 +7445,7 @@ describe('Workflow', () => {
     });
   });
 
-  // TODO
-  describe.skip('Dependency Injection', () => {
+  describe('Dependency Injection', () => {
     it('should inject runtimeContext dependencies into steps during run', async () => {
       const runtimeContext = new RuntimeContext();
       const testValue = 'test-dependency';
@@ -7464,6 +7463,11 @@ describe('Workflow', () => {
       const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
       workflow.then(step).commit();
 
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
+
       const run = workflow.createRun();
       const result = await run.start({ runtimeContext });
 
@@ -7477,11 +7481,6 @@ describe('Workflow', () => {
       const runtimeContext = new RuntimeContext();
       const testValue = 'test-dependency';
       runtimeContext.set('testKey', testValue);
-
-      const mastra = new Mastra({
-        logger: false,
-        storage: initialStorage,
-      });
 
       const execute = vi.fn(async ({ runtimeContext, suspend, resumeData }) => {
         if (!resumeData?.human) {
@@ -7500,11 +7499,16 @@ describe('Workflow', () => {
       });
       const workflow = createWorkflow({
         id: 'test-workflow',
-        mastra,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       workflow.then(step).commit();
+
+      new Mastra({
+        logger: false,
+        storage: initialStorage,
+        workflows: { 'test-workflow': workflow },
+      });
 
       const run = workflow.createRun();
       await run.start({ runtimeContext });
