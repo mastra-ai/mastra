@@ -56,8 +56,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     return runCount;
   }
 
-  protected runtimeContext: Record<string, any> = {};
-
   protected async fmtReturnValue<TOutput>(
     executionSpan: Span | undefined,
     emitter: Emitter,
@@ -151,7 +149,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
-      snapshotRuntimeContext?: Record<string, any>;
     };
     emitter: Emitter;
     retryConfig?: {
@@ -185,10 +182,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     if (resume?.resumePath) {
       startIdx = resume.resumePath[0]!;
       resume.resumePath.shift();
-    }
-
-    if (resume?.snapshotRuntimeContext) {
-      this.runtimeContext = { ...this.runtimeContext, ...resume.snapshotRuntimeContext };
     }
 
     const stepResults: Record<string, any> = resume?.stepResults || { input };
@@ -238,6 +231,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             workflowStatus: result.status,
             result: result.result,
             error: result.error,
+            runtimeContext: params.runtimeContext,
           });
           return result;
         }
@@ -273,6 +267,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           workflowStatus: result.status,
           result: result.result,
           error: result.error,
+          runtimeContext: params.runtimeContext,
         });
         return result;
       }
@@ -288,6 +283,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       workflowStatus: result.status,
       result: result.result,
       error: result.error,
+      runtimeContext: params.runtimeContext,
     });
     return result;
   }
@@ -598,18 +594,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         let suspended: { payload: any } | undefined;
         let bailed: { payload: any } | undefined;
 
-        let runtimeContextToUse = runtimeContext;
-
-        Object.entries(this.runtimeContext).forEach(([key, value]) => {
-          if (!runtimeContextToUse.has(key)) {
-            runtimeContextToUse.set(key, value);
-          }
-        });
-
         const result = await runStep({
           runId,
           mastra: this.mastra!,
-          runtimeContext: runtimeContextToUse,
+          runtimeContext,
           inputData: prevOutput,
           runCount: this.getOrGenerateRunCount(step.id),
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
@@ -646,13 +634,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           engine: {},
           abortSignal: abortController?.signal,
         });
-
-        let runtimeContextObj: Record<string, any> = {};
-        runtimeContext.forEach((value, key) => {
-          runtimeContextObj[key] = value;
-        });
-
-        this.runtimeContext = { ...this.runtimeContext, ...runtimeContextObj };
 
         if (suspended) {
           execResults = { status: 'suspended', suspendPayload: suspended.payload, suspendedAt: Date.now() };
@@ -1281,6 +1262,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowStatus,
     result,
     error,
+    runtimeContext,
   }: {
     workflowId: string;
     runId: string;
@@ -1290,7 +1272,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowStatus: 'success' | 'failed' | 'suspended' | 'running' | 'waiting';
     result?: Record<string, any>;
     error?: string | Error;
+    runtimeContext: RuntimeContext;
   }) {
+    const runtimeContextObj: Record<string, any> = {};
+    runtimeContext.forEach((value, key) => {
+      runtimeContextObj[key] = value;
+    });
+
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflowId,
       runId,
@@ -1304,7 +1292,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         suspendedPaths: executionContext.suspendedPaths,
         result,
         error,
-        runtimeContext: this.runtimeContext,
+        runtimeContext: runtimeContextObj,
         // @ts-ignore
         timestamp: Date.now(),
       },
@@ -1484,6 +1472,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepResults,
         executionContext,
         workflowStatus: 'waiting',
+        runtimeContext,
       });
 
       await this.executeSleep({
@@ -1508,6 +1497,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepResults,
         executionContext,
         workflowStatus: 'running',
+        runtimeContext,
       });
 
       const endedAt = Date.now();
@@ -1599,6 +1589,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepResults,
         executionContext,
         workflowStatus: 'waiting',
+        runtimeContext,
       });
 
       await this.executeSleepUntil({
@@ -1623,6 +1614,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepResults,
         executionContext,
         workflowStatus: 'running',
+        runtimeContext,
       });
 
       const endedAt = Date.now();
@@ -1716,6 +1708,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepResults,
         executionContext,
         workflowStatus: 'waiting',
+        runtimeContext,
       });
 
       try {
@@ -1728,6 +1721,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           stepResults,
           executionContext,
           workflowStatus: 'running',
+          runtimeContext,
         });
 
         const { step } = entry;
@@ -1777,6 +1771,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       stepResults,
       executionContext,
       workflowStatus: execResults.status === 'success' ? 'running' : execResults.status,
+      runtimeContext,
     });
 
     return { result: execResults, stepResults, executionContext };
