@@ -719,6 +719,19 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
       });
 
+      await this.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'step-suspended',
+          payload: {
+            id: (step as any)?.step?.id,
+            ...prevResult,
+            suspendedAt: Date.now(),
+            suspendPayload: prevResult.suspendPayload,
+          },
+        },
+      });
+
       return;
     }
 
@@ -751,16 +764,18 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
       });
 
-      await this.pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        data: {
-          type: 'step-finish',
-          payload: {
-            id: step.step.id,
-            metadata: {},
+      if (prevResult.status === 'success') {
+        await this.pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          data: {
+            type: 'step-finish',
+            payload: {
+              id: step.step.id,
+              metadata: {},
+            },
           },
-        },
-      });
+        });
+      }
     }
 
     step = workflow.stepGraph[executionPath[0]!];

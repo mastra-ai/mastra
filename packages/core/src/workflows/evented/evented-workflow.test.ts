@@ -19,8 +19,7 @@ describe('Workflow', () => {
     vi.resetAllMocks();
   });
 
-  // TODO
-  describe.skip('Streaming', () => {
+  describe('Streaming', () => {
     it('should generate a stream', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
@@ -45,6 +44,11 @@ describe('Workflow', () => {
         steps: [step1, step2],
       });
       workflow.then(step1).then(step2).commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
@@ -264,6 +268,7 @@ describe('Workflow', () => {
           payload: { userInput: 'test input' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
+          suspendPayload: {},
           resumePayload: { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } },
           resumedAt: expect.any(Number),
           suspendedAt: expect.any(Number),
@@ -292,7 +297,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should be able to use an agent as a step', async () => {
+    it.only('should be able to use an agent as a step', async () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({

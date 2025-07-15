@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import type { ReadableStream } from 'stream/web';
 import z from 'zod';
 import { Workflow, Run } from '../..';
 import type {
@@ -9,6 +10,7 @@ import type {
   Mastra,
   SerializedStepFlowEntry,
   Step,
+  StreamEvent,
   ToolExecutionContext,
   WatchEvent,
   WorkflowConfig,
@@ -436,6 +438,53 @@ export class EventedRun<
     }
 
     return result;
+  }
+
+  /**
+   * Starts the workflow execution with the provided input as a stream
+   * @param input The input data for the workflow
+   * @returns A promise that resolves to the workflow output
+   */
+  stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
+    stream: ReadableStream<StreamEvent>;
+    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
+  } {
+    const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
+
+    const writer = writable.getWriter();
+    const unwatch = this.watch(async event => {
+      try {
+        console.log('writing', event);
+        // watch-v2 events are data stream events, so we need to cast them to the correct type
+        await writer.write(event as any);
+      } catch {}
+    }, 'watch-v2');
+
+    this.closeStreamAction = async () => {
+      console.log('closing stream');
+      unwatch();
+
+      try {
+        await writer.close();
+      } catch (err) {
+        console.error('Error closing stream:', err);
+      } finally {
+        writer.releaseLock();
+      }
+    };
+
+    this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
+      if (result.status !== 'suspended') {
+        this.closeStreamAction?.().catch(() => {});
+      }
+
+      return result;
+    });
+
+    return {
+      stream: readable as ReadableStream<StreamEvent>,
+      getWorkflowState: () => this.executionResults!,
+    };
   }
 
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
