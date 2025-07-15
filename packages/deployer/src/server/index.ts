@@ -2398,7 +2398,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
   app.get(
     '/api/memory/threads/:threadId/messages/paginated',
     describeRoute({
-      description: 'Get messages for a thread',
+      description: 'Get paginated messages for a thread',
       tags: ['memory'],
       parameters: [
         {
