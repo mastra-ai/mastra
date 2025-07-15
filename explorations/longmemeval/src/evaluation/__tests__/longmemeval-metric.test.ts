@@ -4,9 +4,9 @@ import { Agent } from '@mastra/core/agent';
 
 // Mock Agent
 const mockAgent = {
-  generate: vi.fn().mockImplementation(async (messages) => {
+  generate: vi.fn().mockImplementation(async messages => {
     const content = messages[0].content;
-    
+
     // Check if it's asking about correct response
     if (content.includes('Is the model response correct?')) {
       // If the model response contains the correct answer, return yes
@@ -20,10 +20,10 @@ const mockAgent = {
         text: 'no: the model did not provide the correct answer',
       };
     }
-    
+
     // For abstention questions
     if (content.includes('Does the model correctly identify the question as unanswerable?')) {
-      if (content.includes('cannot answer') || content.includes('don\'t have that information')) {
+      if (content.includes('cannot answer') || content.includes("don't have that information")) {
         return {
           text: 'yes',
         };
@@ -32,7 +32,7 @@ const mockAgent = {
         text: 'no: the model attempted to answer an unanswerable question',
       };
     }
-    
+
     // Default response
     return {
       text: 'yes',
@@ -141,7 +141,7 @@ describe('LongMemEvalMetric', () => {
         question: 'What is my name?',
         answer: 'John',
       });
-      const output = 'I don\'t know your name';
+      const output = "I don't know your name";
 
       const result = await metric.measure(input, output);
 
@@ -157,7 +157,7 @@ describe('LongMemEvalMetric', () => {
 
       expect(metric).toBeInstanceOf(LongMemEvalMetric);
     });
-    
+
     it('should throw error when agent is not provided', () => {
       expect(() => {
         new LongMemEvalMetric({

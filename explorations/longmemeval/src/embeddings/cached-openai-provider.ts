@@ -29,10 +29,10 @@ export function createCachedOpenAI(options: CachedOpenAIOptions = {}) {
           return new CachedOpenAIEmbeddingModel(originalModel, cacheDir);
         };
       }
-      
+
       // For all other properties, use the original
       return Reflect.get(target, prop, receiver);
-    }
+    },
   });
 }
 

@@ -22,7 +22,7 @@ export function createMockEmbedding() {
         if (fixtureEmbeddings[text]) {
           return fixtureEmbeddings[text];
         }
-        
+
         // Otherwise generate a deterministic "random" embedding based on the text
         // This ensures the same text always gets the same embedding
         const seed = text.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -30,7 +30,7 @@ export function createMockEmbedding() {
           // Use a simple deterministic function to generate values
           return Math.sin(seed + i) * Math.cos(seed * i * 0.01);
         });
-        
+
         return embedding;
       });
 

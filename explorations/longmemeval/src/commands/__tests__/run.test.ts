@@ -66,7 +66,7 @@ describe('RunCommand', () => {
     testDir = join(tmpdir(), `run-test-${Date.now()}`);
     preparedDataDir = join(testDir, 'prepared-data');
     outputDir = join(testDir, 'results');
-    
+
     // Override the directories
     (command as any).preparedDataDir = preparedDataDir;
     (command as any).outputDir = outputDir;
@@ -90,112 +90,145 @@ describe('RunCommand', () => {
     // Question 1
     const q1Dir = join(dataDir, 'test-q1');
     await mkdir(q1Dir, { recursive: true });
-    
-    await writeFile(join(q1Dir, 'meta.json'), JSON.stringify({
-      questionId: 'test-q1',
-      questionType: 'single-session-user',
-      resourceId: 'resource_test-q1',
-      threadIds: ['session-1'],
-      memoryConfig: 'full-history',
-      question: 'What is my favorite color?',
-      answer: 'Blue',
-    }));
 
-    await writeFile(join(q1Dir, 'db.json'), JSON.stringify({
-      mastra_messages: [
-        ['msg-1', {
-          id: 'msg-1',
-          threadId: 'session-1',
-          resourceId: 'resource_test-q1',
-          role: 'user',
-          content: 'My favorite color is blue',
-          createdAt: new Date().toISOString(),
-          type: 'text',
-        }],
-        ['msg-2', {
-          id: 'msg-2',
-          threadId: 'session-1',
-          resourceId: 'resource_test-q1',
-          role: 'assistant',
-          content: 'I understand your favorite color is blue.',
-          createdAt: new Date().toISOString(),
-          type: 'text',
-        }],
-      ],
-      mastra_threads: [
-        ['session-1', {
-          id: 'session-1',
-          resourceId: 'resource_test-q1',
-          title: 'Session 1',
-          metadata: {},
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }],
-      ],
-      mastra_resources: [],
-      mastra_workflow_snapshot: [],
-      mastra_evals: [],
-      mastra_traces: [],
-    }));
+    await writeFile(
+      join(q1Dir, 'meta.json'),
+      JSON.stringify({
+        questionId: 'test-q1',
+        questionType: 'single-session-user',
+        resourceId: 'resource_test-q1',
+        threadIds: ['session-1'],
+        memoryConfig: 'full-history',
+        question: 'What is my favorite color?',
+        answer: 'Blue',
+      }),
+    );
+
+    await writeFile(
+      join(q1Dir, 'db.json'),
+      JSON.stringify({
+        mastra_messages: [
+          [
+            'msg-1',
+            {
+              id: 'msg-1',
+              threadId: 'session-1',
+              resourceId: 'resource_test-q1',
+              role: 'user',
+              content: 'My favorite color is blue',
+              createdAt: new Date().toISOString(),
+              type: 'text',
+            },
+          ],
+          [
+            'msg-2',
+            {
+              id: 'msg-2',
+              threadId: 'session-1',
+              resourceId: 'resource_test-q1',
+              role: 'assistant',
+              content: 'I understand your favorite color is blue.',
+              createdAt: new Date().toISOString(),
+              type: 'text',
+            },
+          ],
+        ],
+        mastra_threads: [
+          [
+            'session-1',
+            {
+              id: 'session-1',
+              resourceId: 'resource_test-q1',
+              title: 'Session 1',
+              metadata: {},
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+        ],
+        mastra_resources: [],
+        mastra_workflow_snapshot: [],
+        mastra_evals: [],
+        mastra_traces: [],
+      }),
+    );
 
     // Question 2
     const q2Dir = join(dataDir, 'test-q2');
     await mkdir(q2Dir, { recursive: true });
-    
-    await writeFile(join(q2Dir, 'meta.json'), JSON.stringify({
-      questionId: 'test-q2',
-      questionType: 'multi-session',
-      resourceId: 'resource_test-q2',
-      threadIds: ['session-2', 'session-3'],
-      memoryConfig: 'full-history',
-      question: 'What did I say about my pet?',
-      answer: 'You have a cat named Fluffy',
-    }));
 
-    await writeFile(join(q2Dir, 'db.json'), JSON.stringify({
-      mastra_messages: [
-        ['msg-1', {
-          id: 'msg-1',
-          threadId: 'session-2',
-          resourceId: 'resource_test-q2',
-          role: 'user',
-          content: 'I have a pet',
-          createdAt: new Date().toISOString(),
-          type: 'text',
-        }],
-        ['msg-2', {
-          id: 'msg-2',
-          threadId: 'session-3',
-          resourceId: 'resource_test-q2',
-          role: 'user',
-          content: 'It is a cat named Fluffy',
-          createdAt: new Date().toISOString(),
-          type: 'text',
-        }],
-      ],
-      mastra_threads: [
-        ['session-2', {
-          id: 'session-2',
-          resourceId: 'resource_test-q2',
-          title: 'Session 2',
-          metadata: {},
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }],
-        ['session-3', {
-          id: 'session-3',
-          resourceId: 'resource_test-q2',
-          title: 'Session 3',
-          metadata: {},
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }],
-      ],
-      mastra_resources: [],
-      mastra_workflow_snapshot: [],
-      mastra_evals: [],
-      mastra_traces: [],
-    }));
+    await writeFile(
+      join(q2Dir, 'meta.json'),
+      JSON.stringify({
+        questionId: 'test-q2',
+        questionType: 'multi-session',
+        resourceId: 'resource_test-q2',
+        threadIds: ['session-2', 'session-3'],
+        memoryConfig: 'full-history',
+        question: 'What did I say about my pet?',
+        answer: 'You have a cat named Fluffy',
+      }),
+    );
+
+    await writeFile(
+      join(q2Dir, 'db.json'),
+      JSON.stringify({
+        mastra_messages: [
+          [
+            'msg-1',
+            {
+              id: 'msg-1',
+              threadId: 'session-2',
+              resourceId: 'resource_test-q2',
+              role: 'user',
+              content: 'I have a pet',
+              createdAt: new Date().toISOString(),
+              type: 'text',
+            },
+          ],
+          [
+            'msg-2',
+            {
+              id: 'msg-2',
+              threadId: 'session-3',
+              resourceId: 'resource_test-q2',
+              role: 'user',
+              content: 'It is a cat named Fluffy',
+              createdAt: new Date().toISOString(),
+              type: 'text',
+            },
+          ],
+        ],
+        mastra_threads: [
+          [
+            'session-2',
+            {
+              id: 'session-2',
+              resourceId: 'resource_test-q2',
+              title: 'Session 2',
+              metadata: {},
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+          [
+            'session-3',
+            {
+              id: 'session-3',
+              resourceId: 'resource_test-q2',
+              title: 'Session 3',
+              metadata: {},
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+        ],
+        mastra_resources: [],
+        mastra_workflow_snapshot: [],
+        mastra_evals: [],
+        mastra_traces: [],
+      }),
+    );
   }
 
   describe('run', () => {
@@ -213,8 +246,9 @@ describe('RunCommand', () => {
       expect(metrics.overall_accuracy).toBe(1.0);
 
       // Check output files
-      const runDirs = await Promise.resolve()
-        .then(() => existsSync(outputDir) ? require('fs/promises').readdir(outputDir) : []);
+      const runDirs = await Promise.resolve().then(() =>
+        existsSync(outputDir) ? require('fs/promises').readdir(outputDir) : [],
+      );
       expect(runDirs.length).toBeGreaterThan(0);
 
       const runDir = join(outputDir, runDirs[0]);
@@ -242,59 +276,80 @@ describe('RunCommand', () => {
 
       const q1Dir = join(semanticDir, 'test-q1');
       await mkdir(q1Dir, { recursive: true });
-      
-      await writeFile(join(q1Dir, 'meta.json'), JSON.stringify({
-        questionId: 'test-q1',
-        questionType: 'single-session-user',
-        resourceId: 'resource_test-q1',
-        threadIds: ['session-1'],
-        memoryConfig: 'semantic-recall',
-        question: 'What is my favorite color?',
-        answer: 'Blue',
-      }));
 
-      await writeFile(join(q1Dir, 'db.json'), JSON.stringify({
-        mastra_messages: [['msg-1', {
-          id: 'msg-1',
-          threadId: 'session-1',
+      await writeFile(
+        join(q1Dir, 'meta.json'),
+        JSON.stringify({
+          questionId: 'test-q1',
+          questionType: 'single-session-user',
           resourceId: 'resource_test-q1',
-          role: 'user',
-          content: 'My favorite color is blue',
-          createdAt: new Date().toISOString(),
-          type: 'text',
-        }]],
-        mastra_threads: [['session-1', {
-          id: 'session-1',
-          resourceId: 'resource_test-q1',
-          title: 'Session 1',
-          metadata: {},
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }]],
-        mastra_resources: [],
-        mastra_workflow_snapshot: [],
-        mastra_evals: [],
-        mastra_traces: [],
-      }));
+          threadIds: ['session-1'],
+          memoryConfig: 'semantic-recall',
+          question: 'What is my favorite color?',
+          answer: 'Blue',
+        }),
+      );
+
+      await writeFile(
+        join(q1Dir, 'db.json'),
+        JSON.stringify({
+          mastra_messages: [
+            [
+              'msg-1',
+              {
+                id: 'msg-1',
+                threadId: 'session-1',
+                resourceId: 'resource_test-q1',
+                role: 'user',
+                content: 'My favorite color is blue',
+                createdAt: new Date().toISOString(),
+                type: 'text',
+              },
+            ],
+          ],
+          mastra_threads: [
+            [
+              'session-1',
+              {
+                id: 'session-1',
+                resourceId: 'resource_test-q1',
+                title: 'Session 1',
+                metadata: {},
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              },
+            ],
+          ],
+          mastra_resources: [],
+          mastra_workflow_snapshot: [],
+          mastra_evals: [],
+          mastra_traces: [],
+        }),
+      );
 
       // Add vector store data in the correct format
-      await writeFile(join(q1Dir, 'vector.json'), JSON.stringify({
-        messages: {
-          config: {
-            dimension: 1536,
-            metric: 'cosine',
-          },
-          documents: [{
-            id: 'msg-1',
-            vector: new Array(1536).fill(0).map(() => Math.random()),
-            metadata: { 
-              threadId: 'session-1', 
-              resourceId: 'resource_test-q1',
-              content: 'My favorite color is blue',
+      await writeFile(
+        join(q1Dir, 'vector.json'),
+        JSON.stringify({
+          messages: {
+            config: {
+              dimension: 1536,
+              metric: 'cosine',
             },
-          }],
-        },
-      }));
+            documents: [
+              {
+                id: 'msg-1',
+                vector: new Array(1536).fill(0).map(() => Math.random()),
+                metadata: {
+                  threadId: 'session-1',
+                  resourceId: 'resource_test-q1',
+                  content: 'My favorite color is blue',
+                },
+              },
+            ],
+          },
+        }),
+      );
 
       const metrics = await command.run({
         dataset: 'longmemeval_s',
@@ -316,7 +371,7 @@ describe('RunCommand', () => {
           model: 'gpt-4o',
           preparedDataDir,
           outputDir,
-        })
+        }),
       ).rejects.toThrow(/Prepared data not found/);
     });
   });

@@ -157,14 +157,14 @@ program
       console.log('  • Generate embeddings for semantic recall');
       console.log('  • Potentially use significant API credits\n');
       console.log(chalk.gray('Memory configs like "working-memory" and "combined" are especially costly.\n'));
-      
+
       const readline = await import('readline');
       const rl = readline.createInterface({
         input: process.stdin,
-        output: process.stdout
+        output: process.stdout,
       });
 
-      const answer = await new Promise<string>((resolve) => {
+      const answer = await new Promise<string>(resolve => {
         rl.question(chalk.bold('Are you sure you want to continue? (y/N): '), resolve);
       });
       rl.close();

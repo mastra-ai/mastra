@@ -33,7 +33,9 @@ export class MockLanguageModelV1 implements LanguageModelV1 {
     this.generateFunc = doGenerate;
   }
 
-  async doGenerate(options: Parameters<LanguageModelV1['doGenerate']>[0]): Promise<Awaited<ReturnType<LanguageModelV1['doGenerate']>>> {
+  async doGenerate(
+    options: Parameters<LanguageModelV1['doGenerate']>[0],
+  ): Promise<Awaited<ReturnType<LanguageModelV1['doGenerate']>>> {
     return this.generateFunc(options);
   }
 

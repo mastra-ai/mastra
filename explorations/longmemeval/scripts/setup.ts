@@ -14,7 +14,7 @@ async function setup() {
 
   // Check if already set up
   const hasAllFiles = EXPECTED_FILES.every(file => existsSync(join(DATA_DIR, file)));
-  
+
   if (hasAllFiles) {
     console.log(chalk.green('✓ All datasets are already downloaded'));
     console.log(chalk.gray('\nYou can run the benchmark with:'));
@@ -34,7 +34,7 @@ async function setup() {
 
   // Download datasets
   console.log(chalk.blue('\n📥 Downloading datasets...\n'));
-  
+
   try {
     execSync('pnpm download', { stdio: 'inherit' });
   } catch (error) {
@@ -44,7 +44,7 @@ async function setup() {
 
   // Verify setup
   const filesAfterDownload = EXPECTED_FILES.filter(file => existsSync(join(DATA_DIR, file)));
-  
+
   if (filesAfterDownload.length === EXPECTED_FILES.length) {
     console.log(chalk.green('\n✅ Setup complete!'));
     console.log(chalk.gray('\nYou can now run the benchmark:'));

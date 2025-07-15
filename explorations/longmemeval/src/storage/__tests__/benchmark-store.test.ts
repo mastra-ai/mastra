@@ -191,7 +191,7 @@ describe('BenchmarkStore', () => {
           include: [
             {
               id: 'msg-2',
-              threadId: 'thread-2',  // Different thread!
+              threadId: 'thread-2', // Different thread!
               withPreviousMessages: 0,
               withNextMessages: 1,
             },

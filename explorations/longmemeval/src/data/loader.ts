@@ -13,23 +13,25 @@ export class DatasetLoader {
   /**
    * Load a LongMemEval dataset from JSON file
    */
-  async loadDataset(dataset: 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle' | 'sample_data'): Promise<LongMemEvalQuestion[]> {
+  async loadDataset(
+    dataset: 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle' | 'sample_data',
+  ): Promise<LongMemEvalQuestion[]> {
     const filePath = join(this.dataDir, `${dataset}.json`);
-    
+
     try {
       const fileContent = await readFile(filePath, 'utf-8');
       const data = JSON.parse(fileContent) as LongMemEvalQuestion[];
-      
+
       // Validate the data structure
       this.validateDataset(data);
-      
+
       return data;
     } catch (error) {
       if ((error as any).code === 'ENOENT') {
         throw new Error(
           `Dataset file not found: ${filePath}\n` +
-          `Please download the LongMemEval dataset from https://drive.google.com/file/d/1zJgtYRFhOh5zDQzzatiddfjYhFSnyQ80/view ` +
-          `and extract it to ${this.dataDir}`
+            `Please download the LongMemEval dataset from https://drive.google.com/file/d/1zJgtYRFhOh5zDQzzatiddfjYhFSnyQ80/view ` +
+            `and extract it to ${this.dataDir}`,
         );
       }
       throw error;
@@ -41,7 +43,7 @@ export class DatasetLoader {
    */
   async loadSubset(
     dataset: 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle' | 'sample_data',
-    limit: number
+    limit: number,
   ): Promise<LongMemEvalQuestion[]> {
     const fullDataset = await this.loadDataset(dataset);
     return fullDataset.slice(0, limit);
@@ -52,7 +54,7 @@ export class DatasetLoader {
    */
   async loadByType(
     dataset: 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle' | 'sample_data',
-    questionType: string
+    questionType: string,
   ): Promise<LongMemEvalQuestion[]> {
     const fullDataset = await this.loadDataset(dataset);
     return fullDataset.filter(q => q.question_type === questionType);
@@ -63,7 +65,7 @@ export class DatasetLoader {
    */
   async getDatasetStats(dataset: 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle' | 'sample_data') {
     const data = await this.loadDataset(dataset);
-    
+
     const stats = {
       totalQuestions: data.length,
       questionsByType: {} as Record<string, number>,
@@ -77,7 +79,7 @@ export class DatasetLoader {
     for (const question of data) {
       const type = question.question_type;
       stats.questionsByType[type] = (stats.questionsByType[type] || 0) + 1;
-      
+
       if (question.question_id.endsWith('_abs')) {
         stats.abstentionQuestions++;
       }
@@ -130,7 +132,7 @@ export class DatasetLoader {
       'haystack_session_ids',
       'haystack_dates',
       'haystack_sessions',
-      'answer_session_ids'
+      'answer_session_ids',
     ];
 
     for (const field of requiredFields) {

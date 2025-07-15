@@ -35,7 +35,7 @@ export HF_TOKEN=your_huggingface_token_here  # For automatic dataset download
 
 # 2. Run a benchmark (downloads datasets automatically if needed)
 pnpm bench:s          # Run small dataset (10 parallel requests)
-pnpm bench:m          # Run medium dataset (10 parallel requests)  
+pnpm bench:m          # Run medium dataset (10 parallel requests)
 pnpm bench:oracle     # Run oracle dataset (10 parallel requests)
 
 # Or run quick 10-question tests
@@ -82,7 +82,7 @@ pnpm bench:oracle     # Oracle dataset (full run)
 
 # Quick test runs (10 questions only, 5 parallel)
 pnpm bench:s:quick    # Small dataset (quick test)
-pnpm bench:m:quick    # Medium dataset (quick test)  
+pnpm bench:m:quick    # Medium dataset (quick test)
 pnpm bench:oracle:quick # Oracle dataset (quick test)
 
 # Advanced: Use full CLI with custom options
@@ -171,4 +171,3 @@ To add custom memory configurations:
 1. Edit `src/benchmark/runner.ts` and add your configuration to `getMemoryConfig()`
 2. Update the `MemoryConfigType` in `src/data/types.ts`
 3. Implement the configuration logic in `src/memory-adapters/mastra-adapter.ts`
-

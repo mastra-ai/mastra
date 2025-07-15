@@ -138,7 +138,7 @@ describe('PrepareCommand', () => {
       });
 
       const q1Dir = join(testDir, 'longmemeval_s', 'semantic-recall', 'test-q1');
-      
+
       // Should have both db.json and vector.json
       expect(existsSync(join(q1Dir, 'db.json'))).toBe(true);
       expect(existsSync(join(q1Dir, 'vector.json'))).toBe(true);
@@ -185,7 +185,7 @@ describe('PrepareCommand', () => {
       });
 
       const q1Dir = join(testDir, 'longmemeval_s', 'combined', 'test-q1');
-      
+
       // Combined config should have vector store
       expect(existsSync(join(q1Dir, 'db.json'))).toBe(true);
       expect(existsSync(join(q1Dir, 'vector.json'))).toBe(true);

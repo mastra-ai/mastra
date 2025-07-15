@@ -92,6 +92,7 @@ pnpm run:s
 ## Viewing Results
 
 Results are saved in `./results/run_<timestamp>/`:
+
 - `results.jsonl`: Raw evaluation results
 - `metrics.json`: Aggregated metrics
 

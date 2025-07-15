@@ -15,20 +15,24 @@ describe('DatasetLoader', () => {
 
   describe('validateDataset', () => {
     it('should validate correct dataset structure', () => {
-      const validData: LongMemEvalQuestion[] = [{
-        question_id: 'test_001',
-        question_type: 'single-session-user',
-        question: 'What is my favorite color?',
-        answer: 'Blue',
-        question_date: '2024-01-01',
-        haystack_session_ids: ['session_1'],
-        haystack_dates: ['2024-01-01'],
-        haystack_sessions: [[
-          { role: 'user', content: 'My favorite color is blue.' },
-          { role: 'assistant', content: 'I understand your favorite color is blue.' }
-        ]],
-        answer_session_ids: ['session_1']
-      }];
+      const validData: LongMemEvalQuestion[] = [
+        {
+          question_id: 'test_001',
+          question_type: 'single-session-user',
+          question: 'What is my favorite color?',
+          answer: 'Blue',
+          question_date: '2024-01-01',
+          haystack_session_ids: ['session_1'],
+          haystack_dates: ['2024-01-01'],
+          haystack_sessions: [
+            [
+              { role: 'user', content: 'My favorite color is blue.' },
+              { role: 'assistant', content: 'I understand your favorite color is blue.' },
+            ],
+          ],
+          answer_session_ids: ['session_1'],
+        },
+      ];
 
       // Should not throw
       expect(() => {
@@ -38,10 +42,12 @@ describe('DatasetLoader', () => {
     });
 
     it('should throw on invalid dataset structure', () => {
-      const invalidData = [{
-        question_id: 'test_001',
-        // Missing required fields
-      }];
+      const invalidData = [
+        {
+          question_id: 'test_001',
+          // Missing required fields
+        },
+      ];
 
       expect(() => {
         (loader as any).validateDataset(invalidData);
@@ -58,11 +64,11 @@ describe('DatasetLoader', () => {
       expect(questions[0].question_id).toBe('test-001');
       expect(questions[0].question_type).toBe('single-session-user');
       expect(questions[1].question_type).toBe('multi-session');
-      
+
       // Verify the dataset structure
       expect(questions[0].haystack_sessions).toHaveLength(1);
       expect(questions[1].haystack_sessions).toHaveLength(2);
-      
+
       // Check answers
       expect(questions[0].answer).toBe('Blue');
       expect(questions[1].answer).toBe('A golden retriever named Max');
@@ -70,9 +76,7 @@ describe('DatasetLoader', () => {
 
     it('should throw helpful error when dataset file not found', async () => {
       // Use the regular loader which points to the data directory
-      await expect(
-        loader.loadDataset('non-existent-dataset' as any)
-      ).rejects.toThrow('Dataset file not found');
+      await expect(loader.loadDataset('non-existent-dataset' as any)).rejects.toThrow('Dataset file not found');
     });
   });
 

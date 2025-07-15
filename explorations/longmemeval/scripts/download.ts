@@ -12,8 +12,8 @@ const DATA_DIR = join(process.cwd(), 'data');
 
 const FILES = [
   { filename: 'longmemeval_oracle.json', repoPath: 'longmemeval_oracle' },
-  { filename: 'longmemeval_s.json', repoPath: 'longmemeval_s' }, 
-  { filename: 'longmemeval_m.json', repoPath: 'longmemeval_m' }
+  { filename: 'longmemeval_s.json', repoPath: 'longmemeval_s' },
+  { filename: 'longmemeval_m.json', repoPath: 'longmemeval_m' },
 ];
 
 function formatFileSize(bytes: number): string {
@@ -38,15 +38,15 @@ async function getFileSize(filePath: string): Promise<number> {
 async function downloadWithFetch(url: string, outputPath: string, token: string): Promise<void> {
   const response = await fetch(url, {
     headers: {
-      'Authorization': `Bearer ${token}`,
-      'User-Agent': 'longmemeval-downloader/1.0'
-    }
+      Authorization: `Bearer ${token}`,
+      'User-Agent': 'longmemeval-downloader/1.0',
+    },
   });
-  
+
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
-  
+
   const buffer = await response.arrayBuffer();
   const { writeFile } = await import('fs/promises');
   await writeFile(outputPath, Buffer.from(buffer));
@@ -65,7 +65,8 @@ async function main() {
   for (const fileInfo of FILES) {
     const outputPath = join(DATA_DIR, fileInfo.filename);
     const size = await getFileSize(outputPath);
-    if (size > 1000000) { // > 1MB
+    if (size > 1000000) {
+      // > 1MB
       console.log(chalk.green(`✓ ${fileInfo.filename} already exists (${formatFileSize(size)})`));
       existingCount++;
     }
@@ -80,42 +81,42 @@ async function main() {
 
   // Check for HuggingFace token
   const token = process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN;
-  
+
   if (!token) {
     console.log(chalk.yellow('⚠️  No HuggingFace token found!\n'));
     console.log(chalk.blue('The LongMemEval datasets require authentication to download.\n'));
-    
+
     console.log(chalk.gray('1. Get your token from:'));
     console.log(chalk.cyan('   https://huggingface.co/settings/tokens\n'));
-    
+
     console.log(chalk.gray('2. Set it as an environment variable:'));
     console.log(chalk.cyan('   export HF_TOKEN=your_token_here\n'));
-    
+
     console.log(chalk.gray('3. Run this script again:'));
     console.log(chalk.cyan('   pnpm download\n'));
-    
+
     console.log(chalk.blue('Alternative: Download manually from Google Drive'));
     console.log(chalk.gray('See DOWNLOAD_GUIDE.md for instructions'));
-    
+
     process.exit(1);
   }
 
   // Download missing files
   console.log(chalk.blue('Downloading missing datasets...\n'));
   let successCount = existingCount;
-  
+
   for (const fileInfo of FILES) {
     const { filename, repoPath } = fileInfo;
     const outputPath = join(DATA_DIR, filename);
-    
+
     // Skip if already exists
     const existingSize = await getFileSize(outputPath);
     if (existingSize > 1000000) {
       continue;
     }
-    
+
     const spinner = ora(`Downloading ${filename}...`).start();
-    
+
     try {
       // Try HuggingFace Hub API first
       try {
@@ -124,7 +125,7 @@ async function main() {
           path: repoPath,
           credentials: { accessToken: token },
         });
-        
+
         if (response && response.body) {
           const fileStream = createWriteStream(outputPath);
           await pipeline(response.body as any, fileStream);
@@ -136,7 +137,7 @@ async function main() {
         const directUrl = `https://huggingface.co/datasets/${REPO_ID}/resolve/main/${repoPath}?download=true`;
         await downloadWithFetch(directUrl, outputPath, token);
       }
-      
+
       // Verify file size
       const downloadedSize = await getFileSize(outputPath);
       if (downloadedSize > 1000000) {
@@ -151,7 +152,7 @@ async function main() {
     } catch (error: any) {
       spinner.fail(`Failed to download ${filename}`);
       console.error(chalk.red(`  Error: ${error.message}`));
-      
+
       if (error.message.includes('401') || error.message.includes('403')) {
         console.log(chalk.yellow('\n  Authentication issue. Please check:'));
         console.log(chalk.gray('  - Your token is valid'));
@@ -160,7 +161,7 @@ async function main() {
       }
     }
   }
-  
+
   // Final summary
   console.log('');
   if (successCount === FILES.length) {

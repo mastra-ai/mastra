@@ -14,7 +14,7 @@ export const embeddingCacheStats = {
     this.cacheHits = 0;
     this.cacheMisses = 0;
     this.cacheWrites = 0;
-  }
+  },
 };
 
 export class CachedOpenAIEmbeddingModel implements EmbeddingModelV2<string> {
@@ -122,32 +122,34 @@ export class CachedOpenAIEmbeddingModel implements EmbeddingModelV2<string> {
     embeddingCacheStats.cacheWrites++;
 
     // Store in file cache asynchronously with mutex (fire and forget)
-    this.fileOperationMutex.runExclusive(async () => {
-      const cachePath = this.getCachePath(key);
-      try {
-        const data = JSON.stringify({
-          value: value,
-          embedding: embedding,
-          modelId: this.modelId,
-          timestamp: new Date().toISOString(),
-        });
-        
-        // Write to temp file first, then rename (atomic operation)
-        const tempPath = `${cachePath}.tmp`;
-        writeFileSync(tempPath, data);
-        require('fs').renameSync(tempPath, cachePath);
-      } catch (e) {
-        // console.warn(`Failed to cache embedding for ${key}:`, e);
-        // Clean up temp file if it exists
+    this.fileOperationMutex
+      .runExclusive(async () => {
+        const cachePath = this.getCachePath(key);
         try {
-          require('fs').unlinkSync(`${cachePath}.tmp`);
-        } catch (cleanupError) {
-          // Ignore cleanup errors
+          const data = JSON.stringify({
+            value: value,
+            embedding: embedding,
+            modelId: this.modelId,
+            timestamp: new Date().toISOString(),
+          });
+
+          // Write to temp file first, then rename (atomic operation)
+          const tempPath = `${cachePath}.tmp`;
+          writeFileSync(tempPath, data);
+          require('fs').renameSync(tempPath, cachePath);
+        } catch (e) {
+          // console.warn(`Failed to cache embedding for ${key}:`, e);
+          // Clean up temp file if it exists
+          try {
+            require('fs').unlinkSync(`${cachePath}.tmp`);
+          } catch (cleanupError) {
+            // Ignore cleanup errors
+          }
         }
-      }
-    }).catch(() => {
-      // Ignore write errors
-    });
+      })
+      .catch(() => {
+        // Ignore write errors
+      });
   }
 
   async doEmbed({

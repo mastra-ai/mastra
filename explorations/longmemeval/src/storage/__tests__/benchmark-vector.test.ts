@@ -47,7 +47,7 @@ describe('BenchmarkVectorStore', () => {
           indexName: 'test-index',
           dimension: 384,
           metric: 'cosine',
-        })
+        }),
       ).rejects.toThrow();
     });
   });
@@ -68,11 +68,7 @@ describe('BenchmarkVectorStore', () => {
         [0, 0, 1],
       ];
 
-      const metadata = [
-        { text: 'First vector' },
-        { text: 'Second vector' },
-        { text: 'Third vector' },
-      ];
+      const metadata = [{ text: 'First vector' }, { text: 'Second vector' }, { text: 'Third vector' }];
 
       const ids = await vectorStore.upsert({
         indexName: 'test-index',
@@ -106,7 +102,10 @@ describe('BenchmarkVectorStore', () => {
 
       const ids = await vectorStore.upsert({
         indexName: 'test-index',
-        vectors: [[1, 0, 0], [0, 1, 0]],
+        vectors: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
         metadata: [{ text: 'Vector 1' }, { text: 'Vector 2' }],
         ids: ['vec-1', 'vec-2'],
       });
@@ -164,7 +163,7 @@ describe('BenchmarkVectorStore', () => {
       await vectorStore.persist(testFilePath);
       const newStore = new BenchmarkVectorStore();
       await newStore.hydrate(testFilePath);
-      
+
       const stats = await newStore.describeIndex({ indexName: 'test-index' });
       expect(stats.count).toBe(1);
     });
@@ -182,7 +181,10 @@ describe('BenchmarkVectorStore', () => {
     it('should delete a vector', async () => {
       await vectorStore.upsert({
         indexName: 'test-index',
-        vectors: [[1, 0, 0], [0, 1, 0]],
+        vectors: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
         ids: ['vec-1', 'vec-2'],
       });
 
