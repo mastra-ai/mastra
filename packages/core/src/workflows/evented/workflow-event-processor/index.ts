@@ -36,6 +36,7 @@ export type ParentWorkflow = {
   resume: boolean;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   parentWorkflow?: ParentWorkflow;
+  stepId: string;
 };
 
 export class WorkflowEventProcessor extends EventProcessor {
@@ -159,7 +160,6 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowSuspend({
-    workflow,
     workflowId,
     resumeSteps,
     prevResult,
@@ -167,7 +167,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     parentWorkflow,
     activeSteps,
     runId,
-    executionPath,
   }: ProcessorArgs) {
     // TODO: if there are still active paths don't end the workflow yet
     // handle nested workflow
@@ -181,7 +180,18 @@ export class WorkflowEventProcessor extends EventProcessor {
           executionPath: parentWorkflow.executionPath,
           resumeSteps,
           stepResults: parentWorkflow.stepResults,
-          prevResult,
+          prevResult: {
+            ...prevResult,
+            suspendPayload: {
+              ...prevResult.suspendPayload,
+              __workflow_meta: {
+                runId: runId,
+                path: parentWorkflow?.parentWorkflow
+                  ? [parentWorkflow.stepId].concat(prevResult.suspendPayload?.__workflow_meta?.path ?? [])
+                  : (prevResult.suspendPayload?.__workflow_meta?.path ?? []),
+              },
+            },
+          },
           resumeData,
           activeSteps,
           parentWorkflow: parentWorkflow.parentWorkflow,
@@ -442,10 +452,11 @@ export class WorkflowEventProcessor extends EventProcessor {
               data: {
                 workflowId: step.step.id,
                 parentWorkflow: {
+                  stepId: step.step.id,
                   workflowId,
                   runId,
                   executionPath,
-                  resumeSteps,
+                  resumeSteps: nestedSteps,
                   stepResults,
                   input: prevResult,
                   parentWorkflow,
@@ -468,10 +479,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           data: {
             workflowId: step.step.id,
             parentWorkflow: {
+              stepId: step.step.id,
               workflowId,
               runId,
               executionPath,
-              resumeSteps,
+              resumeSteps: nestedSteps,
               stepResults,
               input: prevResult,
               parentWorkflow,
@@ -491,6 +503,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           data: {
             workflowId: step.step.id,
             parentWorkflow: {
+              stepId: step.step.id,
               workflowId,
               runId,
               executionPath,

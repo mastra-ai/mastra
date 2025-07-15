@@ -125,9 +125,19 @@ export class EventedExecutionEngine extends ExecutionEngine {
         steps: resultData.stepResults,
       } as TOutput;
     } else if (resultData.prevResult.status === 'suspended') {
+      const suspendedSteps = Object.entries(resultData.stepResults)
+        .map(([stepId, stepResult]: [string, any]) => {
+          if (stepResult.status === 'suspended') {
+            return [stepId].concat(stepResult.suspendPayload?.__workflow_meta?.path ?? []);
+          }
+
+          return null;
+        })
+        .filter(Boolean);
       return {
         status: 'suspended',
         steps: resultData.stepResults,
+        suspended: suspendedSteps,
       } as TOutput;
     }
 

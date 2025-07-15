@@ -7036,8 +7036,7 @@ describe('Workflow', () => {
       });
     });
 
-    // TODO
-    describe.skip('suspending and resuming nested workflows', () => {
+    describe('suspending and resuming nested workflows', () => {
       it('should be able to suspend nested workflow step', async () => {
         const start = vi.fn().mockImplementation(async ({ inputData }) => {
           // Get the current value (either from trigger or previous increment)
@@ -7133,7 +7132,7 @@ describe('Workflow', () => {
         new Mastra({
           logger: false,
           storage: testStorage,
-          workflows: { counterWorkflow },
+          workflows: { 'counter-workflow': counterWorkflow },
         });
 
         const run = counterWorkflow.createRun();
@@ -7284,8 +7283,7 @@ describe('Workflow', () => {
       });
     });
 
-    // TODO
-    it.skip('should be able to suspend nested workflow step in a nested workflow step', async () => {
+    it('should be able to suspend nested workflow step in a nested workflow step', async () => {
       const start = vi.fn().mockImplementation(async ({ inputData }) => {
         // Get the current value (either from trigger or previous increment)
         const currentValue = inputData.startValue || 0;
@@ -7416,6 +7414,7 @@ describe('Workflow', () => {
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
+      console.dir(result, { depth: null });
 
       expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
       expect(result.steps['nested-workflow-c']).toMatchObject({
