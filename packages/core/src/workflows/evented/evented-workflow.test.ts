@@ -4600,8 +4600,7 @@ describe('Workflow', () => {
       });
     });
 
-    // TODO: watch
-    it.skip('should handle parallel steps with conditional suspend', async () => {
+    it('should handle parallel steps with conditional suspend', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi.fn().mockResolvedValue({ modelOutput: 'test output' });
       const evaluateToneAction = vi.fn().mockResolvedValue({
@@ -4698,7 +4697,9 @@ describe('Workflow', () => {
       const initialResult = await run.start({ inputData: { input: 'test' } });
 
       expect(initialResult.steps.humanIntervention.status).toBe('suspended');
-      expect(initialResult.steps.explainResponse).toBeUndefined();
+      expect(initialResult.steps.explainResponse).toEqual({
+        status: 'skipped',
+      });
       expect(humanInterventionAction).toHaveBeenCalledTimes(1);
       expect(explainResponseAction).not.toHaveBeenCalled();
 
@@ -4733,10 +4734,14 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
+        explainResponse: {
+          status: 'skipped',
+        },
         humanIntervention: {
           status: 'success',
           output: { improvedOutput: 'human intervention output' },
           payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          suspendPayload: {},
           resumePayload: { humanPrompt: 'What improvements would you suggest?' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
