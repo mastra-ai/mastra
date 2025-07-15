@@ -5,7 +5,7 @@ import { scorersTableColumns } from '@/domains/agents/table.columns';
 export default function Scorers() {
   const { scorers, isLoading } = useScorers();
 
-  const scorerListData = Object.entries(scorers).map(([key, scorer]) => ({
+  const scorerListData = Object.entries(scorers || {}).map(([key, scorer]) => ({
     id: key,
     name: scorer.scorer.name,
     description: scorer.scorer.description,
@@ -17,14 +17,18 @@ export default function Scorers() {
         <HeaderTitle>Scorers</HeaderTitle>
       </Header>
       <div>
-        <DataTable
-          columns={scorersTableColumns}
-          data={scorerListData}
-          isLoading={isLoading}
-          onClick={props => {
-            console.log(props);
-          }}
-        />
+        {isLoading ? (
+          <div className="text-center text-icon3 m-[2rem]">Loading...</div>
+        ) : (
+          <DataTable
+            columns={scorersTableColumns}
+            data={scorerListData || []}
+            isLoading={isLoading}
+            onClick={props => {
+              console.log(props);
+            }}
+          />
+        )}
       </div>
     </MainContentLayout>
   );
