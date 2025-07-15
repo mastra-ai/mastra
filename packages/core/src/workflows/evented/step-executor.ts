@@ -24,13 +24,12 @@ export class StepExecutor extends MastraBase {
     input?: any;
     resumeData?: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
-    emitter: { runtime: PubSub; events: PubSub };
+    emitter: EventEmitter;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     const { step, stepResults, runId, runtimeContext } = params;
 
     const abortController = new AbortController();
-    const ee = new EventEmitter();
 
     let suspended: { payload: any } | undefined;
     let bailed: { payload: any } | undefined;
@@ -84,7 +83,7 @@ export class StepExecutor extends MastraBase {
         abort: () => {
           abortController?.abort();
         },
-        [EMITTER_SYMBOL]: ee as unknown as Emitter, // TODO: refactor this to use our PubSub actually
+        [EMITTER_SYMBOL]: params.emitter as unknown as Emitter, // TODO: refactor this to use our PubSub actually
         engine: {},
         abortSignal: abortController?.signal,
       });

@@ -561,12 +561,20 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
+    const ee = new EventEmitter();
+    ee.on('watch-v2', async (event: any) => {
+      console.log('watch-v2', event);
+      await this.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        data: event,
+      });
+    });
     const stepResult = await this.stepExecutor.execute({
       workflowId,
       step: step.step,
       runId,
       stepResults,
-      emitter: new EventEmitter() as any, // TODO
+      emitter: ee,
       runtimeContext: new RuntimeContext(), // TODO
       input: prevResult?.status === 'success' ? prevResult.output : undefined,
       resumeData,

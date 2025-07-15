@@ -12,7 +12,7 @@ export async function processWorkflowSleep(
     executionPath,
     stepResults,
     activeSteps,
-    resume,
+    resumeSteps,
     prevResult,
     resumeData,
     parentWorkflow,
@@ -27,6 +27,20 @@ export async function processWorkflowSleep(
     step: Extract<StepFlowEntry, { type: 'sleep' }>;
   },
 ) {
+  const startedAt = Date.now();
+  await pubsub.publish(`workflow.events.v2.${runId}`, {
+    type: 'watch',
+    data: {
+      type: 'step-waiting',
+      payload: {
+        id: step.id,
+        status: 'waiting',
+        payload: prevResult.status === 'success' ? prevResult.output : undefined,
+        startedAt,
+      },
+    },
+  });
+
   const duration = await stepExecutor.resolveSleep({
     step,
     runId,
@@ -39,13 +53,39 @@ export async function processWorkflowSleep(
 
   setTimeout(
     async () => {
-      return pubsub.publish('workflows', {
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'step-result',
+          payload: {
+            id: step.id,
+            status: 'success',
+            payload: prevResult.status === 'success' ? prevResult.output : undefined,
+            output: prevResult.status === 'success' ? prevResult.output : undefined,
+            startedAt,
+            endedAt: Date.now(),
+          },
+        },
+      });
+
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'step-finish',
+          payload: {
+            id: step.id,
+            metadata: {},
+          },
+        },
+      });
+
+      await pubsub.publish('workflows', {
         type: 'workflow.step.run',
         data: {
           workflowId,
           runId,
           executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
-          resume,
+          resumeSteps,
           stepResults,
           prevResult,
           resumeData,
@@ -65,7 +105,7 @@ export async function processWorkflowSleepUntil(
     executionPath,
     stepResults,
     activeSteps,
-    resume,
+    resumeSteps,
     prevResult,
     resumeData,
     parentWorkflow,
@@ -80,6 +120,7 @@ export async function processWorkflowSleepUntil(
     step: Extract<StepFlowEntry, { type: 'sleepUntil' }>;
   },
 ) {
+  const startedAt = Date.now();
   const duration = await stepExecutor.resolveSleepUntil({
     step,
     runId,
@@ -90,15 +131,54 @@ export async function processWorkflowSleepUntil(
     resumeData,
   });
 
+  await pubsub.publish(`workflow.events.v2.${runId}`, {
+    type: 'watch',
+    data: {
+      type: 'step-waiting',
+      payload: {
+        id: step.id,
+        status: 'waiting',
+        payload: prevResult.status === 'success' ? prevResult.output : undefined,
+        startedAt,
+      },
+    },
+  });
+
   setTimeout(
     async () => {
-      return pubsub.publish('workflows', {
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'step-result',
+          payload: {
+            id: step.id,
+            status: 'success',
+            payload: prevResult.status === 'success' ? prevResult.output : undefined,
+            output: prevResult.status === 'success' ? prevResult.output : undefined,
+            startedAt,
+            endedAt: Date.now(),
+          },
+        },
+      });
+
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'step-finish',
+          payload: {
+            id: step.id,
+            metadata: {},
+          },
+        },
+      });
+
+      await pubsub.publish('workflows', {
         type: 'workflow.step.run',
         data: {
           workflowId,
           runId,
           executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
-          resume,
+          resumeSteps,
           stepResults,
           prevResult,
           resumeData,

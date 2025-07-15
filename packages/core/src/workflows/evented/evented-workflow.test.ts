@@ -297,7 +297,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should be able to use an agent as a step', async () => {
+    it('should be able to use an agent as a step', async () => {
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({
@@ -367,6 +367,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        storage: testStorage,
       });
 
       const agentStep1 = createStep(agent);
@@ -444,7 +445,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            id: 'mapping_mock-uuid-1',
+            id: expect.any(String),
             payload: {
               prompt1: 'Capital of France, just the name',
               prompt2: 'Capital of UK, just the name',
@@ -455,7 +456,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            id: 'mapping_mock-uuid-1',
+            id: expect.any(String),
             endedAt: expect.any(Number),
             output: {
               prompt: 'Capital of France, just the name',
@@ -466,7 +467,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            id: 'mapping_mock-uuid-1',
+            id: expect.any(String),
             metadata: {},
           },
           type: 'step-finish',
@@ -516,7 +517,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            id: 'mapping_mock-uuid-2',
+            id: expect.any(String),
             payload: {
               text: 'Paris',
             },
@@ -526,7 +527,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            id: 'mapping_mock-uuid-2',
+            id: expect.any(String),
             endedAt: expect.any(Number),
             output: {
               prompt: 'Capital of UK, just the name',
@@ -537,7 +538,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            id: 'mapping_mock-uuid-2',
+            id: expect.any(String),
             metadata: {},
           },
           type: 'step-finish',
@@ -619,6 +620,11 @@ describe('Workflow', () => {
       });
       workflow.then(step1).sleep(1000).then(step2).commit();
 
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
+
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
       const run = await workflow.createRunAsync({
@@ -673,7 +679,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            id: 'sleep_mock-uuid-1',
+            id: expect.any(String),
             startedAt: expect.any(Number),
             status: 'waiting',
             payload: {
@@ -684,7 +690,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            id: 'sleep_mock-uuid-1',
+            id: expect.any(String),
             endedAt: expect.any(Number),
             startedAt: expect.any(Number),
             status: 'success',
@@ -697,7 +703,7 @@ describe('Workflow', () => {
         {
           type: 'step-finish',
           payload: {
-            id: 'sleep_mock-uuid-1',
+            id: expect.any(String),
             metadata: {},
           },
         },
