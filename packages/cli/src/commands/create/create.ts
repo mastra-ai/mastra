@@ -42,7 +42,7 @@ export const create = async (args: {
   // between those and the case where the args were not passed at all.
   if (args.components === undefined || args.llmProvider === undefined || args.addExample === undefined) {
     const result = await interactivePrompt();
-    
+
     // Track model provider selection from interactive prompt
     const analytics = getAnalytics();
     if (analytics && result?.llmProvider) {
@@ -51,7 +51,7 @@ export const create = async (args: {
         selection_method: 'interactive',
       });
     }
-    
+
     await init({
       ...result,
       llmApiKey: result?.llmApiKey as string,
