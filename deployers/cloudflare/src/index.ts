@@ -108,7 +108,7 @@ export class CloudflareDeployer extends Deployer {
     return `
     import '#polyfills';
     import { mastra } from '#mastra';
-    import { createHonoServer } from '#server';
+    import { createHonoServer, tools } from '#server';
     import { evaluate } from '@mastra/core/eval';
     import { AvailableHooks, registerHook } from '@mastra/core/hooks';
     import { TABLE_EVALS } from '@mastra/core/storage';
@@ -154,7 +154,7 @@ export class CloudflareDeployer extends Deployer {
 
     export default {
       fetch: async (request, env, context) => {
-        const app = await createHonoServer(mastra)
+        const app = await createHonoServer(mastra, { tools })
         return app.fetch(request, env, context);
       }
     }
