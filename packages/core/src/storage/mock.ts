@@ -10,6 +10,7 @@ import type {
   StorageColumn,
   StorageGetMessagesArg,
   StorageResourceType,
+  ThreadSortOptions,
   WorkflowRun,
   WorkflowRuns,
 } from './types';
@@ -75,7 +76,9 @@ export class MockStore extends MastraStorage {
     return thread ? (thread as StorageThreadType) : null;
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
+  async getThreadsByResourceId({
+    resourceId,
+  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
     this.logger.debug(`MockStore: getThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Object.values(this.data.mastra_threads).filter((t: any) => t.resourceId === resourceId);
@@ -386,11 +389,13 @@ export class MockStore extends MastraStorage {
     };
   }
 
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  async getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     this.logger.debug(`MockStore: getThreadsByResourceIdPaginated called for ${args.resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Object.values(this.data.mastra_threads).filter((t: any) => t.resourceId === args.resourceId);
