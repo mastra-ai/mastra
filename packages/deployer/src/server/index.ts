@@ -2350,10 +2350,17 @@ ${err.stack.split('\n').slice(1).join('\n')}
     getThreadByIdHandler,
   );
 
-  // @TODO: We need to add warning logs in the original method that we will be deprecating and breaking
-  // this api in the future.
   app.get(
     '/api/memory/threads/:threadId/messages',
+    async (c, next) => {
+      c.header('Deprecation', 'true');
+      c.header(
+        'Warning',
+        '299 - "This endpoint is deprecated, use /api/memory/threads/:threadId/messages/paginated instead"',
+      );
+      c.header('Link', '</api/memory/threads/:threadId/messages/paginated>; rel="successor-version"');
+      return next();
+    },
     describeRoute({
       description: 'Get messages for a thread',
       tags: ['memory'],
