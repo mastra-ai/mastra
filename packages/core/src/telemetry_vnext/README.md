@@ -15,7 +15,7 @@ The next-generation telemetry system for Mastra, designed to address the limitat
 
 ### Core Components
 
-1. **Abstract Base Class (`MastraTelemetry`)**
+1. **Abstract Base Class (`MastraAITelemetry`)**
    - Extends `MastraBase` for consistent logging and component registration
    - Handles span lifecycle management and event emission
    - Processes spans through pluggable processors

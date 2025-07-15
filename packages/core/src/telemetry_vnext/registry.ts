@@ -5,7 +5,7 @@
  * pattern with a more flexible multi-instance approach.
  */
 
-import type { MastraTelemetry } from './base';
+import type { MastraAITelemetry } from './base';
 
 // ============================================================================
 // Global Telemetry Registry
@@ -16,13 +16,13 @@ import type { MastraTelemetry } from './base';
  * This replaces the singleton pattern with a more flexible registry approach.
  */
 class TelemetryRegistry {
-  private instances = new Map<string, MastraTelemetry>();
-  private defaultInstance?: MastraTelemetry;
+  private instances = new Map<string, MastraAITelemetry>();
+  private defaultInstance?: MastraAITelemetry;
 
   /**
    * Register a telemetry instance
    */
-  register(name: string, instance: MastraTelemetry, isDefault = false): void {
+  register(name: string, instance: MastraAITelemetry, isDefault = false): void {
     this.instances.set(name, instance);
     if (isDefault || !this.defaultInstance) {
       this.defaultInstance = instance;
@@ -32,7 +32,7 @@ class TelemetryRegistry {
   /**
    * Get a telemetry instance by name
    */
-  get(name?: string): MastraTelemetry | undefined {
+  get(name?: string): MastraAITelemetry | undefined {
     if (name) {
       return this.instances.get(name);
     }
@@ -63,7 +63,7 @@ class TelemetryRegistry {
   /**
    * Get all registered instances
    */
-  getAll(): ReadonlyMap<string, MastraTelemetry> {
+  getAll(): ReadonlyMap<string, MastraAITelemetry> {
     return new Map(this.instances);
   }
 }
@@ -77,14 +77,14 @@ const telemetryRegistry = new TelemetryRegistry();
 /**
  * Register a telemetry instance globally
  */
-export function registerTelemetry(name: string, instance: MastraTelemetry, isDefault = false): void {
+export function registerTelemetry(name: string, instance: MastraAITelemetry, isDefault = false): void {
   telemetryRegistry.register(name, instance, isDefault);
 }
 
 /**
  * Get a telemetry instance from the registry
  */
-export function getTelemetry(name?: string): MastraTelemetry | undefined {
+export function getTelemetry(name?: string): MastraAITelemetry | undefined {
   return telemetryRegistry.get(name);
 }
 

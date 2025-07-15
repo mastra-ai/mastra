@@ -1,5 +1,5 @@
 /**
- * MastraTelemetry - Abstract base class for telemetry implementations
+ * MastraAITelemetry - Abstract base class for telemetry implementations
  *
  * Follows Mastra's architectural patterns while providing a comprehensive
  * telemetry interface that addresses the limitations of the current system.
@@ -7,10 +7,10 @@
 
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger/constants';
+import type { RuntimeContext } from '../runtime-context';
 import { deepMerge } from '../utils';
 import type {
   TelemetryConfig,
-  AITrace,
   AISpan,
   SpanOptions,
   TracingOptions,
@@ -24,10 +24,12 @@ import type {
   WorkflowRunMetadata,
   WorkflowStepMetadata,
   BaseMetadata,
-  StartSpanOptions,
+  TraceContext,
 } from './types';
 import { SpanType } from './types';
+import { NoOpAISpan } from './no_op'
 import type { Context } from '@opentelemetry/api';
+import type { Span } from '@opentelemetry/sdk-trace-base';
 
 // ============================================================================
 // Default Configuration
@@ -37,7 +39,7 @@ export const telemetryDefaultOptions: TelemetryConfig = {
   serviceName: 'mastra-service',
   enabled: true,
   sampling: { type: 'always_on' },
-  context: {
+  settings: {
     includeIO: true,
     maxDataSize: 64 * 1024, // 64KB
     excludeFields: ['password', 'token', 'secret', 'key'],
@@ -57,7 +59,7 @@ export const telemetryDefaultOptions: TelemetryConfig = {
  * - Provides capability-based feature detection
  * - Supports pluggable exporters, processors, and samplers
  */
-export abstract class MastraTelemetry extends MastraBase {
+export abstract class MastraAITelemetry extends MastraBase {
   protected config: TelemetryConfig;
   protected exporters: TelemetryExporter[] = [];
   protected processors: SpanProcessor[] = [];
@@ -80,116 +82,85 @@ export abstract class MastraTelemetry extends MastraBase {
       this.samplers = [...config.samplers];
     }
 
-    this.logger.debug(`Telemetry initialized [name=${this.name}] [enabled=${this.config.enabled}]`);
+    this.logger.debug(`AI Telemetry initialized [name=${this.name}] [enabled=${this.config.enabled}]`);
   }
 
   // ============================================================================
   // Public API - Handles sampling before calling abstract methods
   // ============================================================================
 
-  /**
-   * Start a new trace (handles sampling)
-   */
-  startTrace(
-    name: string,
-    options?: {
-      user?: { id?: string; sessionId?: string; [key: string]: any };
-      attributes?: Record<string, any>;
-      tags?: string[];
-    },
-  ): AITrace {
-    if (!this.isEnabled()) {
-      return this.createNoOpTrace(name);
-    }
-
-    const traceContext = { name, user: options?.user, attributes: options?.attributes };
-    if (!this.shouldSample(traceContext)) {
-      return this.createNoOpTrace(name);
-    }
-
-    return this._startTrace(name, options);
-  }
-
-  startWorkflowRunSpan(
-    name: string,
-    metadata: WorkflowRunMetadata,
-    options: StartSpanOptions,
-  ): AISpan<WorkflowRunMetadata> {
-    return this.startSpan(name, SpanType.WORKFLOW_RUN, metadata, options);
-  }
-
-  startAgentRunSpan(name: string, metadata: AgentRunMetadata, options: StartSpanOptions): AISpan<AgentRunMetadata> {
-    return this.startSpan(name, SpanType.AGENT_RUN, metadata, options);
-  }
-
-  startWorkflowStepSpan(
-    name: string,
-    metadata: WorkflowStepMetadata,
-    options: StartSpanOptions,
-  ): AISpan<WorkflowStepMetadata> {
-    return this.startSpan(name, SpanType.WORKFLOW_STEP, metadata, options);
-  }
-
-  startGenericSpan(name: string, metadata: BaseMetadata, options: StartSpanOptions): AISpan<BaseMetadata> {
-    return this.startSpan(name, SpanType.GENERIC, metadata, options);
-  }
-
-  /**
-   * Start a new span with strongly-typed metadata
-   */
-  startSpan<T extends SpanMetadata>(
-    name: string,
-    spanType: SpanType,
-    metadata: T,
-    options: StartSpanOptions,
-  ): AISpan<T> {
-    if (!this.isEnabled()) {
-      const spanOptions: SpanOptions = {
-        name,
-        metadata: metadata,
-        parent: options.parent,
-        context: options.context,
-      };
-      return this.createNoOpSpan(spanOptions) as AISpan<T>;
-    }
-
-    const spanOptions: SpanOptions = {
+  startWorkflowRunSpan({
+    name,
+    metadata,
+    parent,
+  }: {
+    name: string;
+    metadata: WorkflowRunMetadata;
+    parent?: AISpan;
+  }): AISpan<SpanMetadata> {
+    return this.startSpan<WorkflowRunMetadata>({
       name,
-      metadata: metadata,
-      parent: options.parent,
-      context: options.context,
-      _callbacks: {
-        onEnd: (span: AISpan) => this.emitSpanEnded(span),
-        onUpdate: (span: AISpan) => this.emitSpanUpdated(span),
-      },
-    };
-
-    const span = this._startSpan(spanType, spanOptions);
-
-    // Add to trace if it's a root span
-    this.addSpanToTrace(span);
-
-    // Emit span started event
-    this.emitSpanStarted(span);
-
-    return span as AISpan<T>;
+      type: SpanType.WORKFLOW_RUN,
+      metadata,
+      parent,
+    });
   }
+
+  startAgentRunSpan({
+    name,
+    metadata,
+    parent,
+  }:{ 
+    name: string;
+    metadata: AgentRunMetadata;
+    parent?: AISpan;
+  }): AISpan<SpanMetadata> {
+    return this.startSpan<AgentRunMetadata>({
+      name,
+      type: SpanType.AGENT_RUN,
+      metadata,
+      parent,
+    });
+  }
+
+  startWorkflowStepSpan({
+    name,
+    metadata,
+    parent,
+  }:{ 
+    name: string;
+    metadata: WorkflowStepMetadata;
+    parent?: AISpan;
+  }): AISpan<SpanMetadata> {
+    return this.startSpan<WorkflowStepMetadata>({
+      name,
+      type: SpanType.WORKFLOW_STEP,
+      metadata,
+      parent,
+    });
+  }
+
+  startGenericSpan({
+    name,
+    metadata,
+    parent,
+  }:{ 
+    name: string;
+    metadata: BaseMetadata;
+    parent?: AISpan;
+  }): AISpan<SpanMetadata> {
+    return this.startSpan<BaseMetadata>({
+      name,
+      type: SpanType.GENERIC,
+      metadata,
+      parent,
+    });
+  }
+
 
   // ============================================================================
   // Abstract Methods - Must be implemented by concrete classes
   // ============================================================================
-
-  /**
-   * Start a new trace (called after sampling)
-   */
-  protected abstract _startTrace(
-    name: string,
-    options?: {
-      user?: { id?: string; sessionId?: string; [key: string]: any };
-      attributes?: Record<string, any>;
-      tags?: string[];
-    },
-  ): AITrace;
 
   /**
    * Start a new span (called after sampling)
@@ -198,6 +169,7 @@ export abstract class MastraTelemetry extends MastraBase {
    * 1. Create a span with the provided metadata
    * 2. Set span.trace to the appropriate trace
    * 3. Set span.parent to options.parent (if any)
+   * 3. Set span.trace to span.parent.trace if options.parent, else to self.
    * 4. Use createSpanWithCallbacks() helper to automatically wire up lifecycle callbacks
    *
    * The base class will automatically:
@@ -206,7 +178,7 @@ export abstract class MastraTelemetry extends MastraBase {
    *
    * Example:
    * ```typescript
-   * protected _startSpan(spanType: SpanType, options: SpanOptions): AISpan {
+   * protected _startSpan(options: SpanOptions): AISpan {
    *   return this.createSpanWithCallbacks(options, (opts) => {
    *     const span = new MySpanImplementation(opts);
    *     span.type = spanType;
@@ -217,7 +189,38 @@ export abstract class MastraTelemetry extends MastraBase {
    * }
    * ```
    */
-  protected abstract _startSpan(spanType: SpanType, options: SpanOptions): AISpan;
+  protected abstract _startSpan(options: SpanOptions): AISpan;
+
+  /**
+   * Start a new span (handles sampling)
+   */
+  startSpan<T extends SpanMetadata>(
+    options: SpanOptions<T>,
+    runtimeContext?: RuntimeContext,
+    attributes?: Record<string, any>
+  ): AISpan {
+    if (!this.isEnabled()) {
+      return new NoOpAISpan(options);
+    }
+
+    if ((runtimeContext || attributes) && !this.shouldSample({ runtimeContext, attributes })) {
+      return new NoOpAISpan(options);
+    }
+
+    options._callbacks = {
+      onEnd: (span: AISpan) => this.emitSpanEnded(span),
+      onUpdate: (span: AISpan) => this.emitSpanUpdated(span),
+    }
+    const span = this._startSpan(options);
+
+    span.parent = options.parent;
+    span.trace = options.parent ? options.parent.trace : span;
+
+    // Emit span started event
+    this.emitSpanStarted(span);
+
+    return span as AISpan<T>;
+  }
 
   /**
    * AITrace a class instance with automatic instrumentation (handles sampling)
@@ -337,63 +340,11 @@ export abstract class MastraTelemetry extends MastraBase {
     return [...this.samplers];
   }
 
-  // ============================================================================
-  // No-op Methods for Disabled/Un-sampled Operations
-  // ============================================================================
-
-  /**
-   * Create a no-op trace for disabled/un-sampled operations
-   */
-  protected createNoOpTrace(name: string): AITrace {
-    return {
-      id: 'noop',
-      name,
-      startTime: new Date(),
-      status: 'completed',
-      rootSpans: [],
-    };
-  }
-
-  /**
-   * Create a no-op span for disabled/un-sampled operations
-   */
-  protected createNoOpSpan(options: SpanOptions): AISpan {
-    const noOpTrace: AITrace = {
-      id: 'noop',
-      name: 'noop',
-      startTime: new Date(),
-      status: 'completed',
-      rootSpans: [],
-    };
-
-    const noOpSpan: AISpan = {
-      id: 'noop',
-      type: SpanType.GENERIC,
-      startTime: new Date(),
-      metadata: options.metadata as SpanMetadata,
-      children: [],
-      parent: options.parent,
-      trace: noOpTrace,
-      end: () => {},
-      createChildSpan: () => noOpSpan,
-      update: () => {},
-      export: async () => '',
-    };
-    return noOpSpan;
-  }
 
   // ============================================================================
   // Span Creation Helpers
   // ============================================================================
 
-  /**
-   * Add a span to its trace's rootSpans if it has no parent
-   */
-  protected addSpanToTrace(span: AISpan): void {
-    if (!span.parent && !span.trace.rootSpans.includes(span)) {
-      span.trace.rootSpans.push(span);
-    }
-  }
 
   /**
    * Create a span that automatically calls lifecycle callbacks
@@ -405,6 +356,7 @@ export abstract class MastraTelemetry extends MastraBase {
     // Store original methods
     const originalEnd = span.end.bind(span);
     const originalUpdate = span.update.bind(span);
+   
 
     // Wrap methods to call callbacks
     span.end = (endOptions?: any) => {
@@ -434,7 +386,7 @@ export abstract class MastraTelemetry extends MastraBase {
   /**
    * Check if a trace should be sampled
    */
-  protected shouldSample(traceContext: any): boolean {
+  protected shouldSample(traceContext: TraceContext): boolean {
     if (!this.isEnabled()) {
       return false;
     }
@@ -492,32 +444,6 @@ export abstract class MastraTelemetry extends MastraBase {
   // Event-driven Export Methods
   // ============================================================================
 
-  /**
-   * Emit a trace started event
-   */
-  protected emitTraceStarted(trace: AITrace): void {
-    this.exportEvent({ type: 'trace_started', trace }).catch(error => {
-      this.logger.error('Failed to export trace_started event', error);
-    });
-  }
-
-  /**
-   * Emit a trace updated event
-   */
-  protected emitTraceUpdated(trace: AITrace): void {
-    this.exportEvent({ type: 'trace_updated', trace }).catch(error => {
-      this.logger.error('Failed to export trace_updated event', error);
-    });
-  }
-
-  /**
-   * Emit a trace ended event
-   */
-  protected emitTraceEnded(trace: AITrace): void {
-    this.exportEvent({ type: 'trace_ended', trace }).catch(error => {
-      this.logger.error('Failed to export trace_ended event', error);
-    });
-  }
 
   /**
    * Emit a span started event

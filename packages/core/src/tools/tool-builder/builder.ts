@@ -154,11 +154,13 @@ export class CoreToolBuilder extends MastraBase {
         attributes: rest,
       };
       console.log("starting tool span with agentSpan: %s", agentSpan ? "true": "false");
-      const toolSpan = agentSpan?.createChildSpan(SpanType.TOOL_CALL, metadata);
+      const toolSpan = agentSpan?.createChildSpan({name: `tool-${toolId}`, type: SpanType.TOOL_CALL, metadata});
+      console.log("Created toolSpan: %s", toolSpan ? "true" : "false")
       try {
         logger.debug(start, { ...rest, args });
         const result = await execFunction(args, execOptions);
-        toolSpan?.end({ metadata: { output: result } });
+        toolSpan?.end({ output: result });
+        console.log("Ended toolSpan: %s", toolSpan ? "true" : "false")
         return result;
       } catch (err) {
         const mastraError = new MastraError(
@@ -176,8 +178,8 @@ export class CoreToolBuilder extends MastraBase {
         );
         logger.trackException(mastraError);
         logger.error(error, { ...rest, error: mastraError, args });
-        //TODO: add better handling of mastra error messages.
-        toolSpan?.end({ metadata: { error: { message: mastraError.message } } });
+        toolSpan?.error(mastraError, true)
+        console.log("Errored toolSpan: %s", toolSpan ? "true" : "false")
         return mastraError;
       }
     };

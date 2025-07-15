@@ -2,7 +2,7 @@
  * Telemetry Decorators for Mastra
  * 
  * Provides decorator-based instrumentation that integrates with the new
- * MastraTelemetry abstract base class.
+ * MastraAITelemetry abstract base class.
  */
 
 import type { DecoratorOptions } from './types';

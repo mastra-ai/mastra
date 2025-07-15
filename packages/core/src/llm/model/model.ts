@@ -111,9 +111,9 @@ export class MastraLLM extends MastraLLMBase {
         input: params,
       };
 
-      const toolSpan = aiSpan.createChildSpan(SpanType.TOOL_CALL, metadata);
+      const toolSpan = aiSpan.createChildSpan({name: `tool-${tool.id}`, type: SpanType.TOOL_CALL, metadata});
       const result = await tool.execute?.(params, options);
-      toolSpan.end({metadata: {output: result}});
+      toolSpan.end({output: result});
       return result;
     }
 

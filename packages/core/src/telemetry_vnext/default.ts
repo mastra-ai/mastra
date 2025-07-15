@@ -9,9 +9,9 @@
  * - DefaultTelemetry: Main telemetry implementation
  */
 
-import { MastraTelemetry } from './base';
+import { MastraError } from '../error';
+import { MastraAITelemetry } from './base';
 import {
-  type Trace,
   type AISpan,
   type SpanOptions,
   type TracingOptions,
@@ -19,32 +19,35 @@ import {
   SpanType,
   type TelemetryExporter,
   type TelemetryConfig,
+  type BaseMetadata,
 } from './types';
 
 // ============================================================================
 // Default AISpan Implementation
 // ============================================================================
 
-function generateId(type: string): string {
-  return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+function generateId(): string {
+  return `span-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
-class DefaultAISpan implements AISpan {
+class DefaultAISpan implements AISpan<BaseMetadata> {
   public id: string;
+  public name: string;
   public type: SpanType;
   public metadata: SpanMetadata;
-  public children: AISpan[] = [];
-  public parent?: AISpan;
-  public trace: Trace;
+  public children: AISpan<SpanMetadata>[] = [];
+  public parent?: AISpan<SpanMetadata>;
+  public trace: AISpan<SpanMetadata>;
   public startTime: Date;
   public endTime?: Date;
 
-  constructor(options: { id: string; type: SpanType; metadata: SpanMetadata; trace: Trace; parent?: AISpan }) {
-    this.id = options.id;
+  constructor(options: SpanOptions) {
+    this.id = generateId();
+    this.name = options.name;
     this.type = options.type;
     this.metadata = options.metadata;
-    this.trace = options.trace;
     this.parent = options.parent;
+    this.trace = options.parent ? options.parent.trace : this;
     this.startTime = new Date();
 
     // Add to parent's children if we have a parent
@@ -53,27 +56,44 @@ class DefaultAISpan implements AISpan {
     }
   }
 
-  end(options?: { endTime?: Date; metadata?: any }): void {
-    this.endTime = options?.endTime || new Date();
-    if (options?.metadata) {
-      this.metadata = { ...this.metadata, ...options.metadata };
+  end(metadata?: Partial<BaseMetadata>): void {
+    this.endTime = new Date();
+    if (metadata) {
+      this.metadata = { ...this.metadata, ...metadata };
     }
     // Callback will be set up by base class createSpanWithCallbacks
   }
 
-  createChildSpan(type: SpanType, metadata: SpanMetadata): AISpan {
-    const childId = generateId('span');
+  // TODO: could endSpan be default = true?
+  error(error: MastraError | Error, endSpan: boolean): void {
+    const metadata = (error instanceof(MastraError)) ? {
+      error : {
+        id: error.id,
+        details: error.details,
+        category: error.category,
+        domain: error.domain,
+        message: error.message,
+      }
+    } : {
+      error: {
+        message: error.message,
+      }
+    }
 
-    return new DefaultAISpan({
-      id: childId,
-      type,
-      metadata,
-      trace: this.trace,
-      parent: this,
-    });
+    if (endSpan) {
+      this.end(metadata)
+    } else {
+      this.update(metadata)
+    }
   }
 
-  update(metadata: any): void {
+  createChildSpan(options: SpanOptions): AISpan {
+    options.parent = this;
+    //TODO: NEED TO FIGURE OUT HOW TO WRAP THIS WITH EVENTS
+    return new DefaultAISpan(options);
+  }
+
+  update(metadata: BaseMetadata): void {
     this.metadata = { ...this.metadata, ...metadata };
     // Callback will be set up by base class createSpanWithCallbacks
   }
@@ -91,43 +111,6 @@ class DefaultAISpan implements AISpan {
 }
 
 // ============================================================================
-// Default Trace Implementation
-// ============================================================================
-
-class DefaultTrace implements Trace {
-  public id: string;
-  public name: string;
-  public startTime: Date;
-  public endTime?: Date;
-  public status: 'running' | 'completed' | 'failed' | 'cancelled' = 'running';
-  public user?: { id?: string; sessionId?: string; [key: string]: any };
-  public attributes?: Record<string, any>;
-  public tags?: string[];
-  public rootSpans: AISpan[] = [];
-  public metadata?: Record<string, any>;
-
-  constructor(options: {
-    id: string;
-    name: string;
-    user?: { id?: string; sessionId?: string; [key: string]: any };
-    attributes?: Record<string, any>;
-    tags?: string[];
-  }) {
-    this.id = options.id;
-    this.name = options.name;
-    this.startTime = new Date();
-    this.user = options.user;
-    this.attributes = options.attributes;
-    this.tags = options.tags;
-  }
-
-  end(status: 'completed' | 'failed' | 'cancelled' = 'completed'): void {
-    this.endTime = new Date();
-    this.status = status;
-  }
-}
-
-// ============================================================================
 // Default Console Exporter
 // ============================================================================
 
@@ -138,14 +121,6 @@ export class DefaultConsoleExporter implements TelemetryExporter {
     const timestamp = new Date().toISOString();
 
     switch (event.type) {
-      case 'trace_started':
-        console.log(`[${timestamp}] TRACE_STARTED: ${event.trace.name} (${event.trace.id})`);
-        break;
-      case 'trace_ended':
-        console.log(
-          `[${timestamp}] TRACE_ENDED: ${event.trace.name} (${event.trace.id}) - Status: ${event.trace.status}`,
-        );
-        break;
       case 'span_started':
         console.log(
           `[${timestamp}] SPAN_STARTED: ${event.span.type} (${event.span.id}) in trace ${event.span.trace.id}`,
@@ -173,9 +148,8 @@ export class DefaultConsoleExporter implements TelemetryExporter {
 // Default Telemetry Implementation
 // ============================================================================
 
-export class DefaultTelemetry extends MastraTelemetry {
-  private currentTrace?: Trace;
-  private traces = new Map<string, Trace>();
+export class DefaultTelemetry extends MastraAITelemetry {
+  private traces = new Map<string, AISpan>();
 
   constructor(config: { name: string } & TelemetryConfig = { name: 'default-telemetry' }) {
     // Add console exporter by default if none provided
@@ -190,54 +164,15 @@ export class DefaultTelemetry extends MastraTelemetry {
   // Abstract Method Implementations
   // ============================================================================
 
-  protected _startTrace(
-    name: string,
-    options?: {
-      user?: { id?: string; sessionId?: string; [key: string]: any };
-      attributes?: Record<string, any>;
-      tags?: string[];
-    },
-  ): Trace {
-    const traceId = generateId('trace');
 
-    const trace = new DefaultTrace({
-      id: traceId,
-      name,
-      user: options?.user,
-      attributes: options?.attributes,
-      tags: options?.tags,
-    });
-
-    this.traces.set(traceId, trace);
-    this.currentTrace = trace;
-
-    // Emit trace started event
-    this.emitTraceStarted(trace);
-
-    return trace;
-  }
-
-  protected _startSpan(spanType: SpanType, options: SpanOptions): AISpan {
-    const spanId = generateId('span');
-
-    // Use current trace if no parent span provided, or parent's trace if parent exists
-    const trace = options.parent?.trace || this.currentTrace;
-
-    if (!trace) {
-      throw new Error('No active trace found. Start a trace before creating spans.');
-    }
+  protected _startSpan(options: SpanOptions): AISpan {
+    const spanId = generateId();
 
     const metadata: SpanMetadata = options.metadata as SpanMetadata;
 
     // Use the createSpanWithCallbacks helper to wire up lifecycle callbacks
     return this.createSpanWithCallbacks(options, () => {
-      return new DefaultAISpan({
-        id: spanId,
-        type: spanType,
-        metadata,
-        trace,
-        parent: options.parent,
-      });
+      return new DefaultAISpan(options);
     });
   }
 
@@ -262,10 +197,12 @@ export class DefaultTelemetry extends MastraTelemetry {
           return this._traceMethod(value.bind(target), {
             spanName: `${spanNamePrefix}.${prop.toString()}`,
             spanType: defaultSpanType,
-            attributes: {
-              ...attributes,
-              'method.name': prop.toString(),
-              'class.name': target.constructor.name,
+            metadata: {
+                attributes: {
+                ...attributes,
+                'method.name': prop.toString(),
+                'class.name': target.constructor.name,
+              },
             },
           });
         }
@@ -280,20 +217,20 @@ export class DefaultTelemetry extends MastraTelemetry {
     options: {
       spanName: string;
       spanType?: SpanType;
-      attributes?: Record<string, any>;
+      metadata?: SpanMetadata;
     },
   ): TMethod {
-    const { spanName, attributes = {} } = options;
+    const { spanName, spanType = SpanType.GENERIC, metadata = {} } = options;
 
     return ((...args: unknown[]) => {
       // Create span using strongly-typed API
-      const span = this.startGenericSpan(
-        spanName,
-        {
-          attributes,
-        },
-        {},
-      );
+      const span = this.startSpan<SpanMetadata>({
+        name: spanName,
+        type: spanType,
+        metadata,
+        // TODO: try to get calling method somehow to pull parent:
+        // parent
+      });
 
       try {
         // Record input arguments (safely)
@@ -332,13 +269,7 @@ export class DefaultTelemetry extends MastraTelemetry {
               return resolvedValue;
             })
             .catch(error => {
-              span.update({
-                error: {
-                  message: error.message,
-                  code: error.code,
-                  stack: error.stack,
-                },
-              });
+              span.error(error, false)
               throw error;
             })
             .finally(() => {
@@ -362,14 +293,7 @@ export class DefaultTelemetry extends MastraTelemetry {
         span.end();
         return result;
       } catch (error: any) {
-        span.update({
-          error: {
-            message: error.message,
-            code: error.code,
-            stack: error.stack,
-          },
-        });
-        span.end();
+        span.error(error, true)
         throw error;
       }
     }) as unknown as TMethod;
@@ -385,29 +309,12 @@ export class DefaultTelemetry extends MastraTelemetry {
   // Additional Helper Methods
   // ============================================================================
 
-  /**
-   * Get the current active trace
-   */
-  getCurrentTrace(): Trace | undefined {
-    return this.currentTrace;
-  }
 
   /**
    * Get all traces
    */
-  getAllTraces(): Trace[] {
+  getAllTraces(): AISpan[] {
     return Array.from(this.traces.values());
-  }
-
-  /**
-   * End the current trace
-   */
-  endCurrentTrace(status: 'completed' | 'failed' | 'cancelled' = 'completed'): void {
-    if (this.currentTrace) {
-      (this.currentTrace as DefaultTrace).end(status);
-      this.emitTraceEnded(this.currentTrace);
-      this.currentTrace = undefined;
-    }
   }
 
   /**
@@ -415,6 +322,5 @@ export class DefaultTelemetry extends MastraTelemetry {
    */
   clearTraces(): void {
     this.traces.clear();
-    this.currentTrace = undefined;
   }
 }

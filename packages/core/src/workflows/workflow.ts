@@ -26,7 +26,7 @@ import type {
   StreamEvent,
   WorkflowRunState,
 } from './types';
-import type { AITelemetry, AITrace } from '../telemetry_vnext';
+import type { AISpan } from '../telemetry_vnext';
 
 export type DefaultEngineType = {};
 
@@ -1094,7 +1094,7 @@ export class Workflow<
     runtimeContext,
     abort,
     abortSignal,
-    aiTelemetry,
+    parentSpan,
   }: {
     inputData: z.infer<TInput>;
     resumeData?: any;
@@ -1114,8 +1114,8 @@ export class Workflow<
     abortSignal: AbortSignal;
     bail: (result: any) => any;
     abort: () => any;
-    /** The AI telemetry to attach append this workflow to. Created if not provided. */
-    aiTelemetry?: AITelemetry;
+    /** The AI Span to attach append this workflow to. Created if not provided. */
+    parentSpan?: AISpan;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
@@ -1139,18 +1139,10 @@ export class Workflow<
       emitter.emit('nested-watch', { event, workflowId: this.id, runId: run.runId, isResume });
     }, 'watch');
 
-    const vnextTelemetry = this.mastra?.getTelemetryVNext();
-    if (vnextTelemetry) {
-      //Start a trace for the workflow execution
-      const trace = vnextTelemetry.startTrace(`workflow-${workflowId}`, {
-        attributes: { workflowId, runId },
-        tags: ['workflow', 'execution'],
-      });
-
 
     const res = isResume
-      ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext })
-      : await run.start({ inputData, runtimeContext });
+      ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext, parentSpan })
+      : await run.start({ inputData, runtimeContext, parentSpan });
     unwatch();
     unwatchV2();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
@@ -1344,9 +1336,11 @@ export class Run<
   async start({
     inputData,
     runtimeContext,
+    parentSpan,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
+    parentSpan?: AISpan;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -1371,6 +1365,7 @@ export class Run<
       retryConfig: this.retryConfig,
       runtimeContext: runtimeContext ?? new RuntimeContext(),
       abortController: this.abortController,
+      parentSpan,
     });
 
     if (result.status !== 'suspended') {
@@ -1385,7 +1380,7 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
+  stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext; } = {}): {
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
   } {
@@ -1504,6 +1499,7 @@ export class Run<
       | string
       | string[];
     runtimeContext?: RuntimeContext;
+    parentSpan?: AISpan;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
@@ -1544,6 +1540,7 @@ export class Run<
         },
         runtimeContext: params.runtimeContext ?? new RuntimeContext(),
         abortController: this.abortController,
+        parentSpan: params.parentSpan,
       })
       .then(result => {
         if (result.status !== 'suspended') {

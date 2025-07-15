@@ -1,7 +1,6 @@
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
-import { SpanType } from '../telemetry_vnext/types';
-import type { AISpan, AITrace, WorkflowRunMetadata, WorkflowStepMetadata } from '../telemetry_vnext/types';
+import { SpanType, type AISpan, type SpanMetadata, type WorkflowRunMetadata, type WorkflowStepMetadata } from '../telemetry_vnext';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { EMITTER_SYMBOL } from './constants';
@@ -22,7 +21,7 @@ export type ExecutionContext = {
     delay: number;
   };
   executionSpan: Span;
-  aiSpan?: AISpan;
+  workflowSpan?: AISpan;
 };
 
 /**
@@ -160,31 +159,29 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       delay?: number;
     };
     runtimeContext: RuntimeContext;
-    aiTrace?: AITrace;
+    parentSpan?: AISpan;
     abortController: AbortController;
   }): Promise<TOutput> {
-    const { workflowId, runId, graph, input, resume, retryConfig, aiTrace } = params;
+    const { workflowId, runId, graph, input, resume, retryConfig, parentSpan } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
 
-    let aiSpan: AISpan<WorkflowRunMetadata> | undefined;
-    const vnextTelemetry = this.mastra?.getTelemetryVNext();
-    if (aiTrace) {
-      //Start a trace for the workflow execution
-      const trace = vnextTelemetry.startTrace(`workflow-${workflowId}`, {
-        attributes: { workflowId, runId },
-        tags: ['workflow', 'execution'],
-      });
+    let workflowSpan: AISpan<SpanMetadata> | undefined;
 
-      aiSpan = vnextTelemetry.startWorkflowRunSpan(
-        `workflow.${workflowId}.execute`,
-        {
-          workflowId,
-          input,
-        },
-        {},
-      );
+    const vnextTelemetry = this.mastra?.getTelemetryVNext();
+    if (vnextTelemetry) {
+      const metadata: WorkflowRunMetadata = {
+        workflowId,
+        input,
+      }
+
+      workflowSpan = vnextTelemetry.startWorkflowRunSpan({
+          name: `workflow-${workflowId}`,
+          metadata,
+          parent: parentSpan,
+        });
     }
+
 
     if (steps.length === 0) {
       const empty_graph_error = new MastraError({
@@ -194,14 +191,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         category: ErrorCategory.USER,
       });
 
-      aiSpan?.end({
-        metadata: {
-          error: {
-            message: empty_graph_error.message,
-          },
-        },
-      });
-
+      workflowSpan?.error(empty_graph_error, true)
       throw empty_graph_error;
     }
 
@@ -237,7 +227,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: {},
             retryConfig: { attempts, delay },
             executionSpan: executionSpan as Span,
-            aiSpan,
+            workflowSpan,
           },
           abortController: params.abortController,
           emitter: params.emitter,
@@ -302,12 +292,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           error: result.error,
         });
 
-        aiSpan?.end({
-          metadata: {
-            status: result.status,
-            output: result.result,
-            error: result.error,
-          },
+        workflowSpan?.end({
+          status: result.status,
+          output: result.result,
+          error: result.error,
         });
 
         return result;
@@ -326,12 +314,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       error: result.error,
     });
 
-    aiSpan?.end({
-      metadata: {
-        status: result.status,
-        output: result.result,
-        error: result.error,
-      },
+    workflowSpan?.end({
+      status: result.status,
+      output: result.result,
+      error: result.error,
     });
 
     return result;
@@ -564,21 +550,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
     const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
 
-    let aiSpan: AISpan<WorkflowStepMetadata> | undefined;
-    const vnextTelemetry = this.mastra?.getTelemetryVNext();
-    if (vnextTelemetry) {
-      aiSpan = vnextTelemetry.startWorkflowStepSpan(
-        `workflow.${workflowId}.step.${step.id}`,
-        {
+    const stepSpan = executionContext.workflowSpan?.createChildSpan({
+      name: `workflow.${workflowId}.step.${step.id}`,
+      type: SpanType.WORKFLOW_STEP,
+      metadata: {
           stepId: step.id,
           input: prevOutput,
-        },
-        {
-          parent: executionContext.aiSpan,
-        },
-      );
-      executionContext.aiSpan?.children.push(aiSpan);
-    }
+        }
+    });
+
 
     const stepInfo = {
       ...stepResults[step.id],
@@ -778,11 +758,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     }
 
-    aiSpan?.end({
-      metadata: {
-        status: execResults.status,
-        output: execResults.output,
-      },
+    stepSpan?.end({
+      status: execResults.status,
+      output: execResults.output,
     });
 
     return { ...stepInfo, ...execResults };
@@ -836,7 +814,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
-            aiSpan: executionContext.aiSpan,
+            workflowSpan: executionContext.workflowSpan,
           },
           emitter,
           abortController,
@@ -982,7 +960,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
-            aiSpan: executionContext.aiSpan,
+            workflowSpan: executionContext.workflowSpan,
           },
           emitter,
           abortController,

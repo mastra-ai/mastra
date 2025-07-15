@@ -49,6 +49,7 @@ import {
   SpanType,
   type AgentRunMetadata,
   type AISpan,
+  type SpanMetadata,
   type ToolCallMetadata,
   type WorkflowRunMetadata,
 } from '../telemetry_vnext';
@@ -783,7 +784,11 @@ export class Agent<
                         toolType: 'memory',
                         input: args,
                       };
-                      const toolSpan = agentSpan?.createChildSpan(SpanType.TOOL_CALL, metadata);
+                      const toolSpan = agentSpan?.createChildSpan({
+                        name: k,
+                        type: SpanType.TOOL_CALL,
+                        metadata,
+                      });
                       try {
                         this.logger.debug(`[Agent:${this.name}] - Executing memory tool ${k}`, {
                           name: k,
@@ -808,7 +813,7 @@ export class Agent<
                             },
                             options,
                           ) ?? undefined;
-                        toolSpan?.end({ metadata: { output: result } });
+                        toolSpan?.end({ output: result });
                       } catch (err) {
                         const mastraError = new MastraError(
                           {
@@ -827,7 +832,7 @@ export class Agent<
                         );
                         this.logger.trackException(mastraError);
                         this.logger.error(mastraError.toString());
-                        toolSpan?.end({ metadata: { error: { message: mastraError.message } } });
+                        toolSpan?.error(mastraError, true)
                         throw mastraError;
                       }
                     }
@@ -1034,7 +1039,7 @@ export class Agent<
                 toolType: 'workflow',
                 input: args,
               };
-              const toolSpan = agentSpan?.createChildSpan(SpanType.TOOL_CALL, metadata);
+              const toolSpan = agentSpan?.createChildSpan({name: workflowName, type: SpanType.TOOL_CALL, metadata});
 
               try {
                 this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
@@ -1052,7 +1057,7 @@ export class Agent<
                   inputData: args,
                   runtimeContext,
                 });
-                toolSpan?.end({ metadata: { output: result } });
+                toolSpan?.end({ output: result });
                 return result;
               } catch (err) {
                 const mastraError = new MastraError(
@@ -1072,7 +1077,7 @@ export class Agent<
                 );
                 this.logger.trackException(mastraError);
                 this.logger.error(mastraError.toString());
-                toolSpan?.end({ metadata: { error: { message: mastraError.message } } });
+                toolSpan?.error(mastraError, true)
                 throw mastraError;
               }
             },
@@ -1217,6 +1222,7 @@ export class Agent<
     runtimeContext,
     generateMessageId,
     saveQueueManager,
+    parentSpan,
   }: {
     instructions?: string;
     toolsets?: ToolsetsInput;
@@ -1230,6 +1236,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
     generateMessageId: undefined | IDGenerator;
     saveQueueManager: SaveQueueManager;
+    parentSpan?: AISpan;
   }) {
     return {
       before: async () => {
@@ -1238,11 +1245,10 @@ export class Agent<
         }
 
         let agentSpan: AISpan<AgentRunMetadata> | undefined;
+        
         const vnextTelemetry = this.#mastra?.getTelemetryVNext();
         if (vnextTelemetry) {
-          agentSpan = vnextTelemetry.startAgentRunSpan(
-            `agent.${this.id}.execute`,
-            {
+          const metadata: AgentRunMetadata = {
               agentId: this.id,
               instructions,
               availableTools: [
@@ -1254,9 +1260,13 @@ export class Agent<
                 resourceId,
                 threadId: thread?.id,
               },
-            },
-            {},
-          );
+          }
+    
+          agentSpan = vnextTelemetry.startAgentRunSpan({
+              name: `agent-${this.id}`,
+              metadata,
+              parent: parentSpan,
+            }) as AISpan<AgentRunMetadata>;
         }
 
         const memory = this.getMemory();
@@ -1322,8 +1332,7 @@ export class Agent<
           });
           this.logger.trackException(mastraError);
           this.logger.error(mastraError.toString());
-
-          agentSpan?.end({ metadata: { error: { message: mastraError.message } } });
+          agentSpan?.error(mastraError, true);
           throw mastraError;
         }
         const store = memory.constructor.name;
@@ -1482,7 +1491,7 @@ export class Agent<
           result: resToLog,
           threadId,
         });
-        agentSpan?.end({ metadata: { output: resToLog } });
+        agentSpan?.end({ output: resToLog });
         const memory = this.getMemory();
         const messageListResponses = new MessageList({ threadId, resourceId })
           .add(result.response.messages, 'response')

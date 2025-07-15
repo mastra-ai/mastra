@@ -8,6 +8,8 @@
 
 import type { Context, Span as OTelSpan } from '@opentelemetry/api';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows';
+import type { RuntimeContext } from '../runtime-context';
+import type { MastraError } from '../error';
 
 // ============================================================================
 // Core AI-Specific Span Types
@@ -58,9 +60,10 @@ export interface BaseMetadata {
   /** Error information if span failed */
   error?: {
     message: string;
-    code?: string;
-    stack?: string;
-    retryable?: boolean;
+    id?: string;
+    domain?: string;
+    category?: string;
+    details?: Record<string, any>
   };
 }
 
@@ -366,36 +369,8 @@ export type SpanMetadata =
   | BaseMetadata; // For generic spans
 
 // ============================================================================
-// Trace and Span Interfaces
+// Span Interfaces
 // ============================================================================
-
-/**
- * Represents a trace - the top-level execution unit
- */
-export interface AITrace {
-  /** Unique trace identifier */
-  id: string;
-  /** Trace name/operation */
-  name: string;
-  /** When trace started */
-  startTime: Date;
-  /** When trace ended */
-  endTime?: Date;
-  /** Trace status */
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
-  /** User/session context */
-  user?: {
-    id?: string;
-    sessionId?: string;
-    [key: string]: any;
-  };
-  /** Custom attributes */
-  attributes?: Record<string, any>;
-  /** Tags for categorization */
-  tags?: string[];
-  /** Root spans (spans with no parent span) */
-  rootSpans: AISpan[];
-}
 
 /**
  * Enhanced Span interface that wraps OpenTelemetry spans with AI-specific features
@@ -403,6 +378,8 @@ export interface AITrace {
 export interface AISpan<TMetadata extends SpanMetadata = SpanMetadata> {
   /** Unique span identifier */
   id: string;
+  /** Name of the span */
+  name: string;
   /** Type of the span */
   type: SpanType;
   /** When span started */
@@ -417,33 +394,26 @@ export interface AISpan<TMetadata extends SpanMetadata = SpanMetadata> {
   children: AISpan[];
   /** Parent span reference (undefined for root spans) */
   parent?: AISpan;
-  /** Trace this span belongs to */
-  trace: AITrace;
+  /** The top-level span */
+  trace: AISpan;
 
   // Methods for span lifecycle
   /** End the span */
-  end(options?: { endTime?: Date; metadata?: Partial<TMetadata> }): void;
+  end(metadata?: Partial<TMetadata>): void;
+
+  /** Record an error for the span, optionally end the span as well */
+  error(error: MastraError | Error, endSpan: boolean): void;
 
   /** Update span metadata */
   update(metadata: Partial<TMetadata>): void;
 
   /** Create child span */
-  createChildSpan(type: SpanType, metadata: SpanMetadata): AISpan;
+  createChildSpan(options: SpanOptions<TMetadata>): AISpan;
+  
   /** Export span for distributed tracing */
   export(): Promise<string>;
 }
 
-export interface AITraceSpan {
-  /** The overall trace for the AI execution (workflow, agent, ect...) */
-  trace: AITrace;
-  /** The parent span for the current item. If not set, then the trace is the parent. */
-  parentSpan?: AISpan;
-}
-
-export interface StartSpanOptions {
-  parent?: AISpan;
-  context?: Context;
-}
 
 // ============================================================================
 // Configuration Types
@@ -456,7 +426,7 @@ export type SamplingStrategy =
   | { type: 'always_on' }
   | { type: 'always_off' }
   | { type: 'ratio'; probability: number }
-  | { type: 'custom'; sampler: (traceContext: any) => boolean };
+  | { type: 'custom'; sampler: (traceContext: TraceContext) => boolean };
 
 /**
  * Complete telemetry configuration that combines all options
@@ -468,8 +438,8 @@ export interface TelemetryConfig {
   enabled?: boolean;
   /** Sampling strategy */
   sampling?: SamplingStrategy;
-  /** Context propagation settings */
-  context?: {
+  /** Output settings */
+  settings?: {
     /** Whether to include input/output in spans */
     includeIO?: boolean;
     /** Maximum size for serialized data */
@@ -518,9 +488,6 @@ export interface TelemetrySupports {
  * Telemetry events that can be exported
  */
 export type TelemetryEvent =
-  | { type: 'trace_started'; trace: AITrace }
-  | { type: 'trace_updated'; trace: AITrace }
-  | { type: 'trace_ended'; trace: AITrace }
   | { type: 'span_started'; span: AISpan }
   | { type: 'span_updated'; span: AISpan }
   | { type: 'span_ended'; span: AISpan };
@@ -558,17 +525,19 @@ export interface TelemetrySampler {
   /** Sampler name */
   name: string;
   /** Determine if trace should be sampled */
-  shouldSample(traceContext: any): boolean;
+  shouldSample(traceContext: TraceContext): boolean;
 }
 
 /**
  * Options for span creation (internal - used by telemetry system)
  */
-export interface SpanOptions {
+export interface SpanOptions<TMetadata extends SpanMetadata = SpanMetadata> {
   /** Span name */
   name: string;
+  /** Span type */
+  type: SpanType;
   /** Span metadata (partial - system fields will be filled in) */
-  metadata: Partial<SpanMetadata>;
+  metadata: Partial<TMetadata>;
   /** Parent span */
   parent?: AISpan;
   /** OpenTelemetry context */
@@ -578,6 +547,14 @@ export interface SpanOptions {
     onEnd?: (span: AISpan) => void;
     onUpdate?: (span: AISpan) => void;
   };
+}
+
+/**
+ * Context for TraceSampling
+ */
+export interface TraceContext {
+  runtimeContext?: RuntimeContext;
+  attributes?: Record<string, any>;
 }
 
 /**
@@ -598,7 +575,7 @@ export interface TracingOptions {
  * Options for decorator-based instrumentation
  */
 export interface DecoratorOptions {
-  /** Span name (defaults to method name) */
+  /** Span id (defaults to method name) */
   spanName?: string;
   /** Span type */
   spanType?: SpanType;

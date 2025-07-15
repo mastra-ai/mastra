@@ -16,7 +16,7 @@ import type { OtelConfig } from '../telemetry';
 import { DefaultTelemetry } from '../telemetry_vnext/default';
 import { registerTelemetry } from '../telemetry_vnext/registry';
 import type { TelemetryConfig } from '../telemetry_vnext/types';
-import { MastraTelemetry } from '../telemetry_vnext/base';
+import { MastraAITelemetry } from '../telemetry_vnext/base';
 import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
@@ -43,7 +43,7 @@ export interface Config<
   workflows?: TWorkflows;
   tts?: TTTS;
   telemetry?: OtelConfig;
-  telemetryVNext?: TelemetryConfig | MastraTelemetry;
+  telemetryVNext?: TelemetryConfig | MastraAITelemetry;
   deployer?: MastraDeployer;
   server?: ServerConfig;
   mcpServers?: TMCPServers;
@@ -90,7 +90,7 @@ export class Mastra<
     path: string;
   }> = [];
   #telemetry?: Telemetry;
-  #telemetryVNext?: MastraTelemetry;
+  #telemetryVNext?: MastraAITelemetry;
   #storage?: MastraStorage;
   #memory?: MastraMemory;
   #networks?: TNetworks;
@@ -169,7 +169,7 @@ export class Mastra<
     Telemetry VNext - Running alongside existing telemetry
     */
     if (config?.telemetryVNext) {
-      if (config.telemetryVNext instanceof MastraTelemetry) {
+      if (config.telemetryVNext instanceof MastraAITelemetry) {
         // User provided their own telemetry implementation
         this.#telemetryVNext = config.telemetryVNext;
       } else {
@@ -182,7 +182,7 @@ export class Mastra<
 
       // Register with the global registry following best practices
       registerTelemetry('mastra-vnext', this.#telemetryVNext, true);
-    }
+    } 
 
     /*
     Telemetry

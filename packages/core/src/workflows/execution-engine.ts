@@ -4,7 +4,7 @@ import type { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
 import type { Emitter, StepResult } from './types';
 import type { StepFlowEntry } from '.';
-import type { AITrace } from '../telemetry_vnext';
+import type { AISpan } from '../telemetry_vnext';
 
 /**
  * Represents an execution graph for a workflow
@@ -49,7 +49,7 @@ export abstract class ExecutionEngine extends MastraBase {
     };
     emitter: Emitter;
     runtimeContext: RuntimeContext;
-    aiTrace: AITrace;
+    parentSpan?: AISpan;
     retryConfig?: {
       attempts?: number;
       delay?: number;

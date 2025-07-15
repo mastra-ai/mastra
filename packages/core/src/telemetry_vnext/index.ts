@@ -11,7 +11,7 @@ export * from './types';
 export * from './registry';
 
 // Abstract base class
-export { MastraTelemetry, telemetryDefaultOptions } from './base';
+export { MastraAITelemetry, telemetryDefaultOptions } from './base';
 
 // Decorators
 export { withSpan, InstrumentClass } from './decorators';
