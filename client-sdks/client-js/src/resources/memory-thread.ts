@@ -64,14 +64,17 @@ export class MemoryThread extends BaseResource {
   }
 
   /**
- * Retrieves messages associated with the thread
- * @param params - Optional parameters including limit for number of messages to retrieve
- * @returns Promise containing thread messages and UI messages
- */
-  getMessagesPaginated({ selectBy, ...rest }: GetMemoryThreadMessagesPaginatedParams): Promise<GetMemoryThreadMessagesPaginatedResponse> {
+   * Retrieves paginated messages associated with the thread with advanced filtering and selection options
+   * @param params - Pagination parameters including selectBy criteria, page, perPage, date ranges, and message inclusion options
+   * @returns Promise containing paginated thread messages with pagination metadata (total, page, perPage, hasMore)
+   */
+  getMessagesPaginated({
+    selectBy,
+    ...rest
+  }: GetMemoryThreadMessagesPaginatedParams): Promise<GetMemoryThreadMessagesPaginatedResponse> {
     const query = new URLSearchParams({
       ...rest,
-      selectBy: JSON.stringify(selectBy),
+      ...(selectBy ? { selectBy: JSON.stringify(selectBy) } : {}),
     });
     return this.request(`/api/memory/threads/${this.threadId}/messages/paginated?${query.toString()}`);
   }
