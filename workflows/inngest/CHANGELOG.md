@@ -1,5 +1,17 @@
 # @mastra/inngest
 
+## 0.11.4-alpha.0
+
+### Patch Changes
+
+- 0b56518: Ensure removed runtimeContext values are not saved in snapshot
+- Updated dependencies [0b56518]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [c3a30de]
+- Updated dependencies [cf3a184]
+- Updated dependencies [d6bfd60]
+  - @mastra/core@0.10.15-alpha.1
+
 ## 0.11.3
 
 ### Patch Changes

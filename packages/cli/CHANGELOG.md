@@ -1,5 +1,23 @@
 # mastra
 
+## 0.10.13-alpha.1
+
+### Patch Changes
+
+- d49334d: export tool list for usage in cloud
+- 9cdfcb5: fix infinite rerenders on agents table + share runtime context for cloud
+- 45174f3: share network list between core and cloud
+- 48f5532: export workflow list for usage in cloud
+- 3e484be: Added CLI template option
+- Updated dependencies [0b56518]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [c3a30de]
+- Updated dependencies [cf3a184]
+- Updated dependencies [fe4bbd4]
+- Updated dependencies [d6bfd60]
+  - @mastra/core@0.10.15-alpha.1
+  - @mastra/deployer@0.10.15-alpha.1
+
 ## 0.10.13-alpha.0
 
 ### Patch Changes
