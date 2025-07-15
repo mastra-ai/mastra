@@ -1,11 +1,12 @@
 import { useWorkflows } from '@/hooks/use-workflows';
 import { Header, HeaderTitle, MainContentLayout, MainContentContent, WorkflowTable } from '@mastra/playground-ui';
-import { useNavigate } from 'react-router';
 
 function Workflows() {
   const { data, isLoading } = useWorkflows();
-  const navigate = useNavigate();
   const [legacyWorkflows, workflows] = data ?? [];
+
+  const isEmpty =
+    !isLoading && Object.keys(legacyWorkflows || {}).length === 0 && Object.keys(workflows || {}).length === 0;
 
   return (
     <MainContentLayout>
@@ -13,12 +14,12 @@ function Workflows() {
         <HeaderTitle>Workflows</HeaderTitle>
       </Header>
 
-      <MainContentContent isCentered={!isLoading && Object.keys(data || {}).length === 0}>
+      <MainContentContent isCentered={isEmpty}>
         <WorkflowTable
           workflows={workflows}
           legacyWorkflows={legacyWorkflows}
           isLoading={isLoading}
-          onClickRow={workflowId => navigate(`/workflows/${workflowId}/graph`)}
+          computeLink={workflowId => `/workflows/${workflowId}/graph`}
         />
       </MainContentContent>
     </MainContentLayout>

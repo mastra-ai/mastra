@@ -188,6 +188,8 @@ export function WorkflowTrigger({
   const workflowActivePaths = streamResultToUse?.payload?.workflowState?.steps ?? {};
   const hasWorkflowActivePaths = Object.values(workflowActivePaths).length > 0;
 
+  const doneStatuses = ['success', 'failed', 'canceled'];
+
   return (
     <div className="h-full pt-3 pb-12">
       <div className="space-y-4 px-5 pb-5 border-b-sm border-border1">
@@ -280,7 +282,11 @@ export function WorkflowTrigger({
             className="w-full"
             size="lg"
             onClick={handleCancelWorkflowRun}
-            disabled={!!cancelResponse?.message || isCancellingWorkflowRun}
+            disabled={
+              !!cancelResponse?.message ||
+              isCancellingWorkflowRun ||
+              (result?.payload?.workflowState?.status && doneStatuses.includes(result?.payload?.workflowState?.status))
+            }
           >
             {isCancellingWorkflowRun ? (
               <Icon>
