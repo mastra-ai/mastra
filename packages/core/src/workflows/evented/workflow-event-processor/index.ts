@@ -727,6 +727,21 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
       });
 
+      await this.pubsub.publish(`workflow.events.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'watch',
+          payload: {
+            currentStep: { ...prevResult, id: (step as any)?.step?.id },
+            workflowState: {
+              status: 'suspended',
+              steps: stepResults,
+              suspendPayload: prevResult.suspendPayload,
+            },
+          },
+        },
+      });
+
       await this.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         data: {

@@ -4415,7 +4415,6 @@ describe('Workflow', () => {
     });
   });
 
-  // TODO
   describe('Suspend and Resume', () => {
     afterAll(async () => {
       const pathToDb = path.join(process.cwd(), 'mastra.db');
@@ -4449,8 +4448,7 @@ describe('Workflow', () => {
       expect(run.runId).toBe(run2.runId);
     });
 
-    // TODO: watch
-    it.skip('should handle basic suspend and resume flow', async () => {
+    it('should handle basic suspend and resume flow', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
         .fn()
@@ -4571,6 +4569,7 @@ describe('Workflow', () => {
           status: 'success',
           output: { modelOutput: 'test output' },
           payload: { userInput: 'test input' },
+          suspendPayload: {},
           resumePayload: { context: { userInput: 'test input for resumption' }, stepId: 'promptAgent' },
           resumedAt: expect.any(Number),
           suspendedAt: expect.any(Number),
