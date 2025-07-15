@@ -838,7 +838,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         return;
       }
 
-      console.dir({ parallel: { status: 'success', output: allResults } }, { depth: null });
+      console.dir({ parallel: { allResults, executionPath } }, { depth: null });
       await this.pubsub.publish('workflows', {
         type: 'workflow.step.end',
         data: {

@@ -87,7 +87,7 @@ export class MockStore extends MastraStorage {
     snapshot.snapshot.context[stepId] = result;
     this.data.mastra_workflow_snapshot[runId] = snapshot;
 
-    return snapshot.snapshot.context;
+    return JSON.parse(JSON.stringify(snapshot.snapshot.context));
   }
 
   async updateWorkflowState({

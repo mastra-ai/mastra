@@ -2798,7 +2798,6 @@ describe('Workflow', () => {
             endedAt: expect.any(Number),
           },
           step2: {
-            output: undefined,
             status: 'success',
             payload: {
               data: 'success',
