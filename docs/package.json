@@ -23,7 +23,6 @@
     "@mastra/core": "^0.8.3",
     "@radix-ui/react-dialog": "^1.1.11",
     "@radix-ui/react-label": "^2.1.2",
-    "@radix-ui/react-scroll-area": "^1.2.8",
     "@radix-ui/react-slot": "^1.1.2",
     "@tailwindcss/postcss": "^4.0.17",
     "@tanstack/react-virtual": "^3.13.8",
