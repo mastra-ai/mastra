@@ -570,7 +570,7 @@ export default withGT(
       },
       {
         source: "/docs/guide/deployment/deployment",
-        destination: "/docs/deployment/deployment",
+        destination: "/docs/deployment/serverless-platforms",
         permanent: true,
       },
       {
