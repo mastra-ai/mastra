@@ -21,7 +21,7 @@ This example demonstrates how to integrate Mastra agents with [AI SDK v5](https:
 
 First, set up your Mastra agent with memory and tools:
 
-```ts showLineNumbers copy filename="src/mastra/index.ts"
+```typescript showLineNumbers copy filename="src/mastra/index.ts"
 import { ConsoleLogger } from "@mastra/core/logger";
 import { Mastra } from "@mastra/core/mastra";
 import { weatherAgent } from "./agents";
@@ -33,7 +33,7 @@ export const mastra = new Mastra({
 });
 ```
 
-```ts showLineNumbers copy filename="src/mastra/agents/index.ts"
+```typescript showLineNumbers copy filename="src/mastra/agents/index.ts"
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { Memory } from "@mastra/memory";
@@ -77,7 +77,7 @@ export const weatherAgent = new Agent({
 
 Create a tool that fetches real-time weather data:
 
-```ts showLineNumbers copy filename="src/mastra/tools/index.ts"
+```typescript showLineNumbers copy filename="src/mastra/tools/index.ts"
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -136,7 +136,7 @@ const getWeather = async (location: string) => {
 
 Create an API route that streams responses from your Mastra agent:
 
-```ts showLineNumbers copy filename="app/api/chat/route.ts"
+```typescript showLineNumbers copy filename="app/api/chat/route.ts"
 import { mastra } from "@/src/mastra";
 import { createV4CompatibleResponse } from "@mastra/core/agent";
 
@@ -159,7 +159,7 @@ export async function POST(req: Request) {
 
 Load conversation history from Mastra Memory:
 
-```ts showLineNumbers copy filename="app/api/initial-chat/route.ts"
+```typescript showLineNumbers copy filename="app/api/initial-chat/route.ts"
 import { mastra } from "@/src/mastra";
 import { NextResponse } from "next/server";
 
@@ -178,7 +178,7 @@ export async function GET() {
 
 Build the frontend using AI SDK v5's `useChat` hook:
 
-```tsx showLineNumbers copy filename="app/page.tsx"
+```typescript showLineNumbers copy filename="app/page.tsx"
 "use client";
 
 import { Message, useChat } from "@ai-sdk/react";
@@ -260,7 +260,7 @@ NOTE: ai-sdk v5 is still in beta, while it is in beta you'll have to install the
 
 The `createV4CompatibleResponse` function bridges Mastra's streaming format with AI SDK v5:
 
-```ts
+```typescript
 // Converts Mastra stream to AI SDK v5 compatible format
 return createV4CompatibleResponse(stream.toUIMessageStreamResponse().body!);
 ```

@@ -1343,10 +1343,33 @@ export class Agent<
           memorySystemMessage = ``;
         }
         if (resultsFromOtherThreads.length) {
-          memorySystemMessage += `\nThe following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n${JSON.stringify(
-            // get v1 since they're closer to CoreMessages (which get sent to the LLM) but also include timestamps
-            new MessageList().add(resultsFromOtherThreads, 'memory').get.all.v1(),
-          )}\n<end_remembered_from_other_conversation>`;
+          memorySystemMessage += `\nThe following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n${(() => {
+            let result = ``;
+
+            const messages = new MessageList().add(resultsFromOtherThreads, 'memory').get.all.v1();
+            let lastYmd: string | null = null;
+            for (const msg of messages) {
+              const date = msg.createdAt;
+              const year = date.getUTCFullYear();
+              const month = date.toLocaleString('default', { month: 'short' });
+              const day = date.getUTCDate();
+              const ymd = `${year}, ${month}, ${day}`;
+              const utcHour = date.getUTCHours();
+              const utcMinute = date.getUTCMinutes();
+              const hour12 = utcHour % 12 || 12;
+              const ampm = utcHour < 12 ? 'AM' : 'PM';
+              const timeofday = `${hour12}:${utcMinute < 10 ? '0' : ''}${utcMinute} ${ampm}`;
+
+              if (!lastYmd || lastYmd !== ymd) {
+                result += `\nthe following messages are from ${ymd}\n`;
+              }
+              result += `
+Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conversation' : ''} at ${timeofday}: ${JSON.stringify(msg)}`;
+
+              lastYmd = ymd;
+            }
+            return result;
+          })()}\n<end_remembered_from_other_conversation>`;
         }
 
         if (memorySystemMessage) {
@@ -1615,6 +1638,12 @@ export class Agent<
     const threadFromArgs = resolveThreadIdFromArgs({ ...args, ...generateOptions });
     const resourceId = args.memory?.resource || resourceIdFromArgs;
     const memoryConfig = args.memory?.options || memoryConfigFromArgs;
+
+    if (resourceId && threadFromArgs && !this.getMemory()) {
+      this.logger.warn(
+        `[Agent:${this.name}] - No memory is configured but resourceId and threadId were passed in args. This will not work.`,
+      );
+    }
     const runId = args.runId || randomUUID();
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
@@ -1851,6 +1880,12 @@ export class Agent<
     const threadFromArgs = resolveThreadIdFromArgs({ ...args, ...streamOptions });
     const resourceId = args.memory?.resource || resourceIdFromArgs;
     const memoryConfig = args.memory?.options || memoryConfigFromArgs;
+
+    if (resourceId && threadFromArgs && !this.getMemory()) {
+      this.logger.warn(
+        `[Agent:${this.name}] - No memory is configured but resourceId and threadId were passed in args. This will not work.`,
+      );
+    }
 
     const runId = args.runId || randomUUID();
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
