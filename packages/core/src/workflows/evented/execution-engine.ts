@@ -76,6 +76,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
         resumeSteps: params.resume.steps,
         prevResult: { status: 'success', output: prevResult?.payload },
         resumeData: params.resume.resumePayload,
+        runtimeContext: Object.fromEntries(params.runtimeContext.entries()),
       });
       await this.pubsub.publish('workflows', {
         type: 'workflow.resume',
@@ -87,6 +88,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           resumeSteps: params.resume.steps,
           prevResult: { status: 'success', output: prevResult?.payload },
           resumeData: params.resume.resumePayload,
+          runtimeContext: Object.fromEntries(params.runtimeContext.entries()),
         },
       });
     } else {
@@ -96,6 +98,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           workflowId: params.workflowId,
           runId: params.runId,
           prevResult: { status: 'success', output: params.input },
+          runtimeContext: Object.fromEntries(params.runtimeContext.entries()),
         },
       });
     }

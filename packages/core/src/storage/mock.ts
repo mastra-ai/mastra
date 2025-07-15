@@ -61,11 +61,13 @@ export class MockStore extends MastraStorage {
     runId,
     stepId,
     result,
+    runtimeContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
+    runtimeContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     this.logger.debug(`MockStore: updateWorkflowResults called for ${workflowName} ${runId} ${stepId}`, result);
     const snapshot = this.data.mastra_workflow_snapshot[runId];
@@ -85,7 +87,7 @@ export class MockStore extends MastraStorage {
     }
 
     snapshot.snapshot.context[stepId] = result;
-    this.data.mastra_workflow_snapshot[runId] = snapshot;
+    snapshot.snapshot.runtimeContext = { ...snapshot.snapshot.runtimeContext, ...runtimeContext };
 
     return JSON.parse(JSON.stringify(snapshot.snapshot.context));
   }

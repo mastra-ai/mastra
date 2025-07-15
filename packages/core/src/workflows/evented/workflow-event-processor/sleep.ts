@@ -16,6 +16,7 @@ export async function processWorkflowSleep(
     prevResult,
     resumeData,
     parentWorkflow,
+    runtimeContext,
   }: ProcessorArgs,
   {
     pubsub,
@@ -91,6 +92,7 @@ export async function processWorkflowSleep(
           resumeData,
           parentWorkflow,
           activeSteps,
+          runtimeContext,
         },
       });
     },
@@ -109,6 +111,7 @@ export async function processWorkflowSleepUntil(
     prevResult,
     resumeData,
     parentWorkflow,
+    runtimeContext,
   }: ProcessorArgs,
   {
     pubsub,
@@ -184,6 +187,7 @@ export async function processWorkflowSleepUntil(
           resumeData,
           parentWorkflow,
           activeSteps,
+          runtimeContext,
         },
       });
     },

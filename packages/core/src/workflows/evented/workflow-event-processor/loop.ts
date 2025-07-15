@@ -13,9 +13,10 @@ export async function processWorkflowLoop(
     executionPath,
     stepResults,
     activeSteps,
-    resume,
+    resumeSteps,
     resumeData,
     parentWorkflow,
+    runtimeContext,
   }: ProcessorArgs,
   {
     pubsub,
@@ -51,11 +52,12 @@ export async function processWorkflowLoop(
           workflowId,
           runId,
           executionPath,
-          resume,
+          resumeSteps,
           stepResults,
           prevResult: stepResult,
           resumeData,
           activeSteps,
+          runtimeContext,
         },
       });
     } else {
@@ -66,11 +68,12 @@ export async function processWorkflowLoop(
           workflowId,
           runId,
           executionPath,
-          resume,
+          resumeSteps,
           stepResults,
           prevResult: stepResult,
           resumeData,
           activeSteps,
+          runtimeContext,
         },
       });
     }
@@ -83,11 +86,12 @@ export async function processWorkflowLoop(
           workflowId,
           runId,
           executionPath,
-          resume,
+          resumeSteps,
           stepResults,
           prevResult: stepResult,
           resumeData,
           activeSteps,
+          runtimeContext,
         },
       });
     } else {
@@ -98,11 +102,12 @@ export async function processWorkflowLoop(
           workflowId,
           runId,
           executionPath,
-          resume,
+          resumeSteps,
           stepResults,
           prevResult: stepResult,
           resumeData,
           activeSteps,
+          runtimeContext,
         },
       });
     }

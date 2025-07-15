@@ -393,6 +393,8 @@ export class EventedRun<
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
+    runtimeContext = runtimeContext ?? new RuntimeContext();
+
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -401,6 +403,7 @@ export class EventedRun<
         serializedStepGraph: this.serializedStepGraph,
         value: {},
         context: {} as any,
+        runtimeContext: Object.fromEntries(runtimeContext.entries()),
         activePaths: [],
         suspendedPaths: {},
         timestamp: Date.now(),
@@ -429,7 +432,7 @@ export class EventedRun<
         },
       },
       retryConfig: this.retryConfig,
-      runtimeContext: runtimeContext ?? new RuntimeContext(),
+      runtimeContext,
       abortController: this.abortController,
     });
 
@@ -516,6 +519,16 @@ export class EventedRun<
       );
     }
 
+    console.dir(
+      { resume: { runtimeContextObj: snapshot?.runtimeContext, runtimeContext: params.runtimeContext } },
+      { depth: null },
+    );
+    const runtimeContextObj = snapshot?.runtimeContext ?? {};
+    const runtimeContext = params.runtimeContext ?? new RuntimeContext();
+    for (const [key, value] of Object.entries(runtimeContextObj)) {
+      runtimeContext.set(key, value);
+    }
+
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -544,7 +557,7 @@ export class EventedRun<
             this.emitter.once(event, callback);
           },
         },
-        runtimeContext: params.runtimeContext ?? new RuntimeContext(),
+        runtimeContext,
         abortController: this.abortController,
       })
       .then(result => {
