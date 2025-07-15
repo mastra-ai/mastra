@@ -1,4 +1,5 @@
-import { generateEmptyFromSchema, type StorageGetMessagesArg } from '@mastra/core';
+import { generateEmptyFromSchema } from '@mastra/core';
+import type { StorageGetMessagesArg } from '@mastra/core';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import { HTTPException } from '../http-exception';
@@ -285,7 +286,6 @@ export async function getMessagesPaginatedHandler({
     return handleError(error, 'Error getting messages');
   }
 }
-
 
 export async function getMessagesHandler({
   mastra,
