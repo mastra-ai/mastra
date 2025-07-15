@@ -114,6 +114,9 @@ export class Agent<
   evals: TMetrics;
   #voice: CompositeVoice;
 
+  // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
+  private _agentNetworkAppend = false;
+
   constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
 
@@ -185,6 +188,9 @@ export class Agent<
     } else {
       this.#voice = new DefaultVoice();
     }
+
+    // @ts-ignore Flag for agent network messages
+    this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
 
   public hasOwnMemory(): boolean {
@@ -1250,7 +1256,13 @@ export class Agent<
           runtimeContext,
         });
 
-        const messageList = new MessageList({ threadId, resourceId, generateMessageId })
+        const messageList = new MessageList({
+          threadId,
+          resourceId,
+          generateMessageId,
+          // @ts-ignore Flag for agent network messages
+          _agentNetworkAppend: this._agentNetworkAppend,
+        })
           .addSystem({
             role: 'system',
             content: instructions || `${this.instructions}.`,
@@ -1399,7 +1411,12 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           memorySystemMessage: memorySystemMessage || undefined,
         });
 
-        const processedList = new MessageList({ threadId: threadObject.id, resourceId })
+        const processedList = new MessageList({
+          threadId: threadObject.id,
+          resourceId,
+          // @ts-ignore Flag for agent network messages
+          _agentNetworkAppend: this._agentNetworkAppend,
+        })
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
           .add(context || [], 'context')
@@ -1455,7 +1472,12 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           threadId,
         });
         const memory = this.getMemory();
-        const messageListResponses = new MessageList({ threadId, resourceId })
+        const messageListResponses = new MessageList({
+          threadId,
+          resourceId,
+          // @ts-ignore Flag for agent network messages
+          _agentNetworkAppend: this._agentNetworkAppend,
+        })
           .add(result.response.messages, 'response')
           .get.all.core();
 

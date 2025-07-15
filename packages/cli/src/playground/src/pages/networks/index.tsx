@@ -15,7 +15,7 @@ function Networks() {
         <HeaderTitle>Networks</HeaderTitle>
       </Header>
 
-      <MainContentContent isCentered={isEmpty}>
+      <MainContentContent isCentered={isEmpty && !isLoading}>
         <NetworkTable
           legacyNetworks={networks}
           networks={vNextNetworks}

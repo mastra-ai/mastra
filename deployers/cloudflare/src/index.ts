@@ -189,7 +189,14 @@ process.versions.node = '${process.versions.node}';
   }
 
   async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
+    return this._bundle(
+      this.getEntry(),
+      entryFile,
+      outputDirectory,
+      toolsPaths,
+      join(outputDirectory, this.outputDir),
+      false,
+    );
   }
 
   async deploy(): Promise<void> {
