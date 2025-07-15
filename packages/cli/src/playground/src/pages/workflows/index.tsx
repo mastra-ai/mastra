@@ -7,7 +7,6 @@ function Workflows() {
   const navigate = useNavigate();
   const [legacyWorkflows, workflows] = data ?? [];
 
-
   return (
     <MainContentLayout>
       <Header>
