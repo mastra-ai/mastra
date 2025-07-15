@@ -231,16 +231,16 @@ export function CustomChatInterface({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  if (inputValue.trim() !== "") {
-                    // Track the question
-                    trackQuestion(inputValue);
+                  if (inputValue.trim() === "" || isLoading) return;
+                  // Track the question
 
-                    // Submit the form on Enter
-                    appendMessage(
-                      new TextMessage({ content: inputValue, role: Role.User }),
-                    );
-                    setInputValue("foo");
-                  }
+                  trackQuestion(inputValue);
+
+                  // Submit the form on Enter
+                  appendMessage(
+                    new TextMessage({ content: inputValue, role: Role.User }),
+                  );
+                  setInputValue("");
                 }
               }}
               placeholder="Enter your message..."
