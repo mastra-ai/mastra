@@ -465,7 +465,6 @@ export class WorkflowEventProcessor extends EventProcessor {
             [step.step.id]: stepResult,
           },
           prevResult: stepResult,
-          resumeData,
           activeSteps,
         },
       });
@@ -504,7 +503,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           resume,
           stepResults,
           prevResult: stepResult,
-          resumeData,
           activeSteps,
         },
       });
@@ -518,7 +516,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     executionPath,
     resume,
     prevResult,
-    resumeData,
     parentWorkflow,
     stepResults,
     activeSteps,
@@ -576,7 +573,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           stepResults,
           prevResult,
-          resumeData,
           activeSteps,
         },
       });
@@ -593,7 +589,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           stepResults,
           prevResult,
-          resumeData,
           activeSteps,
         },
       });
@@ -637,7 +632,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           resume,
           stepResults,
           prevResult: { status: 'success', output: allResults },
-          resumeData,
           activeSteps,
         },
       });
@@ -652,7 +646,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           stepResults,
           prevResult,
-          resumeData,
           activeSteps,
         },
       });
@@ -667,7 +660,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           stepResults,
           prevResult,
-          resumeData,
           activeSteps,
         },
       });
