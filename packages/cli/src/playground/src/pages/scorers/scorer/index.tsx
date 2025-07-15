@@ -12,7 +12,7 @@ import type { ScoreRowData } from '@mastra/core/eval';
 import * as Dialog from '@radix-ui/react-dialog';
 
 import MarkdownRenderer from '@/components/ui/markdown-renderer';
-// import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 
 import { useWorkflows } from '@/hooks/use-workflows';
@@ -54,7 +54,7 @@ export default function Scorer() {
   const { scores: scoresData, isLoading: scoresLoading } = useScoresByScorerId({
     scorerId,
     page: scoresPage,
-    entityId: filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.id : undefined,
+    entityId: filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.name : undefined,
     entityType: filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.type : undefined,
   });
 
@@ -63,20 +63,20 @@ export default function Scorer() {
   const scoresHasMore = scoresData?.pagination.hasMore;
   const scoresPerPage = scoresData?.pagination.perPage;
 
-  // const handleFilterChange = (value: string) => {
-  //   if (value === 'all') {
-  //     setFilteredByEntity('');
-  //     setScoresPage(0); // Reset to first page when filtering by all
-  //   } else {
-  //     const entity = scorerEntities?.[parseInt(value)];
-  //     if (entity) {
-  //       setFilteredByEntity(value);
-  //       setScoresPage(0);
-  //     } else {
-  //       console.warn('Entity not found for value:', value);
-  //     }
-  //   }
-  // };
+  const handleFilterChange = (value: string) => {
+    if (value === 'all') {
+      setFilteredByEntity('');
+      setScoresPage(0); // Reset to first page when filtering by all
+    } else {
+      const entity = scorerEntities?.[parseInt(value)];
+      if (entity) {
+        setFilteredByEntity(value);
+        setScoresPage(0);
+      } else {
+        console.warn('Entity not found for value:', value);
+      }
+    }
+  };
 
   const handleOnListItemClick = (score: any) => {
     if (score.id === selectedScore?.id) {
@@ -140,9 +140,9 @@ export default function Scorer() {
             <div className={cn('max-w-[100rem] px-[3rem] mx-auto')}>
               <ScorerHeader scorer={scorer} agents={scorerAgents} workflows={scorerWorkflows} />
               <ScoreListHeader
-              // filteredByEntity={filteredByEntity}
-              // onFilterChange={handleFilterChange}
-              // scorerEntities={scorerEntities}
+                filteredByEntity={filteredByEntity}
+                onFilterChange={handleFilterChange}
+                scorerEntities={scorerEntities}
               />
               <ScoreList
                 scores={scores || []}
@@ -220,26 +220,24 @@ function ScorerHeader({
   );
 }
 
-function ScoreListHeader(
-  {
-    // filteredByEntity,
-    // onFilterChange,
-    // scorerEntities,
-  }: {
-    // filteredByEntity?: string;
-    // onFilterChange?: (value: string) => void;
-    // scorerEntities?: { id: string; name: string; type: string }[];
-  },
-) {
+function ScoreListHeader({
+  filteredByEntity,
+  onFilterChange,
+  scorerEntities,
+}: {
+  filteredByEntity?: string;
+  onFilterChange: (value: string) => void;
+  scorerEntities: { id: string; name: string; type: string }[];
+}) {
   return (
     <div className={cn('sticky top-0 bg-surface4 z-[1] mt-[1rem] mb-[1rem] rounded-lg px-[1.5rem]')}>
-      {/* <div className="flex items-center justify-between">
-        <div className="inline-flex items-baseline gap-[1rem] py-[.75rem]">
-          <label htmlFor="filter-by-agent" className="text-icon3 text-[0.875rem] font-semibold whitespace-nowrap border-b border-border1">
+      <div className="flex items-center justify-between">
+        <div className="inline-flex items-baseline gap-[1rem] py-[.75rem] ">
+          <label htmlFor="filter-by-entity" className="text-icon3 text-[0.875rem] font-semibold whitespace-nowrap">
             Filter by entity:
           </label>
           <Select
-            name="filter-by-agent"
+            name="filter-by-entity"
             onValueChange={value => {
               onFilterChange(value);
             }}
@@ -264,11 +262,11 @@ function ScoreListHeader(
             </SelectContent>
           </Select>
         </div>
-      </div> */}
+      </div>
 
       <div
         className={cn(
-          'grid gap-[1rem] grid-cols-[7rem_7rem_1fr_2fr_10rem_3rem] text-left text-[0.75rem] text-icon3 uppercase py-[1rem]',
+          'grid gap-[1rem] grid-cols-[7rem_7rem_1fr_2fr_10rem_3rem] text-left text-[0.75rem] text-icon3 uppercase py-[1rem]  border-t border-border1',
         )}
       >
         <span>Date</span>
