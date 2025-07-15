@@ -41,7 +41,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@babel/core": "^7.27.7",
+    "@babel/core": "^7.28.0",
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
     "cloudflare": "^4.4.1",
