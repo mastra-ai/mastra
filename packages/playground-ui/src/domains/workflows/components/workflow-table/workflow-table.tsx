@@ -1,9 +1,8 @@
-import { GetAgentResponse } from '@mastra/client-js';
+import { GetLegacyWorkflowResponse, GetWorkflowResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
-import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
+
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo } from 'react';
@@ -11,49 +10,58 @@ import React, { useMemo } from 'react';
 import { ScrollableContainer } from '@/components/scrollable-container';
 import { Skeleton } from '@/components/ui/skeleton';
 import { columns } from './columns';
-import { AgentTableData } from './types';
+import { WorkflowTableData } from './types';
+import { WorkflowCoinIcon, WorkflowIcon } from '@/ds/icons';
 
-export interface AgentsTableProps {
-  agents: Record<string, GetAgentResponse>;
+export interface WorkflowTableProps {
+  workflows?: Record<string, GetWorkflowResponse>;
+  legacyWorkflows?: Record<string, GetLegacyWorkflowResponse>;
   isLoading: boolean;
   onClickRow: (agentId: string) => void;
 }
 
-export function AgentsTable({ agents, isLoading, onClickRow }: AgentsTableProps) {
-  const projectData: AgentTableData[] = useMemo(
-    () =>
-      Object.keys(agents).map(key => {
-        const agent = agents[key];
+export function WorkflowTable({ workflows, legacyWorkflows, isLoading, onClickRow }: WorkflowTableProps) {
+  const workflowData: WorkflowTableData[] = useMemo(() => {
+    const _workflowsData = Object.keys(workflows ?? {}).map(key => {
+      const workflow = workflows?.[key];
 
-        return {
-          id: key,
-          name: agent.name,
-          instructions: agent.instructions,
-          provider: agent.provider,
-          branch: undefined,
-          executedAt: undefined,
-          repoUrl: undefined,
-          tools: agent.tools,
-          modelId: agent.modelId,
-          link: `/agents/${key}/chat/new`,
-        };
-      }),
-    [agents],
-  );
+      return {
+        id: key,
+        name: workflow?.name || 'N/A',
+        stepsCount: Object.keys(workflow?.steps ?? {})?.length,
+        isLegacy: false,
+        link: `/workflows/${key}/graph`,
+      };
+    });
+
+    const legacyWorkflowsData = Object.keys(legacyWorkflows ?? {}).map(key => {
+      const workflow = legacyWorkflows?.[key];
+
+      return {
+        id: key,
+        name: workflow?.name || 'N/A',
+        stepsCount: Object.keys(workflow?.steps ?? {})?.length,
+        isLegacy: true,
+        link: `/workflows/legacy/${key}/graph`,
+      };
+    });
+
+    return [..._workflowsData, ...legacyWorkflowsData];
+  }, [workflows, legacyWorkflows]);
 
   const table = useReactTable({
-    data: projectData,
-    columns: columns as ColumnDef<AgentTableData>[],
+    data: workflowData,
+    columns: columns as ColumnDef<WorkflowTableData>[],
     getCoreRowModel: getCoreRowModel(),
   });
 
-  if (isLoading) return <AgentsTableSkeleton />;
+  if (isLoading) return <WorkflowTableSkeleton />;
 
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows.concat();
 
   if (rows.length === 0) {
-    return <EmptyAgentsTable />;
+    return <EmptyWorkflowsTable />;
   }
 
   return (
@@ -82,12 +90,11 @@ export function AgentsTable({ agents, isLoading, onClickRow }: AgentsTableProps)
   );
 }
 
-export const AgentsTableSkeleton = () => (
+export const WorkflowTableSkeleton = () => (
   <Table>
     <Thead>
       <Th>Name</Th>
-      <Th width={160}>Model</Th>
-      <Th width={160}>Tools</Th>
+      <Th width={300}>Steps</Th>
     </Thead>
     <Tbody>
       {Array.from({ length: 3 }).map((_, index) => (
@@ -95,10 +102,7 @@ export const AgentsTableSkeleton = () => (
           <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
-          <Cell width={160}>
-            <Skeleton className="h-4 w-1/2" />
-          </Cell>
-          <Cell width={160}>
+          <Cell width={300}>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
         </Row>
@@ -107,23 +111,23 @@ export const AgentsTableSkeleton = () => (
   </Table>
 );
 
-export const EmptyAgentsTable = () => (
+export const EmptyWorkflowsTable = () => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
-      iconSlot={<AgentCoinIcon />}
-      titleSlot="Configure Agents"
-      descriptionSlot="Mastra agents are not configured yet. You can find more information in the documentation."
+      iconSlot={<WorkflowCoinIcon />}
+      titleSlot="Configure Workflows"
+      descriptionSlot="Mastra workflows are not configured yet. You can find more information in the documentation."
       actionSlot={
         <Button
           size="lg"
           className="w-full"
           variant="light"
           as="a"
-          href="https://mastra.ai/en/docs/agents/overview"
+          href="https://mastra.ai/en/docs/workflows/overview"
           target="_blank"
         >
           <Icon>
-            <AgentIcon />
+            <WorkflowIcon />
           </Icon>
           Docs
         </Button>

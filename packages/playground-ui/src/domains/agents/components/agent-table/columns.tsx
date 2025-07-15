@@ -39,6 +39,7 @@ export type AgentTableColumn = {
 
 const NameCell = ({ row }: { row: Row<AgentTableColumn> }) => {
   const { Link } = useLinkComponent();
+
   return (
     <EntryCell
       icon={<AgentIcon />}
