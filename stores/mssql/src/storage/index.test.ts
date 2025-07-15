@@ -20,9 +20,9 @@ import {
   TABLE_TRACES,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import sql from 'mssql';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
 
-import sql from 'mssql';
 import { MSSQLStore } from '.';
 import type { MSSQLConfig } from '.';
 
@@ -48,41 +48,41 @@ describe('MSSQLStore', () => {
 
   describe('Public Fields Access (MSSQL)', () => {
     let testDB: MSSQLStore;
-  
+
     beforeAll(async () => {
       testDB = new MSSQLStore(TEST_CONFIG);
       await testDB.init();
     });
-  
+
     afterAll(async () => {
       try {
         await testDB.close();
       } catch {}
     });
-  
+
     it('should expose pool field as public', () => {
       expect(testDB.pool).toBeDefined();
       // For mssql, db is likely a pool or connection
       expect(typeof testDB.pool).toBe('object');
       expect(typeof testDB.pool.request).toBe('function');
     });
-  
+
     it('should allow direct database queries via public pool field', async () => {
       const result = await testDB.pool.request().query('SELECT 1 as test');
       expect(result.recordset[0].test).toBe(1);
     });
-  
+
     it('should maintain connection state through public pool field', async () => {
       // MSSQL: Use SYSDATETIME() for current timestamp
       const result1 = await testDB.pool.request().query('SELECT SYSDATETIME() as timestamp1');
       const result2 = await testDB.pool.request().query('SELECT SYSDATETIME() as timestamp2');
-  
+
       expect(result1.recordset[0].timestamp1).toBeDefined();
       expect(result2.recordset[0].timestamp2).toBeDefined();
       // Compare timestamps as strings (ISO format)
       expect(result2.recordset[0].timestamp2 >= result1.recordset[0].timestamp1).toBe(true);
     });
-  
+
     it('should throw error when pool is used after disconnect', async () => {
       await testDB.close();
       await expect(testDB.pool.request().query('SELECT 1')).rejects.toThrow();
@@ -120,9 +120,7 @@ describe('MSSQLStore', () => {
       expect(() => new MSSQLStore(rest as any)).toThrow(/server must be provided and cannot be empty/);
     });
     it('throws if user is missing or empty', () => {
-      expect(() => new MSSQLStore({ ...validConfig, user: '' })).toThrow(
-        /user must be provided and cannot be empty/,
-      );
+      expect(() => new MSSQLStore({ ...validConfig, user: '' })).toThrow(/user must be provided and cannot be empty/);
       const { user, ...rest } = validConfig;
       expect(() => new MSSQLStore(rest as any)).toThrow(/user must be provided and cannot be empty/);
     });
@@ -246,10 +244,7 @@ describe('MSSQLStore', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [
-        createSampleMessageV1({ threadId: thread.id }),
-        createSampleMessageV1({ threadId: thread.id })
-      ];
+      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
 
       // Save messages
       const savedMessages = await store.saveMessages({ messages });
@@ -400,10 +395,9 @@ describe('MSSQLStore', () => {
         },
       });
 
-        expect(crossThreadMessages).toHaveLength(6);
-        expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
-        expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
-
+      expect(crossThreadMessages).toHaveLength(6);
+      expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+      expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
     });
 
     it('should return messages using both last and include (cross-thread, deduped)', async () => {
@@ -943,7 +937,7 @@ describe('MSSQLStore', () => {
       const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot('success');
       const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('failed');
       const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('suspended');
-      
+
       await store.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
@@ -2193,12 +2187,12 @@ describe('MSSQLStore', () => {
         });
 
         try {
-          await expect(store.init()).rejects.toThrow(`Unable to create schema "testSchema". This requires CREATE privilege on the database. Either create the schema manually or grant CREATE privilege to the user.`);
+          await expect(store.init()).rejects.toThrow(
+            `Unable to create schema "testSchema". This requires CREATE privilege on the database. Either create the schema manually or grant CREATE privilege to the user.`,
+          );
 
           // Verify schema was not created
-          const result = await adminPool.request().query(
-            `SELECT * FROM sys.schemas WHERE name = '${testSchema}'`
-          );
+          const result = await adminPool.request().query(`SELECT * FROM sys.schemas WHERE name = '${testSchema}'`);
           expect(result.recordset.length).toBe(0);
         } finally {
           await store.close();
@@ -2221,12 +2215,12 @@ describe('MSSQLStore', () => {
             await store.init();
             const thread = createSampleThread();
             await store.saveThread({ thread });
-          }).rejects.toThrow(`Unable to create schema "testSchema". This requires CREATE privilege on the database. Either create the schema manually or grant CREATE privilege to the user.`);
+          }).rejects.toThrow(
+            `Unable to create schema "testSchema". This requires CREATE privilege on the database. Either create the schema manually or grant CREATE privilege to the user.`,
+          );
 
           // Verify schema was not created
-          const result = await adminPool.request().query(
-            `SELECT * FROM sys.schemas WHERE name = '${testSchema}'`
-          );
+          const result = await adminPool.request().query(`SELECT * FROM sys.schemas WHERE name = '${testSchema}'`);
           expect(result.recordset.length).toBe(0);
         } finally {
           await store.close();

@@ -24,8 +24,8 @@ import type {
   WorkflowRuns,
   PaginationArgs,
 } from '@mastra/core/storage';
-import type { WorkflowRunState } from '@mastra/core/workflows';
 import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
 
 export type MSSQLConfigType = {
@@ -153,12 +153,12 @@ export class MSSQLStore extends MastraStorage {
     if (row.test_info) {
       try {
         testInfoValue = typeof row.test_info === 'string' ? JSON.parse(row.test_info) : row.test_info;
-      } catch (e) {}
+      } catch {}
     }
     if (row.test_info) {
       try {
         resultValue = typeof row.result === 'string' ? JSON.parse(row.result) : row.result;
-      } catch (e) {}
+      } catch {}
     }
     return {
       agentName: row.agent_name as string,
@@ -1181,11 +1181,8 @@ export class MSSQLStore extends MastraStorage {
       format?: 'v1' | 'v2';
     },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, format, selectBy } = args;
-    const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
-    const fromDate = dateRange?.start;
-    const toDate = dateRange?.end;
-    const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId`;
+    const { threadId, selectBy } = args;
+    const { page = 0, perPage: perPageInput } = selectBy?.pagination || {};
     const orderByStatement = `ORDER BY [seq_id] DESC`;
     let messages: any[] = [];
     if (selectBy?.include?.length) {
@@ -1521,7 +1518,6 @@ export class MSSQLStore extends MastraStorage {
       try {
         parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
       } catch (e) {
-        // eslint-disable-next-line no-console
         console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
       }
     }
@@ -1553,7 +1549,6 @@ export class MSSQLStore extends MastraStorage {
     try {
       const conditions: string[] = [];
       const paramMap: Record<string, any> = {};
-      let paramIdx = 1;
 
       if (workflowName) {
         conditions.push(`[workflow_name] = @workflowName`);
@@ -1566,7 +1561,6 @@ export class MSSQLStore extends MastraStorage {
           conditions.push(`[resourceId] = @resourceId`);
           paramMap['resourceId'] = resourceId;
         } else {
-          // eslint-disable-next-line no-console
           console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
         }
       }
