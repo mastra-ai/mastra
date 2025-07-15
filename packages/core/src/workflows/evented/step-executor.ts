@@ -51,7 +51,7 @@ export class StepExecutor extends MastraBase {
     }
 
     try {
-      console.log('executor start', this.mastra, step.id, stepInfo);
+      console.log('executor start', step.id, stepInfo, params.input, params.resumeData);
       const stepResult = await step.execute({
         runId,
         mastra: this.mastra!,
@@ -92,6 +92,7 @@ export class StepExecutor extends MastraBase {
       let finalResult: StepResult<any, any, any, any>;
       if (suspended) {
         finalResult = {
+          ...stepResults[step.id],
           ...stepInfo,
           status: 'suspended',
           suspendedAt: endedAt,

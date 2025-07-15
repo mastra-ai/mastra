@@ -444,11 +444,41 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
           workflowName: workflowId,
-          runId,
+          runId: nestedRunId,
         });
 
         const nestedStepResults = snapshot?.context;
         const nestedSteps = resumeSteps.slice(1);
+        const nestedExecutionPath = snapshot?.suspendedPaths?.[nestedSteps[0]!] as any;
+
+        console.dir({ nestedSnapshot: snapshot, nestedExecutionPath, nestedSteps }, { depth: null });
+        console.dir(
+          {
+            nestedResume: {
+              type: 'workflow.resume',
+              data: {
+                workflowId: step.step.id,
+                parentWorkflow: {
+                  workflowId,
+                  runId,
+                  executionPath,
+                  resumeSteps,
+                  stepResults,
+                  input: prevResult,
+                  parentWorkflow,
+                },
+                executionPath: nestedExecutionPath,
+                runId: nestedRunId,
+                resumeSteps: nestedSteps,
+                stepResults: nestedStepResults,
+                prevResult,
+                resumeData,
+                activeSteps,
+              },
+            },
+          },
+          { depth: null },
+        );
 
         await this.pubsub.publish('workflows', {
           type: 'workflow.resume',

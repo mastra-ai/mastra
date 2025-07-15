@@ -84,11 +84,7 @@ export class MockStore extends MastraStorage {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
-    const stepResults = snapshot.snapshot.context[stepId];
-    snapshot.snapshot.context[stepId] = {
-      ...stepResults,
-      ...result,
-    };
+    snapshot.snapshot.context[stepId] = result;
     this.data.mastra_workflow_snapshot[runId] = snapshot;
 
     return snapshot.snapshot.context;

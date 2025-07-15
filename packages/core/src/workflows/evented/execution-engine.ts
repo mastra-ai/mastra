@@ -84,7 +84,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           runId: params.runId,
           executionPath: params.resume.resumePath,
           stepResults: params.resume.stepResults,
-          resumeSteps: params.resume.steps.slice(1),
+          resumeSteps: params.resume.steps,
           prevResult: { status: 'success', output: prevResult?.payload },
           resumeData: params.resume.resumePayload,
         },
