@@ -26,9 +26,9 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     emitter: EventEmitter;
     runtimeContext: RuntimeContext;
-    runCount: number;
+    runCount?: number;
   }): Promise<StepResult<any, any, any, any>> {
-    const { step, stepResults, runId, runtimeContext, runCount } = params;
+    const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
 
     const abortController = new AbortController();
 
@@ -60,7 +60,7 @@ export class StepExecutor extends MastraBase {
         mastra: this.mastra!,
         runtimeContext,
         inputData: params.input,
-        runCount: runCount - 1,
+        runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {
@@ -141,8 +141,9 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     emitter: { runtime: PubSub; events: PubSub };
     runtimeContext: RuntimeContext;
+    runCount?: number;
   }): Promise<number[]> {
-    const { step, stepResults, runId, runtimeContext } = params;
+    const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
 
     const abortController = new AbortController();
     const ee = new EventEmitter();
@@ -157,7 +158,7 @@ export class StepExecutor extends MastraBase {
             runId,
             runtimeContext,
             inputData: params.input,
-            runCount: 0, // TODO: implement this
+            runCount,
             resumeData: params.resumeData,
             abortController,
             stepResults,
@@ -191,6 +192,7 @@ export class StepExecutor extends MastraBase {
     runtimeContext,
     emitter,
     abortController,
+    runCount = 0,
   }: {
     condition: ExecuteFunction<any, any, any, any, any>;
     runId: string;
@@ -200,14 +202,14 @@ export class StepExecutor extends MastraBase {
     emitter: EventEmitter;
     runtimeContext: RuntimeContext;
     abortController: AbortController;
-    runCount: number;
+    runCount?: number;
   }): Promise<boolean> {
     return condition({
       runId,
       mastra: this.mastra!,
       runtimeContext,
       inputData,
-      runCount: 0, // TODO: implement this
+      runCount,
       resumeData: resumeData,
       getInitData: () => stepResults?.input as any,
       getStepResult: (step: any) => {
@@ -245,8 +247,9 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     emitter: { runtime: PubSub; events: PubSub };
     runtimeContext: RuntimeContext;
+    runCount?: number;
   }): Promise<number> {
-    const { step, stepResults, runId, runtimeContext } = params;
+    const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
 
     const abortController = new AbortController();
     const ee = new EventEmitter();
@@ -265,7 +268,7 @@ export class StepExecutor extends MastraBase {
         mastra: this.mastra!,
         runtimeContext,
         inputData: params.input,
-        runCount: 0, // TODO: implement this
+        runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {
@@ -307,8 +310,9 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     emitter: { runtime: PubSub; events: PubSub };
     runtimeContext: RuntimeContext;
+    runCount?: number;
   }): Promise<number> {
-    const { step, stepResults, runId, runtimeContext } = params;
+    const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
 
     const abortController = new AbortController();
     const ee = new EventEmitter();
@@ -327,7 +331,7 @@ export class StepExecutor extends MastraBase {
         mastra: this.mastra!,
         runtimeContext,
         inputData: params.input,
-        runCount: 0, // TODO: implement this
+        runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,
         getStepResult: (step: any) => {

@@ -17,6 +17,7 @@ export async function processWorkflowLoop(
     resumeData,
     parentWorkflow,
     runtimeContext,
+    runCount = 0,
   }: ProcessorArgs,
   {
     pubsub,
@@ -30,7 +31,7 @@ export async function processWorkflowLoop(
     stepResult: StepResult<any, any, any, any>;
   },
 ) {
-  console.log('loop found', step.step.id, stepResult);
+  console.log('loop found', step.step.id, stepResult, runCount);
   const loopCondition = await stepExecutor.evaluateCondition({
     condition: step.condition,
     runId,
@@ -40,7 +41,7 @@ export async function processWorkflowLoop(
     inputData: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
     abortController: new AbortController(),
-    runCount: 0,
+    runCount,
   });
 
   if (step.loopType === 'dountil') {
@@ -74,6 +75,7 @@ export async function processWorkflowLoop(
           resumeData,
           activeSteps,
           runtimeContext,
+          runCount,
         },
       });
     }
@@ -92,6 +94,7 @@ export async function processWorkflowLoop(
           resumeData,
           activeSteps,
           runtimeContext,
+          runCount,
         },
       });
     } else {

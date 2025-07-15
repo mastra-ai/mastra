@@ -689,6 +689,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           runtimeContext,
+          runCount: runCount + 1,
         },
         {
           pubsub: this.pubsub,

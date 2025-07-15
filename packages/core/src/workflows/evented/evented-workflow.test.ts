@@ -7658,7 +7658,7 @@ describe('Workflow', () => {
   });
 
   describe('Run count', () => {
-    it.only('runCount property should increment the run count when a step is executed multiple times', async () => {
+    it('runCount property should increment the run count when a step is executed multiple times', async () => {
       const repeatingStep = createStep({
         id: 'repeatingStep',
         inputSchema: z.object({}),
@@ -7717,11 +7717,19 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       })
-        .dowhile(step1, async ({ inputData }) => inputData.count < 3)
+        .dowhile(step1, async ({ inputData }) => {
+          return inputData.count < 3;
+        })
         .dountil(step2, async ({ inputData }) => inputData.count === 10)
         .commit();
 
-      const result = await workflow.createRun().start({ inputData: {} });
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
+
+      const run = await workflow.createRunAsync();
+      const result = await run.start({ inputData: {} });
 
       expect(result.status).toBe('success');
       expect(result.steps.step1).toHaveProperty('output', { count: 3 });
@@ -7748,6 +7756,11 @@ describe('Workflow', () => {
       })
         .then(step)
         .commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
 
       const run = workflow.createRun();
       await run.start({ inputData: {} });
