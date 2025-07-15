@@ -21,7 +21,6 @@ export interface WorkflowTableProps {
 }
 
 export function WorkflowTable({ workflows, legacyWorkflows, isLoading, onClickRow }: WorkflowTableProps) {
-  console.log('RERENDER');
   const workflowData: WorkflowTableData[] = useMemo(() => {
     const _workflowsData = Object.keys(workflows ?? {}).map(key => {
       const workflow = workflows?.[key];
