@@ -9,3 +9,4 @@ export * as legacyWorkflows from './handlers/legacyWorkflows';
 export * as workflows from './handlers/workflows';
 export * as vector from './handlers/vector';
 export * as voice from './handlers/voice';
+export * as scores from './handlers/scores';

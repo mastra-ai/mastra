@@ -1,4 +1,7 @@
+import { openai } from '@ai-sdk/openai';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
+// import { createCompletenessScorer } from '@mastra/evals/scorers/code';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 import { z } from 'zod';
 
 export const myWorkflow = createWorkflow({
@@ -21,6 +24,16 @@ const step = createStep({
   outputSchema: z.object({
     result: z.string(),
   }),
+  scorers: {
+    // completeness: {
+    //   scorer: createCompletenessScorer(),
+    // },
+    answerRelevancy: {
+      scorer: createAnswerRelevancyScorer({
+        model: openai('gpt-4o-mini'),
+      }),
+    },
+  },
   execute: async ({ inputData }) => {
     return {
       result: inputData.ingredient,

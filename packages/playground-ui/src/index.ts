@@ -28,4 +28,5 @@ export * from './components/ui/entry';
 export type { TraceContextType } from './domains/traces/context/trace-context';
 
 export * from './store/playground-store';
+export * from './domains/scorers';
 export * from './lib/framework';

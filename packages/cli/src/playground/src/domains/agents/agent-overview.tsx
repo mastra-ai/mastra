@@ -1,7 +1,7 @@
 import { GetAgentResponse } from '@mastra/client-js';
 import { AgentPromptEnhancer } from './agent-instructions-enhancer';
 import { ToolList } from './tool-list';
-import { Txt } from '@mastra/playground-ui';
+import { ScorerList, Txt } from '@mastra/playground-ui';
 import { WorkflowList } from './workflow-list';
 import { Link } from 'react-router';
 
@@ -62,6 +62,15 @@ export const AgentOverview = ({ agent, agentId }: AgentOverviewProps) => {
             No workflows were attached to this agent.
           </Txt>
         )}
+      </div>
+
+      <hr className="border-border1 border-sm my-5" />
+      <div className="px-5 pb-5">
+        <Txt as="h3" variant="ui-md" className="text-icon3 pb-1">
+          Agent Scorers
+        </Txt>
+
+        <ScorerList entityId={agentId} entityType="AGENT" />
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import type { KVNamespace } from '@cloudflare/workers-types';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { ScoreRowData } from '@mastra/core/eval';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
   MastraStorage,
@@ -9,6 +10,7 @@ import {
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
+  TABLE_SCORERS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
 import type {
@@ -20,6 +22,7 @@ import type {
   WorkflowRun,
   StorageGetTracesArg,
   PaginationInfo,
+  StoragePagination,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -44,7 +47,14 @@ export class CloudflareStore extends MastraStorage {
     }
 
     // Validate all required table bindings exist
-    const requiredTables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES] as const;
+    const requiredTables = [
+      TABLE_THREADS,
+      TABLE_MESSAGES,
+      TABLE_WORKFLOW_SNAPSHOT,
+      TABLE_EVALS,
+      TABLE_SCORERS,
+      TABLE_TRACES,
+    ] as const;
 
     for (const table of requiredTables) {
       if (!(table in config.bindings)) {
@@ -1849,5 +1859,63 @@ export class CloudflareStore extends MastraStorage {
   }): Promise<MastraMessageV2[]> {
     this.logger.error('updateMessages is not yet implemented in CloudflareStore');
     throw new Error('Method not implemented');
+  }
+
+  /**
+   * SCORERS - Not implemented
+   */
+  async getScoreById({ id: _id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new Error(
+      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
+        `To use scores functionality, implement the required methods in this storage adapter.`,
+    );
+  }
+
+  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+    throw new Error(
+      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
+        `To use scores functionality, implement the required methods in this storage adapter.`,
+    );
+  }
+
+  async getScoresByRunId({
+    runId: _runId,
+    pagination: _pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new Error(
+      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
+        `To use scores functionality, implement the required methods in this storage adapter.`,
+    );
+  }
+
+  async getScoresByEntityId({
+    entityId: _entityId,
+    entityType: _entityType,
+    pagination: _pagination,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new Error(
+      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
+        `To use scores functionality, implement the required methods in this storage adapter.`,
+    );
+  }
+
+  async getScoresByScorerId({
+    scorerId: _scorerId,
+    pagination: _pagination,
+  }: {
+    scorerId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new Error(
+      `Scores functionality is not implemented in this storage adapter (${this.constructor.name}). ` +
+        `To use scores functionality, implement the required methods in this storage adapter.`,
+    );
   }
 }

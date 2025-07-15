@@ -9,7 +9,7 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { Metric } from '../eval';
+import type { Metric, Scorers } from '../eval';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -36,12 +36,12 @@ export type ToolsetsInput = Record<string, ToolsInput>;
 export type MastraLanguageModel = LanguageModelV1;
 
 export type DynamicArgument<T> = T | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => Promise<T> | T);
-
 export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
+  id?: TAgentId;
   name: TAgentId;
   description?: string;
   instructions: DynamicArgument<string>;
@@ -52,6 +52,7 @@ export interface AgentConfig<
   defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
   mastra?: Mastra;
   evals?: TMetrics;
+  scorers?: DynamicArgument<Scorers>;
   memory?: MastraMemory;
   voice?: CompositeVoice;
   /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */

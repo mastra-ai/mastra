@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test('verfied persistent model settings', async ({ page }) => {
   // Arrange
   await page.goto('http://localhost:4111/agents/weatherAgent/chat/new');
-  await page.click('text=Model settings');
+  await page.click('text=Settings');
   await page.isVisible('text=Chat Method');
   await page.click('text=Generate');
   await page.click('text=Advanced Settings');
@@ -16,7 +16,7 @@ test('verfied persistent model settings', async ({ page }) => {
 
   // Act
   await page.reload();
-  await page.click('text=Model settings');
+  await page.click('text=Settings');
   await page.click('text=Advanced Settings');
 
   // Assert
@@ -31,7 +31,7 @@ test('verfied persistent model settings', async ({ page }) => {
 test('resets the form values when pressing "reset" button', async ({ page }) => {
   // Arrange
   await page.goto('http://localhost:4111/agents/weatherAgent/chat/new');
-  await page.click('text=Model settings');
+  await page.click('text=Settings');
   await page.isVisible('text=Chat Method');
   await page.click('text=Generate');
   await page.click('text=Advanced Settings');

@@ -28,6 +28,10 @@ export default {
       },
     },
     extend: {
+      screens: {
+        '3xl': '1900px',
+        '4xl': '2000px',
+      },
       fontSize: {
         ...FontSizes,
       },

@@ -91,7 +91,7 @@ export const AgentSettings = () => {
         </div>
       </section>
 
-      <section className="py-7">
+      <section className="py-7 px-5">
         <AgentAdvancedSettings />
       </section>
 

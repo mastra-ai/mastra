@@ -198,3 +198,10 @@ th:has(header) {
   height: var(--top-bar-height) !important;
   padding-block: 0 !important ;
 }
+
+.scorerListItem:has(+ .expanded) {
+  border-bottom: none;
+}
+.scorerListItem.expanded:has(+ .expanded) {
+  margin-bottom: 5px;
+}

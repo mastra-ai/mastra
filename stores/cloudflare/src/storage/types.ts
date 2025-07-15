@@ -9,7 +9,9 @@ import type {
   TABLE_RESOURCES,
   TABLE_NAMES,
   EvalRow,
+  ScorerRow,
   StorageResourceType,
+  TABLE_SCORERS,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
@@ -72,6 +74,7 @@ export type RecordTypes = {
   [TABLE_MESSAGES]: MastraMessageV2;
   [TABLE_WORKFLOW_SNAPSHOT]: WorkflowRunState;
   [TABLE_EVALS]: EvalRow;
+  [TABLE_SCORERS]: ScorerRow;
   [TABLE_TRACES]: any;
   [TABLE_RESOURCES]: StorageResourceType;
 };

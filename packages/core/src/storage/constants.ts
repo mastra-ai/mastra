@@ -6,6 +6,7 @@ export const TABLE_MESSAGES = 'mastra_messages';
 export const TABLE_THREADS = 'mastra_threads';
 export const TABLE_TRACES = 'mastra_traces';
 export const TABLE_RESOURCES = 'mastra_resources';
+export const TABLE_SCORERS = 'mastra_scorers';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -13,7 +14,102 @@ export type TABLE_NAMES =
   | typeof TABLE_MESSAGES
   | typeof TABLE_THREADS
   | typeof TABLE_TRACES
-  | typeof TABLE_RESOURCES;
+  | typeof TABLE_RESOURCES
+  | typeof TABLE_SCORERS;
+
+export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  scorerId: {
+    type: 'text',
+  },
+  traceId: {
+    type: 'text',
+    nullable: true,
+  },
+  runId: {
+    type: 'text',
+  },
+  scorer: {
+    type: 'jsonb',
+  },
+  extractStepResult: {
+    type: 'jsonb',
+    nullable: true,
+  },
+  analyzeStepResult: {
+    type: 'jsonb',
+    nullable: true,
+  },
+  score: {
+    type: 'float',
+  },
+  reason: {
+    type: 'text',
+    nullable: true,
+  },
+  metadata: {
+    type: 'jsonb',
+    nullable: true,
+  },
+  extractPrompt: {
+    type: 'text',
+    nullable: true,
+  },
+  analyzePrompt: {
+    type: 'text',
+    nullable: true,
+  },
+  reasonPrompt: {
+    type: 'text',
+    nullable: true,
+  },
+  input: {
+    type: 'jsonb', // MESSAGE INPUT
+  },
+  output: {
+    type: 'jsonb', // MESSAGE OUTPUT
+  },
+  additionalContext: {
+    type: 'jsonb', // DATA FROM THE CONTEXT PARAM ON AN AGENT
+    nullable: true,
+  },
+  runtimeContext: {
+    type: 'jsonb', // THE EVALUATE RUNTIME CONTEXT FOR THE RUN
+    nullable: true,
+  },
+  /**
+   * Things you can evaluate
+   */
+  entityType: {
+    type: 'text', // WORKFLOW, AGENT, TOOL, STEP, NETWORK
+    nullable: true,
+  },
+  entity: {
+    type: 'jsonb', // MINIMAL JSON DATA ABOUT WORKFLOW, AGENT, TOOL, STEP, NETWORK
+    nullable: true,
+  },
+  entityId: {
+    type: 'text',
+    nullable: true,
+  },
+  source: {
+    type: 'text',
+  },
+  resourceId: {
+    type: 'text',
+    nullable: true,
+  },
+  threadId: {
+    type: 'text',
+    nullable: true,
+  },
+  createdAt: {
+    type: 'timestamp',
+  },
+  updatedAt: {
+    type: 'timestamp',
+  },
+};
 
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
@@ -34,6 +130,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
       type: 'timestamp',
     },
   },
+  [TABLE_SCORERS]: SCORERS_SCHEMA,
   [TABLE_EVALS]: {
     input: {
       type: 'text',

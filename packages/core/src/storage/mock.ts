@@ -1,5 +1,6 @@
 import { MessageList } from '../agent';
 import type { MastraMessageV2 } from '../agent';
+import type { ScoreRowData } from '../eval';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { Trace } from '../telemetry';
 import { MastraStorage } from './base';
@@ -9,6 +10,7 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
+  StoragePagination,
   StorageResourceType,
   WorkflowRun,
   WorkflowRuns,
@@ -22,6 +24,7 @@ export class MockStore extends MastraStorage {
     mastra_threads: {},
     mastra_traces: {},
     mastra_resources: {},
+    mastra_scorers: {},
   };
 
   constructor() {
@@ -246,6 +249,81 @@ export class MockStore extends MastraStorage {
     const start = page * perPage;
     const end = start + perPage;
     return traces.slice(start, end);
+  }
+
+  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
+    this.logger.debug(`MockStore: getScoreById called for ${id}`);
+    return this.data.mastra_scorers[id] || null;
+  }
+
+  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+    this.logger.debug(`MockStore: saveScore called for ${score.id}`);
+    this.data.mastra_scorers[score.id] = score;
+    return { score };
+  }
+
+  async getScoresByScorerId({
+    scorerId,
+    pagination,
+  }: {
+    scorerId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    this.logger.debug(`MockStore: getScoresByScorerId called for ${scorerId}`);
+    const scores = Object.values(this.data.mastra_scorers).filter((s: any) => s.scorerId === scorerId);
+    return {
+      scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
+      pagination: {
+        total: scores.length,
+        page: pagination.page,
+        perPage: pagination.perPage,
+        hasMore: scores.length > (pagination.page + 1) * pagination.perPage,
+      },
+    };
+  }
+
+  async getScoresByRunId({
+    runId,
+    pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    this.logger.debug(`MockStore: getScoresByRunId called for ${runId}`);
+    const scores = Object.values(this.data.mastra_scorers).filter((s: any) => s.runId === runId);
+    return {
+      scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
+      pagination: {
+        total: scores.length,
+        page: pagination.page,
+        perPage: pagination.perPage,
+        hasMore: scores.length > (pagination.page + 1) * pagination.perPage,
+      },
+    };
+  }
+
+  async getScoresByEntityId({
+    entityId,
+    entityType,
+    pagination,
+  }: {
+    entityId: string;
+    entityType: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    this.logger.debug(`MockStore: getScoresByEntityId called for ${entityId} and ${entityType}`);
+    const scores = Object.values(this.data.mastra_scorers).filter(
+      (s: any) => s.entityId === entityId && s.entityType === entityType,
+    );
+    return {
+      scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
+      pagination: {
+        total: scores.length,
+        page: pagination.page,
+        perPage: pagination.perPage,
+        hasMore: scores.length > (pagination.page + 1) * pagination.perPage,
+      },
+    };
   }
 
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {

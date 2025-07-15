@@ -1,6 +1,7 @@
-import { describe, expect, beforeEach, it, vi } from 'vitest';
+import { describe, expect, beforeEach, afterEach, it, vi } from 'vitest';
 import { MastraClient } from './client';
-import type { McpServerListResponse, ServerDetailInfo } from './types';
+import type { McpServerListResponse } from './types';
+import type { ServerDetailInfo } from '@mastra/core/mcp';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -47,21 +48,24 @@ describe('MastraClient Resources', () => {
         }),
       );
     } else {
-      const response = new Response(undefined, {
-        status: 200,
-        statusText: 'OK',
-        headers: new Headers({
-          'Content-Type': 'application/json',
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify(data), {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'Content-Type': 'application/json' },
         }),
-      });
-      response.json = () => Promise.resolve(data);
-      (global.fetch as any).mockResolvedValueOnce(response);
+      );
     }
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     client = new MastraClient(clientOptions);
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    global.fetch = vi.fn();
   });
 
   describe('Vector Resource', () => {
@@ -542,7 +546,12 @@ describe('MastraClient Resources', () => {
       ];
       mockFetchResponse(messages);
       const result = await client.saveMessageToMemory({ agentId, messages });
-      expect(result).toEqual(messages);
+      expect(result).toEqual(
+        messages.map(message => ({
+          ...message,
+          createdAt: message.createdAt.toISOString(),
+        })),
+      );
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/memory/save-messages?agentId=${agentId}`,
         expect.objectContaining({
@@ -574,7 +583,13 @@ describe('MastraClient Resources', () => {
       const limit = 5;
       const result = await memoryThread.getMessages({ limit });
 
-      expect(result).toEqual(mockResponse);
+      expect(result).toEqual({
+        ...mockResponse,
+        messages: mockResponse.messages.map(message => ({
+          ...message,
+          createdAt: message.createdAt.toISOString(),
+        })),
+      });
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/memory/threads/${threadId}/messages?agentId=${agentId}&limit=${limit}`,
         expect.objectContaining({
@@ -662,14 +677,14 @@ describe('MastraClient Resources', () => {
       };
       mockFetchResponse(mockResponse);
 
-      const result = await workflow.startAsync({ triggerData: { test: 'test' } });
+      const result = await workflow.startAsync({ inputData: { test: 'test' } });
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/workflows/test-workflow/start-async?`,
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining(clientOptions.headers),
-          body: JSON.stringify({ test: 'test' }),
+          body: JSON.stringify({ inputData: { test: 'test' } }),
         }),
       );
     });
@@ -681,13 +696,12 @@ describe('MastraClient Resources', () => {
       (global.fetch as any)
         .mockRejectedValueOnce(new Error('Network error'))
         .mockRejectedValueOnce(new Error('Network error'))
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: {
-            get: () => 'application/json',
-          },
-          json: async () => ({ success: true }),
-        });
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
 
       const result = await client.request('/test-endpoint');
       expect(result).toEqual({ success: true });
@@ -822,6 +836,210 @@ describe('MastraClient Resources', () => {
           `${clientOptions.baseUrl}/api/mcp/v0/servers/${serverId}?version=${version}`,
           expect.objectContaining({
             headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+    });
+  });
+
+  describe('Scores Methods', () => {
+    describe('getScorers()', () => {
+      it('should fetch all available scorers', async () => {
+        const mockResponse = {
+          scorers: [
+            { id: 'scorer-1', name: 'Test Scorer 1', description: 'A test scorer' },
+            { id: 'scorer-2', name: 'Test Scorer 2', description: 'Another test scorer' },
+          ],
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await client.getScorers();
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/scores/scorers`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+    });
+
+    describe('getScoresByRunId()', () => {
+      it('should fetch scores by run ID without pagination', async () => {
+        const mockResponse = {
+          pagination: {
+            total: 10,
+            page: 0,
+            perPage: 10,
+            hasMore: false,
+          },
+          scores: [
+            {
+              id: 'score-1',
+              runId: 'run-123',
+              scorer: { name: 'test-scorer' },
+              result: { score: 0.8 },
+              input: { messages: [] },
+              output: { response: 'test' },
+              source: 'LIVE',
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          ],
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await client.getScoresByRunId({ runId: 'run-123' });
+        expect(result).toEqual({
+          ...mockResponse,
+          scores: mockResponse.scores.map(score => ({
+            ...score,
+            createdAt: score.createdAt.toISOString(),
+            updatedAt: score.updatedAt.toISOString(),
+          })),
+        });
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/scores/run/run-123`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+
+      it('should fetch scores by run ID with pagination', async () => {
+        const mockResponse = {
+          pagination: {
+            total: 20,
+            page: 1,
+            perPage: 5,
+            hasMore: true,
+          },
+          scores: [],
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await client.getScoresByRunId({
+          runId: 'run-123',
+          page: 1,
+          perPage: 5,
+        });
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/scores/run/run-123?page=1&perPage=5`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+    });
+
+    describe('getScoresByEntityId()', () => {
+      it('should fetch scores by entity ID and type without pagination', async () => {
+        const mockResponse = {
+          pagination: {
+            total: 5,
+            page: 0,
+            perPage: 10,
+            hasMore: false,
+          },
+          scores: [
+            {
+              id: 'score-1',
+              runId: 'run-123',
+              entityId: 'agent-456',
+              entityType: 'AGENT',
+              scorer: { name: 'test-scorer' },
+              result: { score: 0.9 },
+              input: { messages: [] },
+              output: { response: 'test' },
+              source: 'LIVE',
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          ],
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await client.getScoresByEntityId({
+          entityId: 'agent-456',
+          entityType: 'AGENT',
+        });
+        expect(result).toEqual({
+          ...mockResponse,
+          scores: mockResponse.scores.map(score => ({
+            ...score,
+            createdAt: score.createdAt.toISOString(),
+            updatedAt: score.updatedAt.toISOString(),
+          })),
+        });
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/scores/entity/agent-456/AGENT`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+
+      it('should fetch scores by entity ID and type with pagination', async () => {
+        const mockResponse = {
+          pagination: {
+            total: 15,
+            page: 2,
+            perPage: 5,
+            hasMore: true,
+          },
+          scores: [],
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await client.getScoresByEntityId({
+          entityId: 'workflow-789',
+          entityType: 'WORKFLOW',
+          page: 2,
+          perPage: 5,
+        });
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/scores/entity/workflow-789/WORKFLOW?page=2&perPage=5`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+    });
+
+    describe('saveScore()', () => {
+      it('should save a score', async () => {
+        const scoreData = {
+          id: 'score-1',
+          runId: 'run-123',
+          scorer: { name: 'test-scorer' },
+          result: { score: 0.85 },
+          input: { messages: [] },
+          output: { response: 'test response' },
+          source: 'LIVE',
+          entityType: 'AGENT',
+          entity: { id: 'agent-456', name: 'test-agent' },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        const mockResponse = { score: scoreData };
+        mockFetchResponse(mockResponse);
+
+        const result = await client.saveScore({ score: scoreData });
+        expect(result).toEqual({
+          score: {
+            ...scoreData,
+            createdAt: scoreData.createdAt.toISOString(),
+            updatedAt: scoreData.updatedAt.toISOString(),
+          },
+        });
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/scores`,
+          expect.objectContaining({
+            method: 'POST',
+            headers: expect.objectContaining(clientOptions.headers),
+            body: JSON.stringify({ score: scoreData }),
           }),
         );
       });

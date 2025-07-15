@@ -327,6 +327,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
   async executeSleep({
     runId,
+    workflowId,
     entry,
     prevOutput,
     stepResults,
@@ -363,6 +364,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       duration = await fn({
         runId,
         mastra: this.mastra!,
+        workflowId,
         runtimeContext,
         inputData: prevOutput,
         runCount: -1,
@@ -397,6 +399,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
   async executeSleepUntil({
     runId,
+    workflowId,
     entry,
     prevOutput,
     stepResults,
@@ -432,6 +435,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     if (fn) {
       date = await fn({
         runId,
+        workflowId,
         mastra: this.mastra!,
         runtimeContext,
         inputData: prevOutput,
@@ -608,6 +612,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         const result = await runStep({
           runId,
+          workflowId,
           mastra: this.mastra!,
           runtimeContext: runtimeContextToUse,
           inputData: prevOutput,
@@ -866,6 +871,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         entry.conditions.map(async (cond, index) => {
           try {
             const result = await cond({
+              workflowId,
               runId,
               mastra: this.mastra!,
               runtimeContext,
@@ -1026,6 +1032,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
 
       isTrue = await condition({
+        workflowId,
         runId,
         mastra: this.mastra!,
         runtimeContext,

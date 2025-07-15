@@ -37,6 +37,7 @@ export function AgentsTable({ agents, isLoading, onClickRow }: AgentsTableProps)
       repoUrl: undefined,
       tools: agent.tools,
       modelId: agent.modelId,
+      link: `/agents/${key}`,
     };
   });
 

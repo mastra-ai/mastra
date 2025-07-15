@@ -8,6 +8,7 @@ import type {
   WorkflowRun,
   LegacyWorkflowRuns,
 } from '@mastra/core';
+import type { MastraScorer, ScoreRowData } from '@mastra/core/eval';
 import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput } from '@mastra/core/agent';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
@@ -59,6 +60,7 @@ export interface GetAgentResponse {
   instructions: string;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
+  scorers: Record<string, GetScorerResponse>;
   provider: string;
   modelId: string;
   defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
@@ -425,4 +427,53 @@ export interface McpToolInfo {
 
 export interface McpServerToolListResponse {
   tools: McpToolInfo[];
+}
+
+// Scores-related types
+export interface GetScoresByRunIdParams {
+  runId: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface GetScoresByScorerIdParams {
+  scorerId: string;
+  entityId?: string;
+  entityType?: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface GetScoresByEntityIdParams {
+  entityId: string;
+  entityType: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface SaveScoreParams {
+  score: ScoreRowData;
+}
+
+export interface GetScoresResponse {
+  pagination: {
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  };
+  scores: ScoreRowData[];
+}
+
+export interface SaveScoreResponse {
+  score: ScoreRowData;
+}
+
+export type GetScorerResponse = MastraScorer & {
+  agentIds: string[];
+  workflowIds: string[];
+};
+
+export interface GetScorersResponse {
+  scorers: Array<GetScorerResponse>;
 }
