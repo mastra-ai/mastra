@@ -170,23 +170,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     executionPath,
   }: ProcessorArgs) {
     // TODO: if there are still active paths don't end the workflow yet
-
-    const suspendedPaths: Record<string, number[]> = {};
-    const suspendedStep = getStep(workflow, executionPath);
-    if (suspendedStep) {
-      suspendedPaths[suspendedStep.id] = executionPath;
-    }
-
-    await this.mastra.getStorage()?.updateWorkflowState({
-      workflowName: workflowId,
-      runId,
-      opts: {
-        status: 'suspended',
-        result: prevResult,
-        suspendedPaths,
-      },
-    });
-
     // handle nested workflow
     if (parentWorkflow) {
       console.log('ending nested', workflowId, parentWorkflow);
@@ -713,6 +696,22 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       return;
     } else if (prevResult.status === 'suspended') {
+      const suspendedPaths: Record<string, number[]> = {};
+      const suspendedStep = getStep(workflow, executionPath);
+      if (suspendedStep) {
+        suspendedPaths[suspendedStep.id] = executionPath;
+      }
+
+      await this.mastra.getStorage()?.updateWorkflowState({
+        workflowName: workflowId,
+        runId,
+        opts: {
+          status: 'suspended',
+          result: prevResult,
+          suspendedPaths,
+        },
+      });
+
       await this.pubsub.publish('workflows', {
         type: 'workflow.suspend',
         data: {

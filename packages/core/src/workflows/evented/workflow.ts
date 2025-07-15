@@ -499,10 +499,22 @@ export class EventedRun<
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
+
+    if (steps.length === 0) {
+      throw new Error('No steps provided to resume');
+    }
+
     const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
+
+    const resumePath = snapshot?.suspendedPaths?.[steps[0]!] as any;
+    if (!resumePath) {
+      throw new Error(
+        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot?.suspendedPaths)}`,
+      );
+    }
 
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
@@ -515,8 +527,7 @@ export class EventedRun<
           steps,
           stepResults: snapshot?.context as any,
           resumePayload: params.resumeData,
-          // @ts-ignore
-          resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
+          resumePath,
         },
         emitter: {
           emit: (event: string, data: any) => {

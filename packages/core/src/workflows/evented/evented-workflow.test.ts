@@ -4751,8 +4751,7 @@ describe('Workflow', () => {
       });
     });
 
-    // TODO: watch
-    it.skip('should handle complex workflow with multiple suspends', async () => {
+    it('should handle complex workflow with multiple suspends', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi.fn().mockResolvedValue({ modelOutput: 'test output' });
 
