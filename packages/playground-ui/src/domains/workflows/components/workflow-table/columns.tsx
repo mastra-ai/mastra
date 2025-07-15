@@ -14,8 +14,6 @@ export const columns: ColumnDef<WorkflowTableData>[] = [
     cell: ({ row }) => {
       const { Link } = useLinkComponent();
 
-      console.log('row', row.original.link);
-
       return (
         <EntryCell
           icon={<WorkflowIcon />}
