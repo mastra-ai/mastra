@@ -1,5 +1,6 @@
 import type { Mastra } from '@mastra/core';
-import type { StorageGetMessagesArg, MastraMessageFormat } from '@mastra/core/storage';
+import type { StorageGetMessagesArg, ThreadOrderBy, ThreadSortDirection, MastraMessageFormat } from '@mastra/core/storage';
+import { isThreadOrderBy, isThreadSortDirection } from '@mastra/core/storage';
 import {
   getMemoryStatusHandler as getOriginalMemoryStatusHandler,
   getThreadsHandler as getOriginalThreadsHandler,
@@ -42,12 +43,20 @@ export async function getThreadsHandler(c: Context) {
     const agentId = c.req.query('agentId');
     const resourceId = c.req.query('resourceid');
     const networkId = c.req.query('networkId');
+    const rawOrderBy = c.req.query('orderBy');
+    const rawSortDirection = c.req.query('sortDirection');
+    const orderBy: ThreadOrderBy | undefined = isThreadOrderBy(rawOrderBy) ? rawOrderBy : undefined;
+    const sortDirection: ThreadSortDirection | undefined = isThreadSortDirection(rawSortDirection)
+      ? rawSortDirection
+      : undefined;
 
     const result = await getOriginalThreadsHandler({
       mastra,
       agentId,
       resourceId,
       networkId,
+      orderBy,
+      sortDirection,
     });
 
     return c.json(result);
