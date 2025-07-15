@@ -58,7 +58,7 @@ export default function Scorer() {
     entityType: filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.type : undefined,
   });
 
-  const scores = scoresData?.scores;
+  const scores = scoresData?.scores || [];
   const scoresTotal = scoresData?.pagination.total;
   const scoresHasMore = scoresData?.pagination.hasMore;
   const scoresPerPage = scoresData?.pagination.perPage;
@@ -88,20 +88,20 @@ export default function Scorer() {
   };
 
   const toPreviousScore = (currentScore: ScoreRowData) => {
-    const currentIndex = scoresData?.scores?.findIndex(score => score?.id === currentScore?.id);
-    if (currentIndex === -1 || currentIndex === (scoresData?.scores?.length || 0) - 1) {
+    const currentIndex = scores?.findIndex(score => score?.id === currentScore?.id);
+    if (currentIndex === -1 || currentIndex === (scores?.length || 0) - 1) {
       return null; // No next score
     }
 
-    return () => setSelectedScore(scoresData?.scores[(currentIndex || 0) + 1]);
+    return () => setSelectedScore(scores[(currentIndex || 0) + 1]);
   };
 
   const toNextScore = (currentScore: ScoreRowData) => {
-    const currentIndex = scoresData?.scores?.findIndex(score => score?.id === currentScore?.id);
+    const currentIndex = scores?.findIndex(score => score?.id === currentScore?.id);
     if ((currentIndex || 0) <= 0) {
       return null; // No previous score
     }
-    return () => setSelectedScore(scoresData?.scores[(currentIndex || 0) - 1]);
+    return () => setSelectedScore(scores[(currentIndex || 0) - 1]);
   };
 
   const handleNextPage = () => {
