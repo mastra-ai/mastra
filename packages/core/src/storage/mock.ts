@@ -2,7 +2,7 @@ import { MessageList } from '../agent';
 import type { MastraMessageV2 } from '../agent';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { Trace } from '../telemetry';
-import type { StepResult } from '../workflows';
+import type { StepResult, WorkflowRunState } from '../workflows';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
 import type {
@@ -93,12 +93,12 @@ export class MockStore extends MastraStorage {
   async updateWorkflowState({
     workflowName,
     runId,
-    result,
+    opts,
   }: {
     workflowName: string;
     runId: string;
-    result: StepResult<any, any, any, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    opts: { status: string; result?: StepResult<any, any, any, any>; error?: string; executionPath: number[] };
+  }): Promise<WorkflowRunState> {
     const snapshot = this.data.mastra_workflow_snapshot[runId];
 
     if (!snapshot) {
@@ -115,19 +115,8 @@ export class MockStore extends MastraStorage {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
-    if (result.status === 'success') {
-      snapshot.snapshot.status = 'success';
-      snapshot.snapshot.result = result.output;
-    } else if (result.status === 'failed') {
-      snapshot.snapshot.status = 'failed';
-      snapshot.snapshot.error = result.error;
-    } else if (result.status === 'suspended') {
-      snapshot.snapshot.status = 'suspended';
-    }
-
-    this.data.mastra_workflow_snapshot[runId] = snapshot;
-
-    return snapshot.snapshot.context;
+    this.data.mastra_workflow_snapshot[runId].snapshot = { ...snapshot.snapshot, ...opts };
+    return this.data.mastra_workflow_snapshot[runId];
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {

@@ -10,7 +10,7 @@ import { EventedWorkflow } from '../workflow';
 import { processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
 import { processWorkflowSleep, processWorkflowSleepUntil } from './sleep';
-import { getNestedWorkflow } from './utils';
+import { getNestedWorkflow, getStep } from './utils';
 
 export type ProcessorArgs = {
   activeSteps: number[][];
@@ -81,6 +81,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     resume,
     prevResult,
     resumeData,
+    executionPath,
+    stepResults,
   }: ProcessorArgs) {
     await this.mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflow.id,
@@ -92,7 +94,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         timestamp: Date.now(),
         runId,
         status: 'running',
-        context: {
+        context: stepResults ?? {
           input: prevResult?.status === 'success' ? prevResult.output : undefined,
         },
         value: {},
@@ -105,7 +107,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         parentWorkflow,
         workflowId,
         runId,
-        executionPath: [0],
+        executionPath: executionPath ?? [0],
         resume,
         stepResults: {
           input: prevResult?.status === 'success' ? prevResult.output : undefined,
@@ -129,7 +131,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     await this.mastra.getStorage()?.updateWorkflowState({
       workflowName: workflowId,
       runId,
-      result: prevResult,
+      opts: {
+        status: 'success',
+        result: prevResult,
+      },
     });
 
     // handle nested workflow
@@ -154,6 +159,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowSuspend({
+    workflow,
     workflowId,
     resume,
     prevResult,
@@ -161,11 +167,24 @@ export class WorkflowEventProcessor extends EventProcessor {
     parentWorkflow,
     activeSteps,
     runId,
+    executionPath,
   }: ProcessorArgs) {
+    // TODO: if there are still active paths don't end the workflow yet
+
+    const suspendedPaths: Record<string, number[]> = {};
+    const suspendedStep = getStep(workflow, executionPath);
+    if (suspendedStep) {
+      suspendedPaths[suspendedStep.id] = executionPath;
+    }
+
     await this.mastra.getStorage()?.updateWorkflowState({
       workflowName: workflowId,
       runId,
-      result: prevResult,
+      opts: {
+        status: 'suspended',
+        result: prevResult,
+        suspendedPaths,
+      },
     });
 
     // handle nested workflow
@@ -201,7 +220,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     await this.mastra.getStorage()?.updateWorkflowState({
       workflowName: workflowId,
       runId,
-      result: prevResult,
+      opts: {
+        status: 'failed',
+        error: (prevResult as any).error,
+      },
     });
 
     // handle nested workflow

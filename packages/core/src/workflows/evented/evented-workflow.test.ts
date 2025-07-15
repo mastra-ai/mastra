@@ -5039,6 +5039,8 @@ describe('Workflow', () => {
         throw new Error('Resume failed to return a result');
       }
 
+      console.dir({ firstResumeResult }, { depth: null });
+
       // expect(firstResumeResult.activePaths.size).toBe(1);
       // expect(firstResumeResult.activePaths.get('improveResponse')?.status).toBe('suspended');
       expect(firstResumeResult.steps).toEqual({
