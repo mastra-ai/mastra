@@ -40,12 +40,15 @@ export class StepExecutor extends MastraBase {
       payload: any;
       resumePayload?: any;
       resumedAt?: number;
+      [key: string]: any;
     } = {
+      ...stepResults[step.id],
       startedAt,
       payload: params.input ?? {},
     };
 
     if (params.resumeData) {
+      delete stepInfo.suspendPayload?.['__workflow_meta'];
       stepInfo.resumePayload = params.resumeData;
       stepInfo.resumedAt = Date.now();
     }
@@ -92,7 +95,6 @@ export class StepExecutor extends MastraBase {
       let finalResult: StepResult<any, any, any, any>;
       if (suspended) {
         finalResult = {
-          ...stepResults[step.id],
           ...stepInfo,
           status: 'suspended',
           suspendedAt: endedAt,

@@ -519,7 +519,6 @@ export class WorkflowEventProcessor extends EventProcessor {
             executionPath: [0],
             runId: randomUUID(),
             resumeSteps,
-            stepResults: {},
             prevResult,
             resumeData,
             activeSteps,
