@@ -20,7 +20,9 @@ function Networks() {
           legacyNetworks={networks}
           networks={vNextNetworks}
           isLoading={isLoading || isVNextLoading}
-          onClickRow={networkId => navigate(`/networks/${networkId}/chat`)}
+          onClickRow={(networkId: string, isVNext: boolean) => {
+            navigate(isVNext ? `/networks/v-next/${networkId}/chat` : `/networks/${networkId}/chat`);
+          }}
         />
       </MainContentContent>
     </MainContentLayout>
