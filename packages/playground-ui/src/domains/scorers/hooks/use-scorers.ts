@@ -32,7 +32,14 @@ export const useScoresByEntityId = (entityId: string, entityType: string, page: 
   return { scores, isLoading };
 };
 
-export const useScoresByScorerId = (scorerId: string, page: number = 0) => {
+type UseScoresByScorerIdProps = {
+  scorerId: string;
+  page?: number;
+  entityId?: string;
+  entityType?: string;
+};
+
+export const useScoresByScorerId = ({ scorerId, page = 0, entityId, entityType }: UseScoresByScorerIdProps) => {
   const client = useMastraClient();
   const [scores, setScores] = useState<GetScoresResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +51,8 @@ export const useScoresByScorerId = (scorerId: string, page: number = 0) => {
         const res = await client.getScoresByScorerId({
           scorerId,
           page: page || 0,
+          entityId: entityId || undefined,
+          entityType: entityType || undefined,
           perPage: 10,
         });
         setScores(res);
@@ -55,7 +64,7 @@ export const useScoresByScorerId = (scorerId: string, page: number = 0) => {
     };
 
     fetchScores();
-  }, [scorerId, page]);
+  }, [scorerId, page, entityId, entityType]);
 
   return { scores, isLoading };
 };

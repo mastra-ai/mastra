@@ -1,19 +1,18 @@
 import { AgentIcon, Breadcrumb, Crumb, Header, MainContentLayout, WorkflowIcon } from '@mastra/playground-ui';
 import { useParams, Link } from 'react-router';
-import { useScorer, useScoresByEntityId, useScoresByScorerId } from '@mastra/playground-ui';
+import { useScorer, useScoresByScorerId } from '@mastra/playground-ui';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from 'lucide-react';
 import { format, isToday } from 'date-fns';
 import { useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
 import { cn } from '@/lib/utils';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { type GetScorerResponse, type ScoreRowData } from '@mastra/client-js';
+import type { ScoreRowData } from '@mastra/core/eval';
 
 import * as Dialog from '@radix-ui/react-dialog';
 
 import MarkdownRenderer from '@/components/ui/markdown-renderer';
-import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/components/ui/select';
+// import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 
 import { useWorkflows } from '@/hooks/use-workflows';
@@ -50,37 +49,34 @@ export default function Scorer() {
   ];
 
   const [scoresPage, setScoresPage] = useState<number>(0);
-  const { scores: allScores, isLoading: scoresLoading } = useScoresByScorerId(scorerId, scoresPage);
   const [filteredByEntity, setFilteredByEntity] = useState<string>('');
-  const { scores: entityScores, isLoading: entityScoresLoading } = useScoresByEntityId(
-    filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.name : '',
-    filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.type : '',
-    scoresPage,
-  );
 
-  const scoresTotal = allScores?.pagination?.total || 0;
-  const filteredScores = filteredByEntity !== '' ? entityScores?.scores : allScores?.scores;
-  const filteredScoresTotal = filteredByEntity !== '' ? entityScores?.pagination.total : allScores?.pagination.total;
-  const filteredScoresPage = filteredByEntity !== '' ? entityScores?.pagination.page : allScores?.pagination.page;
-  const filteredScoresHasMore =
-    filteredByEntity !== '' ? entityScores?.pagination.hasMore : allScores?.pagination.hasMore;
-  const filteredScoresPerPage =
-    filteredByEntity !== '' ? entityScores?.pagination.perPage : allScores?.pagination.perPage;
+  const { scores: scoresData, isLoading: scoresLoading } = useScoresByScorerId({
+    scorerId,
+    page: scoresPage,
+    entityId: filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.id : undefined,
+    entityType: filteredByEntity !== '' ? scorerEntities?.[+filteredByEntity]?.type : undefined,
+  });
 
-  const handleFilterChange = (value: string) => {
-    if (value === 'all') {
-      setFilteredByEntity('');
-      setScoresPage(0); // Reset to first page when filtering by all
-    } else {
-      const entity = scorerEntities?.[parseInt(value)];
-      if (entity) {
-        setFilteredByEntity(value);
-        setScoresPage(0);
-      } else {
-        console.warn('Entity not found for value:', value);
-      }
-    }
-  };
+  const scores = scoresData?.scores;
+  const scoresTotal = scoresData?.pagination.total;
+  const scoresHasMore = scoresData?.pagination.hasMore;
+  const scoresPerPage = scoresData?.pagination.perPage;
+
+  // const handleFilterChange = (value: string) => {
+  //   if (value === 'all') {
+  //     setFilteredByEntity('');
+  //     setScoresPage(0); // Reset to first page when filtering by all
+  //   } else {
+  //     const entity = scorerEntities?.[parseInt(value)];
+  //     if (entity) {
+  //       setFilteredByEntity(value);
+  //       setScoresPage(0);
+  //     } else {
+  //       console.warn('Entity not found for value:', value);
+  //     }
+  //   }
+  // };
 
   const handleOnListItemClick = (score: any) => {
     if (score.id === selectedScore?.id) {
@@ -92,24 +88,24 @@ export default function Scorer() {
   };
 
   const toPreviousScore = (currentScore: ScoreRowData) => {
-    const currentIndex = allScores?.scores?.findIndex(score => score?.id === currentScore?.id);
-    if (currentIndex === -1 || currentIndex === (allScores?.scores?.length || 0) - 1) {
+    const currentIndex = scoresData?.scores?.findIndex(score => score?.id === currentScore?.id);
+    if (currentIndex === -1 || currentIndex === (scoresData?.scores?.length || 0) - 1) {
       return null; // No next score
     }
 
-    return () => setSelectedScore(allScores?.scores[(currentIndex || 0) + 1]);
+    return () => setSelectedScore(scoresData?.scores[(currentIndex || 0) + 1]);
   };
 
   const toNextScore = (currentScore: ScoreRowData) => {
-    const currentIndex = allScores?.scores?.findIndex(score => score?.id === currentScore?.id);
+    const currentIndex = scoresData?.scores?.findIndex(score => score?.id === currentScore?.id);
     if ((currentIndex || 0) <= 0) {
       return null; // No previous score
     }
-    return () => setSelectedScore(allScores?.scores[(currentIndex || 0) - 1]);
+    return () => setSelectedScore(scoresData?.scores[(currentIndex || 0) - 1]);
   };
 
   const handleNextPage = () => {
-    if (filteredScoresHasMore) {
+    if (scoresHasMore) {
       setScoresPage(prev => prev + 1);
     }
   };
@@ -120,7 +116,6 @@ export default function Scorer() {
     }
   };
 
-  const hasPrompts = false;
   if (isLoading) {
     return null;
   }
@@ -144,53 +139,23 @@ export default function Scorer() {
           <div className={cn(`h-full overflow-y-scroll `)}>
             <div className={cn('max-w-[100rem] px-[3rem] mx-auto')}>
               <ScorerHeader scorer={scorer} agents={scorerAgents} workflows={scorerWorkflows} />
-              <Tabs defaultValue="scores">
-                <TabsList
-                  className={cn(
-                    'flex border-b group',
-                    '[&>button]:text-icon3 [&>button]:text-[1rem] [&>button]:px-[1.5rem] [&>button]:py-[0.75rem] [&>button]:border-b-2 [&>button]:border-transparent ',
-                    '[&>button[data-state=active]]:bg-surface2 [&>button[data-state=active]]:text-icon5 [&>button[data-state=active]]:border-icon5',
-                  )}
-                >
-                  <TabsTrigger value="scores" className="group">
-                    Scores
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="prompts"
-                    className={cn('group', {
-                      'cursor-not-allowed': !hasPrompts,
-                    })}
-                    disabled={!hasPrompts}
-                  >
-                    Prompts
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="scores">
-                  <ScoreListHeader
-                    filteredByEntity={filteredByEntity}
-                    onFilterChange={handleFilterChange}
-                    scorerEntities={scorerEntities}
-                    scoresTotal={scoresTotal}
-                    filteredScoresTotal={filteredByEntity ? filteredScoresTotal : undefined}
-                  />
-                  <ScoreList
-                    scores={filteredScores || []}
-                    selectedScore={selectedScore}
-                    onItemClick={handleOnListItemClick}
-                    isLoading={filteredByEntity !== '' ? entityScoresLoading : scoresLoading || false}
-                    total={filteredScoresTotal}
-                    page={filteredScoresPage}
-                    perPage={filteredScoresPerPage}
-                    hasMore={filteredScoresHasMore}
-                    onNextPage={handleNextPage}
-                    onPrevPage={handlePrevPage}
-                  />
-                </TabsContent>
-                <TabsContent value="prompts">
-                  <ScorerPrompts prompts={scorer?.prompts} />
-                </TabsContent>
-              </Tabs>
+              <ScoreListHeader
+              // filteredByEntity={filteredByEntity}
+              // onFilterChange={handleFilterChange}
+              // scorerEntities={scorerEntities}
+              />
+              <ScoreList
+                scores={scores || []}
+                selectedScore={selectedScore}
+                onItemClick={handleOnListItemClick}
+                isLoading={scoresLoading}
+                total={scoresTotal}
+                page={scoresPage}
+                perPage={scoresPerPage}
+                hasMore={scoresHasMore}
+                onNextPage={handleNextPage}
+                onPrevPage={handlePrevPage}
+              />
             </div>
           </div>
           <ScoreDetails
@@ -255,24 +220,22 @@ function ScorerHeader({
   );
 }
 
-function ScoreListHeader({
-  filteredByEntity,
-  onFilterChange,
-  scorerEntities,
-  scoresTotal,
-  filteredScoresTotal,
-}: {
-  filteredByEntity: string;
-  onFilterChange: (value: string) => void;
-  scorerEntities?: { id: string; name: string; type: string }[];
-  scoresTotal?: number;
-  filteredScoresTotal?: number;
-}) {
+function ScoreListHeader(
+  {
+    // filteredByEntity,
+    // onFilterChange,
+    // scorerEntities,
+  }: {
+    // filteredByEntity?: string;
+    // onFilterChange?: (value: string) => void;
+    // scorerEntities?: { id: string; name: string; type: string }[];
+  },
+) {
   return (
-    <div className={cn('sticky top-0 bg-surface4 z-[1] mt-[2rem] mb-[1rem] rounded-lg px-[1.5rem]')}>
-      <div className="flex items-center justify-between">
+    <div className={cn('sticky top-0 bg-surface4 z-[1] mt-[1rem] mb-[1rem] rounded-lg px-[1.5rem]')}>
+      {/* <div className="flex items-center justify-between">
         <div className="inline-flex items-baseline gap-[1rem] py-[.75rem]">
-          <label htmlFor="filter-by-agent" className="text-icon3 text-[0.875rem] font-semibold whitespace-nowrap">
+          <label htmlFor="filter-by-agent" className="text-icon3 text-[0.875rem] font-semibold whitespace-nowrap border-b border-border1">
             Filter by entity:
           </label>
           <Select
@@ -301,22 +264,11 @@ function ScoreListHeader({
             </SelectContent>
           </Select>
         </div>
-
-        <div className="text-icon3 text-[0.875rem] flex gap-[1rem] [&_b]:text-icon5 [&>span]:flex [&>span]:gap-[0.5rem]">
-          {filteredScoresTotal && (
-            <span>
-              Filtered: <b>{filteredScoresTotal}</b>
-            </span>
-          )}
-          <span>
-            Total: <b>{scoresTotal}</b>
-          </span>
-        </div>
-      </div>
+      </div> */}
 
       <div
         className={cn(
-          'grid gap-[1rem] grid-cols-[7rem_7rem_1fr_2fr_10rem_3rem] text-left text-[0.75rem] text-icon3 uppercase py-[1rem] border-t border-border1 ',
+          'grid gap-[1rem] grid-cols-[7rem_7rem_1fr_2fr_10rem_3rem] text-left text-[0.75rem] text-icon3 uppercase py-[1rem]',
         )}
       >
         <span>Date</span>
@@ -377,9 +329,7 @@ function ScoreList({
 
       {typeof page === 'number' && typeof perPage === 'number' && typeof total === 'number' && (
         <div className={cn('flex items-center justify-center text-icon3 text-[0.875rem] gap-[2rem]')}>
-          <span>
-            Page {page ? page + 1 : '1'} of {total ? Math.ceil(total / perPage) : 0}
-          </span>
+          <span>Page {page ? page + 1 : '1'}</span>
           <div
             className={cn(
               'flex gap-[1rem]',
@@ -484,6 +434,14 @@ function ScoreDetails({
     }
   };
 
+  const prompts: Record<
+    string,
+    {
+      prompt: string;
+      description: string;
+    }
+  > = {};
+
   return (
     <Dialog.Root open={isOpen} onOpenChange={onClose}>
       <Dialog.Portal>
@@ -524,7 +482,7 @@ function ScoreDetails({
                 '[&>em]:flex [&>em]:justify-between',
                 '[&_svg]:w-[1.1em] [&>svg]:h-[1.1em] [&_svg]:text-icon3 ',
                 '[&_b]:text-icon6 [&_b]:font-semibold',
-                'text-[0.875rem]',
+                'text-[0.875rem] break-all',
               )}
             >
               <em>
@@ -541,7 +499,7 @@ function ScoreDetails({
               {(score.input || []).map((input: any, index: number) => (
                 <div
                   key={index}
-                  className="border-b border-border1 last:border-b-0 py-[1rem] px-[1.5rem] text-[0.875rem] text-icon5"
+                  className="border-b border-border1 last:border-b-0 py-[1rem] px-[1.5rem] text-[0.875rem] text-icon4 break-all"
                 >
                   {input?.content && <MarkdownRenderer>{input.content}</MarkdownRenderer>}
                   {input?.ingredient && <MarkdownRenderer>{input.ingredient}</MarkdownRenderer>}
@@ -568,38 +526,35 @@ function ScoreDetails({
                     </div>
                   )}
                 </div>
-                <div className="text-icon5 text-[0.875rem] p-[1.5rem] py-[1rem]">
+                <div className="text-icon4 text-[0.875rem] p-[1.5rem] py-[1rem] break-all">
                   {score.output?.text && <MarkdownRenderer>{score.output.text}</MarkdownRenderer>}
                   {score.output?.object?.result && <MarkdownRenderer>{score.output.object.result}</MarkdownRenderer>}
                 </div>
               </div>
             </section>
+            {prompts && (
+              <section className="border border-border1 rounded-lg">
+                <div className="flex items-center justify-between  p-[1rem] ">
+                  <h3 className="px-[.5rem]">Prompts</h3>
+                </div>
+
+                {Object.entries(prompts || {}).map(([key, value]) => (
+                  <>
+                    <div className="flex gap-[1rem] text-[] py-[1rem] px-[1.5rem] border-y border-border1" key={key}>
+                      <span className="text-icon5 font-bold text-[0.875rem]">{key}</span>
+                      <span className="text-icon2 text-[0.75rem]">{value?.description && `|`}</span>
+                      <span className="text-icon4 text-[0.875rem]">{value?.description || ''}</span>
+                    </div>
+                    <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
+                      {value?.prompt && <MarkdownRenderer>{value.prompt}</MarkdownRenderer>}
+                    </div>
+                  </>
+                ))}
+              </section>
+            )}
           </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
-  );
-}
-
-function ScorerPrompts({ prompts }: { prompts: GetScorerResponse['prompts'] | undefined }) {
-  if (!prompts) {
-    return null;
-  }
-
-  return (
-    <div className="grid gap-[2rem] my-[2rem] items-start">
-      {Object.entries(prompts || {}).map(([key, value]) => (
-        <div className="" key={key}>
-          <div className="flex gap-[1rem] mb-[.5rem]">
-            <span className="text-icon5 font-bold">{key}</span>
-            <span className="text-icon2">{value?.description && `|`}</span>
-            <span className="text-icon4">{value?.description || ''}</span>
-          </div>
-          <div className={`rounded-md border border-border1 bg-surface1 `}>
-            <pre className="text-[0.875rem] text-[#ccc] p-[1rem] whitespace-pre-wrap font-mono">{value.prompt}</pre>
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
