@@ -7,13 +7,15 @@ function Workflows() {
   const navigate = useNavigate();
   const [legacyWorkflows, workflows] = data ?? [];
 
+  console.log({ data });
+
   return (
     <MainContentLayout>
       <Header>
         <HeaderTitle>Workflows</HeaderTitle>
       </Header>
 
-      <MainContentContent>
+      <MainContentContent isCentered={!isLoading && Object.keys(data || {}).length === 0}>
         <WorkflowTable
           workflows={workflows}
           legacyWorkflows={legacyWorkflows}
