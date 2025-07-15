@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -9,8 +8,9 @@ services:
       - ACCEPT_EULA=Y
       - SA_PASSWORD=${SA_PASSWORD:-Your_password123}
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${SA_PASSWORD:-Your_password123}", "-Q", "SELECT 1"]
+      test: ["CMD-SHELL", "echo > /dev/tcp/localhost/1433"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 20s
     # shm_size: 1gb  # Optional: uncomment if you want to set shared memory size 

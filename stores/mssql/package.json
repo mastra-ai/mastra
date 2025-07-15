@@ -21,9 +21,9 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch",
-    "pretest": "docker compose up -d && (for i in $(seq 1 30); do nc -z localhost 1433 && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
+    "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose ps | grep mssql && break || sleep 1; done) && (for i in $(seq 1 30); do docker inspect --format='{{.State.Health.Status}}' $(docker compose ps -q mssql) | grep healthy && break || sleep 2; done)",
     "test": "vitest run",
-    "pretest:perf": "docker compose -f docker-compose.perf.yaml up -d && (for i in $(seq 1 30); do nc -z localhost 1435 && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
+    "pretest:perf": "docker compose -f docker-compose.perf.yaml up -d && (for i in $(seq 1 30); do docker compose ps | grep mssql && break || sleep 1; done) && (for i in $(seq 1 30); do docker inspect --format='{{.State.Health.Status}}' $(docker compose ps -q mssql) | grep healthy && break || sleep 2; done)",
     "test:perf": "NODE_OPTIONS='--max-old-space-size=16384' vitest run -c vitest.perf.config.ts",
     "posttest": "docker compose down -v",
     "posttest:perf": "docker compose -f docker-compose.perf.yaml down -v",
