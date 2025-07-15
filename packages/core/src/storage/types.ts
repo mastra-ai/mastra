@@ -114,24 +114,6 @@ export interface ThreadSortOptions {
   sortDirection?: ThreadSortDirection;
 }
 
-const THREAD_ORDER_BY_SET = {
-  createdAt: true,
-  updatedAt: true,
-} satisfies Record<'createdAt' | 'updatedAt', true>;
+export type ThreadOrderBy = 'createdAt' | 'updatedAt';
 
-const THREAD_THREAD_SORT_DIRECTION_SET = {
-  ASC: true,
-  DESC: true,
-} satisfies Record<'ASC' | 'DESC', true>;
-
-export type ThreadOrderBy = keyof typeof THREAD_ORDER_BY_SET;
-
-export type ThreadSortDirection = keyof typeof THREAD_THREAD_SORT_DIRECTION_SET;
-
-export function isThreadOrderBy(v: string | unknown): v is ThreadOrderBy {
-  return (v as string) in THREAD_ORDER_BY_SET;
-}
-
-export function isThreadSortDirection(v: string | unknown): v is ThreadSortDirection {
-  return (v as string) in THREAD_THREAD_SORT_DIRECTION_SET;
-}
+export type ThreadSortDirection = 'ASC' | 'DESC';

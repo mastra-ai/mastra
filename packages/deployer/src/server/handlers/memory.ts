@@ -1,6 +1,5 @@
 import type { Mastra } from '@mastra/core';
 import type { StorageGetMessagesArg, ThreadOrderBy, ThreadSortDirection, MastraMessageFormat } from '@mastra/core/storage';
-import { isThreadOrderBy, isThreadSortDirection } from '@mastra/core/storage';
 import {
   getMemoryStatusHandler as getOriginalMemoryStatusHandler,
   getThreadsHandler as getOriginalThreadsHandler,
@@ -35,6 +34,24 @@ export async function getMemoryStatusHandler(c: Context) {
   } catch (error) {
     return handleError(error, 'Error getting memory status');
   }
+}
+
+const THREAD_ORDER_BY_SET = {
+  createdAt: true,
+  updatedAt: true,
+} satisfies Record<ThreadOrderBy, true>;
+
+const THREAD_THREAD_SORT_DIRECTION_SET = {
+  ASC: true,
+  DESC: true,
+} satisfies Record<ThreadSortDirection, true>;
+
+function isThreadOrderBy(v: string | unknown): v is ThreadOrderBy {
+  return (v as string) in THREAD_ORDER_BY_SET;
+}
+
+function isThreadSortDirection(v: string | unknown): v is ThreadSortDirection {
+  return (v as string) in THREAD_THREAD_SORT_DIRECTION_SET;
 }
 
 export async function getThreadsHandler(c: Context) {
