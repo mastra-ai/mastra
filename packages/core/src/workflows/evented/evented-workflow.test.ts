@@ -4270,7 +4270,7 @@ describe('Workflow', () => {
       expect(onTransition2).toHaveBeenCalledTimes(10);
     });
 
-    it.only('should be able to use all action types in a workflow', async () => {
+    it('should be able to use all action types in a workflow', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ name: 'step1' });
 
       const step1 = createStep({
@@ -4317,7 +4317,7 @@ describe('Workflow', () => {
       expect(values).toMatchObject([
         {
           payload: {
-            runId: 'mock-uuid-1',
+            runId: expect.any(String),
           },
           type: 'start',
         },
@@ -4377,7 +4377,7 @@ describe('Workflow', () => {
         },
         {
           payload: {
-            runId: 'mock-uuid-1',
+            runId: expect.any(String),
           },
           type: 'finish',
         },

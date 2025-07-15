@@ -546,6 +546,19 @@ export class WorkflowEventProcessor extends EventProcessor {
           eventTimestamp: Date.now(),
         },
       });
+
+      await this.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'step-start',
+          payload: {
+            id: step.step.id,
+            startedAt: Date.now(),
+            payload: prevResult.status === 'success' ? prevResult.output : undefined,
+            status: 'running',
+          },
+        },
+      });
     }
 
     const stepResult = await this.stepExecutor.execute({
@@ -726,6 +739,28 @@ export class WorkflowEventProcessor extends EventProcessor {
           eventTimestamp: Date.now(),
         },
       });
+
+      await this.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'step-result',
+          payload: {
+            id: step.step.id,
+            ...prevResult,
+          },
+        },
+      });
+
+      await this.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'step-finish',
+          payload: {
+            id: step.step.id,
+            metadata: {},
+          },
+        },
+      });
     }
 
     step = workflow.stepGraph[executionPath[0]!];
@@ -857,6 +892,27 @@ export class WorkflowEventProcessor extends EventProcessor {
             },
           },
           eventTimestamp: Date.now(),
+        },
+      });
+
+      await this.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'finish',
+          payload: {
+            runId,
+          },
+        },
+      });
+    } else if (type === 'workflow.start' || type === 'workflow.resume') {
+      const { runId } = workflowData;
+      await this.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'start',
+          payload: {
+            runId,
+          },
         },
       });
     }

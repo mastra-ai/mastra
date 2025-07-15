@@ -502,17 +502,20 @@ export class EventedRun<
 
   watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
     const watchCb = (event: any) => {
-      if (event.type === 'watch') {
-        cb(event.data);
-      }
+      cb(event.data);
     };
 
-    this.pubsub.subscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
+    if (type === 'watch-v2') {
+      this.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
+    } else {
+      this.pubsub.subscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
+    }
 
     return () => {
       if (type === 'watch-v2') {
-        // TODO
+        this.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
       } else {
+        this.pubsub.unsubscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
       }
     };
   }
