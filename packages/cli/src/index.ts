@@ -59,6 +59,10 @@ program
     'Project name that will be used in package.json and as the project directory name.',
   )
   .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)')
+  .option(
+    '--template [template-name]',
+    'Create project from a template (use template name or leave blank to select from list)',
+  )
   .action(async (projectNameArg, args) => {
     // Unify: use argument if present, else option
     const projectName = projectNameArg || args.projectName;
@@ -74,6 +78,7 @@ program
             addExample: true,
             timeout,
             mcpServer: args.mcp,
+            template: args.template,
           });
           return;
         }
@@ -86,6 +91,7 @@ program
           projectName,
           directory: args.dir,
           mcpServer: args.mcp,
+          template: args.template,
         });
       },
       origin,
