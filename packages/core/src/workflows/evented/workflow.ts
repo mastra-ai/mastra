@@ -436,4 +436,66 @@ export class EventedRun<
 
     return result;
   }
+
+  async resume<TResumeSchema extends z.ZodType<any>>(params: {
+    resumeData?: z.infer<TResumeSchema>;
+    step:
+      | Step<string, any, any, TResumeSchema, any, TEngineType>
+      | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, TResumeSchema, any, TEngineType>]
+      | string
+      | string[];
+    runtimeContext?: RuntimeContext;
+  }): Promise<WorkflowResult<TOutput, TSteps>> {
+    const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
+      typeof step === 'string' ? step : step?.id,
+    );
+    const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+    });
+
+    const executionResultPromise = this.executionEngine
+      .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+        workflowId: this.workflowId,
+        runId: this.runId,
+        graph: this.executionGraph,
+        serializedStepGraph: this.serializedStepGraph,
+        input: params.resumeData,
+        resume: {
+          steps,
+          stepResults: snapshot?.context as any,
+          resumePayload: params.resumeData,
+          // @ts-ignore
+          resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
+        },
+        emitter: {
+          emit: (event: string, data: any) => {
+            this.emitter.emit(event, data);
+            return Promise.resolve();
+          },
+          on: (event: string, callback: (data: any) => void) => {
+            this.emitter.on(event, callback);
+          },
+          off: (event: string, callback: (data: any) => void) => {
+            this.emitter.off(event, callback);
+          },
+          once: (event: string, callback: (data: any) => void) => {
+            this.emitter.once(event, callback);
+          },
+        },
+        runtimeContext: params.runtimeContext ?? new RuntimeContext(),
+        abortController: this.abortController,
+      })
+      .then(result => {
+        if (result.status !== 'suspended') {
+          this.closeStreamAction?.().catch(() => {});
+        }
+
+        return result;
+      });
+
+    this.executionResults = executionResultPromise;
+
+    return executionResultPromise;
+  }
 }

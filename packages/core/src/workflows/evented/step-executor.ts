@@ -93,8 +93,11 @@ export class StepExecutor extends MastraBase {
           ...stepInfo,
           status: 'suspended',
           suspendedAt: endedAt,
-          suspendPayload: suspended.payload,
         };
+
+        if (suspended.payload) {
+          finalResult.suspendPayload = suspended.payload;
+        }
       } else if (bailed) {
         finalResult = {
           ...stepInfo,

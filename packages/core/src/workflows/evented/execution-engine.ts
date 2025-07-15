@@ -64,14 +64,30 @@ export class EventedExecutionEngine extends ExecutionEngine {
     await this.pubsub.subscribe('workflows', tempCb);
 
     console.log('starting run');
-    await this.pubsub.publish('workflows', {
-      type: 'workflow.start',
-      data: {
-        workflowId: params.workflowId,
-        runId: params.runId,
-        prevResult: { status: 'success', output: params.input },
-      },
-    });
+    if (params.resume) {
+      console.log('resuming run', params.resume);
+      await this.pubsub.publish('workflows', {
+        type: 'workflow.resume',
+        data: {
+          workflowId: params.workflowId,
+          runId: params.runId,
+          executionPath: params.resume.resumePath,
+          stepResults: params.resume.stepResults,
+          resume: true,
+          prevResult: {}, // TODO
+          resumeData: params.resume.resumePayload,
+        },
+      });
+    } else {
+      await this.pubsub.publish('workflows', {
+        type: 'workflow.start',
+        data: {
+          workflowId: params.workflowId,
+          runId: params.runId,
+          prevResult: { status: 'success', output: params.input },
+        },
+      });
+    }
 
     const resultData: any = await new Promise(resolve => {
       const finishCb = async (event: Event) => {

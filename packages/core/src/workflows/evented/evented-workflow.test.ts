@@ -4417,7 +4417,7 @@ describe('Workflow', () => {
       expect(run2.runId).toBeDefined();
       expect(run.runId).toBe(run2.runId);
     });
-    it.only('should handle basic suspend and resume flow', async () => {
+    it('should handle basic suspend and resume flow', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
         .fn()
@@ -4914,7 +4914,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should handle basic suspend and resume flow with async await syntax', async () => {
+    it.only('should handle basic suspend and resume flow with async await syntax', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
         .fn()
