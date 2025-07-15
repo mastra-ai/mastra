@@ -27,12 +27,28 @@ export async function loadTemplates(): Promise<Template[]> {
   }
 }
 
+function pluralize(count: number, singular: string, plural?: string): string {
+  return count === 1 ? singular : plural || `${singular}s`;
+}
+
 export async function selectTemplate(templates: Template[]): Promise<Template | null> {
   const choices = templates.map(template => {
     const parts = [];
-    if (template.agents?.length) parts.push(`${template.agents.length} agents`);
-    if (template.tools?.length) parts.push(`${template.tools.length} tools`);
-    if (template.workflows?.length) parts.push(`${template.workflows.length} workflows`);
+    if (template.agents?.length) {
+      parts.push(`${template.agents.length} ${pluralize(template.agents.length, 'agent')}`);
+    }
+    if (template.tools?.length) {
+      parts.push(`${template.tools.length} ${pluralize(template.tools.length, 'tool')}`);
+    }
+    if (template.workflows?.length) {
+      parts.push(`${template.workflows.length} ${pluralize(template.workflows.length, 'workflow')}`);
+    }
+    if (template.mcp?.length) {
+      parts.push(`${template.mcp.length} ${pluralize(template.mcp.length, 'MCP server')}`);
+    }
+    if (template.networks?.length) {
+      parts.push(`${template.networks.length} ${pluralize(template.networks.length, 'agent network')}`);
+    }
 
     return {
       value: template,

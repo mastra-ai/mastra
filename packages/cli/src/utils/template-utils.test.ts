@@ -190,7 +190,7 @@ describe('template-utils', () => {
           {
             value: mockTemplates[0],
             label: 'Test Template',
-            hint: '1 agents, 1 tools, 1 workflows',
+            hint: '1 agent, 1 tool, 1 workflow',
           },
         ],
       });
@@ -218,6 +218,69 @@ describe('template-utils', () => {
       const result = await selectTemplate(mockTemplates);
 
       expect(result).toBeNull();
+    });
+
+    it('should correctly pluralize component counts', async () => {
+      const mockTemplates = [
+        {
+          githubUrl: 'https://github.com/mastra-ai/template-single',
+          title: 'Single Components',
+          slug: 'template-single',
+          agents: ['agent1'],
+          mcp: [],
+          tools: ['tool1'],
+          networks: [],
+          workflows: ['workflow1'],
+        },
+        {
+          githubUrl: 'https://github.com/mastra-ai/template-multiple',
+          title: 'Multiple Components',
+          slug: 'template-multiple',
+          agents: ['agent1', 'agent2'],
+          mcp: [],
+          tools: ['tool1', 'tool2', 'tool3'],
+          networks: [],
+          workflows: ['workflow1', 'workflow2'],
+        },
+        {
+          githubUrl: 'https://github.com/mastra-ai/template-full',
+          title: 'Full Template',
+          slug: 'template-full',
+          agents: ['agent1'],
+          mcp: ['server1'],
+          tools: ['tool1', 'tool2'],
+          networks: ['network1', 'network2'],
+          workflows: ['workflow1'],
+        },
+      ];
+
+      const { select, isCancel } = await import('@clack/prompts');
+      vi.mocked(select).mockResolvedValue(mockTemplates[0]);
+      vi.mocked(isCancel).mockReturnValue(false);
+
+      const { selectTemplate } = await import('./template-utils');
+      await selectTemplate(mockTemplates);
+
+      expect(select).toHaveBeenCalledWith({
+        message: 'Select a template:',
+        options: [
+          {
+            value: mockTemplates[0],
+            label: 'Single Components',
+            hint: '1 agent, 1 tool, 1 workflow',
+          },
+          {
+            value: mockTemplates[1],
+            label: 'Multiple Components',
+            hint: '2 agents, 3 tools, 2 workflows',
+          },
+          {
+            value: mockTemplates[2],
+            label: 'Full Template',
+            hint: '1 agent, 2 tools, 1 workflow, 1 MCP server, 2 networks',
+          },
+        ],
+      });
     });
 
     it('should handle templates with no components gracefully', async () => {
