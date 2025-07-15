@@ -364,9 +364,9 @@ export const mastra = new Mastra({
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./";
 import { serve } from "@hono/node-server";
-import { createHonoServer } from "@mastra/deployer/server";
+import { createHonoServer, tools } from "@mastra/deployer/server";
 
-const app = await createHonoServer(mastra);
+const app = await createHonoServer(mastra, { tools });
 
 // Start the server on port 3000 so Inngest can send events to it
 const srv = serve({
