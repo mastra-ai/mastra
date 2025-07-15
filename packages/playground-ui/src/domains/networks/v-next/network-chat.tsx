@@ -3,6 +3,7 @@ import { Message } from '@/types';
 import { VNextMastraNetworkRuntimeProvider } from '@/services/vnext-network-runtime-provider';
 import { VNextNetworkChatProvider } from '@/services/vnext-network-chat-provider';
 import { MessagesProvider } from '@/services/vnext-message-provider';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export const VNextNetworkChat = ({
   networkId,
@@ -19,6 +20,7 @@ export const VNextNetworkChat = ({
   memory?: boolean;
   refreshThreadList?: () => void;
 }) => {
+  const { runtimeContext } = usePlaygroundStore();
   return (
     <MessagesProvider key={threadId}>
       <VNextNetworkChatProvider key={threadId}>
@@ -29,6 +31,7 @@ export const VNextNetworkChat = ({
           threadId={threadId}
           memory={memory}
           refreshThreadList={refreshThreadList}
+          runtimeContext={runtimeContext}
         >
           <div className="h-full pb-4">
             <NetworkThread hasMemory={memory} networkName={networkName} />

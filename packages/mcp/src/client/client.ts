@@ -1,5 +1,5 @@
+import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { MastraBase } from '@mastra/core/base';
-
 import type { RuntimeContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
@@ -468,15 +468,16 @@ export class InternalMastraMCPClient extends MastraBase {
       return handler(request.params);
     });
   }
-
-  private convertInputSchema(
+  
+  private async convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema,
-  ): z.ZodType {
+  ): Promise<z.ZodType> {
     if (isZodType(inputSchema)) {
       return inputSchema;
     }
 
     try {
+      await $RefParser.dereference(inputSchema)
       return convertJsonSchemaToZod(inputSchema as JSONSchema);
     } catch (error: unknown) {
       let errorDetails: string | undefined;
@@ -504,15 +505,16 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
-  private convertOutputSchema(
+  private async convertOutputSchema(
     outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'] | JSONSchema,
-  ): z.ZodType | undefined {
+  ): Promise<z.ZodType | undefined> {
     if (!outputSchema) return
     if (isZodType(outputSchema)) {
       return outputSchema;
     }
 
     try {
+      await $RefParser.dereference(outputSchema)
       return convertJsonSchemaToZod(outputSchema as JSONSchema);
     } catch (error: unknown) {
       let errorDetails: string | undefined;
@@ -544,14 +546,14 @@ export class InternalMastraMCPClient extends MastraBase {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({ timeout: this.timeout });
     const toolsRes: Record<string, any> = {};
-    tools.forEach(tool => {
+    for (const tool of tools) {
       this.log('debug', `Processing tool: ${tool.name}`);
       try {
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
-          inputSchema: this.convertInputSchema(tool.inputSchema),
-          outputSchema: this.convertOutputSchema(tool.outputSchema),
+          inputSchema: await this.convertInputSchema(tool.inputSchema),
+          outputSchema: await this.convertOutputSchema(tool.outputSchema),
           execute: async ({ context, runtimeContext }: { context: any; runtimeContext?: RuntimeContext | null }) => {
             const previousContext = this.currentOperationContext;
             this.currentOperationContext = runtimeContext || null; // Set current context
@@ -592,7 +594,7 @@ export class InternalMastraMCPClient extends MastraBase {
           mcpToolDefinition: tool,
         });
       }
-    });
+    }
 
     return toolsRes;
   }

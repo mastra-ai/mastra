@@ -1,13 +1,15 @@
-import type { CoreTool } from '@mastra/core';
-import type { WorkingMemoryFormat } from '@mastra/core/memory';
+import type { CoreTool, MemoryConfig } from '@mastra/core';
 import { z } from 'zod';
 
-export const updateWorkingMemoryTool = ({ format }: { format: WorkingMemoryFormat }): CoreTool => ({
-  description: 'Update the working memory with new information',
+export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig): CoreTool => ({
+  description:
+    'Update the working memory with new information. Always pass data as string to the memory field. Never pass an object.',
   parameters: z.object({
     memory: z
       .string()
-      .describe(`The ${format === 'json' ? 'JSON' : 'Markdown'} formatted working memory content to store`),
+      .describe(
+        `The ${!!memoryConfig?.workingMemory?.schema ? 'JSON' : 'Markdown'} formatted working memory content to store. This MUST be a string. Never pass an object.`,
+      ),
   }),
   execute: async (params: any) => {
     const { context, threadId, memory, resourceId } = params;
@@ -32,6 +34,7 @@ export const updateWorkingMemoryTool = ({ format }: { format: WorkingMemoryForma
       threadId,
       resourceId: resourceId || thread.resourceId,
       workingMemory: workingMemory,
+      memoryConfig,
     });
 
     return { success: true };

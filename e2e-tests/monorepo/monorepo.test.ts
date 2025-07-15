@@ -73,6 +73,13 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(res.status).toBe(200);
       expect(body).toEqual({ message: 'Hello, POST!' });
     });
+
+    it('should return tools from the api', async () => {
+      const res = await fetch(`http://localhost:${port}/api/tools`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(Object.keys(body)).toEqual(['calculatorTool', 'lodashTool']);
+    });
   }
 
   describe('dev', async () => {
@@ -95,7 +102,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       await new Promise<void>(resolve => {
         proc!.stdout?.on('data', data => {
-          console.log(data?.toString());
+          process.stdout.write(data?.toString());
           if (data?.toString()?.includes(`http://localhost:${port}`)) {
             resolve();
           }
@@ -106,8 +113,13 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     afterAll(async () => {
       if (proc) {
         try {
-          proc!.kill('SIGINT');
-        } catch {}
+          proc.kill('SIGKILL');
+        } catch (err) {
+          // @ts-expect-error - isCanceled is not typed
+          if (!err.killed) {
+            console.log('failed to kill build proc', err);
+          }
+        }
       }
     }, timeout);
 
@@ -125,7 +137,6 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       proc = execaNode('index.mjs', {
         cwd: inputFile,
         cancelSignal,
-        gracefulCancel: true,
         env: {
           OPENAI_API_KEY: process.env.OPENAI_API_KEY,
           MASTRA_PORT: port.toString(),
@@ -149,7 +160,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           await proc;
         } catch (err) {
           // @ts-expect-error - isCanceled is not typed
-          if (!proc.isCanceled) {
+          if (!err.isCanceled) {
             console.log('failed to kill build proc', err);
           }
         }
@@ -195,7 +206,8 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           setImmediate(() => controller.abort());
           await proc;
         } catch (err) {
-          if (!(await proc).isCanceled) {
+          // @ts-expect-error - isCanceled is not typed
+          if (!err.isCanceled) {
             console.log('failed to kill start proc', err);
           }
         }
