@@ -1,5 +1,12 @@
 # @mastra/playground-ui
 
+## 5.1.13-alpha.2
+
+### Patch Changes
+
+- 794d9f3: Fix thread creation in playground
+- dfbeec6: Fix navigation to vnext AgentNetwork agents
+
 ## 5.1.13-alpha.1
 
 ### Patch Changes
