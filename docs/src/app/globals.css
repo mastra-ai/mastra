@@ -324,9 +324,12 @@ aside {
 }
 
 article main a {
+  font-weight: 500;
   &:is(html[class~="light"] *) {
     --x-color-primary-600: var(--light-color-text-6);
-    text-decoration: underline var(--light-green-muted);
+    text-decoration-thickness: 1px;
+    text-decoration-line: underline;
+    text-decoration-color: var(--light-green-muted);
   }
 }
 
@@ -698,4 +701,12 @@ table td code.nextra-code:not([class*="twoslash-"]) {
   align-items: center;
   justify-content: center;
   width: fit-content;
+}
+
+/* Reposition theme switcher*/
+
+@media screen and (min-width: 1024px) {
+  button[title="Change theme"] {
+    display: none;
+  }
 }

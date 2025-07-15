@@ -328,6 +328,11 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/frameworks/ai-sdk-v5",
+        destination: "/docs/frameworks/agentic-uis/ai-sdk#vercel-ai-sdk-v5",
+        permanent: true,
+      },
+      {
         source: "/docs/frameworks/express",
         destination: "/docs/frameworks/servers/express",
         permanent: true,
@@ -600,7 +605,7 @@ export default withGT(
       },
       {
         source: "/docs/guide/local-dev/integrations",
-        destination: "/docs/local-dev/mastra-dev",
+        destination: "/docs/server-db/local-dev-playground",
         permanent: true,
       },
       {
