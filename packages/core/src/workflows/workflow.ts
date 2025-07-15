@@ -1537,6 +1537,14 @@ export class Run<
 
     const stepResults = { ...(snapshot?.context ?? {}), input: runtimeContextInput ?? snapshot?.context?.input } as any;
 
+    let runtimeContextToUse = params.runtimeContext ?? new RuntimeContext();
+
+    Object.entries(snapshot?.runtimeContext ?? {}).forEach(([key, value]) => {
+      if (!runtimeContextToUse.has(key)) {
+        runtimeContextToUse.set(key, value);
+      }
+    });
+
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -1550,7 +1558,6 @@ export class Run<
           resumePayload: params.resumeData,
           // @ts-ignore
           resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
-          snapshotRuntimeContext: snapshot?.runtimeContext,
         },
         emitter: {
           emit: (event: string, data: any) => {
@@ -1567,7 +1574,7 @@ export class Run<
             this.emitter.once(event, callback);
           },
         },
-        runtimeContext: params.runtimeContext ?? new RuntimeContext(),
+        runtimeContext: runtimeContextToUse,
         abortController: this.abortController,
       })
       .then(result => {
