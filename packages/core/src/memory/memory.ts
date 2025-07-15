@@ -427,4 +427,21 @@ export abstract class MastraMemory extends MastraBase {
     workingMemory: string;
     memoryConfig?: MemoryConfig;
   }): Promise<void>;
+
+  /**
+   * @warning experimental! can be removed or changed at any time
+   */
+  abstract __experimental_updateWorkingMemoryVNext({
+    threadId,
+    resourceId,
+    workingMemory,
+    searchString,
+    memoryConfig,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string;
+    searchString?: string;
+    memoryConfig?: MemoryConfig;
+  }): Promise<{ success: boolean; reason: string }>;
 }

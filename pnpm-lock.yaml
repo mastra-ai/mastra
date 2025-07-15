@@ -1941,6 +1941,9 @@ importers:
       ai:
         specifier: ^4.3.16
         version: 4.3.16(react@19.1.0)(zod@3.25.67)
+      async-mutex:
+        specifier: ^0.5.0
+        version: 0.5.0
       js-tiktoken:
         specifier: ^1.0.20
         version: 1.0.20
