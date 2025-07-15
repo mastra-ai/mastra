@@ -277,7 +277,7 @@ describe('template-utils', () => {
           {
             value: mockTemplates[2],
             label: 'Full Template',
-            hint: '1 agent, 2 tools, 1 workflow, 1 MCP server, 2 networks',
+            hint: '1 agent, 2 tools, 1 workflow, 1 MCP server, 2 agent networks',
           },
         ],
       });
