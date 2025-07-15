@@ -2,10 +2,11 @@ import fs from 'fs/promises';
 import child_process from 'node:child_process';
 import util from 'node:util';
 import path from 'path';
+import shellQuote from 'shell-quote';
 import yoctoSpinner from 'yocto-spinner';
+import { getPackageManager } from '../commands/utils';
 import { logger } from './logger';
 import type { Template } from './template-utils';
-import { getPackageManager } from '../commands/utils';
 
 const exec = util.promisify(child_process.exec);
 
@@ -72,13 +73,16 @@ async function cloneRepositoryWithoutGit(repoUrl: string, targetPath: string): P
 
   try {
     // First try using degit if available (similar to Next.js)
-    await exec(`npx degit ${repoUrl.replace('https://github.com/', '')} "${targetPath}"`, {
+    const degitRepo = repoUrl.replace('https://github.com/', '');
+    const degitCommand = shellQuote.quote(['npx', 'degit', degitRepo, targetPath]);
+    await exec(degitCommand, {
       cwd: process.cwd(),
     });
   } catch {
     // Fallback to git clone + remove .git
     try {
-      await exec(`git clone "${repoUrl}" "${targetPath}"`, {
+      const gitCommand = shellQuote.quote(['git', 'clone', repoUrl, targetPath]);
+      await exec(gitCommand, {
         cwd: process.cwd(),
       });
 
@@ -118,7 +122,7 @@ export async function installDependencies(projectPath: string, packageManager?: 
     // Use provided package manager or detect from environment/globally
     const pm = packageManager || getPackageManager();
 
-    const installCommand = `${pm} install`;
+    const installCommand = shellQuote.quote([pm, 'install']);
 
     await exec(installCommand, {
       cwd: projectPath,
