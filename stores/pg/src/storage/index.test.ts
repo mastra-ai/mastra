@@ -2125,6 +2125,338 @@ describe('PostgresStore', () => {
         expect(results.perPage).toBe(100);
         expect(results.hasMore).toBe(false);
       });
+
+      it('should use default sorting (createdAt DESC) with pagination', async () => {
+        const resourceId = `pg-paginated-default-sort-${randomUUID()}`;
+        const threadRecords: StorageThreadType[] = [];
+
+        // Create threads with different createdAt times
+        for (let i = 0; i < 8; i++) {
+          const threadData = createSampleThread();
+          threadData.resourceId = resourceId;
+          threadData.createdAt = new Date(Date.now() + i * 1000);
+          threadRecords.push(threadData as StorageThreadType);
+          await new Promise(r => setTimeout(r, 5));
+        }
+
+        for (const tr of threadRecords) {
+          await store.saveThread({ thread: tr });
+        }
+
+        const page1 = await store.getThreadsByResourceIdPaginated({ resourceId, page: 0, perPage: 3 });
+        expect(page1.threads).toHaveLength(3);
+
+        // Should be sorted by createdAt DESC (newest first)
+        for (let i = 0; i < page1.threads.length - 1; i++) {
+          const currentTime = new Date(page1.threads[i].createdAt).getTime();
+          const nextTime = new Date(page1.threads[i + 1].createdAt).getTime();
+          expect(currentTime).toBeGreaterThanOrEqual(nextTime);
+        }
+      });
+
+      it('should support orderBy and sortDirection with pagination', async () => {
+        const resourceId = `pg-paginated-sort-${randomUUID()}`;
+        const baseTime = Date.now();
+
+        // Create threads with different updatedAt times
+        const threadRecords: StorageThreadType[] = [];
+        for (let i = 0; i < 8; i++) {
+          const threadData = createSampleThread();
+          threadData.resourceId = resourceId;
+          threadData.createdAt = new Date(baseTime);
+          threadData.updatedAt = new Date(baseTime + i * 1000);
+          threadRecords.push(threadData as StorageThreadType);
+        }
+
+        for (const tr of threadRecords) {
+          await store.saveThread({ thread: tr });
+        }
+
+        // Test updatedAt ASC with pagination
+        const pageAsc = await store.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 0,
+          perPage: 4,
+          orderBy: 'updatedAt',
+          sortDirection: 'ASC',
+        });
+
+        expect(pageAsc.threads).toHaveLength(4);
+        expect(pageAsc.total).toBe(8);
+        expect(pageAsc.hasMore).toBe(true);
+
+        // Should be sorted by updatedAt ASC (oldest first)
+        for (let i = 0; i < pageAsc.threads.length - 1; i++) {
+          const currentTime = new Date(pageAsc.threads[i].updatedAt).getTime();
+          const nextTime = new Date(pageAsc.threads[i + 1].updatedAt).getTime();
+          expect(currentTime).toBeLessThanOrEqual(nextTime);
+        }
+
+        // Test updatedAt DESC with pagination
+        const pageDesc = await store.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 0,
+          perPage: 4,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        expect(pageDesc.threads).toHaveLength(4);
+
+        // Should be sorted by updatedAt DESC (newest first)
+        for (let i = 0; i < pageDesc.threads.length - 1; i++) {
+          const currentTime = new Date(pageDesc.threads[i].updatedAt).getTime();
+          const nextTime = new Date(pageDesc.threads[i + 1].updatedAt).getTime();
+          expect(currentTime).toBeGreaterThanOrEqual(nextTime);
+        }
+      });
+
+      it('should maintain sort order across multiple pages', async () => {
+        const resourceId = `pg-paginated-multi-page-sort-${randomUUID()}`;
+        const baseTime = Date.now();
+
+        // Create 10 threads with different updatedAt times
+        const threadRecords: StorageThreadType[] = [];
+        for (let i = 0; i < 10; i++) {
+          const threadData = createSampleThread();
+          threadData.resourceId = resourceId;
+          threadData.createdAt = new Date(baseTime);
+          threadData.updatedAt = new Date(baseTime + i * 1000);
+          threadRecords.push(threadData as StorageThreadType);
+        }
+
+        for (const tr of threadRecords) {
+          await store.saveThread({ thread: tr });
+        }
+
+        // Get all pages with updatedAt DESC sorting
+        const page1 = await store.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 0,
+          perPage: 3,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        const page2 = await store.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 1,
+          perPage: 3,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        const page3 = await store.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 2,
+          perPage: 3,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        expect(page1.threads).toHaveLength(3);
+        expect(page2.threads).toHaveLength(3);
+        expect(page3.threads).toHaveLength(3);
+
+        // Verify sort order is maintained across pages
+        const lastFromPage1 = new Date(page1.threads[page1.threads.length - 1].updatedAt).getTime();
+        const firstFromPage2 = new Date(page2.threads[0].updatedAt).getTime();
+        const lastFromPage2 = new Date(page2.threads[page2.threads.length - 1].updatedAt).getTime();
+        const firstFromPage3 = new Date(page3.threads[0].updatedAt).getTime();
+
+        expect(lastFromPage1).toBeGreaterThanOrEqual(firstFromPage2);
+        expect(lastFromPage2).toBeGreaterThanOrEqual(firstFromPage3);
+      });
+    });
+
+    describe('getThreadsByResourceId with sorting', () => {
+      it('should use default sorting (createdAt DESC) when no sort parameters provided', async () => {
+        const resourceId = `pg-sort-default-${randomUUID()}`;
+        const threadRecords: StorageThreadType[] = [];
+
+        // Create threads with different createdAt times
+        for (let i = 0; i < 5; i++) {
+          const threadData = createSampleThread();
+          threadData.resourceId = resourceId;
+          threadData.createdAt = new Date(Date.now() + i * 1000); // Each thread 1 second apart
+          threadRecords.push(threadData as StorageThreadType);
+          await new Promise(r => setTimeout(r, 5)); // Small delay to ensure distinct timestamps
+        }
+
+        for (const tr of threadRecords) {
+          await store.saveThread({ thread: tr });
+        }
+
+        const threads = await store.getThreadsByResourceId({ resourceId });
+        expect(threads).toHaveLength(5);
+
+        // Should be sorted by createdAt DESC (newest first)
+        for (let i = 0; i < threads.length - 1; i++) {
+          const currentTime = new Date(threads[i].createdAt).getTime();
+          const nextTime = new Date(threads[i + 1].createdAt).getTime();
+          expect(currentTime).toBeGreaterThanOrEqual(nextTime);
+        }
+      });
+
+      it('should sort by createdAt ASC when specified', async () => {
+        const resourceId = `pg-sort-created-asc-${randomUUID()}`;
+        const threadRecords: StorageThreadType[] = [];
+
+        for (let i = 0; i < 5; i++) {
+          const threadData = createSampleThread();
+          threadData.resourceId = resourceId;
+          threadData.createdAt = new Date(Date.now() + i * 1000);
+          threadRecords.push(threadData as StorageThreadType);
+          await new Promise(r => setTimeout(r, 5));
+        }
+
+        for (const tr of threadRecords) {
+          await store.saveThread({ thread: tr });
+        }
+
+        const threads = await store.getThreadsByResourceId({
+          resourceId,
+          orderBy: 'createdAt',
+          sortDirection: 'ASC',
+        });
+        expect(threads).toHaveLength(5);
+
+        // Should be sorted by createdAt ASC (oldest first)
+        for (let i = 0; i < threads.length - 1; i++) {
+          const currentTime = new Date(threads[i].createdAt).getTime();
+          const nextTime = new Date(threads[i + 1].createdAt).getTime();
+          expect(currentTime).toBeLessThanOrEqual(nextTime);
+        }
+      });
+
+      it('should sort by updatedAt DESC when specified', async () => {
+        const resourceId = `pg-sort-updated-desc-${randomUUID()}`;
+        const baseTime = Date.now();
+
+        // Create threads with same createdAt but different updatedAt
+        const thread1Data = createSampleThread();
+        thread1Data.resourceId = resourceId;
+        thread1Data.createdAt = new Date(baseTime);
+        thread1Data.updatedAt = new Date(baseTime + 1000); // 1 second later
+
+        const thread2Data = createSampleThread();
+        thread2Data.resourceId = resourceId;
+        thread2Data.createdAt = new Date(baseTime);
+        thread2Data.updatedAt = new Date(baseTime + 3000); // 3 seconds later
+
+        const thread3Data = createSampleThread();
+        thread3Data.resourceId = resourceId;
+        thread3Data.createdAt = new Date(baseTime);
+        thread3Data.updatedAt = new Date(baseTime + 2000); // 2 seconds later
+
+        await store.saveThread({ thread: thread1Data as StorageThreadType });
+        await store.saveThread({ thread: thread2Data as StorageThreadType });
+        await store.saveThread({ thread: thread3Data as StorageThreadType });
+
+        const threads = await store.getThreadsByResourceId({
+          resourceId,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+        expect(threads).toHaveLength(3);
+
+        // Should be sorted by updatedAt DESC (most recently updated first)
+        expect(threads[0].id).toBe(thread2Data.id); // updatedAt: baseTime + 3000
+        expect(threads[1].id).toBe(thread3Data.id); // updatedAt: baseTime + 2000
+        expect(threads[2].id).toBe(thread1Data.id); // updatedAt: baseTime + 1000
+      });
+
+      it('should sort by updatedAt ASC when specified', async () => {
+        const resourceId = `pg-sort-updated-asc-${randomUUID()}`;
+        const baseTime = Date.now();
+
+        const thread1Data = createSampleThread();
+        thread1Data.resourceId = resourceId;
+        thread1Data.createdAt = new Date(baseTime);
+        thread1Data.updatedAt = new Date(baseTime + 3000);
+
+        const thread2Data = createSampleThread();
+        thread2Data.resourceId = resourceId;
+        thread2Data.createdAt = new Date(baseTime);
+        thread2Data.updatedAt = new Date(baseTime + 1000);
+
+        const thread3Data = createSampleThread();
+        thread3Data.resourceId = resourceId;
+        thread3Data.createdAt = new Date(baseTime);
+        thread3Data.updatedAt = new Date(baseTime + 2000);
+
+        await store.saveThread({ thread: thread1Data as StorageThreadType });
+        await store.saveThread({ thread: thread2Data as StorageThreadType });
+        await store.saveThread({ thread: thread3Data as StorageThreadType });
+
+        const threads = await store.getThreadsByResourceId({
+          resourceId,
+          orderBy: 'updatedAt',
+          sortDirection: 'ASC',
+        });
+        expect(threads).toHaveLength(3);
+
+        // Should be sorted by updatedAt ASC (least recently updated first)
+        expect(threads[0].id).toBe(thread2Data.id); // updatedAt: baseTime + 1000
+        expect(threads[1].id).toBe(thread3Data.id); // updatedAt: baseTime + 2000
+        expect(threads[2].id).toBe(thread1Data.id); // updatedAt: baseTime + 3000
+      });
+
+      it('should work with pagination and sorting combined', async () => {
+        const resourceId = `pg-sort-pagination-${randomUUID()}`;
+        const baseTime = Date.now();
+        const threadRecords: StorageThreadType[] = [];
+
+        // Create 6 threads with different updatedAt times
+        for (let i = 0; i < 6; i++) {
+          const threadData = createSampleThread();
+          threadData.resourceId = resourceId;
+          threadData.createdAt = new Date(baseTime);
+          threadData.updatedAt = new Date(baseTime + i * 1000);
+          threadRecords.push(threadData as StorageThreadType);
+        }
+
+        for (const tr of threadRecords) {
+          await store.saveThread({ thread: tr });
+        }
+
+        // Get first page (3 items) sorted by updatedAt DESC
+        const page1 = await store.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 0,
+          perPage: 3,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        expect(page1.threads).toHaveLength(3);
+        expect(page1.total).toBe(6);
+        expect(page1.hasMore).toBe(true);
+
+        // First page should have the 3 most recently updated threads
+        for (let i = 0; i < page1.threads.length - 1; i++) {
+          const currentTime = new Date(page1.threads[i].updatedAt).getTime();
+          const nextTime = new Date(page1.threads[i + 1].updatedAt).getTime();
+          expect(currentTime).toBeGreaterThanOrEqual(nextTime);
+        }
+
+        // Get second page
+        const page2 = await store.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 1,
+          perPage: 3,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        expect(page2.threads).toHaveLength(3);
+        expect(page2.hasMore).toBe(false);
+
+        // Second page should continue the sort order
+        const lastFromPage1Time = new Date(page1.threads[page1.threads.length - 1].updatedAt).getTime();
+        const firstFromPage2Time = new Date(page2.threads[0].updatedAt).getTime();
+        expect(lastFromPage1Time).toBeGreaterThanOrEqual(firstFromPage2Time);
+      });
     });
   });
 
