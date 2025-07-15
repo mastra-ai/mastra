@@ -301,7 +301,7 @@ export abstract class SchemaCompatLayer {
     throwOnTypes: readonly UnsupportedZodType[] = UNSUPPORTED_ZOD_TYPES,
   ): ShapeValue<T> {
     if (throwOnTypes.includes(value._def?.typeName as UnsupportedZodType)) {
-      throw new Error(`${this.model.modelId} does not support zod type: ${value._def.typeName}`);
+      throw new Error(`${this.model.modelId} does not support zod type: ${value._def?.typeName}`);
     }
     return value as ShapeValue<T>;
   }
