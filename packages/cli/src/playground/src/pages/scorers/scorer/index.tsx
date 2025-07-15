@@ -4,7 +4,7 @@ import { useScorer, useScoresByScorerId } from '@mastra/playground-ui';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, XIcon } from 'lucide-react';
 import { format, isToday } from 'date-fns';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useAgents } from '@/hooks/use-agents';
 import { cn } from '@/lib/utils';
 import type { ScoreRowData } from '@mastra/core/eval';
@@ -539,8 +539,8 @@ function ScoreDetails({
                 </div>
 
                 {Object.entries(prompts || {}).map(([key, value]) => (
-                  <>
-                    <div className="flex gap-[1rem] text-[] py-[1rem] px-[1.5rem] border-y border-border1" key={key}>
+                  <Fragment key={key}>
+                    <div className="flex gap-[1rem] text-[] py-[1rem] px-[1.5rem] border-y border-border1">
                       <span className="text-icon5 font-bold text-[0.875rem]">{key}</span>
                       <span className="text-icon2 text-[0.75rem]">{value?.description && `|`}</span>
                       <span className="text-icon4 text-[0.875rem]">{value?.description || ''}</span>
@@ -548,7 +548,7 @@ function ScoreDetails({
                     <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
                       {value?.prompt && <MarkdownRenderer>{value.prompt}</MarkdownRenderer>}
                     </div>
-                  </>
+                  </Fragment>
                 ))}
               </section>
             )}
