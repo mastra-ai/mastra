@@ -589,6 +589,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const retries = step.retries ?? executionContext.retryConfig.attempts ?? 0;
     const delay = executionContext.retryConfig.delay ?? 0;
 
+    let runtimeContextToUse = runtimeContext;
+
+    Object.entries(this.runtimeContext).forEach(([key, value]) => {
+      if (!runtimeContextToUse.has(key)) {
+        runtimeContextToUse.set(key, value);
+      }
+    });
+
     // +1 for the initial attempt
     for (let i = 0; i < retries + 1; i++) {
       if (i > 0 && delay) {
@@ -597,14 +605,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       try {
         let suspended: { payload: any } | undefined;
         let bailed: { payload: any } | undefined;
-
-        let runtimeContextToUse = runtimeContext;
-
-        Object.entries(this.runtimeContext).forEach(([key, value]) => {
-          if (!runtimeContextToUse.has(key)) {
-            runtimeContextToUse.set(key, value);
-          }
-        });
 
         const result = await runStep({
           runId,
@@ -647,13 +647,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           abortSignal: abortController?.signal,
         });
 
-        let runtimeContextObj: Record<string, any> = {};
-        runtimeContext.forEach((value, key) => {
-          runtimeContextObj[key] = value;
-        });
-
-        this.runtimeContext = { ...this.runtimeContext, ...runtimeContextObj };
-
         if (suspended) {
           execResults = { status: 'suspended', suspendPayload: suspended.payload, suspendedAt: Date.now() };
         } else if (bailed) {
@@ -685,6 +678,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         };
       }
     }
+
+    let runtimeContextObj: Record<string, any> = {};
+    runtimeContext.forEach((value, key) => {
+      runtimeContextObj[key] = value;
+    });
+
+    this.runtimeContext = runtimeContextObj;
 
     if (!skipEmits) {
       await emitter.emit('watch', {
