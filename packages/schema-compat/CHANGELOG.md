@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 0.10.5
+
+### Patch Changes
+
+- 4da943f: Fix Cannot read properties of undefined (reading 'typeName') in schema compat check
+
 ## 0.10.5-alpha.0
 
 ### Patch Changes
