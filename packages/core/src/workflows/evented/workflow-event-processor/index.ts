@@ -19,7 +19,7 @@ export type ProcessorArgs = {
   runId: string;
   executionPath: number[];
   stepResults: Record<string, StepResult<any, any, any, any>>;
-  resume: boolean;
+  resumeSteps: string[];
   prevResult: StepResult<any, any, any, any>;
   resumeData: any;
   parentWorkflow?: ParentWorkflow;
@@ -54,7 +54,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   private async errorWorkflow(
-    { parentWorkflow, workflowId, runId, resume, stepResults, resumeData }: Omit<ProcessorArgs, 'workflow'>,
+    { parentWorkflow, workflowId, runId, resumeSteps, stepResults, resumeData }: Omit<ProcessorArgs, 'workflow'>,
     e: Error,
   ) {
     await this.pubsub.publish('workflows', {
@@ -63,7 +63,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowId,
         runId,
         executionPath: [],
-        resume,
+        resumeSteps,
         stepResults,
         prevResult: { status: 'failed', error: e.stack ?? e.message },
         resumeData,
@@ -78,13 +78,12 @@ export class WorkflowEventProcessor extends EventProcessor {
     parentWorkflow,
     workflowId,
     runId,
-    resume,
+    resumeSteps,
     prevResult,
     resumeData,
     executionPath,
     stepResults,
   }: ProcessorArgs) {
-    console.dir({ DURR: { stepResults, executionPath, prevResult } }, { depth: null });
     await this.mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflow.id,
       runId,
@@ -109,7 +108,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowId,
         runId,
         executionPath: executionPath ?? [0],
-        resume,
+        resumeSteps,
         stepResults: stepResults ?? {
           input: prevResult?.status === 'success' ? prevResult.output : undefined,
         },
@@ -122,7 +121,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
   protected async processWorkflowEnd({
     workflowId,
-    resume,
+    resumeSteps,
     prevResult,
     resumeData,
     parentWorkflow,
@@ -147,7 +146,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId: parentWorkflow.workflowId,
           runId: parentWorkflow.runId,
           executionPath: parentWorkflow.executionPath,
-          resume,
+          resumeSteps,
           stepResults: parentWorkflow.stepResults,
           prevResult,
           resumeData,
@@ -162,7 +161,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   protected async processWorkflowSuspend({
     workflow,
     workflowId,
-    resume,
+    resumeSteps,
     prevResult,
     resumeData,
     parentWorkflow,
@@ -197,7 +196,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId: parentWorkflow.workflowId,
           runId: parentWorkflow.runId,
           executionPath: parentWorkflow.executionPath,
-          resume,
+          resumeSteps,
           stepResults: parentWorkflow.stepResults,
           prevResult,
           resumeData,
@@ -212,7 +211,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   protected async processWorkflowFail({
     workflowId,
     runId,
-    resume,
+    resumeSteps,
     prevResult,
     resumeData,
     parentWorkflow,
@@ -236,7 +235,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId: parentWorkflow.workflowId,
           runId: parentWorkflow.runId,
           executionPath: parentWorkflow.executionPath,
-          resume,
+          resumeSteps,
           stepResults: parentWorkflow.stepResults,
           prevResult,
           resumeData,
@@ -255,7 +254,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     executionPath,
     stepResults,
     activeSteps,
-    resume,
+    resumeSteps,
     prevResult,
     resumeData,
     parentWorkflow,
@@ -270,7 +269,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           executionPath,
           stepResults,
           activeSteps,
-          resume,
+          resumeSteps,
           prevResult,
           resumeData,
           parentWorkflow,
@@ -294,7 +293,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           executionPath,
           stepResults,
           activeSteps,
-          resume,
+          resumeSteps,
           prevResult,
           resumeData,
           parentWorkflow,
@@ -319,7 +318,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           executionPath,
           stepResults,
           activeSteps,
-          resume,
+          resumeSteps,
           prevResult,
           resumeData,
           parentWorkflow,
@@ -338,7 +337,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           executionPath,
           stepResults,
           activeSteps,
-          resume,
+          resumeSteps,
           prevResult,
           resumeData,
           parentWorkflow,
@@ -358,7 +357,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           executionPath,
           stepResults,
           activeSteps,
-          resume,
+          resumeSteps,
           prevResult,
           resumeData,
           parentWorkflow,
@@ -378,7 +377,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           executionPath,
           stepResults,
           activeSteps,
-          resume,
+          resumeSteps,
           prevResult,
           resumeData,
           parentWorkflow,
@@ -399,7 +398,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           executionPath,
           stepResults,
           activeSteps,
-          resume,
+          resumeSteps,
           prevResult,
           resumeData,
           parentWorkflow,
@@ -418,20 +417,85 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Run nested workflow
     if (step.step instanceof EventedWorkflow) {
       console.log('starting nested', step.step.id, prevResult);
-      await this.pubsub.publish('workflows', {
-        type: resume ? 'workflow.resume' : 'workflow.start',
-        data: {
-          workflowId: step.step.id,
-          parentWorkflow: { workflowId, runId, executionPath, resume, stepResults, input: prevResult, parentWorkflow },
-          executionPath: [0],
-          runId: randomUUID(),
-          resume,
-          stepResults: {},
-          prevResult,
-          resumeData,
-          activeSteps,
-        },
-      });
+      if (resumeData) {
+        const stepData = stepResults[step.step.id];
+        const nestedRunId = stepData?.suspendPayload?.__workflow_meta?.runId;
+        if (!nestedRunId) {
+          return this.errorWorkflow(
+            {
+              workflowId,
+              runId,
+              executionPath,
+              stepResults,
+              activeSteps,
+              resumeSteps,
+              prevResult,
+              resumeData,
+              parentWorkflow,
+            },
+            new MastraError({
+              id: 'MASTRA_WORKFLOW',
+              text: `Nested workflow run id not found: ${JSON.stringify(stepResults)}`,
+              domain: ErrorDomain.MASTRA_WORKFLOW,
+              category: ErrorCategory.SYSTEM,
+            }),
+          );
+        }
+
+        const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+          workflowName: workflowId,
+          runId,
+        });
+
+        const nestedStepResults = snapshot?.context;
+        const nestedSteps = resumeSteps.slice(1);
+
+        await this.pubsub.publish('workflows', {
+          type: 'workflow.resume',
+          data: {
+            workflowId: step.step.id,
+            parentWorkflow: {
+              workflowId,
+              runId,
+              executionPath,
+              resumeSteps,
+              stepResults,
+              input: prevResult,
+              parentWorkflow,
+            },
+            executionPath: snapshot?.suspendedPaths?.[nestedSteps[0]!] as any,
+            runId: nestedRunId,
+            resumeSteps: nestedSteps,
+            stepResults: nestedStepResults,
+            prevResult,
+            resumeData,
+            activeSteps,
+          },
+        });
+      } else {
+        await this.pubsub.publish('workflows', {
+          type: 'workflow.start',
+          data: {
+            workflowId: step.step.id,
+            parentWorkflow: {
+              workflowId,
+              runId,
+              executionPath,
+              resumeSteps,
+              stepResults,
+              input: prevResult,
+              parentWorkflow,
+            },
+            executionPath: [0],
+            runId: randomUUID(),
+            resumeSteps,
+            stepResults: {},
+            prevResult,
+            resumeData,
+            activeSteps,
+          },
+        });
+      }
 
       return;
     }
@@ -460,7 +524,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           runId,
           executionPath,
-          resume,
+          resumeSteps,
           stepResults: {
             ...stepResults,
             [step.step.id]: stepResult,
@@ -482,7 +546,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           executionPath,
           stepResults,
           activeSteps,
-          resume,
+          resumeSteps,
           resumeData,
           parentWorkflow,
         },
@@ -501,7 +565,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           runId,
           executionPath,
-          resume,
+          resumeSteps,
           stepResults,
           prevResult: stepResult,
           activeSteps,
@@ -515,7 +579,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     workflowId,
     runId,
     executionPath,
-    resume,
+    resumeSteps,
     prevResult,
     parentWorkflow,
     stepResults,
@@ -570,7 +634,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           runId,
           executionPath,
-          resume,
+          resumeSteps,
           parentWorkflow,
           stepResults,
           prevResult,
@@ -586,7 +650,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           runId,
           executionPath,
-          resume,
+          resumeSteps,
           parentWorkflow,
           stepResults,
           prevResult,
@@ -630,7 +694,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           runId,
           executionPath: executionPath.slice(0, -1),
-          resume,
+          resumeSteps,
           stepResults,
           prevResult: { status: 'success', output: allResults },
           activeSteps,
@@ -643,7 +707,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           runId,
           executionPath,
-          resume,
+          resumeSteps,
           parentWorkflow,
           stepResults,
           prevResult,
@@ -657,7 +721,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           runId,
           executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
-          resume,
+          resumeSteps,
           parentWorkflow,
           stepResults,
           prevResult,

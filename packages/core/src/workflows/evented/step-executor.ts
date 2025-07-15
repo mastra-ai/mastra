@@ -73,7 +73,7 @@ export class StepExecutor extends MastraBase {
           return null;
         },
         suspend: async (suspendPayload: any): Promise<any> => {
-          suspended = { payload: suspendPayload };
+          suspended = { payload: { ...suspendPayload, __workflow_meta: { runId, path: [step.id] } } };
         },
         bail: (result: any) => {
           bailed = { payload: result };

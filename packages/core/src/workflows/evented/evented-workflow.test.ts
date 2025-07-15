@@ -4914,7 +4914,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should handle basic suspend and resume flow with async await syntax', async () => {
+    it('should handle basic suspend and resume flow with async await syntax', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
         .fn()
@@ -5287,7 +5287,7 @@ describe('Workflow', () => {
       expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['first message', 'promptAgentAction']);
     });
 
-    it('should handle basic suspend and resume in a dountil workflow', async () => {
+    it.only('should handle basic suspend and resume in a dountil workflow', async () => {
       const resumeStep = createStep({
         id: 'resume',
         inputSchema: z.object({ value: z.number() }),
@@ -5353,7 +5353,7 @@ describe('Workflow', () => {
       new Mastra({
         logger: false,
         storage: testStorage,
-        workflows: { dowhileWorkflow },
+        workflows: { 'dowhile-workflow': dowhileWorkflow },
       });
 
       const run = await dowhileWorkflow.createRunAsync();
@@ -5375,6 +5375,8 @@ describe('Workflow', () => {
         resumeData: { value: 21 },
         step: ['simple-resume-workflow', 'resume'],
       });
+
+      console.log('lastResumeResult', lastResumeResult);
 
       expect(lastResumeResult.steps['simple-resume-workflow']).toMatchObject({
         status: 'success',
