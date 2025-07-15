@@ -2119,7 +2119,6 @@ ${err.stack.split('\n').slice(1).join('\n')}
     getMessagesHandler,
   );
 
-
   app.post(
     '/api/memory/network/threads',
     bodyLimit(bodyLimitOptions),
@@ -2388,7 +2387,6 @@ ${err.stack.split('\n').slice(1).join('\n')}
     getMessagesHandler,
   );
 
-
   // @TODO: Temporary api as we inform users that we are deprecating the original api.
   app.get(
     '/api/memory/threads/:threadId/messages/paginated',
@@ -2402,8 +2400,8 @@ ${err.stack.split('\n').slice(1).join('\n')}
           required: true,
           description: 'The unique identifier of the thread',
           schema: {
-            type: 'string'
-          }
+            type: 'string',
+          },
         },
         {
           name: 'resourceId',
@@ -2411,8 +2409,8 @@ ${err.stack.split('\n').slice(1).join('\n')}
           required: false,
           description: 'Filter messages by resource ID',
           schema: {
-            type: 'string'
-          }
+            type: 'string',
+          },
         },
         {
           name: 'format',
@@ -2422,8 +2420,8 @@ ${err.stack.split('\n').slice(1).join('\n')}
           schema: {
             type: 'string',
             enum: ['v1', 'v2'],
-            default: 'v1'
-          }
+            default: 'v1',
+          },
         },
         {
           name: 'selectBy',
@@ -2432,9 +2430,10 @@ ${err.stack.split('\n').slice(1).join('\n')}
           description: 'JSON string containing selection criteria for messages',
           schema: {
             type: 'string',
-            example: '{"pagination":{"page":0,"perPage":20,"dateRange":{"start":"2024-01-01T00:00:00Z","end":"2024-12-31T23:59:59Z"}},"include":[{"id":"msg-123","withPreviousMessages":5,"withNextMessages":3}]}'
-          }
-        }
+            example:
+              '{"pagination":{"page":0,"perPage":20,"dateRange":{"start":"2024-01-01T00:00:00Z","end":"2024-12-31T23:59:59Z"}},"include":[{"id":"msg-123","withPreviousMessages":5,"withNextMessages":3}]}',
+          },
+        },
       ],
       responses: {
         200: {
