@@ -14,7 +14,7 @@ function Agents() {
         <HeaderTitle>Agents</HeaderTitle>
       </Header>
 
-      <MainContentContent>
+      <MainContentContent isCentered={!isLoading && Object.keys(agents || {}).length === 0}>
         <AgentsTable
           agents={agents}
           isLoading={isLoading}

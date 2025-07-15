@@ -29,5 +29,11 @@ export const LinkComponentProvider = ({ children, Link }: LinkComponentProviderP
 };
 
 export const useLinkComponent = () => {
-  return useContext(LinkComponentContext);
+  const ctx = useContext(LinkComponentContext);
+
+  if (!ctx) {
+    throw new Error('useLinkComponent must be used within a LinkComponentProvider');
+  }
+
+  return ctx;
 };

@@ -1575,6 +1575,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     workflowStatus: 'success' | 'failed' | 'suspended' | 'running';
     result?: Record<string, any>;
     error?: string | Error;
+    runtimeContext: RuntimeContext;
   }) {
     await this.inngestStep.run(
       `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate`,
