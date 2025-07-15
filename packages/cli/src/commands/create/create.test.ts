@@ -73,10 +73,6 @@ vi.mock('../../utils/clone-template', () => ({
 beforeEach(() => {
   vol.reset();
   vi.resetAllMocks();
-  // Mock process.exit to prevent test failures
-  vi.spyOn(process, 'exit').mockImplementation(code => {
-    throw new Error(`process.exit called with code ${code}`);
-  });
   // Mock global fetch for API calls
   global.fetch = vi.fn();
 });
@@ -184,13 +180,9 @@ describe('create command with --template flag', () => {
       });
     });
 
-    it('should exit if template not found', async () => {
+    it('should throw error if template not found', async () => {
       const { loadTemplates, findTemplateByName } = await import('../../utils/template-utils');
       const { log } = await import('@clack/prompts');
-
-      const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-        throw new Error('process.exit called');
-      });
 
       vi.mocked(loadTemplates).mockResolvedValue([mockTemplate]);
       vi.mocked(findTemplateByName).mockReturnValue(null);
@@ -201,9 +193,8 @@ describe('create command with --template flag', () => {
         create({
           template: 'non-existent-template',
         }),
-      ).rejects.toThrow('process.exit called');
+      ).rejects.toThrow('Template "non-existent-template" not found');
 
-      expect(mockExit).toHaveBeenCalledWith(1);
       expect(log.error).toHaveBeenCalledWith('Template "non-existent-template" not found. Available templates:');
     });
 
@@ -241,10 +232,6 @@ describe('create command with --template flag', () => {
       const { cloneTemplate } = await import('../../utils/clone-template');
       const { log } = await import('@clack/prompts');
 
-      const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-        throw new Error('process.exit called');
-      });
-
       vi.mocked(loadTemplates).mockResolvedValue([mockTemplate]);
       vi.mocked(findTemplateByName).mockReturnValue(mockTemplate);
       vi.mocked(cloneTemplate).mockRejectedValue(new Error('Clone failed'));
@@ -256,9 +243,8 @@ describe('create command with --template flag', () => {
           template: 'test-template',
           projectName: 'my-project',
         }),
-      ).rejects.toThrow('process.exit called');
+      ).rejects.toThrow('Clone failed');
 
-      expect(mockExit).toHaveBeenCalledWith(1);
       expect(log.error).toHaveBeenCalledWith('Failed to create project from template: Clone failed');
     });
 
@@ -266,10 +252,6 @@ describe('create command with --template flag', () => {
       const { loadTemplates, findTemplateByName } = await import('../../utils/template-utils');
       const { cloneTemplate, installDependencies } = await import('../../utils/clone-template');
       const { log } = await import('@clack/prompts');
-
-      const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-        throw new Error('process.exit called');
-      });
 
       vi.mocked(loadTemplates).mockResolvedValue([mockTemplate]);
       vi.mocked(findTemplateByName).mockReturnValue(mockTemplate);
@@ -283,9 +265,8 @@ describe('create command with --template flag', () => {
           template: 'test-template',
           projectName: 'my-project',
         }),
-      ).rejects.toThrow('process.exit called');
+      ).rejects.toThrow('Install failed');
 
-      expect(mockExit).toHaveBeenCalledWith(1);
       expect(log.error).toHaveBeenCalledWith('Failed to create project from template: Install failed');
     });
 

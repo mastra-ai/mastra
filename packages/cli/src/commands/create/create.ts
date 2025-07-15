@@ -91,7 +91,7 @@ async function createFromTemplate(args: { projectName?: string; template?: strin
     if (!selectedTemplate) {
       p.log.error(`Template "${args.template}" not found. Available templates:`);
       templates.forEach((t: Template) => p.log.info(`  - ${t.title} (use: ${t.slug.replace('template-', '')})`));
-      process.exit(1);
+      throw new Error(`Template "${args.template}" not found`);
     }
   }
 
@@ -138,6 +138,6 @@ async function createFromTemplate(args: { projectName?: string; template?: strin
     postCreate({ projectName });
   } catch (error) {
     p.log.error(`Failed to create project from template: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    process.exit(1);
+    throw error;
   }
 }

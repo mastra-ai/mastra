@@ -45,20 +45,22 @@ vi.mock('node:util', () => ({
   },
 }));
 
-vi.mock('path', () => ({
-  default: {
-    resolve: vi.fn((...args) => {
-      const joined = args.filter(Boolean).join('/');
-      return joined.startsWith('/') ? joined : '/' + joined;
-    }),
-    join: vi.fn((...args) => args.filter(Boolean).join('/')),
-  },
-  resolve: vi.fn((...args) => {
+vi.mock('path', () => {
+  const pathResolve = vi.fn((...args) => {
     const joined = args.filter(Boolean).join('/');
     return joined.startsWith('/') ? joined : '/' + joined;
-  }),
-  join: vi.fn((...args) => args.filter(Boolean).join('/')),
-}));
+  });
+  const pathJoin = vi.fn((...args) => args.filter(Boolean).join('/'));
+
+  return {
+    default: {
+      resolve: pathResolve,
+      join: pathJoin,
+    },
+    resolve: pathResolve,
+    join: pathJoin,
+  };
+});
 
 beforeEach(() => {
   vol.reset();
@@ -94,8 +96,7 @@ describe('clone-template', () => {
       const mockExec = vi.fn().mockResolvedValue({ stdout: '', stderr: '' });
       vi.mocked(child_process.exec).mockImplementation(mockExec);
 
-      // Don't pre-create the directory - let the clone operation handle it
-      vol.fromJSON({});
+      // Filesystem starts empty from beforeEach vol.reset()
 
       const { cloneTemplate } = await import('./clone-template');
       const result = await cloneTemplate({
@@ -117,8 +118,7 @@ describe('clone-template', () => {
 
       vi.mocked(child_process.exec).mockImplementation(mockExec);
 
-      // Don't pre-create the directory
-      vol.fromJSON({});
+      // Filesystem starts empty from beforeEach vol.reset()
 
       const { cloneTemplate } = await import('./clone-template');
       const result = await cloneTemplate({
@@ -136,16 +136,19 @@ describe('clone-template', () => {
     });
 
     it('should update package.json with new project name', async () => {
-      const mockExec = vi.fn().mockResolvedValue({ stdout: '', stderr: '' });
+      const mockExec = vi.fn(async (cmd: string) => {
+        // Simulate degit creating the directory and package.json
+        if (cmd.includes('degit')) {
+          vol.fromJSON({
+            '/test-project/package.json': JSON.stringify({ name: 'old-name', version: '1.0.0' }),
+          });
+        }
+        return { stdout: '', stderr: '' };
+      });
       vi.mocked(child_process.exec).mockImplementation(mockExec);
 
-      // Simulate degit creating the directory and package.json
-      vol.fromJSON({
-        '/test-project/package.json': JSON.stringify({ name: 'old-name', version: '1.0.0' }),
-      });
-
-      // Start with empty filesystem
-      vol.fromJSON({});
+      // Filesystem starts empty from beforeEach vol.reset()
+      // The mock exec will create files when degit runs
 
       const { cloneTemplate } = await import('./clone-template');
       await cloneTemplate({

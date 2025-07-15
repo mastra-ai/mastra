@@ -48,7 +48,10 @@ program
   .option('-t, --timeout [timeout]', 'Configurable timeout for package installation, defaults to 60000 ms')
   .option('-d, --dir <directory>', 'Target directory for Mastra source code (default: src/)')
   .option('-m, --mcp <mcp>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)')
-  .option('--template [template-name]', 'Create project from a template (use template name or slug)')
+  .option(
+    '--template [template-name]',
+    'Create project from a template (use template name or leave blank to select from list)',
+  )
   .action(async (projectNameArg, args) => {
     // Unify: use argument if present, else option
     const projectName = projectNameArg || args.projectName;
