@@ -3,6 +3,7 @@ import { ExecutionEngine } from '../..';
 import type { RuntimeContext } from '../../di';
 import type { PubSub, Event } from '../../events';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
+import { getStep } from './workflow-event-processor/utils';
 
 export class EventedExecutionEngine extends ExecutionEngine {
   protected eventProcessor: WorkflowEventProcessor;
@@ -65,7 +66,17 @@ export class EventedExecutionEngine extends ExecutionEngine {
 
     console.log('starting run');
     if (params.resume) {
-      console.log('resuming run', params.resume);
+      const prevStep = getStep(this.mastra!.getWorkflow(params.workflowId), params.resume.resumePath);
+      const prevResult = params.resume.stepResults[prevStep?.id ?? 'input'];
+      console.log('resuming run', {
+        workflowId: params.workflowId,
+        runId: params.runId,
+        executionPath: params.resume.resumePath,
+        stepResults: params.resume.stepResults,
+        resume: true,
+        prevResult: { status: 'success', output: prevResult?.payload },
+        resumeData: params.resume.resumePayload,
+      });
       await this.pubsub.publish('workflows', {
         type: 'workflow.resume',
         data: {
@@ -74,7 +85,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           executionPath: params.resume.resumePath,
           stepResults: params.resume.stepResults,
           resume: true,
-          prevResult: {}, // TODO
+          prevResult: { status: 'success', output: prevResult?.payload },
           resumeData: params.resume.resumePayload,
         },
       });

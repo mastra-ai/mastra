@@ -39,6 +39,7 @@ export class StepExecutor extends MastraBase {
       startedAt: number;
       payload: any;
       resumePayload?: any;
+      resumedAt?: number;
     } = {
       startedAt,
       payload: params.input ?? {},
@@ -46,10 +47,11 @@ export class StepExecutor extends MastraBase {
 
     if (params.resumeData) {
       stepInfo.resumePayload = params.resumeData;
+      stepInfo.resumedAt = Date.now();
     }
 
     try {
-      console.log('executor start', this.mastra, step.id, step);
+      console.log('executor start', this.mastra, step.id, stepInfo);
       const stepResult = await step.execute({
         runId,
         mastra: this.mastra!,

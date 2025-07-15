@@ -84,6 +84,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     executionPath,
     stepResults,
   }: ProcessorArgs) {
+    console.dir({ DURR: { stepResults, executionPath, prevResult } }, { depth: null });
     await this.mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflow.id,
       runId,
@@ -109,7 +110,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         executionPath: executionPath ?? [0],
         resume,
-        stepResults: {
+        stepResults: stepResults ?? {
           input: prevResult?.status === 'success' ? prevResult.output : undefined,
         },
         prevResult,
