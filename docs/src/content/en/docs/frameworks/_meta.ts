@@ -5,7 +5,6 @@ const meta = {
   },
   servers: "Servers",
   "web-frameworks": "Web Frameworks",
-  "ai-sdk-v5": "AI SDK v5 (beta)",
 };
 
 export default meta;
