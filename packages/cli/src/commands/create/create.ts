@@ -1,6 +1,7 @@
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 
+import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { loadTemplates, selectTemplate, findTemplateByName, getDefaultProjectName } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
@@ -41,6 +42,16 @@ export const create = async (args: {
   // between those and the case where the args were not passed at all.
   if (args.components === undefined || args.llmProvider === undefined || args.addExample === undefined) {
     const result = await interactivePrompt();
+
+    // Track model provider selection from interactive prompt
+    const analytics = getAnalytics();
+    if (analytics && result?.llmProvider) {
+      analytics.trackEvent('cli_model_provider_selected', {
+        provider: result.llmProvider,
+        selection_method: 'interactive',
+      });
+    }
+
     await init({
       ...result,
       llmApiKey: result?.llmApiKey as string,
@@ -52,6 +63,15 @@ export const create = async (args: {
   }
 
   const { components = [], llmProvider = 'openai', addExample = false, llmApiKey } = args;
+
+  // Track model provider selection from CLI args
+  const analytics = getAnalytics();
+  if (analytics) {
+    analytics.trackEvent('cli_model_provider_selected', {
+      provider: llmProvider,
+      selection_method: 'cli_args',
+    });
+  }
 
   await init({
     directory,
@@ -118,6 +138,15 @@ async function createFromTemplate(args: { projectName?: string; template?: strin
   }
 
   try {
+    // Track template usage
+    const analytics = getAnalytics();
+    if (analytics) {
+      analytics.trackEvent('cli_template_used', {
+        template_slug: selectedTemplate.slug,
+        template_title: selectedTemplate.title,
+      });
+    }
+
     // Clone the template
     const projectPath = await cloneTemplate({
       template: selectedTemplate,

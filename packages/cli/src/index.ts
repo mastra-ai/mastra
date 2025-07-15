@@ -2,7 +2,7 @@
 import { Command } from 'commander';
 
 import { config } from 'dotenv';
-import { PosthogAnalytics } from './analytics/index';
+import { PosthogAnalytics, setAnalytics } from './analytics/index';
 import type { CLI_ORIGIN } from './analytics/index';
 import { build } from './commands/build/build';
 import { create } from './commands/create/create';
@@ -23,6 +23,8 @@ const analytics = new PosthogAnalytics({
   host: 'https://us.posthog.com',
   version: version!,
 });
+
+setAnalytics(analytics);
 
 const program = new Command();
 
