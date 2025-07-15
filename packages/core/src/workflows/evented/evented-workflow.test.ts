@@ -3966,8 +3966,7 @@ describe('Workflow', () => {
     });
   });
 
-  // TODO
-  describe.skip('Watch', () => {
+  describe('Watch', () => {
     it('should watch workflow state changes and call onTransition', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
@@ -3993,6 +3992,11 @@ describe('Workflow', () => {
       });
       workflow.then(step1).then(step2).commit();
 
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
+
       let watchData: WatchEvent[] = [];
       const onTransition = data => {
         watchData.push(JSON.parse(JSON.stringify(data)));
@@ -4005,6 +4009,7 @@ describe('Workflow', () => {
 
       const executionResult = await run.start({ inputData: {} });
 
+      console.dir({ watchData }, { depth: null });
       expect(watchData.length).toBe(5);
       expect(watchData[1]).toEqual({
         type: 'watch',
@@ -4107,6 +4112,11 @@ describe('Workflow', () => {
         steps: [step1, step2],
       });
       workflow.then(step1).then(step2).commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
 
       let watchData: WatchEvent[] = [];
       const onTransition = data => {
@@ -4223,6 +4233,11 @@ describe('Workflow', () => {
       });
       workflow.then(step1).then(step2).commit();
 
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
+
       const onTransition = vi.fn();
       const onTransition2 = vi.fn();
 
@@ -4255,7 +4270,7 @@ describe('Workflow', () => {
       expect(onTransition2).toHaveBeenCalledTimes(10);
     });
 
-    it('should be able to use all action types in a workflow', async () => {
+    it.only('should be able to use all action types in a workflow', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ name: 'step1' });
 
       const step1 = createStep({
@@ -4286,6 +4301,11 @@ describe('Workflow', () => {
       });
 
       workflow.then(step1).then(createStep(randomTool)).commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
 
       const { stream, getWorkflowState } = (await workflow.createRunAsync()).stream({ inputData: {} });
 

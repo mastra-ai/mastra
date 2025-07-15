@@ -529,6 +529,25 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
+    if (step.type === 'step') {
+      await this.pubsub.publish(`workflow.events.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'watch',
+          payload: {
+            currentStep: { id: step.step.id, status: 'running' },
+            workflowState: {
+              status: 'running',
+              steps: stepResults,
+              error: null,
+              result: null,
+            },
+          },
+          eventTimestamp: Date.now(),
+        },
+      });
+    }
+
     const stepResult = await this.stepExecutor.execute({
       workflowId,
       step: step.step,
@@ -690,6 +709,25 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
+    if (step?.type === 'step') {
+      await this.pubsub.publish(`workflow.events.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'watch',
+          payload: {
+            currentStep: { ...prevResult, id: step.step.id },
+            workflowState: {
+              status: 'running',
+              steps: stepResults,
+              error: null,
+              result: null,
+            },
+          },
+          eventTimestamp: Date.now(),
+        },
+      });
+    }
+
     step = workflow.stepGraph[executionPath[0]!];
     if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
       let skippedCount = 0;
@@ -803,6 +841,26 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
+    if (type === 'workflow.end' || type === 'workflow.fail' || type === 'workflow.suspend') {
+      const { runId, prevResult, stepResults } = workflowData;
+      await this.pubsub.publish(`workflow.events.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'watch',
+          payload: {
+            currentStep: undefined,
+            workflowState: {
+              status: prevResult.status,
+              steps: stepResults,
+              result: prevResult.status === 'success' ? prevResult.output : null,
+              error: (prevResult as any).error ?? null,
+            },
+          },
+          eventTimestamp: Date.now(),
+        },
+      });
+    }
+
     switch (type) {
       case 'workflow.start':
         await this.processWorkflowStart({
@@ -810,14 +868,14 @@ export class WorkflowEventProcessor extends EventProcessor {
           ...workflowData,
         });
         break;
-      case 'workflow.end':
-        await this.processWorkflowEnd({
+      case 'workflow.resume':
+        await this.processWorkflowStart({
           workflow,
           ...workflowData,
         });
         break;
-      case 'workflow.resume':
-        await this.processWorkflowStart({
+      case 'workflow.end':
+        await this.processWorkflowEnd({
           workflow,
           ...workflowData,
         });

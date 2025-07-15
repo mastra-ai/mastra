@@ -10,6 +10,7 @@ import type {
   SerializedStepFlowEntry,
   Step,
   ToolExecutionContext,
+  WatchEvent,
   WorkflowConfig,
   WorkflowResult,
 } from '../..';
@@ -497,5 +498,22 @@ export class EventedRun<
     this.executionResults = executionResultPromise;
 
     return executionResultPromise;
+  }
+
+  watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
+    const watchCb = (event: any) => {
+      if (event.type === 'watch') {
+        cb(event.data);
+      }
+    };
+
+    this.pubsub.subscribe(`workflow.events.${this.runId}`, watchCb).catch(() => {});
+
+    return () => {
+      if (type === 'watch-v2') {
+        // TODO
+      } else {
+      }
+    };
   }
 }
