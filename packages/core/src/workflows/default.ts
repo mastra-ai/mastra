@@ -56,6 +56,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     return runCount;
   }
 
+  protected runtimeContext: Record<string, any> = {};
+
   protected async fmtReturnValue<TOutput>(
     executionSpan: Span | undefined,
     emitter: Emitter,
@@ -149,6 +151,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
+      snapshotRuntimeContext?: Record<string, any>;
     };
     emitter: Emitter;
     retryConfig?: {
@@ -161,6 +164,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const { workflowId, runId, graph, input, resume, retryConfig } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
+
+    //clear runCounts
+    this.runCounts.clear();
 
     if (steps.length === 0) {
       throw new MastraError({
@@ -179,6 +185,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     if (resume?.resumePath) {
       startIdx = resume.resumePath[0]!;
       resume.resumePath.shift();
+    }
+
+    if (resume?.snapshotRuntimeContext) {
+      this.runtimeContext = { ...this.runtimeContext, ...resume.snapshotRuntimeContext };
     }
 
     const stepResults: Record<string, any> = resume?.stepResults || { input };
@@ -587,10 +597,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       try {
         let suspended: { payload: any } | undefined;
         let bailed: { payload: any } | undefined;
+
+        let runtimeContextToUse = runtimeContext;
+
+        Object.entries(this.runtimeContext).forEach(([key, value]) => {
+          if (!runtimeContextToUse.has(key)) {
+            runtimeContextToUse.set(key, value);
+          }
+        });
+
         const result = await runStep({
           runId,
           mastra: this.mastra!,
-          runtimeContext,
+          runtimeContext: runtimeContextToUse,
           inputData: prevOutput,
           runCount: this.getOrGenerateRunCount(step.id),
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
@@ -627,6 +646,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           engine: {},
           abortSignal: abortController?.signal,
         });
+
+        let runtimeContextObj: Record<string, any> = {};
+        runtimeContext.forEach((value, key) => {
+          runtimeContextObj[key] = value;
+        });
+
+        this.runtimeContext = { ...this.runtimeContext, ...runtimeContextObj };
 
         if (suspended) {
           execResults = { status: 'suspended', suspendPayload: suspended.payload, suspendedAt: Date.now() };
@@ -1278,6 +1304,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         suspendedPaths: executionContext.suspendedPaths,
         result,
         error,
+        runtimeContext: this.runtimeContext,
         // @ts-ignore
         timestamp: Date.now(),
       },
@@ -1749,7 +1776,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       serializedStepGraph,
       stepResults,
       executionContext,
-      workflowStatus: execResults.status,
+      workflowStatus: execResults.status === 'success' ? 'running' : execResults.status,
     });
 
     return { result: execResults, stepResults, executionContext };
