@@ -41,7 +41,7 @@ const THREAD_ORDER_BY_SET = {
   updatedAt: true,
 } satisfies Record<ThreadOrderBy, true>;
 
-const THREAD_THREAD_SORT_DIRECTION_SET = {
+const THREAD_SORT_DIRECTION_SET = {
   ASC: true,
   DESC: true,
 } satisfies Record<ThreadSortDirection, true>;
@@ -51,7 +51,7 @@ function isThreadOrderBy(v: string | unknown): v is ThreadOrderBy {
 }
 
 function isThreadSortDirection(v: string | unknown): v is ThreadSortDirection {
-  return (v as string) in THREAD_THREAD_SORT_DIRECTION_SET;
+  return (v as string) in THREAD_SORT_DIRECTION_SET;
 }
 
 export async function getThreadsHandler(c: Context) {
