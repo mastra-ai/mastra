@@ -24,7 +24,7 @@ export function getPackageManager(): string {
     return 'npm';
   }
 
-  return 'npm';
+  return 'npm'; // Default fallback
 }
 
 export function getPackageManagerInstallCommand(pm: string): string {
