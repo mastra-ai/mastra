@@ -89,6 +89,9 @@ export function getTelemetryBundler(
 export async function writeTelemetryConfig(
   entryFile: string,
   outputDir: string,
+  options: {
+    sourcemap?: boolean;
+  } = {},
 ): Promise<{
   hasCustomConfig: boolean;
   externalDependencies: string[];
@@ -103,6 +106,7 @@ export async function writeTelemetryConfig(
     dir: outputDir,
     format: 'es',
     entryFileNames: '[name].mjs',
+    sourcemap: options.sourcemap,
   });
   const externals = output[0].imports.filter(x => !x.startsWith('./'));
 

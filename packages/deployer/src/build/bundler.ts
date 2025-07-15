@@ -19,13 +19,13 @@ export async function getInputOptions(
   let nodeResolvePlugin =
     platform === 'node'
       ? nodeResolve({
-          preferBuiltins: true,
-          exportConditions: ['node'],
-        })
+        preferBuiltins: true,
+        exportConditions: ['node'],
+      })
       : nodeResolve({
-          preferBuiltins: false,
-          browser: true,
-        });
+        preferBuiltins: false,
+        browser: true,
+      });
 
   const externalsCopy = new Set<string>();
 
