@@ -197,7 +197,9 @@ export class Agent<
     return Boolean(this.#memory);
   }
 
-  public async getMemory({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}): Promise<MastraMemory | undefined> {
+  public async getMemory({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}): Promise<
+    MastraMemory | undefined
+  > {
     if (!this.#memory) {
       return undefined;
     }
@@ -209,7 +211,7 @@ export class Agent<
     } else {
       const result = this.#memory({ runtimeContext });
       resolvedMemory = await Promise.resolve(result);
-      
+
       if (!resolvedMemory) {
         const mastraError = new MastraError({
           id: 'AGENT_GET_MEMORY_FUNCTION_EMPTY_RETURN',
@@ -886,7 +888,7 @@ export class Agent<
         // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
         vectorMessageSearch,
       })
-      .then((r) => r.messagesV2);
+      .then(r => r.messagesV2);
   }
 
   private async getAssignedTools({
@@ -1380,7 +1382,7 @@ export class Agent<
         // So the agent doesn't get confused and start replying directly to messages
         // that were added via semanticRecall from a different conversation,
         // we need to pull those out and add to the system message.
-        const resultsFromOtherThreads = memoryMessages.filter((m) => m.threadId !== threadObject.id);
+        const resultsFromOtherThreads = memoryMessages.filter(m => m.threadId !== threadObject.id);
         if (resultsFromOtherThreads.length && !memorySystemMessage) {
           memorySystemMessage = ``;
         }

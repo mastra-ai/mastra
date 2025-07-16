@@ -121,12 +121,34 @@ class MockMemory extends MastraMemory {
     return config || {};
   }
 
-  async updateWorkingMemory({ threadId: _threadId, resourceId: _resourceId, workingMemory: _workingMemory, memoryConfig: _memoryConfig }: { threadId: string; resourceId?: string; workingMemory: string; memoryConfig?: MemoryConfig }) {
+  async updateWorkingMemory({
+    threadId: _threadId,
+    resourceId: _resourceId,
+    workingMemory: _workingMemory,
+    memoryConfig: _memoryConfig,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string;
+    memoryConfig?: MemoryConfig;
+  }) {
     // Mock implementation - just return void
     return;
   }
 
-  async __experimental_updateWorkingMemoryVNext({ threadId: _threadId, resourceId: _resourceId, workingMemory: _workingMemory, searchString: _searchString, memoryConfig: _memoryConfig }: { threadId: string; resourceId?: string; workingMemory: string; searchString?: string; memoryConfig?: MemoryConfig }) {
+  async __experimental_updateWorkingMemoryVNext({
+    threadId: _threadId,
+    resourceId: _resourceId,
+    workingMemory: _workingMemory,
+    searchString: _searchString,
+    memoryConfig: _memoryConfig,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string;
+    searchString?: string;
+    memoryConfig?: MemoryConfig;
+  }) {
     // Mock implementation for abstract method
     return { success: true, reason: 'Mock implementation' };
   }
@@ -1067,7 +1089,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = typeof systemMessage.content === 'string' ? systemMessage.content : JSON.stringify(systemMessage.content);
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
                 return {
                   rawCall: { rawPrompt: null, rawSettings: {} },
@@ -1129,7 +1154,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = typeof systemMessage.content === 'string' ? systemMessage.content : JSON.stringify(systemMessage.content);
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
 
                 if (capturedPrompt.includes('簡潔なタイトル')) {
@@ -1224,7 +1252,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = typeof systemMessage.content === 'string' ? systemMessage.content : JSON.stringify(systemMessage.content);
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
                 return {
                   rawCall: { rawPrompt: null, rawSettings: {} },
@@ -1347,7 +1378,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = typeof systemMessage.content === 'string' ? systemMessage.content : JSON.stringify(systemMessage.content);
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
                 return {
                   rawCall: { rawPrompt: null, rawSettings: {} },
@@ -1396,7 +1430,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = typeof systemMessage.content === 'string' ? systemMessage.content : JSON.stringify(systemMessage.content);
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
                 return {
                   rawCall: { rawPrompt: null, rawSettings: {} },
@@ -2495,7 +2532,7 @@ describe('dynamic memory configuration', () => {
   it('should support dynamic memory configuration with runtimeContext', async () => {
     const premiumMemory = new MockMemory();
     const standardMemory = new MockMemory();
-    
+
     const agent = new Agent({
       name: 'dynamic-memory-agent',
       instructions: 'test agent',
@@ -2521,7 +2558,7 @@ describe('dynamic memory configuration', () => {
 
   it('should support async dynamic memory configuration', async () => {
     const mockMemory = new MockMemory();
-    
+
     const agent = new Agent({
       name: 'async-memory-agent',
       instructions: 'test agent',
@@ -2542,7 +2579,7 @@ describe('dynamic memory configuration', () => {
 
     const runtimeContext = new RuntimeContext();
     runtimeContext.set('userId', 'user123');
-    
+
     const memory = await agent.getMemory({ runtimeContext });
     expect(memory).toBe(mockMemory);
     expect((memory as any)?.threads['user-user123']).toBeDefined();
@@ -2556,14 +2593,12 @@ describe('dynamic memory configuration', () => {
       memory: () => null as any,
     });
 
-    await expect(agent.getMemory()).rejects.toThrow(
-      'Function-based memory returned empty value'
-    );
+    await expect(agent.getMemory()).rejects.toThrow('Function-based memory returned empty value');
   });
 
   it('should work with memory in generate method with dynamic configuration', async () => {
     const mockMemory = new MockMemory();
-    
+
     const agent = new Agent({
       name: 'generate-memory-agent',
       instructions: 'test agent',
@@ -2592,7 +2627,7 @@ describe('dynamic memory configuration', () => {
     });
 
     expect(response.text).toBe('Dummy response');
-    
+
     // Verify that thread was created in memory
     const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
     expect(thread).toBeDefined();
@@ -2601,7 +2636,7 @@ describe('dynamic memory configuration', () => {
 
   it('should work with memory in stream method with dynamic configuration', async () => {
     const mockMemory = new MockMemory();
-    
+
     const agent = new Agent({
       name: 'stream-memory-agent',
       instructions: 'test agent',
@@ -2648,7 +2683,7 @@ describe('dynamic memory configuration', () => {
     }
 
     expect(finalText).toBe('Dynamic memory response');
-    
+
     // Verify that thread was created in memory
     const thread = await mockMemory.getThreadById({ threadId: 'thread-stream' });
     expect(thread).toBeDefined();
