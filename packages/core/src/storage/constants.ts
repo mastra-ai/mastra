@@ -112,7 +112,3 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: { type: 'timestamp', nullable: false },
   },
 };
-
-export const DEFAULT_THREAD_ORDER_BY: ThreadOrderBy = 'createdAt';
-
-export const DEFAULT_THREAD_SORT_DIRECTION: ThreadSortDirection = 'DESC';

@@ -3,7 +3,6 @@ import type { MastraMessageV2 } from '../agent';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { Trace } from '../telemetry';
 import { MastraStorage } from './base';
-import { DEFAULT_THREAD_ORDER_BY, DEFAULT_THREAD_SORT_DIRECTION } from './constants';
 import type { TABLE_NAMES } from './constants';
 import type {
   EvalRow,
@@ -17,6 +16,7 @@ import type {
   WorkflowRun,
   WorkflowRuns,
 } from './types';
+import { castThreadOrderBy, castThreadSortDirection } from './types';
 
 export class MockStore extends MastraStorage {
   private data: Record<TABLE_NAMES, Record<string, any>> = {
@@ -94,14 +94,13 @@ export class MockStore extends MastraStorage {
 
   async getThreadsByResourceId({
     resourceId,
-    orderBy = DEFAULT_THREAD_ORDER_BY,
-    sortDirection = DEFAULT_THREAD_SORT_DIRECTION,
+    orderBy,
+    sortDirection,
   }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
     this.logger.debug(`MockStore: getThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Object.values(this.data.mastra_threads).filter((t: any) => t.resourceId === resourceId);
-    const sortedThreads = this.sortThreads(threads, orderBy, sortDirection);
-
+    const sortedThreads = this.sortThreads(threads, castThreadOrderBy(orderBy), castThreadSortDirection(sortDirection));
     return sortedThreads as StorageThreadType[];
   }
 
@@ -418,17 +417,11 @@ export class MockStore extends MastraStorage {
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     this.logger.debug(`MockStore: getThreadsByResourceIdPaginated called for ${args.resourceId}`);
 
-    const {
-      resourceId,
-      page,
-      perPage,
-      orderBy = DEFAULT_THREAD_ORDER_BY,
-      sortDirection = DEFAULT_THREAD_SORT_DIRECTION,
-    } = args;
+    const { resourceId, page, perPage, orderBy, sortDirection } = args;
 
     // Mock implementation - find threads by resourceId
     const threads = Object.values(this.data.mastra_threads).filter((t: any) => t.resourceId === resourceId);
-    const sortedThreads = this.sortThreads(threads, orderBy, sortDirection);
+    const sortedThreads = this.sortThreads(threads, castThreadOrderBy(orderBy), castThreadSortDirection(sortDirection));
 
     // Apply pagination
     const total = sortedThreads.length;
