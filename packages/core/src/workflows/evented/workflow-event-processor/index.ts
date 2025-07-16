@@ -7,7 +7,7 @@ import { EventProcessor } from '../../../events/processor';
 import { RuntimeContext } from '../../../runtime-context';
 import { StepExecutor } from '../step-executor';
 import { EventedWorkflow } from '../workflow';
-import { processWorkflowLoop } from './loop';
+import { processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
 import { processWorkflowSleep, processWorkflowSleepUntil } from './sleep';
 import { getNestedWorkflow, getStep } from './utils';
@@ -464,6 +464,26 @@ export class WorkflowEventProcessor extends EventProcessor {
         {
           pubsub: this.pubsub,
           stepExecutor: this.stepExecutor,
+          step,
+        },
+      );
+    } else if (step?.type === 'foreach') {
+      return processWorkflowForEach(
+        {
+          workflow,
+          workflowId,
+          runId,
+          executionPath,
+          stepResults,
+          activeSteps,
+          resumeSteps,
+          prevResult,
+          resumeData,
+          parentWorkflow,
+          runtimeContext,
+        },
+        {
+          pubsub: this.pubsub,
           step,
         },
       );

@@ -116,3 +116,54 @@ export async function processWorkflowLoop(
     }
   }
 }
+
+export async function processWorkflowForEach(
+  {
+    workflowId,
+    prevResult,
+    runId,
+    executionPath,
+    stepResults,
+    activeSteps,
+    resumeSteps,
+    resumeData,
+    parentWorkflow,
+    runtimeContext,
+    runCount = 0,
+  }: ProcessorArgs,
+  {
+    pubsub,
+    step,
+  }: {
+    pubsub: PubSub;
+    step: Extract<StepFlowEntry, { type: 'foreach' }>;
+  },
+) {
+  console.log('foreach found', step.step.id, prevResult, runCount);
+
+  const concurrency = step.opts.concurrency ?? 1;
+
+  for (let i = 0; i < (prevResult as any).output.length; i += concurrency) {
+    const items = (prevResult as any).output.slice(i, i + concurrency);
+
+    await Promise.all(
+      items.map(async (_item: any) => {
+        return pubsub.publish('workflows', {
+          type: 'workflow.step.run',
+          data: {
+            parentWorkflow,
+            workflowId,
+            runId,
+            executionPath,
+            resumeSteps,
+            stepResults,
+            prevResult,
+            resumeData,
+            activeSteps,
+            runtimeContext,
+          },
+        });
+      }),
+    );
+  }
+}
