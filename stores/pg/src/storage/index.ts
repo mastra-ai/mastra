@@ -380,17 +380,20 @@ export class PostgresStore extends MastraStorage {
       this.setupSchemaPromise = (async () => {
         try {
           // First check if schema exists and we have usage permission
-          const schemaExists = await this.db.oneOrNone(
-            `
-            SELECT EXISTS (
-              SELECT 1 FROM information_schema.schemata 
-              WHERE schema_name = $1
-            )
-          `,
-            [this.schema],
-          );
+          const schemaExists =
+            (
+              await this.db.query(
+                `
+                SELECT EXISTS (
+                  SELECT 1 FROM information_schema.schemata 
+                  WHERE schema_name = $1
+                )
+                `,
+                [this.schema],
+              )
+            ).rows.length > 0;
 
-          if (!schemaExists?.exists) {
+          if (!schemaExists) {
             try {
               await this.db.query(`CREATE SCHEMA IF NOT EXISTS ${this.getSchemaName()}`);
               this.logger.info(`Schema "${this.schema}" created successfully`);
@@ -596,10 +599,10 @@ export class PostgresStore extends MastraStorage {
       const conditions = keyEntries.map(([key], index) => `"${key}" = $${index + 1}`).join(' AND ');
       const values = keyEntries.map(([_, value]) => value);
 
-      const result = await this.db.oneOrNone<R>(
-        `SELECT * FROM ${this.getTableName(tableName)} WHERE ${conditions}`,
-        values,
-      );
+      //TODO this query had a generic of <R>. Removed for testing, should be added back and fixed
+      //TODO for type safety
+      const result = (await this.db.query(`SELECT * FROM ${this.getTableName(tableName)} WHERE ${conditions}`, values))
+        .rows[0];
 
       if (!result) {
         return null;
@@ -632,18 +635,20 @@ export class PostgresStore extends MastraStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const thread = await this.db.oneOrNone<StorageThreadType>(
-        `SELECT 
+      const thread = (
+        await this.db.query<StorageThreadType>(
+          `SELECT 
           id,
           "resourceId",
           title,
           metadata,
           "createdAt",
           "updatedAt"
-        FROM ${this.getTableName(TABLE_THREADS)}
-        WHERE id = $1`,
-        [threadId],
-      );
+          FROM ${this.getTableName(TABLE_THREADS)}
+          WHERE id = $1`,
+          [threadId],
+        )
+      ).rows[0];
 
       if (!thread) {
         return null;
@@ -830,7 +835,7 @@ export class PostgresStore extends MastraStorage {
     };
 
     try {
-      const thread = await this.db.one<StorageThreadType>(
+      const response = await this.db.query<StorageThreadType>(
         `UPDATE ${this.getTableName(TABLE_THREADS)}
         SET title = $1,
         metadata = $2,
@@ -839,6 +844,11 @@ export class PostgresStore extends MastraStorage {
         RETURNING *`,
         [title, mergedMetadata, new Date().toISOString(), id],
       );
+      const thread = response.rows[0];
+
+      if (!thread || response.rowCount !== 1) {
+        throw new Error();
+      }
 
       return {
         ...thread,
@@ -1344,10 +1354,12 @@ export class PostgresStore extends MastraStorage {
   private async hasColumn(table: string, column: string): Promise<boolean> {
     // Use this.schema to scope the check
     const schema = this.schema || 'public';
-    const result = await this.db.oneOrNone(
-      `SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
-      [schema, table, column, column.toLowerCase()],
-    );
+    const result = (
+      await this.db.query(
+        `SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
+        [schema, table, column, column.toLowerCase()],
+      )
+    ).rows[0];
     return !!result;
   }
 
@@ -1501,7 +1513,7 @@ export class PostgresStore extends MastraStorage {
 
       const queryValues = values;
 
-      const result = await this.db.oneOrNone(query, queryValues);
+      const result = (await this.db.query(query, queryValues)).rows[0];
 
       if (!result) {
         return null;
@@ -1525,7 +1537,7 @@ export class PostgresStore extends MastraStorage {
   }
 
   async close(): Promise<void> {
-    this.pgp.end();
+    this.db.end();
   }
 
   async getEvals(
@@ -1755,9 +1767,8 @@ export class PostgresStore extends MastraStorage {
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     const tableName = this.getTableName(TABLE_RESOURCES);
-    const result = await this.db.oneOrNone<StorageResourceType>(`SELECT * FROM ${tableName} WHERE id = $1`, [
-      resourceId,
-    ]);
+    const result = (await this.db.query<StorageResourceType>(`SELECT * FROM ${tableName} WHERE id = $1`, [resourceId]))
+      .rows[0];
 
     if (!result) {
       return null;
