@@ -97,10 +97,8 @@ In your Mastra server, install additional packages for CopilotKit integration:
 
 Configure your Mastra instance to include CopilotKit's runtime endpoint:
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy {7-10,21-37}
+```typescript filename="src/mastra/index.ts" showLineNumbers copy {5-8,12-28}
 import { Mastra } from "@mastra/core/mastra";
-import { PinoLogger } from "@mastra/loggers";
-import { LibSQLStore } from "@mastra/libsql";
 import { registerCopilotKit } from "@ag-ui/mastra";
 import { weatherAgent } from "./agents/weather-agent";
 
@@ -111,13 +109,6 @@ type WeatherRuntimeContext = {
 
 export const mastra = new Mastra({
   agents: { weatherAgent },
-  storage: new LibSQLStore({
-    url: ":memory:"
-  }),
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info"
-  }),
   server: {
     cors: {
       origin: "*",

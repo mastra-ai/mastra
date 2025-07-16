@@ -17,7 +17,7 @@ export interface NetworkTableProps {
   legacyNetworks: GetNetworkResponse[];
   networks: GetVNextNetworkResponse[];
   isLoading: boolean;
-  onClickRow: (networkId: string) => void;
+  onClickRow: (networkId: string, isVNext: boolean) => void;
 }
 
 export const NetworkTable = ({ legacyNetworks, networks, isLoading, onClickRow }: NetworkTableProps) => {
@@ -69,7 +69,7 @@ export const NetworkTable = ({ legacyNetworks, networks, isLoading, onClickRow }
         </Thead>
         <Tbody>
           {rows.map(row => (
-            <Row key={row.id} onClick={() => onClickRow(row.original.id)}>
+            <Row key={row.id} onClick={() => onClickRow(row.original.id, row.original.isVNext || false)}>
               {row.getVisibleCells().map(cell => (
                 <React.Fragment key={cell.id}>
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}

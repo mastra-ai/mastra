@@ -13,7 +13,7 @@ function Workflows() {
         <HeaderTitle>Workflows</HeaderTitle>
       </Header>
 
-      <MainContentContent>
+      <MainContentContent isCentered={!isLoading && Object.keys(data || {}).length === 0}>
         <WorkflowTable
           workflows={workflows}
           legacyWorkflows={legacyWorkflows}
