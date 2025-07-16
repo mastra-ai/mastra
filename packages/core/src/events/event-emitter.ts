@@ -14,11 +14,11 @@ export class EventEmitterPubSub extends PubSub {
     this.emitter.emit(topic, JSON.parse(JSON.stringify(event)));
   }
 
-  async subscribe(topic: string, cb: (event: Event) => void): Promise<void> {
+  async subscribe(topic: string, cb: (event: Event, ack: () => void) => void): Promise<void> {
     this.emitter.on(topic, cb);
   }
 
-  async unsubscribe(topic: string, cb: (event: Event) => void): Promise<void> {
+  async unsubscribe(topic: string, cb: (event: Event, ack: () => void) => void): Promise<void> {
     this.emitter.off(topic, cb);
   }
 }

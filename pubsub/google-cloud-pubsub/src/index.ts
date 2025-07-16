@@ -27,10 +27,9 @@ export class GoogleCloudPubSub extends PubSub {
     const subscription = this.pubsub.subscription('workflows-subscription');
     subscription.on('message', message => {
       const event = JSON.parse(message.data.toString()) as Event;
-      cb(event);
-
-      // TODO: this needs to be passed through the cb somehow
-      message.ack();
+      cb(event, async () => {
+        message.ack();
+      });
     });
   }
 
