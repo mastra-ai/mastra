@@ -371,7 +371,7 @@ export class MessageList {
     if (shouldAppendToLastAssistantMessage && appendNetworkMessage) {
       latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
 
-      for (const part of messageV2.content.parts.values()) {
+      for (const [index, part] of messageV2.content.parts.entries()) {
         // If the incoming part is a tool-invocation result, find the corresponding call in the latest message
         if (part.type === 'tool-invocation') {
           const existingCallPart = [...latestMessage.content.parts]
@@ -404,12 +404,14 @@ export class MessageList {
           } else {
             this.pushNewMessage({
               latestMessage,
+              index,
               part,
             });
           }
         } else {
           this.pushNewMessage({
             latestMessage,
+            index,
             part,
           });
         }
@@ -463,17 +465,25 @@ export class MessageList {
 
   private pushNewMessage({
     latestMessage,
+    index,
     part,
   }: {
     latestMessage: MastraMessageV2;
+    index: number;
     part: MastraMessageContentV2['parts'][number];
   }) {
+    const indexCheck =
+      // if there is no part at the index, or
+      !latestMessage.content.parts[index] ||
+      // or there is and the parts are not identical
+      MessageList.cacheKeyFromParts([latestMessage.content.parts[index]]) !== MessageList.cacheKeyFromParts([part]);
+
     // Get the cache key for the part
     const partKey = MessageList.cacheKeyFromParts([part]);
     // Check if the part already exists in the message
     const alreadyExists = latestMessage.content.parts.some(p => MessageList.cacheKeyFromParts([p]) === partKey);
-    // For all other part types that aren't already present, simply push them to the latest message's parts
-    if (!alreadyExists) {
+    // If the part isn't already present, or is a step-start and the parts are not identical, push it to the message
+    if (!alreadyExists || (part.type === 'step-start' && indexCheck)) {
       latestMessage.content.parts.push(part);
     }
   }
