@@ -3214,6 +3214,7 @@ describe('Workflow', () => {
     });
   });
 
+  // TODO: fix this
   describe.skip('foreach', () => {
     it('should run a single item concurrency (default) for loop', async () => {
       const startTime = Date.now();
