@@ -6,8 +6,6 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
-  DEFAULT_THREAD_ORDER_BY,
-  DEFAULT_THREAD_SORT_DIRECTION,
   MastraStorage,
   TABLE_EVALS,
   TABLE_MESSAGES,
@@ -15,6 +13,8 @@ import {
   TABLE_TRACES,
   TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
+  castThreadOrderBy,
+  castThreadSortDirection,
 } from '@mastra/core/storage';
 import type {
   EvalRow,
@@ -406,7 +406,9 @@ export class LibSQLStore extends MastraStorage {
    * @deprecated use getThreadsByResourceIdPaginated instead for paginated results.
    */
   public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    const { resourceId, orderBy = DEFAULT_THREAD_ORDER_BY, sortDirection = DEFAULT_THREAD_SORT_DIRECTION } = args;
+    const resourceId = args.resourceId;
+    const orderBy = castThreadOrderBy(args.orderBy);
+    const sortDirection = castThreadSortDirection(args.sortDirection);
 
     try {
       const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
@@ -453,13 +455,9 @@ export class LibSQLStore extends MastraStorage {
     } & PaginationArgs &
       ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const {
-      resourceId,
-      orderBy = DEFAULT_THREAD_ORDER_BY,
-      sortDirection = DEFAULT_THREAD_SORT_DIRECTION,
-      page = 0,
-      perPage = 100,
-    } = args;
+    const { resourceId, page = 0, perPage = 100 } = args;
+    const orderBy = castThreadOrderBy(args.orderBy);
+    const sortDirection = castThreadSortDirection(args.sortDirection);
 
     try {
       const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
