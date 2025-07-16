@@ -226,6 +226,7 @@ export abstract class Bundler extends MastraBundler {
     outputDirectory: string,
     toolsPaths: string[] = [],
     bundleLocation: string = join(outputDirectory, this.outputDir),
+    installDependencies: boolean = true,
   ): Promise<void> {
     this.logger.info('Start bundling Mastra');
 
@@ -420,10 +421,11 @@ export const tools = [${toolsExports.join(', ')}]`,
 
       this.logger.info('Done copying .npmrc file');
 
-      this.logger.info('Installing dependencies');
-      await this.installDependencies(outputDirectory);
-
-      this.logger.info('Done installing dependencies');
+      if (installDependencies) {
+        this.logger.info('Installing dependencies');
+        await this.installDependencies(outputDirectory);
+        this.logger.info('Done installing dependencies');
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new MastraError(
