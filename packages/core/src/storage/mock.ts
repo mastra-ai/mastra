@@ -341,6 +341,49 @@ export class MockStore extends MastraStorage {
     return this.scoresStorage.getScoresByEntityId({ entityId, entityType, pagination });
   }
 
+  async getEvals(options: { agentName?: string; type?: 'test' | 'live' } & PaginationArgs): Promise<PaginationInfo & { evals: EvalRow[] }> {
+    this.logger.debug(`MockStore: getEvals called`, options);
+
+    let evals = Object.values(this.data.mastra_evals) as EvalRow[];
+
+    // Filter by agentName if provided
+    if (options.agentName) {
+      evals = evals.filter((evalR) => evalR.agentName === options.agentName);
+    }
+
+    // Filter by type if provided
+    if (options.type === 'test') {
+      evals = evals.filter((evalR) => evalR.testInfo && evalR.testInfo.testPath);
+    } else if (options.type === 'live') {
+      evals = evals.filter((evalR) => !evalR.testInfo || !evalR.testInfo.testPath);
+    }
+
+    // Filter by date range if provided
+    if (options.dateRange?.start) {
+      evals = evals.filter((evalR) => new Date(evalR.createdAt) >= options.dateRange!.start!);
+    }
+    if (options.dateRange?.end) {
+      evals = evals.filter((evalR) => new Date(evalR.createdAt) <= options.dateRange!.end!);
+    }
+
+    // Sort by createdAt (newest first)
+    evals.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const total = evals.length;
+    const page = options.page || 0;
+    const perPage = options.perPage || 100;
+    const start = page * perPage;
+    const end = start + perPage;
+
+    return {
+      evals: evals.slice(start, end),
+      total,
+      page,
+      perPage,
+      hasMore: total > end,
+    };
+  }
+
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     this.logger.debug(`MockStore: getEvalsByAgentName called for ${agentName}`);
     // Mock implementation - filter evals by agentName and type

@@ -10,7 +10,6 @@ import {
   TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_THREADS,
-  TABLE_TRACES,
   TABLE_RESOURCES,
 
 } from '@mastra/core/storage';
@@ -35,14 +34,6 @@ import { StoreOperationsLibSQL } from './domains/operations';
 import { ScoresLibSQL } from './domains/scores';
 import { TracesLibSQL } from './domains/traces';
 import { WorkflowsLibSQL } from './domains/workflows';
-
-function safelyParseJSON(jsonString: string): any {
-  try {
-    return JSON.parse(jsonString);
-  } catch {
-    return {};
-  }
-}
 
 export type LibSQLConfig =
   | {

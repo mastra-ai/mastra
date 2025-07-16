@@ -1,7 +1,7 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { TABLE_TRACES, TracesStorage } from '@mastra/core/storage';
-import type { StorageGetTracesArg, PaginationInfo } from '@mastra/core/storage';
+import type { StorageGetTracesArg, StorageGetTracesPaginatedArg, PaginationInfo } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { StoreOperationsLibSQL } from './operations';
@@ -47,9 +47,11 @@ export class TracesLibSQL extends TracesStorage {
     }
 
     async getTracesPaginated(
-        args: StorageGetTracesArg,
+        args: StorageGetTracesPaginatedArg,
     ): Promise<PaginationInfo & { traces: Trace[] }> {
-        const { name, scope, page = 0, perPage = 100, attributes, filters, fromDate, toDate } = args;
+        const { name, scope, page = 0, perPage = 100, attributes, filters, dateRange } = args;
+        const fromDate = dateRange?.start;
+        const toDate = dateRange?.end;
         const currentOffset = page * perPage;
 
         const queryArgs: InValue[] = [];
