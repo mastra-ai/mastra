@@ -10,7 +10,7 @@ import { EventedWorkflow } from '../workflow';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
 import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitForEvent } from './sleep';
-import { getNestedWorkflow, getStep } from './utils';
+import { getNestedWorkflow, getStep, isExecutableStep } from './utils';
 
 export type ProcessorArgs = {
   activeSteps: Record<string, boolean>;
@@ -507,7 +507,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
 
       return;
-    } else if (step?.type === 'foreach') {
+    } else if (step?.type === 'foreach' && executionPath.length === 1) {
       return processWorkflowForEach(
         {
           workflow,
@@ -529,7 +529,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
-    if (step?.type !== 'step' && step?.type !== 'loop' && step?.type !== 'waitForEvent') {
+    if (step?.type !== 'step' && step?.type !== 'loop' && step?.type !== 'waitForEvent' && step?.type !== 'foreach') {
       return this.errorWorkflow(
         {
           workflowId,
@@ -727,9 +727,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResults,
       emitter: ee,
       runtimeContext: rc,
-      input: prevResult?.status === 'success' ? prevResult.output : undefined,
+      input: (prevResult as any)?.output,
       resumeData,
       runCount,
+      foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
     });
     runtimeContext = Object.fromEntries(rc.entries());
     console.dir({ stepId: step.step.id, stepResult, stepResults, runtimeContext }, { depth: null });
@@ -853,7 +854,60 @@ export class WorkflowEventProcessor extends EventProcessor {
       step = step.steps[executionPath[1]!];
     }
 
-    if (step?.type === 'step' || step?.type === 'loop' || step?.type === 'waitForEvent') {
+    if (!step) {
+      return this.errorWorkflow(
+        {
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          prevResult,
+          stepResults,
+          activeSteps,
+          runtimeContext,
+        },
+        new MastraError({
+          id: 'MASTRA_WORKFLOW',
+          text: `Step not found: ${JSON.stringify(executionPath)}`,
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.SYSTEM,
+        }),
+      );
+    }
+
+    if (step.type === 'foreach') {
+      const snapshot = await this.mastra.getStorage()?.loadWorkflowSnapshot({
+        workflowName: workflowId,
+        runId,
+      });
+
+      const currentIdx = executionPath[1];
+      const currentResult = (snapshot?.context?.[step.step.id] as any)?.output;
+      console.log('foreach-update', currentResult, currentIdx, prevResult);
+
+      let newResult = prevResult;
+      if (currentIdx !== undefined) {
+        if (currentResult) {
+          currentResult[currentIdx] = (prevResult as any).output;
+          newResult = { ...prevResult, output: currentResult } as any;
+        } else {
+          newResult = { ...prevResult, output: [(prevResult as any).output] } as any;
+        }
+      }
+      const newStepResults = await this.mastra.getStorage()?.updateWorkflowResults({
+        workflowName: workflow.id,
+        runId,
+        stepId: step.step.id,
+        result: newResult,
+        runtimeContext,
+      });
+
+      if (!newStepResults) {
+        return;
+      }
+
+      stepResults = newStepResults;
+    } else if (isExecutableStep(step)) {
       // clear from activeSteps
       delete activeSteps[step.step.id];
 
@@ -1014,7 +1068,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       let skippedCount = 0;
       const allResults: Record<string, any> = step.steps.reduce(
         (acc, step) => {
-          if (step.type === 'step' || step.type === 'waitForEvent') {
+          if (isExecutableStep(step)) {
             const res = stepResults?.[step.step.id];
             if (res && res.status === 'success') {
               acc[step.step.id] = res?.output;
@@ -1045,6 +1099,21 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeSteps,
           stepResults,
           prevResult: { status: 'success', output: allResults },
+          activeSteps,
+          runtimeContext,
+        },
+      });
+    } else if (step?.type === 'foreach') {
+      await this.pubsub.publish('workflows', {
+        type: 'workflow.step.run',
+        data: {
+          workflowId,
+          runId,
+          executionPath: executionPath.slice(0, -1),
+          resumeSteps,
+          parentWorkflow,
+          stepResults,
+          prevResult: { ...prevResult, output: prevResult?.payload },
           activeSteps,
           runtimeContext,
         },

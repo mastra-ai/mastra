@@ -27,6 +27,7 @@ export class StepExecutor extends MastraBase {
     emitter: EventEmitter;
     runtimeContext: RuntimeContext;
     runCount?: number;
+    foreachIdx?: number;
   }): Promise<StepResult<any, any, any, any>> {
     const { step, stepResults, runId, runtimeContext, runCount = 0 } = params;
 
@@ -59,7 +60,7 @@ export class StepExecutor extends MastraBase {
         runId,
         mastra: this.mastra!,
         runtimeContext,
-        inputData: params.input,
+        inputData: typeof params.foreachIdx === 'number' ? params.input?.[params.foreachIdx] : params.input,
         runCount,
         resumeData: params.resumeData,
         getInitData: () => stepResults?.input as any,

@@ -139,31 +139,49 @@ export async function processWorkflowForEach(
     step: Extract<StepFlowEntry, { type: 'foreach' }>;
   },
 ) {
-  console.log('foreach found', step.step.id, prevResult, runCount);
+  // TODO: concurrency
+  const currentResult: Extract<StepResult<any, any, any, any>, { status: 'success' }> = stepResults[
+    step.step.id
+  ] as any;
 
-  const concurrency = step.opts.concurrency ?? 1;
+  const idx = currentResult?.output?.length ?? 0;
+  console.log('foreach found', step.step.id, idx, prevResult, runCount);
 
-  for (let i = 0; i < (prevResult as any).output.length; i += concurrency) {
-    const items = (prevResult as any).output.slice(i, i + concurrency);
+  const targetLen = (prevResult as any)?.output?.length ?? 0;
 
-    await Promise.all(
-      items.map(async (_item: any) => {
-        return pubsub.publish('workflows', {
-          type: 'workflow.step.run',
-          data: {
-            parentWorkflow,
-            workflowId,
-            runId,
-            executionPath,
-            resumeSteps,
-            stepResults,
-            prevResult,
-            resumeData,
-            activeSteps,
-            runtimeContext,
-          },
-        });
-      }),
-    );
+  if (idx >= targetLen) {
+    await pubsub.publish('workflows', {
+      type: 'workflow.step.run',
+      data: {
+        parentWorkflow,
+        workflowId,
+        runId,
+        executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+        resumeSteps,
+        stepResults,
+        prevResult: currentResult,
+        resumeData,
+        activeSteps,
+        runtimeContext,
+      },
+    });
+
+    return;
   }
+
+  await pubsub.publish('workflows', {
+    type: 'workflow.step.run',
+    data: {
+      parentWorkflow,
+      workflowId,
+      runId,
+      executionPath: [executionPath[0]!, idx],
+      resumeSteps,
+      stepResults,
+      prevResult,
+      resumeData,
+      activeSteps,
+      runtimeContext,
+    },
+  });
 }

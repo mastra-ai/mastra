@@ -1,5 +1,5 @@
 import type { Workflow } from '../..';
-import type { Mastra, Step } from '../../..';
+import type { Mastra, Step, StepFlowEntry } from '../../..';
 import { EventedWorkflow } from '../workflow';
 import type { ParentWorkflow } from '.';
 
@@ -26,7 +26,7 @@ export function getNestedWorkflow(
   }
 
   if (parentStep?.type === 'step' || parentStep?.type === 'loop') {
-    return parentStep.step as Workflow; // TODO: this is wrong
+    return parentStep.step as Workflow;
   }
 
   return null;
@@ -40,6 +40,8 @@ export function getStep(workflow: Workflow, executionPath: number[]): Step<strin
   if (parentStep?.type === 'parallel' || parentStep?.type === 'conditional') {
     parentStep = parentStep.steps[executionPath[1]!];
     idx++;
+  } else if (parentStep?.type === 'foreach') {
+    return parentStep.step;
   }
 
   if (!(parentStep?.type === 'step' || parentStep?.type === 'loop' || parentStep?.type === 'waitForEvent')) {
@@ -51,4 +53,8 @@ export function getStep(workflow: Workflow, executionPath: number[]): Step<strin
   }
 
   return parentStep.step;
+}
+
+export function isExecutableStep(step: StepFlowEntry<any>) {
+  return step.type === 'step' || step.type === 'loop' || step.type === 'waitForEvent' || step.type === 'foreach';
 }
