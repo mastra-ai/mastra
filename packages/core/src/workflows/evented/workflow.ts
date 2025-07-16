@@ -603,4 +603,16 @@ export class EventedRun<
       },
     });
   }
+
+  async sendEvent(eventName: string, data: any) {
+    console.log('sending user event');
+    await this.pubsub.publish('workflows', {
+      type: `workflow.user-event.${eventName}`,
+      data: {
+        workflowId: this.workflowId,
+        runId: this.runId,
+        resumeData: data,
+      },
+    });
+  }
 }

@@ -467,6 +467,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           step,
         },
       );
+    } else if (step?.type === 'waitForEvent') {
+      // wait for event to arrive externally
+      // TODO: need to store awaiting-for-event paths similarly to suspends
+      console.log('waiting for event', step.step.id);
+      return;
     } else if (step?.type === 'foreach') {
       return processWorkflowForEach(
         {
@@ -1068,6 +1073,13 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (currentState?.status === 'canceled' && type !== 'workflow.end') {
       console.log('workflow canceled', type);
+      return;
+    }
+
+    if (type.startsWith('workflow.user-event.')) {
+      const eventName = type.split('.').slice(2).join('.');
+      console.log('user event', eventName);
+      // TODO
       return;
     }
 

@@ -764,8 +764,7 @@ describe('Workflow', () => {
       });
     });
 
-    // TODO
-    it.skip('should handle waitForEvent waiting flow', async () => {
+    it.only('should handle waitForEvent waiting flow', async () => {
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
 
@@ -789,6 +788,11 @@ describe('Workflow', () => {
         steps: [step1, step2],
       });
       workflow.then(step1).waitForEvent('user-event-test', step2).commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
 
       const runId = 'test-run-id';
       let watchData: StreamEvent[] = [];
