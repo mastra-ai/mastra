@@ -108,6 +108,13 @@ export type StorageGetTracesArg = {
   toDate?: Date;
 };
 
+export type StorageGetTracesPaginatedArg = {
+  name?: string;
+  scope?: string;
+  attributes?: Record<string, string>;
+  filters?: Record<string, any>;
+} & PaginationArgs;
+
 export type StorageResourceType = {
   id: string;
   workingMemory?: string;

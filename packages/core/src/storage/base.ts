@@ -3,6 +3,7 @@ import { MastraBase } from '../base';
 import type { ScoreRowData } from '../eval';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { Trace } from '../telemetry';
+
 import type { WorkflowRunState } from '../workflows';
 
 import {
@@ -18,17 +19,21 @@ import {
 import type { TABLE_NAMES } from './constants';
 import type { StoreOperations } from './domains/operations';
 import type { ScoresStorage } from './domains/scores';
+import type { TracesStorage } from './domains/traces';
 import type { WorkflowsStorage } from './domains/workflows';
 import type {
   EvalRow,
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
-  StorageGetTracesArg,
+
   StorageResourceType,
   StoragePagination,
   WorkflowRun,
   WorkflowRuns,
+  StorageGetTracesArg,
+  PaginationArgs,
+  StorageGetTracesPaginatedArg,
 } from './types';
 
 export abstract class MastraStorage extends MastraBase {
@@ -50,6 +55,7 @@ export abstract class MastraStorage extends MastraBase {
     operations: StoreOperations;
     workflows: WorkflowsStorage;
     scores: ScoresStorage;
+    traces: TracesStorage;
   }
 
   constructor({ name }: { name: string }) {
@@ -157,6 +163,9 @@ export abstract class MastraStorage extends MastraBase {
   }): Promise<void>;
 
   batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
+    if (this.stores?.traces) {
+      return this.stores.traces.batchTraceInsert({ records });
+    }
     return this.batchInsert({ tableName: TABLE_TRACES, records });
   }
 
@@ -231,7 +240,9 @@ export abstract class MastraStorage extends MastraBase {
     }[];
   }): Promise<MastraMessageV2[]>;
 
-  abstract getTraces(args: StorageGetTracesArg): Promise<any[]>;
+  abstract getTraces(args: StorageGetTracesArg): Promise<Trace[]>;
+
+  abstract getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }>;
 
   async init(): Promise<void> {
     // to prevent race conditions, await any current init
@@ -387,7 +398,7 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
 
-  abstract getTracesPaginated(args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }>;
+
 
   abstract getThreadsByResourceIdPaginated(args: {
     resourceId: string;

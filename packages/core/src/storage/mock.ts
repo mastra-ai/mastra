@@ -9,13 +9,19 @@ import type { TABLE_NAMES } from './constants';
 import { StoreOperationsInMemory } from './domains/operations/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import type { InMemoryScores } from './domains/scores/inmemory';
+import { TracesInMemory } from './domains/traces/inmemory';
+import type { InMemoryTraces } from './domains/traces/inmemory';
 import { WorkflowsInMemory } from './domains/workflows';
 import type { InMemoryWorkflows } from './domains/workflows/inmemory';
+
 import type {
   EvalRow,
+  PaginationArgs,
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
+  StorageGetTracesArg,
+  StorageGetTracesPaginatedArg,
   StoragePagination,
   StorageResourceType,
   WorkflowRun,
@@ -26,6 +32,7 @@ export class MockStore extends MastraStorage {
   scoresStorage: ScoresInMemory;
   operationsStorage: StoreOperationsInMemory;
   workflowsStorage: WorkflowsInMemory;
+  tracesStorage: TracesInMemory;
 
   constructor() {
     super({ name: 'InMemoryStorage' });
@@ -42,6 +49,11 @@ export class MockStore extends MastraStorage {
 
     this.workflowsStorage = new WorkflowsInMemory({
       collection: database.mastra_workflow_snapshot as InMemoryWorkflows,
+      operations: operationsStorage,
+    });
+
+    this.tracesStorage = new TracesInMemory({
+      collection: database.mastra_traces as InMemoryTraces,
       operations: operationsStorage,
     });
 
@@ -278,28 +290,15 @@ export class MockStore extends MastraStorage {
     fromDate?: Date;
     toDate?: Date;
   }): Promise<any[]> {
-    this.logger.debug(`MockStore: getTraces called`);
-    // Mock implementation - basic filtering
-    let traces = Object.values(this.data.mastra_traces);
+    return this.tracesStorage.getTraces({ name, scope, page, perPage, attributes, filters, fromDate, toDate });
+  }
 
-    if (name) traces = traces.filter((t: any) => t.name?.startsWith(name));
-    if (scope) traces = traces.filter((t: any) => t.scope === scope);
-    if (attributes) {
-      traces = traces.filter((t: any) =>
-        Object.entries(attributes).every(([key, value]) => t.attributes?.[key] === value),
-      );
-    }
-    if (filters) {
-      traces = traces.filter((t: any) => Object.entries(filters).every(([key, value]) => t[key] === value));
-    }
-    if (fromDate) traces = traces.filter((t: any) => new Date(t.createdAt) >= fromDate);
-    if (toDate) traces = traces.filter((t: any) => new Date(t.createdAt) <= toDate);
+  async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    return this.tracesStorage.getTracesPaginated(args);
+  }
 
-    // Apply pagination and sort
-    traces.sort((a: any, b: any) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
-    const start = page * perPage;
-    const end = start + perPage;
-    return traces.slice(start, end);
+  async batchTraceInsert(args: { records: Record<string, any>[] }): Promise<void> {
+    return this.tracesStorage.batchTraceInsert(args);
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
@@ -387,49 +386,7 @@ export class MockStore extends MastraStorage {
     return this.workflowsStorage.getWorkflowRunById({ runId, workflowName });
   }
 
-  async getTracesPaginated({
-    name,
-    scope,
-    attributes,
-    page,
-    perPage,
-    fromDate,
-    toDate,
-  }: {
-    name?: string;
-    scope?: string;
-    attributes?: Record<string, string>;
-    page: number;
-    perPage: number;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<PaginationInfo & { traces: Trace[] }> {
-    this.logger.debug(`MockStore: getTracesPaginated called`);
-    // Mock implementation - basic filtering
-    let traces = Object.values(this.data.mastra_traces);
 
-    if (name) traces = traces.filter((t: any) => t.name?.startsWith(name));
-    if (scope) traces = traces.filter((t: any) => t.scope === scope);
-    if (attributes) {
-      traces = traces.filter((t: any) =>
-        Object.entries(attributes).every(([key, value]) => t.attributes?.[key] === value),
-      );
-    }
-    if (fromDate) traces = traces.filter((t: any) => new Date(t.createdAt) >= fromDate);
-    if (toDate) traces = traces.filter((t: any) => new Date(t.createdAt) <= toDate);
-
-    // Apply pagination and sort
-    traces.sort((a: any, b: any) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
-    const start = page * perPage;
-    const end = start + perPage;
-    return {
-      traces: traces.slice(start, end),
-      total: traces.length,
-      page,
-      perPage,
-      hasMore: traces.length > end,
-    };
-  }
 
   async getThreadsByResourceIdPaginated(args: {
     resourceId: string;
