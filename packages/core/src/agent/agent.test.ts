@@ -2092,7 +2092,6 @@ describe('Agent save message parts', () => {
         threadId: 'thread-echo-generate',
         resourceId: 'resource-echo-generate',
       });
-      console.log(JSON.stringify(messages, null, 2));
       expect(messages.length).toBeGreaterThan(0);
 
       const assistantMsg = messages.find(m => m.role === 'assistant');
