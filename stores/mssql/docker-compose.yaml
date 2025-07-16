@@ -5,9 +5,9 @@ services:
       - ACCEPT_EULA=Y
       - SA_PASSWORD=Your_password123
     ports:
-      - "1433:1433"
+      - '1433:1433'
     healthcheck:
-      test: ["CMD-SHELL", "echo > /dev/tcp/localhost/1433"]
+      test: ['CMD-SHELL', 'echo > /dev/tcp/localhost/1433']
       interval: 10s
       timeout: 5s
       retries: 10
