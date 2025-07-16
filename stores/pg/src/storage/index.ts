@@ -188,14 +188,15 @@ export class PostgresStore extends MastraStorage {
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    const client = await this.db.connect();
     try {
-      await this.db.query('BEGIN');
+      await client.query('BEGIN');
       for (const record of records) {
-        await this.insert({ tableName, record });
+        await this.insert({ tableName, record, client });
       }
-      await this.db.query('COMMIT');
+      await client.query('COMMIT');
     } catch (error) {
-      await this.db.query('ROLLBACK');
+      await client.query('ROLLBACK');
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_BATCH_INSERT_FAILED',
@@ -208,6 +209,8 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
+    } finally {
+      client.release();
     }
   }
 
@@ -294,7 +297,7 @@ export class PostgresStore extends MastraStorage {
     const countQuery = `SELECT COUNT(*) FROM ${this.getTableName(TABLE_TRACES)} ${whereClause}`;
     let total = 0;
     try {
-      const countResult = await this.db.one(countQuery, queryParams);
+      const countResult = (await this.db.query(countQuery, queryParams)).rows[0];
       total = parseInt(countResult.count, 10);
     } catch (error) {
       throw new MastraError(
@@ -553,13 +556,22 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+  async insert({
+    tableName,
+    record,
+    client,
+  }: {
+    tableName: TABLE_NAMES;
+    record: Record<string, any>;
+    client?: Client;
+  }): Promise<void> {
     try {
       const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
       const values = Object.values(record);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+      const db = client || this.db;
 
-      await this.db.query(
+      await db.query(
         `INSERT INTO ${this.getTableName(tableName)} (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
         values,
       );
@@ -695,7 +707,7 @@ export class PostgresStore extends MastraStorage {
       const currentOffset = page * perPage;
 
       const countQuery = `SELECT COUNT(*) ${baseQuery}`;
-      const countResult = await this.db.one(countQuery, queryParams);
+      const countResult = (await this.db.query(countQuery, queryParams)).rows[0];
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -851,18 +863,19 @@ export class PostgresStore extends MastraStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    const client = await this.db.connect();
     try {
-      await this.db.query('BEGIN');
+      await client.query('BEGIN');
 
       // First delete all messages associated with this thread
-      await this.db.query(`DELETE FROM ${this.getTableName(TABLE_MESSAGES)} WHERE thread_id = $1`, [threadId]);
+      await client.query(`DELETE FROM ${this.getTableName(TABLE_MESSAGES)} WHERE thread_id = $1`, [threadId]);
 
       // Then delete the thread
-      await this.db.query(`DELETE FROM ${this.getTableName(TABLE_THREADS)} WHERE id = $1`, [threadId]);
+      await client.query(`DELETE FROM ${this.getTableName(TABLE_THREADS)} WHERE id = $1`, [threadId]);
 
-      await this.db.query('COMMIT');
+      await client.query('COMMIT');
     } catch (error) {
-      await this.db.query('ROLLBACK');
+      await client.query('ROLLBACK');
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_DELETE_THREAD_FAILED',
@@ -874,6 +887,8 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
+    } finally {
+      client.release();
     }
   }
 
@@ -1068,7 +1083,7 @@ export class PostgresStore extends MastraStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       const countQuery = `SELECT COUNT(*) FROM ${this.getTableName(TABLE_MESSAGES)} ${whereClause}`;
-      const countResult = await this.db.one(countQuery, queryParams);
+      const countResult = (await this.db.query(countQuery, queryParams)).rows[0];
       const total = parseInt(countResult.count, 10);
 
       if (total === 0 && messages.length === 0) {
@@ -1167,8 +1182,9 @@ export class PostgresStore extends MastraStorage {
       });
     }
 
+    const client = await this.db.connect();
     try {
-      await this.db.query('BEGIN');
+      await client.query('BEGIN');
 
       // Execute message inserts and thread update in parallel for better performance
       const messageInserts = messages.map(message => {
@@ -1182,7 +1198,7 @@ export class PostgresStore extends MastraStorage {
             `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
           );
         }
-        return this.db.query(
+        return client.query(
           `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type, "resourceId") 
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (id) DO UPDATE SET
@@ -1203,7 +1219,7 @@ export class PostgresStore extends MastraStorage {
         );
       });
 
-      const threadUpdate = this.db.query(
+      const threadUpdate = client.query(
         `UPDATE ${this.getTableName(TABLE_THREADS)} 
           SET "updatedAt" = $1 
           WHERE id = $2`,
@@ -1212,7 +1228,7 @@ export class PostgresStore extends MastraStorage {
 
       await Promise.all([...messageInserts, threadUpdate]);
 
-      await this.db.query('COMMIT');
+      await client.query('COMMIT');
 
       // Parse content back to objects if they were stringified during storage
       const messagesWithParsedContent = messages.map(message => {
@@ -1231,7 +1247,7 @@ export class PostgresStore extends MastraStorage {
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
-      await this.db.query('ROLLBACK');
+      await client.query('ROLLBACK');
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_SAVE_MESSAGES_FAILED',
@@ -1243,6 +1259,8 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
+    } finally {
+      client.release();
     }
   }
 
@@ -1407,10 +1425,12 @@ export class PostgresStore extends MastraStorage {
       let total = 0;
       // Only get total count when using pagination
       if (limit !== undefined && offset !== undefined) {
-        const countResult = await this.db.one(
-          `SELECT COUNT(*) as count FROM ${this.getTableName(TABLE_WORKFLOW_SNAPSHOT)} ${whereClause}`,
-          values,
-        );
+        const countResult = (
+          await this.db.query(
+            `SELECT COUNT(*) as count FROM ${this.getTableName(TABLE_WORKFLOW_SNAPSHOT)} ${whereClause}`,
+            values,
+          )
+        ).rows[0];
         total = Number(countResult.count);
       }
 
@@ -1547,7 +1567,7 @@ export class PostgresStore extends MastraStorage {
 
     const countQuery = `SELECT COUNT(*) FROM ${this.getTableName(TABLE_EVALS)} ${whereClause}`;
     try {
-      const countResult = await this.db.one(countQuery, queryParams);
+      const countResult = (await this.db.query(countQuery, queryParams)).rows[0];
       const total = parseInt(countResult.count, 10);
       const currentOffset = page * perPage;
 
@@ -1635,8 +1655,9 @@ export class PostgresStore extends MastraStorage {
 
     const threadIdsToUpdate = new Set<string>();
 
+    const client = await this.db.connect();
     try {
-      await this.db.query('BEGIN');
+      await client.query('BEGIN');
       const queries = [];
       const columnMapping: Record<string, string> = {
         threadId: 'thread_id',
@@ -1693,26 +1714,28 @@ export class PostgresStore extends MastraStorage {
           const sql = `UPDATE ${this.getTableName(
             TABLE_MESSAGES,
           )} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`;
-          queries.push(this.db.query(sql, values));
+          queries.push(client.query(sql, values));
         }
       }
 
       if (threadIdsToUpdate.size > 0) {
         queries.push(
-          this.db.query(`UPDATE ${this.getTableName(TABLE_THREADS)} SET "updatedAt" = NOW() WHERE id IN ($1:list)`, [
+          client.query(`UPDATE ${this.getTableName(TABLE_THREADS)} SET "updatedAt" = NOW() WHERE id IN ($1:list)`, [
             Array.from(threadIdsToUpdate),
           ]),
         );
       }
 
       if (queries.length > 0) {
-        await t.batch(queries);
+        await Promise.allSettled(queries);
       }
 
-      await this.db.query('COMMIT');
+      await client.query('COMMIT');
     } catch {
       //TODO Should we log this error? It wasn't being logged originally
-      await this.db.query('ROLLBACK');
+      await client.query('ROLLBACK');
+    } finally {
+      client.release();
     }
 
     // Re-fetch to return the fully updated messages
