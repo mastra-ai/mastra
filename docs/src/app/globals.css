@@ -2,8 +2,9 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Move all colors to :root and unify dark mode */
 /* TODO: use :root and .dark class to make theming easier */
+/* Move all colors to :root and unify dark mode */
+/* Use one color format*/
 :root {
   --border: hsla(0, 0%, 80%, 1);
   --color-text-icon-5: hsla(0, 0%, 8%, 1);
@@ -12,6 +13,7 @@
   --color-green-accent-2: hsla(125, 66%, 50%, 1);
   --border-2: hsla(0, 0%, 72%, 1);
   --border-radius-lg: 0.5rem;
+  --diff-color: #2ea04326;
 }
 
 .dark {
@@ -703,10 +705,40 @@ table td code.nextra-code:not([class*="twoslash-"]) {
   width: fit-content;
 }
 
-/* Reposition theme switcher*/
-
 @media screen and (min-width: 1024px) {
   button[title="Change theme"] {
     display: none;
+  }
+}
+
+.diff.remove {
+  background: oklch(0.65 0.22 16.44 / 0.16);
+  --content-color: var(--light-color-text-4);
+
+  &:is(html[class~="dark"] *) {
+    --content-color: white;
+  }
+
+  &::after {
+    content: "-";
+    position: absolute;
+    left: 2.6rem;
+    color: var(--content-color);
+  }
+}
+
+.diff.add {
+  background: var(--diff-color);
+  --content-color: var(--light-color-text-4);
+
+  &:is(html[class~="dark"] *) {
+    --content-color: white;
+  }
+
+  &::after {
+    content: "+";
+    position: absolute;
+    left: 2.6rem;
+    color: var(--content-color);
   }
 }
