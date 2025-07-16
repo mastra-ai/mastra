@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { createTool, Mastra, Telemetry } from '../..';
 import { Agent } from '../../agent';
 import { RuntimeContext } from '../../di';
+import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
 import { MockStore } from '../../storage/mock';
 import type { StreamEvent, WatchEvent } from '../types';
 import { mapVariable } from '../workflow';
@@ -17,6 +18,7 @@ const testStorage = new MockStore();
 describe('Workflow', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   });
 
   describe('Streaming', () => {
@@ -2524,8 +2526,7 @@ describe('Workflow', () => {
     });
   });
 
-  // TODO
-  describe.skip('abort', () => {
+  describe('abort', () => {
     it('should be able to abort workflow execution in between steps', async () => {
       const step1 = createStep({
         id: 'step1',
@@ -2554,6 +2555,11 @@ describe('Workflow', () => {
       });
 
       workflow.then(step1).sleep(1000).then(step2).commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
 
       const run = await workflow.createRunAsync();
       const p = run.start({ inputData: { value: 'test' } });
@@ -2588,6 +2594,7 @@ describe('Workflow', () => {
       const step2 = createStep({
         id: 'step2',
         execute: async ({ inputData }) => {
+          await new Promise(resolve => setTimeout(resolve, 3000));
           return { result: 'step2: ' + inputData.result };
         },
         inputSchema: z.object({ result: z.string() }),
@@ -2605,9 +2612,15 @@ describe('Workflow', () => {
 
       workflow.then(step1).then(step2).commit();
 
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
+
       const run = await workflow.createRunAsync();
       const p = run.start({ inputData: { value: 'test' } });
 
+      await new Promise(resolve => setTimeout(resolve, 1000));
       await run.cancel();
 
       const result = await p;
@@ -2667,6 +2680,11 @@ describe('Workflow', () => {
       });
 
       workflow.then(step1).then(step2).commit();
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
 
       const run = await workflow.createRunAsync();
       const p = run.start({ inputData: { value: 'test' } });
@@ -4138,6 +4156,7 @@ describe('Workflow', () => {
       run2.watch(onTransition);
 
       const executionResult = await run.start({ inputData: {} });
+      console.dir({ watchData }, { depth: null });
 
       expect(watchData.length).toBe(5);
       expect(watchData[1]).toEqual({
@@ -5526,6 +5545,7 @@ describe('Workflow', () => {
       await run1.start({ inputData: {} });
 
       const { runs, total } = await workflow.getWorkflowRuns();
+      console.dir({ runs }, { depth: null });
       expect(total).toBe(1);
       expect(runs).toHaveLength(1);
       expect(runs.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId]));
@@ -5533,6 +5553,7 @@ describe('Workflow', () => {
       expect(runs[0]?.snapshot).toBeDefined();
 
       const run3 = await workflow.getWorkflowRunById(run1.runId);
+      console.dir({ run3 }, { depth: null });
       expect(run3?.runId).toBe(run1.runId);
       expect(run3?.workflowName).toBe('test-workflow');
       expect(run3?.snapshot).toEqual(runs[0].snapshot);

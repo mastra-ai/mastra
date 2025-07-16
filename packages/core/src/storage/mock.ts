@@ -118,7 +118,7 @@ export class MockStore extends MastraStorage {
     }
 
     this.data.mastra_workflow_snapshot[runId].snapshot = { ...snapshot.snapshot, ...opts };
-    return this.data.mastra_workflow_snapshot[runId];
+    return this.data.mastra_workflow_snapshot[runId]?.snapshot;
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {

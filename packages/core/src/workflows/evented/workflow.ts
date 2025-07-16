@@ -592,4 +592,15 @@ export class EventedRun<
       }
     };
   }
+
+  async cancel() {
+    console.log('sending cancel event');
+    await this.pubsub.publish('workflows', {
+      type: 'workflow.cancel',
+      data: {
+        workflowId: this.workflowId,
+        runId: this.runId,
+      },
+    });
+  }
 }

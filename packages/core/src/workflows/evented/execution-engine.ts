@@ -106,6 +106,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     const resultData: any = await new Promise(resolve => {
       const finishCb = async (event: Event) => {
         if (event.type === 'workflow.end' && event.data.runId === params.runId) {
+          console.log('ehh', event.data);
           resolve(event.data);
         } else if (event.type === 'workflow.fail' && event.data.runId === params.runId) {
           resolve(event.data);
