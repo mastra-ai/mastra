@@ -4,8 +4,6 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult } from '@mastra/core/eval';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
-  DEFAULT_THREAD_ORDER_BY,
-  DEFAULT_THREAD_SORT_DIRECTION,
   MastraStorage,
   TABLE_MESSAGES,
   TABLE_THREADS,
@@ -13,6 +11,8 @@ import {
   TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
+  castThreadOrderBy,
+  castThreadSortDirection,
 } from '@mastra/core/storage';
 import type {
   EvalRow,
@@ -25,6 +25,8 @@ import type {
   WorkflowRuns,
   PaginationArgs,
   ThreadSortOptions,
+  ThreadOrderBy,
+  ThreadSortDirection,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -649,7 +651,9 @@ export class PostgresStore extends MastraStorage {
    * @deprecated use getThreadsByResourceIdPaginated instead
    */
   public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    const { resourceId, orderBy = DEFAULT_THREAD_ORDER_BY, sortDirection = DEFAULT_THREAD_SORT_DIRECTION } = args;
+    const resourceId = args.resourceId;
+    const orderBy = castThreadOrderBy(args.orderBy);
+    const sortDirection = castThreadSortDirection(args.sortDirection);
 
     try {
       const baseQuery = `FROM ${this.getTableName(TABLE_THREADS)} WHERE "resourceId" = $1`;
@@ -685,13 +689,9 @@ export class PostgresStore extends MastraStorage {
     } & PaginationArgs &
       ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const {
-      resourceId,
-      orderBy = DEFAULT_THREAD_ORDER_BY,
-      sortDirection = DEFAULT_THREAD_SORT_DIRECTION,
-      page = 0,
-      perPage: perPageInput,
-    } = args;
+    const { resourceId, page = 0, perPage: perPageInput } = args;
+    const orderBy = castThreadOrderBy(args.orderBy);
+    const sortDirection = castThreadSortDirection(args.sortDirection);
     try {
       const baseQuery = `FROM ${this.getTableName(TABLE_THREADS)} WHERE "resourceId" = $1`;
       const queryParams: any[] = [resourceId];
