@@ -25,7 +25,7 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import type { Client } from 'pg';
+import { Client } from 'pg';
 // import pgPromise from 'pg-promise';
 import Pool from 'pg-pool';
 import { URL } from 'url';
@@ -852,14 +852,17 @@ export class PostgresStore extends MastraStorage {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     try {
-      await this.db.tx(async t => {
-        // First delete all messages associated with this thread
-        await t.none(`DELETE FROM ${this.getTableName(TABLE_MESSAGES)} WHERE thread_id = $1`, [threadId]);
+      await this.db.query('BEGIN');
 
-        // Then delete the thread
-        await t.none(`DELETE FROM ${this.getTableName(TABLE_THREADS)} WHERE id = $1`, [threadId]);
-      });
+      // First delete all messages associated with this thread
+      await t.none(`DELETE FROM ${this.getTableName(TABLE_MESSAGES)} WHERE thread_id = $1`, [threadId]);
+
+      // Then delete the thread
+      await t.none(`DELETE FROM ${this.getTableName(TABLE_THREADS)} WHERE id = $1`, [threadId]);
+
+      await this.db.query('COMMIT');
     } catch (error) {
+      await this.db.query('ROLLBACK');
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_DELETE_THREAD_FAILED',
@@ -1165,49 +1168,51 @@ export class PostgresStore extends MastraStorage {
     }
 
     try {
-      await this.db.tx(async t => {
-        // Execute message inserts and thread update in parallel for better performance
-        const messageInserts = messages.map(message => {
-          if (!message.threadId) {
-            throw new Error(
-              `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
-            );
-          }
-          if (!message.resourceId) {
-            throw new Error(
-              `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
-            );
-          }
-          return t.none(
-            `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type, "resourceId") 
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
-             ON CONFLICT (id) DO UPDATE SET
-              thread_id = EXCLUDED.thread_id,
-              content = EXCLUDED.content,
-              role = EXCLUDED.role,
-              type = EXCLUDED.type,
-              "resourceId" = EXCLUDED."resourceId"`,
-            [
-              message.id,
-              message.threadId,
-              typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-              message.createdAt || new Date().toISOString(),
-              message.role,
-              message.type || 'v2',
-              message.resourceId,
-            ],
+      await this.db.query('BEGIN');
+
+      // Execute message inserts and thread update in parallel for better performance
+      const messageInserts = messages.map(message => {
+        if (!message.threadId) {
+          throw new Error(
+            `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
           );
-        });
-
-        const threadUpdate = t.none(
-          `UPDATE ${this.getTableName(TABLE_THREADS)} 
-           SET "updatedAt" = $1 
-           WHERE id = $2`,
-          [new Date().toISOString(), threadId],
+        }
+        if (!message.resourceId) {
+          throw new Error(
+            `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
+          );
+        }
+        return t.none(
+          `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type, "resourceId") 
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (id) DO UPDATE SET
+            thread_id = EXCLUDED.thread_id,
+            content = EXCLUDED.content,
+            role = EXCLUDED.role,
+            type = EXCLUDED.type,
+            "resourceId" = EXCLUDED."resourceId"`,
+          [
+            message.id,
+            message.threadId,
+            typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+            message.createdAt || new Date().toISOString(),
+            message.role,
+            message.type || 'v2',
+            message.resourceId,
+          ],
         );
-
-        await Promise.all([...messageInserts, threadUpdate]);
       });
+
+      const threadUpdate = t.none(
+        `UPDATE ${this.getTableName(TABLE_THREADS)} 
+          SET "updatedAt" = $1 
+          WHERE id = $2`,
+        [new Date().toISOString(), threadId],
+      );
+
+      await Promise.all([...messageInserts, threadUpdate]);
+
+      await this.db.query('COMMIT');
 
       // Parse content back to objects if they were stringified during storage
       const messagesWithParsedContent = messages.map(message => {
@@ -1226,6 +1231,7 @@ export class PostgresStore extends MastraStorage {
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
+      await this.db.query('ROLLBACK');
       throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_SAVE_MESSAGES_FAILED',
@@ -1629,7 +1635,8 @@ export class PostgresStore extends MastraStorage {
 
     const threadIdsToUpdate = new Set<string>();
 
-    await this.db.tx(async t => {
+    try {
+      await this.db.query('BEGIN');
       const queries = [];
       const columnMapping: Record<string, string> = {
         threadId: 'thread_id',
@@ -1701,7 +1708,12 @@ export class PostgresStore extends MastraStorage {
       if (queries.length > 0) {
         await t.batch(queries);
       }
-    });
+
+      await this.db.query('COMMIT');
+    } catch {
+      //TODO Should we log this error? It wasn't being logged originally
+      await this.db.query('ROLLBACK');
+    }
 
     // Re-fetch to return the fully updated messages
     const updatedMessages = (await this.db.query<MastraMessageV2>(selectQuery, [messageIds])).rows;
