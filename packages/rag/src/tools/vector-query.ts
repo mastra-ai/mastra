@@ -54,7 +54,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
               ? Number(topK)
               : 10;
 
-        const vectorStore = mastra?.getVector(vectorStoreName);
+        const vectorStore = mastra?.getVector(vectorStoreName) ?? runtimeContext.get('vectorStore');
 
         if (!vectorStore) {
           if (logger) {

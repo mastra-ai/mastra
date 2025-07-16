@@ -327,5 +327,24 @@ describe('createVectorQueryTool', () => {
       });
       expect(result.relevantContext[0]).toEqual({ text: 'bar' });
     });
+
+    it('Fetches the vector store from runtimeContext when no Mastra server is provided', async () => {
+      const tool = createVectorQueryTool({
+        id: 'test',
+        model: mockModel,
+        indexName: 'testIndex',
+        vectorStoreName: 'testStore',
+      });
+
+      const testStore = {};
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('vectorStore', testStore);
+      const result = await tool.execute({
+        context: { queryText: 'foo', topK: 1 },
+        runtimeContext,
+      });
+      console.log(result.sources);
+      expect(result.relevantContext[0]).toEqual({ text: 'foo' });
+    });
   });
 });
