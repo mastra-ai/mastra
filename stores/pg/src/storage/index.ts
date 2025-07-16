@@ -28,6 +28,7 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { Client } from 'pg';
 // import pgPromise from 'pg-promise';
 import Pool from 'pg-pool';
+import { URL } from 'url';
 // import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 
 export type PostgresConfig = {
@@ -79,18 +80,31 @@ export class PostgresStore extends MastraStorage {
       super({ name: 'PostgresStore' });
       // this.pgp = pgPromise();
       this.schema = config.schemaName;
-      this.db = new Pool(
-        `connectionString` in config
-          ? { connectionString: config.connectionString }
-          : {
-              host: config.host,
-              port: config.port,
-              database: config.database,
-              user: config.user,
-              password: config.password,
-              ssl: config.ssl,
-            },
-      );
+
+      let poolConfig: Pool.Config<Client>;
+      if ('connectionString' in config) {
+        // Parse connection string into a config object for pg-pool
+        const url = new URL(config.connectionString);
+        poolConfig = {
+          host: url.host,
+          port: Number(url.port),
+          database: url.pathname.split('/')[1],
+          user: url.username,
+          password: url.password,
+          ssl: true,
+        };
+      } else {
+        poolConfig = {
+          host: config.host,
+          port: config.port,
+          database: config.database,
+          user: config.user,
+          password: config.password,
+          ssl: config.ssl,
+        };
+      }
+
+      this.db = new Pool(poolConfig);
     } catch (e) {
       throw new MastraError(
         {
