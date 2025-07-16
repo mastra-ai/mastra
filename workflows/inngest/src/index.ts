@@ -1464,15 +1464,19 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         execResults = {
           status: 'success',
           output: result,
+          startedAt,
           endedAt,
+          payload: prevOutput,
           resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
           resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
         };
       } catch (e) {
         execResults = {
           status: 'failed',
+          payload: prevOutput,
           error: e instanceof Error ? e.message : String(e),
           endedAt: Date.now(),
+          startedAt,
           resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
           resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
         };
@@ -1482,12 +1486,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         execResults = {
           status: 'suspended',
           suspendedPayload: suspended.payload,
+          payload: prevOutput,
           suspendedAt: Date.now(),
+          startedAt,
           resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
           resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
         };
       } else if (bailed) {
-        execResults = { status: 'bailed', output: bailed.payload, endedAt: Date.now() };
+        execResults = { status: 'bailed', output: bailed.payload, payload: prevOutput, endedAt: Date.now(), startedAt };
       }
 
       if (execResults.status === 'failed') {
