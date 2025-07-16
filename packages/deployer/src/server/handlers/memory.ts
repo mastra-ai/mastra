@@ -1,5 +1,6 @@
 import type { Mastra } from '@mastra/core';
-import type { StorageGetMessagesArg, ThreadOrderBy, ThreadSortDirection, MastraMessageFormat } from '@mastra/core/storage';
+import type { StorageGetMessagesArg, MastraMessageFormat } from '@mastra/core/storage';
+import { castThreadOrderBy, castThreadSortDirection } from '@mastra/core/storage';
 import {
   getMemoryStatusHandler as getOriginalMemoryStatusHandler,
   getThreadsHandler as getOriginalThreadsHandler,
@@ -36,36 +37,14 @@ export async function getMemoryStatusHandler(c: Context) {
   }
 }
 
-const THREAD_ORDER_BY_SET = {
-  createdAt: true,
-  updatedAt: true,
-} satisfies Record<ThreadOrderBy, true>;
-
-const THREAD_SORT_DIRECTION_SET = {
-  ASC: true,
-  DESC: true,
-} satisfies Record<ThreadSortDirection, true>;
-
-function isThreadOrderBy(v: string | unknown): v is ThreadOrderBy {
-  return (v as string) in THREAD_ORDER_BY_SET;
-}
-
-function isThreadSortDirection(v: string | unknown): v is ThreadSortDirection {
-  return (v as string) in THREAD_SORT_DIRECTION_SET;
-}
-
 export async function getThreadsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
     const resourceId = c.req.query('resourceid');
     const networkId = c.req.query('networkId');
-    const rawOrderBy = c.req.query('orderBy');
-    const rawSortDirection = c.req.query('sortDirection');
-    const orderBy: ThreadOrderBy | undefined = isThreadOrderBy(rawOrderBy) ? rawOrderBy : undefined;
-    const sortDirection: ThreadSortDirection | undefined = isThreadSortDirection(rawSortDirection)
-      ? rawSortDirection
-      : undefined;
+    const orderBy = castThreadOrderBy(c.req.query('orderBy'));
+    const sortDirection = castThreadSortDirection(c.req.query('sortDirection'));
 
     const result = await getOriginalThreadsHandler({
       mastra,
