@@ -158,7 +158,7 @@ import { realtimeMiddleware } from "@inngest/realtime";
 import { serve } from "@hono/node-server";
 import {
   createHonoServer,
-  convertBundledToolsIntoServerToolsObject,
+  getToolExports,
 } from "@mastra/deployer/server";
 import { tools } from "#tools";
 
@@ -193,7 +193,7 @@ export const mastra = new Mastra({
 
 // Create and start the Hono server
 const app = await createHonoServer(mastra, {
-  tools: convertBundledToolsIntoServerToolsObject(tools),
+  tools: getToolExports(tools),
 });
 
 const srv = serve({

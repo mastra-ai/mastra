@@ -108,7 +108,7 @@ export class CloudflareDeployer extends Deployer {
     return `
     import '#polyfills';
     import { mastra } from '#mastra';
-    import { createHonoServer, convertBundledToolsIntoServerToolsObject } from '#server';
+    import { createHonoServer, getToolExports } from '#server';
     import { tools } from '#tools';
     import { evaluate } from '@mastra/core/eval';
     import { AvailableHooks, registerHook } from '@mastra/core/hooks';
@@ -155,7 +155,7 @@ export class CloudflareDeployer extends Deployer {
 
     export default {
       fetch: async (request, env, context) => {
-        const app = await createHonoServer(mastra, { tools: convertBundledToolsIntoServerToolsObject(tools) });
+        const app = await createHonoServer(mastra, { tools: getToolExports(tools) });
         return app.fetch(request, env, context);
       }
     }

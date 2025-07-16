@@ -111,7 +111,7 @@ type Variables = {
   isDev: boolean;
 };
 
-export async function convertBundledToolsIntoServerToolsObject(tools: Record<string, Function>[]) {
+export async function getToolExports(tools: Record<string, Function>[]) {
   try {
     return tools.reduce((acc, toolModule) => {
       Object.entries(toolModule).forEach(([key, tool]) => {
