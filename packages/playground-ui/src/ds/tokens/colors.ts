@@ -9,6 +9,7 @@ export const Colors = {
   accent3: '#267AD2',
   accent4: '#9E57B3',
   accent5: '#4A9DF2',
+  accent6: '#FFF176',
 };
 
 export const BorderColors = {

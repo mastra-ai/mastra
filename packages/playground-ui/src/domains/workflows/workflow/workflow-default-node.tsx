@@ -54,6 +54,7 @@ export function WorkflowDefaultNode({
           step?.status === 'failed' && 'ring-2 ring-accent2',
           step?.status === 'suspended' && 'ring-2 ring-accent3',
           step?.status === 'waiting' && 'ring-2 ring-accent5',
+          step?.status === 'running' && 'ring-2 ring-accent6',
         )}
       >
         <div className={cn('flex items-center gap-2 px-3', !description && 'pb-2')}>
@@ -63,7 +64,7 @@ export function WorkflowDefaultNode({
               {step?.status === 'success' && <CheckIcon className="text-accent1" />}
               {step?.status === 'suspended' && <PauseIcon className="text-accent3" />}
               {step?.status === 'waiting' && <HourglassIcon className="text-accent5" />}
-              {step?.status === 'running' && <Loader2 className="text-icon6 animate-spin" />}
+              {step?.status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
               {!step && <CircleDashed className="text-icon2" />}
             </Icon>
           )}
