@@ -3,7 +3,7 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { openai } from '@ai-sdk/openai';
 import { weatherTool } from '../tools';
-import { weatherReporterAgent } from '../agents';
+import { weatherAgent } from '../agents';
 
 const agent = new Agent({
   name: 'Weather Agent',
@@ -188,7 +188,7 @@ const weatherWorkflow = createWorkflow({
 weatherWorkflow.commit();
 
 const weatherStepFromTool = createStep(weatherTool);
-const weatherStepFromAgent = createStep(weatherReporterAgent);
+const weatherStepFromAgent = createStep(weatherAgent);
 
 const weatherWorkflow2 = createWorkflow({
   id: 'weather-workflow-with-tool-and-agent',
