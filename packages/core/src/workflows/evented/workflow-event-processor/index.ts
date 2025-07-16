@@ -13,7 +13,7 @@ import { processWorkflowSleep, processWorkflowSleepUntil } from './sleep';
 import { getNestedWorkflow, getStep } from './utils';
 
 export type ProcessorArgs = {
-  activeSteps: number[][];
+  activeSteps: Record<string, boolean>;
   workflow: Workflow;
   workflowId: string;
   runId: string;
@@ -79,7 +79,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         prevResult: { status: 'failed', error: e.stack ?? e.message },
         runtimeContext,
         resumeData,
-        activeSteps: [],
+        activeSteps: {},
         parentWorkflow: parentWorkflow,
       },
     });
@@ -103,7 +103,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       prevResult: { status: 'canceled' } as any,
       runtimeContext: currentState?.runtimeContext as any,
       executionPath: [],
-      activeSteps: [],
+      activeSteps: {},
       resumeSteps: [],
       resumeData: undefined,
       parentWorkflow: undefined,
@@ -153,7 +153,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         prevResult,
         runtimeContext,
         resumeData,
-        activeSteps: [],
+        activeSteps: {},
       },
     });
   }
@@ -512,7 +512,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
-    activeSteps.push(executionPath);
+    activeSteps[step.step.id] = true;
 
     // Run nested workflow
     if (step.step instanceof EventedWorkflow) {
@@ -807,12 +807,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     parentContext,
     runtimeContext,
   }: ProcessorArgs) {
-    // clear from activeSteps
-    const activeStepIndex = activeSteps.findIndex(step => step.every((idx, i) => idx === executionPath[i]));
-    if (activeStepIndex !== -1) {
-      activeSteps.splice(activeStepIndex, 1);
-    }
-
     let step = workflow.stepGraph[executionPath[0]!];
 
     if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
@@ -820,6 +814,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (step?.type === 'step' || step?.type === 'loop') {
+      // clear from activeSteps
+      delete activeSteps[step.step.id];
+
       // handle nested workflow
       if (parentContext) {
         console.log('YOYO', prevResult, parentContext?.input?.output, {

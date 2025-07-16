@@ -27,7 +27,10 @@ export async function processWorkflowParallel(
   },
 ) {
   for (let i = 0; i < step.steps.length; i++) {
-    activeSteps.push(executionPath.concat([i]));
+    const nestedStep = step.steps[i];
+    if (nestedStep?.type === 'step') {
+      activeSteps[nestedStep.step.id] = true;
+    }
   }
 
   await Promise.all(
@@ -88,14 +91,16 @@ export async function processWorkflowConditional(
 
   const truthyIdxs: Record<number, boolean> = {};
   for (let i = 0; i < idxs.length; i++) {
-    activeSteps.push(executionPath.concat([idxs[i]!]));
     truthyIdxs[idxs[i]!] = true;
   }
 
   await Promise.all(
-    step.steps.map(async (_step, idx) => {
+    step.steps.map(async (step, idx) => {
       if (truthyIdxs[idx]) {
         console.log('suhh: running conditional step', executionPath.concat([idx]));
+        if (step?.type === 'step') {
+          activeSteps[step.step.id] = true;
+        }
         return pubsub.publish('workflows', {
           type: 'workflow.step.run',
           data: {
