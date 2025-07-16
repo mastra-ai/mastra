@@ -286,8 +286,6 @@ async function createFromTemplate(args: { projectName?: string; template?: strin
       projectName,
     });
 
-    // GitHub templates are already validated before cloning
-
     // Install dependencies
     await installDependencies(projectPath);
 
