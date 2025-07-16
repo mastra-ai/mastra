@@ -8,6 +8,7 @@ import { vectorQuerySearch, defaultVectorQueryDescription, filterSchema, outputS
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
 import type { VectorQueryToolOptions } from './types';
+import type { MastraVector } from '@mastra/core/vector';
 
 export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
   const { id, description } = options;
@@ -54,8 +55,12 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
               ? Number(topK)
               : 10;
 
-        const vectorStore = mastra?.getVector(vectorStoreName) ?? runtimeContext.get('vectorStore');
-
+        let vectorStore: MastraVector | undefined;
+        if (mastra) {
+          vectorStore = mastra.getVector(vectorStoreName);
+        } else {
+          vectorStore = runtimeContext.get('vectorStore');
+        }
         if (!vectorStore) {
           if (logger) {
             logger.error('Vector store not found', { vectorStoreName });
