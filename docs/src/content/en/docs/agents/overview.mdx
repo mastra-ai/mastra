@@ -9,6 +9,8 @@ description: Overview of agents in Mastra, detailing their capabilities and how 
 
 Agents can run autonomously in a loop, run once, or take turns with a user. You can give short-term, long-term, and working memory of their user interactions. They can stream text or return structured output (ie, JSON). They can access third-party APIs, query knowledge bases, and so on.
 
+Additionally, agents support dynamic configuration, allowing you to change their instructions, model, tools, and memory based on runtime context like user preferences, subscription tiers, or environment settings.
+
 ## 1. Creating an Agent
 
 To create an agent in Mastra, you use the `Agent` class and define its properties:
@@ -35,6 +37,8 @@ Also, make sure you have the `@mastra/core` package installed:
 ```bash npm2yarn copy
 npm install @mastra/core@latest
 ```
+
+All agent properties (instructions, model, tools, memory) can be configured dynamically using runtime context. See the [Dynamic Agents guide](./dynamic-agents.mdx) for examples of how to adapt agent behavior based on user context, subscription tiers, or other runtime variables.
 
 ### Registering the Agent
 
@@ -282,5 +286,6 @@ For more details, see the [Local Dev Playground](/docs/server-db/local-dev-playg
 ## Next Steps
 
 - Learn about Agent Memory in the [Agent Memory](./agent-memory.mdx) guide.
+- Learn about Dynamic Agent configuration in the [Dynamic Agents](./dynamic-agents.mdx) guide.
 - Learn about Agent Tools in the [Agent Tools and MCP](./using-tools-and-mcp.mdx) guide.
 - See an example agent in the [Chef Michel](../../guides/guide/chef-michel.mdx) example.

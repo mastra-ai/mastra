@@ -121,8 +121,36 @@ class MockMemory extends MastraMemory {
     return config || {};
   }
 
-  async updateWorkingMemory() {
-    return null;
+  async updateWorkingMemory({
+    threadId: _threadId,
+    resourceId: _resourceId,
+    workingMemory: _workingMemory,
+    memoryConfig: _memoryConfig,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string;
+    memoryConfig?: MemoryConfig;
+  }) {
+    // Mock implementation - just return void
+    return;
+  }
+
+  async __experimental_updateWorkingMemoryVNext({
+    threadId: _threadId,
+    resourceId: _resourceId,
+    workingMemory: _workingMemory,
+    searchString: _searchString,
+    memoryConfig: _memoryConfig,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string;
+    searchString?: string;
+    memoryConfig?: MemoryConfig;
+  }) {
+    // Mock implementation for abstract method
+    return { success: true, reason: 'Mock implementation' };
   }
 }
 
@@ -1061,7 +1089,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = systemMessage.content;
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
                 return {
                   rawCall: { rawPrompt: null, rawSettings: {} },
@@ -1123,7 +1154,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = systemMessage.content;
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
 
                 if (capturedPrompt.includes('簡潔なタイトル')) {
@@ -1218,7 +1252,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = systemMessage.content;
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
                 return {
                   rawCall: { rawPrompt: null, rawSettings: {} },
@@ -1341,7 +1378,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = systemMessage.content;
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
                 return {
                   rawCall: { rawPrompt: null, rawSettings: {} },
@@ -1390,7 +1430,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = systemMessage.content;
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
                 return {
                   rawCall: { rawPrompt: null, rawSettings: {} },
@@ -2457,5 +2500,193 @@ describe('Agent save message parts', () => {
       const messages = await mockMemory.getMessages({ threadId: 'thread-3', resourceId: 'resource-3' });
       expect(messages.length).toBe(0);
     });
+  });
+});
+
+describe('dynamic memory configuration', () => {
+  let dummyModel: MockLanguageModelV1;
+  beforeEach(() => {
+    dummyModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: `Dummy response`,
+      }),
+    });
+  });
+
+  it('should support static memory configuration', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      name: 'static-memory-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    const memory = await agent.getMemory();
+    expect(memory).toBe(mockMemory);
+  });
+
+  it('should support dynamic memory configuration with runtimeContext', async () => {
+    const premiumMemory = new MockMemory();
+    const standardMemory = new MockMemory();
+
+    const agent = new Agent({
+      name: 'dynamic-memory-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: ({ runtimeContext }) => {
+        const userTier = runtimeContext.get('userTier');
+        return userTier === 'premium' ? premiumMemory : standardMemory;
+      },
+    });
+
+    // Test with premium context
+    const premiumContext = new RuntimeContext();
+    premiumContext.set('userTier', 'premium');
+    const premiumResult = await agent.getMemory({ runtimeContext: premiumContext });
+    expect(premiumResult).toBe(premiumMemory);
+
+    // Test with standard context
+    const standardContext = new RuntimeContext();
+    standardContext.set('userTier', 'standard');
+    const standardResult = await agent.getMemory({ runtimeContext: standardContext });
+    expect(standardResult).toBe(standardMemory);
+  });
+
+  it('should support async dynamic memory configuration', async () => {
+    const mockMemory = new MockMemory();
+
+    const agent = new Agent({
+      name: 'async-memory-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: async ({ runtimeContext }) => {
+        const userId = runtimeContext.get('userId') as string;
+        // Simulate async memory creation/retrieval
+        await new Promise(resolve => setTimeout(resolve, 10));
+        (mockMemory as any).threads[`user-${userId}`] = {
+          id: `user-${userId}`,
+          resourceId: userId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        return mockMemory;
+      },
+    });
+
+    const runtimeContext = new RuntimeContext();
+    runtimeContext.set('userId', 'user123');
+
+    const memory = await agent.getMemory({ runtimeContext });
+    expect(memory).toBe(mockMemory);
+    expect((memory as any)?.threads['user-user123']).toBeDefined();
+  });
+
+  it('should throw error when dynamic memory function returns empty value', async () => {
+    const agent = new Agent({
+      name: 'invalid-memory-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: () => null as any,
+    });
+
+    await expect(agent.getMemory()).rejects.toThrow('Function-based memory returned empty value');
+  });
+
+  it('should work with memory in generate method with dynamic configuration', async () => {
+    const mockMemory = new MockMemory();
+
+    const agent = new Agent({
+      name: 'generate-memory-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: ({ runtimeContext }) => {
+        const environment = runtimeContext.get('environment');
+        if (environment === 'test') {
+          return mockMemory;
+        }
+        // Return a default mock memory instead of undefined
+        return new MockMemory();
+      },
+    });
+
+    const runtimeContext = new RuntimeContext();
+    runtimeContext.set('environment', 'test');
+
+    const response = await agent.generate('test message', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-1',
+        },
+      },
+      runtimeContext,
+    });
+
+    expect(response.text).toBe('Dummy response');
+
+    // Verify that thread was created in memory
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+    expect(thread).toBeDefined();
+    expect(thread?.resourceId).toBe('user-1');
+  });
+
+  it('should work with memory in stream method with dynamic configuration', async () => {
+    const mockMemory = new MockMemory();
+
+    const agent = new Agent({
+      name: 'stream-memory-agent',
+      instructions: 'test agent',
+      model: new MockLanguageModelV1({
+        doStream: async () => ({
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'text-delta', textDelta: 'Dynamic' },
+              { type: 'text-delta', textDelta: ' memory' },
+              { type: 'text-delta', textDelta: ' response' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { completionTokens: 10, promptTokens: 3 },
+              },
+            ],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        }),
+      }),
+      memory: ({ runtimeContext }) => {
+        const enableMemory = runtimeContext.get('enableMemory');
+        return enableMemory ? mockMemory : new MockMemory();
+      },
+    });
+
+    const runtimeContext = new RuntimeContext();
+    runtimeContext.set('enableMemory', true);
+
+    const stream = await agent.stream('test message', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-stream',
+        },
+      },
+      runtimeContext,
+    });
+
+    let finalText = '';
+    for await (const textPart of stream.textStream) {
+      finalText += textPart;
+    }
+
+    expect(finalText).toBe('Dynamic memory response');
+
+    // Verify that thread was created in memory
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-stream' });
+    expect(thread).toBeDefined();
+    expect(thread?.resourceId).toBe('user-1');
   });
 });
