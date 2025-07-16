@@ -389,7 +389,7 @@ export class PostgresStore extends MastraStorage {
 
           if (!schemaExists?.exists) {
             try {
-              await this.db.none(`CREATE SCHEMA IF NOT EXISTS ${this.getSchemaName()}`);
+              await this.db.query(`CREATE SCHEMA IF NOT EXISTS ${this.getSchemaName()}`);
               this.logger.info(`Schema "${this.schema}" created successfully`);
             } catch (error) {
               this.logger.error(`Failed to create schema "${this.schema}"`, { error });
@@ -461,7 +461,7 @@ export class PostgresStore extends MastraStorage {
         }
       `;
 
-      await this.db.none(sql);
+      await this.db.query(sql);
     } catch (error) {
       throw new MastraError(
         {
@@ -516,7 +516,7 @@ export class PostgresStore extends MastraStorage {
           const alterSql =
             `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
 
-          await this.db.none(alterSql);
+          await this.db.query(alterSql);
           this.logger?.debug?.(`Ensured column ${parsedColumnName} exists in table ${fullTableName}`);
         }
       }
@@ -537,7 +537,7 @@ export class PostgresStore extends MastraStorage {
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
-      await this.db.none(`TRUNCATE TABLE ${this.getTableName(tableName)} CASCADE`);
+      await this.db.query(`TRUNCATE TABLE ${this.getTableName(tableName)} CASCADE`);
     } catch (error) {
       throw new MastraError(
         {
@@ -559,7 +559,7 @@ export class PostgresStore extends MastraStorage {
       const values = Object.values(record);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
-      await this.db.none(
+      await this.db.query(
         `INSERT INTO ${this.getTableName(tableName)} (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
         values,
       );
@@ -746,7 +746,7 @@ export class PostgresStore extends MastraStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
-      await this.db.none(
+      await this.db.query(
         `INSERT INTO ${this.getTableName(TABLE_THREADS)} (
           id,
           "resourceId",
@@ -855,10 +855,10 @@ export class PostgresStore extends MastraStorage {
       await this.db.query('BEGIN');
 
       // First delete all messages associated with this thread
-      await t.none(`DELETE FROM ${this.getTableName(TABLE_MESSAGES)} WHERE thread_id = $1`, [threadId]);
+      await this.db.query(`DELETE FROM ${this.getTableName(TABLE_MESSAGES)} WHERE thread_id = $1`, [threadId]);
 
       // Then delete the thread
-      await t.none(`DELETE FROM ${this.getTableName(TABLE_THREADS)} WHERE id = $1`, [threadId]);
+      await this.db.query(`DELETE FROM ${this.getTableName(TABLE_THREADS)} WHERE id = $1`, [threadId]);
 
       await this.db.query('COMMIT');
     } catch (error) {
@@ -1182,7 +1182,7 @@ export class PostgresStore extends MastraStorage {
             `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
           );
         }
-        return t.none(
+        return this.db.query(
           `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type, "resourceId") 
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (id) DO UPDATE SET
@@ -1203,7 +1203,7 @@ export class PostgresStore extends MastraStorage {
         );
       });
 
-      const threadUpdate = t.none(
+      const threadUpdate = this.db.query(
         `UPDATE ${this.getTableName(TABLE_THREADS)} 
           SET "updatedAt" = $1 
           WHERE id = $2`,
@@ -1257,7 +1257,7 @@ export class PostgresStore extends MastraStorage {
   }): Promise<void> {
     try {
       const now = new Date().toISOString();
-      await this.db.none(
+      await this.db.query(
         `INSERT INTO ${this.getTableName(TABLE_WORKFLOW_SNAPSHOT)} (
           workflow_name,
           run_id,
@@ -1693,13 +1693,13 @@ export class PostgresStore extends MastraStorage {
           const sql = `UPDATE ${this.getTableName(
             TABLE_MESSAGES,
           )} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`;
-          queries.push(t.none(sql, values));
+          queries.push(this.db.query(sql, values));
         }
       }
 
       if (threadIdsToUpdate.size > 0) {
         queries.push(
-          t.none(`UPDATE ${this.getTableName(TABLE_THREADS)} SET "updatedAt" = NOW() WHERE id IN ($1:list)`, [
+          this.db.query(`UPDATE ${this.getTableName(TABLE_THREADS)} SET "updatedAt" = NOW() WHERE id IN ($1:list)`, [
             Array.from(threadIdsToUpdate),
           ]),
         );
@@ -1751,7 +1751,7 @@ export class PostgresStore extends MastraStorage {
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
     const tableName = this.getTableName(TABLE_RESOURCES);
-    await this.db.none(
+    await this.db.query(
       `INSERT INTO ${tableName} (id, "workingMemory", metadata, "createdAt", "updatedAt") 
        VALUES ($1, $2, $3, $4, $5)`,
       [
@@ -1822,7 +1822,7 @@ export class PostgresStore extends MastraStorage {
 
     values.push(resourceId);
 
-    await this.db.none(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
+    await this.db.query(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
 
     return updatedResource;
   }
