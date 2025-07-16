@@ -3224,9 +3224,8 @@ describe('Workflow', () => {
     });
   });
 
-  // TODO: fix this
-  describe.skip('foreach', () => {
-    it('should run a single item concurrency (default) for loop', async () => {
+  describe('foreach', () => {
+    it.only('should run a single item concurrency (default) for loop', async () => {
       const startTime = Date.now();
       const map = vi.fn().mockImplementation(async ({ inputData }) => {
         await new Promise(resolve => setTimeout(resolve, 1e3));

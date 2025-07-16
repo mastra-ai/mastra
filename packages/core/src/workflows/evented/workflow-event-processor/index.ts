@@ -128,6 +128,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       snapshot: {
         activePaths: [],
         suspendedPaths: {},
+        waitingPaths: {},
         serializedStepGraph: workflow.serializedStepGraph,
         timestamp: Date.now(),
         runId,
@@ -468,7 +469,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
       );
     } else if (step?.type === 'waitForEvent' && !resumeData) {
-      // wait for event to arrive externally
+      // wait for event to arrive externally (with resumeData)
       await this.mastra.getStorage()?.updateWorkflowResults({
         workflowName: workflowId,
         runId,
