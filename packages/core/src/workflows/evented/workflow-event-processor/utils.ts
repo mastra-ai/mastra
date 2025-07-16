@@ -42,7 +42,7 @@ export function getStep(workflow: Workflow, executionPath: number[]): Step<strin
     idx++;
   }
 
-  if (!(parentStep?.type === 'step' || parentStep?.type === 'loop')) {
+  if (!(parentStep?.type === 'step' || parentStep?.type === 'loop' || parentStep?.type === 'waitForEvent')) {
     return null;
   }
 

@@ -9,7 +9,7 @@ import { StepExecutor } from '../step-executor';
 import { EventedWorkflow } from '../workflow';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
-import { processWorkflowSleep, processWorkflowSleepUntil } from './sleep';
+import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitForEvent } from './sleep';
 import { getNestedWorkflow, getStep } from './utils';
 
 export type ProcessorArgs = {
@@ -467,10 +467,44 @@ export class WorkflowEventProcessor extends EventProcessor {
           step,
         },
       );
-    } else if (step?.type === 'waitForEvent') {
+    } else if (step?.type === 'waitForEvent' && !resumeData) {
       // wait for event to arrive externally
-      // TODO: need to store awaiting-for-event paths similarly to suspends
+      await this.mastra.getStorage()?.updateWorkflowResults({
+        workflowName: workflowId,
+        runId,
+        stepId: step.step.id,
+        result: {
+          startedAt: Date.now(),
+          status: 'waiting',
+          payload: prevResult.status === 'success' ? prevResult.output : undefined,
+        },
+        runtimeContext,
+      });
+      await this.mastra.getStorage()?.updateWorkflowState({
+        workflowName: workflowId,
+        runId,
+        opts: {
+          status: 'waiting',
+          waitingPaths: {
+            [step.event]: executionPath,
+          },
+        },
+      });
+
       console.log('waiting for event', step.step.id);
+      await this.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        data: {
+          type: 'step-waiting',
+          payload: {
+            id: step.step.id,
+            status: 'waiting',
+            payload: prevResult.status === 'success' ? prevResult.output : undefined,
+            startedAt: Date.now(),
+          },
+        },
+      });
+
       return;
     } else if (step?.type === 'foreach') {
       return processWorkflowForEach(
@@ -494,7 +528,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
-    if (step?.type !== 'step' && step?.type !== 'loop') {
+    if (step?.type !== 'step' && step?.type !== 'loop' && step?.type !== 'waitForEvent') {
       return this.errorWorkflow(
         {
           workflowId,
@@ -641,7 +675,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    if (step.type === 'step') {
+    if (step.type === 'step' || step.type === 'waitForEvent') {
       await this.pubsub.publish(`workflow.events.${runId}`, {
         type: 'watch',
         data: {
@@ -818,7 +852,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       step = step.steps[executionPath[1]!];
     }
 
-    if (step?.type === 'step' || step?.type === 'loop') {
+    if (step?.type === 'step' || step?.type === 'loop' || step?.type === 'waitForEvent') {
       // clear from activeSteps
       delete activeSteps[step.step.id];
 
@@ -931,7 +965,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    if (step?.type === 'step') {
+    if (step?.type === 'step' || step?.type === 'waitForEvent') {
       await this.pubsub.publish(`workflow.events.${runId}`, {
         type: 'watch',
         data: {
@@ -979,7 +1013,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       let skippedCount = 0;
       const allResults: Record<string, any> = step.steps.reduce(
         (acc, step) => {
-          if (step.type === 'step') {
+          if (step.type === 'step' || step.type === 'waitForEvent') {
             const res = stepResults?.[step.step.id];
             if (res && res.status === 'success') {
               acc[step.step.id] = res?.output;
@@ -1077,9 +1111,17 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (type.startsWith('workflow.user-event.')) {
-      const eventName = type.split('.').slice(2).join('.');
-      console.log('user event', eventName);
-      // TODO
+      await processWorkflowWaitForEvent(
+        {
+          ...workflowData,
+          workflow: this.mastra.getWorkflow(workflowData.workflowId),
+        },
+        {
+          pubsub: this.pubsub,
+          eventName: type.split('.').slice(2).join('.'),
+          currentState: currentState!,
+        },
+      );
       return;
     }
 

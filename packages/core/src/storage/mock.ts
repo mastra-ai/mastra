@@ -99,7 +99,13 @@ export class MockStore extends MastraStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: { status: string; result?: StepResult<any, any, any, any>; error?: string; executionPath: number[] };
+    opts: {
+      status: string;
+      result?: StepResult<any, any, any, any>;
+      error?: string;
+      suspendedPaths?: Record<string, number[]>;
+      waitingPaths?: Record<string, number[]>;
+    };
   }): Promise<WorkflowRunState> {
     const snapshot = this.data.mastra_workflow_snapshot[runId];
 
@@ -109,6 +115,8 @@ export class MockStore extends MastraStorage {
         workflow_name: workflowName,
         snapshot: {
           context: {},
+          suspendedPaths: opts.suspendedPaths || {},
+          waitingPaths: opts.waitingPaths || {},
         },
       };
     }

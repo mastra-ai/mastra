@@ -1,9 +1,53 @@
 import EventEmitter from 'events';
-import type { StepFlowEntry } from '../..';
+import type { StepFlowEntry, WorkflowRunState } from '../..';
 import { RuntimeContext } from '../../../di';
 import type { PubSub } from '../../../events';
 import type { StepExecutor } from '../step-executor';
+import { getStep } from './utils';
 import type { ProcessorArgs } from '.';
+
+export async function processWorkflowWaitForEvent(
+  workflowData: ProcessorArgs,
+  {
+    pubsub,
+    eventName,
+    currentState,
+  }: {
+    pubsub: PubSub;
+    eventName: string;
+    currentState: WorkflowRunState;
+  },
+) {
+  const executionPath = currentState?.waitingPaths[eventName];
+  if (!executionPath) {
+    console.log('user event not found in', eventName, currentState?.waitingPaths);
+    return;
+  }
+
+  const currentStep = getStep(workflowData.workflow, executionPath);
+  const prevResult = {
+    status: 'success',
+    output: currentState?.context[currentStep?.id ?? 'input']?.payload,
+  };
+  console.dir({ currentStep, currentState }, { depth: null });
+  console.log('user event', eventName, executionPath, prevResult);
+
+  await pubsub.publish('workflows', {
+    type: 'workflow.step.run',
+    data: {
+      workflowId: workflowData.workflowId,
+      runId: workflowData.runId,
+      executionPath,
+      resumeSteps: [],
+      resumeData: workflowData.resumeData,
+      parentWorkflow: workflowData.parentWorkflow,
+      stepResults: currentState?.context,
+      prevResult,
+      activeSteps: [],
+      runtimeContext: currentState?.runtimeContext,
+    },
+  });
+}
 
 export async function processWorkflowSleep(
   {

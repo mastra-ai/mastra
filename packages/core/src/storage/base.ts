@@ -323,6 +323,7 @@ export abstract class MastraStorage extends MastraBase {
       result?: StepResult<any, any, any, any>;
       error?: string;
       suspendedPaths?: Record<string, number[]>;
+      waitingPaths?: Record<string, number[]>;
     };
   }): Promise<WorkflowRunState>;
 
