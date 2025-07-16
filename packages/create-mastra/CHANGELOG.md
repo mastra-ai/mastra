@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.10.13-alpha.0
+
+### Patch Changes
+
+- 0bf0bc8: fix link in shared components + add e2e tests
+- 7827943: Handle streaming large data
+- 808b493: wrap runtime context with tooltip provider for usage in cloud
+
 ## 0.10.12
 
 ### Patch Changes

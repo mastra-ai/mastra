@@ -1,5 +1,15 @@
 # @mastra/agui
 
+## 1.0.7-alpha.0
+
+### Patch Changes
+
+- 8cacef9: Added deprecation message to readme of @mastra/agui to switch to @ag-ui/mastra
+- Updated dependencies [7827943]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [cbddd18]
+  - @mastra/core@0.11.0-alpha.0
+
 ## 1.0.6
 
 ### Patch Changes
