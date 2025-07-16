@@ -1302,6 +1302,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         activePaths: [],
         serializedStepGraph,
         suspendedPaths: executionContext.suspendedPaths,
+        waitingPaths: {},
         result,
         error,
         runtimeContext: this.runtimeContext,

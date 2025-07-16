@@ -4,6 +4,7 @@ packages:
   - "stores/*"
   - "voice/*"
   - "workflows/*"
+  - "pubsub/*"
   - "client-sdks/*"
   - "!packages/cli/admin"
   - "integrations/*"
