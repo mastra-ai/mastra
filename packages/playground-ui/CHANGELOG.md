@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 5.1.14-alpha.0
+
+### Patch Changes
+
+- 0bf0bc8: fix link in shared components + add e2e tests
+- 7827943: Handle streaming large data
+- 808b493: wrap runtime context with tooltip provider for usage in cloud
+- Updated dependencies [7827943]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [cbddd18]
+  - @mastra/client-js@0.10.15-alpha.0
+  - @mastra/core@0.11.0-alpha.0
+
 ## 5.1.13
 
 ### Patch Changes
