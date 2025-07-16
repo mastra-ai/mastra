@@ -23,6 +23,7 @@ import type {
   WorkflowRuns,
   PaginationArgs,
   StoragePagination,
+  StorageDomains,
 } from '@mastra/core/storage';
 
 import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
@@ -31,6 +32,7 @@ import pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 import { StoreOperationsPG } from './domains/operations';
 import { getSchemaName, getTableName } from './domains/utils';
+import { ScoresPG } from './domains/scores';
 
 export type PostgresConfig = {
   schemaName?: string;
@@ -48,16 +50,13 @@ export type PostgresConfig = {
     }
   );
 
-type StorageDomains = {
-  operations: StoreOperationsPG;
-}
-
 export class PostgresStore extends MastraStorage {
   public db: pgPromise.IDatabase<{}>;
   public pgp: pgPromise.IMain;
   private client: pgPromise.IDatabase<{}>;
   private schema?: string;
-  private stores: StorageDomains;
+
+  stores: StorageDomains;
 
   constructor(config: PostgresConfig) {
     // Validation: connectionString or host/database/user/password must not be empty
@@ -101,10 +100,12 @@ export class PostgresStore extends MastraStorage {
       this.client = this.db;
 
       const operations = new StoreOperationsPG({ client: this.client, schemaName: this.schema || 'public' });
+      const scores = new ScoresPG({ client: this.client, operations });
 
       this.stores = {
         operations,
-      };
+        scores,
+      } as unknown as StorageDomains;
 
     } catch (e) {
       throw new MastraError(
@@ -1588,14 +1589,7 @@ export class PostgresStore extends MastraStorage {
    * SCORERS - Not implemented
    */
   async getScoreById({ id: _id }: { id: string }): Promise<ScoreRowData | null> {
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_PG_STORE_GET_SCORE_BY_ID_FAILED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.THIRD_PARTY,
-      details: {
-        id: _id,
-      },
-    });
+    return this.stores.scores.getScoreById({ id: _id });
   }
 
   async getScoresByScorerId({
@@ -1605,22 +1599,11 @@ export class PostgresStore extends MastraStorage {
     scorerId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.THIRD_PARTY,
-      details: {
-        scorerId: _scorerId,
-      },
-    });
+    return this.stores.scores.getScoresByScorerId({ scorerId: _scorerId, pagination: _pagination });
   }
 
   async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_PG_STORE_SAVE_SCORE_FAILED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.THIRD_PARTY,
-    });
+    return this.stores.scores.saveScore(_score);
   }
 
   async getScoresByRunId({
@@ -1630,14 +1613,8 @@ export class PostgresStore extends MastraStorage {
     runId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_RUN_ID_FAILED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.THIRD_PARTY,
-      details: {
-        runId: _runId,
-      },
-    });
+    return this.stores.scores.getScoresByRunId({ runId: _runId, pagination: _pagination });
+
   }
 
   async getScoresByEntityId({
@@ -1649,14 +1626,6 @@ export class PostgresStore extends MastraStorage {
     entityId: string;
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.THIRD_PARTY,
-      details: {
-        entityId: _entityId,
-        entityType: _entityType,
-      },
-    });
+    return this.stores.scores.getScoresByEntityId({ entityId: _entityId, entityType: _entityType, pagination: _pagination });
   }
 }

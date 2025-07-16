@@ -36,6 +36,13 @@ import type {
   StorageGetTracesPaginatedArg,
 } from './types';
 
+export type StorageDomains = {
+  operations: StoreOperations;
+  workflows: WorkflowsStorage;
+  scores: ScoresStorage;
+  traces: TracesStorage;
+}
+
 export abstract class MastraStorage extends MastraBase {
   /** @deprecated import from { TABLE_WORKFLOW_SNAPSHOT } '@mastra/core/storage' instead */
   static readonly TABLE_WORKFLOW_SNAPSHOT = TABLE_WORKFLOW_SNAPSHOT;
@@ -51,12 +58,7 @@ export abstract class MastraStorage extends MastraBase {
   protected hasInitialized: null | Promise<boolean> = null;
   protected shouldCacheInit = true;
 
-  stores?: {
-    operations: StoreOperations;
-    workflows: WorkflowsStorage;
-    scores: ScoresStorage;
-    traces: TracesStorage;
-  }
+  stores?: StorageDomains;
 
   constructor({ name }: { name: string }) {
     super({

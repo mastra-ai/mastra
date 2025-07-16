@@ -1,6 +1,6 @@
 import { MastraStorage, TABLE_TRACES } from "@mastra/core/storage";
 import { randomUUID } from "crypto";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 export const createSampleTraceForDB = (
     name: string,
@@ -26,6 +26,10 @@ export const createSampleTraceForDB = (
 
 export function createTraceTests(storage: MastraStorage) {
     describe('getTraces with pagination', () => {
+        beforeEach(async () => {
+            await storage.clearTable({ tableName: TABLE_TRACES });
+        });
+
         it('should return paginated traces with total count when returnPaginationResults is true', async () => {
             const scope = 'libsql-test-scope-traces';
             const traceRecords = Array.from({ length: 18 }, (_, i) => createSampleTraceForDB(`test-trace-${i}`, scope));

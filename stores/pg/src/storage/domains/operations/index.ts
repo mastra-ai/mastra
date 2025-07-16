@@ -18,6 +18,18 @@ export class StoreOperationsPG extends StoreOperations {
         this.schemaName = schemaName;
     }
 
+    async hasColumn(table: string, column: string): Promise<boolean> {
+        // Use this.schema to scope the check
+        const schema = this.schemaName || 'public';
+
+        const result = await this.client.oneOrNone(
+            `SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
+            [schema, table, column, column.toLowerCase()],
+        );
+
+        return !!result;
+    }
+
     private async setupSchema() {
         if (!this.schemaName || this.schemaSetupComplete) {
             return;

@@ -197,6 +197,12 @@ export function createConversationsTest({
     });
 
     describe('Message Operations', () => {
+
+        beforeEach(async () => {
+            await storage.clearTable({ tableName: TABLE_MESSAGES });
+            await storage.clearTable({ tableName: TABLE_THREADS });
+        });
+
         it('should save and retrieve messages', async () => {
             const thread = createSampleThread();
             await storage.saveThread({ thread });
