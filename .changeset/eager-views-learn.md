@@ -4,4 +4,4 @@
 'create-mastra': patch
 ---
 
-add the same agent table as in cloud and export it from the playground
+fix link in shared components + add e2e tests

@@ -12,15 +12,17 @@ import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack
 import { columns } from './columns';
 import { Skeleton } from '@/components/ui/skeleton';
 import React from 'react';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface NetworkTableProps {
   legacyNetworks: GetNetworkResponse[];
   networks: GetVNextNetworkResponse[];
   isLoading: boolean;
-  onClickRow: (networkId: string, isVNext: boolean) => void;
+  computeLink: (networkId: string, isVNext: boolean) => string;
 }
 
-export const NetworkTable = ({ legacyNetworks, networks, isLoading, onClickRow }: NetworkTableProps) => {
+export const NetworkTable = ({ legacyNetworks, networks, isLoading, computeLink }: NetworkTableProps) => {
+  const { navigate } = useLinkComponent();
   const allNetworks: NetworkTableColumn[] = useMemo(
     () => [
       ...(legacyNetworks?.map(network => ({
@@ -69,7 +71,11 @@ export const NetworkTable = ({ legacyNetworks, networks, isLoading, onClickRow }
         </Thead>
         <Tbody>
           {rows.map(row => (
-            <Row key={row.id} onClick={() => onClickRow(row.original.id, row.original.isVNext || false)}>
+            <Row
+              key={row.id}
+              onClick={() => navigate(computeLink(row.original.id, row.original.isVNext || false))}
+              className="cursor-pointer"
+            >
               {row.getVisibleCells().map(cell => (
                 <React.Fragment key={cell.id}>
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
