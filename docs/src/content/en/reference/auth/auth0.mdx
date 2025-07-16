@@ -1,0 +1,46 @@
+---
+title: "MastraAuthAuth0"
+description: "Documentation for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0."
+---
+
+# MastraAuthAuth0
+
+The `MastraAuthAuth0` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs) issued by Auth0. It verifies incoming requests using Auth0’s JWKS endpoint and integrates with the Mastra server using the `experimental_auth` option.
+
+
+## Usage example
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+
+export const mastra = new Mastra({
+  // ..
+  server: {
+    experimental_auth: new MastraAuthAuth0({
+       domain: '<tenant.auth0.com>',
+       audience: '<api-identifier>',
+    })
+  },
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "domain",
+      type: "string",
+      description: "Your Auth0 domain, used to locate the JWKS endpoint and validate the token issuer.",
+      isOptional: true,
+    },
+    {
+      name: "audience",
+      type: "string",
+      description: "The expected audience claim for JWT validation, typically your Auth0 API identifier.",
+      isOptional: true,
+    }
+  ]}
+/>
+

@@ -15,7 +15,7 @@ npm install @mastra/auth
 
 ## Usage example
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,7-9} filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { MastraJwtAuth } from '@mastra/auth';
 
@@ -23,16 +23,53 @@ export const mastra = new Mastra({
   // ..
   server: {
     experimental_auth: new MastraJwtAuth({
-        secret: process.env.MASTRA_JWT_SECRET
+        secret: "<secret>"
     }),
   },
 });
 ```
 
-## Environment variables
+## Configuring `MastraClient`
 
-TODO...
+With `experimental_auth` enabled, all requests made to Mastra using the [Mastra Client SDK](/docs/client-js/overview) will require a secret be sent in the authorization header:
 
-## Next steps
+```typescript filename="lib/mastra/mastra-client.ts" showLineNumbers copy
+import { MastraClient } from "@mastra/client-js";
 
-- [Mastra Client SDK](/docs/client-js/overview)
+export const mastraClient = new MastraClient({
+  baseUrl: "https://<mastra-api-url>",
+  headers: {
+    Authorization: `Bearer <secret>`
+  }
+});
+```
+
+## Testing
+
+```bash {3} copy
+curl -X POST https://<mastra-api-url>/api/agents/weatherAgent/generate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <secret>" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "What'\''s the weather in London"
+      }
+    ]
+  }'
+```
+
+If the Authorization was successful you'll see your agent's response. If Authorization fails, you'll see the following message:
+
+```echo
+Error: ....
+```
+
+> See [Mastra Client SDK](/docs/client-js/overview) for more configuration options.
+
+## Mastra Cloud Playground
+
+To access the Playground in Mastra Cloud with `experimental_auth` enabled...
+
+
