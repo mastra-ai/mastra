@@ -23,17 +23,17 @@ export class GoogleCloudPubSub extends PubSub {
     console.log('message sent', topicName, event, messageId);
   }
 
-  async subscribe(topic: string, cb: (event: Event) => void): Promise<void> {
+  async subscribe(topic: string, cb: (event: Event, ack: () => void) => void): Promise<void> {
     const subscription = this.pubsub.subscription('workflows-subscription');
     subscription.on('message', message => {
       const event = JSON.parse(message.data.toString()) as Event;
-      cb(event, async () => {
+      cb(event, () => {
         message.ack();
       });
     });
   }
 
-  async unsubscribe(topic: string, cb: (event: Event) => void): Promise<void> {
+  async unsubscribe(topic: string, cb: (event: Event, ack: () => void) => void): Promise<void> {
     const subscription = this.pubsub.subscription('workflows-subscription');
     subscription.removeListener('message', cb);
   }

@@ -1165,7 +1165,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     return snapshot;
   }
 
-  async process(event: Event) {
+  async process(event: Event, ack?: () => void) {
     const { type, data } = event;
 
     const workflowData = data as Omit<ProcessorArgs, 'workflow'>;
@@ -1277,5 +1277,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       default:
         break;
     }
+
+    ack?.();
   }
 }
