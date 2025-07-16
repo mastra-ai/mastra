@@ -1,4 +1,4 @@
-import { Routes, Route, BrowserRouter, Outlet } from 'react-router';
+import { Routes, Route, BrowserRouter, Outlet, useNavigate } from 'react-router';
 
 import { Layout } from '@/components/layout';
 
@@ -35,6 +35,19 @@ import VNextNetwork from './pages/networks/network/v-next';
 import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
 
+const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
+  const navigate = useNavigate();
+  const frameworkNavigate = (path: string) => {
+    navigate(path);
+  };
+
+  return (
+    <LinkComponentProvider Link={Link} navigate={frameworkNavigate}>
+      {children}
+    </LinkComponentProvider>
+  );
+};
+
 function App() {
   const [queryClient] = useState(() => new QueryClient());
 
@@ -43,7 +56,7 @@ function App() {
       <PostHogProvider>
         <MastraClientProvider>
           <BrowserRouter>
-            <LinkComponentProvider Link={Link}>
+            <LinkComponentWrapper>
               <Routes>
                 <Route
                   element={
@@ -159,7 +172,7 @@ function App() {
                   <Route path="/runtime-context" element={<RuntimeContext />} />
                 </Route>
               </Routes>
-            </LinkComponentProvider>
+            </LinkComponentWrapper>
           </BrowserRouter>
         </MastraClientProvider>
       </PostHogProvider>
