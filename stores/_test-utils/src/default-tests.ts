@@ -11,6 +11,7 @@ import {
 } from '@mastra/core/storage';
 import { createScoresTest } from './domains/scores';
 import { createConversationsTest } from './domains/conversations';
+import { createTestSuiteWorkflows } from './domains/workflows';
 
 export * from './domains/conversations/data';
 
@@ -110,160 +111,9 @@ export function createTestSuite(storage: MastraStorage) {
       await storage.clearTable({ tableName: TABLE_THREADS });
     });
 
-    describe('Workflow Snapshots', () => {
-      beforeAll(async () => {
-        // Create workflow_snapshot table
-        await storage.createTable({
-          tableName: TABLE_WORKFLOW_SNAPSHOT,
-          schema: {
-            workflow_name: { type: 'text', nullable: false },
-            run_id: { type: 'text', nullable: false },
-            snapshot: { type: 'text', nullable: false },
-            created_at: { type: 'timestamp', nullable: false },
-            updated_at: { type: 'timestamp', nullable: false },
-          },
-        });
-      });
 
-      it('should persist and load workflow snapshots', async () => {
-        const workflowName = 'test-workflow';
-        const runId = `run-${randomUUID()}`;
-        const snapshot = {
-          status: 'running',
-          context: {
-            stepResults: {},
-            attempts: {},
-            triggerData: { type: 'manual' },
-          },
-        } as any;
+    createTestSuiteWorkflows(storage);
 
-        await storage.persistWorkflowSnapshot({
-          workflowName,
-          runId,
-          snapshot,
-        });
-
-        const loadedSnapshot = await storage.loadWorkflowSnapshot({
-          workflowName,
-          runId,
-        });
-
-        expect(loadedSnapshot).toEqual(snapshot);
-      });
-
-      it('should return null for non-existent workflow snapshot', async () => {
-        const result = await storage.loadWorkflowSnapshot({
-          workflowName: 'non-existent',
-          runId: 'non-existent',
-        });
-
-        expect(result).toBeNull();
-      });
-
-      it('should update existing workflow snapshot', async () => {
-        const workflowName = 'test-workflow';
-        const runId = `run-${randomUUID()}`;
-        const initialSnapshot = {
-          status: 'running',
-          context: {
-            stepResults: {},
-            attempts: {},
-            triggerData: { type: 'manual' },
-          },
-        };
-
-        await storage.persistWorkflowSnapshot({
-          workflowName,
-          runId,
-          snapshot: initialSnapshot as any,
-        });
-
-        const updatedSnapshot = {
-          status: 'completed',
-          context: {
-            stepResults: {
-              'step-1': { status: 'success', result: { data: 'test' } },
-            },
-            attempts: { 'step-1': 1 },
-            triggerData: { type: 'manual' },
-          },
-        } as any;
-
-        await storage.persistWorkflowSnapshot({
-          workflowName,
-          runId,
-          snapshot: updatedSnapshot,
-        });
-
-        const loadedSnapshot = await storage.loadWorkflowSnapshot({
-          workflowName,
-          runId,
-        });
-
-        expect(loadedSnapshot).toEqual(updatedSnapshot);
-      });
-
-      it('should handle complex workflow state', async () => {
-        const workflowName = 'complex-workflow';
-        const runId = `run-${randomUUID()}`;
-        const complexSnapshot = {
-          value: { currentState: 'running' },
-          context: {
-            stepResults: {
-              'step-1': {
-                status: 'success',
-                result: {
-                  nestedData: {
-                    array: [1, 2, 3],
-                    object: { key: 'value' },
-                    date: new Date().toISOString(),
-                  },
-                },
-              },
-              'step-2': {
-                status: 'waiting',
-                dependencies: ['step-3', 'step-4'],
-              },
-            },
-            attempts: { 'step-1': 1, 'step-2': 0 },
-            triggerData: {
-              type: 'scheduled',
-              metadata: {
-                schedule: '0 0 * * *',
-                timezone: 'UTC',
-              },
-            },
-          },
-          activePaths: [
-            {
-              stepPath: ['step-1'],
-              stepId: 'step-1',
-              status: 'success',
-            },
-            {
-              stepPath: ['step-2'],
-              stepId: 'step-2',
-              status: 'waiting',
-            },
-          ],
-          runId: runId,
-          timestamp: Date.now(),
-        };
-
-        await storage.persistWorkflowSnapshot({
-          workflowName,
-          runId,
-          snapshot: complexSnapshot as unknown as WorkflowRunState,
-        });
-
-        const loadedSnapshot = await storage.loadWorkflowSnapshot({
-          workflowName,
-          runId,
-        });
-
-        expect(loadedSnapshot).toEqual(complexSnapshot);
-      });
-    });
 
     describe('getWorkflowRuns', () => {
       beforeEach(async () => {
@@ -592,7 +442,11 @@ export function createTestSuite(storage: MastraStorage) {
         },
       });
 
-      expect(await storage['hasColumn'](tempTable, 'resourceId')).toBe(false);
+      if ('stores' in storage) {
+        expect(await storage.stores!.operations.hasColumn(tempTable, 'resourceId')).toBe(false);
+      } else {
+        expect(await storage['hasColumn'](tempTable, 'resourceId')).toBe(false);
+      }
 
       await storage.alterTable({
         tableName: tempTable as TABLE_NAMES, schema: {
@@ -601,7 +455,11 @@ export function createTestSuite(storage: MastraStorage) {
         }, ifNotExists: ['resourceId']
       });
 
-      expect(await storage['hasColumn'](tempTable, 'resourceId')).toBe(true);
+      if ('stores' in storage) {
+        expect(await storage.stores!.operations.hasColumn(tempTable, 'resourceId')).toBe(true);
+      } else {
+        expect(await storage['hasColumn'](tempTable, 'resourceId')).toBe(true);
+      }
     });
 
   });

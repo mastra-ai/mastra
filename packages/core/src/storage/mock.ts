@@ -3,11 +3,14 @@ import type { MastraMessageV2 } from '../agent';
 import type { ScoreRowData } from '../eval';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { Trace } from '../telemetry';
+import type { WorkflowRunState } from '../workflows';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
 import { StoreOperationsInMemory } from './domains/operations/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import type { InMemoryScores } from './domains/scores/inmemory';
+import { WorkflowsInMemory } from './domains/workflows';
+import type { InMemoryWorkflows } from './domains/workflows/inmemory';
 import type {
   EvalRow,
   PaginationInfo,
@@ -22,6 +25,7 @@ import type {
 export class MockStore extends MastraStorage {
   scoresStorage: ScoresInMemory;
   operationsStorage: StoreOperationsInMemory;
+  workflowsStorage: WorkflowsInMemory;
 
   constructor() {
     super({ name: 'InMemoryStorage' });
@@ -36,6 +40,11 @@ export class MockStore extends MastraStorage {
       collection: database.mastra_scorers as InMemoryScores,
     });
 
+    this.workflowsStorage = new WorkflowsInMemory({
+      collection: database.mastra_workflow_snapshot as InMemoryWorkflows,
+      operations: operationsStorage,
+    });
+
     this.operationsStorage = operationsStorage;
   }
 
@@ -48,6 +57,28 @@ export class MockStore extends MastraStorage {
     mastra_resources: {},
     mastra_scorers: {},
   };
+
+  async persistWorkflowSnapshot({
+    workflowName,
+    runId,
+    snapshot,
+  }: {
+    workflowName: string;
+    runId: string;
+    snapshot: WorkflowRunState;
+  }): Promise<void> {
+    await this.workflowsStorage.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+  }
+
+  async loadWorkflowSnapshot({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunState | null> {
+    return this.workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+  }
 
   async createTable({
     tableName,
@@ -343,37 +374,7 @@ export class MockStore extends MastraStorage {
     offset?: number;
     resourceId?: string;
   } = {}): Promise<WorkflowRuns> {
-    this.logger.debug(`MockStore: getWorkflowRuns called`);
-    let runs = Object.values(this.data.mastra_workflow_snapshot || {});
-
-    if (workflowName) runs = runs.filter((run: any) => run.workflow_name === workflowName);
-    if (fromDate) runs = runs.filter((run: any) => new Date(run.createdAt) >= fromDate);
-    if (toDate) runs = runs.filter((run: any) => new Date(run.createdAt) <= toDate);
-    if (resourceId) runs = runs.filter((run: any) => run.resourceId === resourceId);
-
-    const total = runs.length;
-
-    // Sort by createdAt
-    runs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    // Apply pagination
-    if (limit !== undefined && offset !== undefined) {
-      const start = offset;
-      const end = start + limit;
-      runs = runs.slice(start, end);
-    }
-
-    // Deserialize snapshot if it's a string
-    const parsedRuns = runs.map((run: any) => ({
-      ...run,
-      snapshot: typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : { ...run.snapshot },
-      createdAt: new Date(run.createdAt),
-      updatedAt: new Date(run.updatedAt),
-      runId: run.run_id,
-      workflowName: run.workflow_name,
-    }));
-
-    return { runs: parsedRuns as WorkflowRun[], total };
+    return this.workflowsStorage.getWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
   }
 
   async getWorkflowRunById({
@@ -383,26 +384,7 @@ export class MockStore extends MastraStorage {
     runId: string;
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
-    this.logger.debug(`MockStore: getWorkflowRunById called for runId ${runId}`);
-    let run = Object.values(this.data.mastra_workflow_snapshot || {}).find((r: any) => r.run_id === runId);
-
-    if (run && workflowName && run.workflow_name !== workflowName) {
-      run = undefined; // Not found if workflowName doesn't match
-    }
-
-    if (!run) return null;
-
-    // Deserialize snapshot if it's a string
-    const parsedRun = {
-      ...run,
-      snapshot: typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot,
-      createdAt: new Date(run.createdAt),
-      updatedAt: new Date(run.updatedAt),
-      runId: run.run_id,
-      workflowName: run.workflow_name,
-    };
-
-    return parsedRun as WorkflowRun;
+    return this.workflowsStorage.getWorkflowRunById({ runId, workflowName });
   }
 
   async getTracesPaginated({

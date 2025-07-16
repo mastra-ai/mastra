@@ -83,4 +83,9 @@ export class StoreOperationsInMemory extends StoreOperations {
     }): Promise<void> {
         this.logger.debug(`MockStore: alterTable called for ${tableName} with schema`, schema);
     }
+
+    async hasColumn(table: string, column: string): Promise<boolean> {
+        this.logger.debug(`MockStore: hasColumn called for ${table} with column ${column}`);
+        return true;
+    }
 }

@@ -10,6 +10,8 @@ export abstract class StoreOperations extends MastraBase {
     });
   }
 
+  abstract hasColumn(table: string, column: string): Promise<boolean>;
+
   protected getSqlType(type: StorageColumn['type']): string {
     switch (type) {
       case 'text':

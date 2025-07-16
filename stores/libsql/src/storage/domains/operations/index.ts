@@ -35,6 +35,13 @@ export class StoreOperationsLibSQL extends StoreOperations {
         this.initialBackoffMs = initialBackoffMs ?? 100;
     }
 
+    async hasColumn(table: string, column: string): Promise<boolean> {
+        const result = await this.client.execute({
+            sql: `PRAGMA table_info(${table})`,
+        });
+        return (await result.rows)?.some((row: any) => row.name === column);
+    }
+
     private getCreateTableSQL(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string {
         const parsedTableName = parseSqlIdentifier(tableName, 'table name');
         const columns = Object.entries(schema).map(([name, col]) => {

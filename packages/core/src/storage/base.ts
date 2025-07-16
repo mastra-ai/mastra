@@ -16,6 +16,9 @@ import {
   TABLE_SCHEMAS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
+import type { StoreOperations } from './domains/operations';
+import type { ScoresStorage } from './domains/scores';
+import type { WorkflowsStorage } from './domains/workflows';
 import type {
   EvalRow,
   PaginationInfo,
@@ -42,6 +45,12 @@ export abstract class MastraStorage extends MastraBase {
 
   protected hasInitialized: null | Promise<boolean> = null;
   protected shouldCacheInit = true;
+
+  stores?: {
+    operations: StoreOperations;
+    workflows: WorkflowsStorage;
+    scores: ScoresStorage;
+  }
 
   constructor({ name }: { name: string }) {
     super({
