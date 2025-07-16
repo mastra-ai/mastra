@@ -25,8 +25,10 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import pgPromise from 'pg-promise';
-import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
+import type { Client } from 'pg';
+// import pgPromise from 'pg-promise';
+import Pool from 'pg-pool';
+// import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 
 export type PostgresConfig = {
   schemaName?: string;
@@ -37,7 +39,7 @@ export type PostgresConfig = {
       database: string;
       user: string;
       password: string;
-      ssl?: boolean | ISSLConfig;
+      ssl?: boolean /*| ISSLConfig*/;
     }
   | {
       connectionString: string;
@@ -45,8 +47,8 @@ export type PostgresConfig = {
 );
 
 export class PostgresStore extends MastraStorage {
-  public db: pgPromise.IDatabase<{}>;
-  public pgp: pgPromise.IMain;
+  public db: Pool<Client>;
+  // public pgp: pgPromise.IMain;
   private schema?: string;
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
@@ -75,9 +77,9 @@ export class PostgresStore extends MastraStorage {
         }
       }
       super({ name: 'PostgresStore' });
-      this.pgp = pgPromise();
+      // this.pgp = pgPromise();
       this.schema = config.schemaName;
-      this.db = this.pgp(
+      this.db = new Pool(
         `connectionString` in config
           ? { connectionString: config.connectionString }
           : {
@@ -135,7 +137,7 @@ export class PostgresStore extends MastraStorage {
 
       const query = `${baseQuery}${typeCondition} ORDER BY created_at DESC`;
 
-      const rows = await this.db.manyOrNone(query, [agentName]);
+      const rows = (await this.db.query(query, [agentName])).rows;
       return rows?.map(row => this.transformEvalRow(row)) ?? [];
     } catch (error) {
       // Handle case where table doesn't exist yet
@@ -311,7 +313,7 @@ export class PostgresStore extends MastraStorage {
     const finalQueryParams = [...queryParams, perPage, currentOffset];
 
     try {
-      const rows = await this.db.manyOrNone<any>(dataQuery, finalQueryParams);
+      const rows = (await this.db.query<any>(dataQuery, finalQueryParams)).rows;
       const traces = rows.map(row => ({
         id: row.id,
         parentSpanId: row.parentSpanId,
@@ -653,7 +655,7 @@ export class PostgresStore extends MastraStorage {
       const queryParams: any[] = [resourceId];
 
       const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "createdAt" DESC`;
-      const rows = await this.db.manyOrNone(dataQuery, queryParams);
+      const rows = (await this.db.query(dataQuery, queryParams)).rows;
       return (rows || []).map(thread => ({
         ...thread,
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
@@ -693,7 +695,7 @@ export class PostgresStore extends MastraStorage {
       }
 
       const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "createdAt" DESC LIMIT $2 OFFSET $3`;
-      const rows = await this.db.manyOrNone(dataQuery, [...queryParams, perPage, currentOffset]);
+      const rows = (await this.db.query(dataQuery, [...queryParams, perPage, currentOffset])).rows;
 
       const threads = (rows || []).map(thread => ({
         ...thread,
@@ -916,7 +918,7 @@ export class PostgresStore extends MastraStorage {
       paramIdx += 4;
     }
     const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
-    const includedRows = await this.db.manyOrNone(finalQuery, params);
+    const includedRows = (await this.db.query(finalQuery, params)).rows;
     const seen = new Set<string>();
     const dedupedRows = includedRows.filter(row => {
       if (seen.has(row.id)) return false;
@@ -961,7 +963,7 @@ export class PostgresStore extends MastraStorage {
         LIMIT $${excludeIds.length + 2}
         `;
       const queryParams: any[] = [threadId, ...excludeIds, limit];
-      const remainingRows = await this.db.manyOrNone(query, queryParams);
+      const remainingRows = (await this.db.query(query, queryParams)).rows;
       rows.push(...remainingRows);
 
       const fetchedMessages = (rows || []).map(message => {
@@ -1069,7 +1071,7 @@ export class PostgresStore extends MastraStorage {
       const dataQuery = `${selectStatement} FROM ${this.getTableName(
         TABLE_MESSAGES,
       )} ${whereClause} ${excludeIds.length ? `AND id NOT IN (${excludeIdsParam})` : ''}${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      const rows = await this.db.manyOrNone(dataQuery, [...queryParams, ...excludeIds, perPage, currentOffset]);
+      const rows = (await this.db.query(dataQuery, [...queryParams, ...excludeIds, perPage, currentOffset])).rows;
       messages.push(...(rows || []));
 
       // Parse content back to objects if they were stringified during storage
@@ -1402,7 +1404,7 @@ export class PostgresStore extends MastraStorage {
 
       const queryValues = limit !== undefined && offset !== undefined ? [...values, limit, offset] : values;
 
-      const result = await this.db.manyOrNone(query, queryValues);
+      const result = (await this.db.query(query, queryValues)).rows;
 
       const runs = (result || []).map(row => {
         return this.parseWorkflowRun(row);
@@ -1542,7 +1544,7 @@ export class PostgresStore extends MastraStorage {
       const dataQuery = `SELECT * FROM ${this.getTableName(
         TABLE_EVALS,
       )} ${whereClause} ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      const rows = await this.db.manyOrNone(dataQuery, [...queryParams, perPage, currentOffset]);
+      const rows = (await this.db.query(dataQuery, [...queryParams, perPage, currentOffset])).rows;
 
       return {
         evals: rows?.map(row => this.transformEvalRow(row)) ?? [],
@@ -1593,7 +1595,7 @@ export class PostgresStore extends MastraStorage {
       TABLE_MESSAGES,
     )} WHERE id IN ($1:list)`;
 
-    const existingMessagesDb = await this.db.manyOrNone(selectQuery, [messageIds]);
+    const existingMessagesDb = (await this.db.query(selectQuery, [messageIds])).rows;
 
     if (existingMessagesDb.length === 0) {
       return [];
@@ -1688,7 +1690,7 @@ export class PostgresStore extends MastraStorage {
     });
 
     // Re-fetch to return the fully updated messages
-    const updatedMessages = await this.db.manyOrNone<MastraMessageV2>(selectQuery, [messageIds]);
+    const updatedMessages = (await this.db.query<MastraMessageV2>(selectQuery, [messageIds])).rows;
 
     return (updatedMessages || []).map(message => {
       if (typeof message.content === 'string') {
