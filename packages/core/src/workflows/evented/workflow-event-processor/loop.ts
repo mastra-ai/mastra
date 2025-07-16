@@ -1,5 +1,6 @@
 import EventEmitter from 'events';
 import type { StepFlowEntry, StepResult } from '../..';
+import type { Mastra } from '../../..';
 import { RuntimeContext } from '../../../di';
 import type { PubSub } from '../../../events';
 import type { StepExecutor } from '../step-executor';
@@ -129,13 +130,14 @@ export async function processWorkflowForEach(
     resumeData,
     parentWorkflow,
     runtimeContext,
-    runCount = 0,
   }: ProcessorArgs,
   {
     pubsub,
+    mastra,
     step,
   }: {
     pubsub: PubSub;
+    mastra: Mastra;
     step: Extract<StepFlowEntry, { type: 'foreach' }>;
   },
 ) {
@@ -145,11 +147,11 @@ export async function processWorkflowForEach(
   ] as any;
 
   const idx = currentResult?.output?.length ?? 0;
-  console.log('foreach found', step.step.id, idx, prevResult, runCount);
-
   const targetLen = (prevResult as any)?.output?.length ?? 0;
 
-  if (idx >= targetLen) {
+  console.dir({ foreach: { idx, targetLen, executionPath, prevResult, currentResult } }, { depth: null });
+
+  if (idx >= targetLen && currentResult.output.filter((r: any) => r !== null).length >= targetLen) {
     await pubsub.publish('workflows', {
       type: 'workflow.step.run',
       data: {
@@ -167,7 +169,64 @@ export async function processWorkflowForEach(
     });
 
     return;
+  } else if (idx >= targetLen) {
+    // wait for the 'null' values to be filled from the concurrent run
+    return;
   }
+
+  if (executionPath.length === 1 && idx === 0) {
+    console.log('foreach first iteration', step.step.id, idx, prevResult);
+    // on first iteratation we need to kick off up to the set concurrency
+    const concurrency = Math.min(step.opts.concurrency ?? 1, targetLen);
+    const dummyResult = Array.from({ length: concurrency }, () => null);
+
+    await mastra.getStorage()?.updateWorkflowResults({
+      workflowName: workflowId,
+      runId,
+      stepId: step.step.id,
+      result: {
+        status: 'succcess',
+        output: dummyResult as any,
+        startedAt: Date.now(),
+        payload: (prevResult as any)?.output,
+      } as any,
+      runtimeContext,
+    });
+
+    for (let i = 0; i < concurrency; i++) {
+      await pubsub.publish('workflows', {
+        type: 'workflow.step.run',
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath: [executionPath[0]!, i],
+          resumeSteps,
+          stepResults,
+          prevResult,
+          resumeData,
+          activeSteps,
+          runtimeContext,
+        },
+      });
+    }
+
+    return;
+  }
+
+  (currentResult as any).output.push(null);
+  await mastra.getStorage()?.updateWorkflowResults({
+    workflowName: workflowId,
+    runId,
+    stepId: step.step.id,
+    result: {
+      status: 'succcess',
+      output: (currentResult as any).output,
+      startedAt: Date.now(),
+      payload: (prevResult as any)?.output,
+    } as any,
+    runtimeContext,
+  });
 
   await pubsub.publish('workflows', {
     type: 'workflow.step.run',

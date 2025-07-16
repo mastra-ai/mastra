@@ -3298,10 +3298,10 @@ describe('Workflow', () => {
       });
     });
 
-    // TODO: add .foreach concurrency
-    it.skip('should run a all item concurrency for loop', async () => {
+    it('should run a all item concurrency for loop', async () => {
       const startTime = Date.now();
       const map = vi.fn().mockImplementation(async ({ inputData }) => {
+        console.log('stepping', inputData.value);
         await new Promise(resolve => setTimeout(resolve, 1e3));
         return { value: inputData.value + 11 };
       });
@@ -3374,9 +3374,10 @@ describe('Workflow', () => {
       });
     });
 
-    it.skip('should run a partial item concurrency for loop', async () => {
+    it('should run a partial item concurrency for loop', async () => {
       const startTime = Date.now();
       const map = vi.fn().mockImplementation(async ({ inputData }) => {
+        console.log('stepping', inputData.value);
         await new Promise(resolve => setTimeout(resolve, 1e3));
         return { value: inputData.value + 11 };
       });

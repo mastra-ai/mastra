@@ -524,12 +524,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
         {
           pubsub: this.pubsub,
+          mastra: this.mastra,
           step,
         },
       );
     }
 
-    if (step?.type !== 'step' && step?.type !== 'loop' && step?.type !== 'waitForEvent' && step?.type !== 'foreach') {
+    if (!isExecutableStep(step)) {
       return this.errorWorkflow(
         {
           workflowId,
@@ -883,7 +884,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       const currentIdx = executionPath[1];
       const currentResult = (snapshot?.context?.[step.step.id] as any)?.output;
-      console.log('foreach-update', currentResult, currentIdx, prevResult);
+      console.dir({ foreachUpdate: { executionPath, currentResult, currentIdx, prevResult } }, { depth: null });
 
       let newResult = prevResult;
       if (currentIdx !== undefined) {
