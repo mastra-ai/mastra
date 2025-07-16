@@ -63,7 +63,8 @@ export class NetlifyDeployer extends Deployer {
     return `
     import { handle } from 'hono/netlify'
     import { mastra } from '#mastra';
-    import { createHonoServer, importTools } from '#server';
+    import { createHonoServer, convertBundledToolsIntoServerToolsObject } from '#server';
+    import { tools } from '#tools';
     import { evaluate } from '@mastra/core/eval';
     import { AvailableHooks, registerHook } from '@mastra/core/hooks';
     import { TABLE_EVALS } from '@mastra/core/storage';
@@ -107,7 +108,7 @@ export class NetlifyDeployer extends Deployer {
       }
     });
 
-    const app = await createHonoServer(mastra, { tools: importTools() });
+    const app = await createHonoServer(mastra, { tools: convertBundledToolsIntoServerToolsObject(tools) });
 
     export default handle(app)
 `;

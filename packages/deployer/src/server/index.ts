@@ -111,12 +111,9 @@ type Variables = {
   isDev: boolean;
 };
 
-export async function importTools() {
+export async function convertBundledToolsIntoServerToolsObject(tools: Record<string, Function>[]) {
   try {
-    // @ts-expect-error Tools is generated dependency
-    const toolImports = (await import('#tools')).tools as Record<string, Function>[];
-
-    return toolImports.reduce((acc, toolModule) => {
+    return tools.reduce((acc, toolModule) => {
       Object.entries(toolModule).forEach(([key, tool]) => {
         if (tool instanceof Tool) {
           acc[key] = tool;
