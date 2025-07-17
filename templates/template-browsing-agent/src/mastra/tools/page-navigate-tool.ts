@@ -30,7 +30,7 @@ export const pageNavigateTool = createTool({
         title,
         currentUrl,
       };
-    } catch (error: unknown) {
+    } catch (error: any) {
       return {
         success: false,
         message: `Navigation failed: ${error.message}`,
