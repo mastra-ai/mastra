@@ -250,7 +250,8 @@ export interface GetMemoryThreadMessagesParams {
    */
   limit?: number;
 }
-export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg, 'threadConfig'>;
+
+export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg, 'threadConfig' | 'threadId'>;
 
 export interface GetMemoryThreadMessagesResponse {
   messages: CoreMessage[];
