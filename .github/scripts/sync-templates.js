@@ -84,7 +84,7 @@ async function processTemplate(templateName, description) {
 
     if (repoExists) {
       console.log(`Repository ${templateName} exists, updating...`);
-      await updateExistingRepo(templateName);
+      await updateExistingRepo(templateName, description);
     } else {
       console.log(`Repository ${templateName} does not exist, creating...`);
       await createNewRepo(templateName, description);
@@ -125,7 +125,20 @@ async function createNewRepo(repoName, description) {
   await pushToRepo(repoName);
 }
 
-async function updateExistingRepo(repoName) {
+async function updateExistingRepo(repoName, description) {
+  try {
+    console.log(`Updating ${repoName} description`);
+    // Update existing repo description
+    await octokit.repos.update({
+      owner: ORGANIZATION,
+      repo: repoName,
+      description: description || `Template repository for ${repoName}`,
+    });
+
+    console.log(`Updated ${repoName} description`);
+  } catch (error) {
+    console.error(`Error updating ${repoName} description:`, error);
+  }
   // Push updated template code to the existing repository
   await pushToRepo(repoName);
 }
