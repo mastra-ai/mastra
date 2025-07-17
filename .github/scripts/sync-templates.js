@@ -157,8 +157,8 @@ async function pushToRepo(repoName) {
     console.log(`Cloning repo into temp directory: ${tempRoot}`);
     execSync(
       ` 
-      git config user.name "${USERNAME}" &&
-      git config user.email "${EMAIL}" && 
+      git config --global user.name "${USERNAME}" &&
+      git config --global user.email "${EMAIL}" && 
       git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${ORGANIZATION}/${repoName}.git &&
       cd ${repoName} &&
       git fetch origin
