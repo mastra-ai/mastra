@@ -34,9 +34,9 @@ Your template folder **must** include the following files:
   },
   "dependencies": {
     "@mastra/core": "latest",
-    "zod": "^3.25.67", //whatever version is the latest at the time the template is created
+    "zod": "^3.25.67",
     "@mastra/your-other-packages": "latest",
-    "@ai-sdk/openai": "^1.3.23" //whatever version is the latest at the time the template is created
+    "@ai-sdk/openai": "^1.3.23"
   },
   "devDependencies": {
     "@types/node": "^24.0.4",
