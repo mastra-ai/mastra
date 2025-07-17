@@ -229,6 +229,15 @@ async function pushToRepo(repoName) {
           stdio: 'inherit',
           cwd: tempDir,
         });
+
+        try {
+          execSync(`git pull origin ${provider}`, {
+            stdio: 'inherit',
+            cwd: tempDir,
+          });
+        } catch (error) {
+          console.log(`No ${provider} branch found in origin, skipping`);
+        }
       } catch (error) {
         console.log(`${provider} branch already exists in local`);
         execSync(`git checkout ${provider} && git pull origin ${provider}`, {
