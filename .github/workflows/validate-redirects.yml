@@ -9,6 +9,9 @@ on:
       - .github/workflows/validate-redirects.yml
       - .github/scripts/**
 
+permissions:
+  contents: read
+
 jobs:
   get-redirects-and-validate:
     runs-on: ubuntu-latest
