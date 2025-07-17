@@ -38,6 +38,6 @@ const performWebAction = async (url?: string, action?: string) => {
       message: `Successfully performed: ${action}`,
     };
   } catch (error: any) {
-    throw new Error(`Stagehand action failed: ${error.message}`);
+    throw new Error(`Web action failed: ${error.message}`);
   }
 };
