@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { Client } from 'pg';
+import { randomInt } from 'crypto';
 
 // Type definitions for the dataset
 interface Company {
@@ -943,11 +944,11 @@ async function seedData(client: Client): Promise<number> {
             employee.id,
             currentSalary,
             effectiveDate.toISOString().split('T')[0],
-            reasons[Math.floor(Math.random() * reasons.length)],
+            reasons[randomInt(0, reasons.length)],
           ],
         );
 
-        currentSalary = Math.floor(currentSalary * (1.05 + Math.random() * 0.1)); // 5-15% increase
+        currentSalary = Math.floor(currentSalary * (1.05 + randomInt(0, 1001) / 10000)); // 5-15% increase
         historyRecords++;
       }
     }
