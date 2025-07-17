@@ -311,13 +311,9 @@ async function pushToRepo(repoName) {
       const envExamplePath = path.join(tempDir, '.env.example');
       let envExample = await readFile(envExamplePath, 'utf-8');
       envExample = envExample.replace('OPENAI_API_KEY', providerApiKey);
-      if (envExample.includes('MODEL')) {
-        const splittedEnv = envExample.split('MODEL');
-        envExample = splittedEnv[0];
+      if (!envExample.includes('MODEL')) {
+        envExample = envExample + `\nMODEL=${defaultModel}`;
       }
-      // if (!envExample.includes('MODEL')) {
-      //   envExample = envExample + `\nMODEL=${defaultModel}`;
-      // }
       await writeFile(envExamplePath, envExample);
 
       //update llm provider in README.md
