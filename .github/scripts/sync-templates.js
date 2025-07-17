@@ -202,7 +202,7 @@ async function pushToRepo(repoName) {
       `
       git add . &&
       git commit -m "Update template from monorepo" &&
-      git push -u origin main --force
+      git push origin main
     `,
       { stdio: 'inherit', cwd: tempDir },
     );
@@ -316,7 +316,7 @@ async function pushToRepo(repoName) {
         `
         git add . &&
         git commit -m "Update llm provider to ${provider}" &&
-        git push -u origin ${provider} --force
+        git push origin ${provider}
     `,
         { stdio: 'inherit', cwd: tempDir },
       );
