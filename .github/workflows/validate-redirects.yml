@@ -1,15 +1,12 @@
 name: Validate next.config.mjs redirects
-
-on:
-  push:
-    branches:
-      - 'paul/**'
+on: [deployment_status]
 
 permissions:
   contents: read
 
 jobs:
   get-redirects-and-validate:
+    if: ${{ github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'Preview – mastra-docs' }}
     runs-on: ubuntu-latest
 
     steps:
