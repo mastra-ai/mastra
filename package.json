@@ -6,7 +6,7 @@
     "@changesets/cli": "^2.29.5",
     "@types/node": "^20.19.0",
     "husky": "^9.1.7",
-    "lint-staged": "^15.5.2",
+    "lint-staged": "^16.1.2",
     "npm-run-all2": "^8.0.4",
     "prettier": "^3.6.2",
     "turbo": "^2.5.4",
