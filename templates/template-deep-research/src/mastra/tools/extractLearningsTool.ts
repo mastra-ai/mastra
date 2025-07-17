@@ -1,16 +1,18 @@
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
 export const extractLearningsTool = createTool({
-  id: "extract-learnings",
-  description: "Extract key learnings and follow-up questions from a search result",
+  id: 'extract-learnings',
+  description: 'Extract key learnings and follow-up questions from a search result',
   inputSchema: z.object({
-    query: z.string().describe("The original research query"),
-    result: z.object({
-      title: z.string(),
-      url: z.string(),
-      content: z.string(),
-    }).describe("The search result to process"),
+    query: z.string().describe('The original research query'),
+    result: z
+      .object({
+        title: z.string(),
+        url: z.string(),
+        content: z.string(),
+      })
+      .describe('The search result to process'),
   }),
   execute: async ({ context, mastra }) => {
     try {
@@ -21,7 +23,7 @@ export const extractLearningsTool = createTool({
       const response = await learningExtractionAgent.generate(
         [
           {
-            role: "user",
+            role: 'user',
             content: `The user is researching "${query}".
             Extract a key learning and generate follow-up questions from this search result:
 
@@ -31,22 +33,22 @@ export const extractLearningsTool = createTool({
 
             Respond with a JSON object containing:
             - learning: string with the key insight from the content
-            - followUpQuestions: array of up to 3 follow-up questions for deeper research`
-          }
+            - followUpQuestions: array of up to 3 follow-up questions for deeper research`,
+          },
         ],
         {
           experimental_output: z.object({
             learning: z.string(),
             followUpQuestions: z.array(z.string()).max(3),
           }),
-        }
+        },
       );
 
       return response.object;
     } catch (error) {
-      console.error("Error extracting learnings:", error);
+      console.error('Error extracting learnings:', error);
       return {
-        learning: "Error extracting information",
+        learning: 'Error extracting information',
         followUpQuestions: [],
       };
     }

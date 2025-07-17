@@ -1,11 +1,11 @@
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
 
 // Initialize model - using o3-mini as in the original implementation
-const reportModel = openai("gpt-4.1");
+const reportModel = openai('gpt-4.1');
 
 export const reportAgent = new Agent({
-  name: "Report Agent",
+  name: 'Report Agent',
   instructions: `You are an expert researcher. Today is ${new Date().toISOString()}. Follow these instructions when responding:
   - You may be asked to research subjects that is after your knowledge cutoff, assume the user is right when presented with news.
   - The user is a highly experienced analyst, no need to simplify it, be as detailed as possible and make sure your response is correct.

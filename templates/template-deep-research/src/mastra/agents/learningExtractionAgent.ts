@@ -1,11 +1,11 @@
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
 
 // Initialize model
 const mainModel = openai('gpt-4.1');
 
 export const learningExtractionAgent = new Agent({
-  name: "Learning Extraction Agent",
+  name: 'Learning Extraction Agent',
   instructions: `You are an expert at analyzing search results and extracting key insights. Your role is to:
 
   1. Analyze search results from research queries

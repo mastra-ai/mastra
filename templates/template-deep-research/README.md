@@ -43,6 +43,7 @@ npm run dev
 ```
 
 Follow the interactive prompts:
+
 1. Enter your research topic
 2. Review the research findings
 3. Approve or reject the research results
@@ -51,6 +52,7 @@ Follow the interactive prompts:
 ## Required Environment Variables
 
 Create a `.env` file with:
+
 ```
 EXA_API_KEY="your-exa-api-key"
 ```

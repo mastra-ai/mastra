@@ -1,11 +1,11 @@
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
 
 // Initialize model
 const mainModel = openai('gpt-4.1');
 
 export const evaluationAgent = new Agent({
-  name: "Evaluation Agent",
+  name: 'Evaluation Agent',
   instructions: `You are an expert evaluation agent. Your task is to evaluate whether search results are relevant to a research query.
 
   When evaluating search results:
