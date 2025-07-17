@@ -17,7 +17,7 @@ const EMAIL = process.env.EMAIL;
 
 const PROVIDERS = {
   openai: {
-    model: 'gpt-4o',
+    model: 'gpt-4.1',
     package: '@ai-sdk/openai',
     apiKey: 'OPENAI_API_KEY',
     name: 'OpenAI',
