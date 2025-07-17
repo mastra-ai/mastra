@@ -1,5 +1,3 @@
-'use client';
-
 import { GetAgentResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
@@ -8,37 +6,42 @@ import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React from 'react';
+import React, { useMemo } from 'react';
 
 import { ScrollableContainer } from '@/components/scrollable-container';
 import { Skeleton } from '@/components/ui/skeleton';
 import { columns } from './columns';
 import { AgentTableData } from './types';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentsTableProps {
-  agents?: Record<string, GetAgentResponse>;
+  agents: Record<string, GetAgentResponse>;
   isLoading: boolean;
-  onClickRow: (agentId: string) => void;
+  computeLink: (agentId: string) => string;
 }
 
-export function AgentsTable({ agents, isLoading, onClickRow }: AgentsTableProps) {
-  const _agents = agents || {};
+export function AgentsTable({ agents, isLoading, computeLink }: AgentsTableProps) {
+  const { navigate } = useLinkComponent();
+  const projectData: AgentTableData[] = useMemo(
+    () =>
+      Object.keys(agents).map(key => {
+        const agent = agents[key];
 
-  const projectData: AgentTableData[] = Object.keys(_agents).map(key => {
-    const agent = _agents[key];
-
-    return {
-      id: key,
-      name: agent.name,
-      instructions: agent.instructions,
-      provider: agent.provider,
-      branch: undefined,
-      executedAt: undefined,
-      repoUrl: undefined,
-      tools: agent.tools,
-      modelId: agent.modelId,
-    };
-  });
+        return {
+          id: key,
+          name: agent.name,
+          instructions: agent.instructions,
+          provider: agent.provider,
+          branch: undefined,
+          executedAt: undefined,
+          repoUrl: undefined,
+          tools: agent.tools,
+          modelId: agent.modelId,
+          link: computeLink(key),
+        };
+      }),
+    [agents],
+  );
 
   const table = useReactTable({
     data: projectData,
@@ -67,7 +70,7 @@ export function AgentsTable({ agents, isLoading, onClickRow }: AgentsTableProps)
         </Thead>
         <Tbody>
           {rows.map(row => (
-            <Row key={row.id} onClick={() => onClickRow(row.original.id)}>
+            <Row key={row.id} onClick={() => navigate(row.original.link)}>
               {row.getVisibleCells().map(cell => (
                 <React.Fragment key={cell.id}>
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}

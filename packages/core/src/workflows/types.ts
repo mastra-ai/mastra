@@ -122,6 +122,11 @@ export type StreamEvent =
       type: 'step-waiting';
       payload: any;
       id: string;
+    }
+  | {
+      type: 'step-result';
+      payload: any;
+      id: string;
     };
 
 export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
@@ -181,6 +186,7 @@ export interface WorkflowRunState {
   status: WorkflowRunStatus;
   result?: Record<string, any>;
   error?: string | Error;
+  runtimeContext?: Record<string, any>;
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];

@@ -1,4 +1,5 @@
 import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
+import type { JSONSchema7 } from 'json-schema';
 
 export type { MastraMessageV2 } from '../agent';
 import type { ZodObject } from 'zod';
@@ -53,10 +54,11 @@ type BaseWorkingMemory = {
 type TemplateWorkingMemory = BaseWorkingMemory & {
   template: string;
   schema?: never;
+  version?: 'stable' | 'vnext';
 };
 
 type SchemaWorkingMemory = BaseWorkingMemory & {
-  schema: ZodObject<any>;
+  schema: ZodObject<any> | JSONSchema7;
   template?: never;
 };
 

@@ -17,28 +17,32 @@ const EMAIL = process.env.EMAIL;
 
 const PROVIDERS = {
   openai: {
-    model: 'gpt-4o',
+    model: 'gpt-4.1',
     package: '@ai-sdk/openai',
     apiKey: 'OPENAI_API_KEY',
     name: 'OpenAI',
+    url: 'https://platform.openai.com/api-keys',
   },
   anthropic: {
     model: 'claude-3-5-sonnet-20240620',
     package: '@ai-sdk/anthropic',
     apiKey: 'ANTHROPIC_API_KEY',
     name: 'Anthropic',
+    url: 'https://console.anthropic.com/settings/keys',
   },
   google: {
     model: 'gemini-2.5-pro',
     package: '@ai-sdk/google',
     apiKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
     name: 'Google',
+    url: 'https://console.cloud.google.com/apis/credentials',
   },
   groq: {
     model: 'llama-3.3-70b-versatile',
     package: '@ai-sdk/groq',
     apiKey: 'GROQ_API_KEY',
     name: 'Groq',
+    url: 'https://console.groq.com/keys',
   },
 };
 
@@ -58,8 +62,11 @@ async function main() {
 
     // Process each template
     for (const templateName of templateDirs) {
-      //pick description text from description.txt
-      const description = fs.readFileSync(path.join(TEMPLATES_DIR, templateName, 'description.txt'), 'utf-8');
+      //pick description text from package.json
+      const packageJsonFile = fs.readFileSync(path.join(TEMPLATES_DIR, templateName, 'package.json'), 'utf-8');
+      const packageJson = JSON.parse(packageJsonFile);
+      const description = packageJson.description || '';
+      console.log(`Description for ${templateName}: ${description}`);
       await processTemplate(templateName, description);
     }
   } catch (error) {
@@ -77,7 +84,7 @@ async function processTemplate(templateName, description) {
 
     if (repoExists) {
       console.log(`Repository ${templateName} exists, updating...`);
-      await updateExistingRepo(templateName);
+      await updateExistingRepo(templateName, description);
     } else {
       console.log(`Repository ${templateName} does not exist, creating...`);
       await createNewRepo(templateName, description);
@@ -118,7 +125,20 @@ async function createNewRepo(repoName, description) {
   await pushToRepo(repoName);
 }
 
-async function updateExistingRepo(repoName) {
+async function updateExistingRepo(repoName, description) {
+  try {
+    console.log(`Updating ${repoName} description`);
+    // Update existing repo description
+    await octokit.repos.update({
+      owner: ORGANIZATION,
+      repo: repoName,
+      description: description || `Template repository for ${repoName}`,
+    });
+
+    console.log(`Updated ${repoName} description`);
+  } catch (error) {
+    console.error(`Error updating ${repoName} description:`, error);
+  }
   // Push updated template code to the existing repository
   await pushToRepo(repoName);
 }
@@ -148,6 +168,7 @@ async function pushToRepo(repoName) {
       git commit -m "Update template from monorepo" &&
       git branch -M main &&
       git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${ORGANIZATION}/${repoName}.git  &&
+      git pull origin main &&
       git push -u origin main --force
     `,
       { stdio: 'inherit', cwd: tempDir },
@@ -157,15 +178,53 @@ async function pushToRepo(repoName) {
     // TODO make more dynamic
     for (const [
       provider,
-      { model: defaultModel, package: providerPackage, apiKey: providerApiKey, name: providerName },
+      { model: defaultModel, package: providerPackage, apiKey: providerApiKey, name: providerName, url: providerUrl },
     ] of Object.entries(PROVIDERS)) {
-      const files = ['./src/mastra/workflows/index.ts', './src/mastra/agents/index.ts'];
       // move to new branch
-      execSync(`git checkout main && git switch -c ${provider}`, { stdio: 'inherit', cwd: tempDir });
+      execSync(`git checkout main && git switch -c ${provider}${provider}`, {
+        stdio: 'inherit',
+        cwd: tempDir,
+      });
 
-      //update llm provider in workflows and agents
-      for (const file of files) {
-        const filePath = path.join(tempDir, file);
+      try {
+        execSync(`git pull origin ${provider}`, {
+          stdio: 'inherit',
+          cwd: tempDir,
+        });
+      } catch (error) {
+        console.log(`No ${provider} branch found in origin`);
+      }
+
+      //update llm provider agent files and workflow files
+      let agentDir = '';
+      let agentFiles = [];
+      try {
+        agentDir = path.join(tempDir, 'src/mastra/agents');
+        agentFiles = fs.readdirSync(agentDir);
+      } catch (error) {
+        console.log(`No agents directory found in ${tempDir}`);
+      }
+      const agentFilesToUpdate = agentFiles
+        .filter(file => file.endsWith('.ts'))
+        ?.map(file => path.join(agentDir, file));
+      let workflowDir = '';
+      let workflowFiles = [];
+      try {
+        workflowDir = path.join(tempDir, 'src/mastra/workflows');
+        workflowFiles = fs.readdirSync(workflowDir);
+      } catch (error) {
+        console.log(`No workflows directory found in ${tempDir}`);
+      }
+      const workflowFilesToUpdate = workflowFiles
+        .filter(file => file.endsWith('.ts'))
+        ?.map(file => path.join(workflowDir, file));
+      console.log(
+        `Updating ${workflowFilesToUpdate.length} workflow files and ${agentFilesToUpdate.length} agent files`,
+      );
+      const filePaths = [...workflowFilesToUpdate, ...agentFilesToUpdate];
+
+      //update llm provider in and agents
+      for (const filePath of filePaths) {
         if (fs.existsSync(filePath)) {
           console.log(`Updating ${filePath}`);
           let content = await readFile(filePath, 'utf-8');
@@ -173,7 +232,10 @@ async function pushToRepo(repoName) {
             `import { openai } from '@ai-sdk/openai';`,
             `import { ${provider} } from '${providerPackage}';`,
           );
-          content = content.replaceAll(`openai('gpt-4o')`, `${provider}(process.env.MODEL ?? "${defaultModel}")`);
+          content = content.replaceAll(
+            /openai\((['"])[^'"]*(['"])\)/g,
+            `${provider}(process.env.MODEL ?? "${defaultModel}")`,
+          );
           await writeFile(filePath, content);
         } else {
           console.log(`${filePath} does not exist`);
@@ -202,7 +264,10 @@ async function pushToRepo(repoName) {
       console.log(`Updating README.md for ${provider}`);
       const readmePath = path.join(tempDir, 'README.md');
       let readme = await readFile(readmePath, 'utf-8');
-      readme = readme.replace('OpenAI', providerName);
+      readme = readme.replaceAll('OpenAI', providerName);
+      readme = readme.replaceAll('OPENAI_API_KEY', providerApiKey);
+      readme = readme.replaceAll('@ai-sdk/openai', providerPackage);
+      readme = readme.replaceAll('https://platform.openai.com/api-keys', providerUrl);
       await writeFile(readmePath, readme);
 
       // push branch

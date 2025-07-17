@@ -1,4 +1,5 @@
 import type { Tool } from '@mastra/core';
+import type { Context } from 'hono';
 
 export interface ApiError extends Error {
   message: string;
@@ -9,4 +10,9 @@ export type ServerBundleOptions = {
   playground?: boolean;
   isDev?: boolean;
   tools: Record<string, Tool>;
+};
+
+export type BodyLimitOptions = {
+  maxSize: number;
+  onError: (c: Context) => Response;
 };

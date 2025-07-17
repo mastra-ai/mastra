@@ -9,4 +9,5 @@ export type AgentTableData = {
   provider: string;
   instructions: string;
   tools?: Record<string, GetToolResponse>;
+  link: string;
 };

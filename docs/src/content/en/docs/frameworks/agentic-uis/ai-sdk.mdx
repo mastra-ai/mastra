@@ -3,60 +3,96 @@ title: "Using with Vercel AI SDK"
 description: "Learn how Mastra leverages the Vercel AI SDK library and how you can leverage it further with Mastra"
 ---
 
-import Image from "next/image";
+import { Callout, Tabs } from "nextra/components";
 
-# Using with Vercel AI SDK
+# Using Vercel AI SDK
 
-Mastra leverages AI SDK's model routing (a unified interface on top of OpenAI, Anthropic, etc), structured output, and tool calling.
+Mastra integrates with [Vercel's AI SDK](https://sdk.vercel.ai) to support model routing, React Hooks, and data streaming methods.
 
-We explain this in greater detail in [this blog post](https://mastra.ai/blog/using-ai-sdk-with-mastra)
+## AI SDK v5 (beta)
 
-## Mastra + AI SDK
+Mastra also supports AI SDK v5 (beta) see the following section for v5 specific methods: [Vercel AI SDK v5](/docs/frameworks/agentic-uis/ai-sdk#vercel-ai-sdk-v5)
 
-Mastra acts as a layer on top of AI SDK to help teams productionize their proof-of-concepts quickly and easily.
-
-<Image
-  src="/image/mastra-ai-sdk.png"
-  alt="Agent interaction trace showing spans, LLM calls, and tool executions"
-  style={{ maxWidth: "800px", width: "100%", margin: "8px 0" }}
-  className="nextra-image rounded-md py-8"
-  data-zoom
-  width={800}
-  height={400}
-/>
+<Callout type="warning">
+  The code examples contained with this page assume you're using the Next.js App Router at the root of your
+  project, e.g., `app` rather than `src/app`.
+</Callout>
 
 ## Model routing
 
-When creating agents in Mastra, you can specify any AI SDK-supported model:
+When creating agents in Mastra, you can specify any AI SDK-supported model.
 
-```typescript
+```typescript {7} filename="agents/weather-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
-const agent = new Agent({
-  name: "WeatherAgent",
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
   instructions: "Instructions for the agent...",
-  model: openai("gpt-4-turbo"), // Model comes directly from AI SDK
+  model: openai("gpt-4-turbo"),
 });
-
-const result = await agent.generate("What is the weather like?");
 ```
 
-## AI SDK Hooks
+> See [Model Providers](/docs/getting-started/model-providers) and [Model Capabilities](/docs/getting-started/model-capability) for more information.
 
-Mastra is compatible with AI SDK's hooks for seamless frontend integration:
+## React Hooks
 
-### useChat
+Mastra supports AI SDK hooks for connecting frontend components directly to agents using HTTP streams.
 
-The `useChat` hook enables real-time chat interactions in your frontend application
+Install the required AI SDK React package:
 
-- Works with agent data streams i.e. `.toDataStreamResponse()`
-- The useChat `api` defaults to `/api/chat`
-- Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for data streams,
-  i.e. no structured output is defined.
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm install @ai-sdk/react
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add @ai-sdk/react
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add @ai-sdk/react
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    bun add @ai-sdk/react
+    ```
+  </Tabs.Tab>
+</Tabs>
 
-```typescript filename="app/api/chat/route.ts" copy
-import { mastra } from "@/src/mastra";
+
+### Using the `useChat()` Hook
+
+The `useChat` hook handles real-time chat interactions between your frontend and a Mastra agent, enabling you to send prompts and receive streaming responses over HTTP.
+
+```typescript {6} filename="app/test/chat.tsx" showLineNumbers copy
+"use client";
+
+import { useChat } from "@ai-sdk/react";
+
+export function Chat() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: "api/chat"
+  });
+  return (
+    <div>
+      <pre>{JSON.stringify(messages, null, 2)}</pre>
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} placeholder="Name of city" />
+      </form>
+    </div>
+  );
+}
+```
+
+Requests sent using the `useChat` hook are handled by a standard server route. This example shows how to define a POST route using a Next.js Route Handler.
+
+```typescript filename="app/api/chat/route.ts" showLineNumbers copy
+import { mastra } from "../../mastra";
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
@@ -67,46 +103,37 @@ export async function POST(req: Request) {
 }
 ```
 
-```typescript copy
-import { useChat } from '@ai-sdk/react';
+> When using `useChat` with agent memory, refer to the [Agent Memory section](/docs/agents/agent-memory#usechat) for key implementation details.
 
-export function ChatComponent() {
-  const { messages, input, handleInputChange, handleSubmit } = useChat({
-    api: '/path-to-your-agent-stream-api-endpoint'
+### Using the `useCompletion()` Hook
+
+The `useCompletion` hook handles single-turn completions between your frontend and a Mastra agent, allowing you to send a prompt and receive a streamed response over HTTP.
+
+```typescript {6} filename="app/test/completion.tsx" showLineNumbers copy
+"use client";
+
+import { useCompletion } from "@ai-sdk/react";
+
+export function Completion() {
+  const { completion, input, handleInputChange, handleSubmit } = useCompletion({
+    api: "api/completion"
   });
 
   return (
     <div>
-      {messages.map(m => (
-        <div key={m.id}>
-          {m.role}: {m.content}
-        </div>
-      ))}
       <form onSubmit={handleSubmit}>
-        <input
-          value={input}
-          onChange={handleInputChange}
-          placeholder="Say something..."
-        />
+        <input value={input} onChange={handleInputChange} placeholder="Name of city" />
       </form>
+      <p>Completion result: {completion}</p>
     </div>
   );
 }
 ```
 
-> **Gotcha**: When using `useChat` with agent memory functionality, make sure to check out the [Agent Memory section](/docs/agents/agent-memory#usechat) for important implementation details.
+Requests sent using the `useCompletion` hook are handled by a standard server route. This example shows how to define a POST route using a Next.js Route Handler.
 
-### useCompletion
-
-For single-turn completions, use the `useCompletion` hook:
-
-- Works with agent data streams i.e. `.toDataStreamResponse()`
-- The useCompletion `api` defaults to `/api/completion`
-- Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for data streams,
-  i.e. no structured output is defined.
-
-```typescript filename="app/api/completion/route.ts" copy
-import { mastra } from "@/src/mastra";
+```typescript filename="app/api/completion/route.ts" showLineNumbers copy
+import { mastra } from "../../../mastra";
 
 export async function POST(req: Request) {
   const { prompt } = await req.json();
@@ -117,141 +144,121 @@ export async function POST(req: Request) {
 }
 ```
 
-```typescript
-import { useCompletion } from "@ai-sdk/react";
+### Using the `useObject()` Hook
 
-export function CompletionComponent() {
-  const {
-    completion,
-    input,
-    handleInputChange,
-    handleSubmit,
-  } = useCompletion({
-  api: '/path-to-your-agent-stream-api-endpoint'
+The `useObject` hook consumes streamed text from a Mastra agent and parses it into a structured JSON object based on a defined schema.
+
+```typescript {7} filename="app/test/object.tsx" showLineNumbers copy
+"use client";
+
+import { experimental_useObject as useObject } from "@ai-sdk/react";
+import { z } from "zod";
+
+export function Object() {
+  const { object, submit } = useObject({
+    api: "api/object",
+    schema: z.object({
+      weather: z.string()
+    })
   });
 
   return (
     <div>
-      <form onSubmit={handleSubmit}>
-        <input
-          value={input}
-          onChange={handleInputChange}
-          placeholder="Enter a prompt..."
-        />
-      </form>
-      <p>Completion result: {completion}</p>
+      <button onClick={() => submit("London")}>Generate</button>
+      {object ? <pre>{JSON.stringify(object, null, 2)}</pre> : null}
     </div>
   );
 }
 ```
 
-### useObject
+Requests sent using the `useObject` hook are handled by a standard server route. This example shows how to define a POST route using a Next.js Route Handler.
 
-For consuming text streams that represent JSON objects and parsing them into a complete object based on a schema.
-
-- Works with agent text streams i.e. `.toTextStreamResponse()`
-- Works with the Mastra REST API agent stream endpoint `{MASTRA_BASE_URL}/agents/:agentId/stream` for text streams,
-  i.e. structured output is defined.
-
-```typescript filename="app/api/use-object/route.ts" copy
-import { mastra } from "@/src/mastra";
+```typescript filename="app/api/object/route.ts" showLineNumbers copy
+import { mastra } from "../../../mastra";
+import { z } from "zod";
 
 export async function POST(req: Request) {
   const body = await req.json();
   const myAgent = mastra.getAgent("weatherAgent");
   const stream = await myAgent.stream(body, {
     output: z.object({
-      weather: z.string(),
-    }),
+      weather: z.string()
+    })
   });
 
   return stream.toTextStreamResponse();
 }
 ```
 
-```typescript
-import { experimental_useObject as useObject } from '@ai-sdk/react';
+### Passing additional data with `sendExtraMessageFields`
 
-export default function Page() {
-  const { object, submit } = useObject({
-    api: '/api/use-object',
-    schema: z.object({
-      weather: z.string(),
-    }),
+The `sendExtraMessageFields` option allows you to pass additional data from the frontend to Mastra. This data is available on the server as `RuntimeContext`.
+
+```typescript {8,14-20} filename="app/test/chat-extra.tsx" showLineNumbers copy
+"use client";
+
+import { useChat } from "@ai-sdk/react";
+
+export function ChatExtra() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: "/api/chat-extra",
+    sendExtraMessageFields: true
   });
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleSubmit(e, {
+      data: {
+        userId: "user123",
+        preferences: {
+          language: "en",
+          temperature: "celsius"
+        }
+      }
+    });
+  };
 
   return (
     <div>
-      <button onClick={() => submit('example input')}>Generate</button>
-      {object?.weather && <p>{object.weather}</p>}
+      <pre>{JSON.stringify(messages, null, 2)}</pre>
+      <form onSubmit={handleFormSubmit}>
+        <input value={input} onChange={handleInputChange} placeholder="Name of city" />
+      </form>
     </div>
   );
 }
 ```
 
-### With additional data / RuntimeContext
+Requests sent using `sendExtraMessageFields` are handled by a standard server route. This example shows how to extract the custom data and populate a `RuntimeContext` instance.
 
-You can send additional data via the UI hooks that can be leveraged in Mastra as RuntimeContext using the `sendExtraMessageFields` option.
-
-#### Frontend: Using sendExtraMessageFields
-
-```typescript
-import { useChat } from '@ai-sdk/react';
-
-export function ChatComponent() {
-  const { messages, input, handleInputChange, handleSubmit } = useChat({
-    api: '/api/chat',
-    sendExtraMessageFields: true, // Enable sending extra fields
-  });
-
-  const handleFormSubmit = (e: React.FormEvent) => {
-        e.preventDefault();        
-        handleSubmit(e,{
-            // Add context data to the message
-            data: {
-                userId: 'user123',
-                preferences: { language: 'en', temperature: 'celsius' },
-            },
-        });
-  };
-
-  return (
-    <form onSubmit={handleFormSubmit}>
-      <input value={input} onChange={handleInputChange} />
-    </form>
-  );
-}
-```
-
-#### Backend: Handling in API Route
-
-```typescript filename="app/api/chat/route.ts" copy
-import { mastra } from "@/src/mastra";
+```typescript {8,12} filename="app/api/chat-extra/route.ts" showLineNumbers copy
+import { mastra } from "../../../mastra";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 
 export async function POST(req: Request) {
   const { messages, data } = await req.json();
   const myAgent = mastra.getAgent("weatherAgent");
-  
+
   const runtimeContext = new RuntimeContext();
-  
+
   if (data) {
-    Object.entries(data).forEach(([key, value]) => {
+    for (const [key, value] of Object.entries(data)) {
       runtimeContext.set(key, value);
-    });
+    }
   }
-  
+
   const stream = await myAgent.stream(messages, { runtimeContext });
   return stream.toDataStreamResponse();
 }
 ```
 
-#### Alternative: Server Middleware
 
-You can also handle this at the server middleware level:
+### Handling `runtimeContext` with `server.middleware`
 
-```typescript filename="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core";
+You can also populate the `RuntimeContext` by reading custom data in a server middleware:
+
+```typescript {6} filename="mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
 
 export const mastra = new Mastra({
   agents: { weatherAgent },
@@ -259,24 +266,20 @@ export const mastra = new Mastra({
     middleware: [
       async (c, next) => {
         const runtimeContext = c.get("runtimeContext");
-        
-        if (c.req.method === 'POST') {
+
+        if (c.req.method === "POST") {
           try {
-            // Clone the request since reading the body can only be done once
             const clonedReq = c.req.raw.clone();
             const body = await clonedReq.json();
-            
-            
+
             if (body?.data) {
-              Object.entries(body.data).forEach(([key, value]) => {
+              for (const [key, value] of Object.entries(body.data)) {
                 runtimeContext.set(key, value);
-              });
+              }
             }
           } catch {
-            // Continue without additional data
           }
         }
-        
         await next();
       },
     ],
@@ -284,115 +287,187 @@ export const mastra = new Mastra({
 });
 ```
 
-You can then access this data in your tools via the `runtimeContext` parameter. See the [Runtime Context documentation](/docs/agents/runtime-variables) for more details.
+> You can then access this data in your tools via the `runtimeContext` parameter. See the [Runtime Context documentation](/docs/agents/runtime-variables) for more details.
 
-## Tool Calling
+## Streaming data
 
-### AI SDK Tool Format
+The `ai` package provides utilities for managing custom data streams. In some cases, you may want to send structured updates or annotations to the client using an agent's `dataStream`.
 
-Mastra supports tools created using the AI SDK format, so you can use
-them directly with Mastra agents. See our tools doc on [Vercel AI SDK Tool Format
-](/docs/agents/adding-tools#vercel-ai-sdk-tool-format) for more details.
+Install the required package:
 
-### Client-side tool calling
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm install ai
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add ai
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add ai
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    bun add ai
+    ```
+  </Tabs.Tab>
+</Tabs>
 
-Mastra leverages AI SDK's tool calling, so what applies in AI SDK applies here still.
-[Agent Tools](/docs/agents/adding-tools) in Mastra are 100% percent compatible with AI SDK tools.
+### Using `createDataStream()`
 
-Mastra tools also expose an optional `execute` async function. It is optional because you might want to forward tool calls to the client or to a queue instead of executing them in the same process.
+The `createDataStream` function allows you to stream additional data to the client.
 
-One way to then leverage client-side tool calling is to use the `@ai-sdk/react` `useChat` hook's `onToolCall` property for
-client-side tool execution
-
-## Custom DataStream
-
-In certain scenarios you need to write custom data, message annotations to an agent's dataStream.
-This can be useful for:
-
-- Streaming additional data to the client
-- Passing progress info back to the client in real time
-
-Mastra integrates well with AI SDK to make this possible
-
-### CreateDataStream
-
-The `createDataStream` function allows you to stream additional data to the client
-
-```typescript copy
+```typescript {1, 6} filename="mastra/agents/weather-agent.ts" showLineNumbers copy
 import { createDataStream } from "ai";
 import { Agent } from "@mastra/core/agent";
 
-export const weatherAgent = new Agent({
-  name: "Weather Agent",
-  instructions: `
-          You are a helpful weather assistant that provides accurate weather information.
+export const weatherAgent = new Agent({...});
 
-          Your primary function is to help users get weather details for specific locations. When responding:
-          - Always ask for a location if none is provided
-          - If the location name isn't in English, please translate it
-          - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
-          - Include relevant details like humidity, wind conditions, and precipitation
-          - Keep responses concise but informative
-
-          Use the weatherTool to fetch current weather data.
-    `,
-  model: openai("gpt-4o"),
-  tools: { weatherTool },
-});
-
-const stream = createDataStream({
+createDataStream({
   async execute(dataStream) {
-    // Write data
     dataStream.writeData({ value: "Hello" });
 
-    // Write annotation
     dataStream.writeMessageAnnotation({ type: "status", value: "processing" });
 
-    //mastra agent stream
     const agentStream = await weatherAgent.stream("What is the weather");
 
-    // Merge agent stream
     agentStream.mergeIntoDataStream(dataStream);
   },
-  onError: (error) => `Custom error: ${error.message}`,
+  onError: (error) => `Custom error: ${error}`
 });
 ```
 
-### CreateDataStreamResponse
+### Using `createDataStreamResponse()`
 
-The `createDataStreamResponse` function creates a Response object that streams data to the client
+The `createDataStreamResponse` function creates a response object that streams data to the client.
 
-```typescript filename="app/api/chat/route.ts" copy
-import { mastra } from "@/src/mastra";
+```typescript {2,9} filename="app/api/chat-stream/route.ts" showLineNumbers copy
+import { mastra } from "../../../mastra";
+import { createDataStreamResponse } from "ai";
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
   const myAgent = mastra.getAgent("weatherAgent");
-  //mastra agent stream
   const agentStream = await myAgent.stream(messages);
 
   const response = createDataStreamResponse({
     status: 200,
     statusText: "OK",
     headers: {
-      "Custom-Header": "value",
+      "Custom-Header": "value"
     },
     async execute(dataStream) {
-      // Write data
       dataStream.writeData({ value: "Hello" });
 
-      // Write annotation
       dataStream.writeMessageAnnotation({
         type: "status",
-        value: "processing",
+        value: "processing"
       });
 
-      // Merge agent stream
       agentStream.mergeIntoDataStream(dataStream);
     },
-    onError: (error) => `Custom error: ${error.message}`,
+    onError: (error) => `Custom error: ${error}`
   });
 
   return response;
 }
 ```
+
+## Vercel AI SDK v5
+
+This guide covers Mastra-specific considerations when migrating from AI SDK v4 to v5 beta.
+
+> Please add any feedback or bug reports to the [AI SDK v5 mega issue in Github.](https://github.com/mastra-ai/mastra/issues/5470)
+
+### Official migration guide
+
+Follow the official [AI SDK v5 Migration Guide](https://v5.ai-sdk.dev/docs/migration-guides/migration-guide-5-0) for all AI SDK core breaking changes, package updates, and API changes.
+
+This guide covers only the Mastra-specific aspects of the migration.
+
+- **Data compatibility**: New data stored in v5 format will no longer work if you downgrade from the beta
+- **Backup recommendation**: Keep DB backups from before you upgrade to v5 beta
+- **Production use**: Wait for the AI SDK v5 stable release before using in production applications
+- **Prerelease status**: The Mastra `ai-v5` tag is a prerelease version and may have bugs
+
+### Memory and Storage
+
+Mastra automatically handles AI SDK v4 data using its internal `MessageList` class, which manages format conversion—including v4 to v5. No database migrations are required; your existing messages are translated on the fly and continue working after you upgrade.
+
+### Migration strategy
+
+Migrating to AI SDK v5 with Mastra involves updating both your **backend** (Mastra server) and **frontend**.
+We provide a compatibility mode to handle stream format conversion during the transition.
+
+### Upgrade dependencies
+
+Install the `@ai-v5` prerelease version of all Mastra packages:
+
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm install mastra@ai-v5 @mastra/core@ai-v5 @mastra/memory@ai-v5
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add mastra@ai-v5 @mastra/core@ai-v5 @mastra/memory@ai-v5
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add mastra@ai-v5 @mastra/core@ai-v5 @mastra/memory@ai-v5
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    bun add mastra@ai-v5 @mastra/core@ai-v5 @mastra/memory@ai-v5
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Configure your Mastra instance with `v4` compatibility so your frontend, and the Mastra Playground will continue to work:
+
+```typescript {7} filename="mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+import { weatherAgent } from "./agents/weather-agent";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+  aiSdkCompat: 'v4',
+});
+```
+
+### Enabling stream compatibility
+
+If your frontend calls a Mastra agent using a custom API route, wrap the `toUIMessageStreamResponse()` result with `createV4CompatibleResponse` to maintain AI SDK `v4` compatibility.
+
+
+```typescript filename="app/api/chat/route.ts" showLineNumbers copy
+import { mastra } from "../../../mastra";
+import { createV4CompatibleResponse } from "@mastra/core/agent";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  const stream = await myAgent.stream(messages);
+
+  return createV4CompatibleResponse(stream.toUIMessageStreamResponse().body!);
+}
+```
+
+### Frontend upgrade
+
+When you're ready, remove the compatibility flag and upgrade your frontend:
+
+1. Remove `aiSdkCompat: 'v4'` from your Mastra configuration
+2. Follow the AI SDK guide on upgrading your frontend dependencies
+3. Update your frontend code for v5 breaking changes
+
+
