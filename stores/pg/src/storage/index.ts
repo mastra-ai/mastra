@@ -26,10 +26,9 @@ import type {
 import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Client } from 'pg';
-// import pgPromise from 'pg-promise';
 import Pool from 'pg-pool';
+import type { ConnectionOptions } from 'tls';
 import { URL } from 'url';
-// import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 
 export type PostgresConfig = {
   schemaName?: string;
@@ -40,7 +39,7 @@ export type PostgresConfig = {
       database: string;
       user: string;
       password: string;
-      ssl?: boolean /*| ISSLConfig*/;
+      ssl?: boolean | ConnectionOptions;
     }
   | {
       connectionString: string;
@@ -78,7 +77,6 @@ export class PostgresStore extends MastraStorage {
         }
       }
       super({ name: 'PostgresStore' });
-      // this.pgp = pgPromise();
       this.schema = config.schemaName;
 
       let poolConfig: Pool.Config<Client>;
@@ -598,10 +596,17 @@ export class PostgresStore extends MastraStorage {
       const conditions = keyEntries.map(([key], index) => `"${key}" = $${index + 1}`).join(' AND ');
       const values = keyEntries.map(([_, value]) => value);
 
-      //TODO this query had a generic of <R>. Removed for testing, should be added back and fixed
-      //TODO for type safety
-      const result = (await this.db.query(`SELECT * FROM ${this.getTableName(tableName)} WHERE ${conditions}`, values))
-        .rows[0];
+      const queryResult = await this.db.query<R[]>(
+        `SELECT * FROM ${this.getTableName(tableName)} WHERE ${conditions}`,
+        values,
+      );
+      if (queryResult.rows.length > 1) {
+        throw new Error(
+          `Expected at most one row for ${tableName} with keys ${JSON.stringify(keys)}, but found ${queryResult.rows.length}`,
+        );
+      }
+
+      const result = queryResult.rows[0] as R | undefined;
 
       if (!result) {
         return null;
@@ -1745,7 +1750,7 @@ export class PostgresStore extends MastraStorage {
 
       await client.query('COMMIT');
     } catch {
-      //TODO Should we log this error? It wasn't being logged originally
+      //Should we throw a MastraError here? It wasn't being handled originally
       await client.query('ROLLBACK');
     } finally {
       client.release();

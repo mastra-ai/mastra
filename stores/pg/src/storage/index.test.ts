@@ -20,7 +20,6 @@ import {
   TABLE_TRACES,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-// import pgPromise from 'pg-promise';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
 
 import { PostgresStore } from '.';
@@ -68,25 +67,11 @@ describe('PostgresStore', () => {
       expect(typeof testDB.db.query).toBe('function');
     });
 
-    // it('should expose pgp field as public', () => {
-    //   expect(testDB.pgp).toBeDefined();
-    //   expect(typeof testDB.pgp).toBe('function');
-    //   expect(testDB.pgp.end).toBeDefined();
-    //   expect(typeof testDB.pgp.end).toBe('function');
-    // });
-
     it('should allow direct database queries via public db field', async () => {
       const result = await testDB.db.query('SELECT 1 as test');
       expect(result.rows.length).toBe(1);
       expect(result.rows[0].test).toBe(1);
     });
-
-    // it('should allow access to pgp utilities via public pgp field', () => {
-    //   const helpers = testDB.pgp.helpers;
-    //   expect(helpers).toBeDefined();
-    //   expect(helpers.insert).toBeDefined();
-    //   expect(helpers.update).toBeDefined();
-    // });
 
     it('should maintain connection state through public db field', async () => {
       // Test multiple queries to ensure connection state
