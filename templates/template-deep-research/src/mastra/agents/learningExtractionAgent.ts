@@ -19,6 +19,6 @@ export const learningExtractionAgent = new Agent({
   - Ensure follow-up questions are focused and would lead to deeper understanding
   - Consider the original research query context when extracting insights
 
-  Your output should always include one key learning and up to 3 follow-up questions.`,
+  3. Generate 2-3 relevant follow-up questions that would deepen the research
   model: mainModel,
 });
