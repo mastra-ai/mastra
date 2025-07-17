@@ -303,6 +303,7 @@ const reviewAndExecuteStep = createStep({
     queryResult: z.any(),
     modifications: z.string().optional(),
     rowCount: z.number().optional(),
+    error: z.string().optional(),
   }),
   resumeSchema: z.object({
     approved: z.boolean().optional(),
