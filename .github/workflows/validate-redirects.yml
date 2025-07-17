@@ -21,5 +21,9 @@ jobs:
         with:
           node-version: lts/*
 
+      - name: Install dependencies for docs
+        run: npm ci
+        working-directory: docs
+
       - name: Run validate-redirects
         run: node .github/scripts/validate-redirects.js
