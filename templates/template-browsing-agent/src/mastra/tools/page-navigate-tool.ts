@@ -10,6 +10,7 @@ export const pageNavigateTool = createTool({
   }),
   outputSchema: z.object({
     success: z.boolean(),
+    message: z.string().optional(),
     title: z.string().optional(),
     currentUrl: z.string().optional(),
   }),
