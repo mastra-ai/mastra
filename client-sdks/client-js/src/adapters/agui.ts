@@ -1,5 +1,4 @@
 // Cross-platform UUID generation function
-import { generateId } from 'ai';
 import type {
   AgentConfig,
   BaseEvent,
@@ -151,13 +150,33 @@ export class AGUIAdapter extends AbstractAgent {
 }
 
 /**
- * Generates a unique ID using Vercel AI SDK's generateId
- * This provides consistent ID generation across the Mastra ecosystem
+ * Generates a UUID v4 that works in both browser and Node.js environments
  */
 export function generateUUID(): string {
-  // Use Vercel AI SDK's generateId for consistency
-  return generateId();
-}
+  // Use crypto.randomUUID() if available (Node.js environment or modern browsers)
+  if (typeof crypto !== 'undefined') {
+    // Browser crypto API or Node.js crypto global
+    if (typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    // Fallback for older browsers
+    if (typeof crypto.getRandomValues === 'function') {
+      const buffer = new Uint8Array(16);
+      crypto.getRandomValues(buffer);
+      // Set version (4) and variant (8, 9, A, or B)
+      buffer[6] = (buffer[6]! & 0x0f) | 0x40; // version 4
+      buffer[8] = (buffer[8]! & 0x3f) | 0x80; // variant
+
+      // Convert to hex string in UUID format
+      let hex = '';
+      for (let i = 0; i < 16; i++) {
+        hex += buffer[i]!.toString(16).padStart(2, '0');
+        // Add hyphens at standard positions
+        if (i === 3 || i === 5 || i === 7 || i === 9) hex += '-';
+      }
+      return hex;
+    }
+  }
 
   // Last resort fallback (less secure but works everywhere)
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
