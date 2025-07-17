@@ -21,24 +21,28 @@ const PROVIDERS = {
     package: '@ai-sdk/openai',
     apiKey: 'OPENAI_API_KEY',
     name: 'OpenAI',
+    url: 'https://platform.openai.com/api-keys',
   },
   anthropic: {
     model: 'claude-3-5-sonnet-20240620',
     package: '@ai-sdk/anthropic',
     apiKey: 'ANTHROPIC_API_KEY',
     name: 'Anthropic',
+    url: 'https://console.anthropic.com/settings/keys',
   },
   google: {
     model: 'gemini-2.5-pro',
     package: '@ai-sdk/google',
     apiKey: 'GOOGLE_GENERATIVE_AI_API_KEY',
     name: 'Google',
+    url: 'https://console.cloud.google.com/apis/credentials',
   },
   groq: {
     model: 'llama-3.3-70b-versatile',
     package: '@ai-sdk/groq',
     apiKey: 'GROQ_API_KEY',
     name: 'Groq',
+    url: 'https://console.groq.com/keys',
   },
 };
 
@@ -160,7 +164,7 @@ async function pushToRepo(repoName) {
     // TODO make more dynamic
     for (const [
       provider,
-      { model: defaultModel, package: providerPackage, apiKey: providerApiKey, name: providerName },
+      { model: defaultModel, package: providerPackage, apiKey: providerApiKey, name: providerName, url: providerUrl },
     ] of Object.entries(PROVIDERS)) {
       const files = ['./src/mastra/workflows/index.ts', './src/mastra/agents/index.ts'];
       // move to new branch
@@ -206,6 +210,8 @@ async function pushToRepo(repoName) {
       const readmePath = path.join(tempDir, 'README.md');
       let readme = await readFile(readmePath, 'utf-8');
       readme = readme.replace('OpenAI', providerName);
+      readme = readme.replace('OPENAI_API_KEY', providerApiKey);
+      readme = readme.replace('https://platform.openai.com/api-keys', providerUrl);
       await writeFile(readmePath, readme);
 
       // push branch
