@@ -1,8 +1,6 @@
-import * as babel from '@babel/core';
 import { rollup } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
 import commonjs from '@rollup/plugin-commonjs';
-import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 
 export function getCustomInstrumentationBundler(
   entryFile: string,
