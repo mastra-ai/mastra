@@ -169,6 +169,27 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+function assertNoDuplicateParts(parts: any[]) {
+  // Check for duplicate tool-invocation results by toolCallId
+  const seenToolResults = new Set();
+  for (const part of parts) {
+    if (part.type === 'tool-invocation' && part.toolInvocation.state === 'result') {
+      const key = `${part.toolInvocation.toolCallId}|${JSON.stringify(part.toolInvocation.result)}`;
+      expect(seenToolResults.has(key)).toBe(false);
+      seenToolResults.add(key);
+    }
+  }
+
+  // Check for duplicate text parts
+  const seenTexts = new Set();
+  for (const part of parts) {
+    if (part.type === 'text') {
+      expect(seenTexts.has(part.text)).toBe(false);
+      seenTexts.add(part.text);
+    }
+  }
+}
+
 describe('agent', () => {
   const integration = new TestIntegration();
 
@@ -2072,6 +2093,17 @@ describe('Agent save message parts', () => {
         resourceId: 'resource-echo-generate',
       });
       expect(messages.length).toBeGreaterThan(0);
+
+      const assistantMsg = messages.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+      assertNoDuplicateParts(assistantMsg!.content.parts);
+
+      const toolResultIds = new Set(
+        assistantMsg!.content.parts
+          .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
+          .map(p => p.toolInvocation.toolCallId),
+      );
+      expect(assistantMsg!.content.toolInvocations.length).toBe(toolResultIds.size);
     }, 500000);
 
     it('should incrementally save messages with multiple tools and multi-step generation', async () => {
@@ -2126,6 +2158,16 @@ describe('Agent save message parts', () => {
         resourceId: 'resource-multi-generate',
       });
       expect(messages.length).toBeGreaterThan(0);
+      const assistantMsg = messages.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+      assertNoDuplicateParts(assistantMsg!.content.parts);
+
+      const toolResultIds = new Set(
+        assistantMsg!.content.parts
+          .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
+          .map(p => p.toolInvocation.toolCallId),
+      );
+      expect(assistantMsg!.content.toolInvocations.length).toBe(toolResultIds.size);
     }, 500000);
 
     it('should persist the full message after a successful run', async () => {
@@ -2353,6 +2395,16 @@ describe('Agent save message parts', () => {
       expect(saveCallCount).toBeGreaterThan(1);
       const messages = await mockMemory.getMessages({ threadId: 'thread-echo', resourceId: 'resource-echo' });
       expect(messages.length).toBeGreaterThan(0);
+      const assistantMsg = messages.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+      assertNoDuplicateParts(assistantMsg!.content.parts);
+
+      const toolResultIds = new Set(
+        assistantMsg!.content.parts
+          .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
+          .map(p => p.toolInvocation.toolCallId),
+      );
+      expect(assistantMsg!.content.toolInvocations.length).toBe(toolResultIds.size);
     }, 500000);
 
     it('should incrementally save messages with multiple tools and multi-step streaming', async () => {
@@ -2407,6 +2459,16 @@ describe('Agent save message parts', () => {
       expect(saveCallCount).toBeGreaterThan(1);
       const messages = await mockMemory.getMessages({ threadId: 'thread-multi', resourceId: 'resource-multi' });
       expect(messages.length).toBeGreaterThan(0);
+      const assistantMsg = messages.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+      assertNoDuplicateParts(assistantMsg!.content.parts);
+
+      const toolResultIds = new Set(
+        assistantMsg!.content.parts
+          .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
+          .map(p => p.toolInvocation.toolCallId),
+      );
+      expect(assistantMsg!.content.toolInvocations.length).toBe(toolResultIds.size);
     }, 500000);
 
     it('should persist the full message after a successful run', async () => {

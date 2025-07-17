@@ -25,12 +25,10 @@ import { PostHogProvider } from './lib/analytics';
 import RuntimeContext from './pages/runtime-context';
 import MCPs from './pages/mcps';
 import MCPServerToolExecutor from './pages/mcps/tool';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
-import { QueryClient } from '@tanstack/react-query';
+
 import { McpServerPage } from './pages/mcps/[serverId]';
 import { WorkflowGraphLayout } from './pages/workflows/layouts/workflow-graph-layout';
-import { LinkComponentProvider, MastraClientProvider } from '@mastra/playground-ui';
+import { LinkComponentProvider, MastraClientProvider, PlaygroundQueryClient } from '@mastra/playground-ui';
 import VNextNetwork from './pages/networks/network/v-next';
 import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
@@ -49,10 +47,8 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 };
 
 function App() {
-  const [queryClient] = useState(() => new QueryClient());
-
   return (
-    <QueryClientProvider client={queryClient}>
+    <PlaygroundQueryClient>
       <PostHogProvider>
         <MastraClientProvider>
           <BrowserRouter>
@@ -176,7 +172,7 @@ function App() {
           </BrowserRouter>
         </MastraClientProvider>
       </PostHogProvider>
-    </QueryClientProvider>
+    </PlaygroundQueryClient>
   );
 }
 

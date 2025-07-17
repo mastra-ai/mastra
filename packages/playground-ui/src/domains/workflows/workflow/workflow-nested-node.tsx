@@ -53,11 +53,11 @@ export function WorkflowNestedNode({
       <div
         className={cn(
           'bg-surface3 rounded-lg w-[274px] border-sm border-border1 pt-2',
-          step?.status === 'success' && 'ring-2 ring-accent1',
-          step?.status === 'failed' && 'ring-2 ring-accent2',
-          step?.status === 'suspended' && 'ring-2 ring-accent3',
-          step?.status === 'waiting' && 'ring-2 ring-accent5',
-          step?.status === 'running' && 'ring-2 ring-accent6',
+          step?.status === 'success' && 'ring-2 ring-accent1 bg-accent1Darker',
+          step?.status === 'failed' && 'ring-2 ring-accent2 bg-accent2Darker',
+          step?.status === 'suspended' && 'ring-2 ring-accent3 bg-accent3Darker',
+          step?.status === 'waiting' && 'ring-2 ring-accent5 bg-accent5Darker',
+          step?.status === 'running' && 'ring-2 ring-accent6 bg-accent6Darker',
         )}
       >
         <div className={cn('flex items-center gap-2 px-3', !description && 'pb-2')}>
@@ -94,6 +94,7 @@ export function WorkflowNestedNode({
           onSendEvent={onSendEvent}
           event={step?.status === 'waiting' ? event : undefined}
           runId={runId}
+          status={step?.status}
         />
       </div>
       {!withoutBottomHandle && <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />}

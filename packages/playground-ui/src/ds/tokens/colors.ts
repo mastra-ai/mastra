@@ -10,6 +10,16 @@ export const Colors = {
   accent4: '#9E57B3',
   accent5: '#4A9DF2',
   accent6: '#FFF176',
+  accent1Dark: '#16281f',
+  accent2Dark: '#281916',
+  accent3Dark: '#161a28',
+  accent5Dark: '#161a22',
+  accent6Dark: '#232214',
+  accent1Darker: '#141a16',
+  accent2Darker: '#1a1414',
+  accent3Darker: '#14141a',
+  accent5Darker: '#14161a',
+  accent6Darker: '#1a1a14',
 };
 
 export const BorderColors = {
