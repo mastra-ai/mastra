@@ -22,5 +22,8 @@ jobs:
         run: npm ci
         working-directory: docs
 
+      - name: Set deployment URL as env var
+        run: echo "MASTRA_DEPLOYMENT_URL=${{ github.event.deployment_status.target_url }}" >> $GITHUB_ENV
+
       - name: Run validate-redirects
         run: node .github/scripts/validate-redirects.js

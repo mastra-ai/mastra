@@ -2,7 +2,7 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 import process from 'process';
 
-const baseUrl = 'https://mastra.ai';
+const baseUrl = process.env.MASTRA_DEPLOYMENT_URL || 'https://mastra.ai';
 
 const loadRedirects = async () => {
   process.chdir('docs');
