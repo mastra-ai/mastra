@@ -17,7 +17,7 @@ const EMAIL = process.env.EMAIL;
 
 const PROVIDERS = {
   openai: {
-    model: 'gpt-4o',
+    model: 'gpt-4.1',
     package: '@ai-sdk/openai',
     apiKey: 'OPENAI_API_KEY',
     name: 'OpenAI',
@@ -180,7 +180,10 @@ async function pushToRepo(repoName) {
             `import { openai } from '@ai-sdk/openai';`,
             `import { ${provider} } from '${providerPackage}';`,
           );
-          content = content.replaceAll(`openai('gpt-4o')`, `${provider}(process.env.MODEL ?? "${defaultModel}")`);
+          content = content.replaceAll(
+            /openai\((['"])[^'"]*(['"])\)/g,
+            `${provider}(process.env.MODEL ?? "${defaultModel}")`,
+          );
           await writeFile(filePath, content);
         } else {
           console.log(`${filePath} does not exist`);
