@@ -122,6 +122,11 @@ export type StreamEvent =
       type: 'step-waiting';
       payload: any;
       id: string;
+    }
+  | {
+      type: 'step-result';
+      payload: any;
+      id: string;
     };
 
 export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';

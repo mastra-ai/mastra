@@ -31,7 +31,7 @@ function Agent() {
   } = useThreads({ resourceid: agentId!, agentId: agentId!, isMemoryEnabled: !!memory?.result });
 
   useEffect(() => {
-    if (memory?.result && !threadId) {
+    if (memory?.result && (!threadId || threadId === 'new')) {
       // use @lukeed/uuid because we don't need a cryptographically secure uuid (this is a debugging local uuid)
       // using crypto.randomUUID() on a domain without https (ex a local domain like local.lan:4111) will cause a TypeError
       navigate(`/agents/${agentId}/chat/${uuid()}`);

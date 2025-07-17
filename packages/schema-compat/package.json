@@ -1,6 +1,6 @@
 {
   "name": "@mastra/schema-compat",
-  "version": "0.10.5-alpha.0",
+  "version": "0.10.5",
   "description": "Tool schema compatibility layer for Mastra.ai",
   "type": "module",
   "main": "dist/index.js",
