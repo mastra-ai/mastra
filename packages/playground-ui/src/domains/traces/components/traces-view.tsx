@@ -1,27 +1,58 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-
 import { TraceContext, TraceProvider } from '@/domains/traces/context/trace-context';
-
-import { TracesTable } from '@/domains/traces/traces-table';
+import { TracesTable } from '@/domains/traces/components/traces-table';
 import { TracesSidebar } from '@/domains/traces/traces-sidebar';
 import { RefinedTrace } from '@/domains/traces/types';
+import clsx from 'clsx';
+import { Skeleton } from '@/components/ui/skeleton';
 
-export interface WorkflowTracesProps {
+export interface TracesViewProps {
+  isLoading: boolean;
+  error: Error | null;
   traces: RefinedTrace[];
-  error: { message: string } | null;
   runId?: string;
   stepName?: string;
+  className?: string;
+  setEndOfListElement: (element: HTMLDivElement | null) => void;
 }
 
-export function WorkflowTraces({ traces, error, runId, stepName }: WorkflowTracesProps) {
+export function TracesView({
+  isLoading,
+  error,
+  traces,
+  runId,
+  stepName,
+  className,
+  setEndOfListElement,
+}: TracesViewProps) {
+  if (isLoading) {
+    return <TracesViewSkeleton />;
+  }
+
   return (
     <TraceProvider initialTraces={traces || []}>
-      <WorkflowTracesInner traces={traces} error={error} runId={runId} stepName={stepName} />
+      <TracesViewInner
+        traces={traces}
+        error={error}
+        runId={runId}
+        stepName={stepName}
+        className={className}
+        setEndOfListElement={setEndOfListElement}
+      />
     </TraceProvider>
   );
 }
 
-function WorkflowTracesInner({ traces, error, runId, stepName }: WorkflowTracesProps) {
+interface TracesViewInnerProps {
+  traces: RefinedTrace[];
+  error: Error | null;
+  runId?: string;
+  stepName?: string;
+  className?: string;
+  setEndOfListElement: (element: HTMLDivElement | null) => void;
+}
+
+function TracesViewInner({ traces, error, runId, stepName, className, setEndOfListElement }: TracesViewInnerProps) {
   // This is a hack. To fix, The provider should not resolve the data like this.
   // We should resolve the data first and pass them to the provider instead of having the proving setState on the result.
   const hasRunRef = useRef(false);
@@ -45,12 +76,24 @@ function WorkflowTracesInner({ traces, error, runId, stepName }: WorkflowTracesP
   }, [runId, traces, setTrace]);
 
   return (
-    <main className="h-full relative overflow-hidden flex">
+    <div className={clsx('h-full relative overflow-hidden flex', className)}>
       <div className="h-full overflow-y-scroll w-full">
         <TracesTable traces={traces} error={error} />
+
+        <div aria-hidden ref={setEndOfListElement} />
       </div>
 
       {open && <TracesSidebar width={sidebarWidth} onResize={setSidebarWidth} />}
-    </main>
+    </div>
   );
 }
+
+export const TracesViewSkeleton = () => {
+  return (
+    <div className="h-full relative overflow-hidden flex">
+      <div className="h-full overflow-y-scroll w-full">
+        <Skeleton className="h-10" />
+      </div>
+    </div>
+  );
+};

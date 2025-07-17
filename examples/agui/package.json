@@ -16,7 +16,7 @@
     "@copilotkit/react-core": "^1.8.10",
     "@copilotkit/react-ui": "^1.8.10",
     "@copilotkit/runtime": "^1.8.10",
-    "@mastra/agui": "latest",
+    "@ag-ui/mastra": "latest",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
@@ -29,7 +29,6 @@
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
-      "@mastra/agui": "link:../../packages/agui",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/loggers": "link:../../packages/loggers",
       "@mastra/memory": "link:../../packages/memory",
