@@ -1,0 +1,20 @@
+name: Validated next.config.mjs redirects
+
+on:
+  workflow_dispatch:
+
+jobs:
+  get-and-process-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Run validate-redirects
+        run: node .github/scripts/validate-redirects.js
