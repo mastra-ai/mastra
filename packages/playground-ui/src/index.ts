@@ -27,6 +27,7 @@ export * from './hooks/use-speech-recognition';
 export * from './components/ui/radio-group';
 export * from './components/ui/entry';
 export * from './hooks';
+export * from './lib/tanstack-query';
 
 export type { TraceContextType } from './domains/traces/context/trace-context';
 
