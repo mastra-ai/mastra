@@ -1,13 +1,9 @@
 name: Validate next.config.mjs redirects
 
 on:
-  workflow_dispatch:
   push:
     branches:
-      - paul/grwth-434-validate-redirects
-    paths:
-      - .github/workflows/validate-redirects.yml
-      - .github/scripts/**
+      - 'paul/**'
 
 permissions:
   contents: read
