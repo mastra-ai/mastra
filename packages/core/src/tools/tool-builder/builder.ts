@@ -134,8 +134,9 @@ export class CoreToolBuilder extends MastraBase {
             runtimeContext: options.runtimeContext ?? new RuntimeContext(),
             writer: new ToolStream(
               {
-                toolCallId: execOptions.toolCallId,
-                toolName: options.name,
+                prefix: 'tool',
+                callId: execOptions.toolCallId,
+                name: options.name,
                 runId: options.runId!,
               },
               options.writableStream,

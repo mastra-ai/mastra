@@ -3,12 +3,14 @@ import { WritableStream } from 'stream/web';
 export class ToolStream<T> extends WritableStream<T> {
   constructor(
     {
-      toolCallId,
-      toolName,
+      prefix,
+      callId,
+      name,
       runId,
     }: {
-      toolCallId: string;
-      toolName: string;
+      prefix: string;
+      callId: string;
+      name: string;
       runId: string;
     },
     originalStream?: WritableStream,
@@ -16,15 +18,16 @@ export class ToolStream<T> extends WritableStream<T> {
     super({
       async write(chunk: any) {
         const writer = originalStream?.getWriter();
+
         try {
           await writer?.write({
-            type: 'tool-output',
+            type: `${prefix}-output`,
             runId,
             from: 'USER',
             payload: {
               output: chunk,
-              toolCallId,
-              toolName,
+              [`${prefix}CallId`]: callId,
+              [`${prefix}Name`]: name,
             },
           });
         } finally {
@@ -36,6 +39,7 @@ export class ToolStream<T> extends WritableStream<T> {
 
   async write(data: any) {
     const writer = this.getWriter();
+
     try {
       await writer.write(data);
     } finally {

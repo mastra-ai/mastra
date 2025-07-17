@@ -29,6 +29,8 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { RuntimeContext } from '../runtime-context';
+import { MastraAgentStream } from '../stream/MastraAgentStream';
+import type { ChunkType } from '../stream/MastraAgentStream';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
@@ -40,8 +42,6 @@ import type { AgentVNextStreamOptions } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput } from './message-list';
 import { SaveQueueManager } from './save-queue';
-import { MastraAgentStream } from './stream/MastraAgentStream';
-import type { ChunkType } from './stream/MastraAgentStream';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -2062,7 +2062,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     streamOptions?: AgentVNextStreamOptions<Output, StructuredOutput>,
-  ): any {
+  ): MastraAgentStream {
     const defaultStreamOptionsPromise = this.getDefaultVNextStreamOptions<Output, StructuredOutput>({
       runtimeContext: streamOptions?.runtimeContext,
     });
