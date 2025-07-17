@@ -1,18 +1,18 @@
 import { MCPServer } from '@mastra/mcp';
-import { planetsInfoTool } from '../tools/planets-tool';
+import { docsTool } from '../tools/docs-tool';
 
 import { config } from 'dotenv';
 config();
 
 // Create MCP server with tools and agents for HTTP/SSE transport
 export const mcpServer = new MCPServer({
-  name: 'Template Docs Chatbot MCP Server',
+  name: 'Kepler docs chatbot MCP server',
   version: '1.0.0',
   description: 'Provides access to documentation, planet information tools and intelligent agents via HTTP/SSE',
 
   // Expose individual tools
   tools: {
-    planetsInfoTool,
+    docsTool,
   },
 });
 
