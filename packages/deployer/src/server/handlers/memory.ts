@@ -1,5 +1,5 @@
 import type { Mastra } from '@mastra/core';
-import type { StorageGetMessagesArg, MessageFormat } from '@mastra/core/storage';
+import type { StorageGetMessagesArg, MastraMessageFormat } from '@mastra/core/storage';
 import {
   getMemoryStatusHandler as getOriginalMemoryStatusHandler,
   getThreadsHandler as getOriginalThreadsHandler,
@@ -193,7 +193,7 @@ export async function getMessagesPaginatedHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const threadId = c.req.param('threadId');
     const resourceId = c.req.query('resourceId');
-    const format = (c.req.query('format') || 'v1') as MessageFormat;
+    const format = (c.req.query('format') || 'v1') as MastraMessageFormat;
     const selectByArgs = c.req.query('selectBy');
 
     let selectBy = {} as StorageGetMessagesArg['selectBy'];
