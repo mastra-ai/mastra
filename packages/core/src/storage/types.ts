@@ -57,6 +57,8 @@ export type PaginationInfo = {
   hasMore: boolean;
 };
 
+export type MessageFormat = 'v1' | 'v2';
+
 export type StorageGetMessagesArg = {
   threadId: string;
   resourceId?: string;
@@ -72,7 +74,7 @@ export type StorageGetMessagesArg = {
     pagination?: PaginationArgs;
   };
   threadConfig?: MemoryConfig;
-  format?: 'v1' | 'v2';
+  format?: MessageFormat;
 };
 
 export type EvalRow = {
