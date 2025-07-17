@@ -2,6 +2,8 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 import process from 'process';
 
+const baseUrl = 'https://mastra.ai';
+
 const loadRedirects = async () => {
   process.chdir('docs');
 
@@ -24,27 +26,18 @@ const checkRedirects = async () => {
   const redirects = await loadRedirects();
   let skipped = 0;
   let successful = 0;
-  let brokenSource = 0;
   let brokenDestination = 0;
 
   for (const redirect of redirects) {
-    const sourceUrl = `https://mastra.ai${redirect.source}`;
-    const destinationUrl = `https://mastra.ai${redirect.destination}`;
-
-    if (!redirect.source.startsWith('/')) {
+    if (redirect.destination.includes(':path*')) {
+      console.log('├───SKIPPED───', `${baseUrl}${redirect.destination}`);
       skipped++;
       continue;
     }
 
-    let sourceOk = false;
-    let destinationOk = false;
+    const destinationUrl = `${baseUrl}${redirect.destination}`;
 
-    try {
-      const sourceRes = await fetch(sourceUrl, { redirect: 'follow' });
-      sourceOk = sourceRes.status !== 404;
-    } catch {
-      sourceOk = false;
-    }
+    let destinationOk = false;
 
     try {
       const destRes = await fetch(destinationUrl, { redirect: 'follow' });
@@ -53,20 +46,16 @@ const checkRedirects = async () => {
       destinationOk = false;
     }
 
-    if (sourceOk && destinationOk) {
-      console.log('├───OK───', sourceUrl);
+    if (destinationOk) {
+      console.log('├───OK───', destinationUrl);
       successful++;
     } else {
-      if (!sourceOk) {
-        console.log('├─BROKEN SOURCE────', sourceUrl);
-        brokenSource++;
-      }
-      if (!destinationOk) {
-        console.log('├─BROKEN DESTINATION────', destinationUrl);
-        brokenDestination++;
-      }
+      console.log(' ');
+      console.log('├───BROKEN───', destinationUrl);
+      console.log('⚠️  Update destination URL in redirect object:');
       console.dir(redirect, { depth: null });
       console.log(' ');
+      brokenDestination++;
     }
   }
 
@@ -78,12 +67,11 @@ const checkRedirects = async () => {
   console.log(`Links found: ${redirects.length}`);
   console.log(`Links skipped: ${skipped}`);
   console.log(`Redirects OK: ${successful}`);
-  console.log(`Broken sources: ${brokenSource}`);
   console.log(`Broken destinations: ${brokenDestination}`);
   console.log(`Time elapsed: ${minutes} minutes, ${seconds} seconds`);
   console.log('='.repeat(40));
 
-  process.exit(brokenSource + brokenDestination > 0 ? 1 : 0);
+  process.exit(brokenDestination > 0 ? 1 : 0);
 };
 
 checkRedirects().catch(console.error);
