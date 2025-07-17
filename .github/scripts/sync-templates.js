@@ -181,10 +181,19 @@ async function pushToRepo(repoName) {
       { model: defaultModel, package: providerPackage, apiKey: providerApiKey, name: providerName, url: providerUrl },
     ] of Object.entries(PROVIDERS)) {
       // move to new branch
-      execSync(`git checkout main && git switch -c ${provider} && git pull origin ${provider}`, {
+      execSync(`git checkout main && git switch -c ${provider}${provider}`, {
         stdio: 'inherit',
         cwd: tempDir,
       });
+
+      try {
+        execSync(`git pull origin ${provider}`, {
+          stdio: 'inherit',
+          cwd: tempDir,
+        });
+      } catch (error) {
+        console.log(`No ${provider} branch found in origin`);
+      }
 
       //update llm provider agent files and workflow files
       let agentDir = '';
