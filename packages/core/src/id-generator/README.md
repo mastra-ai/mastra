@@ -13,23 +13,22 @@ const id = generateId(); // Generates a 16-character nanoid
 console.log(id); // Example: "V1StGXR8_Z5jdHi6"
 ```
 
-### 2. Prefixed IDs (When Needed for Debugging)
+### 2. Prefixed IDs (Advanced Use Cases)
 
 ```typescript
 import { createIdGenerator } from 'ai';
 
-// Use prefixes for workflow steps and run instances (helpful for debugging)
-const generateSleepId = createIdGenerator({ prefix: 'sleep' });
-const generateMappingId = createIdGenerator({ prefix: 'mapping' });
-const generateRunId = createIdGenerator({ prefix: 'run' });
+// Only use prefixes when you need to distinguish ID types in logs or debugging
+// Most Mastra components use simple generateId() for consistency
+const generateUserId = createIdGenerator({ prefix: 'user', separator: '_', size: 8 });
+const generateSessionId = createIdGenerator({ prefix: 'session' });
 
-console.log(generateSleepId());    // Example: "sleep-V1StGXR8_Z5jdHi6"
-console.log(generateMappingId());  // Example: "mapping-B2QvGXR9_A6keIj7"
-console.log(generateRunId());      // Example: "run-C3RwHXS0_B7lfJk8"
+console.log(generateUserId());    // Example: "user_A1B2C3D4"
+console.log(generateSessionId()); // Example: "session-V1StGXR8_Z5jdHi6"
 
-// For message IDs, use simple generateId() for consistency
+// Standard approach for most IDs in Mastra
 import { generateId } from 'ai';
-const messageId = generateId(); // Example: "V1StGXR8_Z5jdHi6"
+const id = generateId(); // Example: "V1StGXR8_Z5jdHi6"
 ```
 
 ### 3. Custom Configuration
@@ -76,16 +75,19 @@ class Agent {
 }
 ```
 
-### Workflow Runs
+### Workflow Steps and Runs
 
 ```typescript
-import { createIdGenerator } from 'ai';
+import { generateId } from 'ai';
 
 class Workflow {
-  private generateRunId = createIdGenerator({ prefix: 'run' });
-  
+  sleep(duration: number) {
+    const stepId = generateId(); // Simple, consistent ID generation
+    // Use stepId for step tracking
+  }
+
   async execute() {
-    const runId = this.generateRunId();
+    const runId = generateId(); // Simple, consistent ID generation
     // Use runId for workflow execution tracking
   }
 }

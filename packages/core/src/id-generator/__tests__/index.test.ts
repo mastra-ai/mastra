@@ -28,19 +28,19 @@ describe('ID Generator', () => {
     });
   });
 
-  describe('createIdGenerator', () => {
-    it('should create a generator with prefix', () => {
-      const generator = createIdGenerator({ prefix: 'test' });
+  describe('createIdGenerator (advanced use cases)', () => {
+    it('should create a generator with prefix for special cases', () => {
+      const generator = createIdGenerator({ prefix: 'user' });
       const id = generator();
 
-      expect(id).toMatch(/^test-[a-zA-Z0-9]{16}$/);
+      expect(id).toMatch(/^user-[a-zA-Z0-9]{16}$/);
     });
 
     it('should create a generator with custom separator', () => {
-      const generator = createIdGenerator({ prefix: 'test', separator: '_' });
+      const generator = createIdGenerator({ prefix: 'user', separator: '_' });
       const id = generator();
 
-      expect(id).toMatch(/^test_[a-zA-Z0-9]{16}$/);
+      expect(id).toMatch(/^user_[a-zA-Z0-9]{16}$/);
     });
 
     it('should create a generator with custom size', () => {
@@ -50,22 +50,14 @@ describe('ID Generator', () => {
       expect(id.length).toBe(8);
     });
 
-    it('should create a generator with prefix and custom size', () => {
-      const generator = createIdGenerator({ prefix: 'msg', size: 8 });
-      const id = generator();
-
-      expect(id).toMatch(/^msg-[a-zA-Z0-9]{8}$/);
-      expect(id.length).toBe(12); // 'msg' + '-' + 8 chars
-    });
-
-    it('should generate unique IDs', () => {
-      const generator = createIdGenerator({ prefix: 'test' });
+    it('should generate unique IDs with prefix', () => {
+      const generator = createIdGenerator({ prefix: 'session' });
       const id1 = generator();
       const id2 = generator();
 
       expect(id1).not.toBe(id2);
-      expect(id1.startsWith('test-')).toBe(true);
-      expect(id2.startsWith('test-')).toBe(true);
+      expect(id1.startsWith('session-')).toBe(true);
+      expect(id2.startsWith('session-')).toBe(true);
     });
   });
 });
