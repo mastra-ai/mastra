@@ -59,9 +59,7 @@ class StagehandSessionManager {
         console.error('Session check failed:', error);
         if (
           error instanceof Error &&
-          (error.message.includes(
-            'Target page, context or browser has been closed'
-          ) ||
+          (error.message.includes('Target page, context or browser has been closed') ||
             error.message.includes('Session expired') ||
             error.message.includes('context destroyed'))
         ) {
@@ -81,9 +79,7 @@ class StagehandSessionManager {
       this.initialized = false;
       this.stagehand = null;
       const errorMsg = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Failed to initialize/reinitialize Stagehand: ${errorMsg}`
-      );
+      throw new Error(`Failed to initialize/reinitialize Stagehand: ${errorMsg}`);
     }
   }
 

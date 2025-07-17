@@ -6,13 +6,8 @@ export const pageObserveTool = createTool({
   id: 'web-observe',
   description: 'Observe elements on a webpage using Stagehand to plan actions',
   inputSchema: z.object({
-    url: z
-      .string()
-      .optional()
-      .describe('URL to navigate to (optional if already on a page)'),
-    instruction: z
-      .string()
-      .describe('What to observe (e.g., "find the sign in button")'),
+    url: z.string().optional().describe('URL to navigate to (optional if already on a page)'),
+    instruction: z.string().describe('What to observe (e.g., "find the sign in button")'),
   }),
   outputSchema: z.array(z.any()).describe('Array of observable actions'),
   execute: async ({ context }) => {
@@ -21,11 +16,7 @@ export const pageObserveTool = createTool({
 });
 
 const performWebObservation = async (url?: string, instruction?: string) => {
-  console.log(
-    `Starting observation${
-      url ? ` for ${url}` : ''
-    } with instruction: ${instruction}`
-  );
+  console.log(`Starting observation${url ? ` for ${url}` : ''} with instruction: ${instruction}`);
 
   try {
     const stagehand = await sessionManager.ensureStagehand();
@@ -53,9 +44,7 @@ const performWebObservation = async (url?: string, instruction?: string) => {
         console.log(`Observing with instruction: ${instruction}`);
         try {
           const actions = await page.observe(instruction);
-          console.log(
-            `Observation successful, found ${actions.length} actions`
-          );
+          console.log(`Observation successful, found ${actions.length} actions`);
           return actions;
         } catch (observeError) {
           console.error('Error during observation:', observeError);

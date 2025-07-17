@@ -27,12 +27,14 @@ This project enables AI agents to interact with web pages through the Mastra fra
 ### Setup
 
 1. Clone the repository:
+
    ```
    git clone https://github.com/mastra-ai/template-browsing-agent.git
    cd template-browsing-agent
    ```
 
 2. Install dependencies:
+
    ```
    pnpm install
    ```
@@ -86,6 +88,7 @@ The project can be configured through the `.env` file and by modifying the agent
 ## Credits
 
 This project is built with:
+
 - [Mastra](https://mastra.ai) - AI Agent framework
 - [Stagehand by Browserbase](https:/stagehand.dev) - Browser automation
 - [OpenAI](https://openai.com/) - AI models

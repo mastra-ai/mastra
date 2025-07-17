@@ -22,9 +22,7 @@ export const pageNavigateTool = createTool({
 
       // Get page title and current URL
       const title = await stagehand.page.evaluate(() => document.title);
-      const currentUrl = await stagehand.page.evaluate(
-        () => window.location.href
-      );
+      const currentUrl = await stagehand.page.evaluate(() => window.location.href);
 
       return {
         success: true,
