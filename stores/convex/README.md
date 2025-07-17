@@ -101,24 +101,6 @@ const message = await storage.saveMessage({
 const messages = await storage.getMessages({ threadId: 'thread-123' });
 ```
 
-### Real-time Subscriptions
-
-```typescript
-// Subscribe to thread changes
-const unsubscribeThread = storage.subscribeToThread('thread-123', thread => {
-  console.log('Thread updated:', thread);
-});
-
-// Subscribe to thread messages
-const unsubscribeMessages = storage.subscribeToThreadMessages('thread-123', messages => {
-  console.log('Messages updated:', messages);
-});
-
-// Later, when done
-unsubscribeThread();
-unsubscribeMessages();
-```
-
 ### Advanced Operations
 
 ```typescript
@@ -178,6 +160,71 @@ Each table has appropriate indexes for efficient queries.
 ## Environment Variables
 
 - `CONVEX_URL`: URL of your Convex deployment (e.g., "https://cheerful-lemur-123.convex.cloud")
+
+## Running Convex Locally
+
+For local development, you can run Convex using the provided Docker Compose configuration. This sets up both the Convex backend and dashboard services.
+
+### Prerequisites
+
+- Docker and Docker Compose installed on your system
+- Node.js and npm/yarn/pnpm
+
+### Steps
+
+1. Start the Convex development environment:
+
+```bash
+docker-compose up -d
+```
+
+This starts:
+
+- Convex backend service at http://localhost:3210
+- Convex dashboard at http://localhost:6791
+
+2. Configure your application to use the local Convex instance:
+
+```typescript
+const storage = new ConvexStorage({
+  convexUrl: 'http://localhost:3210',
+  api,
+});
+```
+
+3. Access the Convex dashboard at http://localhost:6791 to view your data and manage your deployment.
+
+### Environment Variables
+
+The Docker Compose configuration supports several environment variables that can be set in a `.env` file:
+
+- `PORT`: Backend port (default: 3210)
+- `DASHBOARD_PORT`: Dashboard port (default: 6791)
+- `SITE_PROXY_PORT`: Site proxy port (default: 3211)
+
+## Advanced Usage
+
+### Pagination and Filtering
+
+For large datasets, use pagination and filtering options:
+
+```typescript
+// Get paginated messages
+const paginatedMessages = await storage.getMessagesPaginated({
+  threadId: 'thread-123',
+  page: 1,
+  perPage: 20,
+});
+
+// Get workflow runs with filters
+const workflowRuns = await storage.getWorkflowRuns({
+  workflowName: 'my-workflow',
+  fromDate: new Date('2023-01-01'),
+  toDate: new Date(),
+  perPage: 10,
+  page: 1,
+});
+```
 
 ## Error Handling
 
