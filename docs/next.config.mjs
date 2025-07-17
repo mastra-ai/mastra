@@ -338,11 +338,6 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/examples/rag/usage/rerank-rag",
-        destination: "/examples/rag/rerank/rerank-rag",
-        permanent: true,
-      },
-      {
         source: "/examples/rag/reranking-with-cohere",
         destination: "/examples/rag/rerank/reranking-with-cohere",
         permanent: true,
