@@ -37,7 +37,6 @@ export class NewAgentNetwork extends MastraBase {
   #tools: DynamicArgument<Record<string, Tool>> | undefined;
   #memory?: DynamicArgument<MastraMemory>;
   #mastra?: Mastra;
-  #generateMessageId = createIdGenerator({ prefix: 'msg' });
 
   constructor({
     id,
@@ -93,7 +92,7 @@ export class NewAgentNetwork extends MastraBase {
     await memory?.saveMessages({
       messages: [
         {
-          id: this.#generateMessageId(),
+          id: generateId(),
           type: 'text',
           role: 'user',
           content: { parts: [{ type: 'text', text: message }], format: 2 },
@@ -613,7 +612,7 @@ export class NewAgentNetwork extends MastraBase {
         await memory?.saveMessages({
           messages: [
             {
-              id: this.#generateMessageId(),
+              id: generateId(),
               type: 'text',
               role: 'assistant',
               content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
@@ -756,7 +755,7 @@ export class NewAgentNetwork extends MastraBase {
         await memory?.saveMessages({
           messages: [
             {
-              id: this.#generateMessageId(),
+              id: generateId(),
               type: 'text',
               role: 'assistant',
               content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
@@ -833,7 +832,7 @@ export class NewAgentNetwork extends MastraBase {
         await memory?.saveMessages({
           messages: [
             {
-              id: this.#generateMessageId(),
+              id: generateId(),
               type: 'text',
               role: 'assistant',
               content: { parts: [{ type: 'text', text: JSON.stringify(finalResult) }], format: 2 },

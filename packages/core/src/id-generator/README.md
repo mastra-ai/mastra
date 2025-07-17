@@ -13,19 +13,23 @@ const id = generateId(); // Generates a 16-character nanoid
 console.log(id); // Example: "V1StGXR8_Z5jdHi6"
 ```
 
-### 2. Prefixed IDs (Component-Specific)
+### 2. Prefixed IDs (When Needed for Debugging)
 
 ```typescript
 import { createIdGenerator } from 'ai';
 
-// Create generators for different components
-const generateMessageId = createIdGenerator({ prefix: 'msg' });
-const generateThreadId = createIdGenerator({ prefix: 'thread' });
+// Use prefixes for workflow steps and run instances (helpful for debugging)
+const generateSleepId = createIdGenerator({ prefix: 'sleep' });
+const generateMappingId = createIdGenerator({ prefix: 'mapping' });
 const generateRunId = createIdGenerator({ prefix: 'run' });
 
-console.log(generateMessageId()); // Example: "msg-V1StGXR8_Z5jdHi6"
-console.log(generateThreadId());  // Example: "thread-B2QvGXR9_A6keIj7"
-console.log(generateRunId());     // Example: "run-C3RwHXS0_B7lfJk8"
+console.log(generateSleepId());    // Example: "sleep-V1StGXR8_Z5jdHi6"
+console.log(generateMappingId());  // Example: "mapping-B2QvGXR9_A6keIj7"
+console.log(generateRunId());      // Example: "run-C3RwHXS0_B7lfJk8"
+
+// For message IDs, use simple generateId() for consistency
+import { generateId } from 'ai';
+const messageId = generateId(); // Example: "V1StGXR8_Z5jdHi6"
 ```
 
 ### 3. Custom Configuration
@@ -62,13 +66,11 @@ const mastra = new Mastra({
 ### Agent Messages
 
 ```typescript
-import { createIdGenerator } from 'ai';
+import { generateId } from 'ai';
 
 class Agent {
-  private generateMessageId = createIdGenerator({ prefix: 'msg' });
-  
   async generate(prompt: string) {
-    const messageId = this.generateMessageId();
+    const messageId = generateId(); // Simple, consistent with other message IDs
     // Use messageId for message storage
   }
 }
