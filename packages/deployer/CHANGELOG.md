@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.11.0-alpha.1
+
+### Patch Changes
+
+- 7983e53: Revert cloudflare omit install deps step
+  - @mastra/core@0.11.0-alpha.1
+  - @mastra/server@0.11.0-alpha.1
+
 ## 0.11.0-alpha.0
 
 ### Minor Changes
