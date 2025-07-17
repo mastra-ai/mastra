@@ -58,8 +58,11 @@ async function main() {
 
     // Process each template
     for (const templateName of templateDirs) {
-      //pick description text from description.txt
-      const description = fs.readFileSync(path.join(TEMPLATES_DIR, templateName, 'description.txt'), 'utf-8');
+      //pick description text from package.json
+      const packageJsonFile = fs.readFileSync(path.join(TEMPLATES_DIR, templateName, 'package.json'), 'utf-8');
+      const packageJson = JSON.parse(packageJsonFile);
+      const description = packageJson.description || '';
+      console.log(`Description for ${templateName}: ${description}`);
       await processTemplate(templateName, description);
     }
   } catch (error) {
