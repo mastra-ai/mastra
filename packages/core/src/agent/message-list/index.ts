@@ -1,5 +1,4 @@
-import { randomUUID } from 'crypto';
-import { convertToCoreMessages } from 'ai';
+import { convertToCoreMessages, generateId } from 'ai';
 import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, ToolCallPart, ToolInvocation, UIMessage } from 'ai';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { MastraMessageV1 } from '../../memory';
@@ -569,7 +568,7 @@ export class MessageList {
     if (this.generateMessageId) {
       return this.generateMessageId();
     }
-    return randomUUID();
+    return generateId();
   }
 
   private mastraMessageV1ToMastraMessageV2(message: MastraMessageV1, messageSource: MessageSource): MastraMessageV2 {

@@ -2,6 +2,7 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
@@ -43,6 +44,13 @@ export interface Config<
   server?: ServerConfig;
   mcpServers?: TMCPServers;
   bundler?: BundlerConfig;
+
+  /**
+   * Custom ID generator function for generating unique identifiers
+   * If not provided, uses Vercel AI SDK's generateId by default
+   * Only needed for special algorithms like ULID, nanoid with custom config, etc.
+   */
+  generateId?: () => string;
 
   /**
    * Server middleware functions to be applied to API routes
@@ -92,6 +100,7 @@ export class Mastra<
   #server?: ServerConfig;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
+  #generateId?: () => string;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -152,6 +161,11 @@ export class Mastra<
       }
     }
     this.#logger = logger;
+
+    /*
+      ID Generator
+    */
+    this.#generateId = config?.generateId;
 
     let storage = config?.storage;
 
@@ -795,6 +809,14 @@ do:
     }
 
     return await this.#logger.getLogs(transportId, params);
+  }
+
+  /**
+   * Get the configured ID generator function
+   * @returns The ID generator function, or undefined if not configured (falls back to Vercel AI SDK default)
+   */
+  public getIdGenerator(): (() => string) | undefined {
+    return this.#generateId;
   }
 
   /**

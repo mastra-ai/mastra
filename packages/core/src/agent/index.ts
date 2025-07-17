@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import type {
   CoreMessage,
   GenerateObjectResult,
@@ -11,6 +10,7 @@ import type {
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
+import { generateId } from 'ai';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -1606,7 +1606,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           const input = userInputMessages
             .map(message => (typeof message.content === 'string' ? message.content : ''))
             .join('\n');
-          const runIdToUse = runId || crypto.randomUUID();
+          const runIdToUse = runId || generateId();
           for (const metric of Object.values(this.evals || {})) {
             executeHook(AvailableHooks.ON_GENERATION, {
               input,
@@ -1698,7 +1698,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         `[Agent:${this.name}] - No memory is configured but resourceId and threadId were passed in args. This will not work.`,
       );
     }
-    const runId = args.runId || randomUUID();
+    const runId = args.runId || generateId();
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
 
@@ -1941,7 +1941,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       );
     }
 
-    const runId = args.runId || randomUUID();
+    const runId = args.runId || generateId();
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
 
