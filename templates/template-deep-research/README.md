@@ -52,6 +52,11 @@ Follow the interactive prompts:
 
 Create a `.env` file with:
 
+```
+OPENAI_API_KEY=""
+EXA_API_KEY="your-exa-api-key"
+```
+
 ## Required Dependencies
 
 - `@mastra/core`: Core Mastra functionality with vNext workflows
