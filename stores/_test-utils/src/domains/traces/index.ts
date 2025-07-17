@@ -123,8 +123,8 @@ export function createTraceTests(storage: MastraStorage) {
             fromYesterday.traces.forEach(t =>
                 expect(new Date(t.createdAt).getTime()).toBeGreaterThanOrEqual(new Date(yesterday.toISOString()).getTime()),
             );
-            if (fromYesterday.traces.length > 0 && fromYesterday.traces[0].createdAt === now.toISOString()) {
-                expect(new Date(fromYesterday.traces[0].createdAt).toISOString().slice(0, 10)).toEqual(
+            if (fromYesterday.traces.length > 0 && fromYesterday.traces[0]!.createdAt === now.toISOString()) {
+                expect(new Date(fromYesterday.traces[0]!.createdAt).toISOString().slice(0, 10)).toEqual(
                     now.toISOString().slice(0, 10),
                 );
             }

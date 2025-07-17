@@ -7,7 +7,6 @@ import {
   MastraStorage,
   TABLE_MESSAGES,
   TABLE_THREADS,
-  TABLE_TRACES,
   TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
@@ -17,6 +16,8 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
+  StorageGetTracesArg,
+  StorageGetTracesPaginatedArg,
   StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,
@@ -25,14 +26,14 @@ import type {
   StoragePagination,
   StorageDomains,
 } from '@mastra/core/storage';
-
-import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
+import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 import { StoreOperationsPG } from './domains/operations';
-import { getSchemaName, getTableName } from './domains/utils';
 import { ScoresPG } from './domains/scores';
+import { TracesPG } from './domains/traces';
+import { getSchemaName, getTableName } from './domains/utils';
 
 export type PostgresConfig = {
   schemaName?: string;
@@ -101,10 +102,12 @@ export class PostgresStore extends MastraStorage {
 
       const operations = new StoreOperationsPG({ client: this.client, schemaName: this.schema || 'public' });
       const scores = new ScoresPG({ client: this.client, operations });
+      const traces = new TracesPG({ client: this.client, operations, schema: this.schema });
 
       this.stores = {
         operations,
         scores,
+        traces,
       } as unknown as StorageDomains;
 
     } catch (e) {
@@ -181,156 +184,16 @@ export class PostgresStore extends MastraStorage {
   /**
    * @deprecated use getTracesPaginated instead
    */
-  public async getTraces(args: {
-    name?: string;
-    scope?: string;
-    attributes?: Record<string, string>;
-    filters?: Record<string, any>;
-    page: number;
-    perPage?: number;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<any[]> {
-    if (args.fromDate || args.toDate) {
-      (args as any).dateRange = {
-        start: args.fromDate,
-        end: args.toDate,
-      };
-    }
-    const result = await this.getTracesPaginated(args);
-    return result.traces;
+  public async getTraces(args: StorageGetTracesArg): Promise<Trace[]> {
+    return this.stores.traces.getTraces(args);
   }
 
-  public async getTracesPaginated(
-    args: {
-      name?: string;
-      scope?: string;
-      attributes?: Record<string, string>;
-      filters?: Record<string, any>;
-    } & PaginationArgs,
-  ): Promise<
-    PaginationInfo & {
-      traces: any[];
-    }
-  > {
-    const { name, scope, page = 0, perPage: perPageInput, attributes, filters, dateRange } = args;
-    const fromDate = dateRange?.start;
-    const toDate = dateRange?.end;
+  public async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    return this.stores.traces.getTracesPaginated(args);
+  }
 
-    const perPage = perPageInput !== undefined ? perPageInput : 100; // Default perPage
-    const currentOffset = page * perPage;
-
-    const queryParams: any[] = [];
-    const conditions: string[] = [];
-    let paramIndex = 1;
-
-    if (name) {
-      conditions.push(`name LIKE $${paramIndex++}`);
-      queryParams.push(`${name}%`); // Add wildcard for LIKE
-    }
-    if (scope) {
-      conditions.push(`scope = $${paramIndex++}`);
-      queryParams.push(scope);
-    }
-    if (attributes) {
-      Object.entries(attributes).forEach(([key, value]) => {
-        const parsedKey = parseFieldKey(key);
-        conditions.push(`attributes->>'${parsedKey}' = $${paramIndex++}`);
-        queryParams.push(value);
-      });
-    }
-    if (filters) {
-      Object.entries(filters).forEach(([key, value]) => {
-        const parsedKey = parseFieldKey(key);
-        conditions.push(`"${parsedKey}" = $${paramIndex++}`); // Ensure filter keys are quoted if they are column names
-        queryParams.push(value);
-      });
-    }
-    if (fromDate) {
-      conditions.push(`"createdAt" >= $${paramIndex++}`);
-      queryParams.push(fromDate);
-    }
-    if (toDate) {
-      conditions.push(`"createdAt" <= $${paramIndex++}`);
-      queryParams.push(toDate);
-    }
-
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    // Get total count
-    const countQuery = `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_TRACES, schemaName: getSchemaName(this.schema) })} ${whereClause}`;
-    let total = 0;
-    try {
-      const countResult = await this.db.one(countQuery, queryParams);
-      total = parseInt(countResult.count, 10);
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_TRACES_PAGINATED_FAILED_TO_RETRIEVE_TOTAL_COUNT',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            name: args.name ?? '',
-            scope: args.scope ?? '',
-          },
-        },
-        error,
-      );
-    }
-
-    if (total === 0) {
-      return {
-        traces: [],
-        total: 0,
-        page,
-        perPage,
-        hasMore: false,
-      };
-    }
-
-    const dataQuery = `SELECT * FROM ${getTableName({ indexName: TABLE_TRACES, schemaName: getSchemaName(this.schema) })} ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-    const finalQueryParams = [...queryParams, perPage, currentOffset];
-
-    try {
-      const rows = await this.db.manyOrNone<any>(dataQuery, finalQueryParams);
-      const traces = rows.map(row => ({
-        id: row.id,
-        parentSpanId: row.parentSpanId,
-        traceId: row.traceId,
-        name: row.name,
-        scope: row.scope,
-        kind: row.kind,
-        status: row.status,
-        events: row.events,
-        links: row.links,
-        attributes: row.attributes,
-        startTime: row.startTime,
-        endTime: row.endTime,
-        other: row.other,
-        createdAt: row.createdAt,
-      }));
-
-      return {
-        traces,
-        total,
-        page,
-        perPage,
-        hasMore: currentOffset + traces.length < total,
-      };
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_TRACES_PAGINATED_FAILED_TO_RETRIEVE_TRACES',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            name: args.name ?? '',
-            scope: args.scope ?? '',
-          },
-        },
-        error,
-      );
-    }
+  async batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
+    return this.stores.traces.batchTraceInsert({ records });
   }
 
   async createTable({

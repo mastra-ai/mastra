@@ -38,7 +38,7 @@ export function createConversationsTest({
                 const resourceId = `pg-non-paginated-resource-${randomUUID()}`;
                 await storage.saveThread({ thread: { ...createSampleThread(), resourceId } });
 
-                const results = await storage.getThreadsByResourceIdPaginated({ resourceId });
+                const results = await storage.getThreadsByResourceIdPaginated({ resourceId, page: 0, perPage: 100 });
                 expect(Array.isArray(results.threads)).toBe(true);
                 expect(results.threads.length).toBe(1);
                 expect(results.total).toBe(1);
@@ -354,13 +354,13 @@ export function createConversationsTest({
                     last: 0,
                     include: [
                         {
-                            id: messages[1].id,
+                            id: messages[1]!.id,
                             threadId: thread.id,
                             withNextMessages: 2,
                             withPreviousMessages: 2,
                         },
                         {
-                            id: messages[4].id,
+                            id: messages[4]!.id,
                             threadId: thread2.id,
                             withPreviousMessages: 2,
                             withNextMessages: 2,
@@ -380,7 +380,7 @@ export function createConversationsTest({
                     last: 0,
                     include: [
                         {
-                            id: messages[4].id,
+                            id: messages[4]!.id,
                             threadId: thread2.id,
                             withPreviousMessages: 1,
                             withNextMessages: 30,
@@ -400,7 +400,7 @@ export function createConversationsTest({
                     last: 0,
                     include: [
                         {
-                            id: messages[1].id,
+                            id: messages[1]!.id,
                             threadId: thread.id,
                             withNextMessages: 1,
                             withPreviousMessages: 1,
@@ -584,10 +584,10 @@ export function createConversationsTest({
             });
 
             expect(updatedMessages).toHaveLength(1);
-            expect(updatedMessages[0].role).toBe('assistant');
+            expect(updatedMessages[0]!.role).toBe('assistant');
 
             const fromDb = await storage.getMessages({ threadId: thread.id, format: 'v2' });
-            expect(fromDb[0].role).toBe('assistant');
+            expect(fromDb[0]!.role).toBe('assistant');
         });
 
         it('should update only the metadata within the content field, preserving other content fields', async () => {
@@ -604,9 +604,9 @@ export function createConversationsTest({
 
             const fromDb = await storage.getMessages({ threadId: thread.id, format: 'v2' });
             expect(fromDb).toHaveLength(1);
-            expect(fromDb[0].content.metadata).toEqual(newMetadata);
-            expect(fromDb[0].content.content).toBe('hello world');
-            expect(fromDb[0].content.parts).toEqual([{ type: 'text', text: 'hello world' }]);
+            expect(fromDb[0]!.content.metadata).toEqual(newMetadata);
+            expect(fromDb[0]!.content.content).toBe('hello world');
+            expect(fromDb[0]!.content.parts).toEqual([{ type: 'text', text: 'hello world' }]);
         });
 
         it('should update only the content string within the content field, preserving metadata', async () => {
@@ -622,8 +622,8 @@ export function createConversationsTest({
             });
 
             const fromDb = await storage.getMessages({ threadId: thread.id, format: 'v2' });
-            expect(fromDb[0].content.content).toBe(newContentString);
-            expect(fromDb[0].content.metadata).toEqual({ initial: true });
+            expect(fromDb[0]!.content.content).toBe(newContentString);
+            expect(fromDb[0]!.content.metadata).toEqual({ initial: true });
         });
 
         it('should deep merge metadata, not overwrite it', async () => {
@@ -639,8 +639,8 @@ export function createConversationsTest({
             });
 
             const fromDb = await storage.getMessages({ threadId: thread.id, format: 'v2' });
-            expect(fromDb[0].content.content).toBe('old content');
-            expect(fromDb[0].content.metadata).toEqual({ initial: true, updated: true });
+            expect(fromDb[0]!.content.content).toBe('old content');
+            expect(fromDb[0]!.content.metadata).toEqual({ initial: true, updated: true });
         });
 
         it('should update multiple messages at once', async () => {
@@ -656,11 +656,11 @@ export function createConversationsTest({
             });
 
             const fromDb = await storage.getMessages({ threadId: thread.id, format: 'v2' });
-            const updatedMsg1 = fromDb.find(m => m.id === msg1.id)!;
-            const updatedMsg2 = fromDb.find(m => m.id === msg2.id)!;
+            const updatedMsg1 = fromDb.find(m => m.id === msg1.id);
+            const updatedMsg2 = fromDb.find(m => m.id === msg2.id);
 
-            expect(updatedMsg1.role).toBe('assistant');
-            expect(updatedMsg2.content.content).toBe('updated');
+            expect(updatedMsg1!.role).toBe('assistant');
+            expect(updatedMsg2!.content.content).toBe('updated');
         });
 
         it('should update the parent thread updatedAt timestamp', async () => {
@@ -706,7 +706,7 @@ export function createConversationsTest({
             const thread2Messages = await storage.getMessages({ threadId: thread2.id, format: 'v2' });
             expect(thread1Messages).toHaveLength(0);
             expect(thread2Messages).toHaveLength(1);
-            expect(thread2Messages[0].id).toBe(message.id);
+            expect(thread2Messages[0]!.id).toBe(message.id);
         });
 
         it('should not fail when trying to update a non-existent message', async () => {
@@ -723,7 +723,7 @@ export function createConversationsTest({
             ).resolves.not.toThrow();
 
             const fromDb = await storage.getMessages({ threadId: thread.id, format: 'v2' });
-            expect(fromDb[0].role).toBe(originalMessage.role);
+            expect(fromDb[0]!.role).toBe(originalMessage.role);
         });
     });
 

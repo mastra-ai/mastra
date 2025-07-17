@@ -1,4 +1,5 @@
-import { MastraStorage, MetricResult } from "@mastra/core";
+import type { MetricResult } from "@mastra/core/eval";
+import type { MastraStorage } from "@mastra/core/storage";
 import { describe, it, expect } from "vitest";
 import { createSampleEval } from "./data";
 import { TABLE_EVALS } from "@mastra/core/storage";
@@ -78,7 +79,7 @@ export function createEvalsTests(storage: MastraStorage) {
             );
             // Check if the first item is from 'now' if possible (because of DESC order)
             if (fromYesterday.evals.length > 0) {
-                expect(new Date(fromYesterday.evals[0].createdAt).toISOString().slice(0, 10)).toEqual(
+                expect(new Date(fromYesterday.evals[0]!.createdAt).toISOString().slice(0, 10)).toEqual(
                     now.toISOString().slice(0, 10),
                 );
             }
@@ -176,7 +177,7 @@ export function createEvalsTests(storage: MastraStorage) {
             // Test getting all evals for the agent
             const allEvals = await storage.getEvalsByAgentName(agentName);
             expect(allEvals).toHaveLength(2);
-            expect(allEvals.map(e => e.runId)).toEqual(expect.arrayContaining([liveEval.runId, testEval.runId]));
+            expect(allEvals.map((e: any) => e.runId)).toEqual(expect.arrayContaining([liveEval.runId, testEval.runId]));
 
             // Test getting only live evals
             const liveEvals = await storage.getEvalsByAgentName(agentName, 'live');

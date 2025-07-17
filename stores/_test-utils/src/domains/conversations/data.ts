@@ -1,5 +1,5 @@
-import { MastraMessageV1, MastraMessageV2, MastraStorage, StorageThreadType } from "@mastra/core";
-import { MastraMessageContentV2 } from "@mastra/core/agent";
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from "@mastra/core";
+import type { MastraMessageContentV2 } from "@mastra/core/agent";
 import { randomUUID } from "crypto";
 
 let role: 'assistant' | 'user' = 'assistant';

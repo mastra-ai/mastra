@@ -1,10 +1,9 @@
 import { createSampleThread } from "@internal/storage-test-utils";
+import type { StorageColumn, TABLE_NAMES } from "@mastra/core/storage";
 import pgPromise from "pg-promise";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PostgresStore } from ".";
 import type { PostgresConfig } from ".";
-import type { StorageColumn, TABLE_NAMES } from "@mastra/core/storage";
-
 
 export const TEST_CONFIG: PostgresConfig = {
     host: process.env.POSTGRES_HOST || 'localhost',
@@ -27,10 +26,53 @@ export function pgTests() {
             try {
                 await store.close();
             } catch {
-
             }
         });
 
+        describe('Public Fields Access', () => {
+            it('should expose db field as public', () => {
+                expect(store.db).toBeDefined();
+                expect(typeof store.db).toBe('object');
+                expect(store.db.query).toBeDefined();
+                expect(typeof store.db.query).toBe('function');
+            });
+
+            it('should expose pgp field as public', () => {
+                expect(store.pgp).toBeDefined();
+                expect(typeof store.pgp).toBe('function');
+                expect(store.pgp.end).toBeDefined();
+                expect(typeof store.pgp.end).toBe('function');
+            });
+
+            it('should allow direct database queries via public db field', async () => {
+                const result = await store.db.one('SELECT 1 as test');
+                expect(result.test).toBe(1);
+            });
+
+            it('should allow access to pgp utilities via public pgp field', () => {
+                const helpers = store.pgp.helpers;
+                expect(helpers).toBeDefined();
+                expect(helpers.insert).toBeDefined();
+                expect(helpers.update).toBeDefined();
+            });
+
+            it('should maintain connection state through public db field', async () => {
+                // Test multiple queries to ensure connection state
+                const result1 = await store.db.one('SELECT NOW() as timestamp1');
+                const result2 = await store.db.one('SELECT NOW() as timestamp2');
+
+                expect(result1.timestamp1).toBeDefined();
+                expect(result2.timestamp2).toBeDefined();
+                expect(new Date(result2.timestamp2).getTime()).toBeGreaterThanOrEqual(new Date(result1.timestamp1).getTime());
+            });
+
+            it('should throw error when pool is used after disconnect', async () => {
+                await store.close();
+                await expect(store.db.connect()).rejects.toThrow();
+                store = new PostgresStore(TEST_CONFIG);
+                await store.init();
+            });
+        });
 
 
         describe('PgStorage Table Name Quoting', () => {
@@ -106,50 +148,6 @@ export function pgTests() {
             });
         });
 
-        describe('Public Fields Access', () => {
-            it('should expose db field as public', () => {
-                expect(store.db).toBeDefined();
-                expect(typeof store.db).toBe('object');
-                expect(store.db.query).toBeDefined();
-                expect(typeof store.db.query).toBe('function');
-            });
-
-            it('should expose pgp field as public', () => {
-                expect(store.pgp).toBeDefined();
-                expect(typeof store.pgp).toBe('function');
-                expect(store.pgp.end).toBeDefined();
-                expect(typeof store.pgp.end).toBe('function');
-            });
-
-            it('should allow direct database queries via public db field', async () => {
-                const result = await store.db.one('SELECT 1 as test');
-                expect(result.test).toBe(1);
-            });
-
-            it('should allow access to pgp utilities via public pgp field', () => {
-                const helpers = store.pgp.helpers;
-                expect(helpers).toBeDefined();
-                expect(helpers.insert).toBeDefined();
-                expect(helpers.update).toBeDefined();
-            });
-
-            it('should maintain connection state through public db field', async () => {
-                // Test multiple queries to ensure connection state
-                const result1 = await store.db.one('SELECT NOW() as timestamp1');
-                const result2 = await store.db.one('SELECT NOW() as timestamp2');
-
-                expect(result1.timestamp1).toBeDefined();
-                expect(result2.timestamp2).toBeDefined();
-                expect(new Date(result2.timestamp2).getTime()).toBeGreaterThanOrEqual(new Date(result1.timestamp1).getTime());
-            });
-
-            it('should throw error when pool is used after disconnect', async () => {
-                await store.close();
-                await expect(store.db.connect()).rejects.toThrow();
-                store = new PostgresStore(TEST_CONFIG);
-                await store.init();
-            });
-        });
 
         describe('Permission Handling', () => {
             const schemaRestrictedUser = 'mastra_schema_restricted_storage';
@@ -183,8 +181,8 @@ export function pgTests() {
 
                         // Grant only connect and usage to schema restricted user
                         await t.none(`
-                  REVOKE ALL ON DATABASE ${TEST_CONFIG.database} FROM ${schemaRestrictedUser};
-                  GRANT CONNECT ON DATABASE ${TEST_CONFIG.database} TO ${schemaRestrictedUser};
+                  REVOKE ALL ON DATABASE ${(TEST_CONFIG as any).database} FROM ${schemaRestrictedUser};
+                  GRANT CONNECT ON DATABASE ${(TEST_CONFIG as any).database} TO ${schemaRestrictedUser};
                   REVOKE ALL ON SCHEMA public FROM ${schemaRestrictedUser};
                   GRANT USAGE ON SCHEMA public TO ${schemaRestrictedUser};
                 `);

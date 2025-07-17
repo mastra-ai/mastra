@@ -50,6 +50,8 @@ export abstract class StoreOperations extends MastraBase {
 
   abstract clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void>;
 
+  abstract dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void>;
+
   abstract alterTable(args: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;

@@ -97,8 +97,6 @@ export function createTestSuite(storage: MastraStorage) {
 
       if ('stores' in storage) {
         expect(await storage.stores!.operations.hasColumn(tempTable, 'resourceId')).toBe(false);
-      } else {
-        expect(await storage['hasColumn'](tempTable, 'resourceId')).toBe(false);
       }
 
       await storage.alterTable({
@@ -110,8 +108,6 @@ export function createTestSuite(storage: MastraStorage) {
 
       if ('stores' in storage) {
         expect(await storage.stores!.operations.hasColumn(tempTable, 'resourceId')).toBe(true);
-      } else {
-        expect(await storage['hasColumn'](tempTable, 'resourceId')).toBe(true);
       }
     });
 

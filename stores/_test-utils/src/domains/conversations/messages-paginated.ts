@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createSampleMessageV1, createSampleMessageV2 } from "./data";
 import { resetRole, createSampleThread } from "./data";
 import { MastraStorage } from "@mastra/core/storage";
-import { MastraMessageV1, MastraMessageV2 } from "@mastra/core";
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from "@mastra/core";
 
 export function createMessagesPaginatedTest({
     storage,
@@ -146,7 +146,7 @@ export function createMessagesPaginatedTest({
 
                 // Verify order is maintained
                 retrievedMessages.messages.forEach((msg, idx) => {
-                    expect(msg.content[0].text).toBe(messages[idx].content[0].text);
+                    expect((msg as any).content[0]!.text).toBe((messages[idx] as any).content[0]!.text);
                 });
             });
 
@@ -252,13 +252,13 @@ export function createMessagesPaginatedTest({
                         last: 0,
                         include: [
                             {
-                                id: messages[1].id,
+                                id: messages[1]!.id,
                                 threadId: thread.id,
                                 withNextMessages: 2,
                                 withPreviousMessages: 2,
                             },
                             {
-                                id: messages[4].id,
+                                id: messages[4]!.id,
                                 threadId: thread2.id,
                                 withPreviousMessages: 2,
                                 withNextMessages: 2,
@@ -278,7 +278,7 @@ export function createMessagesPaginatedTest({
                         last: 0,
                         include: [
                             {
-                                id: messages[4].id,
+                                id: messages[4]!.id,
                                 threadId: thread2.id,
                                 withPreviousMessages: 1,
                                 withNextMessages: 30,
@@ -298,7 +298,7 @@ export function createMessagesPaginatedTest({
                         last: 0,
                         include: [
                             {
-                                id: messages[1].id,
+                                id: messages[1]!.id,
                                 threadId: thread.id,
                                 withNextMessages: 1,
                                 withPreviousMessages: 1,
@@ -364,7 +364,7 @@ export function createMessagesPaginatedTest({
                         last: 2,
                         include: [
                             {
-                                id: messages[4].id, // 'E' from thread-bar
+                                id: messages[4]!.id, // 'E' from thread-bar
                                 threadId: 'thread-two',
                                 withPreviousMessages: 1,
                                 withNextMessages: 1,
@@ -374,11 +374,11 @@ export function createMessagesPaginatedTest({
                 });
 
                 // Should include last 2 from thread-one and 3 from thread-two (D, E, F)
-                expect(result.map(m => m.content.content).sort()).toEqual(['B', 'C', 'D', 'E', 'F']);
+                expect(result.map((m: any) => m.content.content).sort()).toEqual(['B', 'C', 'D', 'E', 'F']);
                 // Should include 2 from thread-one
-                expect(result.filter(m => m.threadId === 'thread-one').map((m: any) => m.content.content)).toEqual(['B', 'C']);
+                expect(result.filter((m: any) => m.threadId === 'thread-one').map((m: any) => m.content.content)).toEqual(['B', 'C']);
                 // Should include 3 from thread-two
-                expect(result.filter(m => m.threadId === 'thread-two').map((m: any) => m.content.content)).toEqual([
+                expect(result.filter((m: any) => m.threadId === 'thread-two').map((m: any) => m.content.content)).toEqual([
                     'D',
                     'E',
                     'F',
