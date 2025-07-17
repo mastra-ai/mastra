@@ -1,5 +1,15 @@
 # @mastra/client-js
 
+## 0.10.15-alpha.0
+
+### Patch Changes
+
+- 7827943: Handle streaming large data
+- Updated dependencies [7827943]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [cbddd18]
+  - @mastra/core@0.11.0-alpha.0
+
 ## 0.10.14
 
 ### Patch Changes

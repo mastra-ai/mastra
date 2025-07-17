@@ -1,5 +1,24 @@
 # @mastra/deployer
 
+## 0.11.0-alpha.0
+
+### Minor Changes
+
+- 0938991: Refactored the hono server structure by extracting route logic into route groups based on namespace.
+
+### Patch Changes
+
+- 6f50efd: Only enforce authorization on protected routes
+- bf6903e: Fix dependency resolving with directories
+
+  Follow import from `import x from 'pkg/dir'` => `import x from 'pkg/dir/index.js'`
+
+- Updated dependencies [7827943]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [cbddd18]
+  - @mastra/core@0.11.0-alpha.0
+  - @mastra/server@0.11.0-alpha.0
+
 ## 0.10.15
 
 ### Patch Changes
