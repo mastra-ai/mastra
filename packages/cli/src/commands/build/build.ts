@@ -29,7 +29,6 @@ export async function build({
     const mastraEntryFile = fs.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
     const platformDeployer = await getDeployer(mastraEntryFile, outputDirectory);
-
     if (!platformDeployer) {
       const deployer = new BuildBundler(env);
       deployer.__setLogger(logger);

@@ -23,7 +23,6 @@ import {
   packWorkspaceDependencies,
 } from './workspaceDependencies';
 
-
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
   protected outputDir = 'output';
@@ -241,7 +240,6 @@ export abstract class Bundler extends MastraBundler {
       this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
     }
 
-
     let analyzedBundleInfo;
     try {
       const resolvedToolsPaths = await this.getToolsInputOptions(toolsPaths);
@@ -406,7 +404,7 @@ export abstract class Bundler extends MastraBundler {
           manualChunks: {
             mastra: ['#mastra'],
           },
-          sourcemap
+          sourcemap,
         },
       );
 
