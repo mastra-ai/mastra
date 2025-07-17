@@ -20,11 +20,13 @@ import {
   TABLE_TRACES,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import pgPromise from 'pg-promise';
+// import pgPromise from 'pg-promise';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
 
 import { PostgresStore } from '.';
 import type { PostgresConfig } from '.';
+import Pool from 'pg-pool';
+import { Client } from 'pg';
 
 const TEST_CONFIG: PostgresConfig = {
   host: process.env.POSTGRES_HOST || 'localhost',
@@ -66,29 +68,30 @@ describe('PostgresStore', () => {
       expect(typeof testDB.db.query).toBe('function');
     });
 
-    it('should expose pgp field as public', () => {
-      expect(testDB.pgp).toBeDefined();
-      expect(typeof testDB.pgp).toBe('function');
-      expect(testDB.pgp.end).toBeDefined();
-      expect(typeof testDB.pgp.end).toBe('function');
-    });
+    // it('should expose pgp field as public', () => {
+    //   expect(testDB.pgp).toBeDefined();
+    //   expect(typeof testDB.pgp).toBe('function');
+    //   expect(testDB.pgp.end).toBeDefined();
+    //   expect(typeof testDB.pgp.end).toBe('function');
+    // });
 
     it('should allow direct database queries via public db field', async () => {
-      const result = await testDB.db.one('SELECT 1 as test');
-      expect(result.test).toBe(1);
+      const result = await testDB.db.query('SELECT 1 as test');
+      expect(result.rows.length).toBe(1);
+      expect(result.rows[0].test).toBe(1);
     });
 
-    it('should allow access to pgp utilities via public pgp field', () => {
-      const helpers = testDB.pgp.helpers;
-      expect(helpers).toBeDefined();
-      expect(helpers.insert).toBeDefined();
-      expect(helpers.update).toBeDefined();
-    });
+    // it('should allow access to pgp utilities via public pgp field', () => {
+    //   const helpers = testDB.pgp.helpers;
+    //   expect(helpers).toBeDefined();
+    //   expect(helpers.insert).toBeDefined();
+    //   expect(helpers.update).toBeDefined();
+    // });
 
     it('should maintain connection state through public db field', async () => {
       // Test multiple queries to ensure connection state
-      const result1 = await testDB.db.one('SELECT NOW() as timestamp1');
-      const result2 = await testDB.db.one('SELECT NOW() as timestamp2');
+      const result1 = (await testDB.db.query('SELECT NOW() as timestamp1')).rows[0];
+      const result2 = (await testDB.db.query('SELECT NOW() as timestamp2')).rows[0];
 
       expect(result1.timestamp1).toBeDefined();
       expect(result2.timestamp2).toBeDefined();
@@ -2205,40 +2208,48 @@ describe('PostgresStore', () => {
     const schemaRestrictedUser = 'mastra_schema_restricted_storage';
     const restrictedPassword = 'test123';
     const testSchema = 'testSchema';
-    let adminDb: pgPromise.IDatabase<{}>;
-    let pgpAdmin: pgPromise.IMain;
+
+    let adminDb: Pool<Client>;
+    const url = new URL(connectionString);
 
     beforeAll(async () => {
-      // Create a separate pg-promise instance for admin operations
-      pgpAdmin = pgPromise();
-      adminDb = pgpAdmin(connectionString);
+      // Create a separate pool for admin operations
+      adminDb = new Pool(TEST_CONFIG);
+
+      const client = await adminDb.connect();
       try {
-        await adminDb.tx(async t => {
-          // Drop the test schema if it exists from previous runs
-          await t.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+        await client.query('BEGIN');
 
-          // Create schema restricted user with minimal permissions
-          await t.none(`          
-          DO $$
-          BEGIN
-            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${schemaRestrictedUser}') THEN
-              CREATE USER ${schemaRestrictedUser} WITH PASSWORD '${restrictedPassword}' NOCREATEDB;
-            END IF;
-          END
-          $$;`);
+        // Drop the test schema if it exists from previous runs
+        await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
 
-          // Grant only connect and usage to schema restricted user
-          await t.none(`
-            REVOKE ALL ON DATABASE ${TEST_CONFIG.database} FROM ${schemaRestrictedUser};
-            GRANT CONNECT ON DATABASE ${TEST_CONFIG.database} TO ${schemaRestrictedUser};
-            REVOKE ALL ON SCHEMA public FROM ${schemaRestrictedUser};
-            GRANT USAGE ON SCHEMA public TO ${schemaRestrictedUser};
-          `);
-        });
+        // Create schema restricted user with minimal permissions
+        await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${schemaRestrictedUser}') THEN
+            CREATE USER ${schemaRestrictedUser} WITH PASSWORD '${restrictedPassword}' NOCREATEDB;
+          END IF;
+        END
+        $$;`);
+
+        // Grant only connect and usage to schema restricted user
+        await client.query(`
+          REVOKE ALL ON DATABASE ${TEST_CONFIG.database} FROM ${schemaRestrictedUser};
+          GRANT CONNECT ON DATABASE ${TEST_CONFIG.database} TO ${schemaRestrictedUser};
+          REVOKE ALL ON SCHEMA public FROM ${schemaRestrictedUser};
+          GRANT USAGE ON SCHEMA public TO ${schemaRestrictedUser};
+        `);
+
+        await client.query('COMMIT');
       } catch (error) {
+        await client.query('ROLLBACK');
+
         // Clean up the database connection on error
-        pgpAdmin.end();
+        adminDb.end();
         throw error;
+      } finally {
+        client.release();
       }
     });
 
@@ -2250,60 +2261,66 @@ describe('PostgresStore', () => {
         }
 
         // Then clean up test user in admin connection
-        await adminDb.tx(async t => {
-          await t.none(`
+        const client = await adminDb.connect();
+        try {
+          await client.query('BEGIN');
+          await client.query(`
             REASSIGN OWNED BY ${schemaRestrictedUser} TO postgres;
             DROP OWNED BY ${schemaRestrictedUser};
             DROP USER IF EXISTS ${schemaRestrictedUser};
           `);
-        });
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        } finally {
+          client.release();
+        }
 
         // Finally clean up admin connection
-        if (pgpAdmin) {
-          pgpAdmin.end();
+        if (adminDb) {
+          adminDb.end();
         }
       } catch (error) {
         console.error('Error cleaning up test user:', error);
         // Still try to clean up connections even if user cleanup fails
         if (store) await store.close();
-        if (pgpAdmin) pgpAdmin.end();
+        if (adminDb) adminDb.end();
       }
     });
 
     describe('Schema Creation', () => {
       beforeEach(async () => {
         // Create a fresh connection for each test
-        const tempPgp = pgPromise();
-        const tempDb = tempPgp(connectionString);
+        const tempDb = new Pool(TEST_CONFIG);
 
         try {
           // Ensure schema doesn't exist before each test
-          await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+          await tempDb.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
 
           // Ensure no active connections from restricted user
-          await tempDb.none(`
-            SELECT pg_terminate_backend(pid) 
-            FROM pg_stat_activity 
+          await tempDb.query(`
+            SELECT pg_terminate_backend(pid)
+            FROM pg_stat_activity
             WHERE usename = '${schemaRestrictedUser}'
           `);
         } finally {
-          tempPgp.end(); // Always clean up the connection
+          tempDb.end(); // Always clean up the connection
         }
       });
 
       afterEach(async () => {
         // Create a fresh connection for cleanup
-        const tempPgp = pgPromise();
-        const tempDb = tempPgp(connectionString);
+        const tempDb = new Pool(TEST_CONFIG);
 
         try {
           // Clean up any connections from the restricted user and drop schema
-          await tempDb.none(`
+          await tempDb.query(`
             DO $$
             BEGIN
               -- Terminate connections
-              PERFORM pg_terminate_backend(pid) 
-              FROM pg_stat_activity 
+              PERFORM pg_terminate_backend(pid)
+              FROM pg_stat_activity
               WHERE usename = '${schemaRestrictedUser}';
 
               -- Drop schema
@@ -2313,7 +2330,7 @@ describe('PostgresStore', () => {
         } catch (error) {
           console.error('Error in afterEach cleanup:', error);
         } finally {
-          tempPgp.end(); // Always clean up the connection
+          tempDb.end(); // Always clean up the connection
         }
       });
 
@@ -2326,8 +2343,7 @@ describe('PostgresStore', () => {
         });
 
         // Create a fresh connection for verification
-        const tempPgp = pgPromise();
-        const tempDb = tempPgp(connectionString);
+        const tempDb = new Pool(TEST_CONFIG);
 
         try {
           // Test schema creation by initializing the store
@@ -2338,14 +2354,15 @@ describe('PostgresStore', () => {
           );
 
           // Verify schema was not created
-          const exists = await tempDb.oneOrNone(
-            `SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
-            [testSchema],
-          );
-          expect(exists?.exists).toBe(false);
+          const exists = (
+            await tempDb.query(`SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`, [
+              testSchema,
+            ])
+          ).rows[0].exists;
+          expect(exists).toBe(false);
         } finally {
           await restrictedDB.close();
-          tempPgp.end(); // Clean up the verification connection
+          tempDb.end(); // Clean up the verification connection
         }
       });
 
@@ -2358,8 +2375,7 @@ describe('PostgresStore', () => {
         });
 
         // Create a fresh connection for verification
-        const tempPgp = pgPromise();
-        const tempDb = tempPgp(connectionString);
+        const tempDb = new Pool(TEST_CONFIG);
 
         try {
           await expect(async () => {
@@ -2371,14 +2387,15 @@ describe('PostgresStore', () => {
           );
 
           // Verify schema was not created
-          const exists = await tempDb.oneOrNone(
-            `SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
-            [testSchema],
-          );
-          expect(exists?.exists).toBe(false);
+          const exists = (
+            await tempDb.query(`SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`, [
+              testSchema,
+            ])
+          ).rows[0].exists;
+          expect(exists).toBe(false);
         } finally {
           await restrictedDB.close();
-          tempPgp.end(); // Clean up the verification connection
+          tempDb.end(); // Clean up the verification connection
         }
       });
     });

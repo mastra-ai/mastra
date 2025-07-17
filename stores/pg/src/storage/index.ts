@@ -49,7 +49,7 @@ export type PostgresConfig = {
 
 export class PostgresStore extends MastraStorage {
   public db: Pool<Client>;
-  // public pgp: pgPromise.IMain;
+  private closed: boolean = false;
   private schema?: string;
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
@@ -380,18 +380,17 @@ export class PostgresStore extends MastraStorage {
       this.setupSchemaPromise = (async () => {
         try {
           // First check if schema exists and we have usage permission
-          const schemaExists =
-            (
-              await this.db.query(
-                `
+          const schemaExists = (
+            await this.db.query(
+              `
                 SELECT EXISTS (
                   SELECT 1 FROM information_schema.schemata 
                   WHERE schema_name = $1
                 )
                 `,
-                [this.schema],
-              )
-            ).rows.length > 0;
+              [this.schema],
+            )
+          ).rows[0]?.exists;
 
           if (!schemaExists) {
             try {
@@ -1537,6 +1536,8 @@ export class PostgresStore extends MastraStorage {
   }
 
   async close(): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
     this.db.end();
   }
 
@@ -1645,7 +1646,7 @@ export class PostgresStore extends MastraStorage {
 
     const selectQuery = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId" FROM ${this.getTableName(
       TABLE_MESSAGES,
-    )} WHERE id IN ($1:list)`;
+    )} WHERE id = ANY($1)`;
 
     const existingMessagesDb = (await this.db.query(selectQuery, [messageIds])).rows;
 
@@ -1732,7 +1733,7 @@ export class PostgresStore extends MastraStorage {
 
       if (threadIdsToUpdate.size > 0) {
         queries.push(
-          client.query(`UPDATE ${this.getTableName(TABLE_THREADS)} SET "updatedAt" = NOW() WHERE id IN ($1:list)`, [
+          client.query(`UPDATE ${this.getTableName(TABLE_THREADS)} SET "updatedAt" = NOW() WHERE id = ANY($1)`, [
             Array.from(threadIdsToUpdate),
           ]),
         );
