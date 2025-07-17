@@ -285,7 +285,7 @@ describe('MastraClient Resources', () => {
     });
 
     it('should stream responses', async () => {
-      const mockChunk = `0:"test response"`;
+      const mockChunk = `0:"test response"\n`;
       mockFetchResponse(mockChunk, { isStream: true });
 
       const response = await agent.stream({
