@@ -4,6 +4,7 @@ import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
+import type { ChunkType } from './agent/stream/MastraAgentStream';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
@@ -223,6 +224,7 @@ export interface ToolOptions {
   memory?: MastraMemory;
   agentName?: string;
   model?: LanguageModelV1;
+  writableStream?: WritableStream<ChunkType>;
 }
 
 type ToolToConvert = VercelTool | ToolAction<any, any, any>;

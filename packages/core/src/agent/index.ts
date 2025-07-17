@@ -1,8 +1,9 @@
 import { randomUUID } from 'crypto';
+import type { ReadableStream, WritableStream } from 'stream/web';
 import type { CoreMessage, StreamObjectResult, StreamTextResult, TextPart, Tool, UIMessage } from 'ai';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
+import type { ZodSchema, z } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -37,9 +38,12 @@ import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
+import type { AgentVNextStreamOptions } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput } from './message-list';
 import { SaveQueueManager } from './save-queue';
+import { MastraAgentStream } from './stream/MastraAgentStream';
+import type { ChunkType } from './stream/MastraAgentStream';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -113,6 +117,7 @@ export class Agent<
   #workflows?: DynamicArgument<Record<string, Workflow>>;
   #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
+  #defaultVNextStreamOptions: DynamicArgument<AgentVNextStreamOptions<any, any>>;
   #tools: DynamicArgument<TTools>;
   evals: TMetrics;
   #scorers: DynamicArgument<MastraScorers>;
@@ -153,6 +158,7 @@ export class Agent<
 
     this.#defaultGenerateOptions = config.defaultGenerateOptions || {};
     this.#defaultStreamOptions = config.defaultStreamOptions || {};
+    this.#defaultVNextStreamOptions = config.defaultVNextStreamOptions || {};
 
     this.#tools = config.tools || ({} as TTools);
 
@@ -413,6 +419,39 @@ export class Agent<
             agentName: this.name,
           },
           text: `[Agent:${this.name}] - Function-based default stream options returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      return options;
+    });
+  }
+
+  public getDefaultVNextStreamOptions<
+    Output extends ZodSchema | undefined,
+    StructuredOutput extends ZodSchema | undefined,
+  >({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+    | AgentVNextStreamOptions<Output, StructuredOutput>
+    | Promise<AgentVNextStreamOptions<Output, StructuredOutput>> {
+    if (typeof this.#defaultVNextStreamOptions !== 'function') {
+      return this.#defaultVNextStreamOptions as AgentVNextStreamOptions<Output, StructuredOutput>;
+    }
+
+    const result = this.#defaultVNextStreamOptions({ runtimeContext }) as
+      | AgentVNextStreamOptions<Output, StructuredOutput>
+      | Promise<AgentVNextStreamOptions<Output, StructuredOutput>>;
+    return resolveMaybePromise(result, options => {
+      if (!options) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_DEFAULT_VNEXT_STREAM_OPTIONS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based default vnext stream options returned empty value`,
         });
         this.logger.trackException(mastraError);
         this.logger.error(mastraError.toString());
@@ -924,12 +963,14 @@ export class Agent<
     resourceId,
     threadId,
     mastraProxy,
+    writableStream,
   }: {
     runId?: string;
     resourceId?: string;
     threadId?: string;
     runtimeContext: RuntimeContext;
     mastraProxy?: MastraUnion;
+    writableStream?: WritableStream<ChunkType>;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
@@ -960,6 +1001,7 @@ export class Agent<
           agentName: this.name,
           runtimeContext,
           model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
+          writableStream,
         };
 
         return [k, makeCoreTool(tool, options)];
@@ -1145,6 +1187,7 @@ export class Agent<
     resourceId,
     runId,
     runtimeContext,
+    writableStream,
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -1152,6 +1195,7 @@ export class Agent<
     resourceId?: string;
     runId?: string;
     runtimeContext: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -1166,6 +1210,7 @@ export class Agent<
       threadId,
       runtimeContext,
       mastraProxy,
+      writableStream,
     });
 
     const memoryTools = await this.getMemoryTools({
@@ -1262,6 +1307,7 @@ export class Agent<
     runtimeContext,
     generateMessageId,
     saveQueueManager,
+    writableStream,
   }: {
     instructions?: string;
     toolsets?: ToolsetsInput;
@@ -1275,6 +1321,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
     generateMessageId: undefined | IDGenerator;
     saveQueueManager: SaveQueueManager;
+    writableStream?: WritableStream<ChunkType>;
   }) {
     return {
       before: async () => {
@@ -1312,6 +1359,7 @@ export class Agent<
           resourceId,
           runId,
           runtimeContext,
+          writableStream,
         });
 
         const messageList = new MessageList({
@@ -1702,7 +1750,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
-    options: AgentGenerateOptions<Output, ExperimentalOutput> | AgentStreamOptions<Output, ExperimentalOutput>,
+    options: (AgentGenerateOptions<Output, ExperimentalOutput> | AgentStreamOptions<Output, ExperimentalOutput>) & {
+      writableStream?: WritableStream<ChunkType>;
+    },
   ): Promise<{
     before:
       | (() => Promise<
@@ -1747,6 +1797,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       toolChoice = 'auto',
       runtimeContext = new RuntimeContext(),
       savePerStep,
+      writableStream,
       ...args
     } = options;
 
@@ -1787,6 +1838,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       runtimeContext,
       generateMessageId,
       saveQueueManager,
+      writableStream,
     });
 
     let messageList: MessageList;
@@ -1914,7 +1966,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
       : GenerateObjectResult<OUTPUT>;
   }
-
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -2025,6 +2076,64 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       },
       runId,
       structuredOutput: output,
+    });
+  }
+
+  streamVNext<
+    Output extends ZodSchema | undefined = undefined,
+    StructuredOutput extends ZodSchema | undefined = undefined,
+  >(
+    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    streamOptions?: AgentVNextStreamOptions<Output, StructuredOutput>,
+  ): any {
+    const defaultStreamOptionsPromise = this.getDefaultVNextStreamOptions<Output, StructuredOutput>({
+      runtimeContext: streamOptions?.runtimeContext,
+    });
+
+    return new MastraAgentStream({
+      getOptions: async () => {
+        const defaultStreamOptions = await defaultStreamOptionsPromise;
+
+        return {
+          runId: defaultStreamOptions.runId!,
+        };
+      },
+      createStream: async (writer: WritableStream<ChunkType>) => {
+        const defaultStreamOptions = await defaultStreamOptionsPromise;
+        const mergedStreamOptions: AgentVNextStreamOptions<Output, StructuredOutput> & {
+          writableStream: WritableStream<ChunkType>;
+        } = {
+          ...defaultStreamOptions,
+          ...streamOptions,
+          writableStream: writer,
+        };
+
+        const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions);
+        const { onFinish, runId, output, experimental_output, ...llmOptions } = await before();
+
+        const streamResult = llm.__stream({
+          ...llmOptions,
+          onFinish: async result => {
+            try {
+              const outputText = result.text;
+              await after({
+                result,
+                outputText,
+              });
+            } catch (e) {
+              this.logger.error('Error saving memory on finish', {
+                error: e,
+                runId,
+              });
+            }
+            await onFinish?.({ ...result, runId } as any);
+          },
+          runId,
+          experimental_output,
+        });
+
+        return streamResult.fullStream as unknown as ReadableStream<any>;
+      },
     });
   }
 

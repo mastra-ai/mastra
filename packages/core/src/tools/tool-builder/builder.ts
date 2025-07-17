@@ -15,6 +15,7 @@ import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
+import { ToolStream } from '../stream';
 import type { CoreTool, ToolAction, VercelTool } from '../types';
 
 export type ToolToConvert = VercelTool | ToolAction<any, any, any>;
@@ -131,6 +132,14 @@ export class CoreToolBuilder extends MastraBase {
             memory: options.memory,
             runId: options.runId,
             runtimeContext: options.runtimeContext ?? new RuntimeContext(),
+            writer: new ToolStream(
+              {
+                toolCallId: execOptions.toolCallId,
+                toolName: options.name,
+                runId: options.runId!,
+              },
+              options.writableStream,
+            ),
           },
           execOptions,
         ) ?? undefined
