@@ -583,7 +583,7 @@ export class Workflow<
    * @returns The workflow instance for chaining
    */
   sleep(duration: number | ExecuteFunction<z.infer<TPrevSchema>, number, any, any, TEngineType>) {
-    const id = generateId();
+    const id = `sleep_${generateId()}`;
 
     const opts: StepFlowEntry<TEngineType> =
       typeof duration === 'function'
@@ -613,7 +613,7 @@ export class Workflow<
    * @returns The workflow instance for chaining
    */
   sleepUntil(date: Date | ExecuteFunction<z.infer<TPrevSchema>, Date, any, any, TEngineType>) {
-    const id = generateId();
+    const id = `sleep_${generateId()}`;
     const opts: StepFlowEntry<TEngineType> =
       typeof date === 'function'
         ? { type: 'sleepUntil', id, fn: date }
@@ -684,7 +684,7 @@ export class Workflow<
     if (typeof mappingConfig === 'function') {
       // @ts-ignore
       const mappingStep: any = createStep({
-        id: generateId(),
+        id: `mapping_${generateId()}`,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         execute: mappingConfig as any,
@@ -725,7 +725,7 @@ export class Workflow<
     );
 
     const mappingStep: any = createStep({
-      id: generateId(),
+      id: `mapping_${generateId()}`,
       inputSchema: z.object({}),
       outputSchema: z.object({}),
       execute: async ctx => {
