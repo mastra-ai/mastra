@@ -5,3 +5,5 @@ export const PlaygroundQueryClient = ({ children }: { children: React.ReactNode 
 
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 };
+
+export * from '@tanstack/react-query';
