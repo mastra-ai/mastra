@@ -235,10 +235,10 @@ async function pushToRepo(repoName) {
       console.log(`Updating README.md for ${provider}`);
       const readmePath = path.join(tempDir, 'README.md');
       let readme = await readFile(readmePath, 'utf-8');
-      readme = readme.replace('OpenAI', providerName);
-      readme = readme.replace('OPENAI_API_KEY', providerApiKey);
-      readme = readme.replace('@ai-sdk/openai', providerPackage);
-      readme = readme.replace('https://platform.openai.com/api-keys', providerUrl);
+      readme = readme.replaceAll('OpenAI', providerName);
+      readme = readme.replaceAll('OPENAI_API_KEY', providerApiKey);
+      readme = readme.replaceAll('@ai-sdk/openai', providerPackage);
+      readme = readme.replaceAll('https://platform.openai.com/api-keys', providerUrl);
       await writeFile(readmePath, readme);
 
       // push branch
