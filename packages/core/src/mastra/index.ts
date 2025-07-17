@@ -2,7 +2,6 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
-
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
@@ -44,8 +43,6 @@ export interface Config<
   server?: ServerConfig;
   mcpServers?: TMCPServers;
   bundler?: BundlerConfig;
-
-
 
   /**
    * Server middleware functions to be applied to API routes
@@ -155,8 +152,6 @@ export class Mastra<
       }
     }
     this.#logger = logger;
-
-
 
     let storage = config?.storage;
 
@@ -801,8 +796,6 @@ do:
 
     return await this.#logger.getLogs(transportId, params);
   }
-
-
 
   /**
    * Get all registered MCP server instances.
