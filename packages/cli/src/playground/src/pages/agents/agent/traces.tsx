@@ -1,17 +1,23 @@
-import { TracesView, TracesViewSkeleton } from '@mastra/playground-ui';
+import { TracesView } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
 
 import { useAgent } from '@/hooks/use-agents';
+import { useTraces } from '@/domains/traces/hooks/use-traces';
 
 function AgentTracesPage() {
   const { agentId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
+  const { data: traces = [], isLoading: isTracesLoading, setEndOfListElement, error } = useTraces(agent?.name || '');
 
-  if (isAgentLoading) {
-    return <TracesViewSkeleton />;
-  }
-
-  return <TracesView componentType="agent" componentName={agent?.name || ''} className="h-[calc(100vh-40px)]" />;
+  return (
+    <TracesView
+      traces={traces}
+      className="h-[calc(100vh-40px)]"
+      isLoading={isAgentLoading || isTracesLoading}
+      error={error}
+      setEndOfListElement={setEndOfListElement}
+    />
+  );
 }
 
 export default AgentTracesPage;

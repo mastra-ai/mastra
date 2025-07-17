@@ -1,16 +1,27 @@
 import { useParams } from 'react-router';
-import { TracesView, TracesViewSkeleton } from '@mastra/playground-ui';
+import { TracesView } from '@mastra/playground-ui';
 import { useLegacyWorkflow } from '@/hooks/use-workflows';
+import { useTraces } from '@/domains/traces/hooks/use-traces';
 
 function WorkflowTracesPage() {
   const { workflowId } = useParams();
   const { data: legacyWorkflow, isLoading: isWorkflowLoading } = useLegacyWorkflow(workflowId!);
 
-  if (isWorkflowLoading) {
-    return <TracesViewSkeleton />;
-  }
+  const {
+    data: traces = [],
+    isLoading: isTracesLoading,
+    setEndOfListElement,
+    error,
+  } = useTraces(legacyWorkflow?.name || '', true);
 
-  return <TracesView componentType="workflow" componentName={legacyWorkflow?.name || ''} />;
+  return (
+    <TracesView
+      traces={traces}
+      isLoading={isWorkflowLoading || isTracesLoading}
+      error={error}
+      setEndOfListElement={setEndOfListElement}
+    />
+  );
 }
 
 export default WorkflowTracesPage;

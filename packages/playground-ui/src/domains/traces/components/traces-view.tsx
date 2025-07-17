@@ -4,25 +4,27 @@ import { TracesTable } from '@/domains/traces/components/traces-table';
 import { TracesSidebar } from '@/domains/traces/traces-sidebar';
 import { RefinedTrace } from '@/domains/traces/types';
 import clsx from 'clsx';
-import { useTraces } from '../hooks/use-traces';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export interface TracesViewProps {
-  componentType: 'workflow' | 'agent';
-  componentName: string;
+  isLoading: boolean;
+  error: Error | null;
+  traces: RefinedTrace[];
   runId?: string;
   stepName?: string;
   className?: string;
+  setEndOfListElement: (element: HTMLDivElement | null) => void;
 }
 
-export function TracesView({ componentType, componentName, runId, stepName, className }: TracesViewProps) {
-  const {
-    setEndOfListElement,
-    data: traces = [],
-    error,
-    isLoading,
-  } = useTraces(componentName, componentType === 'workflow');
-
+export function TracesView({
+  isLoading,
+  error,
+  traces,
+  runId,
+  stepName,
+  className,
+  setEndOfListElement,
+}: TracesViewProps) {
   if (isLoading) {
     return <TracesViewSkeleton />;
   }

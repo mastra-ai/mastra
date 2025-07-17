@@ -1,24 +1,19 @@
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { client } from '@/lib/client';
 import { refineTraces } from '../utils/refine-traces';
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { MastraClient } from '@mastra/client-js';
-import { useInView } from '@/hooks/use-in-view';
+import { useInView, useInfiniteQuery } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 
-const fetchFn = async (
-  client: MastraClient,
-  {
-    componentName,
-    isWorkflow,
-    page,
-    perPage,
-  }: {
-    componentName: string;
-    isWorkflow: boolean;
-    page: number;
-    perPage: number;
-  },
-) => {
+const fetchFn = async ({
+  componentName,
+  isWorkflow,
+  page,
+  perPage,
+}: {
+  componentName: string;
+  isWorkflow: boolean;
+  page: number;
+  perPage: number;
+}) => {
   try {
     const res = await client.getTelemetry({
       attribute: {
@@ -39,12 +34,11 @@ const fetchFn = async (
 };
 
 export const useTraces = (componentName: string, isWorkflow: boolean = false) => {
-  const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
   const query = useInfiniteQuery({
     queryKey: ['traces', componentName, isWorkflow],
-    queryFn: ({ pageParam }) => fetchFn(client, { componentName, isWorkflow, page: pageParam, perPage: 100 }),
+    queryFn: ({ pageParam }) => fetchFn({ componentName, isWorkflow, page: pageParam, perPage: 100 }),
     initialPageParam: 0,
     getNextPageParam: (lastPage, _, lastPageParam) => {
       if (!lastPage?.length) {
