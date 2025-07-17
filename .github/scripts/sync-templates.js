@@ -84,7 +84,7 @@ async function processTemplate(templateName, description) {
 
     if (repoExists) {
       console.log(`Repository ${templateName} exists, updating...`);
-      await updateExistingRepo(templateName);
+      await updateExistingRepo(templateName, description);
     } else {
       console.log(`Repository ${templateName} does not exist, creating...`);
       await createNewRepo(templateName, description);
@@ -125,7 +125,20 @@ async function createNewRepo(repoName, description) {
   await pushToRepo(repoName);
 }
 
-async function updateExistingRepo(repoName) {
+async function updateExistingRepo(repoName, description) {
+  try {
+    console.log(`Updating ${repoName} description`);
+    // Update existing repo description
+    await octokit.repos.update({
+      owner: ORGANIZATION,
+      repo: repoName,
+      description: description || `Template repository for ${repoName}`,
+    });
+
+    console.log(`Updated ${repoName} description`);
+  } catch (error) {
+    console.error(`Error updating ${repoName} description:`, error);
+  }
   // Push updated template code to the existing repository
   await pushToRepo(repoName);
 }
@@ -166,13 +179,23 @@ async function pushToRepo(repoName) {
       provider,
       { model: defaultModel, package: providerPackage, apiKey: providerApiKey, name: providerName, url: providerUrl },
     ] of Object.entries(PROVIDERS)) {
-      const files = ['./src/mastra/workflows/index.ts', './src/mastra/agents/index.ts'];
       // move to new branch
       execSync(`git checkout main && git switch -c ${provider}`, { stdio: 'inherit', cwd: tempDir });
 
-      //update llm provider in workflows and agents
-      for (const file of files) {
-        const filePath = path.join(tempDir, file);
+      //update llm provider agent files and workflow files
+      const agentDir = path.join(tempDir, 'src/mastra/agents');
+      const agentFiles = fs.readdirSync(agentDir);
+      const agentFilesToUpdate = agentFiles.filter(file => file.endsWith('.ts'));
+      const workflowDir = path.join(tempDir, 'src/mastra/workflows');
+      const workflowFiles = fs.readdirSync(workflowDir);
+      const workflowFilesToUpdate = workflowFiles.filter(file => file.endsWith('.ts'));
+      console.log(
+        `Updating ${workflowFilesToUpdate.length} workflow files and ${agentFilesToUpdate.length} agent files`,
+      );
+      const filePaths = [...workflowFilesToUpdate, ...agentFilesToUpdate];
+
+      //update llm provider in and agents
+      for (const filePath of filePaths) {
         if (fs.existsSync(filePath)) {
           console.log(`Updating ${filePath}`);
           let content = await readFile(filePath, 'utf-8');
@@ -212,9 +235,10 @@ async function pushToRepo(repoName) {
       console.log(`Updating README.md for ${provider}`);
       const readmePath = path.join(tempDir, 'README.md');
       let readme = await readFile(readmePath, 'utf-8');
-      readme = readme.replace('OpenAI', providerName);
-      readme = readme.replace('OPENAI_API_KEY', providerApiKey);
-      readme = readme.replace('https://platform.openai.com/api-keys', providerUrl);
+      readme = readme.replaceAll('OpenAI', providerName);
+      readme = readme.replaceAll('OPENAI_API_KEY', providerApiKey);
+      readme = readme.replaceAll('@ai-sdk/openai', providerPackage);
+      readme = readme.replaceAll('https://platform.openai.com/api-keys', providerUrl);
       await writeFile(readmePath, readme);
 
       // push branch
