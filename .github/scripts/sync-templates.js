@@ -183,11 +183,23 @@ async function pushToRepo(repoName) {
       execSync(`git checkout main && git switch -c ${provider}`, { stdio: 'inherit', cwd: tempDir });
 
       //update llm provider agent files and workflow files
-      const agentDir = path.join(tempDir, 'src/mastra/agents');
-      const agentFiles = fs.readdirSync(agentDir);
+      let agentDir = '';
+      let agentFiles = [];
+      try {
+        agentDir = path.join(tempDir, 'src/mastra/agents');
+        agentFiles = fs.readdirSync(agentDir);
+      } catch (error) {
+        console.log(`No agents directory found in ${tempDir}`);
+      }
       const agentFilesToUpdate = agentFiles.filter(file => file.endsWith('.ts'));
-      const workflowDir = path.join(tempDir, 'src/mastra/workflows');
-      const workflowFiles = fs.readdirSync(workflowDir);
+      let workflowDir = '';
+      let workflowFiles = [];
+      try {
+        workflowDir = path.join(tempDir, 'src/mastra/workflows');
+        workflowFiles = fs.readdirSync(workflowDir);
+      } catch (error) {
+        console.log(`No workflows directory found in ${tempDir}`);
+      }
       const workflowFilesToUpdate = workflowFiles.filter(file => file.endsWith('.ts'));
       console.log(
         `Updating ${workflowFilesToUpdate.length} workflow files and ${agentFilesToUpdate.length} agent files`,
