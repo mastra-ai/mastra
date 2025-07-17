@@ -30,6 +30,8 @@
     "tailwind.config.ts",
     "postcss.config.js",
     "../../../playground-ui/src/store/playground-store.ts",
-    "../../../playground-ui/src/domains/workflows/utils.ts"
+    "../../../playground-ui/src/domains/workflows/utils.ts",
+    "../../../playground-ui/src/domains/traces/hooks/use-traces.tsx",
+    "../../../playground-ui/src/domains/traces/utils/refine-traces.ts"
   ]
 }

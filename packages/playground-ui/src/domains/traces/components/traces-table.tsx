@@ -4,10 +4,10 @@ import { Thead } from '@/ds/components/Table';
 import type { RefinedTrace } from '@/domains/traces/types';
 import { Badge } from '@/ds/components/Badge';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
-import { useOpenTrace } from './hooks/use-open-trace';
+import { useOpenTrace } from '../hooks/use-open-trace';
 import { Txt } from '@/ds/components/Txt';
 import { useContext } from 'react';
-import { TraceContext } from './context/trace-context';
+import { TraceContext } from '../context/trace-context';
 import { Check, X } from 'lucide-react';
 import { toSigFigs } from '@/lib/number';
 
@@ -91,7 +91,12 @@ export const TracesTable = ({ traces, error }: TracesTableProps) => {
         <>
           <Tbody>
             {traces.map((trace, index) => (
-              <TraceRow key={trace.traceId} trace={trace} index={index} isActive={index === currentTraceIndex} />
+              <TraceRow
+                key={trace.traceId + index}
+                trace={trace}
+                index={index}
+                isActive={index === currentTraceIndex}
+              />
             ))}
           </Tbody>
         </>
