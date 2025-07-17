@@ -2,7 +2,7 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 import process from 'process';
 
-const baseUrl = process.env.MASTRA_DEPLOYMENT_URL || 'https://mastra.ai';
+const baseUrl = process.env.MASTRA_DEPLOYMENT_URL || 'https://mastra.ai'; //'localhost:3000';
 
 const loadRedirects = async () => {
   process.chdir('docs');
@@ -28,7 +28,10 @@ const checkRedirects = async () => {
   const duplicateSourceGroups = new Map();
 
   for (const redirect of redirects) {
+    if (!redirect || typeof redirect !== 'object') continue;
+
     const { source } = redirect;
+    if (!source) continue;
 
     if (sourceMap.has(source)) {
       if (!duplicateSourceGroups.has(source)) {
@@ -45,13 +48,17 @@ const checkRedirects = async () => {
   let brokenDestination = 0;
 
   for (const redirect of redirects) {
-    if (redirect.destination.includes(':path*')) {
-      console.log('├──SKIPPED──', `${baseUrl}${redirect.destination}`);
+    if (!redirect || typeof redirect !== 'object') continue;
+    const { destination } = redirect;
+    if (!destination) continue;
+
+    if (destination.includes(':path*')) {
+      console.log('├──SKIPPED──', `${baseUrl}${destination}`);
       skipped++;
       continue;
     }
 
-    const destinationUrl = `${baseUrl}${redirect.destination}`;
+    const destinationUrl = `${baseUrl}${destination}`;
     let destinationOk = false;
 
     try {
