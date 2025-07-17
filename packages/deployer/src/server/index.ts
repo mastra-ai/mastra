@@ -142,13 +142,6 @@ export async function createHonoServer(
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
 
-  const tools = { ...options.tools };
-  Object.keys(tools).forEach(key => {
-    if (!(tools[key] instanceof Tool)) {
-      delete tools[key];
-    }
-  });
-
   // Middleware
   app.use('*', async function setTelemetryInfo(c, next) {
     const requestId = c.req.header('x-request-id') ?? randomUUID();
@@ -194,7 +187,7 @@ export async function createHonoServer(
 
     c.set('runtimeContext', runtimeContext);
     c.set('mastra', mastra);
-    c.set('tools', tools);
+    c.set('tools', options.tools);
     c.set('playground', options.playground === true);
     c.set('isDev', options.isDev === true);
     return next();
@@ -3647,7 +3640,7 @@ export async function createHonoServer(
         },
       },
     }),
-    executeToolHandler(tools),
+    executeToolHandler(options.tools),
   );
 
   // Vector routes
