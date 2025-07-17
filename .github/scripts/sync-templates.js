@@ -168,6 +168,7 @@ async function pushToRepo(repoName) {
       git commit -m "Update template from monorepo" &&
       git branch -M main &&
       git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${ORGANIZATION}/${repoName}.git  &&
+      git pull origin main &&
       git push -u origin main --force
     `,
       { stdio: 'inherit', cwd: tempDir },
@@ -180,7 +181,19 @@ async function pushToRepo(repoName) {
       { model: defaultModel, package: providerPackage, apiKey: providerApiKey, name: providerName, url: providerUrl },
     ] of Object.entries(PROVIDERS)) {
       // move to new branch
-      execSync(`git checkout main && git switch -c ${provider}`, { stdio: 'inherit', cwd: tempDir });
+      execSync(`git checkout main && git switch -c ${provider}${provider}`, {
+        stdio: 'inherit',
+        cwd: tempDir,
+      });
+
+      try {
+        execSync(`git pull origin ${provider}`, {
+          stdio: 'inherit',
+          cwd: tempDir,
+        });
+      } catch (error) {
+        console.log(`No ${provider} branch found in origin`);
+      }
 
       //update llm provider agent files and workflow files
       let agentDir = '';
@@ -191,7 +204,9 @@ async function pushToRepo(repoName) {
       } catch (error) {
         console.log(`No agents directory found in ${tempDir}`);
       }
-      const agentFilesToUpdate = agentFiles.filter(file => file.endsWith('.ts'));
+      const agentFilesToUpdate = agentFiles
+        .filter(file => file.endsWith('.ts'))
+        ?.map(file => path.join(agentDir, file));
       let workflowDir = '';
       let workflowFiles = [];
       try {
@@ -200,7 +215,9 @@ async function pushToRepo(repoName) {
       } catch (error) {
         console.log(`No workflows directory found in ${tempDir}`);
       }
-      const workflowFilesToUpdate = workflowFiles.filter(file => file.endsWith('.ts'));
+      const workflowFilesToUpdate = workflowFiles
+        .filter(file => file.endsWith('.ts'))
+        ?.map(file => path.join(workflowDir, file));
       console.log(
         `Updating ${workflowFilesToUpdate.length} workflow files and ${agentFilesToUpdate.length} agent files`,
       );
