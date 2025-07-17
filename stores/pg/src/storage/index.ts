@@ -8,7 +8,6 @@ import {
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_RESOURCES,
-  TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
 } from '@mastra/core/storage';
 import type {
@@ -34,6 +33,7 @@ import { StoreOperationsPG } from './domains/operations';
 import { ScoresPG } from './domains/scores';
 import { TracesPG } from './domains/traces';
 import { getSchemaName, getTableName } from './domains/utils';
+import { WorkflowsPG } from './domains/workflows';
 
 export type PostgresConfig = {
   schemaName?: string;
@@ -84,7 +84,7 @@ export class PostgresStore extends MastraStorage {
       }
       super({ name: 'PostgresStore' });
       this.pgp = pgPromise();
-      this.schema = config.schemaName;
+      this.schema = config.schemaName || 'public';
       this.db = this.pgp(
         `connectionString` in config
           ? { connectionString: config.connectionString }
@@ -100,14 +100,16 @@ export class PostgresStore extends MastraStorage {
 
       this.client = this.db;
 
-      const operations = new StoreOperationsPG({ client: this.client, schemaName: this.schema || 'public' });
+      const operations = new StoreOperationsPG({ client: this.client, schemaName: this.schema });
       const scores = new ScoresPG({ client: this.client, operations });
       const traces = new TracesPG({ client: this.client, operations, schema: this.schema });
+      const workflows = new WorkflowsPG({ client: this.client, operations, schema: this.schema });
 
       this.stores = {
         operations,
         scores,
         traces,
+        workflows,
       } as unknown as StorageDomains;
 
     } catch (e) {
@@ -880,36 +882,7 @@ export class PostgresStore extends MastraStorage {
     runId: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    try {
-      const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
-      const now = new Date().toISOString();
-      await this.db.none(
-        `INSERT INTO ${tableName} (
-          workflow_name,
-          run_id,
-          snapshot,
-          "createdAt",
-          "updatedAt"
-        ) VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (workflow_name, run_id) DO UPDATE
-        SET snapshot = EXCLUDED.snapshot,
-            "updatedAt" = EXCLUDED."updatedAt"`,
-        [workflowName, runId, JSON.stringify(snapshot), now, now],
-      );
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            workflowName,
-            runId,
-          },
-        },
-        error,
-      );
-    }
+    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
   }
 
   async loadWorkflowSnapshot({
@@ -919,67 +892,7 @@ export class PostgresStore extends MastraStorage {
     workflowName: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
-    try {
-      const result = await this.load({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: {
-          workflow_name: workflowName,
-          run_id: runId,
-        },
-      });
-
-      if (!result) {
-        return null;
-      }
-
-      return (result as any).snapshot;
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            workflowName,
-            runId,
-          },
-        },
-        error,
-      );
-    }
-  }
-
-  private async hasColumn(table: string, column: string): Promise<boolean> {
-    // Use this.schema to scope the check
-    const schema = this.schema || 'public';
-
-    const result = await this.db.oneOrNone(
-      `SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
-      [schema, table, column, column.toLowerCase()],
-    );
-
-    return !!result;
-  }
-
-  private parseWorkflowRun(row: any): WorkflowRun {
-    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-    if (typeof parsedSnapshot === 'string') {
-      try {
-        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-      } catch (e) {
-        // If parsing fails, return the raw snapshot string
-        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-      }
-    }
-
-    return {
-      workflowName: row.workflow_name,
-      runId: row.run_id,
-      snapshot: parsedSnapshot,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      resourceId: row.resourceId,
-    };
+    return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
   }
 
   async getWorkflowRuns({
@@ -997,83 +910,7 @@ export class PostgresStore extends MastraStorage {
     offset?: number;
     resourceId?: string;
   } = {}): Promise<WorkflowRuns> {
-    try {
-      const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
-      const conditions: string[] = [];
-      const values: any[] = [];
-      let paramIndex = 1;
-
-      if (workflowName) {
-        conditions.push(`workflow_name = $${paramIndex}`);
-        values.push(workflowName);
-        paramIndex++;
-      }
-
-      if (resourceId) {
-        const hasResourceId = await this.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
-        if (hasResourceId) {
-          conditions.push(`"resourceId" = $${paramIndex}`);
-          values.push(resourceId);
-          paramIndex++;
-        } else {
-          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
-        }
-      }
-
-      if (fromDate) {
-        conditions.push(`"createdAt" >= $${paramIndex}`);
-        values.push(fromDate);
-        paramIndex++;
-      }
-
-      if (toDate) {
-        conditions.push(`"createdAt" <= $${paramIndex}`);
-        values.push(toDate);
-        paramIndex++;
-      }
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-      let total = 0;
-      // Only get total count when using pagination
-      if (limit !== undefined && offset !== undefined) {
-        const countResult = await this.db.one(
-          `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
-          values,
-        );
-        total = Number(countResult.count);
-      }
-
-      // Get results
-      const query = `
-      SELECT * FROM ${tableName} 
-      ${whereClause} 
-      ORDER BY "createdAt" DESC
-      ${limit !== undefined && offset !== undefined ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
-    `;
-
-      const queryValues = limit !== undefined && offset !== undefined ? [...values, limit, offset] : values;
-
-      const result = await this.db.manyOrNone(query, queryValues);
-
-      const runs = (result || []).map(row => {
-        return this.parseWorkflowRun(row);
-      });
-
-      // Use runs.length as total when not paginating
-      return { runs, total: total || runs.length };
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_WORKFLOW_RUNS_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            workflowName: workflowName || 'all',
-          },
-        },
-        error,
-      );
-    }
+    return this.stores.workflows.getWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
   }
 
   async getWorkflowRunById({
@@ -1083,55 +920,7 @@ export class PostgresStore extends MastraStorage {
     runId: string;
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
-    try {
-      const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
-      const conditions: string[] = [];
-      const values: any[] = [];
-      let paramIndex = 1;
-
-      if (runId) {
-        conditions.push(`run_id = $${paramIndex}`);
-        values.push(runId);
-        paramIndex++;
-      }
-
-      if (workflowName) {
-        conditions.push(`workflow_name = $${paramIndex}`);
-        values.push(workflowName);
-        paramIndex++;
-      }
-
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-      // Get results
-      const query = `
-      SELECT * FROM ${tableName} 
-      ${whereClause} 
-    `;
-
-      const queryValues = values;
-
-      const result = await this.db.oneOrNone(query, queryValues);
-
-      if (!result) {
-        return null;
-      }
-
-      return this.parseWorkflowRun(result);
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            runId,
-            workflowName: workflowName || '',
-          },
-        },
-        error,
-      );
-    }
+    return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
   async close(): Promise<void> {
