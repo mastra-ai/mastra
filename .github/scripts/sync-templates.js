@@ -198,14 +198,18 @@ async function pushToRepo(repoName) {
 
     // Initialize git and push to repo
     console.log(`Pushing to main branch`);
-    execSync(
-      `
+    try {
+      execSync(
+        `
       git add . &&
       git commit -m "Update template from monorepo" &&
       git push origin main
     `,
-      { stdio: 'inherit', cwd: tempDir },
-    );
+        { stdio: 'inherit', cwd: tempDir },
+      );
+    } catch (error) {
+      console.log(`No changes to push to main branch, skipping`);
+    }
 
     // setup different branches
     // TODO make more dynamic
@@ -311,15 +315,19 @@ async function pushToRepo(repoName) {
       readme = readme.replaceAll('https://platform.openai.com/api-keys', providerUrl);
       await writeFile(readmePath, readme);
 
-      // push branch
-      execSync(
-        `
+      try {
+        // push branch
+        execSync(
+          `
         git add . &&
         git commit -m "Update llm provider to ${provider}" &&
         git push origin ${provider}
     `,
-        { stdio: 'inherit', cwd: tempDir },
-      );
+          { stdio: 'inherit', cwd: tempDir },
+        );
+      } catch (error) {
+        console.log(`No changes to push to ${provider} branch, skipping`);
+      }
     }
 
     console.log(`Successfully pushed template to ${repoName}`);
