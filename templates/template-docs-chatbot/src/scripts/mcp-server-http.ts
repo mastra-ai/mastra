@@ -8,7 +8,7 @@ const port = parseInt(process.env.MCP_PORT || '4111', 10);
 console.log('Starting MCP server via HTTP/SSE...');
 
 // Start the MCP server via HTTP/SSE
-startHttpServer(port).catch((error) => {
+startHttpServer(port).catch(error => {
   console.error('Failed to start MCP server:', error);
   process.exit(1);
 });

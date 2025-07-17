@@ -22,13 +22,17 @@ export const planetsInfoTool = createTool({
   id: 'Get Planet Information',
   description: 'Get detailed information about planets in our solar system, including random facts',
   inputSchema: z.object({
-    planet: z.string()
+    planet: z
+      .string()
       .optional()
-      .describe('Name of the planet (mercury, venus, earth, mars, jupiter, saturn, uranus, neptune). If not provided, returns info about a random planet'),
-    includeRandomFact: z.boolean()
+      .describe(
+        'Name of the planet (mercury, venus, earth, mars, jupiter, saturn, uranus, neptune). If not provided, returns info about a random planet',
+      ),
+    includeRandomFact: z
+      .boolean()
       .optional()
       .default(true)
-      .describe('Whether to include a random fact about the planet')
+      .describe('Whether to include a random fact about the planet'),
   }),
 
   execute: async ({ context }) => {
@@ -60,7 +64,7 @@ export const planetsInfoTool = createTool({
         moons: planetInfo.moons,
         atmosphere: planetInfo.atmosphere,
         temperature: planetInfo.temperature,
-      }
+      },
     };
 
     if (includeRandomFact) {

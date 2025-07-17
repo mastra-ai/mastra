@@ -18,7 +18,7 @@ export const mastra = new Mastra({
     apiRoutes: [
       registerApiRoute('/health', {
         method: 'GET',
-        handler: async (c) => {
+        handler: async c => {
           return c.json({
             status: 'healthy',
             timestamp: new Date().toISOString(),
@@ -26,13 +26,13 @@ export const mastra = new Mastra({
             services: {
               agents: ['planetsAgent'],
               workflows: [],
-            }
+            },
           });
         },
       }),
       registerApiRoute('/mcp/info', {
         method: 'GET',
-        handler: async (c) => {
+        handler: async c => {
           return c.json({
             mcpServer: {
               name: 'Template Docs Chatbot MCP Server',
@@ -42,8 +42,8 @@ export const mastra = new Mastra({
                 http: process.env.MCP_SERVER_URL || 'http://localhost:4111/mcp',
               },
               availableTools: ['linkCheckerTool', 'planetsInfoTool'],
-              availableAgents: ['ask_planets']
-            }
+              availableAgents: ['ask_planets'],
+            },
           });
         },
       }),

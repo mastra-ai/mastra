@@ -126,8 +126,7 @@ The agent uses the MCP tools to answer questions:
 ```typescript
 export const planetsAgent = new Agent({
   name: 'planetsAgent',
-  instructions:
-    'You are a helpful assistant that provides information about planets.',
+  instructions: 'You are a helpful assistant that provides information about planets.',
   // Agent can use MCP tools automatically
   tools: await mcpClient.getTools(),
 });
