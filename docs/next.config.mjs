@@ -269,7 +269,7 @@ export default withGT(
       },
       {
         source: "/workflows",
-        destination: "/docs/workflows/steps",
+        destination: "/docs/workflows/overview",
         permanent: true,
       },
       {
@@ -379,7 +379,7 @@ export default withGT(
       },
       {
         source: "/docs/reference/workflows/step-retries",
-        destination: "/reference/workflows/step-retries",
+        destination: "/reference/workflows/workflow",
         permanent: true,
       },
       {
@@ -509,7 +509,7 @@ export default withGT(
       },
       {
         source: "/docs/local-dev/syncing-projects",
-        destination: "/docs/local-dev/syncing-projects",
+        destination: "/docs/server-db/local-dev-playground",
         permanent: true,
       },
       {
@@ -680,7 +680,7 @@ export default withGT(
       },
       {
         source: "/examples/workflows/subscribed-steps",
-        destination: "/examples/workflows/sequential-steps",
+        destination: "/examples/workflows/agent-and-tool-interop",
         permanent: true,
       },
       {
