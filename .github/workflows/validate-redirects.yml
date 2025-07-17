@@ -1,10 +1,10 @@
-name: Validated next.config.mjs redirects
+name: Validate next.config.mjs redirects
 
 on:
   workflow_dispatch:
 
 jobs:
-  get-and-process-data:
+  get-redirects-and-validate:
     runs-on: ubuntu-latest
 
     steps:
