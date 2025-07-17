@@ -1,6 +1,6 @@
 # Stagehand & Mastra Integration
 
-A powerful integration that combines the capabilities of [Browserbase's Stagehand](https:/stagehand.dev) with [Mastra](https://mastra.ai/) for advanced web automation, scraping, and AI-powered web interactions.
+A powerful integration that combines the capabilities of [Browserbase's Stagehand](https://stagehand.dev) with [Mastra](https://mastra.ai/) for advanced web automation, scraping, and AI-powered web interactions.
 
 ## Overview
 
