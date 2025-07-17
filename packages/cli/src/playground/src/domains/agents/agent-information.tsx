@@ -1,9 +1,18 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAgent } from '@/hooks/use-agents';
 import { AgentEndpoints } from './agent-endpoints';
 import { AgentLogs } from './agent-logs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge, MemoryIcon, Txt, AgentIcon, Icon, AgentSettings } from '@mastra/playground-ui';
+import {
+  Badge,
+  MemoryIcon,
+  AgentIcon,
+  AgentSettings,
+  EntityHeader,
+  PlaygroundTabs,
+  Tab,
+  TabContent,
+  TabList,
+} from '@mastra/playground-ui';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { CopyIcon } from 'lucide-react';
 import { Link } from 'react-router';
@@ -22,20 +31,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
 
   return (
     <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto border-l-sm border-border1">
-      <div className="p-5 border-b-sm border-border1">
-        <div className="text-icon6 flex items-center gap-2 min-w-0">
-          <Icon size="lg" className="bg-surface4 rounded-md p-1">
-            <AgentIcon />
-          </Icon>
-
-          {isLoading || isMemoryLoading ? (
-            <Skeleton className="h-3 w-1/3" />
-          ) : (
-            <Txt variant="header-md" as="h2" className="font-medium truncate">
-              {agent?.name}
-            </Txt>
-          )}
-        </div>
+      <EntityHeader icon={<AgentIcon />} title={agent?.name || ''} isLoading={isLoading || isMemoryLoading}>
         <div className="flex items-center gap-2 pt-2 flex-wrap">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -76,59 +72,37 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             </TooltipContent>
           </Tooltip>
         </div>
-      </div>
+      </EntityHeader>
 
-      <Tabs defaultValue="overview" className="overflow-y-auto grid grid-rows-[auto_1fr] h-full">
-        <TabsList className="flex border-b overflow-x-auto pl-5">
-          <TabsTrigger value="overview" className="group">
-            <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-              Overview
-            </p>
-          </TabsTrigger>
+      <div className="overflow-y-auto border-t-sm border-border1">
+        <PlaygroundTabs defaultTab="overview">
+          <TabList>
+            <Tab value="overview">Overview</Tab>
+            <Tab value="model-settings">Model Settings</Tab>
+            <Tab value="endpoints">Endpoints</Tab>
+            <Tab value="logs">Log Drains</Tab>
+            <Tab value="working-memory">Working Memory</Tab>
+          </TabList>
 
-          <TabsTrigger value="model-settings" className="group">
-            <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-              Model&nbsp;settings
-            </p>
-          </TabsTrigger>
-
-          <TabsTrigger value="endpoints" className="group">
-            <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-              Endpoints
-            </p>
-          </TabsTrigger>
-          <TabsTrigger value="logs" className="group ">
-            <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-              Log&nbsp;Drains
-            </p>
-          </TabsTrigger>
-          <TabsTrigger value="working-memory" className="group">
-            <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-              Working Memory
-            </p>
-          </TabsTrigger>
-        </TabsList>
-
-        <div className="overflow-y-auto">
-          <TabsContent value="overview">
+          <TabContent value="overview">
             {isLoading && <Skeleton className="h-full" />}
             {agent && <AgentOverview agent={agent} agentId={agentId} />}
-          </TabsContent>
-          <TabsContent value="model-settings">
+          </TabContent>
+          <TabContent value="model-settings">
             {isLoading && <Skeleton className="h-full" />}
             {agent && <AgentSettings />}
-          </TabsContent>
-          <TabsContent value="endpoints">
+          </TabContent>
+          <TabContent value="endpoints">
             {isLoading ? <Skeleton className="h-full" /> : <AgentEndpoints agentId={agentId} />}
-          </TabsContent>
-          <TabsContent value="logs">
+          </TabContent>
+          <TabContent value="logs">
             {isLoading ? <Skeleton className="h-full" /> : <AgentLogs agentId={agentId} />}
-          </TabsContent>
-          <TabsContent value="working-memory">
+          </TabContent>
+          <TabContent value="working-memory">
             {isLoading ? <Skeleton className="h-full" /> : <AgentWorkingMemory />}
-          </TabsContent>
-        </div>
-      </Tabs>
+          </TabContent>
+        </PlaygroundTabs>
+      </div>
     </div>
   );
 }

@@ -66,7 +66,7 @@ export const columns: ColumnDef<NetworkTableColumn>[] = [
     id: 'model',
     header: 'Routing Models',
     cell: ({ row }) => (
-      <Cell>
+      <Cell className="truncate">
         <Badge variant="default" icon={<Brain />}>
           {row.original.routingModel}
         </Badge>
