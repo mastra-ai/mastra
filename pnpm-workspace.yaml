@@ -13,4 +13,3 @@ packages:
   - "packages/cloud"
   - "auth/*"
   - "explorations/longmemeval"
-  - "templates/*"
