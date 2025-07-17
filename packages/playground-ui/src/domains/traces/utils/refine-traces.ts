@@ -1,6 +1,4 @@
-import { Span } from '@mastra/playground-ui';
-
-import { RefinedTrace } from '@mastra/playground-ui';
+import { Span, RefinedTrace } from '../types';
 
 export const refineTraces = (traces: Span[], isWorkflow: boolean = false): RefinedTrace[] => {
   const listOfSpanIds = new Set<string>();
