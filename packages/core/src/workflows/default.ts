@@ -1,7 +1,10 @@
+import { randomUUID } from 'crypto';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import type { RuntimeContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { ChunkType } from '../stream/MastraAgentStream';
+import { ToolStream } from '../tools/stream';
 import { EMITTER_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
@@ -157,6 +160,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     runtimeContext: RuntimeContext;
     abortController: AbortController;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<TOutput> {
     const { workflowId, runId, graph, input, resume, retryConfig } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
@@ -209,6 +213,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           abortController: params.abortController,
           emitter: params.emitter,
           runtimeContext: params.runtimeContext,
+          writableStream: params.writableStream,
         });
 
         if (lastOutput.result.status !== 'success') {
@@ -502,6 +507,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController,
     runtimeContext,
     skipEmits = false,
+    writableStream,
   }: {
     workflowId: string;
     runId: string;
@@ -517,9 +523,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     abortController: AbortController;
     runtimeContext: RuntimeContext;
     skipEmits?: boolean;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<StepResult<any, any, any, any>> {
     const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
     const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
+    const stepCallId = randomUUID();
 
     const stepInfo = {
       ...stepResults[step.id],
@@ -556,6 +564,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         type: 'step-start',
         payload: {
           id: step.id,
+          stepCallId,
           ...stepInfo,
           status: 'running',
         },
@@ -638,6 +647,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           [EMITTER_SYMBOL]: emitter,
           engine: {},
           abortSignal: abortController?.signal,
+          writer: new ToolStream(
+            {
+              prefix: 'step',
+              callId: stepCallId,
+              name: step.id,
+              runId,
+            },
+            writableStream,
+          ),
         });
 
         if (suspended) {
@@ -703,6 +721,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           type: 'step-suspended',
           payload: {
             id: step.id,
+            stepCallId,
             ...execResults,
           },
         });
@@ -711,6 +730,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           type: 'step-result',
           payload: {
             id: step.id,
+            stepCallId,
             ...execResults,
           },
         });
@@ -719,6 +739,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           type: 'step-finish',
           payload: {
             id: step.id,
+            stepCallId,
             metadata: {},
           },
         });
@@ -740,6 +761,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    writableStream,
   }: {
     workflowId: string;
     runId: string;
@@ -757,6 +779,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<StepResult<any, any, any, any>> {
     let execResults: any;
     const results: { result: StepResult<any, any, any, any> }[] = await Promise.all(
@@ -780,6 +803,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           emitter,
           abortController,
           runtimeContext,
+          writableStream,
         }),
       ),
     );
@@ -823,6 +847,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    writableStream,
   }: {
     workflowId: string;
     runId: string;
@@ -845,6 +870,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<StepResult<any, any, any, any>> {
     let execResults: any;
     const truthyIndexes = (
@@ -926,6 +952,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           emitter,
           abortController,
           runtimeContext,
+          writableStream,
         }),
       ),
     );
@@ -967,6 +994,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    writableStream,
   }: {
     workflowId: string;
     runId: string;
@@ -989,6 +1017,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<StepResult<any, any, any, any>> {
     const { step, condition } = entry;
     let isTrue = true;
@@ -1006,6 +1035,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
+        writableStream,
       });
 
       if (result.status !== 'success') {
@@ -1053,6 +1083,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    writableStream,
   }: {
     workflowId: string;
     runId: string;
@@ -1076,6 +1107,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<StepResult<any, any, any, any>> {
     const { step, opts } = entry;
     const results: StepResult<any, any, any, any>[] = [];
@@ -1138,6 +1170,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             abortController,
             runtimeContext,
             skipEmits: true,
+            writableStream,
           });
         }),
       );
@@ -1318,6 +1351,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    writableStream,
   }: {
     workflowId: string;
     runId: string;
@@ -1335,6 +1369,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<{
     result: StepResult<any, any, any, any>;
     stepResults?: Record<string, StepResult<any, any, any, any>>;
@@ -1356,6 +1391,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
+        writableStream,
       });
     } else if (resume?.resumePath?.length && (entry.type === 'parallel' || entry.type === 'conditional')) {
       const idx = resume.resumePath.shift();
@@ -1378,6 +1414,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
+        writableStream,
       });
     } else if (entry.type === 'parallel') {
       execResults = await this.executeParallel({
@@ -1392,6 +1429,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
+        writableStream,
       });
     } else if (entry.type === 'conditional') {
       execResults = await this.executeConditional({
@@ -1407,6 +1445,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
+        writableStream,
       });
     } else if (entry.type === 'loop') {
       execResults = await this.executeLoop({
@@ -1421,6 +1460,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
+        writableStream,
       });
     } else if (entry.type === 'foreach') {
       execResults = await this.executeForeach({
@@ -1435,6 +1475,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
+        writableStream,
       });
     } else if (entry.type === 'sleep') {
       const startedAt = Date.now();
