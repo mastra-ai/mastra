@@ -56,11 +56,6 @@ export default withGT(
     },
     redirects: () => [
       {
-        source: "/examples/memory/short-term-working-memory",
-        destination: "/examples/memory/memory-with-libsql",
-        permanent: true,
-      },
-      {
         source: "/docs/08-running-evals",
         destination: "/docs/evals/overview",
         permanent: true,
@@ -249,27 +244,7 @@ export default withGT(
       },
       {
         source: "/examples/rag/rerank",
-        destination: "/examples/rag/rerank/rerank-rag",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/rerank-rag",
-        destination: "/examples/rag/rerank/rerank-rag",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/chunking",
-        destination: "/examples/rag/chunking/chunk-text",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/chunk-json",
-        destination: "/examples/rag/chunking/chunk-json",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/hybrid-vector-search",
-        destination: "/examples/rag/query/hybrid-vector-search",
+        destination: "/examples/rag/rerank/rerank",
         permanent: true,
       },
       {
@@ -278,43 +253,28 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/examples/rag/retrieve-results",
-        destination: "/examples/rag/query/retrieve-results",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/basic-rag",
-        destination: "/examples/rag/query/hybrid-vector-search",
-        permanent: true,
-      },
-      {
         source: "/examples/rag/embed-chunk-array",
-        destination: "/examples/rag/chunking/chunk-json",
+        destination: "/examples/rag/embedding/embed-chunk-array",
         permanent: true,
       },
       {
         source: "/examples/rag/embed-text-chunk",
-        destination: "/examples/rag/chunking/chunk-text",
+        destination: "/examples/rag/embedding/embed-text-chunk",
         permanent: true,
       },
       {
         source: "/examples/rag/filter-rag",
-        destination: "/docs/rag/retrieval#metadata-filtering",
+        destination: "/examples/rag/usage/filter-rag",
         permanent: true,
       },
       {
         source: "/workflows",
-        destination: "/docs/workflows/steps",
+        destination: "/docs/workflows/overview",
         permanent: true,
       },
       {
         source: "/workflows/:path*",
         destination: "/docs/workflows/:path*",
-        permanent: true,
-      },
-      {
-        source: "/docs/workflows/data-flow",
-        destination: "/docs/workflows/variables",
         permanent: true,
       },
       {
@@ -333,28 +293,8 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/examples/rag/insert-embedding-in-pinecone",
-        destination: "/examples/rag/upsert/upsert-embeddings#pinecone",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/usage/rerank-rag",
-        destination: "/examples/rag/rerank/rerank-rag",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/reranking-with-cohere",
-        destination: "/examples/rag/rerank/reranking-with-cohere",
-        permanent: true,
-      },
-      {
         source: "/examples/memory/short-term-working-memory",
         destination: "/examples/memory/memory-with-libsql",
-        permanent: true,
-      },
-      {
-        source: "/docs/showcase",
-        destination: "/showcase",
         permanent: true,
       },
       {
@@ -439,7 +379,7 @@ export default withGT(
       },
       {
         source: "/docs/reference/workflows/step-retries",
-        destination: "/reference/workflows/step-retries",
+        destination: "/reference/workflows/workflow",
         permanent: true,
       },
       {
@@ -494,11 +434,6 @@ export default withGT(
       },
       {
         source: "/docs/reference/tts/providers-and-models",
-        destination: "/reference/voice/mastra-voice",
-        permanent: true,
-      },
-      {
-        source: "/docs/reference/tts/stream",
         destination: "/reference/voice/mastra-voice",
         permanent: true,
       },
@@ -574,7 +509,7 @@ export default withGT(
       },
       {
         source: "/docs/local-dev/syncing-projects",
-        destination: "/docs/local-dev/syncing-projects",
+        destination: "/docs/server-db/local-dev-playground",
         permanent: true,
       },
       {
@@ -668,23 +603,8 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/examples/rag/embed-chunk-array",
-        destination: "/examples/rag/embedding/embed-chunk-array",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/embed-text-chunk",
-        destination: "/examples/rag/embedding/embed-text-chunk",
-        permanent: true,
-      },
-      {
         source: "/examples/rag/embed-text-with-cohere",
         destination: "/examples/rag/embedding/embed-text-with-cohere",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/filter-rag",
-        destination: "/examples/rag/usage/filter-rag",
         permanent: true,
       },
       {
@@ -698,28 +618,13 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/examples/rag/insert-embedding-in-astra",
-        destination: "/reference/rag/astra",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/insert-embedding-in-pgvector",
-        destination: "/reference/rag/pg",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/insert-embedding-in-chroma",
-        destination: "/reference/rag/chroma",
-        permanent: true,
-      },
-      {
         source: "/examples/rag/insert-embedding-in-libsql",
         destination: "/reference/rag/libsql",
         permanent: true,
       },
       {
         source: "/examples/rag/insert-embedding-in-pinecone",
-        destination: "/reference/rag/pinecone",
+        destination: "/examples/rag/upsert/upsert-embeddings#pinecone",
         permanent: true,
       },
       {
@@ -743,18 +648,8 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/examples/rag/metadata-extraction",
-        destination: "/examples/rag/embedding/metadata-extraction",
-        permanent: true,
-      },
-      {
         source: "/examples/rag/query/metadata-extraction",
         destination: "/examples/rag/embedding/metadata-extraction",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/rerank",
-        destination: "/examples/rag/rerank/rerank",
         permanent: true,
       },
       {
@@ -767,16 +662,7 @@ export default withGT(
         destination: "/examples/rag/rerank/reranking-with-cohere",
         permanent: true,
       },
-      {
-        source: "/examples/rag/retrieve-results",
-        destination: "/examples/rag/query/retrieve-results",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/retrieve-results",
-        destination: "/examples/rag/query/retrieve-results",
-        permanent: true,
-      },
+
       {
         source: "/examples/rag/usage/rerank-rag",
         destination: "/examples/rag/rerank/rerank",
@@ -794,7 +680,7 @@ export default withGT(
       },
       {
         source: "/examples/workflows/subscribed-steps",
-        destination: "/examples/workflows/sequential-steps",
+        destination: "/examples/workflows/agent-and-tool-interop",
         permanent: true,
       },
       {
