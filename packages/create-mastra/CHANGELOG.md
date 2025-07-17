@@ -1,5 +1,14 @@
 # create-mastra
 
+## 0.10.13-alpha.1
+
+### Patch Changes
+
+- 8f89bcd: fix traces pagination + sharing trace view with cloud
+- 59f0dcd: Add light background color for step statuses
+- cf8d497: factorize tabs component between cloud and core
+- 80692d5: refactor: sharing only the UI and not data fetching for traces
+
 ## 0.10.13-alpha.0
 
 ### Patch Changes
