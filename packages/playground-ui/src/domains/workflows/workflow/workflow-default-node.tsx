@@ -50,10 +50,11 @@ export function WorkflowDefaultNode({
       <div
         className={cn(
           'bg-surface3 rounded-lg w-[274px] border-sm border-border1 pt-2',
-          step?.status === 'success' && 'ring-2 ring-accent1',
-          step?.status === 'failed' && 'ring-2 ring-accent2',
-          step?.status === 'suspended' && 'ring-2 ring-accent3',
-          step?.status === 'waiting' && 'ring-2 ring-accent5',
+          step?.status === 'success' && 'ring-2 ring-accent1 bg-accent1Darker',
+          step?.status === 'failed' && 'ring-2 ring-accent2 bg-accent2Darker',
+          step?.status === 'suspended' && 'ring-2 ring-accent3 bg-accent3Darker',
+          step?.status === 'waiting' && 'ring-2 ring-accent5 bg-accent5Darker',
+          step?.status === 'running' && 'ring-2 ring-accent6 bg-accent6Darker',
         )}
       >
         <div className={cn('flex items-center gap-2 px-3', !description && 'pb-2')}>
@@ -63,7 +64,7 @@ export function WorkflowDefaultNode({
               {step?.status === 'success' && <CheckIcon className="text-accent1" />}
               {step?.status === 'suspended' && <PauseIcon className="text-accent3" />}
               {step?.status === 'waiting' && <HourglassIcon className="text-accent5" />}
-              {step?.status === 'running' && <Loader2 className="text-icon6 animate-spin" />}
+              {step?.status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
               {!step && <CircleDashed className="text-icon2" />}
             </Icon>
           )}
@@ -106,6 +107,7 @@ export function WorkflowDefaultNode({
           onShowTrace={runId && onShowTrace ? () => onShowTrace?.({ runId, stepName: fullLabel }) : undefined}
           runId={runId}
           onSendEvent={onSendEvent}
+          status={step?.status}
         />
       </div>
 

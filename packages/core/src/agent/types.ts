@@ -52,7 +52,7 @@ export interface AgentConfig<
   defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
   mastra?: Mastra;
   evals?: TMetrics;
-  memory?: MastraMemory;
+  memory?: DynamicArgument<MastraMemory>;
   voice?: CompositeVoice;
   /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */
   metrics?: TMetrics;

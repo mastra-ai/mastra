@@ -1,5 +1,7 @@
 # @mastra/agui
 
+**⚠️ DEPRECATION NOTICE**: This package is deprecated. Please use [`@ag-ui/mastra`](https://www.npmjs.com/package/@ag-ui/mastra) instead.
+
 AGUI protocol helpers for Mastra - integrate Mastra agents and networks with AGUI-compatible interfaces.
 
 ## Overview

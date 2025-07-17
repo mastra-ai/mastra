@@ -71,6 +71,10 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
   const path = c.req.path;
   const method = c.req.method;
 
+  if (!isProtectedPath(c.req.path, c.req.method, authConfig)) {
+    return next();
+  }
+
   // Skip for public routes
   if (canAccessPublicly(path, method, authConfig)) {
     return next();
