@@ -2,16 +2,22 @@ name: Validate next.config.mjs redirects
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - paul/grwth-434-validate-redirects
+    paths:
+      - .github/workflows/validate-redirects.yml
+      - .github/scripts/**
 
 jobs:
   get-redirects-and-validate:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set Up Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
