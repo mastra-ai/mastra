@@ -373,38 +373,47 @@ export class MessageList {
 
       for (const [index, part] of messageV2.content.parts.entries()) {
         // If the incoming part is a tool-invocation result, find the corresponding call in the latest message
-        if (part.type === 'tool-invocation' && part.toolInvocation.state === 'result') {
+        if (part.type === 'tool-invocation') {
           const existingCallPart = [...latestMessage.content.parts]
             .reverse()
             .find(p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === part.toolInvocation.toolCallId);
 
-          if (existingCallPart && existingCallPart.type === 'tool-invocation') {
-            // Update the existing tool-call part with the result
-            existingCallPart.toolInvocation = {
-              ...existingCallPart.toolInvocation,
-              state: 'result',
-              result: part.toolInvocation.result,
-            };
-            if (!latestMessage.content.toolInvocations) {
-              latestMessage.content.toolInvocations = [];
+          const existingCallToolInvocation = !!existingCallPart && existingCallPart.type === 'tool-invocation';
+
+          if (existingCallToolInvocation) {
+            if (existingCallPart.toolInvocation.state === 'call' && part.toolInvocation.state === 'result') {
+              // Update the existing tool-call part with the result
+              existingCallPart.toolInvocation = {
+                ...existingCallPart.toolInvocation,
+                state: 'result',
+                result: part.toolInvocation.result,
+              };
+              if (!latestMessage.content.toolInvocations) {
+                latestMessage.content.toolInvocations = [];
+              }
+              const toolInvocationIndex = latestMessage.content.toolInvocations.findIndex(
+                t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
+              );
+              if (toolInvocationIndex === -1) {
+                latestMessage.content.toolInvocations.push(existingCallPart.toolInvocation);
+              } else {
+                latestMessage.content.toolInvocations[toolInvocationIndex] = existingCallPart.toolInvocation;
+              }
             }
-            const toolInvocationIndex = latestMessage.content.toolInvocations.findIndex(
-              t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
-            );
-            if (toolInvocationIndex === -1) {
-              latestMessage.content.toolInvocations.push(existingCallPart.toolInvocation);
-            } else {
-              latestMessage.content.toolInvocations[toolInvocationIndex] = existingCallPart.toolInvocation;
-            }
+            // Otherwise we do nothing, as we're not updating the tool call
+          } else {
+            this.pushNewMessage({
+              latestMessage,
+              index,
+              part,
+            });
           }
-        } else if (
-          // if there's no part at this index yet in the existing message we're merging into
-          !latestMessage.content.parts[index] ||
-          // or there is and the parts are not identical
-          MessageList.cacheKeyFromParts([latestMessage.content.parts[index]]) !== MessageList.cacheKeyFromParts([part])
-        ) {
-          // For all other part types that aren't already present, simply push them to the latest message's parts
-          latestMessage.content.parts.push(part);
+        } else {
+          this.pushNewMessage({
+            latestMessage,
+            index,
+            part,
+          });
         }
       }
       if (latestMessage.createdAt.getTime() < messageV2.createdAt.getTime()) {
@@ -452,6 +461,31 @@ export class MessageList {
     this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
     return this;
+  }
+
+  private pushNewMessage({
+    latestMessage,
+    index,
+    part,
+  }: {
+    latestMessage: MastraMessageV2;
+    index: number;
+    part: MastraMessageContentV2['parts'][number];
+  }) {
+    const indexCheck =
+      // if there is no part at the index, or
+      !latestMessage.content.parts[index] ||
+      // or there is and the parts are not identical
+      MessageList.cacheKeyFromParts([latestMessage.content.parts[index]]) !== MessageList.cacheKeyFromParts([part]);
+
+    // Get the cache key for the part
+    const partKey = MessageList.cacheKeyFromParts([part]);
+    // Check if the part already exists in the message
+    const alreadyExists = latestMessage.content.parts.some(p => MessageList.cacheKeyFromParts([p]) === partKey);
+    // If the part isn't already present, or is a step-start and the parts are not identical, push it to the message
+    if (!alreadyExists || (part.type === 'step-start' && indexCheck)) {
+      latestMessage.content.parts.push(part);
+    }
   }
 
   private inputToMastraMessageV2(message: MessageInput, messageSource: MessageSource): MastraMessageV2 {

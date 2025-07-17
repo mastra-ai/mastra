@@ -378,23 +378,6 @@ export const useStreamWorkflow = () => {
             status = value.payload.status;
             setStreamResult((prev: WorkflowWatchResult) => {
               const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
-              const { output: valueOutput, ...rest } = value.payload;
-
-              const output =
-                valueOutput &&
-                typeof valueOutput === 'object' &&
-                !Array.isArray(valueOutput) &&
-                Object.keys(valueOutput).length > 0
-                  ? Object.entries(valueOutput).reduce(
-                      (_acc, [_key, _value]) => {
-                        const val = _value as { type: string; data: unknown };
-                        _acc[_key] =
-                          val.type?.toLowerCase() === 'buffer' ? { type: 'Buffer', data: `[...buffered data]` } : val;
-                        return _acc;
-                      },
-                      {} as Record<string, unknown>,
-                    )
-                  : valueOutput || undefined;
               return {
                 ...prev,
                 payload: {
@@ -402,8 +385,7 @@ export const useStreamWorkflow = () => {
                   currentStep: {
                     id: value.payload.id,
                     ...(prev?.payload?.currentStep || {}),
-                    ...rest,
-                    output,
+                    ...value.payload,
                   },
                   workflowState: {
                     ...prev.payload.workflowState,
@@ -412,8 +394,7 @@ export const useStreamWorkflow = () => {
                       ...prev.payload.workflowState.steps,
                       [value.payload.id]: {
                         ...current,
-                        ...rest,
-                        output,
+                        ...value.payload,
                       },
                     },
                   },
@@ -453,6 +434,9 @@ export const useStreamWorkflow = () => {
             });
           }
         }
+      } catch (error) {
+        console.error('Error streaming workflow:', error);
+        //silent error
       } finally {
         setIsStreaming(false);
         reader.releaseLock();
