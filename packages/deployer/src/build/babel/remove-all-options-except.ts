@@ -1,9 +1,11 @@
 import babel from '@babel/core';
 import type { NodePath, types } from '@babel/core';
+import type { IMastraLogger } from '@mastra/core/logger';
 
 export function removeAllOptionsFromMastraExcept(
   result: { hasCustomConfig: boolean },
   option: 'telemetry' | 'server' | 'bundler',
+  logger?: IMastraLogger,
 ) {
   const t = babel.types;
 
@@ -79,6 +81,10 @@ export function removeAllOptionsFromMastraExcept(
           );
 
           if (!hasExport) {
+            if (logger) {
+              logger.warn(`Mastra ${option} config could not be extracted`);
+            }
+
             const fallbackExportDeclaration = t.exportNamedDeclaration(
               t.variableDeclaration('const', [t.variableDeclarator(t.identifier(option), t.objectExpression([]))]),
               [],
