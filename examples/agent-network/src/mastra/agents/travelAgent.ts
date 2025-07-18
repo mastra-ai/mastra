@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { anthropic } from '@ai-sdk/anthropic';
+import { newWorkflow } from '../workflows';
 
 const llm = anthropic('claude-3-5-sonnet-20240620');
 
@@ -13,6 +14,8 @@ export const summaryAgent = new Agent({
   Make the options as different as possible from each other.
   Also make the plan very short and summarized.
   `,
+
+  workflows: { newWorkflow },
 });
 export const travelAgent = new Agent({
   name: 'travelAgent',
