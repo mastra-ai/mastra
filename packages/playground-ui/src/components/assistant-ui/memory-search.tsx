@@ -60,6 +60,7 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
   const [error, setError] = useState<string | null>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const prevThreadIdRef = useRef<string | undefined>(currentThreadId);
 
   // Debounced search
   const handleSearch = useCallback(
@@ -142,6 +143,15 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Re-run search when thread changes if there's a query
+  useEffect(() => {
+    if (prevThreadIdRef.current !== currentThreadId && query.trim()) {
+      // Thread changed and we have a search query, re-run the search
+      handleSearch(query);
+    }
+    prevThreadIdRef.current = currentThreadId;
+  }, [currentThreadId, query, handleSearch]);
 
   const handleResultClick = (messageId: string, threadId?: string) => {
     setIsOpen(false);
