@@ -6,7 +6,7 @@ import { useLinkComponent } from '@/lib/framework';
 import { GetAgentResponse, GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
-import { AgentMetadataWrapper } from './agent-metatadata-wrapper';
+import { AgentMetadataWrapper } from './agent-metadata-wrapper';
 import { ReactNode } from 'react';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
