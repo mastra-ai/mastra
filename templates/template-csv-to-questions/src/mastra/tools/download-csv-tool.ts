@@ -89,7 +89,10 @@ export const csvFetcherTool = createTool({
 
       // Step 2: Parse and analyze CSV
       console.log('📊 Parsing and analyzing CSV...');
-      const lines = csvText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+      const lines = csvText
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
       const rowCount = lines.length;
       const columnCount = rowCount > 0 ? parseCSVRow(lines[0]).length : 0;
 
