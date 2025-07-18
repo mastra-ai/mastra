@@ -12,6 +12,7 @@ import type { InputOptions, OutputOptions } from 'rollup';
 
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
+import { getBundlerOptions } from '../build/bundlerOptions';
 import { writeCustomInstrumentation } from '../build/customInstrumentation';
 import { writeTelemetryConfig } from '../build/telemetry';
 import { DepsService } from '../services/deps';
@@ -229,6 +230,15 @@ export abstract class Bundler extends MastraBundler {
   ): Promise<void> {
     this.logger.info('Start bundling Mastra');
 
+    let sourcemap = false;
+
+    try {
+      const bundlerOptions = await getBundlerOptions(mastraEntryFile, outputDirectory);
+      sourcemap = !!bundlerOptions?.sourcemap;
+    } catch (error) {
+      this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
+    }
+
     let analyzedBundleInfo;
     try {
       const resolvedToolsPaths = await this.getToolsInputOptions(toolsPaths);
@@ -254,7 +264,14 @@ export abstract class Bundler extends MastraBundler {
 
     let externalDependencies: string[];
     try {
-      const result = await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir), this.logger);
+      const result = await writeTelemetryConfig(
+        mastraEntryFile,
+        join(outputDirectory, this.outputDir),
+        {
+          sourcemap,
+        },
+        this.logger,
+      );
       externalDependencies = result.externalDependencies;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -280,7 +297,9 @@ export abstract class Bundler extends MastraBundler {
 
     try {
       if (customInstrumentation) {
-        const result = await writeCustomInstrumentation(customInstrumentation, join(outputDirectory, this.outputDir));
+        const result = await writeCustomInstrumentation(customInstrumentation, join(outputDirectory, this.outputDir), {
+          sourcemap,
+        });
         externalDependencies = [...externalDependencies, ...result.externalDependencies];
         await this.writeInstrumentationFile(join(outputDirectory, this.outputDir), customInstrumentation);
       } else {
@@ -389,6 +408,7 @@ export abstract class Bundler extends MastraBundler {
           manualChunks: {
             mastra: ['#mastra'],
           },
+          sourcemap,
         },
       );
 

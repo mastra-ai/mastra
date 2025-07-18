@@ -91,6 +91,9 @@ export function getTelemetryBundler(
 export async function writeTelemetryConfig(
   entryFile: string,
   outputDir: string,
+  options: {
+    sourcemap?: boolean;
+  } = {},
   logger: IMastraLogger,
 ): Promise<{
   hasCustomConfig: boolean;
@@ -106,6 +109,7 @@ export async function writeTelemetryConfig(
     dir: outputDir,
     format: 'es',
     entryFileNames: '[name].mjs',
+    sourcemap: options.sourcemap,
   });
   const externals = output[0].imports.filter(x => !x.startsWith('./'));
 
