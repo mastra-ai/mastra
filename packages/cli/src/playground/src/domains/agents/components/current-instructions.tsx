@@ -38,11 +38,7 @@ export function CurrentInstructions({
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4 pb-1">
-        <Txt as="h3" variant="ui-md" className="text-icon3 pb-1">
-          Current Instructions
-        </Txt>
-
+      <div className="flex items-center gap-4 pb-2">
         {enhancedPrompt ? (
           <div className="flex items-center gap-4">
             <button onClick={onCancel}>

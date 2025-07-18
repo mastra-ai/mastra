@@ -26,7 +26,7 @@ export const EntityHeader = ({ icon, title, isLoading, children }: EntityHeaderP
           </div>
         )}
       </div>
-      {children}
+      {children && <div className="pt-2">{children}</div>}
     </div>
   );
 };
