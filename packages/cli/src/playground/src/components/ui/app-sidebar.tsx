@@ -1,6 +1,6 @@
 'use client';
 
-import { Network, Globe, ArrowLeftFromLine, Book } from 'lucide-react';
+import { Network, Globe, ArrowLeftFromLine, Book, Earth } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 
 import {
@@ -222,6 +222,17 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Mastra APIs" asChild>
+                  <a className={`group/icon text-[#939393]`} href="/swagger-ui" target="_blank" rel="noopener">
+                    <Icon>
+                      <Earth />
+                    </Icon>
+                    <span className="text-[0.8rem] font-normal">Mastra APIs</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
               <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Documentation" asChild>
                   <a
