@@ -135,8 +135,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const embeddingField = this.embeddingFieldName;
       const numDimensions = dimension;
 
-      // Create the search index
-      await (collection as any).createSearchIndex({
+      // Create search indexes
+      await collection.createSearchIndex({
         definition: {
           fields: [
             {
@@ -145,10 +145,23 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
               numDimensions: numDimensions,
               similarity: mongoMetric,
             },
+            {
+              type: 'filter',
+              path: '_id',
+            },
           ],
         },
         name: indexNameInternal,
         type: 'vectorSearch',
+      });
+      await collection.createSearchIndex({
+        definition: {
+          mappings: {
+            dynamic: true,
+          },
+        },
+        name: 'pre-filter',
+        type: 'search',
       });
     } catch (error: any) {
       if (error.codeName !== 'IndexAlreadyExists') {
@@ -299,19 +312,32 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         combinedFilter = documentMongoFilter;
       }
 
+      // pre-filter for candidate document IDs
+      const candidateIds =
+        Object.keys(combinedFilter).length > 0
+          ? await collection
+              .aggregate([{ $match: combinedFilter }, { $project: { _id: 1 } }])
+              .map(doc => doc._id)
+              .toArray()
+          : null;
+
+      const vectorSearch: Document = {
+        index: indexNameInternal,
+        queryVector: queryVector,
+        path: this.embeddingFieldName,
+        numCandidates: 100,
+        limit: topK,
+      };
+
+      if (candidateIds !== null) {
+        vectorSearch.filter = { _id: { $in: candidateIds } };
+      }
+
       // Build the aggregation pipeline
       const pipeline = [
         {
-          $vectorSearch: {
-            index: indexNameInternal,
-            queryVector: queryVector,
-            path: this.embeddingFieldName,
-            numCandidates: 100,
-            limit: topK,
-          },
+          $vectorSearch: vectorSearch,
         },
-        // Apply the filter using $match stage
-        ...(Object.keys(combinedFilter).length > 0 ? [{ $match: combinedFilter }] : []),
         {
           $set: { score: { $meta: 'vectorSearchScore' } },
         },
