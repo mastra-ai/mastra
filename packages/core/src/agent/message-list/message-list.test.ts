@@ -1732,8 +1732,6 @@ describe('MessageList', () => {
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
 
-      console.log(JSON.stringify(list.get.all.v2(), null, 2));
-
       expect(list.get.all.v2()[0].content.parts).toEqual([
         { type: 'step-start' },
         {
@@ -1869,8 +1867,6 @@ describe('MessageList', () => {
       const list = new MessageList({ threadId, resourceId });
       list.add(latestMessage, 'memory');
       list.add(messageV2, 'response');
-
-      console.log(JSON.stringify(list.get.all.v2()[0].content.parts, null, 2));
 
       expect(list.get.all.v2()[0].content.parts).toEqual([
         { type: 'step-start' },
@@ -2092,6 +2088,15 @@ describe('MessageList', () => {
       const messages = list.get.all.v2();
       expect(messages[0].content.content).toBe('{"data": "value", "number": 42}'); // Should stay as string
       expect(typeof messages[0].content.content).toBe('string'); // Should be a string, not an object
+      expect(messages[0].content.parts).toEqual([
+        {
+          type: 'step-start',
+        },
+        {
+          type: 'text',
+          text: '{"data": "value", "number": 42}',
+        },
+      ]);
     });
   });
 
@@ -2137,6 +2142,15 @@ describe('MessageList', () => {
 
       const uiMessage = uiMessages[0];
       expect(uiMessage.role).toBe('assistant');
+      expect(uiMessage.parts).toEqual([
+        {
+          type: 'step-start',
+        },
+        {
+          type: 'text',
+          text: 'Let me check that for you.',
+        },
+      ]);
 
       // Check that the tool invocation with state="call" is filtered out from parts
       const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
@@ -2191,6 +2205,26 @@ describe('MessageList', () => {
       expect(uiMessages.length).toBe(1);
 
       const uiMessage = uiMessages[0];
+      expect(uiMessage.role).toBe('assistant');
+      expect(uiMessage.parts).toEqual([
+        {
+          type: 'step-start',
+        },
+        {
+          type: 'text',
+          text: 'Your lucky number is:',
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-2',
+            toolName: 'getLuckyNumber',
+            args: {},
+            result: 42,
+          },
+        },
+      ]);
 
       // Check that the tool invocation with state="result" is preserved
       const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
@@ -2332,6 +2366,16 @@ describe('MessageList', () => {
       expect(uiMessages.length).toBe(1);
 
       const uiMessage = uiMessages[0];
+      expect(uiMessage.role).toBe('assistant');
+      expect(uiMessage.parts).toEqual([
+        {
+          type: 'step-start',
+        },
+        {
+          type: 'text',
+          text: 'Let me get your lucky number.',
+        },
+      ]);
 
       // Tool invocations with "call" state should be filtered out from parts
       const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
