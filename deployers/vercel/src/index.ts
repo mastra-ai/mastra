@@ -20,7 +20,8 @@ export class VercelDeployer extends Deployer {
     return `
 import { handle } from 'hono/vercel'
 import { mastra } from '#mastra';
-import { createHonoServer } from '#server';
+import { createHonoServer, getToolExports } from '#server';
+import { tools } from '#tools';
 import { evaluate } from '@mastra/core/eval';
 import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { TABLE_EVALS } from '@mastra/core/storage';
@@ -64,7 +65,7 @@ registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
   }
 });
 
-const app = await createHonoServer(mastra);
+const app = await createHonoServer(mastra, { tools: getToolExports(tools) });
 
 export const GET = handle(app);
 export const POST = handle(app);

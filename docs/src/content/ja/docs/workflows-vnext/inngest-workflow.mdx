@@ -156,7 +156,11 @@ import { Inngest } from "inngest";
 import { incrementWorkflow } from "./workflows/inngest-workflow";
 import { realtimeMiddleware } from "@inngest/realtime";
 import { serve } from "@hono/node-server";
-import { createHonoServer } from "@mastra/deployer/server";
+import {
+  createHonoServer,
+  getToolExports,
+} from "@mastra/deployer/server";
+import { tools } from "#tools";
 
 // Create an Inngest instance with realtime middleware for development
 const inngest = new Inngest({
@@ -188,7 +192,9 @@ export const mastra = new Mastra({
 });
 
 // Create and start the Hono server
-const app = await createHonoServer(mastra);
+const app = await createHonoServer(mastra, {
+  tools: getToolExports(tools),
+});
 
 const srv = serve({
   fetch: app.fetch,

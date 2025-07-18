@@ -366,9 +366,15 @@ Here, we'll get the activity planner workflow from the mastra instance, then cre
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./";
 import { serve } from "@hono/node-server";
-import { createHonoServer } from "@mastra/deployer/server";
+import {
+  createHonoServer,
+  getToolExports,
+} from "@mastra/deployer/server";
+import { tools } from "#tools";
 
-const app = await createHonoServer(mastra);
+const app = await createHonoServer(mastra, {
+  tools: getToolExports(tools),
+});
 
 // Start the server on port 3000 so Inngest can send events to it
 const srv = serve({
