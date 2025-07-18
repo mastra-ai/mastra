@@ -1,5 +1,15 @@
 # @mastra/libsql
 
+## 0.11.1-alpha.0
+
+### Patch Changes
+
+- da168a4: increase the peer deps range
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [4933192]
+  - @mastra/core@0.11.0-alpha.2
+
 ## 0.11.0
 
 ### Minor Changes

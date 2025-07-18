@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.10.13-alpha.2
+
+### Patch Changes
+
+- 2affc57: Fix output type of network loop
+- 09464dd: Share AgentMetadata component with cloud
+
 ## 0.10.13-alpha.1
 
 ### Patch Changes

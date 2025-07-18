@@ -1,5 +1,20 @@
 # mastra
 
+## 0.10.14-alpha.2
+
+### Patch Changes
+
+- 2affc57: Fix output type of network loop
+- 51192f8: Spread the loaded env into the main process
+- 09464dd: Share AgentMetadata component with cloud
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [24eb25c]
+- Updated dependencies [9de6f58]
+- Updated dependencies [4933192]
+  - @mastra/core@0.11.0-alpha.2
+  - @mastra/deployer@0.11.0-alpha.2
+
 ## 0.10.14-alpha.1
 
 ### Patch Changes

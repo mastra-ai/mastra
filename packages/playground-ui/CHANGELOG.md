@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 5.1.14-alpha.2
+
+### Patch Changes
+
+- 09464dd: Share AgentMetadata component with cloud
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [4933192]
+  - @mastra/core@0.11.0-alpha.2
+  - @mastra/client-js@0.10.15-alpha.2
+
 ## 5.1.14-alpha.1
 
 ### Patch Changes
