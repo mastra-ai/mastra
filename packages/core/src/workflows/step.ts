@@ -1,6 +1,8 @@
 import type { z } from 'zod';
 import type { Emitter, Mastra } from '..';
 import type { RuntimeContext } from '../di';
+import type { ChunkType } from '../stream/MastraWorkflowStream';
+import type { ToolStream } from '../tools/stream';
 import type { EMITTER_SYMBOL } from './constants';
 import type { Workflow } from './workflow';
 
@@ -30,6 +32,7 @@ export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSche
   [EMITTER_SYMBOL]: Emitter;
   engine: EngineType;
   abortSignal: AbortSignal;
+  writer: ToolStream<ChunkType>;
 }) => Promise<TStepOutput>;
 
 // Define a Step interface
