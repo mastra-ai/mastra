@@ -12,7 +12,7 @@ import type { MastraVector } from '@mastra/core/vector';
 
 export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
   const { id, description } = options;
-  const storeName = 'vectorStoreName' in options ? options.vectorStoreName : 'DirectVectorStore';
+  const storeName = options['vectorStoreName'] ? options.vectorStoreName : 'DirectVectorStore';
 
   const toolId = id || `VectorQuery ${storeName} ${options.indexName} Tool`;
   const toolDescription = description || defaultVectorQueryDescription();
