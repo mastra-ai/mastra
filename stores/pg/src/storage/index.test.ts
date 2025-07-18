@@ -73,13 +73,6 @@ describe('PostgresStore', () => {
       expect(result.test).toBe(1);
     });
 
-    // it.skip('should allow access to pgp utilities via public pgp field', () => {
-    //   const helpers = testDB.pgp.helpers;
-    //   expect(helpers).toBeDefined();
-    //   expect(helpers.insert).toBeDefined();
-    //   expect(helpers.update).toBeDefined();
-    // });
-
     it('should maintain connection state through public db field', async () => {
       // Test multiple queries to ensure connection state
       const result1 = await testDB.pool.one('SELECT NOW() as timestamp1');
