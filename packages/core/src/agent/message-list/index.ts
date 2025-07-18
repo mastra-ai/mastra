@@ -386,30 +386,32 @@ export class MessageList {
 
           if (existingCallToolInvocation) {
             if (part.toolInvocation.state === 'result') {
-              if (existingCallPart.toolInvocation.state === 'call') {
-                // Update the existing tool-call part with the result
-                existingCallPart.toolInvocation = {
-                  ...existingCallPart.toolInvocation,
-                  step: part.toolInvocation.step,
-                  state: 'result',
-                  result: part.toolInvocation.result,
-                };
-                if (!latestMessage.content.toolInvocations) {
-                  latestMessage.content.toolInvocations = [];
-                }
-                const toolInvocationIndex = latestMessage.content.toolInvocations.findIndex(
-                  t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
-                );
-                if (toolInvocationIndex === -1) {
-                  latestMessage.content.toolInvocations.push(existingCallPart.toolInvocation);
-                } else {
-                  latestMessage.content.toolInvocations[toolInvocationIndex] = existingCallPart.toolInvocation;
-                }
+              // Update the existing tool-call part with the result
+              existingCallPart.toolInvocation = {
+                ...existingCallPart.toolInvocation,
+                step: part.toolInvocation.step,
+                state: 'result',
+                result: part.toolInvocation.result,
+                args: {
+                  ...existingCallPart.toolInvocation.args,
+                  ...part.toolInvocation.args,
+                },
+              };
+              if (!latestMessage.content.toolInvocations) {
+                latestMessage.content.toolInvocations = [];
               }
-              // Map the index of the tool call in messageV2 to the index of the tool call in latestMessage
-              const existingIndex = latestMessage.content.parts.findIndex(p => p === existingCallPart);
-              toolResultAnchorMap.set(index, existingIndex);
+              const toolInvocationIndex = latestMessage.content.toolInvocations.findIndex(
+                t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
+              );
+              if (toolInvocationIndex === -1) {
+                latestMessage.content.toolInvocations.push(existingCallPart.toolInvocation);
+              } else {
+                latestMessage.content.toolInvocations[toolInvocationIndex] = existingCallPart.toolInvocation;
+              }
             }
+            // Map the index of the tool call in messageV2 to the index of the tool call in latestMessage
+            const existingIndex = latestMessage.content.parts.findIndex(p => p === existingCallPart);
+            toolResultAnchorMap.set(index, existingIndex);
             // Otherwise we do nothing, as we're not updating the tool call
           } else {
             partsToAdd.set(index, part);
@@ -504,14 +506,9 @@ export class MessageList {
     const newPartCount = newMessage.content.parts.filter(p => MessageList.cacheKeyFromParts([p]) === partKey).length;
     // If the number of parts in the latest message is less than the number of parts in the new message, insert the part
     if (latestPartCount < newPartCount) {
-      console.log(`latest message`, JSON.stringify(latestMessage, null, 2));
-      console.log(`new message`, JSON.stringify(newMessage, null, 2));
-      console.log(`part`, JSON.stringify(part, null, 2));
       if (typeof insertAt === 'number') {
-        console.log(`inserting part at ${insertAt}`);
         latestMessage.content.parts.splice(insertAt, 0, part);
       } else {
-        console.log(`pushing part`);
         latestMessage.content.parts.push(part);
       }
       return true;
