@@ -1,3 +1,5 @@
+import type { AgentStreamOptions } from '@mastra/core/agent';
+import type { GenerateReturn } from '@mastra/core/llm';
 import type { AgentNetwork } from '@mastra/core/network';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { HTTPException } from '../http-exception';
@@ -105,7 +107,7 @@ export async function generateHandler({
 }: NetworkContext & {
   runtimeContext: RuntimeContext;
   body: { messages?: Parameters<AgentNetwork['generate']>[0] } & Parameters<AgentNetwork['generate']>[1];
-}) {
+}): Promise<GenerateReturn<any, any, any>> {
   try {
     const network = mastra.getNetwork(networkId!);
 
@@ -147,7 +149,7 @@ export async function streamGenerateHandler({
       output: output as any,
       ...rest,
       runtimeContext,
-    });
+    } as AgentStreamOptions<any, any>);
 
     const streamResponse = output
       ? streamResult.toTextStreamResponse()
