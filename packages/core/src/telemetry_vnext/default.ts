@@ -40,8 +40,9 @@ class DefaultAISpan implements AISpan<BaseMetadata> {
   public trace: AISpan<SpanMetadata>;
   public startTime: Date;
   public endTime?: Date;
+  public aiTelemetry: MastraAITelemetry;
 
-  constructor(options: SpanOptions) {
+  constructor(options: SpanOptions, aiTelemetry: MastraAITelemetry) {
     this.id = generateId();
     this.name = options.name;
     this.type = options.type;
@@ -49,6 +50,7 @@ class DefaultAISpan implements AISpan<BaseMetadata> {
     this.parent = options.parent;
     this.trace = options.parent ? options.parent.trace : this;
     this.startTime = new Date();
+    this.aiTelemetry = aiTelemetry;
 
     // Add to parent's children if we have a parent
     if (this.parent) {
@@ -66,31 +68,33 @@ class DefaultAISpan implements AISpan<BaseMetadata> {
 
   // TODO: could endSpan be default = true?
   error(error: MastraError | Error, endSpan: boolean): void {
-    const metadata = (error instanceof(MastraError)) ? {
-      error : {
-        id: error.id,
-        details: error.details,
-        category: error.category,
-        domain: error.domain,
-        message: error.message,
-      }
-    } : {
-      error: {
-        message: error.message,
-      }
-    }
+    const metadata =
+      error instanceof MastraError
+        ? {
+            error: {
+              id: error.id,
+              details: error.details,
+              category: error.category,
+              domain: error.domain,
+              message: error.message,
+            },
+          }
+        : {
+            error: {
+              message: error.message,
+            },
+          };
 
     if (endSpan) {
-      this.end(metadata)
+      this.end(metadata);
     } else {
-      this.update(metadata)
+      this.update(metadata);
     }
   }
 
   createChildSpan(options: SpanOptions): AISpan {
     options.parent = this;
-    //TODO: NEED TO FIGURE OUT HOW TO WRAP THIS WITH EVENTS
-    return new DefaultAISpan(options);
+    return this.aiTelemetry.startSpan(options);
   }
 
   update(metadata: BaseMetadata): void {
@@ -164,15 +168,10 @@ export class DefaultTelemetry extends MastraAITelemetry {
   // Abstract Method Implementations
   // ============================================================================
 
-
   protected _startSpan(options: SpanOptions): AISpan {
-    const spanId = generateId();
-
-    const metadata: SpanMetadata = options.metadata as SpanMetadata;
-
     // Use the createSpanWithCallbacks helper to wire up lifecycle callbacks
     return this.createSpanWithCallbacks(options, () => {
-      return new DefaultAISpan(options);
+      return new DefaultAISpan(options, this);
     });
   }
 
@@ -198,7 +197,7 @@ export class DefaultTelemetry extends MastraAITelemetry {
             spanName: `${spanNamePrefix}.${prop.toString()}`,
             spanType: defaultSpanType,
             metadata: {
-                attributes: {
+              attributes: {
                 ...attributes,
                 'method.name': prop.toString(),
                 'class.name': target.constructor.name,
@@ -269,7 +268,7 @@ export class DefaultTelemetry extends MastraAITelemetry {
               return resolvedValue;
             })
             .catch(error => {
-              span.error(error, false)
+              span.error(error, false);
               throw error;
             })
             .finally(() => {
@@ -293,7 +292,7 @@ export class DefaultTelemetry extends MastraAITelemetry {
         span.end();
         return result;
       } catch (error: any) {
-        span.error(error, true)
+        span.error(error, true);
         throw error;
       }
     }) as unknown as TMethod;
@@ -308,7 +307,6 @@ export class DefaultTelemetry extends MastraAITelemetry {
   // ============================================================================
   // Additional Helper Methods
   // ============================================================================
-
 
   /**
    * Get all traces

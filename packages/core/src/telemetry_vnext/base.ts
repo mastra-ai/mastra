@@ -27,7 +27,7 @@ import type {
   TraceContext,
 } from './types';
 import { SpanType } from './types';
-import { NoOpAISpan } from './no_op'
+import { NoOpAISpan } from './no_op';
 import type { Context } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/sdk-trace-base';
 
@@ -110,7 +110,7 @@ export abstract class MastraAITelemetry extends MastraBase {
     name,
     metadata,
     parent,
-  }:{ 
+  }: {
     name: string;
     metadata: AgentRunMetadata;
     parent?: AISpan;
@@ -127,7 +127,7 @@ export abstract class MastraAITelemetry extends MastraBase {
     name,
     metadata,
     parent,
-  }:{ 
+  }: {
     name: string;
     metadata: WorkflowStepMetadata;
     parent?: AISpan;
@@ -144,7 +144,7 @@ export abstract class MastraAITelemetry extends MastraBase {
     name,
     metadata,
     parent,
-  }:{ 
+  }: {
     name: string;
     metadata: BaseMetadata;
     parent?: AISpan;
@@ -156,7 +156,6 @@ export abstract class MastraAITelemetry extends MastraBase {
       parent,
     });
   }
-
 
   // ============================================================================
   // Abstract Methods - Must be implemented by concrete classes
@@ -197,20 +196,20 @@ export abstract class MastraAITelemetry extends MastraBase {
   startSpan<T extends SpanMetadata>(
     options: SpanOptions<T>,
     runtimeContext?: RuntimeContext,
-    attributes?: Record<string, any>
+    attributes?: Record<string, any>,
   ): AISpan {
     if (!this.isEnabled()) {
-      return new NoOpAISpan(options);
+      return new NoOpAISpan(options, this);
     }
 
     if ((runtimeContext || attributes) && !this.shouldSample({ runtimeContext, attributes })) {
-      return new NoOpAISpan(options);
+      return new NoOpAISpan(options, this);
     }
 
     options._callbacks = {
       onEnd: (span: AISpan) => this.emitSpanEnded(span),
       onUpdate: (span: AISpan) => this.emitSpanUpdated(span),
-    }
+    };
     const span = this._startSpan(options);
 
     span.parent = options.parent;
@@ -340,11 +339,9 @@ export abstract class MastraAITelemetry extends MastraBase {
     return [...this.samplers];
   }
 
-
   // ============================================================================
   // Span Creation Helpers
   // ============================================================================
-
 
   /**
    * Create a span that automatically calls lifecycle callbacks
@@ -356,7 +353,6 @@ export abstract class MastraAITelemetry extends MastraBase {
     // Store original methods
     const originalEnd = span.end.bind(span);
     const originalUpdate = span.update.bind(span);
-   
 
     // Wrap methods to call callbacks
     span.end = (endOptions?: any) => {
@@ -443,7 +439,6 @@ export abstract class MastraAITelemetry extends MastraBase {
   // ============================================================================
   // Event-driven Export Methods
   // ============================================================================
-
 
   /**
    * Emit a span started event

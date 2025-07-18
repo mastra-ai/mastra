@@ -2,12 +2,8 @@
  * NoOp Implementation for MastraAITelemetry
  */
 
-import {
-  type AISpan,
-  type SpanOptions,
-  type SpanMetadata,
-  SpanType,
-} from './types';
+import type { MastraAITelemetry } from './base';
+import { type AISpan, type SpanOptions, type SpanMetadata, SpanType } from './types';
 
 export class NoOpAISpan implements AISpan {
   public id: string;
@@ -19,8 +15,9 @@ export class NoOpAISpan implements AISpan {
   public trace: AISpan<SpanMetadata>;
   public startTime: Date;
   public endTime?: Date;
+  public aiTelemetry: MastraAITelemetry;
 
-  constructor(options: SpanOptions) {
+  constructor(options: SpanOptions, aiTelemetry: MastraAITelemetry) {
     this.id = 'no-op';
     this.name = options.name;
     this.type = options.type;
@@ -28,12 +25,16 @@ export class NoOpAISpan implements AISpan {
     this.parent = options.parent;
     this.trace = options.parent ? options.parent.trace : this;
     this.startTime = new Date();
+    this.aiTelemetry = aiTelemetry;
   }
 
   end(): void {}
   error(): void {}
-  createChildSpan(): AISpan { return this }
+  createChildSpan(): AISpan {
+    return this;
+  }
   update(): void {}
-  async export(): Promise<string> { return '' }
+  async export(): Promise<string> {
+    return '';
+  }
 }
-

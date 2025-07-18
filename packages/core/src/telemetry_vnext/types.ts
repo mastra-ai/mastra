@@ -10,6 +10,7 @@ import type { Context, Span as OTelSpan } from '@opentelemetry/api';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraError } from '../error';
+import type { MastraAITelemetry } from './base';
 
 // ============================================================================
 // Core AI-Specific Span Types
@@ -63,7 +64,7 @@ export interface BaseMetadata {
     id?: string;
     domain?: string;
     category?: string;
-    details?: Record<string, any>
+    details?: Record<string, any>;
   };
 }
 
@@ -396,6 +397,8 @@ export interface AISpan<TMetadata extends SpanMetadata = SpanMetadata> {
   parent?: AISpan;
   /** The top-level span */
   trace: AISpan;
+  /** Pointer to the AITelemetry instance */
+  aiTelemetry: MastraAITelemetry;
 
   // Methods for span lifecycle
   /** End the span */
@@ -409,11 +412,10 @@ export interface AISpan<TMetadata extends SpanMetadata = SpanMetadata> {
 
   /** Create child span */
   createChildSpan(options: SpanOptions<TMetadata>): AISpan;
-  
+
   /** Export span for distributed tracing */
   export(): Promise<string>;
 }
-
 
 // ============================================================================
 // Configuration Types
