@@ -69,6 +69,7 @@ export type VectorQueryToolOptions = {
       vectorStoreName: string;
     }
   | {
+      vectorStoreName?: string;
       vectorStore: MastraVector;
     }
 );
