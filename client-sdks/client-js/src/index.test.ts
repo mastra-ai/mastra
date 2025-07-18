@@ -588,6 +588,48 @@ describe('MastraClient Resources', () => {
         }),
       );
     });
+
+    it('should get paginated thread messages', async () => {
+      const mockResponse = {
+        messages: [
+          {
+            id: '1',
+            content: 'test message',
+            threadId,
+            role: 'user',
+            type: 'text',
+            resourceId: 'test-resource',
+            createdAt: new Date(),
+          },
+        ],
+        total: 5,
+        page: 1,
+        perPage: 2,
+        hasMore: true,
+      };
+      mockFetchResponse(mockResponse);
+
+      const selectBy = {
+        pagination: {
+          page: 1,
+          perPage: 2,
+        },
+      };
+
+      const result = await memoryThread.getMessagesPaginated({
+        resourceId: 'test-resource',
+        format: 'v2',
+        selectBy,
+      });
+
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/memory/threads/${threadId}/messages/paginated?resourceId=test-resource&format=v2&selectBy=${encodeURIComponent(JSON.stringify(selectBy))}`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
   });
 
   describe('Tool Resource', () => {
