@@ -180,6 +180,10 @@ export class MastraAgentStream<Output> extends ReadableStream<ChunkType> {
                   this.#finishReason = chunk.payload.reason;
                 }
                 break;
+              case 'finish':
+                updateUsageCount(chunk.payload.usage);
+                chunk.payload.totalUsage = this.#usageCount;
+                break;
             }
 
             controller.enqueue(chunk);
