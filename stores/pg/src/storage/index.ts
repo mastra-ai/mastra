@@ -1,5 +1,5 @@
 import type { ConnectionOptions } from 'tls';
-import { URL } from 'url';
+import { parseIntoClientConfig } from 'pg-connection-string';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -81,16 +81,7 @@ export class PostgresStore extends MastraStorage {
 
       let poolConfig: Pool.Config<Client>;
       if ('connectionString' in config) {
-        // Parse connection string into a config object for pg-pool
-        const url = new URL(config.connectionString);
-        poolConfig = {
-          host: url.host,
-          port: Number(url.port),
-          database: url.pathname.split('/')[1],
-          user: url.username,
-          password: url.password,
-          ssl: true,
-        };
+        poolConfig = parseIntoClientConfig(config.connectionString);
       } else {
         poolConfig = {
           host: config.host,
@@ -190,7 +181,7 @@ export class PostgresStore extends MastraStorage {
     try {
       await client.query('BEGIN');
       for (const record of records) {
-        await this.insert({ tableName, record, client });
+        await this.insert({ tableName, record, connectedClient: client });
       }
       await client.query('COMMIT');
     } catch (error) {
@@ -559,17 +550,17 @@ export class PostgresStore extends MastraStorage {
   async insert({
     tableName,
     record,
-    client,
+    connectedClient,
   }: {
     tableName: TABLE_NAMES;
     record: Record<string, any>;
-    client?: Client;
+    connectedClient?: Client;
   }): Promise<void> {
     try {
       const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
       const values = Object.values(record);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-      const db = client || this.db;
+      const db = connectedClient || this.db;
 
       await db.query(
         `INSERT INTO ${this.getTableName(tableName)} (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
