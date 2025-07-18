@@ -20,11 +20,11 @@ import {
   TABLE_TRACES,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import pgPromise from 'pg-promise';
+import { Client } from 'pg';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
 
-import { PostgresStore } from '.';
 import type { PostgresConfig } from '.';
+import { PgHelper, PostgresStore } from '.';
 
 const TEST_CONFIG: PostgresConfig = {
   host: process.env.POSTGRES_HOST || 'localhost',
@@ -59,36 +59,31 @@ describe('PostgresStore', () => {
       await store.init();
     });
 
-    it('should expose db field as public', () => {
-      expect(testDB.db).toBeDefined();
-      expect(typeof testDB.db).toBe('object');
-      expect(testDB.db.query).toBeDefined();
-      expect(typeof testDB.db.query).toBe('function');
-    });
-
-    it('should expose pgp field as public', () => {
-      expect(testDB.pgp).toBeDefined();
-      expect(typeof testDB.pgp).toBe('function');
-      expect(testDB.pgp.end).toBeDefined();
-      expect(typeof testDB.pgp.end).toBe('function');
+    it('should expose pool field as public', () => {
+      expect(testDB.pool).toBeDefined();
+      expect(typeof testDB.pool).toBe('object');
+      expect(testDB.pool.query).toBeDefined();
+      expect(typeof testDB.pool.query).toBe('function');
+      expect(testDB.pool.end).toBeDefined();
+      expect(typeof testDB.pool.end).toBe('function');
     });
 
     it('should allow direct database queries via public db field', async () => {
-      const result = await testDB.db.one('SELECT 1 as test');
+      const result = await testDB.pool.one('SELECT 1 as test');
       expect(result.test).toBe(1);
     });
 
-    it('should allow access to pgp utilities via public pgp field', () => {
-      const helpers = testDB.pgp.helpers;
-      expect(helpers).toBeDefined();
-      expect(helpers.insert).toBeDefined();
-      expect(helpers.update).toBeDefined();
-    });
+    // it.skip('should allow access to pgp utilities via public pgp field', () => {
+    //   const helpers = testDB.pgp.helpers;
+    //   expect(helpers).toBeDefined();
+    //   expect(helpers.insert).toBeDefined();
+    //   expect(helpers.update).toBeDefined();
+    // });
 
     it('should maintain connection state through public db field', async () => {
       // Test multiple queries to ensure connection state
-      const result1 = await testDB.db.one('SELECT NOW() as timestamp1');
-      const result2 = await testDB.db.one('SELECT NOW() as timestamp2');
+      const result1 = await testDB.pool.one('SELECT NOW() as timestamp1');
+      const result2 = await testDB.pool.one('SELECT NOW() as timestamp2');
 
       expect(result1.timestamp1).toBeDefined();
       expect(result2.timestamp2).toBeDefined();
@@ -97,7 +92,7 @@ describe('PostgresStore', () => {
 
     it('should throw error when pool is used after disconnect', async () => {
       await testDB.close();
-      expect(testDB.db.connect()).rejects.toThrow();
+      expect(testDB.pool.connect()).rejects.toThrow();
     });
   });
 
@@ -1111,6 +1106,7 @@ describe('PostgresStore', () => {
       expect(notFound).toBeNull();
     });
   });
+
   describe('getWorkflowRuns with resourceId', () => {
     const workflowName = 'workflow-id-test';
     let resourceId: string;
@@ -1258,26 +1254,26 @@ describe('PostgresStore', () => {
     beforeEach(async () => {
       // Always try to drop the table before each test, ignore errors if it doesn't exist
       try {
-        await store['db'].query(`DROP TABLE IF EXISTS ${tempTable}`);
+        await store.pool.query(`DROP TABLE IF EXISTS ${tempTable}`);
       } catch {
         /* ignore */
       }
     });
 
     it('returns true if the column exists', async () => {
-      await store['db'].query(`CREATE TABLE ${tempTable} (id SERIAL PRIMARY KEY, resourceId TEXT)`);
+      await store.pool.query(`CREATE TABLE ${tempTable} (id SERIAL PRIMARY KEY, resourceId TEXT)`);
       expect(await store['hasColumn'](tempTable, 'resourceId')).toBe(true);
     });
 
     it('returns false if the column does not exist', async () => {
-      await store['db'].query(`CREATE TABLE ${tempTable} (id SERIAL PRIMARY KEY)`);
+      await store.pool.query(`CREATE TABLE ${tempTable} (id SERIAL PRIMARY KEY)`);
       expect(await store['hasColumn'](tempTable, 'resourceId')).toBe(false);
     });
 
     afterEach(async () => {
       // Always try to drop the table after each test, ignore errors if it doesn't exist
       try {
-        await store['db'].query(`DROP TABLE IF EXISTS ${tempTable}`);
+        await store.pool.query(`DROP TABLE IF EXISTS ${tempTable}`);
       } catch {
         /* ignore */
       }
@@ -2205,100 +2201,116 @@ describe('PostgresStore', () => {
     const schemaRestrictedUser = 'mastra_schema_restricted_storage';
     const restrictedPassword = 'test123';
     const testSchema = 'testSchema';
-    let adminDb: pgPromise.IDatabase<{}>;
-    let pgpAdmin: pgPromise.IMain;
+    let adminDb: Client;
 
     beforeAll(async () => {
       // Create a separate pg-promise instance for admin operations
-      pgpAdmin = pgPromise();
-      adminDb = pgpAdmin(connectionString);
-      try {
-        await adminDb.tx(async t => {
-          // Drop the test schema if it exists from previous runs
-          await t.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+      adminDb = new Client(connectionString);
+      await adminDb.connect();
 
-          // Create schema restricted user with minimal permissions
-          await t.none(`          
+      try {
+        await adminDb.query('BEGIN');
+
+        // Drop the test schema if it exists from previous runs
+        await PgHelper.none(adminDb, `DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+
+        // Create schema restricted user with minimal permissions
+        await PgHelper.none(
+          adminDb,
+          `          
           DO $$
           BEGIN
             IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${schemaRestrictedUser}') THEN
               CREATE USER ${schemaRestrictedUser} WITH PASSWORD '${restrictedPassword}' NOCREATEDB;
             END IF;
           END
-          $$;`);
+          $$;`,
+        );
 
-          // Grant only connect and usage to schema restricted user
-          await t.none(`
+        // Grant only connect and usage to schema restricted user
+        await PgHelper.none(
+          adminDb,
+          `
             REVOKE ALL ON DATABASE ${TEST_CONFIG.database} FROM ${schemaRestrictedUser};
             GRANT CONNECT ON DATABASE ${TEST_CONFIG.database} TO ${schemaRestrictedUser};
             REVOKE ALL ON SCHEMA public FROM ${schemaRestrictedUser};
             GRANT USAGE ON SCHEMA public TO ${schemaRestrictedUser};
-          `);
-        });
+          `,
+        );
+
+        await adminDb.query('COMMIT');
       } catch (error) {
+        await adminDb.query('ROLLBACK');
         // Clean up the database connection on error
-        pgpAdmin.end();
+        await adminDb.end();
         throw error;
       }
     });
 
     afterAll(async () => {
-      try {
-        // First close any store connections
-        if (store) {
-          await store.close();
-        }
+      // First close any store connections
+      if (store) {
+        await store.close();
+      }
 
-        // Then clean up test user in admin connection
-        await adminDb.tx(async t => {
-          await t.none(`
+      // Then clean up test user in admin connection
+      try {
+        await adminDb.query('BEGIN');
+
+        await PgHelper.none(
+          adminDb,
+          `
             REASSIGN OWNED BY ${schemaRestrictedUser} TO postgres;
             DROP OWNED BY ${schemaRestrictedUser};
             DROP USER IF EXISTS ${schemaRestrictedUser};
-          `);
-        });
+          `,
+        );
 
-        // Finally clean up admin connection
-        if (pgpAdmin) {
-          pgpAdmin.end();
-        }
+        await adminDb.query('COMMIT');
       } catch (error) {
         console.error('Error cleaning up test user:', error);
-        // Still try to clean up connections even if user cleanup fails
-        if (store) await store.close();
-        if (pgpAdmin) pgpAdmin.end();
+        await adminDb.query('ROLLBACK');
+        throw error;
+      } finally {
+        // Clean up the database
+        await adminDb.end();
       }
     });
 
     describe('Schema Creation', () => {
       beforeEach(async () => {
         // Create a fresh connection for each test
-        const tempPgp = pgPromise();
-        const tempDb = tempPgp(connectionString);
+        const tempDb = new Client(connectionString);
+        await tempDb.connect();
 
         try {
           // Ensure schema doesn't exist before each test
-          await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+          await PgHelper.none(tempDb, `DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
 
           // Ensure no active connections from restricted user
-          await tempDb.none(`
+          await PgHelper.none(
+            tempDb,
+            `
             SELECT pg_terminate_backend(pid) 
             FROM pg_stat_activity 
             WHERE usename = '${schemaRestrictedUser}'
-          `);
+          `,
+          );
         } finally {
-          tempPgp.end(); // Always clean up the connection
+          await tempDb.end(); // Always clean up the connection
         }
       });
 
       afterEach(async () => {
         // Create a fresh connection for cleanup
-        const tempPgp = pgPromise();
-        const tempDb = tempPgp(connectionString);
+        const tempDb = new Client(connectionString);
+        await tempDb.connect();
 
         try {
           // Clean up any connections from the restricted user and drop schema
-          await tempDb.none(`
+          await PgHelper.none(
+            adminDb,
+            `
             DO $$
             BEGIN
               -- Terminate connections
@@ -2309,11 +2321,12 @@ describe('PostgresStore', () => {
               -- Drop schema
               DROP SCHEMA IF EXISTS ${testSchema} CASCADE;
             END $$;
-          `);
+          `,
+          );
         } catch (error) {
           console.error('Error in afterEach cleanup:', error);
         } finally {
-          tempPgp.end(); // Always clean up the connection
+          await tempDb.end(); // Always clean up the connection
         }
       });
 
@@ -2326,8 +2339,8 @@ describe('PostgresStore', () => {
         });
 
         // Create a fresh connection for verification
-        const tempPgp = pgPromise();
-        const tempDb = tempPgp(connectionString);
+        const tempDb = new Client(connectionString);
+        await tempDb.connect();
 
         try {
           // Test schema creation by initializing the store
@@ -2338,14 +2351,15 @@ describe('PostgresStore', () => {
           );
 
           // Verify schema was not created
-          const exists = await tempDb.oneOrNone(
+          const exists = await PgHelper.oneOrNone(
+            tempDb,
             `SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
             [testSchema],
           );
           expect(exists?.exists).toBe(false);
         } finally {
           await restrictedDB.close();
-          tempPgp.end(); // Clean up the verification connection
+          await tempDb.end(); // Clean up the verification connection
         }
       });
 
@@ -2358,8 +2372,8 @@ describe('PostgresStore', () => {
         });
 
         // Create a fresh connection for verification
-        const tempPgp = pgPromise();
-        const tempDb = tempPgp(connectionString);
+        const tempDb = new Client(connectionString);
+        await tempDb.connect();
 
         try {
           await expect(async () => {
@@ -2371,14 +2385,15 @@ describe('PostgresStore', () => {
           );
 
           // Verify schema was not created
-          const exists = await tempDb.oneOrNone(
+          const exists = await PgHelper.oneOrNone(
+            tempDb,
             `SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
             [testSchema],
           );
           expect(exists?.exists).toBe(false);
         } finally {
           await restrictedDB.close();
-          tempPgp.end(); // Clean up the verification connection
+          await tempDb.end(); // Clean up the verification connection
         }
       });
     });
