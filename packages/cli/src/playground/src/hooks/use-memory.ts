@@ -129,7 +129,7 @@ export const useMemorySearch = ({
 }: {
   agentId: string;
   resourceId: string;
-  threadId: string;
+  threadId?: string;
 }) => {
   const searchMemory = async (searchQuery: string) => {
     if (!searchQuery.trim()) {
@@ -139,9 +139,12 @@ export const useMemorySearch = ({
     const params = new URLSearchParams({
       searchQuery,
       resourceId,
-      threadId,
       agentId,
     });
+
+    if (threadId) {
+      params.append('threadId', threadId);
+    }
 
     const response = await fetch(`/api/memory/search?${params}`, {
       method: 'GET',
@@ -152,7 +155,9 @@ export const useMemorySearch = ({
     });
 
     if (!response.ok) {
-      throw new Error('Failed to search memory');
+      const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+      console.error('Search memory error:', errorData);
+      throw new Error(errorData.message || errorData.error || 'Failed to search memory');
     }
 
     return response.json();

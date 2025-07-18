@@ -1,24 +1,22 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useParams } from 'react-router';
 import { MemorySearch } from '@mastra/playground-ui';
 import { useMemorySearch } from '@/hooks/use-memory';
-import { useThreadRuntime } from '@assistant-ui/react';
+import { AgentWorkingMemory } from './agent-working-memory';
+import { useParams } from 'react-router';
+import { useCallback } from 'react';
 
-interface AgentMemorySearchProps {
+interface AgentMemoryProps {
   agentId: string;
 }
 
-export function AgentMemorySearch({ agentId }: AgentMemorySearchProps) {
+export function AgentMemory({ agentId }: AgentMemoryProps) {
   const { threadId } = useParams();
-  const [isReady, setIsReady] = useState(false);
 
   // Get memory search hook
   const { searchMemory } = useMemorySearch({
     agentId: agentId || '',
     resourceId: agentId || '', // In playground, agentId is the resourceId
-    threadId: threadId || '',
+    threadId,
   });
-
 
   // Handle clicking on a search result to scroll to the message
   const handleResultClick = useCallback((messageId: string) => {
@@ -34,27 +32,26 @@ export function AgentMemorySearch({ agentId }: AgentMemorySearchProps) {
     }
   }, []);
 
-  // Check if we have the required data
-  useEffect(() => {
-    setIsReady(!!agentId);
-  }, [agentId]);
-
-  if (!isReady) {
-    return (
-      <div className="p-4 text-center text-icon3">
-        <p>Agent not available</p>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-full">
-      <div className="p-4 flex-1">
+      {/* Memory Search Section */}
+      <div className="p-4 border-b border-border1">
+        <div className="mb-2">
+          <h3 className="text-sm font-medium text-icon5">Search Memory</h3>
+          {!threadId && (
+            <p className="text-xs text-icon3 mt-1">Searching across all threads</p>
+          )}
+        </div>
         <MemorySearch 
           searchMemory={searchMemory}
           onResultClick={handleResultClick}
-          className="w-full h-full"
+          className="w-full"
         />
+      </div>
+
+      {/* Working Memory Section */}
+      <div className="flex-1 overflow-y-auto">
+        <AgentWorkingMemory />
       </div>
     </div>
   );

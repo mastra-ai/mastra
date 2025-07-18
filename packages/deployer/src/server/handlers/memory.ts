@@ -247,7 +247,7 @@ export async function searchMemoryHandler(c: Context) {
       agentId,
       searchQuery: searchQuery!,
       resourceId: resourceId!,
-      threadId: threadId!,
+      threadId,
       limit,
       networkId,
       runtimeContext,

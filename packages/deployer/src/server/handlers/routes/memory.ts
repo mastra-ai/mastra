@@ -425,9 +425,9 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
         {
           name: 'threadId',
           in: 'query',
-          required: true,
+          required: false,
           schema: { type: 'string' },
-          description: 'The thread ID to search within',
+          description: 'The thread ID to search within (optional - searches all threads if not provided)',
         },
         {
           name: 'agentId',

@@ -20,8 +20,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { providerMapToIcon } from './table.columns';
 import { AgentOverview } from './agent-overview';
 import { useMemory } from '@/hooks/use-memory';
-import { AgentWorkingMemory } from './agent-working-memory';
-import { AgentMemorySearch } from './agent-memory-search';
+import { AgentMemory } from './agent-memory';
 
 export function AgentInformation({ agentId }: { agentId: string }) {
   const { agent, isLoading } = useAgent(agentId);
@@ -82,8 +81,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             <Tab value="model-settings">Model Settings</Tab>
             <Tab value="endpoints">Endpoints</Tab>
             <Tab value="logs">Log Drains</Tab>
-            <Tab value="working-memory">Working Memory</Tab>
-            {memory?.result && <Tab value="memory-search">Memory Search</Tab>}
+            {memory?.result && <Tab value="memory">Memory</Tab>}
           </TabList>
 
           <TabContent value="overview">
@@ -100,11 +98,8 @@ export function AgentInformation({ agentId }: { agentId: string }) {
           <TabContent value="logs">
             {isLoading ? <Skeleton className="h-full" /> : <AgentLogs agentId={agentId} />}
           </TabContent>
-          <TabContent value="working-memory">
-            {isLoading ? <Skeleton className="h-full" /> : <AgentWorkingMemory />}
-          </TabContent>
-          <TabContent value="memory-search">
-            {isLoading ? <Skeleton className="h-full" /> : <AgentMemorySearch agentId={agentId} />}
+          <TabContent value="memory">
+            {isLoading ? <Skeleton className="h-full" /> : <AgentMemory agentId={agentId} />}
           </TabContent>
         </PlaygroundTabs>
       </div>
