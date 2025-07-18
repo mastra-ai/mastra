@@ -27,8 +27,7 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import type { Client } from 'pg';
-import Pool from 'pg-pool';
+import { Pool, type PoolConfig, type PoolClient } from 'pg';
 
 export type PostgresConfig = {
   schemaName?: string;
@@ -47,7 +46,7 @@ export type PostgresConfig = {
 );
 
 export class PostgresStore extends MastraStorage {
-  public db: Pool<Client>;
+  public db: Pool;
   private closed: boolean = false;
   private schema?: string;
   private setupSchemaPromise: Promise<void> | null = null;
@@ -79,7 +78,7 @@ export class PostgresStore extends MastraStorage {
       super({ name: 'PostgresStore' });
       this.schema = config.schemaName;
 
-      let poolConfig: Pool.Config<Client>;
+      let poolConfig: PoolConfig;
       if ('connectionString' in config) {
         poolConfig = parseIntoClientConfig(config.connectionString);
       } else {
@@ -554,7 +553,7 @@ export class PostgresStore extends MastraStorage {
   }: {
     tableName: TABLE_NAMES;
     record: Record<string, any>;
-    connectedClient?: Client;
+    connectedClient?: PoolClient;
   }): Promise<void> {
     try {
       const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));

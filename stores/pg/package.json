@@ -37,7 +37,6 @@
     "async-mutex": "^0.5.0",
     "pg": "^8.16.3",
     "pg-connection-string": "^2.9.1",
-    "pg-pool": "^3.10.1",
     "xxhash-wasm": "^1.1.0"
   },
   "devDependencies": {
