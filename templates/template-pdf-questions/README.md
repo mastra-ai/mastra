@@ -43,7 +43,7 @@ This template showcases a crucial architectural pattern for working with large d
 2. **Set up environment variables:**
 
    ```bash
-   cp env.example .env
+   cp .env.example .env
    # Edit .env and add your API keys
    ```
 
