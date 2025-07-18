@@ -25,15 +25,15 @@ In this example, the "documentation" is **planet data**, but you can easily repl
 ```
 src/
 ├── data/
-│   └── planets.json          # Sample documentation data
+│   └── functions.json          # Sample documentation data
 ├── mastra/
 │   ├── agents/
-│   │   └── planets-agent.ts  # Agent that uses MCP tools
+│   │   └── kepler-agent.ts  # Agent that uses MCP tools
 │   ├── mcp/
 │   │   ├── mcp-client.ts     # Client to connect to MCP server
 │   │   └── mcp-server.ts     # MCP server definition
 │   ├── tools/
-│   │   └── planets-tool.ts   # Tool for querying planet data
+│   │   └── docs-tool.ts   # Tool for querying Kepler function data
 │   └── index.ts              # Main Mastra configuration
 └── scripts/
     └── mcp-server-http.ts    # Standalone MCP server runner
@@ -88,7 +88,7 @@ The MCP server exposes tools that can interact with your documentation:
 export const mcpServer = new MCPServer({
   name: 'Template Docs Chatbot MCP Server',
   tools: {
-    planetsInfoTool, // Your documentation query tool
+    keplerInfoTool, // Your documentation query tool
   },
 });
 ```
@@ -107,28 +107,27 @@ export const mcpClient = new MCPClient({
 });
 ```
 
-### Documentation Tool (`src/mastra/tools/planets-tool.ts`)
+### Documentation Tool (`src/mastra/tools/docs-tool.ts`)
 
-This tool queries your documentation data. Replace this with your own data source:
+Query documentation for Kepler project functions with their arguments:
 
 ```typescript
-export const planetsInfoTool = createTool({
-  id: 'planets-info',
-  description: 'Get information about planets',
-  // Your tool implementation here
+export const keplerInfoTool = createTool({
+  id: 'docs-tool',
+  description: 'Get detailed information about Kepler project functions, including arguments and helpful tips',
+  // ... tool configuration
 });
 ```
 
-### Agent (`src/mastra/agents/planets-agent.ts`)
+### Agent (`src/mastra/agents/kepler-agent.ts`)
 
-The agent uses the MCP tools to answer questions:
+The Kepler Documentation Agent that can answer questions about available functions:
 
 ```typescript
-export const planetsAgent = new Agent({
-  name: 'planetsAgent',
-  instructions: 'You are a helpful assistant that provides information about planets.',
-  // Agent can use MCP tools automatically
-  tools: await mcpClient.getTools(),
+export const keplerAgent = new Agent({
+  name: 'Kepler Documentation Agent',
+  instructions: 'You are a helpful assistant that provides information about Kepler project functions.',
+  // ... agent configuration
 });
 ```
 
@@ -138,12 +137,12 @@ To adapt this template for your own documentation:
 
 ### 1. Replace the Data Source
 
-- Update `src/data/planets.json` with your documentation data
+- Update `src/data/functions.json` with your documentation data (including function arguments)
 - Or connect to your API, database, or file system
 
 ### 2. Modify the Tool
 
-Edit `src/mastra/tools/planets-tool.ts`:
+Edit `src/mastra/tools/docs-tool.ts`:
 
 ```typescript
 export const myDocsInfoTool = createTool({
@@ -162,7 +161,7 @@ export const myDocsInfoTool = createTool({
 
 ### 3. Update the Agent
 
-Modify `src/mastra/agents/planets-agent.ts`:
+Modify `src/mastra/agents/kepler-agent.ts`:
 
 ```typescript
 export const myDocsAgent = new Agent({
