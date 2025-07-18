@@ -441,7 +441,7 @@ export class MessageList {
         latestMessage.content.content = messageV2.content.content;
       }
 
-      // If latest message gets appended to, it should be added to the new response messages set to ensure it gets saved
+      // If latest message gets appended to, it should be added to the proper source
       this.pushMessageToSource(latestMessage, messageSource);
     }
     // Else the last message and this message are not both assistant messages OR an existing message has been updated and should be replaced. add a new message to the array or update an existing one.
