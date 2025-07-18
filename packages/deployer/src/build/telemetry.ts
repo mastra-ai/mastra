@@ -88,14 +88,19 @@ export function getTelemetryBundler(
   });
 }
 
-export async function writeTelemetryConfig(
-  entryFile: string,
-  outputDir: string,
+export async function writeTelemetryConfig({
+  entryFile,
+  outputDir,
+  options = {},
+  logger,
+}: {
+  entryFile: string;
+  outputDir: string;
   options: {
     sourcemap?: boolean;
-  } = {},
-  logger: IMastraLogger,
-): Promise<{
+  };
+  logger: IMastraLogger;
+}): Promise<{
   hasCustomConfig: boolean;
   externalDependencies: string[];
 }> {
