@@ -1473,9 +1473,7 @@ export class Run<
     this.closeStreamAction = async () => {};
 
     return new MastraWorkflowStream({
-      getOptions: () => ({
-        runId: this.runId,
-      }),
+      run: this,
       createStream: writer => {
         const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
           transform(chunk, controller) {
@@ -1741,6 +1739,14 @@ export class Run<
     if (state.workflowState) {
       this.state.workflowState = deepMergeWorkflowState(this.state.workflowState ?? {}, state.workflowState ?? {});
     }
+  }
+
+  /**
+   * @access private
+   * @returns The execution results of the workflow run
+   */
+  _getExecutionResults() {
+    return this.executionResults;
   }
 }
 

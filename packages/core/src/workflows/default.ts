@@ -335,6 +335,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    writableStream,
   }: {
     workflowId: string;
     runId: string;
@@ -358,10 +359,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<void> {
     let { duration, fn } = entry;
 
     if (fn) {
+      const stepCallId = randomUUID();
       duration = await fn({
         runId,
         workflowId,
@@ -392,6 +395,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         [EMITTER_SYMBOL]: emitter,
         engine: {},
         abortSignal: abortController?.signal,
+        writer: new ToolStream(
+          {
+            prefix: 'step',
+            callId: stepCallId,
+            name: 'sleep',
+            runId,
+          },
+          writableStream,
+        ),
       });
     }
 
@@ -407,6 +419,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    writableStream,
   }: {
     workflowId: string;
     runId: string;
@@ -430,10 +443,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<void> {
     let { date, fn } = entry;
 
     if (fn) {
+      const stepCallId = randomUUID();
       date = await fn({
         runId,
         workflowId,
@@ -464,6 +479,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         [EMITTER_SYMBOL]: emitter,
         engine: {},
         abortSignal: abortController?.signal,
+        writer: new ToolStream(
+          {
+            prefix: 'step',
+            callId: stepCallId,
+            name: 'sleepUntil',
+            runId,
+          },
+          writableStream,
+        ),
       });
     }
 
@@ -907,6 +931,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               [EMITTER_SYMBOL]: emitter,
               engine: {},
               abortSignal: abortController?.signal,
+              writer: new ToolStream({
+                prefix: 'step',
+                callId: randomUUID(),
+                name: 'conditional',
+                runId,
+              }),
             });
             return result ? index : null;
           } catch (e: unknown) {
@@ -1066,6 +1096,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         [EMITTER_SYMBOL]: emitter,
         engine: {},
         abortSignal: abortController?.signal,
+        writer: new ToolStream({
+          prefix: 'step',
+          callId: randomUUID(),
+          name: 'loop',
+          runId,
+        }),
       });
     } while (entry.loopType === 'dowhile' ? isTrue : !isTrue);
 
@@ -1536,6 +1572,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
+        writableStream,
       });
 
       await this.persistStepUpdate({
@@ -1655,6 +1692,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         abortController,
         runtimeContext,
+        writableStream,
       });
 
       await this.persistStepUpdate({
@@ -1791,6 +1829,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           emitter,
           abortController,
           runtimeContext,
+          writableStream,
         });
       } catch (error) {
         execResults = {
