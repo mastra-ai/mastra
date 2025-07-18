@@ -40,9 +40,7 @@ export type PostgresConfig = {
   schemaName?: string;
 } & (
   | (Omit<PoolConfig, keyof requiredFields> & requiredFields)
-  | {
-      connectionString: string;
-    }
+  | (Omit<PoolConfig, 'connectionString'> & { connectionString: string })
 );
 
 export class PostgresStore extends MastraStorage {
