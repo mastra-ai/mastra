@@ -160,7 +160,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             dynamic: true,
           },
         },
-        name: 'pre-filter',
+        name: `${indexName}_search_index`,
         type: 'search',
       });
     } catch (error: any) {
