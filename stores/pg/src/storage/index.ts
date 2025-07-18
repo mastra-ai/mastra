@@ -28,17 +28,18 @@ import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Pool, type PoolConfig, type PoolClient } from 'pg';
 
+type requiredFields = {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+};
+
 export type PostgresConfig = {
   schemaName?: string;
 } & (
-  | {
-      host: string;
-      port: number;
-      database: string;
-      user: string;
-      password: string;
-      ssl?: boolean | ConnectionOptions;
-    }
+  | (Omit<PoolConfig, keyof requiredFields> & requiredFields)
   | {
       connectionString: string;
     }
@@ -69,7 +70,7 @@ export class PostgresStore extends MastraStorage {
         for (const key of required) {
           if (!(key in config) || typeof (config as any)[key] !== 'string' || (config as any)[key].trim() === '') {
             throw new Error(
-              `PostgresStore: ${key} must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.`,
+              `PostgresStore: ${key} must be provided and cannot be empty. Omitting necessary values may cause fallback to local Postgres defaults.`,
             );
           }
         }
@@ -77,21 +78,14 @@ export class PostgresStore extends MastraStorage {
       super({ name: 'PostgresStore' });
       this.schema = config.schemaName;
 
-      let poolConfig: PoolConfig;
-      if ('connectionString' in config) {
-        poolConfig = { connectionString: config.connectionString };
-      } else {
-        poolConfig = {
-          host: config.host,
-          port: config.port,
-          database: config.database,
-          user: config.user,
-          password: config.password,
-          ssl: config.ssl,
-        };
+      const poolConfig: PoolConfig = { ...config };
+      if (poolConfig.idleTimeoutMillis === undefined) {
+        poolConfig.idleTimeoutMillis = 30000;
       }
 
-      this.db = new Pool(poolConfig);
+      this.db = new Pool({
+        ...poolConfig,
+      });
     } catch (e) {
       throw new MastraError(
         {
