@@ -94,14 +94,13 @@ The storage implementation handles schema creation and updates automatically. It
 
 ### Direct Database and Pool Access
 
-`PostgresStore` exposes both the underlying database object and the pg-promise instance as public fields:
+`PostgresStore` exposes the underlying PgPool instance as a public field:
 
 ```typescript
-store.db  // pg-promise database instance
-store.pgp // pg-promise main instance
+store.pool  // PgPool instance
 ```
 
-This enables direct queries and custom transaction management. When using these fields:
+This enables direct queries and custom transaction management. When using this field:
 - You are responsible for proper connection and transaction handling.
 - Closing the store (`store.close()`) will destroy the associated connection pool.
 - Direct access bypasses any additional logic or validation provided by PostgresStore methods.
