@@ -1,3 +1,5 @@
+import type { ConnectionOptions } from 'tls';
+import { URL } from 'url';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -25,10 +27,8 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { Client } from 'pg';
+import type { Client } from 'pg';
 import Pool from 'pg-pool';
-import type { ConnectionOptions } from 'tls';
-import { URL } from 'url';
 
 export type PostgresConfig = {
   schemaName?: string;
@@ -839,19 +839,20 @@ export class PostgresStore extends MastraStorage {
     };
 
     try {
-      const response = await this.db.query<StorageThreadType>(
-        `UPDATE ${this.getTableName(TABLE_THREADS)}
+      const thread = (
+        await this.db.query<StorageThreadType>(
+          `UPDATE ${this.getTableName(TABLE_THREADS)}
         SET title = $1,
         metadata = $2,
         "updatedAt" = $3
         WHERE id = $4
         RETURNING *`,
-        [title, mergedMetadata, new Date().toISOString(), id],
-      );
-      const thread = response.rows[0];
+          [title, mergedMetadata, new Date().toISOString(), id],
+        )
+      ).rows[0];
 
-      if (!thread || response.rowCount !== 1) {
-        throw new Error();
+      if (!thread) {
+        throw new Error(`Thread ${id} on table ${this.getTableName(TABLE_THREADS)} not found`);
       }
 
       return {
@@ -1542,8 +1543,9 @@ export class PostgresStore extends MastraStorage {
 
   async close(): Promise<void> {
     if (this.closed) return;
+
     this.closed = true;
-    this.db.end();
+    await this.db.end();
   }
 
   async getEvals(
@@ -1749,9 +1751,20 @@ export class PostgresStore extends MastraStorage {
       }
 
       await client.query('COMMIT');
-    } catch {
-      //Should we throw a MastraError here? It wasn't being handled originally
+    } catch (error) {
       await client.query('ROLLBACK');
+
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_UPDATE_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            messageIds: messageIds.join(', '),
+          },
+        },
+        error,
+      );
     } finally {
       client.release();
     }
