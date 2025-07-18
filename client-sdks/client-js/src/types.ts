@@ -166,6 +166,7 @@ export interface GetWorkflowResponse {
 export type WorkflowWatchResult = WatchEvent & { runId: string };
 
 export type WorkflowRunResult = WorkflowResult<any, any>;
+
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];
