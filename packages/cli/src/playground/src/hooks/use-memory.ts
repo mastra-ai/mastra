@@ -131,7 +131,7 @@ export const useMemorySearch = ({
   resourceId: string;
   threadId?: string;
 }) => {
-  const searchMemory = async (searchQuery: string) => {
+  const searchMemory = async (searchQuery: string, memoryConfig?: any) => {
     if (!searchQuery.trim()) {
       return { results: [], count: 0, query: searchQuery };
     }
@@ -144,6 +144,10 @@ export const useMemorySearch = ({
 
     if (threadId) {
       params.append('threadId', threadId);
+    }
+
+    if (memoryConfig) {
+      params.append('memoryConfig', JSON.stringify(memoryConfig));
     }
 
     const response = await fetch(`/api/memory/search?${params}`, {

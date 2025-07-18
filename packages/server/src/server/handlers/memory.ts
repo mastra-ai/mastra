@@ -405,11 +405,13 @@ export async function searchMemoryHandler({
   limit = 20,
   networkId,
   runtimeContext,
+  memoryConfig,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'> & {
   searchQuery: string;
   resourceId: string;
   threadId?: string;
   limit?: number;
+  memoryConfig?: any;
 }): Promise<SearchResponse | ReturnType<typeof handleError>> {
   try {
     validateBody({ searchQuery, resourceId });
@@ -420,7 +422,7 @@ export async function searchMemoryHandler({
     }
 
     // Get memory configuration first to check scope
-    const config = memory.getMergedThreadConfig({});
+    const config = memory.getMergedThreadConfig(memoryConfig || {});
     const hasSemanticRecall = !!config?.semanticRecall;
     const resourceScope = typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
 

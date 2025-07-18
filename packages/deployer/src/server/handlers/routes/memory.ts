@@ -443,6 +443,13 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           schema: { type: 'number' },
           description: 'Maximum number of results to return (default: 20)',
         },
+        {
+          name: 'memoryConfig',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+          description: 'JSON-encoded memory configuration (e.g., {"lastMessages": 0} for semantic-only search)',
+        },
       ],
       responses: {
         200: {

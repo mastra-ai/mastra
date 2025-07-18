@@ -18,6 +18,11 @@ export function AgentMemory({ agentId }: AgentMemoryProps) {
     threadId,
   });
 
+  // Wrap searchMemory to always pass lastMessages: 0 for semantic-only search
+  const searchSemanticRecall = useCallback(async (query: string) => {
+    return searchMemory(query, { lastMessages: 0 });
+  }, [searchMemory]);
+
   // Handle clicking on a search result to scroll to the message
   const handleResultClick = useCallback((messageId: string) => {
     // Find the message element by id and scroll to it
@@ -37,13 +42,13 @@ export function AgentMemory({ agentId }: AgentMemoryProps) {
       {/* Memory Search Section */}
       <div className="p-4 border-b border-border1">
         <div className="mb-2">
-          <h3 className="text-sm font-medium text-icon5">Search Memory</h3>
+          <h3 className="text-sm font-medium text-icon5">Search Semantic Recall</h3>
           {!threadId && (
             <p className="text-xs text-icon3 mt-1">Searching across all threads</p>
           )}
         </div>
         <MemorySearch 
-          searchMemory={searchMemory}
+          searchMemory={searchSemanticRecall}
           onResultClick={handleResultClick}
           className="w-full"
         />

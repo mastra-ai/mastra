@@ -239,6 +239,7 @@ export async function searchMemoryHandler(c: Context) {
     const resourceId = c.req.query('resourceId');
     const threadId = c.req.query('threadId');
     const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined;
+    const memoryConfig = c.req.query('memoryConfig') ? JSON.parse(c.req.query('memoryConfig')!) : undefined;
     const networkId = c.req.query('networkId');
     const runtimeContext = c.get('runtimeContext');
 
@@ -249,6 +250,7 @@ export async function searchMemoryHandler(c: Context) {
       resourceId: resourceId!,
       threadId,
       limit,
+      memoryConfig,
       networkId,
       runtimeContext,
     });
