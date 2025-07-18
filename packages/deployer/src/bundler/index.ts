@@ -254,7 +254,7 @@ export abstract class Bundler extends MastraBundler {
 
     let externalDependencies: string[];
     try {
-      const result = await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));
+      const result = await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir), this.logger);
       externalDependencies = result.externalDependencies;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
