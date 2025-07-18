@@ -47,11 +47,12 @@ interface MemorySearchProps {
     query: string;
     searchType?: string;
   }>;
-  onResultClick?: (messageId: string) => void;
+  onResultClick?: (messageId: string, threadId?: string) => void;
   className?: string;
+  currentThreadId?: string;
 }
 
-export const MemorySearch = ({ searchMemory, onResultClick, className }: MemorySearchProps) => {
+export const MemorySearch = ({ searchMemory, onResultClick, className, currentThreadId }: MemorySearchProps) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<MemorySearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -133,11 +134,11 @@ export const MemorySearch = ({ searchMemory, onResultClick, className }: MemoryS
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleResultClick = (messageId: string) => {
+  const handleResultClick = (messageId: string, threadId?: string) => {
     setIsOpen(false);
     setQuery('');
     setResults([]);
-    onResultClick?.(messageId);
+    onResultClick?.(messageId, threadId);
   };
 
   const clearSearch = () => {
@@ -196,7 +197,7 @@ export const MemorySearch = ({ searchMemory, onResultClick, className }: MemoryS
               {results.map((result) => (
                 <button
                   key={result.id}
-                  onClick={() => handleResultClick(result.id)}
+                  onClick={() => handleResultClick(result.id, result.threadId)}
                   className="w-full px-4 py-3 hover:bg-surface4 transition-colors duration-150 text-left border-b border-border1 last:border-b-0"
                 >
                   <div className="flex flex-col gap-2">

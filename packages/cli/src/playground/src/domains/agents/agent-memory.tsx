@@ -1,7 +1,7 @@
 import { MemorySearch } from '@mastra/playground-ui';
 import { useMemorySearch } from '@/hooks/use-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
-import { useParams } from 'react-router';
+import { useParams, useNavigate } from 'react-router';
 import { useCallback } from 'react';
 
 interface AgentMemoryProps {
@@ -10,6 +10,7 @@ interface AgentMemoryProps {
 
 export function AgentMemory({ agentId }: AgentMemoryProps) {
   const { threadId } = useParams();
+  const navigate = useNavigate();
 
   // Get memory search hook
   const { searchMemory } = useMemorySearch({
@@ -24,18 +25,24 @@ export function AgentMemory({ agentId }: AgentMemoryProps) {
   }, [searchMemory]);
 
   // Handle clicking on a search result to scroll to the message
-  const handleResultClick = useCallback((messageId: string) => {
-    // Find the message element by id and scroll to it
-    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (messageElement) {
-      messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Optionally highlight the message
-      messageElement.classList.add('bg-surface4');
-      setTimeout(() => {
-        messageElement.classList.remove('bg-surface4');
-      }, 2000);
+  const handleResultClick = useCallback((messageId: string, resultThreadId?: string) => {
+    // If the result is from a different thread, navigate to that thread
+    if (resultThreadId && resultThreadId !== threadId) {
+      navigate(`/agents/${agentId}/chat/${resultThreadId}`);
+      // The message will be highlighted after navigation by the new page
+    } else {
+      // Find the message element by id and scroll to it
+      const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+      if (messageElement) {
+        messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Optionally highlight the message
+        messageElement.classList.add('bg-surface4');
+        setTimeout(() => {
+          messageElement.classList.remove('bg-surface4');
+        }, 2000);
+      }
     }
-  }, []);
+  }, [agentId, threadId, navigate]);
 
   return (
     <div className="flex flex-col h-full">
@@ -50,6 +57,7 @@ export function AgentMemory({ agentId }: AgentMemoryProps) {
         <MemorySearch 
           searchMemory={searchSemanticRecall}
           onResultClick={handleResultClick}
+          currentThreadId={threadId}
           className="w-full"
         />
       </div>
