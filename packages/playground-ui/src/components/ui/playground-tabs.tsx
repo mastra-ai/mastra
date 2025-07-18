@@ -21,7 +21,11 @@ export interface TabListProps {
 }
 
 export const TabList = ({ children }: TabListProps) => {
-  return <TabListPrimitive className="border-b-sm border-border1 flex w-full shrink-0">{children}</TabListPrimitive>;
+  return (
+    <div className="w-full overflow-x-auto">
+      <TabListPrimitive className="border-b-sm border-border1 flex min-w-full shrink-0 w-max">{children}</TabListPrimitive>
+    </div>
+  );
 };
 
 export interface TabProps {
@@ -34,7 +38,7 @@ export const Tab = ({ children, value, onClick }: TabProps) => {
   return (
     <TabsTrigger
       value={value}
-      className="text-xs p-3 text-mastra-el-3 data-[state=active]:text-mastra-el-5 data-[state=active]:border-b-2"
+      className="text-xs p-3 text-mastra-el-3 data-[state=active]:text-mastra-el-5 data-[state=active]:border-b-2 whitespace-nowrap flex-shrink-0"
       onClick={onClick}
     >
       {children}
@@ -49,7 +53,7 @@ export interface TabContentProps {
 
 export const TabContent = ({ children, value }: TabContentProps) => {
   return (
-    <TabsContent value={value} className="h-full pb-5">
+    <TabsContent value={value} className="h-full overflow-hidden flex flex-col">
       {children}
     </TabsContent>
   );

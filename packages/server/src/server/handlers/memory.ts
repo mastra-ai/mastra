@@ -35,7 +35,7 @@ async function getMemoryFromContext({
   }
 
   if (agent) {
-    return agent?.getMemory() || mastra.getMemory();
+    return (await agent?.getMemory()) || mastra.getMemory();
   }
 
   if (network) {
@@ -364,5 +364,151 @@ export async function updateWorkingMemoryHandler({
     return { success: true };
   } catch (error) {
     return handleError(error, 'Error updating working memory');
+  }
+}
+
+interface SearchResult {
+  id: string;
+  role: string;
+  content: any;
+  createdAt: Date;
+  threadId?: string;
+  threadTitle?: string;
+  score?: number;
+  context?: {
+    before?: SearchResult[];
+    after?: SearchResult[];
+  };
+}
+
+interface SearchResponse {
+  results: SearchResult[];
+  count: number;
+  query: string;
+  searchScope?: string;
+  searchType?: string;
+}
+
+/**
+ * Handler to search messages in a thread.
+ * @param searchQuery - the text to search for
+ * @param resourceId - the resource id (user/org) to validate thread ownership
+ * @param threadId - the thread id to search within
+ * @param limit - maximum number of results to return (default: 20)
+ */
+export async function searchMemoryHandler({
+  mastra,
+  agentId,
+  searchQuery,
+  resourceId,
+  threadId,
+  limit = 20,
+  networkId,
+  runtimeContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
+  searchQuery: string;
+  resourceId: string;
+  limit?: number;
+}): Promise<SearchResponse | ReturnType<typeof handleError>> {
+  try {
+    validateBody({ searchQuery, resourceId, threadId });
+
+    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    if (!memory) {
+      throw new HTTPException(400, { message: 'Memory is not initialized' });
+    }
+
+    // Validate thread ownership
+    if (threadId) {
+      const thread = await memory.getThreadById({ threadId });
+      if (!thread) {
+        throw new HTTPException(404, { message: 'Thread not found' });
+      }
+      if (thread.resourceId !== resourceId) {
+        throw new HTTPException(403, { message: 'Thread does not belong to the specified resource' });
+      }
+    }
+
+    // Get memory configuration
+    const config = memory.getMergedThreadConfig({});
+    const hasSemanticRecall = !!config?.semanticRecall;
+
+    // Use rememberMessages for semantic search - it handles resource vs thread scope internally
+    const result = await memory.rememberMessages({
+      threadId: threadId!,
+      resourceId,
+      vectorMessageSearch: hasSemanticRecall ? searchQuery : undefined,
+      config,
+    });
+
+    // Get the current thread for context
+    const thread = threadId ? await memory.getThreadById({ threadId }) : null;
+    const threadMessages = threadId ? (await memory.query({ threadId })).uiMessages : [];
+
+    // Convert messages and filter by text search if not using semantic recall
+    const searchResults: SearchResult[] = [];
+    const messageMap = new Map<string, boolean>(); // For deduplication
+
+    result.messagesV2.forEach(msg => {
+      // Skip duplicates
+      if (messageMap.has(msg.id)) return;
+      messageMap.set(msg.id, true);
+
+      // Extract content
+      const content =
+        msg.content.content || msg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join(' ') || '';
+
+      // If not using semantic recall, filter by text search
+      if (!hasSemanticRecall && !content.toLowerCase().includes(searchQuery.toLowerCase())) {
+        return;
+      }
+
+      // Find message index for context
+      const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
+
+      const searchResult: SearchResult = {
+        id: msg.id,
+        role: msg.role,
+        content,
+        createdAt: msg.createdAt,
+        threadId: thread?.id,
+        threadTitle: thread?.title || thread?.id,
+      };
+
+      // Add context if found
+      if (messageIndex !== -1) {
+        searchResult.context = {
+          before: threadMessages.slice(Math.max(0, messageIndex - 2), messageIndex).map(m => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            createdAt: m.createdAt || new Date(),
+          })),
+          after: threadMessages.slice(messageIndex + 1, messageIndex + 3).map(m => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            createdAt: m.createdAt || new Date(),
+          })),
+        };
+      }
+
+      searchResults.push(searchResult);
+    });
+
+    // Sort by date (newest first) and limit
+    const sortedResults = searchResults
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, limit);
+
+    return {
+      results: sortedResults,
+      count: sortedResults.length,
+      query: searchQuery,
+      searchScope: threadId ? 'thread' : 'resource',
+      searchType: hasSemanticRecall ? 'semantic' : 'text',
+    };
+  } catch (error) {
+    return handleError(error, 'Error searching memory');
   }
 }

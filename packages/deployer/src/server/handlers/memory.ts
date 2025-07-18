@@ -10,6 +10,7 @@ import {
   getMessagesHandler as getOriginalGetMessagesHandler,
   getWorkingMemoryHandler as getOriginalGetWorkingMemoryHandler,
   updateWorkingMemoryHandler as getOriginalUpdateWorkingMemoryHandler,
+  searchMemoryHandler as getOriginalSearchMemoryHandler,
 } from '@mastra/server/handlers/memory';
 import type { Context } from 'hono';
 
@@ -227,5 +228,33 @@ export async function getWorkingMemoryHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error getting working memory');
+  }
+}
+
+export async function searchMemoryHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.query('agentId');
+    const searchQuery = c.req.query('searchQuery');
+    const resourceId = c.req.query('resourceId');
+    const threadId = c.req.query('threadId');
+    const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined;
+    const networkId = c.req.query('networkId');
+    const runtimeContext = c.get('runtimeContext');
+
+    const result = await getOriginalSearchMemoryHandler({
+      mastra,
+      agentId,
+      searchQuery: searchQuery!,
+      resourceId: resourceId!,
+      threadId: threadId!,
+      limit,
+      networkId,
+      runtimeContext,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error searching memory');
   }
 }

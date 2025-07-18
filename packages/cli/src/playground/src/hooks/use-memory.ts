@@ -121,3 +121,42 @@ export const useDeleteThread = () => {
 
   return { deleteThread };
 };
+
+export const useMemorySearch = ({
+  agentId,
+  resourceId,
+  threadId,
+}: {
+  agentId: string;
+  resourceId: string;
+  threadId: string;
+}) => {
+  const searchMemory = async (searchQuery: string) => {
+    if (!searchQuery.trim()) {
+      return { results: [], count: 0, query: searchQuery };
+    }
+
+    const params = new URLSearchParams({
+      searchQuery,
+      resourceId,
+      threadId,
+      agentId,
+    });
+
+    const response = await fetch(`/api/memory/search?${params}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-mastra-dev-playground': 'true',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to search memory');
+    }
+
+    return response.json();
+  };
+
+  return { searchMemory };
+};

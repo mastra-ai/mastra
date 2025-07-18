@@ -21,6 +21,7 @@ import { providerMapToIcon } from './table.columns';
 import { AgentOverview } from './agent-overview';
 import { useMemory } from '@/hooks/use-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
+import { AgentMemorySearch } from './agent-memory-search';
 
 export function AgentInformation({ agentId }: { agentId: string }) {
   const { agent, isLoading } = useAgent(agentId);
@@ -74,7 +75,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
         </div>
       </EntityHeader>
 
-      <div className="overflow-y-auto border-t-sm border-border1">
+      <div className="flex-1 overflow-hidden border-t-sm border-border1 flex flex-col">
         <PlaygroundTabs defaultTab="overview">
           <TabList>
             <Tab value="overview">Overview</Tab>
@@ -82,6 +83,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             <Tab value="endpoints">Endpoints</Tab>
             <Tab value="logs">Log Drains</Tab>
             <Tab value="working-memory">Working Memory</Tab>
+            {memory?.result && <Tab value="memory-search">Memory Search</Tab>}
           </TabList>
 
           <TabContent value="overview">
@@ -100,6 +102,9 @@ export function AgentInformation({ agentId }: { agentId: string }) {
           </TabContent>
           <TabContent value="working-memory">
             {isLoading ? <Skeleton className="h-full" /> : <AgentWorkingMemory />}
+          </TabContent>
+          <TabContent value="memory-search">
+            {isLoading ? <Skeleton className="h-full" /> : <AgentMemorySearch agentId={agentId} />}
           </TabContent>
         </PlaygroundTabs>
       </div>
