@@ -1,7 +1,7 @@
 import type { ContextWithMastra } from '@mastra/core/server';
 import type { Next } from 'hono';
 import { defaultAuthConfig } from './defaults';
-import { canAccessPublicly, checkRules, isProtectedPath } from './helpers';
+import { canAccessPublicly, checkRules, isProtectedPath, isDevPlaygroundRequest } from './helpers';
 
 export const authenticationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
@@ -9,6 +9,11 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 
   if (!authConfig) {
     // No auth config, skip authentication
+    return next();
+  }
+
+  if (isDevPlaygroundRequest(c.req)) {
+    // Skip authentication for dev playground requests
     return next();
   }
 
@@ -70,6 +75,11 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
 
   const path = c.req.path;
   const method = c.req.method;
+
+  if (isDevPlaygroundRequest(c.req)) {
+    // Skip authorization for dev playground requests
+    return next();
+  }
 
   if (!isProtectedPath(c.req.path, c.req.method, authConfig)) {
     return next();
