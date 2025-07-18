@@ -1,4 +1,5 @@
 import { generateEmptyFromSchema } from '@mastra/core';
+import type { StorageGetMessagesArg } from '@mastra/core';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import { HTTPException } from '../http-exception';
@@ -254,6 +255,35 @@ export async function deleteThreadHandler({
     return { result: 'Thread deleted' };
   } catch (error) {
     return handleError(error, 'Error deleting thread');
+  }
+}
+
+export async function getMessagesPaginatedHandler({
+  mastra,
+  threadId,
+  resourceId,
+  selectBy,
+  format,
+}: StorageGetMessagesArg & Pick<MemoryContext, 'mastra'>) {
+  try {
+    validateBody({ threadId });
+
+    const storage = mastra.getStorage();
+
+    if (!storage) {
+      throw new HTTPException(400, { message: 'Storage is not initialized' });
+    }
+
+    const thread = await storage.getThreadById({ threadId: threadId! });
+
+    if (!thread) {
+      throw new HTTPException(404, { message: 'Thread not found' });
+    }
+
+    const result = await storage.getMessagesPaginated({ threadId: threadId!, resourceId, selectBy, format });
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error getting messages');
   }
 }
 
