@@ -76,7 +76,7 @@ function convertFullStreamChunkToMastra(value: any, ctx: { runId: string }, writ
   }
 }
 
-export class MastraAgentStream extends ReadableStream<ChunkType> {
+export class MastraAgentStream<Output> extends ReadableStream<ChunkType> {
   #usageCount = {
     promptTokens: 0,
     completionTokens: 0,
@@ -91,12 +91,16 @@ export class MastraAgentStream extends ReadableStream<ChunkType> {
     resolve: (value: void) => void;
     reject: (reason?: any) => void;
   };
+  #resultAsObject: Output | null = null;
 
   constructor({
     createStream,
     getOptions,
   }: {
-    createStream: (writer: WritableStream<ChunkType>) => Promise<ReadableStream<any>> | ReadableStream<any>;
+    createStream: (
+      writer: WritableStream<ChunkType>,
+      onResult: (result: Output) => void,
+    ) => Promise<ReadableStream<any>> | ReadableStream<any>;
     getOptions: () =>
       | Promise<{
           runId: string;
@@ -138,12 +142,6 @@ export class MastraAgentStream extends ReadableStream<ChunkType> {
           },
         });
 
-        this.#usageCount = {
-          promptTokens: 0,
-          completionTokens: 0,
-          totalTokens: 0,
-        };
-
         controller.enqueue({
           type: 'start',
           runId,
@@ -151,7 +149,9 @@ export class MastraAgentStream extends ReadableStream<ChunkType> {
           payload: {},
         });
 
-        const stream = await createStream(writer);
+        const stream = await createStream(writer, result => {
+          this.#resultAsObject = result;
+        });
 
         const updateUsageCount = (usage: {
           promptTokens?: `${number}` | number;
@@ -212,6 +212,12 @@ export class MastraAgentStream extends ReadableStream<ChunkType> {
 
   get text() {
     return this.#streamPromise.promise.then(() => this.#bufferedText.join(''));
+  }
+
+  get object(): Promise<Output extends undefined ? null : Output> {
+    return this.#streamPromise.promise.then(() => this.#resultAsObject) as Promise<
+      Output extends undefined ? null : Output
+    >;
   }
 
   get textStream() {
