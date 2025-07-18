@@ -2204,7 +2204,7 @@ describe('PostgresStore', () => {
     let adminDb: Client;
 
     beforeAll(async () => {
-      // Create a separate pg-promise instance for admin operations
+      // Create a separate pg instance for admin operations
       adminDb = new Client(connectionString);
       await adminDb.connect();
 
