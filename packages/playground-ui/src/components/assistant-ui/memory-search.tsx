@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 const formatRelativeTime = (date: Date): string => {
   const now = new Date();
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-  
+
   if (seconds < 60) return 'just now';
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
@@ -62,56 +62,65 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Debounced search
-  const handleSearch = useCallback(async (searchQuery: string) => {
-    if (!searchQuery.trim()) {
-      setResults([]);
+  const handleSearch = useCallback(
+    async (searchQuery: string) => {
+      if (!searchQuery.trim()) {
+        setResults([]);
+        setError(null);
+        return;
+      }
+
+      setIsSearching(true);
       setError(null);
-      return;
-    }
 
-    setIsSearching(true);
-    setError(null);
-
-    try {
-      const response = await searchMemory(searchQuery);
-      setResults(response.results);
-      setIsOpen(response.results.length > 0);
-    } catch (err) {
-      setError('Failed to search memory');
-      console.error('Memory search error:', err);
-    } finally {
-      setIsSearching(false);
-    }
-  }, [searchMemory]);
+      try {
+        const response = await searchMemory(searchQuery);
+        setResults(response.results);
+        setIsOpen(response.results.length > 0);
+      } catch (err) {
+        setError('Failed to search memory');
+        console.error('Memory search error:', err);
+      } finally {
+        setIsSearching(false);
+      }
+    },
+    [searchMemory],
+  );
 
   // Handle input change with debouncing
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setQuery(value);
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      setQuery(value);
 
-    // Clear previous timeout
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    // Set new timeout for debounced search
-    searchTimeoutRef.current = setTimeout(() => {
-      handleSearch(value);
-    }, 300);
-  }, [handleSearch]);
-
-  // Handle Enter key press
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      // Clear any pending timeout
+      // Clear previous timeout
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
       }
-      // Perform search immediately
-      handleSearch(query);
-    }
-  }, [query, handleSearch]);
+
+      // Set new timeout for debounced search
+      searchTimeoutRef.current = setTimeout(() => {
+        handleSearch(value);
+      }, 300);
+    },
+    [handleSearch],
+  );
+
+  // Handle Enter key press
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        // Clear any pending timeout
+        if (searchTimeoutRef.current) {
+          clearTimeout(searchTimeoutRef.current);
+        }
+        // Perform search immediately
+        handleSearch(query);
+      }
+    },
+    [query, handleSearch],
+  );
 
   // Clean up timeout on unmount
   useEffect(() => {
@@ -154,7 +163,7 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
   };
 
   return (
-    <div className={cn("flex flex-col h-full", className)} ref={dropdownRef}>
+    <div className={cn('flex flex-col h-full', className)} ref={dropdownRef}>
       <div className="relative shrink-0">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-icon3" />
         <Input
@@ -182,25 +191,31 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
         <div className="mt-2 flex-1 bg-surface3 border border-border1 rounded-lg shadow-lg overflow-y-auto">
           {error ? (
             <div className="p-4 text-center">
-              <Txt variant="ui-sm" className="text-red-500">{error}</Txt>
+              <Txt variant="ui-sm" className="text-red-500">
+                {error}
+              </Txt>
             </div>
           ) : isSearching ? (
             <div className="p-4 text-center">
-              <Txt variant="ui-sm" className="text-icon3">Searching...</Txt>
+              <Txt variant="ui-sm" className="text-icon3">
+                Searching...
+              </Txt>
             </div>
           ) : results.length === 0 ? (
             <div className="p-4 text-center">
-              <Txt variant="ui-sm" className="text-icon3">No results found for "{query}"</Txt>
+              <Txt variant="ui-sm" className="text-icon3">
+                No results found for "{query}"
+              </Txt>
             </div>
           ) : (
             <div className="py-2">
-              {results.map((result) => (
+              {results.map(result => (
                 <button
                   key={result.id}
                   onClick={() => handleResultClick(result.id, result.threadId)}
                   className={cn(
-                    "w-full px-4 py-3 hover:bg-surface4 transition-colors duration-150 text-left border-b border-border1 last:border-b-0",
-                    result.threadId !== currentThreadId && "border-l-2 border-l-blue-400"
+                    'w-full px-4 py-3 hover:bg-surface4 transition-colors duration-150 text-left border-b border-border1 last:border-b-0',
+                    result.threadId !== currentThreadId && 'border-l-2 border-l-blue-400',
                   )}
                 >
                   <div className="flex flex-col gap-2">
@@ -215,15 +230,19 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
                         ))}
                       </div>
                     )}
-                    
+
                     {/* Main result */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className={cn(
-                            "text-xs font-medium px-2 py-0.5 rounded",
-                            result.role === 'user' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'
-                          )}>
+                          <span
+                            className={cn(
+                              'text-xs font-medium px-2 py-0.5 rounded',
+                              result.role === 'user'
+                                ? 'bg-blue-500/20 text-blue-400'
+                                : 'bg-green-500/20 text-green-400',
+                            )}
+                          >
                             {result.role}
                           </span>
                           <Txt variant="ui-xs" className="text-icon3">
@@ -231,12 +250,12 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
                           </Txt>
                           {result.threadTitle && (
                             <div className="flex items-center gap-1">
-                              <Txt 
-                                variant="ui-xs" 
+                              <Txt
+                                variant="ui-xs"
                                 className={cn(
-                                  "truncate max-w-[150px]",
-                                  result.threadId !== currentThreadId ? "text-blue-400 font-medium" : "text-icon3"
-                                )} 
+                                  'truncate max-w-[150px]',
+                                  result.threadId !== currentThreadId ? 'text-blue-400 font-medium' : 'text-icon3',
+                                )}
                                 title={result.threadTitle}
                               >
                                 • {result.threadTitle}
@@ -252,7 +271,7 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
                         </Txt>
                       </div>
                     </div>
-                    
+
                     {/* Context after */}
                     {result.context?.after && result.context.after.length > 0 && (
                       <div className="opacity-50 text-xs space-y-1">

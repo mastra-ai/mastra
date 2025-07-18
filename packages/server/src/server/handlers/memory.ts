@@ -436,7 +436,7 @@ export async function searchMemoryHandler({
         throw new HTTPException(403, { message: 'Thread does not belong to the specified resource' });
       }
     }
-    
+
     const searchResults: SearchResult[] = [];
     const messageMap = new Map<string, boolean>(); // For deduplication
 
@@ -459,7 +459,7 @@ export async function searchMemoryHandler({
     if (!threadId || resourceScope) {
       // Search across all threads for this resource
       const threads = await memory.getThreadsByResourceId({ resourceId });
-      
+
       // If no threads exist yet, return empty results
       if (threads.length === 0) {
         return {
@@ -470,7 +470,7 @@ export async function searchMemoryHandler({
           searchType: hasSemanticRecall ? 'semantic' : 'text',
         };
       }
-      
+
       for (const thread of threads) {
         // Use rememberMessages for semantic search
         const result = await memory.rememberMessages({
@@ -479,33 +479,33 @@ export async function searchMemoryHandler({
           vectorMessageSearch: searchQuery,
           config,
         });
-        
+
         // Get thread messages for context
         const threadMessages = (await memory.query({ threadId: thread.id })).uiMessages;
-        
+
         // Process results
         result.messagesV2.forEach(msg => {
           if (messageMap.has(msg.id)) return;
           messageMap.set(msg.id, true);
-          
-          const content = msg.content.content || 
-            msg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join(' ') || '';
-          
+
+          const content =
+            msg.content.content || msg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join(' ') || '';
+
           if (!hasSemanticRecall && !content.toLowerCase().includes(searchQuery.toLowerCase())) {
             return;
           }
-          
+
           const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
-          
+
           const searchResult: SearchResult = {
             id: msg.id,
             role: msg.role,
             content,
             createdAt: msg.createdAt,
-            threadId: thread.id,
-            threadTitle: thread.title || thread.id,
+            threadId: msg.threadId || thread.id,
+            threadTitle: thread.title || msg.threadId || thread.id,
           };
-          
+
           if (messageIndex !== -1) {
             searchResult.context = {
               before: threadMessages.slice(Math.max(0, messageIndex - 2), messageIndex).map(m => ({
@@ -522,7 +522,7 @@ export async function searchMemoryHandler({
               })),
             };
           }
-          
+
           searchResults.push(searchResult);
         });
       }
@@ -539,62 +539,62 @@ export async function searchMemoryHandler({
           searchType: hasSemanticRecall ? 'semantic' : 'text',
         };
       }
-      
+
       const result = await memory.rememberMessages({
         threadId,
         resourceId,
         vectorMessageSearch: searchQuery,
         config,
       });
-      
+
       const threadMessages = (await memory.query({ threadId })).uiMessages;
 
-    result.messagesV2.forEach(msg => {
-      // Skip duplicates
-      if (messageMap.has(msg.id)) return;
-      messageMap.set(msg.id, true);
+      result.messagesV2.forEach(msg => {
+        // Skip duplicates
+        if (messageMap.has(msg.id)) return;
+        messageMap.set(msg.id, true);
 
-      // Extract content
-      const content =
-        msg.content.content || msg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join(' ') || '';
+        // Extract content
+        const content =
+          msg.content.content || msg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join(' ') || '';
 
-      // If not using semantic recall, filter by text search
-      if (!hasSemanticRecall && !content.toLowerCase().includes(searchQuery.toLowerCase())) {
-        return;
-      }
+        // If not using semantic recall, filter by text search
+        if (!hasSemanticRecall && !content.toLowerCase().includes(searchQuery.toLowerCase())) {
+          return;
+        }
 
-      // Find message index for context
-      const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
+        // Find message index for context
+        const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
 
-      const searchResult: SearchResult = {
-        id: msg.id,
-        role: msg.role,
-        content,
-        createdAt: msg.createdAt,
-        threadId: threadId,
-        threadTitle: thread?.title || threadId,
-      };
-
-      // Add context if found
-      if (messageIndex !== -1) {
-        searchResult.context = {
-          before: threadMessages.slice(Math.max(0, messageIndex - 2), messageIndex).map(m => ({
-            id: m.id,
-            role: m.role,
-            content: m.content,
-            createdAt: m.createdAt || new Date(),
-          })),
-          after: threadMessages.slice(messageIndex + 1, messageIndex + 3).map(m => ({
-            id: m.id,
-            role: m.role,
-            content: m.content,
-            createdAt: m.createdAt || new Date(),
-          })),
+        const searchResult: SearchResult = {
+          id: msg.id,
+          role: msg.role,
+          content,
+          createdAt: msg.createdAt,
+          threadId: threadId,
+          threadTitle: thread?.title || threadId,
         };
-      }
 
-      searchResults.push(searchResult);
-    });
+        // Add context if found
+        if (messageIndex !== -1) {
+          searchResult.context = {
+            before: threadMessages.slice(Math.max(0, messageIndex - 2), messageIndex).map(m => ({
+              id: m.id,
+              role: m.role,
+              content: m.content,
+              createdAt: m.createdAt || new Date(),
+            })),
+            after: threadMessages.slice(messageIndex + 1, messageIndex + 3).map(m => ({
+              id: m.id,
+              role: m.role,
+              content: m.content,
+              createdAt: m.createdAt || new Date(),
+            })),
+          };
+        }
+
+        searchResults.push(searchResult);
+      });
     }
 
     // Sort by date (newest first) and limit
