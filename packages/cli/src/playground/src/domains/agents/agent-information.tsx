@@ -21,6 +21,7 @@ import { providerMapToIcon } from './table.columns';
 import { AgentOverview } from './agent-overview';
 import { useMemory } from '@/hooks/use-memory';
 import { AgentMemory } from './agent-memory';
+import { useState, useEffect } from 'react';
 
 export function AgentInformation({ agentId }: { agentId: string }) {
   const { agent, isLoading } = useAgent(agentId);
@@ -28,6 +29,17 @@ export function AgentInformation({ agentId }: { agentId: string }) {
   const { handleCopy } = useCopyToClipboard({ text: agentId });
 
   const providerIcon = providerMapToIcon[(agent?.provider || 'openai.chat') as keyof typeof providerMapToIcon];
+
+  // Persist tab selection
+  const STORAGE_KEY = 'agent-info-selected-tab';
+  const [selectedTab, setSelectedTab] = useState<string>(() => {
+    return sessionStorage.getItem(STORAGE_KEY) || 'overview';
+  });
+
+  const handleTabChange = (value: string) => {
+    setSelectedTab(value);
+    sessionStorage.setItem(STORAGE_KEY, value);
+  };
 
   return (
     <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto border-l-sm border-border1">
@@ -75,7 +87,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
       </EntityHeader>
 
       <div className="flex-1 overflow-hidden border-t-sm border-border1 flex flex-col">
-        <PlaygroundTabs defaultTab="overview">
+        <PlaygroundTabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange}>
           <TabList>
             <Tab value="overview">Overview</Tab>
             <Tab value="model-settings">Model Settings</Tab>

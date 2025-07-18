@@ -4,13 +4,27 @@ import { Tabs, TabsContent, TabsList as TabListPrimitive, TabsTrigger } from './
 export interface PlaygroundTabsProps<T extends string> {
   children: React.ReactNode;
   defaultTab: T;
+  value?: T;
+  onValueChange?: (value: T) => void;
 }
 
-export const PlaygroundTabs = <T extends string>({ children, defaultTab }: PlaygroundTabsProps<T>) => {
-  const [tab, setTab] = useState<T>(defaultTab);
+export const PlaygroundTabs = <T extends string>({ children, defaultTab, value, onValueChange }: PlaygroundTabsProps<T>) => {
+  const [internalTab, setInternalTab] = useState<T>(defaultTab);
+  
+  // Use controlled mode if value and onValueChange are provided
+  const isControlled = value !== undefined && onValueChange !== undefined;
+  const currentTab = isControlled ? value : internalTab;
+  const handleTabChange = (newValue: string) => {
+    const typedValue = newValue as T;
+    if (isControlled) {
+      onValueChange(typedValue);
+    } else {
+      setInternalTab(typedValue);
+    }
+  };
 
   return (
-    <Tabs value={tab} onValueChange={value => setTab(value as T)} className="h-full">
+    <Tabs value={currentTab} onValueChange={handleTabChange} className="h-full">
       {children}
     </Tabs>
   );
