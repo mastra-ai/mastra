@@ -145,8 +145,6 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
 
   const handleResultClick = (messageId: string, threadId?: string) => {
     setIsOpen(false);
-    setQuery('');
-    setResults([]);
     onResultClick?.(messageId, threadId);
   };
 
@@ -155,6 +153,9 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
     setResults([]);
     setIsOpen(false);
     setError(null);
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
   };
 
   const truncateContent = (content: string, maxLength: number = 100) => {

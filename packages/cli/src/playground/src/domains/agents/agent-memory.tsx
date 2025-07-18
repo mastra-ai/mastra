@@ -26,10 +26,9 @@ export function AgentMemory({ agentId }: AgentMemoryProps) {
 
   // Handle clicking on a search result to scroll to the message
   const handleResultClick = useCallback((messageId: string, resultThreadId?: string) => {
-    // If the result is from a different thread, navigate to that thread
+    // If the result is from a different thread, navigate to that thread with message ID
     if (resultThreadId && resultThreadId !== threadId) {
-      navigate(`/agents/${agentId}/chat/${resultThreadId}`);
-      // The message will be highlighted after navigation by the new page
+      navigate(`/agents/${agentId}/chat/${resultThreadId}?messageId=${messageId}`);
     } else {
       // Find the message element by id and scroll to it
       const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
