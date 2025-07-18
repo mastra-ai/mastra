@@ -293,6 +293,11 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/examples/rag/insert-embedding-in-pinecone",
+        destination: "/examples/rag/upsert/upsert-embeddings#pinecone",
+        permanent: true,
+      },
+      {
         source: "/examples/memory/short-term-working-memory",
         destination: "/examples/memory/memory-with-libsql",
         permanent: true,
@@ -620,11 +625,6 @@ export default withGT(
       {
         source: "/examples/rag/insert-embedding-in-libsql",
         destination: "/reference/rag/libsql",
-        permanent: true,
-      },
-      {
-        source: "/examples/rag/insert-embedding-in-pinecone",
-        destination: "/examples/rag/upsert/upsert-embeddings#pinecone",
         permanent: true,
       },
       {
