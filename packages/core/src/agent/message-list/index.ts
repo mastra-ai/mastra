@@ -511,9 +511,7 @@ export class MessageList {
       } else {
         latestMessage.content.parts.push(part);
       }
-      return true;
     }
-    return false;
   }
 
   /**
