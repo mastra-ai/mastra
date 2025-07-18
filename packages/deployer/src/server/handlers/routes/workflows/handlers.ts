@@ -196,6 +196,7 @@ export async function streamWorkflowHandler(c: Context) {
         } catch (err) {
           console.log(err);
         }
+        await stream.close();
       },
       async err => {
         logger.error('Error in workflow stream: ' + err?.message);

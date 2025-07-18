@@ -103,7 +103,7 @@ export class MastraWorkflowStream extends ReadableStream<ChunkType> {
           runId: run.runId,
           from: 'WORKFLOW',
           payload: {
-            usage: this.#usageCount,
+            totalUsage: this.#usageCount,
           },
         });
 

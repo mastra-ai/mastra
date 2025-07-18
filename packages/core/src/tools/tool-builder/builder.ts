@@ -151,7 +151,18 @@ export class CoreToolBuilder extends MastraBase {
       let logger = options.logger || this.logger;
       try {
         logger.debug(start, { ...rest, args });
-        return await execFunction(args, execOptions);
+
+        // there is a small delay in stream output so we add an immediate to ensure the stream is ready
+        return await new Promise((resolve, reject) => {
+          setImmediate(async () => {
+            try {
+              const result = await execFunction(args, execOptions);
+              resolve(result);
+            } catch (err) {
+              reject(err);
+            }
+          });
+        });
       } catch (err) {
         const mastraError = new MastraError(
           {

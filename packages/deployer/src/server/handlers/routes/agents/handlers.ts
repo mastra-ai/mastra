@@ -145,6 +145,8 @@ export async function streamVNextGenerateHandler(c: Context): Promise<Response |
         } catch (err) {
           logger.error('Error in watch stream: ' + ((err as Error)?.message ?? 'Unknown error'));
         }
+
+        await stream.close();
       },
       async err => {
         logger.error('Error in watch stream: ' + err?.message);
