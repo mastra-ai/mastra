@@ -79,9 +79,9 @@ export function AgentInformation({ agentId }: { agentId: string }) {
           <TabList>
             <Tab value="overview">Overview</Tab>
             <Tab value="model-settings">Model Settings</Tab>
+            {memory?.result && <Tab value="memory">Memory</Tab>}
             <Tab value="endpoints">Endpoints</Tab>
             <Tab value="logs">Log Drains</Tab>
-            {memory?.result && <Tab value="memory">Memory</Tab>}
           </TabList>
 
           <TabContent value="overview">
@@ -92,14 +92,14 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             {isLoading && <Skeleton className="h-full" />}
             {agent && <AgentSettings />}
           </TabContent>
+          <TabContent value="memory">
+            {isLoading ? <Skeleton className="h-full" /> : <AgentMemory agentId={agentId} />}
+          </TabContent>
           <TabContent value="endpoints">
             {isLoading ? <Skeleton className="h-full" /> : <AgentEndpoints agentId={agentId} />}
           </TabContent>
           <TabContent value="logs">
             {isLoading ? <Skeleton className="h-full" /> : <AgentLogs agentId={agentId} />}
-          </TabContent>
-          <TabContent value="memory">
-            {isLoading ? <Skeleton className="h-full" /> : <AgentMemory agentId={agentId} />}
           </TabContent>
         </PlaygroundTabs>
       </div>
