@@ -420,7 +420,7 @@ export class MessageList {
           partsToAdd.set(index, part);
         }
       }
-      this.upsertPartsRelativeToAnchors({
+      this.addPartsToLatestMessage({
         latestMessage,
         messageV2,
         anchorMap: toolResultAnchorMap,
@@ -523,7 +523,7 @@ export class MessageList {
    * @param messageV2 - The message to upsert parts from.
    * @param anchorMap - The anchor map to use for upserting parts.
    */
-  private upsertPartsRelativeToAnchors({
+  private addPartsToLatestMessage({
     latestMessage,
     messageV2,
     anchorMap,
