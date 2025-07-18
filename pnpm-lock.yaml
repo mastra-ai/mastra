@@ -3010,9 +3010,6 @@ importers:
       pg:
         specifier: ^8.16.3
         version: 8.16.3
-      pg-connection-string:
-        specifier: ^2.9.1
-        version: 2.9.1
       xxhash-wasm:
         specifier: ^1.1.0
         version: 1.1.0
@@ -3035,9 +3032,6 @@ importers:
       '@types/pg':
         specifier: ^8.15.4
         version: 8.15.4
-      '@types/pg-pool':
-        specifier: ^2.0.6
-        version: 2.0.6
       eslint:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)

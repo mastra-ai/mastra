@@ -1,5 +1,4 @@
 import type { ConnectionOptions } from 'tls';
-import { parseIntoClientConfig } from 'pg-connection-string';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -80,7 +79,7 @@ export class PostgresStore extends MastraStorage {
 
       let poolConfig: PoolConfig;
       if ('connectionString' in config) {
-        poolConfig = parseIntoClientConfig(config.connectionString);
+        poolConfig = { connectionString: config.connectionString };
       } else {
         poolConfig = {
           host: config.host,
