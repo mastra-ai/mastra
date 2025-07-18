@@ -1,5 +1,6 @@
 import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel, UIMessage } from 'ai';
 
+import { generateId } from 'ai';
 import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2 } from '../agent/message-list';
 import { MastraBase } from '../base';
@@ -385,7 +386,7 @@ export abstract class MastraMemory extends MastraBase {
    * @returns A unique string ID
    */
   public generateId(): string {
-    return crypto.randomUUID();
+    return generateId();
   }
 
   /**

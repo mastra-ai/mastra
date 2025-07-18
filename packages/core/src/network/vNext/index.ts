@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { generateId } from 'ai';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { Mastra, MastraMessageV2, Tool } from '../..';
@@ -92,7 +92,7 @@ export class NewAgentNetwork extends MastraBase {
     await memory?.saveMessages({
       messages: [
         {
-          id: randomUUID() as string,
+          id: generateId(),
           type: 'text',
           role: 'user',
           content: { parts: [{ type: 'text', text: message }], format: 2 },
@@ -394,7 +394,7 @@ export class NewAgentNetwork extends MastraBase {
   }
 
   createWorkflow({ runtimeContext }: { runtimeContext?: RuntimeContext }) {
-    const runId = randomUUID();
+    const runId = generateId();
 
     const runtimeContextToUse = runtimeContext || new RuntimeContext();
 
@@ -609,7 +609,7 @@ export class NewAgentNetwork extends MastraBase {
         await memory?.saveMessages({
           messages: [
             {
-              id: randomUUID() as string,
+              id: generateId(),
               type: 'text',
               role: 'assistant',
               content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
@@ -752,7 +752,7 @@ export class NewAgentNetwork extends MastraBase {
         await memory?.saveMessages({
           messages: [
             {
-              id: randomUUID() as string,
+              id: generateId(),
               type: 'text',
               role: 'assistant',
               content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
@@ -829,7 +829,7 @@ export class NewAgentNetwork extends MastraBase {
         await memory?.saveMessages({
           messages: [
             {
-              id: randomUUID() as string,
+              id: generateId(),
               type: 'text',
               role: 'assistant',
               content: { parts: [{ type: 'text', text: JSON.stringify(finalResult) }], format: 2 },
