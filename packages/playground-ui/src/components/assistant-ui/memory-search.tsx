@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Search, X } from 'lucide-react';
+import { Search, X, ExternalLink } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Txt } from '@/ds/components/Txt';
@@ -198,7 +198,10 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
                 <button
                   key={result.id}
                   onClick={() => handleResultClick(result.id, result.threadId)}
-                  className="w-full px-4 py-3 hover:bg-surface4 transition-colors duration-150 text-left border-b border-border1 last:border-b-0"
+                  className={cn(
+                    "w-full px-4 py-3 hover:bg-surface4 transition-colors duration-150 text-left border-b border-border1 last:border-b-0",
+                    result.threadId !== currentThreadId && "border-l-2 border-l-blue-400"
+                  )}
                 >
                   <div className="flex flex-col gap-2">
                     {/* Context before */}
@@ -227,9 +230,21 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
                             {formatRelativeTime(new Date(result.createdAt))}
                           </Txt>
                           {result.threadTitle && (
-                            <Txt variant="ui-xs" className="text-icon3 truncate max-w-[150px]" title={result.threadTitle}>
-                              • {result.threadTitle}
-                            </Txt>
+                            <div className="flex items-center gap-1">
+                              <Txt 
+                                variant="ui-xs" 
+                                className={cn(
+                                  "truncate max-w-[150px]",
+                                  result.threadId !== currentThreadId ? "text-blue-400 font-medium" : "text-icon3"
+                                )} 
+                                title={result.threadTitle}
+                              >
+                                • {result.threadTitle}
+                              </Txt>
+                              {result.threadId !== currentThreadId && (
+                                <ExternalLink className="w-3 h-3 text-blue-400" />
+                              )}
+                            </div>
                           )}
                         </div>
                         <Txt variant="ui-sm" className="text-icon5 break-words">
