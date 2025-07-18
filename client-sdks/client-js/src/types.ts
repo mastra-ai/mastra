@@ -413,7 +413,17 @@ export interface LoopStreamVNextNetworkParams {
 export interface LoopVNextNetworkResponse {
   status: 'success';
   result: {
-    text: string;
+    task: string;
+    resourceId: string;
+    resourceType: 'agent' | 'workflow' | 'none' | 'tool';
+    result: string;
+    iteration: number;
+    isOneOff: boolean;
+    prompt: string;
+    threadId?: string | undefined;
+    threadResourceId?: string | undefined;
+    isComplete?: boolean | undefined;
+    completionReason?: string | undefined;
   };
   steps: WorkflowResult<any, any>['steps'];
 }

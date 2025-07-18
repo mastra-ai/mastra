@@ -279,10 +279,7 @@ export class NewAgentNetwork extends MastraBase {
         task: z.string(),
         resourceType: RESOURCE_TYPES,
       }),
-      outputSchema: z.object({
-        text: z.string(),
-        iteration: z.number(),
-      }),
+      outputSchema: networkWorkflow.outputSchema,
     })
       .dountil(networkWorkflow, async ({ inputData }) => {
         return inputData.isComplete || (maxIterations && inputData.iteration >= maxIterations);
