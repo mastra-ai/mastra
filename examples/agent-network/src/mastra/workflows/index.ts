@@ -1,26 +1,22 @@
-import { createStep, Workflow } from '@mastra/core/workflows';
+import { Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
+import { webSearchAgent } from '../agents';
 
-export const newWorkflow = new Workflow({
-  id: 'newWorkflow',
-  inputSchema: z.object({
+export const agentWorkflow = new Workflow({
+  name: 'Agent Workflow',
+  steps: [webSearchAgent.toStep()],
+  triggerSchema: z.object({
     prompt: z.string(),
   }),
-  outputSchema: z.object({
-    result: z.string(),
-  }),
-  steps: [
-    createStep({
-      id: 'createStep',
-      inputSchema: z.object({
-        prompt: z.string(),
-      }),
-      outputSchema: z.object({
-        result: z.string(),
-      }),
-      execute: async context => {
-        return { result: 'abcd' };
-      },
-    }),
-  ],
 });
+
+agentWorkflow
+  .step(webSearchAgent, {
+    variables: {
+      prompt: {
+        step: 'trigger',
+        path: 'prompt',
+      },
+    },
+  })
+  .commit();
