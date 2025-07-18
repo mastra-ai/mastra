@@ -21,12 +21,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
 
   return (
     <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto border-l-sm border-border1">
-      <AgentEntityHeader
-        agentId={agentId}
-        isLoading={isLoading}
-        isMemoryLoading={isMemoryLoading}
-        agentName={agent?.name || ''}
-      />
+      <AgentEntityHeader agentId={agentId} isLoading={isMemoryLoading} agentName={agent?.name || ''} />
 
       <div className="overflow-y-auto border-t-sm border-border1">
         <PlaygroundTabs defaultTab="overview">
