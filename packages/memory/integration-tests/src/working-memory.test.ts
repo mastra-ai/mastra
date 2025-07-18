@@ -321,7 +321,7 @@ describe('Working Memory Tests', () => {
           for (const part of message.content) {
             if (typeof part === `string`) continue;
             if (part.type === `tool-call` && part.toolName === `updateWorkingMemory`) {
-              memoryArgs.push((part.args as any).memory);
+              memoryArgs.push((part.input as any).memory);
             }
           }
         }
@@ -429,14 +429,13 @@ describe('Working Memory Tests', () => {
         ),
       ).toBe(false);
 
-      // TODO: again seems like we're getting V1 here but types say V2
-      // It actually should return V1 for now (CoreMessage compatible)
-
       // Pure text message should be present
-      expect(saved.some(m => m.content.content === 'Another normal message')).toBe(true);
+      expect(
+        saved.some(m => `text` in m.content.parts[0] && m.content.parts[0].text === 'Another normal message'),
+      ).toBe(true);
       // User message should be present
       expect(
-        saved.some(m => typeof m.content.content === 'string' && m.content.content.includes('User says something')),
+        saved.some(m => m.content.parts.find(p => p.type === 'text' && p.text?.includes?.('User says something'))),
       ).toBe(true);
     });
   });

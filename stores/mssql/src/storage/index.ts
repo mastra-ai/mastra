@@ -1139,13 +1139,19 @@ export class MSSQLStore extends MastraStorage {
 
         if (format === 'v1') {
           if (Array.isArray(message.content)) {
+            // Already in correct format
           } else if (typeof message.content === 'object' && message.content && Array.isArray(message.content.parts)) {
             message.content = message.content.parts;
+          } else if (typeof message.content === 'string') {
+            // Keep string content as-is for v1 messages
+            // The MessageList will handle the conversion
           } else {
             message.content = [{ type: 'text', text: '' }];
           }
         } else {
-          if (typeof message.content !== 'object' || !message.content || !('parts' in message.content)) {
+          if (typeof message.content === 'string') {
+            message.content = { format: 2, parts: [{ type: 'text', text: message.content }] };
+          } else if (typeof message.content !== 'object' || !message.content || !('parts' in message.content)) {
             message.content = { format: 2, parts: [{ type: 'text', text: '' }] };
           }
         }
@@ -1298,13 +1304,19 @@ export class MSSQLStore extends MastraStorage {
 
       if (format === 'v1') {
         if (Array.isArray(parsed.content)) {
+          // Already in correct format
         } else if (parsed.content?.parts) {
           parsed.content = parsed.content.parts;
+        } else if (typeof parsed.content === 'string') {
+          // Keep string content as-is for v1 messages
+          // The MessageList will handle the conversion
         } else {
           parsed.content = [{ type: 'text', text: '' }];
         }
       } else {
-        if (!parsed.content?.parts) {
+        if (typeof parsed.content === 'string') {
+          parsed = { ...parsed, content: { format: 2, parts: [{ type: 'text', text: parsed.content }] } };
+        } else if (!parsed.content?.parts) {
           parsed = { ...parsed, content: { format: 2, parts: [{ type: 'text', text: '' }] } };
         }
       }
