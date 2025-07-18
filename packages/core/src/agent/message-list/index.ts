@@ -371,7 +371,11 @@ export class MessageList {
     if (shouldAppendToLastAssistantMessage && appendNetworkMessage) {
       latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
 
-      for (const part of messageV2.content.parts.values()) {
+      // Used for mapping indexes for messageV2 parts to corresponding indexes in latestMessage
+      const toolResultAnchorMap = new Map<number, number>();
+      const partsToAdd = new Map<number, MastraMessageContentV2['parts'][number]>();
+
+      for (const [index, part] of messageV2.content.parts.entries()) {
         // If the incoming part is a tool-invocation result, find the corresponding call in the latest message
         if (part.type === 'tool-invocation') {
           const existingCallPart = [...latestMessage.content.parts]
@@ -381,42 +385,45 @@ export class MessageList {
           const existingCallToolInvocation = !!existingCallPart && existingCallPart.type === 'tool-invocation';
 
           if (existingCallToolInvocation) {
-            if (existingCallPart.toolInvocation.state === 'call' && part.toolInvocation.state === 'result') {
-              // Update the existing tool-call part with the result
-              existingCallPart.toolInvocation = {
-                ...existingCallPart.toolInvocation,
-                step: part.toolInvocation.step,
-                state: 'result',
-                result: part.toolInvocation.result,
-              };
-              if (!latestMessage.content.toolInvocations) {
-                latestMessage.content.toolInvocations = [];
+            if (part.toolInvocation.state === 'result') {
+              if (existingCallPart.toolInvocation.state === 'call') {
+                // Update the existing tool-call part with the result
+                existingCallPart.toolInvocation = {
+                  ...existingCallPart.toolInvocation,
+                  step: part.toolInvocation.step,
+                  state: 'result',
+                  result: part.toolInvocation.result,
+                };
+                if (!latestMessage.content.toolInvocations) {
+                  latestMessage.content.toolInvocations = [];
+                }
+                const toolInvocationIndex = latestMessage.content.toolInvocations.findIndex(
+                  t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
+                );
+                if (toolInvocationIndex === -1) {
+                  latestMessage.content.toolInvocations.push(existingCallPart.toolInvocation);
+                } else {
+                  latestMessage.content.toolInvocations[toolInvocationIndex] = existingCallPart.toolInvocation;
+                }
               }
-              const toolInvocationIndex = latestMessage.content.toolInvocations.findIndex(
-                t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
-              );
-              if (toolInvocationIndex === -1) {
-                latestMessage.content.toolInvocations.push(existingCallPart.toolInvocation);
-              } else {
-                latestMessage.content.toolInvocations[toolInvocationIndex] = existingCallPart.toolInvocation;
-              }
+              // Map the index of the tool call in messageV2 to the index of the tool call in latestMessage
+              const existingIndex = latestMessage.content.parts.findIndex(p => p === existingCallPart);
+              toolResultAnchorMap.set(index, existingIndex);
             }
             // Otherwise we do nothing, as we're not updating the tool call
           } else {
-            this.pushNewMessagePart({
-              latestMessage,
-              newMessage: messageV2,
-              part,
-            });
+            partsToAdd.set(index, part);
           }
         } else {
-          this.pushNewMessagePart({
-            latestMessage,
-            newMessage: messageV2,
-            part,
-          });
+          partsToAdd.set(index, part);
         }
       }
+      this.upsertPartsRelativeToAnchors({
+        latestMessage,
+        messageV2,
+        anchorMap: toolResultAnchorMap,
+        partsToAdd,
+      });
       if (latestMessage.createdAt.getTime() < messageV2.createdAt.getTime()) {
         latestMessage.createdAt = messageV2.createdAt;
       }
@@ -432,10 +439,6 @@ export class MessageList {
         latestMessage.content.content = messageV2.content.content;
       }
 
-      this.ensureStepStarts({
-        latestMessage,
-        messageV2,
-      });
       // If latest message gets appended to, it should be added to the new response messages set to ensure it gets saved
       this.pushMessageToSource(latestMessage, messageSource);
     }
@@ -476,100 +479,116 @@ export class MessageList {
     }
   }
 
+  /**
+   * Pushes a new message part to the latest message.
+   * @param latestMessage - The latest message to push the part to.
+   * @param newMessage - The new message to push the part from.
+   * @param part - The part to push.
+   * @param insertAt - The index at which to insert the part. Optional.
+   */
   private pushNewMessagePart({
     latestMessage,
     newMessage,
     part,
+    insertAt, // optional
   }: {
     latestMessage: MastraMessageV2;
     newMessage: MastraMessageV2;
     part: MastraMessageContentV2['parts'][number];
+    insertAt?: number;
   }) {
-    // Get the cache key for the part
     const partKey = MessageList.cacheKeyFromParts([part]);
-    // count how many times this part exists in the message
     const latestPartCount = latestMessage.content.parts.filter(
       p => MessageList.cacheKeyFromParts([p]) === partKey,
     ).length;
     const newPartCount = newMessage.content.parts.filter(p => MessageList.cacheKeyFromParts([p]) === partKey).length;
-    // Check if the part already exists the same number of times
-    if (latestPartCount < newPartCount && part.type !== 'step-start') {
-      latestMessage.content.parts.push(part);
+    // If the number of parts in the latest message is less than the number of parts in the new message, insert the part
+    if (latestPartCount < newPartCount) {
+      console.log(`latest message`, JSON.stringify(latestMessage, null, 2));
+      console.log(`new message`, JSON.stringify(newMessage, null, 2));
+      console.log(`part`, JSON.stringify(part, null, 2));
+      if (typeof insertAt === 'number') {
+        console.log(`inserting part at ${insertAt}`);
+        latestMessage.content.parts.splice(insertAt, 0, part);
+      } else {
+        console.log(`pushing part`);
+        latestMessage.content.parts.push(part);
+      }
+      return true;
     }
+    return false;
   }
 
-  private ensureStepStarts({
+  /**
+   * Upserts parts of messageV2 into latestMessage based on the anchorMap.
+   * This is used when appending a message to the last assistant message to ensure that parts are inserted in the correct order.
+   * @param latestMessage - The latest message to upsert parts into.
+   * @param messageV2 - The message to upsert parts from.
+   * @param anchorMap - The anchor map to use for upserting parts.
+   */
+  private upsertPartsRelativeToAnchors({
     latestMessage,
     messageV2,
+    anchorMap,
+    partsToAdd,
   }: {
     latestMessage: MastraMessageV2;
     messageV2: MastraMessageV2;
+    anchorMap: Map<number, number>;
+    partsToAdd: Map<number, MastraMessageContentV2['parts'][number]>;
   }) {
-    const latestPartIndexes = new Map<string, number[]>();
-    latestMessage.content.parts.forEach((p, idx) => {
-      const key = MessageList.cacheKeyFromParts([p]);
-      if (!latestPartIndexes.has(key)) {
-        latestPartIndexes.set(key, []);
-      }
-      latestPartIndexes.get(key)!.push(idx);
-    });
+    // Walk through messageV2, inserting any part not present at the canonical position
+    for (let i = 0; i < messageV2.content.parts.length; ++i) {
+      const part = messageV2.content.parts[i];
+      if (!part) continue;
+      const key = MessageList.cacheKeyFromParts([part]);
+      const partToAdd = partsToAdd.get(i);
+      if (!key || !partToAdd) continue;
+      if (anchorMap.size > 0) {
+        if (anchorMap.has(i)) continue; // skip anchors
+        // Find left anchor in messageV2
+        const leftAnchorV2 = [...anchorMap.keys()].filter(idx => idx < i).pop() ?? -1;
+        // Find right anchor in messageV2
+        const rightAnchorV2 = [...anchorMap.keys()].find(idx => idx > i) ?? -1;
 
-    const newPartIndexMap = new Map<number, string>();
-    messageV2.content.parts.forEach((p, idx) => {
-      const key = MessageList.cacheKeyFromParts([p]);
-      newPartIndexMap.set(idx, key);
-    });
+        // Map to latestMessage
+        const leftAnchorLatest = leftAnchorV2 !== -1 ? anchorMap.get(leftAnchorV2)! : 0;
 
-    // 3. For each step-start in messageV2, ensure it's present in latestMessage in canonical order
-    for (let index = 0; index < messageV2.content.parts.length; ++index) {
-      const part = messageV2.content.parts[index];
-      if (!part || part.type !== 'step-start') continue;
-      const partKey = MessageList.cacheKeyFromParts([part]);
+        // Compute offset from anchor
+        const offset = leftAnchorV2 === -1 ? i : i - leftAnchorV2;
 
-      // Only look right: find the first neighbor after this index that exists in latestMessage
-      let insertAt: number | undefined;
-      let alreadyPresent = false;
-      for (let i = index + 1; i < messageV2.content.parts.length; ++i) {
-        const neighborKey = newPartIndexMap.get(i);
-        if (!neighborKey) continue;
-        const neighborIndexes = latestPartIndexes.get(neighborKey);
-        if (neighborIndexes && neighborIndexes.length > 0) {
-          const candidate = neighborIndexes[0]!;
-          // If the slot before the neighbor already has a step-start, skip insertion
-          if (candidate > 0 && latestPartIndexes.get(partKey)?.includes(candidate - 1)) {
-            insertAt = undefined;
-            alreadyPresent = true;
-            break;
-          }
-          insertAt = candidate;
-          break;
-        }
-      }
-      if (alreadyPresent) {
-        continue;
-      }
-      // If no right neighbor, append to end (if not present at end)
-      if (insertAt === undefined) {
+        // Insert at proportional position
+        const insertAt = leftAnchorLatest + offset;
+
+        const rightAnchorLatest =
+          rightAnchorV2 !== -1 ? anchorMap.get(rightAnchorV2)! : latestMessage.content.parts.length;
+
         if (
-          latestMessage.content.parts.length > 0 &&
-          latestPartIndexes.get(partKey)?.includes(latestMessage.content.parts.length - 1)
+          insertAt >= 0 &&
+          insertAt <= rightAnchorLatest &&
+          !latestMessage.content.parts
+            .slice(insertAt, rightAnchorLatest)
+            .some(p => MessageList.cacheKeyFromParts([p]) === MessageList.cacheKeyFromParts([part]))
         ) {
-          continue; // Already present at end
+          this.pushNewMessagePart({
+            latestMessage,
+            newMessage: messageV2,
+            part,
+            insertAt,
+          });
+          for (const [v2Idx, latestIdx] of anchorMap.entries()) {
+            if (latestIdx >= insertAt) {
+              anchorMap.set(v2Idx, latestIdx + 1);
+            }
+          }
         }
-        insertAt = latestMessage.content.parts.length;
+      } else {
+        this.pushNewMessagePart({
+          latestMessage,
+          newMessage: messageV2,
+          part,
+        });
       }
-
-      // Insert only if not already present at insertAt
-      if (insertAt < latestMessage.content.parts.length && latestPartIndexes.get(partKey)?.includes(insertAt)) {
-        continue; // Already present at intended position
-      }
-
-      // Insert the step-start
-      latestMessage.content.parts.splice(insertAt, 0, part);
-
-      // Update the map for future insertions
-      if (!latestPartIndexes.has(partKey)) latestPartIndexes.set(partKey, []);
-      latestPartIndexes.get(partKey)!.push(insertAt);
     }
   }
 
