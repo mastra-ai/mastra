@@ -1696,6 +1696,304 @@ describe('MessageList', () => {
         expect(list.get.all.ui().length).toBe(2); // user and assistant
       });
     });
+    it('handles upgrading from tool-invocation (call) to [step-start, tool-invocation (result)]', () => {
+      const latestMessage = {
+        id: 'msg-toolcall',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-xyz', toolName: 'foo', args: {} },
+            },
+          ],
+        },
+        threadId,
+        resourceId,
+      } satisfies MastraMessageV2;
+
+      const messageV2 = {
+        ...latestMessage,
+        content: {
+          ...latestMessage.content,
+          parts: [
+            { type: 'step-start' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'call-xyz', toolName: 'foo', args: {}, result: 123 },
+            },
+          ],
+        },
+      } satisfies MastraMessageV2;
+
+      const list = new MessageList({ threadId, resourceId });
+      list.add(latestMessage, 'memory');
+      list.add(messageV2, 'response');
+
+      console.log(JSON.stringify(list.get.all.v2(), null, 2));
+
+      expect(list.get.all.v2()[0].content.parts).toEqual([
+        { type: 'step-start' },
+        {
+          type: 'tool-invocation',
+          toolInvocation: { state: 'result', toolCallId: 'call-xyz', toolName: 'foo', args: {}, result: 123 },
+        },
+      ]);
+    });
+    it('merges tool-invocation upgrade and prepends missing step-start/text', () => {
+      const latestMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'foo', args: {} },
+            },
+          ],
+        },
+        threadId,
+        resourceId,
+      } satisfies MastraMessageV2;
+
+      const messageV2 = {
+        ...latestMessage,
+        content: {
+          ...latestMessage.content,
+          parts: [
+            { type: 'step-start' },
+            { type: 'text', text: 'Let me do this.' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'call-1', toolName: 'foo', args: {}, result: 42 },
+            },
+          ],
+        },
+      } satisfies MastraMessageV2;
+
+      const list = new MessageList({ threadId, resourceId });
+      list.add(latestMessage, 'memory');
+      list.add(messageV2, 'response');
+
+      expect(list.get.all.v2()[0].content.parts).toEqual([
+        {
+          type: 'tool-invocation',
+          toolInvocation: { state: 'result', toolCallId: 'call-1', toolName: 'foo', args: {}, result: 42 },
+        },
+        { type: 'step-start' },
+        { type: 'text', text: 'Let me do this.' },
+      ]);
+    });
+    // it('inserts step-start and upgrades tool-invocation', () => {
+    //   const latestMessage = {
+    //     id: 'msg-2',
+    //     role: 'assistant',
+    //     createdAt: new Date(),
+    //     content: {
+    //       format: 2,
+    //       parts: [
+    //         { type: 'text', text: 'Doing it.' },
+    //         {
+    //           type: 'tool-invocation',
+    //           toolInvocation: { state: 'call', toolCallId: 'call-2', toolName: 'bar', args: {} },
+    //         },
+    //       ],
+    //     },
+    //     threadId,
+    //     resourceId,
+    //   } satisfies MastraMessageV2;
+
+    //   const messageV2 = {
+    //     ...latestMessage,
+    //     content: {
+    //       ...latestMessage.content,
+    //       parts: [
+    //         { type: 'step-start' },
+    //         {
+    //           type: 'tool-invocation',
+    //           toolInvocation: { state: 'result', toolCallId: 'call-2', toolName: 'bar', args: {}, result: 100 },
+    //         },
+    //       ],
+    //     },
+    //   } satisfies MastraMessageV2;
+
+    //   const list = new MessageList({ threadId, resourceId });
+    //   list.add(latestMessage, 'memory');
+    //   list.add(messageV2, 'response');
+
+    //   expect(list.get.all.v2()[0].content.parts).toEqual([
+    //     { type: 'text', text: 'Doing it.' },
+    //     { type: 'step-start' },
+    //     {
+    //       type: 'tool-invocation',
+    //       toolInvocation: { state: 'result', toolCallId: 'call-2', toolName: 'bar', args: {}, result: 100 },
+    //     },
+    //   ]);
+    // });
+    // it('upgrades only matching tool-invocation and preserves order', () => {
+    //   const latestMessage = {
+    //     id: 'msg-3',
+    //     role: 'assistant',
+    //     createdAt: new Date(),
+    //     content: {
+    //       format: 2,
+    //       parts: [
+    //         { type: 'step-start' },
+    //         { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'A', toolName: 'foo', args: {} } },
+    //         { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'B', toolName: 'bar', args: {} } },
+    //       ],
+    //     },
+    //     threadId,
+    //     resourceId,
+    //   } satisfies MastraMessageV2;
+
+    //   const messageV2 = {
+    //     ...latestMessage,
+    //     content: {
+    //       ...latestMessage.content,
+    //       parts: [
+    //         { type: 'step-start' },
+    //         {
+    //           type: 'tool-invocation',
+    //           toolInvocation: { state: 'result', toolCallId: 'B', toolName: 'bar', args: {}, result: 7 },
+    //         },
+    //         { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'A', toolName: 'foo', args: {} } },
+    //       ],
+    //     },
+    //   } satisfies MastraMessageV2;
+
+    //   const list = new MessageList({ threadId, resourceId });
+    //   list.add(latestMessage, 'memory');
+    //   list.add(messageV2, 'response');
+
+    //   expect(list.get.all.v2()[0].content.parts).toEqual([
+    //     { type: 'step-start' },
+    //     { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'A', toolName: 'foo', args: {} } },
+    //     { type: 'step-start' },
+    //     {
+    //       type: 'tool-invocation',
+    //       toolInvocation: { state: 'result', toolCallId: 'B', toolName: 'bar', args: {}, result: 7 },
+    //     },
+    //   ]);
+    // });
+    // it('drops text not present in new canonical message', () => {
+    //   const latestMessage = {
+    //     id: 'msg-4',
+    //     role: 'assistant',
+    //     createdAt: new Date(),
+    //     content: {
+    //       format: 2,
+    //       parts: [
+    //         { type: 'step-start' },
+    //         { type: 'text', text: 'Old reasoning' },
+    //         {
+    //           type: 'tool-invocation',
+    //           toolInvocation: { state: 'call', toolCallId: 'call-4', toolName: 'baz', args: {} },
+    //         },
+    //       ],
+    //     },
+    //     threadId,
+    //     resourceId,
+    //   } satisfies MastraMessageV2;
+
+    //   const messageV2 = {
+    //     ...latestMessage,
+    //     content: {
+    //       ...latestMessage.content,
+    //       parts: [
+    //         { type: 'step-start' },
+    //         {
+    //           type: 'tool-invocation',
+    //           toolInvocation: { state: 'result', toolCallId: 'call-4', toolName: 'baz', args: {}, result: 5 },
+    //         },
+    //       ],
+    //     },
+    //   } satisfies MastraMessageV2;
+
+    //   const list = new MessageList({ threadId, resourceId });
+    //   list.add(latestMessage, 'memory');
+    //   list.add(messageV2, 'response');
+
+    //   expect(list.get.all.v2()[0].content.parts).toEqual([
+    //     { type: 'step-start' },
+    //     { type: 'text', text: 'Old reasoning' },
+    //     { type: 'step-start' },
+    //     {
+    //       type: 'tool-invocation',
+    //       toolInvocation: { state: 'result', toolCallId: 'call-4', toolName: 'baz', args: {}, result: 5 },
+    //     },
+    //   ]);
+    // });
+    // it('merges incremental streaming updates step by step', () => {
+    //   const base = {
+    //     id: 'msg-5',
+    //     role: 'assistant',
+    //     createdAt: new Date(),
+    //     content: { format: 2, parts: [], toolInvocations: [] },
+    //     threadId,
+    //     resourceId,
+    //   } satisfies MastraMessageV2;
+
+    //   // Step 1: Only text
+    //   let list = new MessageList({ threadId, resourceId });
+    //   let msg1 = {
+    //     ...base,
+    //     content: { ...base.content, parts: [{ type: 'step-start' }, { type: 'text', text: 'First...' }] },
+    //   } satisfies MastraMessageV2;
+    //   list.add(msg1, 'memory');
+    //   expect(list.get.all.v2()[0].content.parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'First...' }]);
+
+    //   // Step 2: Add tool-invocation (call)
+    //   let msg2 = {
+    //     ...base,
+    //     content: {
+    //       ...base.content,
+    //       parts: [
+    //         { type: 'step-start' },
+    //         { type: 'text', text: 'First...' },
+    //         {
+    //           type: 'tool-invocation',
+    //           toolInvocation: { state: 'call', toolCallId: 'call-5', toolName: 'foo', args: {} },
+    //         },
+    //       ],
+    //     },
+    //   } satisfies MastraMessageV2;
+    //   list.add(msg2, 'memory');
+    //   expect(list.get.all.v2()[0].content.parts).toEqual([
+    //     { type: 'step-start' },
+    //     { type: 'text', text: 'First...' },
+    //     { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'call-5', toolName: 'foo', args: {} } },
+    //   ]);
+
+    //   // Step 3: Upgrade tool-invocation to result
+    //   let msg3 = {
+    //     ...base,
+    //     content: {
+    //       ...base.content,
+    //       parts: [
+    //         { type: 'step-start' },
+    //         { type: 'text', text: 'First...' },
+    //         {
+    //           type: 'tool-invocation',
+    //           toolInvocation: { state: 'result', toolCallId: 'call-5', toolName: 'foo', args: {}, result: 123 },
+    //         },
+    //       ],
+    //     },
+    //   } satisfies MastraMessageV2;
+    //   list.add(msg3, 'response');
+    //   expect(list.get.all.v2()[0].content.parts).toEqual([
+    //     { type: 'step-start' },
+    //     { type: 'text', text: 'First...' },
+    //     {
+    //       type: 'tool-invocation',
+    //       toolInvocation: { state: 'result', toolCallId: 'call-5', toolName: 'foo', args: {}, result: 123 },
+    //     },
+    //   ]);
+    // });
   });
 
   describe('core message sanitization', () => {

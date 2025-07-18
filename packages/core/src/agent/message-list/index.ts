@@ -371,7 +371,7 @@ export class MessageList {
     if (shouldAppendToLastAssistantMessage && appendNetworkMessage) {
       latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
 
-      for (const [index, part] of messageV2.content.parts.entries()) {
+      for (const part of messageV2.content.parts.values()) {
         // If the incoming part is a tool-invocation result, find the corresponding call in the latest message
         if (part.type === 'tool-invocation') {
           const existingCallPart = [...latestMessage.content.parts]
@@ -385,6 +385,7 @@ export class MessageList {
               // Update the existing tool-call part with the result
               existingCallPart.toolInvocation = {
                 ...existingCallPart.toolInvocation,
+                step: part.toolInvocation.step,
                 state: 'result',
                 result: part.toolInvocation.result,
               };
@@ -402,16 +403,16 @@ export class MessageList {
             }
             // Otherwise we do nothing, as we're not updating the tool call
           } else {
-            this.pushNewMessage({
+            this.pushNewMessagePart({
               latestMessage,
-              index,
+              newMessage: messageV2,
               part,
             });
           }
         } else {
-          this.pushNewMessage({
+          this.pushNewMessagePart({
             latestMessage,
-            index,
+            newMessage: messageV2,
             part,
           });
         }
@@ -430,12 +431,20 @@ export class MessageList {
         // Match what AI SDK does - content string is always the latest text part.
         latestMessage.content.content = messageV2.content.content;
       }
+
+      this.ensureStepStarts({
+        latestMessage,
+        messageV2,
+      });
       // If latest message gets appended to, it should be added to the new response messages set to ensure it gets saved
-      this.newResponseMessages.add(latestMessage);
+      this.pushMessageToSource(latestMessage, messageSource);
     }
     // Else the last message and this message are not both assistant messages OR an existing message has been updated and should be replaced. add a new message to the array or update an existing one.
     else {
-      const existingIndex = (shouldReplace && this.messages.findIndex(m => m.id === id)) || -1;
+      let existingIndex = -1;
+      if (shouldReplace) {
+        existingIndex = this.messages.findIndex(m => m.id === id);
+      }
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
 
       if (shouldReplace && existingMessage) {
@@ -444,17 +453,7 @@ export class MessageList {
         this.messages.push(messageV2);
       }
 
-      if (messageSource === `memory`) {
-        this.memoryMessages.add(messageV2);
-      } else if (messageSource === `response`) {
-        this.newResponseMessages.add(messageV2);
-      } else if (messageSource === `user`) {
-        this.newUserMessages.add(messageV2);
-      } else if (messageSource === `context`) {
-        this.userContextMessages.add(messageV2);
-      } else {
-        throw new Error(`Missing message source for message ${messageV2}`);
-      }
+      this.pushMessageToSource(messageV2, messageSource);
     }
 
     // make sure messages are always stored in order of when they were created!
@@ -463,28 +462,114 @@ export class MessageList {
     return this;
   }
 
-  private pushNewMessage({
+  private pushMessageToSource(messageV2: MastraMessageV2, messageSource: MessageSource) {
+    if (messageSource === `memory`) {
+      this.memoryMessages.add(messageV2);
+    } else if (messageSource === `response`) {
+      this.newResponseMessages.add(messageV2);
+    } else if (messageSource === `user`) {
+      this.newUserMessages.add(messageV2);
+    } else if (messageSource === `context`) {
+      this.userContextMessages.add(messageV2);
+    } else {
+      throw new Error(`Missing message source for message ${messageV2}`);
+    }
+  }
+
+  private pushNewMessagePart({
     latestMessage,
-    index,
+    newMessage,
     part,
   }: {
     latestMessage: MastraMessageV2;
-    index: number;
+    newMessage: MastraMessageV2;
     part: MastraMessageContentV2['parts'][number];
   }) {
-    const indexCheck =
-      // if there is no part at the index, or
-      !latestMessage.content.parts[index] ||
-      // or there is and the parts are not identical
-      MessageList.cacheKeyFromParts([latestMessage.content.parts[index]]) !== MessageList.cacheKeyFromParts([part]);
-
     // Get the cache key for the part
     const partKey = MessageList.cacheKeyFromParts([part]);
-    // Check if the part already exists in the message
-    const alreadyExists = latestMessage.content.parts.some(p => MessageList.cacheKeyFromParts([p]) === partKey);
-    // If the part isn't already present, or is a step-start and the parts are not identical, push it to the message
-    if (!alreadyExists || (part.type === 'step-start' && indexCheck)) {
+    // count how many times this part exists in the message
+    const latestPartCount = latestMessage.content.parts.filter(
+      p => MessageList.cacheKeyFromParts([p]) === partKey,
+    ).length;
+    const newPartCount = newMessage.content.parts.filter(p => MessageList.cacheKeyFromParts([p]) === partKey).length;
+    // Check if the part already exists the same number of times
+    if (latestPartCount < newPartCount && part.type !== 'step-start') {
       latestMessage.content.parts.push(part);
+    }
+  }
+
+  private ensureStepStarts({
+    latestMessage,
+    messageV2,
+  }: {
+    latestMessage: MastraMessageV2;
+    messageV2: MastraMessageV2;
+  }) {
+    const latestPartIndexes = new Map<string, number[]>();
+    latestMessage.content.parts.forEach((p, idx) => {
+      const key = MessageList.cacheKeyFromParts([p]);
+      if (!latestPartIndexes.has(key)) {
+        latestPartIndexes.set(key, []);
+      }
+      latestPartIndexes.get(key)!.push(idx);
+    });
+
+    const newPartIndexMap = new Map<number, string>();
+    messageV2.content.parts.forEach((p, idx) => {
+      const key = MessageList.cacheKeyFromParts([p]);
+      newPartIndexMap.set(idx, key);
+    });
+
+    // 3. For each step-start in messageV2, ensure it's present in latestMessage in canonical order
+    for (let index = 0; index < messageV2.content.parts.length; ++index) {
+      const part = messageV2.content.parts[index];
+      if (!part || part.type !== 'step-start') continue;
+      const partKey = MessageList.cacheKeyFromParts([part]);
+
+      // Only look right: find the first neighbor after this index that exists in latestMessage
+      let insertAt: number | undefined;
+      let alreadyPresent = false;
+      for (let i = index + 1; i < messageV2.content.parts.length; ++i) {
+        const neighborKey = newPartIndexMap.get(i);
+        if (!neighborKey) continue;
+        const neighborIndexes = latestPartIndexes.get(neighborKey);
+        if (neighborIndexes && neighborIndexes.length > 0) {
+          const candidate = neighborIndexes[0]!;
+          // If the slot before the neighbor already has a step-start, skip insertion
+          if (candidate > 0 && latestPartIndexes.get(partKey)?.includes(candidate - 1)) {
+            insertAt = undefined;
+            alreadyPresent = true;
+            break;
+          }
+          insertAt = candidate;
+          break;
+        }
+      }
+      if (alreadyPresent) {
+        continue;
+      }
+      // If no right neighbor, append to end (if not present at end)
+      if (insertAt === undefined) {
+        if (
+          latestMessage.content.parts.length > 0 &&
+          latestPartIndexes.get(partKey)?.includes(latestMessage.content.parts.length - 1)
+        ) {
+          continue; // Already present at end
+        }
+        insertAt = latestMessage.content.parts.length;
+      }
+
+      // Insert only if not already present at insertAt
+      if (insertAt < latestMessage.content.parts.length && latestPartIndexes.get(partKey)?.includes(insertAt)) {
+        continue; // Already present at intended position
+      }
+
+      // Insert the step-start
+      latestMessage.content.parts.splice(insertAt, 0, part);
+
+      // Update the map for future insertions
+      if (!latestPartIndexes.has(partKey)) latestPartIndexes.set(partKey, []);
+      latestPartIndexes.get(partKey)!.push(insertAt);
     }
   }
 
