@@ -2062,12 +2062,29 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     streamOptions?: AgentVNextStreamOptions<Output, StructuredOutput>,
-  ): MastraAgentStream {
+  ): MastraAgentStream<
+    Output extends ZodSchema
+      ? z.infer<Output>
+      : StructuredOutput extends ZodSchema
+        ? z.infer<StructuredOutput>
+        : unknown
+  > {
+    type ResolvedOutput = Output extends ZodSchema
+      ? z.infer<Output>
+      : StructuredOutput extends ZodSchema
+        ? z.infer<StructuredOutput>
+        : unknown;
     const defaultStreamOptionsPromise = this.getDefaultVNextStreamOptions<Output, StructuredOutput>({
       runtimeContext: streamOptions?.runtimeContext,
     });
 
-    return new MastraAgentStream({
+    return new MastraAgentStream<
+      Output extends ZodSchema
+        ? z.infer<Output>
+        : StructuredOutput extends ZodSchema
+          ? z.infer<StructuredOutput>
+          : unknown
+    >({
       getOptions: async () => {
         const defaultStreamOptions = await defaultStreamOptionsPromise;
 
@@ -2075,7 +2092,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           runId: defaultStreamOptions.runId!,
         };
       },
-      createStream: async (writer: WritableStream<ChunkType>) => {
+      createStream: async (writer: WritableStream<ChunkType>, onResult: (result: ResolvedOutput) => void) => {
         const defaultStreamOptions = await defaultStreamOptionsPromise;
         const mergedStreamOptions: AgentVNextStreamOptions<Output, StructuredOutput> & {
           writableStream: WritableStream<ChunkType>;
@@ -2088,28 +2105,56 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions);
         const { onFinish, runId, output, experimental_output, ...llmOptions } = await before();
 
-        const streamResult = llm.__stream({
-          ...llmOptions,
-          onFinish: async result => {
-            try {
-              const outputText = result.text;
-              await after({
-                result,
-                outputText,
-              });
-            } catch (e) {
-              this.logger.error('Error saving memory on finish', {
-                error: e,
-                runId,
-              });
-            }
-            await onFinish?.({ ...result, runId } as any);
-          },
-          runId,
-          experimental_output,
-        });
+        if (output) {
+          const streamResult = llm.__streamObject({
+            ...llmOptions,
+            onFinish: async result => {
+              onResult(result.object as ResolvedOutput);
+              try {
+                const outputText = JSON.stringify(result.object);
+                await after({
+                  result,
+                  outputText,
+                });
+              } catch (e) {
+                this.logger.error('Error saving memory on finish', {
+                  error: e,
+                  runId,
+                });
+              }
 
-        return streamResult.fullStream as unknown as ReadableStream<any>;
+              await onFinish?.({ ...result, runId } as any);
+            },
+            runId,
+            structuredOutput: output,
+          });
+
+          return streamResult.fullStream as unknown as ReadableStream<any>;
+        } else {
+          const streamResult = llm.__stream({
+            ...llmOptions,
+            onFinish: async result => {
+              onResult(result.text as ResolvedOutput);
+              try {
+                const outputText = result.text;
+                await after({
+                  result,
+                  outputText,
+                });
+              } catch (e) {
+                this.logger.error('Error saving memory on finish', {
+                  error: e,
+                  runId,
+                });
+              }
+              await onFinish?.({ ...result, runId } as any);
+            },
+            runId,
+            experimental_output,
+          });
+
+          return streamResult.fullStream as unknown as ReadableStream<any>;
+        }
       },
     });
   }
