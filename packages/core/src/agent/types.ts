@@ -1,7 +1,6 @@
 import type { GenerateTextOnStepFinishCallback, LanguageModelV1, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
-
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -23,6 +22,7 @@ import type { RuntimeContext } from '../runtime-context';
 import type { ToolAction, VercelTool } from '../tools';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
+import type { AgentVNextStreamOptions } from './agent.types';
 
 export type { MastraMessageV2, MastraMessageContentV2, MessageList } from './message-list/index.ts';
 export type { Message as AiMessageType } from 'ai';
@@ -48,6 +48,7 @@ export interface AgentConfig<
   workflows?: DynamicArgument<Record<string, Workflow>>;
   defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
   defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
+  defaultVNextStreamOptions?: DynamicArgument<AgentVNextStreamOptions>;
   mastra?: Mastra;
   evals?: TMetrics;
   memory?: DynamicArgument<MastraMemory>;
