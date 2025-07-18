@@ -105,10 +105,11 @@
   "sideEffects": false,
   "scripts": {
     "check": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "analyze": "size-limit --why",
     "lint": "eslint .",
     "pre-build": "tsup --silent --config tsup.config.ts --format esm,cjs",
-    "build": "node ./tools/commonjs-tsc-fixer.js",
+    "build": "pnpm pre-build && node ./tools/commonjs-tsc-fixer.js",
     "build:watch": "pnpm build --watch",
     "size": "size-limit",
     "test": "vitest run"
