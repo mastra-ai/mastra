@@ -6,7 +6,7 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
-    url: 'file:../mastra.db',
+    url: process.env.MASTRA_DB_URL || 'file:../mastra.db',
   }),
 });
 
