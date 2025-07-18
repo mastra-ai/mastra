@@ -135,6 +135,8 @@ export type AgentVNextStreamOptions<
 
   /** Whether to save messages incrementally on step finish */
   savePerStep?: boolean;
+
+  signal?: AbortSignal;
 } & CallSettings &
   Prompt &
   (Output extends undefined
