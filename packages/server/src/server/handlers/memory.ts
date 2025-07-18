@@ -571,8 +571,8 @@ export async function searchMemoryHandler({
         role: msg.role,
         content,
         createdAt: msg.createdAt,
-        threadId: thread?.id,
-        threadTitle: thread?.title || thread?.id,
+        threadId: threadId,
+        threadTitle: thread?.title || threadId,
       };
 
       // Add context if found
