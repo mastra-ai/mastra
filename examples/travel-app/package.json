@@ -14,7 +14,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "latest",
     "@mastra/core": "latest",
-    "@mastra/memory": "lastest",
+    "@mastra/memory": "latest",
     "@mastra/pg": "latest",
     "@radix-ui/react-checkbox": "^1.3.2",
     "@radix-ui/react-dialog": "^1.1.14",

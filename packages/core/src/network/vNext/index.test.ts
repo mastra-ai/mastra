@@ -1,5 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import type { UIMessage } from '@ai-sdk/ui-utils';
+import { config } from 'dotenv';
 import { describe, it } from 'vitest';
 import { z } from 'zod';
 import { createStep, createWorkflow } from '../..';
@@ -11,6 +12,8 @@ import { MastraMemory } from '../../memory';
 import { RuntimeContext } from '../../runtime-context';
 import { createTool } from '../../tools/index';
 import { NewAgentNetwork } from './index';
+
+config();
 
 class MockMemory extends MastraMemory {
   #byResourceId: Map<string, any[]> = new Map();
@@ -26,11 +29,15 @@ class MockMemory extends MastraMemory {
     });
   }
 
-  async getWorkingMemory({ threadId }: { threadId: string }) {
+  async getWorkingMemory({
+    threadId,
+  }: {
+    threadId: string;
+  }) {
     return this.#workingMemory.get(threadId) || null;
   }
 
-  async getWorkingMemoryTemplate() {
+  async getWorkingMemoryTemplate({}: { memoryConfig?: MemoryConfig } = {}) {
     return {
       format: 'json' as const,
       content: '{ "test": "test" }',
@@ -39,6 +46,17 @@ class MockMemory extends MastraMemory {
 
   async updateWorkingMemory({ threadId, workingMemory }: { threadId: string; workingMemory: string }) {
     this.#workingMemory.set(threadId, workingMemory);
+  }
+
+  async __experimental_updateWorkingMemoryVNext({
+    threadId,
+    workingMemory,
+  }: {
+    threadId: string;
+    workingMemory: string;
+  }): Promise<{ success: boolean; reason: string }> {
+    this.#workingMemory.set(threadId, workingMemory);
+    return { success: true, reason: 'Updated successfully' };
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }) {
