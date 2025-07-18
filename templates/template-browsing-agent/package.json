@@ -28,7 +28,7 @@
   "devDependencies": {
     "@types/node": "^24.0.4",
     "mastra": "latest",
-    "dotenv": "^17.0.0",
+    "dotenv": "^16.4.5",
     "typescript": "^5.8.3"
   }
 }
