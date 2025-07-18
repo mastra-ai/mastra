@@ -20,8 +20,7 @@ import {
   TABLE_TRACES,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import type { Client } from 'pg';
-import Pool from 'pg-pool';
+import { Pool } from 'pg';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
 
 import { PostgresStore } from '.';
@@ -2193,7 +2192,7 @@ describe('PostgresStore', () => {
     const schemaRestrictedUser = 'mastra_schema_restricted_storage';
     const restrictedPassword = 'test123';
     const testSchema = 'testSchema';
-    let adminDb: Pool<Client>;
+    let adminDb: Pool;
 
     beforeAll(async () => {
       // Create a separate pool for admin operations
