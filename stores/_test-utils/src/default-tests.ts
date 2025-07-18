@@ -809,6 +809,51 @@ export function createTestSuite(storage: MastraStorage) {
 
         expect(loadedSnapshot).toEqual(complexSnapshot);
       });
+
+      it('should persist and retrieve workflow snapshot with resourceId', async () => {
+        const workflowName = 'test-workflow-with-resource';
+        const runId = `run-${randomUUID()}`;
+        const resourceId = 'user-12345';
+        const snapshot = {
+          status: 'running',
+          context: {
+            stepResults: {},
+            attempts: {},
+            triggerData: { type: 'manual' },
+          },
+          value: {},
+          activePaths: [],
+          suspendedPaths: {},
+          runId,
+          timestamp: Date.now(),
+          serializedStepGraph: [],
+        } as unknown as WorkflowRunState;
+
+        await storage.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          resourceId,
+          snapshot,
+        });
+
+        const loadedSnapshot = await storage.loadWorkflowSnapshot({
+          workflowName,
+          runId,
+        });
+
+        expect(loadedSnapshot).toEqual(snapshot);
+
+        // Verify resourceId is stored by checking getWorkflowRunById
+        const workflowRun = await storage.getWorkflowRunById({
+          runId,
+          workflowName,
+        });
+
+        expect(workflowRun).toBeTruthy();
+        expect(workflowRun?.resourceId).toBe(resourceId);
+        expect(workflowRun?.runId).toBe(runId);
+        expect(workflowRun?.workflowName).toBe(workflowName);
+      });
     });
     describe('getWorkflowRuns', () => {
       beforeEach(async () => {

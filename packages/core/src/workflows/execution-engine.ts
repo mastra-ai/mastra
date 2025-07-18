@@ -37,6 +37,7 @@ export abstract class ExecutionEngine extends MastraBase {
   abstract execute<TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    resourceId?: string;
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;

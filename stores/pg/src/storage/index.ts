@@ -1227,10 +1227,12 @@ export class PostgresStore extends MastraStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
@@ -1239,14 +1241,15 @@ export class PostgresStore extends MastraStorage {
         `INSERT INTO ${this.getTableName(TABLE_WORKFLOW_SNAPSHOT)} (
           workflow_name,
           run_id,
+          "resourceId",
           snapshot,
           "createdAt",
           "updatedAt"
-        ) VALUES ($1, $2, $3, $4, $5)
+        ) VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (workflow_name, run_id) DO UPDATE
         SET snapshot = EXCLUDED.snapshot,
             "updatedAt" = EXCLUDED."updatedAt"`,
-        [workflowName, runId, JSON.stringify(snapshot), now, now],
+        [workflowName, runId, resourceId || null, JSON.stringify(snapshot), now, now],
       );
     } catch (error) {
       throw new MastraError(

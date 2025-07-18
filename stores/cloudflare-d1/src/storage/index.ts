@@ -1128,10 +1128,12 @@ export class D1Store extends MastraStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     const fullTableName = this.getTableName(TABLE_WORKFLOW_SNAPSHOT);
@@ -1151,6 +1153,7 @@ export class D1Store extends MastraStorage {
       : {
           workflow_name: workflowName,
           run_id: runId,
+          resourceId,
           snapshot: snapshot as Record<string, any>,
           createdAt: now,
           updatedAt: now,
