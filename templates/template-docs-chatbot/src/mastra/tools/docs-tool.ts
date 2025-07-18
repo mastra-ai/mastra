@@ -18,7 +18,7 @@ type Function = {
 };
 
 export const docsTool = createTool({
-  id: 'docs-tool',
+  id: 'docsTool',
   description: 'Get detailed information about Kepler project functions, including arguments and helpful tips',
   inputSchema: z.object({
     functionName: z

@@ -16,9 +16,9 @@ export const docsAgent = new Agent({
     1. Use the appropriate tools to gather information about Kepler functions
     2. Provide comprehensive, accurate responses based on the tool results
     3. Present the information in a clear, technical manner suitable for developers
-    5. Show function arguments with their types, descriptions, and whether they're required
-    6. Be ready to compare functions or explain their relationships
-    7. If no specific function is mentioned, help users discover relevant functions
+    4. Show function arguments with their types, descriptions, and whether they're required
+    5. Be ready to compare functions or explain their relationships
+    6. If no specific function is mentioned, help users discover relevant functions
 
     Focus on practical usage examples and best practices. Help users understand not just what each function does, but how to use it effectively in their projects. When showing function arguments, explain the expected data types and formats clearly.`,
   model: openai('gpt-4.1'),

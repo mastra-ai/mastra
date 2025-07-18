@@ -6,7 +6,7 @@ import { docsAgent } from './agents/docs-agent';
 
 export const mastra = new Mastra({
   agents: {
-    keplerAgent: docsAgent,
+    docsAgent,
   },
   mcpServers: {
     kepler: mcpServer,
@@ -24,7 +24,7 @@ export const mastra = new Mastra({
             timestamp: new Date().toISOString(),
             version: '1.0.0',
             services: {
-              agents: ['keplerAgent'],
+              agents: ['docsAgent'],
               workflows: [],
             },
           });
@@ -35,14 +35,14 @@ export const mastra = new Mastra({
         handler: async c => {
           return c.json({
             mcpServer: {
-              name: 'Kepler documentation MCP Server',
+              name: 'Example docs MCP Server',
               version: '1.0.0',
               availableTransports: ['http', 'sse'],
               endpoints: {
                 http: process.env.MCP_SERVER_URL || 'http://localhost:4111/mcp',
               },
-              availableTools: ['docs-tool'],
-              availableAgents: ['Kepler docs agent'],
+              availableTools: ['docsTool'],
+              availableAgents: ['docsAgent'],
             },
           });
         },
