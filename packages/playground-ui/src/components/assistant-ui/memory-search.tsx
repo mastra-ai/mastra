@@ -154,7 +154,6 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
   }, [currentThreadId, query, handleSearch]);
 
   const handleResultClick = (messageId: string, threadId?: string) => {
-    setIsOpen(false);
     onResultClick?.(messageId, threadId);
   };
 
