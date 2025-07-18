@@ -30,4 +30,7 @@ export const mastra = new Mastra({
       },
     },
   ],
+  // telemetry: {
+  //   enabled: false,
+  // }
 });
