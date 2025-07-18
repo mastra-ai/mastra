@@ -23,7 +23,6 @@
     "@mastra/core": "^0.8.3",
     "@radix-ui/react-dialog": "^1.1.11",
     "@radix-ui/react-label": "^2.1.2",
-    "@radix-ui/react-scroll-area": "^1.2.8",
     "@radix-ui/react-slot": "^1.1.2",
     "@tailwindcss/postcss": "^4.0.17",
     "@tanstack/react-virtual": "^3.13.8",
@@ -47,7 +46,8 @@
     "react-hook-form": "^7.54.2",
     "sonner": "^2.0.1",
     "tailwind-merge": "^2.6.0",
-    "tailwindcss": "^4.0.17"
+    "tailwindcss": "^4.0.17",
+    "use-stick-to-bottom": "^1.1.1"
   },
   "devDependencies": {
     "@shikijs/transformers": "^3.8.0",
