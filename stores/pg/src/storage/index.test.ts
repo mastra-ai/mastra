@@ -49,7 +49,14 @@ describe('PostgresStore', () => {
   describe('Public Fields Access', () => {
     let testDB: PostgresStore;
     beforeAll(async () => {
-      testDB = new PostgresStore(TEST_CONFIG);
+      testDB = new PostgresStore({
+        ...TEST_CONFIG,
+        pgPoolOptions: {
+          max: 10,
+          idleTimeoutMillis: 10000,
+          connectionTimeoutMillis: 4000,
+        },
+      });
     });
     afterAll(async () => {
       try {
@@ -66,6 +73,9 @@ describe('PostgresStore', () => {
       expect(typeof testDB.pool.query).toBe('function');
       expect(testDB.pool.end).toBeDefined();
       expect(typeof testDB.pool.end).toBe('function');
+      expect(testDB.pool.options.max).toBe(10);
+      expect(testDB.pool.options.idleTimeoutMillis).toBe(10000);
+      expect(testDB.pool.options.connectionTimeoutMillis).toBe(4000);
     });
 
     it('should allow direct database queries via public db field', async () => {
