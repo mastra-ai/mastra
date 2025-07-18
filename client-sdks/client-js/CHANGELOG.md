@@ -1,5 +1,16 @@
 # @mastra/client-js
 
+## 0.10.15-alpha.2
+
+### Patch Changes
+
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 2affc57: Fix output type of network loop
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [4933192]
+  - @mastra/core@0.11.0-alpha.2
+
 ## 0.10.15-alpha.1
 
 ### Patch Changes

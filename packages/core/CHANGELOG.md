@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.11.0-alpha.2
+
+### Patch Changes
+
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 2affc57: Fix output type of network loop
+- 4933192: Update Message List to ensure correct order of message parts
+
 ## 0.11.0-alpha.1
 
 ## 0.11.0-alpha.0

@@ -1,5 +1,18 @@
 # @mastra/deployer
 
+## 0.11.0-alpha.2
+
+### Patch Changes
+
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 24eb25c: Provide fallback for extracted mastra options during bundling
+- 9de6f58: Unlocks the dev playground if auth is enabled
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [4933192]
+  - @mastra/core@0.11.0-alpha.2
+  - @mastra/server@0.11.0-alpha.2
+
 ## 0.11.0-alpha.1
 
 ### Patch Changes
