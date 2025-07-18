@@ -70,6 +70,23 @@ export function removeAllOptionsFromMastraExcept(
 
         programPath.node.body.push(exportDeclaration);
       },
+
+      Program: {
+        exit(path) {
+          // Add a fallback export if no mastra configuration was found
+          const hasExport = path.node.body.some(
+            node => node.type === 'ExportNamedDeclaration' || node.type === 'ExportDefaultDeclaration',
+          );
+
+          if (!hasExport) {
+            const fallbackExportDeclaration = t.exportNamedDeclaration(
+              t.variableDeclaration('const', [t.variableDeclarator(t.identifier(option), t.objectExpression([]))]),
+              [],
+            );
+            path.node.body.push(fallbackExportDeclaration);
+          }
+        },
+      },
     },
   } as babel.PluginObj;
 }
