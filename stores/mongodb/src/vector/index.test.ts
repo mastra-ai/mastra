@@ -263,7 +263,10 @@ describe('MongoDBVector Integration Tests', () => {
     beforeAll(async () => {
       // Ensure testIndexName2 has at least one document
       const testVector = [1, 0, 0, 0];
-      const testMetadata = { label: 'test_filter_validation' };
+      const testMetadata = {
+        label: 'test_filter_validation',
+        timestamp: new Date('2024-01-01T00:00:00Z'),
+      };
 
       // First check if there are already documents
       const existingResults = await vectorDB.query({
@@ -335,6 +338,18 @@ describe('MongoDBVector Integration Tests', () => {
         queryVector: [1, 0, 0, 0],
       });
       expect(results).toEqual(results2);
+      expect(results.length).toBeGreaterThan(0);
+    });
+
+    it('handles filters with multiple properties', async () => {
+      const results = await retryQuery({
+        indexName: testIndexName2,
+        queryVector: [1, 0, 0, 0],
+        filter: {
+          'metadata.label': 'test_filter_validation',
+          'metadata.timestamp': { $gt: new Date('2023-01-01T00:00:00Z') },
+        },
+      });
       expect(results.length).toBeGreaterThan(0);
     });
 
