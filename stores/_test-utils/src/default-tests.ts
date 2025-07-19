@@ -3,8 +3,14 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from
 import type { MetricResult } from '@mastra/core/eval';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { MastraStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
-import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
-import { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core';
+import {
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_EPISODES,
+} from '@mastra/core/storage';
+import { MastraMessageV1, MastraMessageV2, StorageThreadType, StorageEpisodeType } from '@mastra/core';
 import { MastraMessageContentV2 } from '@mastra/core/agent';
 
 // Sample test data factory functions to ensure unique records
@@ -176,6 +182,35 @@ export const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepI
   expect(snapshot.context?.[stepId]?.status).toBe(status);
 };
 
+export const createSampleEpisode = ({
+  id = `episode-${randomUUID()}`,
+  resourceId = `resource-${randomUUID()}`,
+  threadId = `thread-${randomUUID()}`,
+  date = new Date(),
+}: {
+  id?: string;
+  resourceId?: string;
+  threadId?: string;
+  date?: Date;
+} = {}): StorageEpisodeType => ({
+  id,
+  resourceId,
+  threadId,
+  title: 'Test Episode',
+  shortSummary: 'A brief test episode',
+  detailedSummary: 'This is a detailed summary of the test episode with important information',
+  categories: ['test', 'sample'],
+  messageIds: [`msg-${randomUUID()}`, `msg-${randomUUID()}`],
+  causalContext: 'This happened because of testing requirements',
+  spatialContext: 'In the test environment',
+  relatedEpisodeIds: [],
+  sequenceId: `sequence-${randomUUID()}`,
+  significance: 0.7,
+  metadata: { test: true, version: 1 },
+  createdAt: date,
+  updatedAt: date,
+});
+
 export function createTestSuite(storage: MastraStorage) {
   describe(storage.constructor.name, () => {
     beforeAll(async () => {
@@ -188,6 +223,11 @@ export function createTestSuite(storage: MastraStorage) {
       await storage.clearTable({ tableName: TABLE_EVALS });
       await storage.clearTable({ tableName: TABLE_MESSAGES });
       await storage.clearTable({ tableName: TABLE_THREADS });
+
+      // Clear episodes table if supported
+      if (storage.supports.resourceEpisodicMemory) {
+        await storage.clearTable({ tableName: TABLE_EPISODES });
+      }
     });
 
     afterAll(async () => {
@@ -196,6 +236,11 @@ export function createTestSuite(storage: MastraStorage) {
       await storage.clearTable({ tableName: TABLE_EVALS });
       await storage.clearTable({ tableName: TABLE_MESSAGES });
       await storage.clearTable({ tableName: TABLE_THREADS });
+
+      // Clear episodes table if supported
+      if (storage.supports.resourceEpisodicMemory) {
+        await storage.clearTable({ tableName: TABLE_EPISODES });
+      }
     });
 
     describe('Thread Operations', () => {
@@ -1561,6 +1606,238 @@ export function createTestSuite(storage: MastraStorage) {
         const updatedThread = await storage.getThreadById({ threadId: thread.id });
         const newUpdatedAt = new Date(updatedThread!.updatedAt);
         expect(newUpdatedAt.getTime()).toBeGreaterThan(initialUpdatedAt.getTime());
+      });
+    });
+
+    describe('Episode Operations', () => {
+      // Skip these tests if episodic memory is not supported
+      beforeEach(async () => {
+        if (!storage.supports.resourceEpisodicMemory) {
+          return;
+        }
+      });
+
+      it('should save and retrieve an episode', async () => {
+        if (!storage.supports.resourceEpisodicMemory) {
+          return;
+        }
+
+        const episode = createSampleEpisode();
+
+        // Save episode
+        await storage.saveEpisode({ episode });
+
+        // Retrieve episode
+        const retrieved = await storage.getEpisodeById({ id: episode.id });
+        expect(retrieved).toBeTruthy();
+        expect(retrieved?.id).toBe(episode.id);
+        expect(retrieved?.title).toBe(episode.title);
+        expect(retrieved?.shortSummary).toBe(episode.shortSummary);
+        expect(retrieved?.detailedSummary).toBe(episode.detailedSummary);
+        expect(retrieved?.categories).toEqual(episode.categories);
+        expect(retrieved?.messageIds).toEqual(episode.messageIds);
+        expect(retrieved?.causalContext).toBe(episode.causalContext);
+        expect(retrieved?.spatialContext).toBe(episode.spatialContext);
+        expect(retrieved?.significance).toBe(episode.significance);
+      });
+
+      it('should get episodes by resource ID', async () => {
+        if (!storage.supports.resourceEpisodicMemory) {
+          return;
+        }
+
+        const resourceId = `resource-${randomUUID()}`;
+        const episodes = [
+          createSampleEpisode({ resourceId }),
+          createSampleEpisode({ resourceId }),
+          createSampleEpisode({ resourceId }),
+          createSampleEpisode({ resourceId: `other-${randomUUID()}` }), // Different resource
+        ];
+
+        // Save all episodes
+        for (const episode of episodes) {
+          await storage.saveEpisode({ episode });
+        }
+
+        // Get episodes for specific resource
+        const resourceEpisodes = await storage.getEpisodesByResourceId({ resourceId });
+        expect(resourceEpisodes).toHaveLength(3);
+        expect(resourceEpisodes.every(ep => ep.resourceId === resourceId)).toBe(true);
+      });
+
+      it('should get episodes by category', async () => {
+        if (!storage.supports.resourceEpisodicMemory) {
+          return;
+        }
+
+        const resourceId = `resource-${randomUUID()}`;
+        const episodes = [
+          createSampleEpisode({ resourceId, date: new Date() }),
+          createSampleEpisode({ resourceId, date: new Date() }),
+          createSampleEpisode({ resourceId, date: new Date() }),
+        ];
+
+        // Modify categories
+        episodes[0].categories = ['work', 'important'];
+        episodes[1].categories = ['personal', 'family'];
+        episodes[2].categories = ['work', 'meeting'];
+
+        // Save all episodes
+        for (const episode of episodes) {
+          await storage.saveEpisode({ episode });
+        }
+
+        // Get episodes by category
+        const workEpisodes = await storage.getEpisodesByCategory({ resourceId, category: 'work' });
+        expect(workEpisodes).toHaveLength(2);
+        expect(workEpisodes.every(ep => ep.categories.includes('work'))).toBe(true);
+
+        const familyEpisodes = await storage.getEpisodesByCategory({ resourceId, category: 'family' });
+        expect(familyEpisodes).toHaveLength(1);
+        expect(familyEpisodes[0].categories).toContain('family');
+      });
+
+      it('should update an episode', async () => {
+        if (!storage.supports.resourceEpisodicMemory) {
+          return;
+        }
+
+        const episode = createSampleEpisode();
+        await storage.saveEpisode({ episode });
+
+        // Update episode
+        const updates = {
+          title: 'Updated Title',
+          shortSummary: 'Updated summary',
+          categories: ['updated', 'test'],
+          significance: 0.9,
+        };
+
+        await storage.updateEpisode({ id: episode.id, updates });
+
+        // Verify updates
+        const updated = await storage.getEpisodeById({ id: episode.id });
+        expect(updated?.title).toBe(updates.title);
+        expect(updated?.shortSummary).toBe(updates.shortSummary);
+        expect(updated?.categories).toEqual(updates.categories);
+        expect(updated?.significance).toBe(updates.significance);
+        // Original fields should remain unchanged
+        expect(updated?.detailedSummary).toBe(episode.detailedSummary);
+        expect(updated?.resourceId).toBe(episode.resourceId);
+      });
+
+      it('should get categories for a resource', async () => {
+        if (!storage.supports.resourceEpisodicMemory) {
+          return;
+        }
+
+        const resourceId = `resource-${randomUUID()}`;
+        const episodes = [
+          createSampleEpisode({ resourceId }),
+          createSampleEpisode({ resourceId }),
+          createSampleEpisode({ resourceId }),
+        ];
+
+        // Set different categories
+        episodes[0].categories = ['work', 'meeting'];
+        episodes[1].categories = ['personal', 'health'];
+        episodes[2].categories = ['work', 'project', 'meeting'];
+
+        // Save all episodes
+        for (const episode of episodes) {
+          await storage.saveEpisode({ episode });
+        }
+
+        // Get all categories for resource
+        const categories = await storage.getCategoriesForResource({ resourceId });
+        expect(categories).toContain('work');
+        expect(categories).toContain('meeting');
+        expect(categories).toContain('personal');
+        expect(categories).toContain('health');
+        expect(categories).toContain('project');
+        // Should have unique categories
+        expect(new Set(categories).size).toBe(categories.length);
+      });
+
+      it('should handle non-existent episode retrieval', async () => {
+        if (!storage.supports.resourceEpisodicMemory) {
+          return;
+        }
+
+        const nonExistentId = `episode-${randomUUID()}`;
+        const episode = await storage.getEpisodeById({ id: nonExistentId });
+        expect(episode).toBeNull();
+      });
+
+      it('should handle empty resource episode list', async () => {
+        if (!storage.supports.resourceEpisodicMemory) {
+          return;
+        }
+
+        const resourceId = `resource-${randomUUID()}`;
+        const episodes = await storage.getEpisodesByResourceId({ resourceId });
+        expect(episodes).toEqual([]);
+      });
+
+      it('should handle episode relationships', async () => {
+        if (!storage.supports.resourceEpisodicMemory) {
+          return;
+        }
+
+        const episode1 = createSampleEpisode();
+        const episode2 = createSampleEpisode();
+        const episode3 = createSampleEpisode();
+
+        // Set up relationships
+        episode1.relatedEpisodeIds = [episode2.id, episode3.id];
+        episode2.relatedEpisodeIds = [episode1.id];
+
+        // Save episodes
+        await storage.saveEpisode({ episode: episode1 });
+        await storage.saveEpisode({ episode: episode2 });
+        await storage.saveEpisode({ episode: episode3 });
+
+        // Verify relationships are stored
+        const retrieved1 = await storage.getEpisodeById({ id: episode1.id });
+        expect(retrieved1?.relatedEpisodeIds).toContain(episode2.id);
+        expect(retrieved1?.relatedEpisodeIds).toContain(episode3.id);
+
+        const retrieved2 = await storage.getEpisodeById({ id: episode2.id });
+        expect(retrieved2?.relatedEpisodeIds).toContain(episode1.id);
+      });
+
+      it('should handle episode sequences', async () => {
+        if (!storage.supports.resourceEpisodicMemory) {
+          return;
+        }
+
+        const resourceId = `resource-${randomUUID()}`;
+        const sequenceId = `sequence-${randomUUID()}`;
+
+        const episodes = [
+          createSampleEpisode({ resourceId, date: new Date('2024-01-01') }),
+          createSampleEpisode({ resourceId, date: new Date('2024-01-02') }),
+          createSampleEpisode({ resourceId, date: new Date('2024-01-03') }),
+          createSampleEpisode({ resourceId, date: new Date('2024-01-04') }), // Not in sequence
+        ];
+
+        // Assign sequence to first 3 episodes
+        episodes[0].sequenceId = sequenceId;
+        episodes[1].sequenceId = sequenceId;
+        episodes[2].sequenceId = sequenceId;
+        episodes[3].sequenceId = undefined;
+
+        // Save all episodes
+        for (const episode of episodes) {
+          await storage.saveEpisode({ episode });
+        }
+
+        // Retrieve all episodes and filter by sequence
+        const allEpisodes = await storage.getEpisodesByResourceId({ resourceId });
+        const sequenceEpisodes = allEpisodes.filter(ep => ep.sequenceId === sequenceId);
+
+        expect(sequenceEpisodes).toHaveLength(3);
+        expect(sequenceEpisodes.every(ep => ep.sequenceId === sequenceId)).toBe(true);
       });
     });
   });

@@ -1,6 +1,6 @@
 import type { MastraMessageContentV2, MastraMessageV2 } from '../agent';
 import { MastraBase } from '../base';
-import type { MastraMessageV1, StorageThreadType } from '../memory/types';
+import type { MastraMessageV1, StorageThreadType, StorageEpisodeType } from '../memory/types';
 import type { Trace } from '../telemetry';
 import type { WorkflowRunState } from '../workflows';
 
@@ -11,6 +11,7 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_RESOURCES,
+  TABLE_EPISODES,
   TABLE_SCHEMAS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
@@ -50,10 +51,12 @@ export abstract class MastraStorage extends MastraBase {
   public get supports(): {
     selectByIncludeResourceScope: boolean;
     resourceWorkingMemory: boolean;
+    resourceEpisodicMemory: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
       resourceWorkingMemory: false,
+      resourceEpisodicMemory: false,
     };
   }
 
@@ -219,6 +222,49 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getTraces(args: StorageGetTracesArg): Promise<any[]>;
 
+  // Episode methods
+  async saveEpisode(_: { episode: StorageEpisodeType }): Promise<void> {
+    throw new Error(
+      `Episodic memory is not supported by this storage adapter (${this.constructor.name}). ` +
+        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash).`,
+    );
+  }
+
+  async getEpisodeById(_: { id: string }): Promise<StorageEpisodeType | null> {
+    throw new Error(
+      `Episodic memory is not supported by this storage adapter (${this.constructor.name}). ` +
+        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash).`,
+    );
+  }
+
+  async getEpisodesByResourceId(_: { resourceId: string }): Promise<StorageEpisodeType[]> {
+    throw new Error(
+      `Episodic memory is not supported by this storage adapter (${this.constructor.name}). ` +
+        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash).`,
+    );
+  }
+
+  async getEpisodesByCategory(_: { resourceId: string; category: string }): Promise<StorageEpisodeType[]> {
+    throw new Error(
+      `Episodic memory is not supported by this storage adapter (${this.constructor.name}). ` +
+        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash).`,
+    );
+  }
+
+  async updateEpisode(_: { id: string; updates: Partial<StorageEpisodeType> }): Promise<void> {
+    throw new Error(
+      `Episodic memory is not supported by this storage adapter (${this.constructor.name}). ` +
+        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash).`,
+    );
+  }
+
+  async getCategoriesForResource(_: { resourceId: string }): Promise<string[]> {
+    throw new Error(
+      `Episodic memory is not supported by this storage adapter (${this.constructor.name}). ` +
+        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash).`,
+    );
+  }
+
   async init(): Promise<void> {
     // to prevent race conditions, await any current init
     if (this.shouldCacheInit && (await this.hasInitialized)) {
@@ -258,6 +304,16 @@ export abstract class MastraStorage extends MastraBase {
         this.createTable({
           tableName: TABLE_RESOURCES,
           schema: TABLE_SCHEMAS[TABLE_RESOURCES],
+        }),
+      );
+    }
+
+    // Only create episodes table for storage adapters that support it
+    if (this.supports.resourceEpisodicMemory) {
+      tableCreationTasks.push(
+        this.createTable({
+          tableName: TABLE_EPISODES,
+          schema: TABLE_SCHEMAS[TABLE_EPISODES],
         }),
       );
     }

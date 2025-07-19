@@ -1,0 +1,126 @@
+# listEpisodes
+
+Retrieves all episodes for a specific resource, sorted by creation date (newest first).
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({
+  options: {
+    episodicMemory: { enabled: true }
+  }
+});
+
+// Get all episodes for a user
+const episodes = await memory.listEpisodes({
+  resourceId: "user-123",
+});
+
+// Filter episodes by significance
+const importantEpisodes = episodes.filter(
+  episode => episode.significance && episode.significance >= 0.8
+);
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description:
+        "Identifier for the resource (user) whose episodes to retrieve",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+Returns an array of `StorageEpisodeType` objects, each containing:
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier of the episode",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "Resource ID associated with the episode",
+    },
+    {
+      name: "threadId",
+      type: "string",
+      description: "Thread ID where the episode was created",
+    },
+    {
+      name: "title",
+      type: "string",
+      description: "Title of the episode",
+    },
+    {
+      name: "shortSummary",
+      type: "string",
+      description: "Brief summary of the episode",
+    },
+    {
+      name: "detailedSummary",
+      type: "string",
+      description: "Full description of the episode",
+    },
+    {
+      name: "categories",
+      type: "string[]",
+      description: "Category labels for the episode",
+    },
+    {
+      name: "significance",
+      type: "number | undefined",
+      description: "Importance score (0-1)",
+    },
+    {
+      name: "causalContext",
+      type: "string | undefined",
+      description: "Why this happened or what led to it",
+    },
+    {
+      name: "spatialContext",
+      type: "string | undefined",
+      description: "Where this occurred",
+    },
+    {
+      name: "relationships",
+      type: "EpisodeRelationship[] | undefined",
+      description: "Relationships to other episodes",
+    },
+    {
+      name: "sequenceId",
+      type: "string | undefined",
+      description: "ID of the sequence this episode belongs to",
+    },
+    {
+      name: "createdAt",
+      type: "Date",
+      description: "Timestamp when the episode was created",
+    },
+    {
+      name: "updatedAt",
+      type: "Date",
+      description: "Timestamp when the episode was last updated",
+    },
+  ]}
+/>
+
+### Related
+
+- [Memory Class Reference](/reference/memory/Memory.mdx)
+- [Episodic Memory Guide](/docs/memory/episodic-memory.mdx)
+- [createEpisode](/reference/memory/createEpisode.mdx)
+- [getEpisodesByCategory](/reference/memory/getEpisodesByCategory.mdx)
+- [getEpisodesInSequence](/reference/memory/getEpisodesInSequence.mdx)

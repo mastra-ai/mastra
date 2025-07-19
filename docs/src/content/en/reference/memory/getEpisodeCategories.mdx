@@ -1,0 +1,76 @@
+# getEpisodeCategories
+
+Retrieves a list of all unique categories used across all episodes for a specific resource.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({
+  options: {
+    episodicMemory: { enabled: true }
+  }
+});
+
+// Get all categories used by the user
+const categories = await memory.getEpisodeCategories({
+  resourceId: "user-123",
+});
+
+console.log("Episode categories:", categories);
+// Output: ["health", "work", "family", "travel", "goals", ...]
+
+// Use categories to create a filtering UI
+const episodesByCategory = {};
+for (const category of categories) {
+  episodesByCategory[category] = await memory.getEpisodesByCategory({
+    resourceId: "user-123",
+    category,
+  });
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description:
+        "Identifier for the resource (user) whose episode categories to retrieve",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+Returns an array of unique category strings.
+
+<PropertiesTable
+  content={[
+    {
+      name: "categories",
+      type: "string[]",
+      description: "Array of unique category names used across all episodes for the resource",
+    },
+  ]}
+/>
+
+## Implementation Details
+
+The categories are extracted from:
+1. All episodes stored for the resource
+2. The resource's metadata (accumulated categories)
+
+This ensures that even if all episodes in a category are deleted, the category history is preserved.
+
+### Related
+
+- [Memory Class Reference](/reference/memory/Memory.mdx)
+- [Episodic Memory Guide](/docs/memory/episodic-memory.mdx)
+- [getEpisodesByCategory](/reference/memory/getEpisodesByCategory.mdx)
+- [createEpisode](/reference/memory/createEpisode.mdx)
+- [listEpisodes](/reference/memory/listEpisodes.mdx)

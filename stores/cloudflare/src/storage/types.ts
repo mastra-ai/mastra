@@ -1,5 +1,5 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
-import type { StorageThreadType, MastraMessageV2 } from '@mastra/core/memory';
+import type { StorageThreadType, MastraMessageV2, StorageEpisodeType } from '@mastra/core/memory';
 import type {
   TABLE_MESSAGES,
   TABLE_THREADS,
@@ -7,6 +7,7 @@ import type {
   TABLE_EVALS,
   TABLE_TRACES,
   TABLE_RESOURCES,
+  TABLE_EPISODES,
   TABLE_NAMES,
   EvalRow,
   StorageResourceType,
@@ -74,6 +75,7 @@ export type RecordTypes = {
   [TABLE_EVALS]: EvalRow;
   [TABLE_TRACES]: any;
   [TABLE_RESOURCES]: StorageResourceType;
+  [TABLE_EPISODES]: StorageEpisodeType;
 };
 
 export type ListOptions = {

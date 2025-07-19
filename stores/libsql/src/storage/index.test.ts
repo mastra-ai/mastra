@@ -7,10 +7,11 @@ import {
   createSampleMessageV1,
   resetRole,
   createSampleMessageV2,
+  createSampleEpisode,
 } from '@internal/storage-test-utils';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core';
 import { Mastra } from '@mastra/core/mastra';
-import { TABLE_EVALS, TABLE_TRACES, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
+import { TABLE_EVALS, TABLE_TRACES, TABLE_MESSAGES, TABLE_THREADS, TABLE_EPISODES } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 
 import { LibSQLStore } from './index';
@@ -583,5 +584,217 @@ describe('LibSQLStore Double-nesting Prevention', () => {
     // Additional check: ensure the message doesn't have the "Found unhandled message" structure
     expect(retrievedMessage.content.parts).toBeDefined();
     expect(Array.isArray(retrievedMessage.content.parts)).toBe(true);
+  });
+});
+
+describe('LibSQLStore Episode Features', () => {
+  let store: LibSQLStore;
+
+  beforeAll(async () => {
+    store = libsql;
+  });
+
+  beforeEach(async () => {
+    await store.clearTable({ tableName: TABLE_EPISODES });
+  });
+
+  describe('Episode JSON serialization', () => {
+    it('should properly serialize and deserialize array fields', async () => {
+      const episode = createSampleEpisode();
+      episode.categories = ['work', 'important', 'milestone'];
+      episode.messageIds = ['msg-1', 'msg-2', 'msg-3'];
+      episode.relatedEpisodeIds = ['ep-1', 'ep-2'];
+
+      await store.saveEpisode({ episode });
+
+      const retrieved = await store.getEpisodeById({ id: episode.id });
+      expect(retrieved).toBeTruthy();
+      expect(Array.isArray(retrieved!.categories)).toBe(true);
+      expect(retrieved!.categories).toEqual(['work', 'important', 'milestone']);
+      expect(Array.isArray(retrieved!.messageIds)).toBe(true);
+      expect(retrieved!.messageIds).toEqual(['msg-1', 'msg-2', 'msg-3']);
+      expect(Array.isArray(retrieved!.relatedEpisodeIds)).toBe(true);
+      expect(retrieved!.relatedEpisodeIds).toEqual(['ep-1', 'ep-2']);
+    });
+
+    it('should handle empty arrays correctly', async () => {
+      const episode = createSampleEpisode();
+      episode.categories = [];
+      episode.messageIds = [];
+      episode.relatedEpisodeIds = [];
+
+      await store.saveEpisode({ episode });
+
+      const retrieved = await store.getEpisodeById({ id: episode.id });
+      expect(retrieved!.categories).toEqual([]);
+      expect(retrieved!.messageIds).toEqual([]);
+      expect(retrieved!.relatedEpisodeIds).toEqual([]);
+    });
+
+    it('should properly serialize metadata field', async () => {
+      const episode = createSampleEpisode();
+      episode.metadata = {
+        complex: {
+          nested: {
+            data: 'value',
+            array: [1, 2, 3],
+          },
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      await store.saveEpisode({ episode });
+
+      const retrieved = await store.getEpisodeById({ id: episode.id });
+      expect(retrieved!.metadata).toEqual(episode.metadata);
+    });
+  });
+
+  describe('Category management in resource metadata', () => {
+    it('should create resource with categories when first episode is saved', async () => {
+      const resourceId = `resource-${randomUUID()}`;
+      const episode = createSampleEpisode({ resourceId });
+      episode.categories = ['work', 'project'];
+
+      await store.saveEpisode({ episode });
+
+      // Check resource was created with categories
+      const resource = await store.getResourceById({ resourceId });
+      expect(resource).toBeTruthy();
+      expect(resource!.metadata?.episodeCategories).toBeTruthy();
+      expect(resource!.metadata.episodeCategories).toContain('work');
+      expect(resource!.metadata.episodeCategories).toContain('project');
+    });
+
+    it('should update resource categories when new categories are added', async () => {
+      const resourceId = `resource-${randomUUID()}`;
+
+      // Save first episode
+      const episode1 = createSampleEpisode({ resourceId });
+      episode1.categories = ['work', 'meeting'];
+      await store.saveEpisode({ episode: episode1 });
+
+      // Save second episode with new categories
+      const episode2 = createSampleEpisode({ resourceId });
+      episode2.categories = ['personal', 'meeting']; // 'meeting' is duplicate
+      await store.saveEpisode({ episode: episode2 });
+
+      // Check categories are properly merged
+      const categories = await store.getCategoriesForResource({ resourceId });
+      expect(categories).toContain('work');
+      expect(categories).toContain('meeting');
+      expect(categories).toContain('personal');
+      expect(categories).toHaveLength(3); // No duplicates
+    });
+
+    it('should update resource categories when episode is updated', async () => {
+      const resourceId = `resource-${randomUUID()}`;
+      const episode = createSampleEpisode({ resourceId });
+      episode.categories = ['work'];
+
+      await store.saveEpisode({ episode });
+
+      // Update episode with new categories
+      await store.updateEpisode({
+        id: episode.id,
+        updates: { categories: ['personal', 'health'] },
+      });
+
+      // Check categories were updated
+      const categories = await store.getCategoriesForResource({ resourceId });
+      expect(categories).toContain('work'); // Original still there
+      expect(categories).toContain('personal');
+      expect(categories).toContain('health');
+    });
+  });
+
+  describe('Episode update error handling', () => {
+    it('should throw error when updating non-existent episode', async () => {
+      const nonExistentId = `episode-${randomUUID()}`;
+
+      await expect(
+        store.updateEpisode({
+          id: nonExistentId,
+          updates: { title: 'New Title' },
+        }),
+      ).rejects.toThrow('EPISODE_NOT_FOUND');
+    });
+  });
+
+  describe('Episode ordering', () => {
+    it('should return episodes ordered by createdAt descending', async () => {
+      const resourceId = `resource-${randomUUID()}`;
+      const dates = [new Date('2024-01-01'), new Date('2024-01-03'), new Date('2024-01-02')];
+
+      const episodes = dates.map((date, i) =>
+        createSampleEpisode({
+          resourceId,
+          date,
+          id: `episode-${i}`,
+        }),
+      );
+
+      // Save in random order
+      for (const episode of episodes) {
+        await store.saveEpisode({ episode });
+      }
+
+      // Get episodes - should be ordered by createdAt desc
+      const retrieved = await store.getEpisodesByResourceId({ resourceId });
+      expect(retrieved).toHaveLength(3);
+      expect(retrieved[0].id).toBe('episode-1'); // Jan 3
+      expect(retrieved[1].id).toBe('episode-2'); // Jan 2
+      expect(retrieved[2].id).toBe('episode-0'); // Jan 1
+    });
+  });
+
+  describe('Episode filtering by category', () => {
+    it('should handle case-sensitive category filtering', async () => {
+      const resourceId = `resource-${randomUUID()}`;
+      const episode = createSampleEpisode({ resourceId });
+      episode.categories = ['Work', 'IMPORTANT', 'MileStone'];
+
+      await store.saveEpisode({ episode });
+
+      // Exact case match
+      const workEpisodes = await store.getEpisodesByCategory({ resourceId, category: 'Work' });
+      expect(workEpisodes).toHaveLength(1);
+
+      // Different case - should not match
+      const workLowercase = await store.getEpisodesByCategory({ resourceId, category: 'work' });
+      expect(workLowercase).toHaveLength(0);
+    });
+
+    it('should filter episodes with JSON_EACH correctly', async () => {
+      const resourceId = `resource-${randomUUID()}`;
+
+      // Create episodes with overlapping categories
+      const episodes = [
+        createSampleEpisode({ resourceId }),
+        createSampleEpisode({ resourceId }),
+        createSampleEpisode({ resourceId }),
+      ];
+
+      episodes[0].categories = ['alpha', 'beta'];
+      episodes[1].categories = ['beta', 'gamma'];
+      episodes[2].categories = ['gamma', 'delta'];
+
+      for (const episode of episodes) {
+        await store.saveEpisode({ episode });
+      }
+
+      // Test each category
+      const alphaEpisodes = await store.getEpisodesByCategory({ resourceId, category: 'alpha' });
+      expect(alphaEpisodes).toHaveLength(1);
+
+      const betaEpisodes = await store.getEpisodesByCategory({ resourceId, category: 'beta' });
+      expect(betaEpisodes).toHaveLength(2);
+
+      const gammaEpisodes = await store.getEpisodesByCategory({ resourceId, category: 'gamma' });
+      expect(gammaEpisodes).toHaveLength(2);
+
+      const deltaEpisodes = await store.getEpisodesByCategory({ resourceId, category: 'delta' });
+      expect(deltaEpisodes).toHaveLength(1);
+    });
   });
 });

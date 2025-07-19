@@ -3,7 +3,13 @@ import type { CoreTool, MastraMessageV1 } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
-import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
+import type {
+  MemoryConfig,
+  SharedMemoryConfig,
+  StorageThreadType,
+  WorkingMemoryTemplate,
+  StorageEpisodeType,
+} from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
 import type { CoreMessage, TextPart, UIMessage } from 'ai';
@@ -15,6 +21,15 @@ import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
+import {
+  createEpisodeTool,
+  getEpisodeTool,
+  listEpisodesTool,
+  updateEpisodeTool,
+  getEpisodeCategoresTool,
+  linkEpisodesTool,
+  getRelatedEpisodesTool,
+} from './tools/episodic-memory';
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -781,26 +796,39 @@ export class Memory extends MastraMemory {
     memoryConfig?: MemoryConfig;
   }): Promise<string | null> {
     const config = this.getMergedThreadConfig(memoryConfig);
-    if (!config.workingMemory?.enabled) {
-      return null;
+    const messages: string[] = [];
+
+    // Working memory system message
+    if (config.workingMemory?.enabled) {
+      const workingMemoryTemplate = await this.getWorkingMemoryTemplate({ memoryConfig: config });
+      const workingMemoryData = await this.getWorkingMemory({ threadId, resourceId, memoryConfig: config });
+
+      if (workingMemoryTemplate) {
+        const workingMemoryMessage = this.isVNextWorkingMemoryConfig(memoryConfig)
+          ? this.__experimental_getWorkingMemoryToolInstructionVNext({
+              template: workingMemoryTemplate,
+              data: workingMemoryData,
+            })
+          : this.getWorkingMemoryToolInstruction({
+              template: workingMemoryTemplate,
+              data: workingMemoryData,
+            });
+        messages.push(workingMemoryMessage);
+      }
     }
 
-    const workingMemoryTemplate = await this.getWorkingMemoryTemplate({ memoryConfig: config });
-    const workingMemoryData = await this.getWorkingMemory({ threadId, resourceId, memoryConfig: config });
-
-    if (!workingMemoryTemplate) {
-      return null;
+    // Episodic memory system message
+    if (config.episodicMemory?.enabled && resourceId) {
+      const episodicMessage = await this.getEpisodicMemorySystemMessage({
+        resourceId,
+        config: config.episodicMemory,
+      });
+      if (episodicMessage) {
+        messages.push(episodicMessage);
+      }
     }
 
-    return this.isVNextWorkingMemoryConfig(memoryConfig)
-      ? this.__experimental_getWorkingMemoryToolInstructionVNext({
-          template: workingMemoryTemplate,
-          data: workingMemoryData,
-        })
-      : this.getWorkingMemoryToolInstruction({
-          template: workingMemoryTemplate,
-          data: workingMemoryData,
-        });
+    return messages.length > 0 ? messages.join('\n\n') : null;
   }
 
   public defaultWorkingMemoryTemplate = `
@@ -915,15 +943,26 @@ ${
 
   public getTools(config?: MemoryConfig): Record<string, CoreTool> {
     const mergedConfig = this.getMergedThreadConfig(config);
+    const tools: Record<string, CoreTool> = {};
+
     if (mergedConfig.workingMemory?.enabled) {
-      return {
-        updateWorkingMemory: this.isVNextWorkingMemoryConfig(mergedConfig)
-          ? // use the new experimental tool
-            __experimental_updateWorkingMemoryToolVNext(mergedConfig)
-          : updateWorkingMemoryTool(mergedConfig),
-      };
+      tools.updateWorkingMemory = this.isVNextWorkingMemoryConfig(mergedConfig)
+        ? // use the new experimental tool
+          __experimental_updateWorkingMemoryToolVNext(mergedConfig)
+        : updateWorkingMemoryTool(mergedConfig);
     }
-    return {};
+
+    if (mergedConfig.episodicMemory?.enabled) {
+      tools.createEpisode = createEpisodeTool(mergedConfig);
+      tools.getEpisode = getEpisodeTool(mergedConfig);
+      tools.listEpisodes = listEpisodesTool(mergedConfig);
+      tools.updateEpisode = updateEpisodeTool(mergedConfig);
+      tools.getEpisodeCategories = getEpisodeCategoresTool(mergedConfig);
+      tools.linkEpisodes = linkEpisodesTool(mergedConfig);
+      tools.getRelatedEpisodes = getRelatedEpisodesTool(mergedConfig);
+    }
+
+    return tools;
   }
 
   /**
@@ -941,5 +980,388 @@ ${
     // TODO: Possibly handle updating the vector db here when a message is updated.
 
     return this.storage.updateMessages({ messages });
+  }
+
+  // Episode methods
+  /**
+   * Creates a new episode from the current conversation context
+   */
+  public async createEpisode({
+    resourceId,
+    threadId,
+    title,
+    shortSummary,
+    detailedSummary,
+    categories,
+    causalContext,
+    spatialContext,
+    relatedEpisodeIds,
+    sequenceId,
+    significance,
+    messageIds,
+    metadata,
+  }: {
+    resourceId: string;
+    threadId: string;
+    title: string;
+    shortSummary: string;
+    detailedSummary: string;
+    categories: string[];
+    causalContext?: string;
+    spatialContext?: string;
+    relatedEpisodeIds?: string[];
+    sequenceId?: string;
+    significance?: number;
+    messageIds?: string[];
+    metadata?: Record<string, any>;
+  }): Promise<StorageEpisodeType> {
+    // Generate unique ID for episode
+    const hasher = await xxhash();
+    const id = hasher.h64ToString(`${resourceId}-${threadId}-${Date.now()}`);
+
+    // If messageIds not provided, get recent messages from thread
+    let finalMessageIds = messageIds;
+    if (!finalMessageIds) {
+      const messages = await this.storage.getMessages({
+        threadId,
+        resourceId,
+        selectBy: { last: 10 },
+        format: 'v2',
+      });
+      finalMessageIds = messages.map(m => m.id);
+    }
+
+    const episode: StorageEpisodeType = {
+      id,
+      resourceId,
+      threadId,
+      title,
+      shortSummary,
+      detailedSummary,
+      categories,
+      messageIds: finalMessageIds,
+      causalContext,
+      spatialContext,
+      relatedEpisodeIds,
+      sequenceId,
+      significance,
+      metadata,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    await this.storage.saveEpisode({ episode });
+
+    // Update resource metadata with new categories if needed
+    if (categories.length > 0) {
+      const existingCategories = await this.storage.getCategoriesForResource({ resourceId });
+      const newCategories = categories.filter(cat => !existingCategories.includes(cat));
+
+      if (newCategories.length > 0) {
+        const resource = await this.storage.getResourceById({ resourceId });
+        if (resource) {
+          const updatedCategories = [...existingCategories, ...newCategories];
+          await this.storage.updateResource({
+            resourceId,
+            metadata: {
+              ...resource.metadata,
+              episodeCategories: updatedCategories,
+            },
+          });
+        }
+      }
+    }
+
+    return episode;
+  }
+
+  /**
+   * Retrieves an episode by ID
+   */
+  public async getEpisode({ id }: { id: string }) {
+    return this.storage.getEpisodeById({ id });
+  }
+
+  /**
+   * Lists episodes for a resource, optionally filtered by category
+   */
+  public async listEpisodes({
+    resourceId,
+    category,
+    limit = 10,
+  }: {
+    resourceId: string;
+    category?: string;
+    limit?: number;
+  }) {
+    const episodes = category
+      ? await this.storage.getEpisodesByCategory({ resourceId, category })
+      : await this.storage.getEpisodesByResourceId({ resourceId });
+
+    return episodes.slice(0, limit);
+  }
+
+  /**
+   * Updates an existing episode
+   */
+  public async updateEpisode({
+    id,
+    updates,
+  }: {
+    id: string;
+    updates: {
+      title?: string;
+      shortSummary?: string;
+      detailedSummary?: string;
+      categories?: string[];
+      causalContext?: string;
+      spatialContext?: string;
+      relatedEpisodeIds?: string[];
+      sequenceId?: string;
+      significance?: number;
+      messageIds?: string[];
+      metadata?: Record<string, any>;
+    };
+  }) {
+    await this.storage.updateEpisode({ id, updates });
+
+    // Update resource metadata with new categories if needed
+    if (updates.categories) {
+      const episode = await this.storage.getEpisodeById({ id });
+      if (episode) {
+        const existingCategories = await this.storage.getCategoriesForResource({ resourceId: episode.resourceId });
+        const newCategories = updates.categories.filter(cat => !existingCategories.includes(cat));
+
+        if (newCategories.length > 0) {
+          const resource = await this.storage.getResourceById({ resourceId: episode.resourceId });
+          if (resource) {
+            const updatedCategories = [...existingCategories, ...newCategories];
+            await this.storage.updateResource({
+              resourceId: episode.resourceId,
+              metadata: {
+                ...resource.metadata,
+                episodeCategories: updatedCategories,
+              },
+            });
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Gets available episode categories for a resource
+   */
+  public async getEpisodeCategories({ resourceId }: { resourceId: string }): Promise<string[]> {
+    return this.storage.getCategoriesForResource({ resourceId });
+  }
+
+  /**
+   * Links two episodes together with a relationship
+   */
+  public async linkEpisodes({
+    episodeId1,
+    episodeId2,
+    relationshipType = 'related-to',
+  }: {
+    episodeId1: string;
+    episodeId2: string;
+    relationshipType?: 'caused-by' | 'leads-to' | 'part-of' | 'similar-to' | 'related-to';
+  }): Promise<void> {
+    // Get both episodes
+    const [episode1, episode2] = await Promise.all([
+      this.storage.getEpisodeById({ id: episodeId1 }),
+      this.storage.getEpisodeById({ id: episodeId2 }),
+    ]);
+
+    if (!episode1 || !episode2) {
+      throw new Error('One or both episodes not found');
+    }
+
+    // Update episode1 to include episode2 in its relatedEpisodeIds and relationships
+    const relatedIds1 = episode1.relatedEpisodeIds || [];
+    const relationships1 = episode1.relationships || [];
+
+    if (!relatedIds1.includes(episodeId2)) {
+      relatedIds1.push(episodeId2);
+      relationships1.push({
+        episodeId: episodeId2,
+        type: relationshipType,
+      });
+
+      await this.storage.updateEpisode({
+        id: episodeId1,
+        updates: {
+          relatedEpisodeIds: relatedIds1,
+          relationships: relationships1,
+        },
+      });
+    }
+
+    // For bidirectional relationships, also update episode2
+    if (relationshipType === 'related-to' || relationshipType === 'similar-to') {
+      const relatedIds2 = episode2.relatedEpisodeIds || [];
+      const relationships2 = episode2.relationships || [];
+
+      if (!relatedIds2.includes(episodeId1)) {
+        relatedIds2.push(episodeId1);
+        relationships2.push({
+          episodeId: episodeId1,
+          type: relationshipType,
+        });
+
+        await this.storage.updateEpisode({
+          id: episodeId2,
+          updates: {
+            relatedEpisodeIds: relatedIds2,
+            relationships: relationships2,
+          },
+        });
+      }
+    }
+
+    // Store relationship metadata if needed
+    const relationshipMeta = {
+      type: relationshipType,
+      linkedAt: new Date().toISOString(),
+    };
+
+    // Update metadata to track relationship types
+    await this.storage.updateEpisode({
+      id: episodeId1,
+      updates: {
+        metadata: {
+          ...episode1.metadata,
+          relationships: {
+            ...(episode1.metadata?.relationships || {}),
+            [episodeId2]: relationshipMeta,
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Gets all episodes related to a specific episode
+   */
+  public async getRelatedEpisodes({
+    episodeId,
+    includeIndirect = false,
+  }: {
+    episodeId: string;
+    includeIndirect?: boolean;
+  }): Promise<StorageEpisodeType[]> {
+    const episode = await this.storage.getEpisodeById({ id: episodeId });
+    if (!episode || !episode.relatedEpisodeIds) {
+      return [];
+    }
+
+    const relatedEpisodes = await Promise.all(episode.relatedEpisodeIds.map(id => this.storage.getEpisodeById({ id })));
+
+    const directRelated = relatedEpisodes.filter(ep => ep !== null) as StorageEpisodeType[];
+
+    if (!includeIndirect) {
+      return directRelated;
+    }
+
+    // Get indirect relationships (related to related episodes)
+    const indirectRelated = new Map<string, StorageEpisodeType>();
+    for (const relatedEp of directRelated) {
+      if (relatedEp.relatedEpisodeIds) {
+        const secondLevel = await Promise.all(
+          relatedEp.relatedEpisodeIds
+            .filter(id => id !== episodeId && !episode.relatedEpisodeIds?.includes(id))
+            .map(id => this.storage.getEpisodeById({ id })),
+        );
+
+        secondLevel.forEach(ep => {
+          if (ep && !indirectRelated.has(ep.id)) {
+            indirectRelated.set(ep.id, ep);
+          }
+        });
+      }
+    }
+
+    return [...directRelated, ...indirectRelated.values()];
+  }
+
+  /**
+   * Gets episodes in the same sequence
+   */
+  public async getEpisodesInSequence({
+    sequenceId,
+    resourceId,
+  }: {
+    sequenceId: string;
+    resourceId: string;
+  }): Promise<StorageEpisodeType[]> {
+    const allEpisodes = await this.storage.getEpisodesByResourceId({ resourceId });
+    return allEpisodes
+      .filter(ep => ep.sequenceId === sequenceId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  /**
+   * Generates system message for episodic memory
+   */
+  private async getEpisodicMemorySystemMessage({
+    resourceId,
+    config,
+  }: {
+    resourceId: string;
+    config: NonNullable<MemoryConfig['episodicMemory']>;
+  }): Promise<string | null> {
+    const lastEpisodes = config.lastEpisodes || 5;
+
+    // Get recent episodes for context
+    const episodes = await this.listEpisodes({
+      resourceId,
+      limit: lastEpisodes,
+    });
+
+    if (episodes.length === 0) {
+      return `EPISODIC_MEMORY_SYSTEM_INSTRUCTION:
+You have access to episodic memory tools to remember important information from conversations.
+
+Create episodes when:
+- User shares significant life events, stories, or experiences
+- Important preferences or facts are revealed
+- Memorable moments occur in the conversation
+- User explicitly asks you to remember something
+
+Use categories like: life-event, family, work, health, travel, preference, story, hobby, relationship, achievement
+
+Available tools:
+- createEpisode: Save important information as a memory episode
+- listEpisodes: View past episodes
+- getEpisode: Get detailed information about a specific episode
+- updateEpisode: Update existing episodes with new information
+- getEpisodeCategories: See available categories`;
+    }
+
+    const episodesList = episodes
+      .map(ep => {
+        const cats = ep.categories.length > 0 ? ` [${ep.categories.join(', ')}]` : '';
+        const causal = ep.causalContext ? ` (because: ${ep.causalContext})` : '';
+        return `- ${ep.title}${cats}: ${ep.shortSummary}${causal}`;
+      })
+      .join('\n');
+
+    const categories = await this.getEpisodeCategories({ resourceId });
+    const categoryInfo =
+      categories.length > 0 ? `\nAvailable categories: ${categories.join(', ')}` : '';
+
+    return `EPISODIC_MEMORY_SYSTEM_INSTRUCTION:
+You have access to the user's episodic memory. Recent episodes:
+
+${episodesList}
+
+Use episodic memory tools to:
+- Create new episodes for important information (createEpisode)
+- Retrieve detailed episode information when needed (getEpisode)
+- List episodes by category (listEpisodes)
+- Update episodes with new information (updateEpisode)${categoryInfo}
+
+Create episodes for significant events, stories, preferences, and important facts. Each episode should capture meaningful context that might be useful in future conversations.`;
   }
 }

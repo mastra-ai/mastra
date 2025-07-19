@@ -4,7 +4,7 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
-import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, StorageThreadType, StorageEpisodeType } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -12,6 +12,7 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_RESOURCES,
+  TABLE_EPISODES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
 import type {
@@ -87,10 +88,12 @@ export class LibSQLStore extends MastraStorage {
   public get supports(): {
     selectByIncludeResourceScope: boolean;
     resourceWorkingMemory: boolean;
+    resourceEpisodicMemory: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
+      resourceEpisodicMemory: true,
     };
   }
 
@@ -1523,6 +1526,269 @@ export class LibSQLStore extends MastraStorage {
     });
 
     return updatedResource;
+  }
+
+  // Episode methods
+  async saveEpisode({ episode }: { episode: StorageEpisodeType }): Promise<void> {
+    // Save the episode
+    await this.insert({
+      tableName: TABLE_EPISODES,
+      record: {
+        ...episode,
+        categories: JSON.stringify(episode.categories),
+        messageIds: JSON.stringify(episode.messageIds),
+        relatedEpisodeIds: episode.relatedEpisodeIds ? JSON.stringify(episode.relatedEpisodeIds) : null,
+        relationships: episode.relationships ? JSON.stringify(episode.relationships) : null,
+        significance: episode.significance?.toString() || null,
+        metadata: episode.metadata ? JSON.stringify(episode.metadata) : null,
+        createdAt: episode.createdAt.toISOString(),
+        updatedAt: episode.updatedAt.toISOString(),
+      },
+    });
+
+    // Update resource metadata with episode categories
+    await this._updateResourceCategories(episode.resourceId, episode.categories);
+  }
+
+  private async _updateResourceCategories(resourceId: string, newCategories: string[]): Promise<void> {
+    // Get or create resource
+    let resource = await this.getResourceById({ resourceId });
+
+    if (!resource) {
+      // Create resource if it doesn't exist
+      resource = await this.saveResource({
+        resource: {
+          id: resourceId,
+          metadata: {
+            episodeCategories: newCategories,
+          },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      // Update existing resource with new categories
+      const existingCategories = (resource.metadata?.episodeCategories || []) as string[];
+      const allCategories = [...new Set([...existingCategories, ...newCategories])];
+
+      await this.updateResource({
+        resourceId,
+        metadata: {
+          ...resource.metadata,
+          episodeCategories: allCategories,
+        },
+      });
+    }
+  }
+
+  async getEpisodeById({ id }: { id: string }): Promise<StorageEpisodeType | null> {
+    const result = await this.load<any>({
+      tableName: TABLE_EPISODES,
+      keys: { id },
+    });
+
+    if (!result) {
+      return null;
+    }
+
+    return {
+      ...result,
+      categories: typeof result.categories === 'string' ? JSON.parse(result.categories) : result.categories,
+      messageIds: typeof result.messageIds === 'string' ? JSON.parse(result.messageIds) : result.messageIds,
+      relatedEpisodeIds: result.relatedEpisodeIds
+        ? typeof result.relatedEpisodeIds === 'string'
+          ? JSON.parse(result.relatedEpisodeIds)
+          : result.relatedEpisodeIds
+        : undefined,
+      relationships: result.relationships
+        ? typeof result.relationships === 'string'
+          ? JSON.parse(result.relationships)
+          : result.relationships
+        : undefined,
+      significance: result.significance ? parseFloat(result.significance) : undefined,
+      metadata: result.metadata
+        ? typeof result.metadata === 'string'
+          ? JSON.parse(result.metadata)
+          : result.metadata
+        : undefined,
+      createdAt: new Date(result.createdAt),
+      updatedAt: new Date(result.updatedAt),
+    };
+  }
+
+  async getEpisodesByResourceId({ resourceId }: { resourceId: string }): Promise<StorageEpisodeType[]> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM ${TABLE_EPISODES} WHERE resourceId = ? ORDER BY createdAt DESC`,
+      args: [resourceId],
+    });
+
+    return result.rows.map(row => ({
+      id: row.id as string,
+      resourceId: row.resourceId as string,
+      threadId: row.threadId as string,
+      title: row.title as string,
+      shortSummary: row.shortSummary as string,
+      detailedSummary: row.detailedSummary as string,
+      categories: JSON.parse(row.categories as string),
+      messageIds: JSON.parse(row.messageIds as string),
+      causalContext: row.causalContext as string | undefined,
+      spatialContext: row.spatialContext as string | undefined,
+      relatedEpisodeIds: row.relatedEpisodeIds ? JSON.parse(row.relatedEpisodeIds as string) : undefined,
+      relationships: row.relationships ? JSON.parse(row.relationships as string) : undefined,
+      sequenceId: row.sequenceId as string | undefined,
+      significance: row.significance ? parseFloat(row.significance as string) : undefined,
+      metadata: row.metadata ? JSON.parse(row.metadata as string) : undefined,
+      createdAt: new Date(row.createdAt as string),
+      updatedAt: new Date(row.updatedAt as string),
+    }));
+  }
+
+  async getEpisodesByCategory({
+    resourceId,
+    category,
+  }: {
+    resourceId: string;
+    category: string;
+  }): Promise<StorageEpisodeType[]> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM ${TABLE_EPISODES} WHERE resourceId = ? AND EXISTS (
+        SELECT 1 FROM json_each(categories) WHERE value = ?
+      ) ORDER BY createdAt DESC`,
+      args: [resourceId, category],
+    });
+
+    return result.rows.map(row => ({
+      id: row.id as string,
+      resourceId: row.resourceId as string,
+      threadId: row.threadId as string,
+      title: row.title as string,
+      shortSummary: row.shortSummary as string,
+      detailedSummary: row.detailedSummary as string,
+      categories: JSON.parse(row.categories as string),
+      messageIds: JSON.parse(row.messageIds as string),
+      causalContext: row.causalContext as string | undefined,
+      spatialContext: row.spatialContext as string | undefined,
+      relatedEpisodeIds: row.relatedEpisodeIds ? JSON.parse(row.relatedEpisodeIds as string) : undefined,
+      relationships: row.relationships ? JSON.parse(row.relationships as string) : undefined,
+      sequenceId: row.sequenceId as string | undefined,
+      significance: row.significance ? parseFloat(row.significance as string) : undefined,
+      metadata: row.metadata ? JSON.parse(row.metadata as string) : undefined,
+      createdAt: new Date(row.createdAt as string),
+      updatedAt: new Date(row.updatedAt as string),
+    }));
+  }
+
+  async updateEpisode({ id, updates }: { id: string; updates: Partial<StorageEpisodeType> }): Promise<void> {
+    const existingEpisode = await this.getEpisodeById({ id });
+    if (!existingEpisode) {
+      throw new MastraError({
+        id: 'EPISODE_NOT_FOUND',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'EPISODE_NOT_FOUND',
+        details: { id },
+      });
+    }
+
+    const updateFields: string[] = [];
+    const values: InValue[] = [];
+
+    if (updates.title !== undefined) {
+      updateFields.push('title = ?');
+      values.push(updates.title);
+    }
+
+    if (updates.shortSummary !== undefined) {
+      updateFields.push('shortSummary = ?');
+      values.push(updates.shortSummary);
+    }
+
+    if (updates.detailedSummary !== undefined) {
+      updateFields.push('detailedSummary = ?');
+      values.push(updates.detailedSummary);
+    }
+
+    if (updates.categories !== undefined) {
+      updateFields.push('categories = ?');
+      values.push(JSON.stringify(updates.categories));
+    }
+
+    if (updates.messageIds !== undefined) {
+      updateFields.push('messageIds = ?');
+      values.push(JSON.stringify(updates.messageIds));
+    }
+
+    if (updates.metadata !== undefined) {
+      updateFields.push('metadata = ?');
+      values.push(JSON.stringify(updates.metadata));
+    }
+
+    if (updates.causalContext !== undefined) {
+      updateFields.push('causalContext = ?');
+      values.push(updates.causalContext);
+    }
+
+    if (updates.spatialContext !== undefined) {
+      updateFields.push('spatialContext = ?');
+      values.push(updates.spatialContext);
+    }
+
+    if (updates.relatedEpisodeIds !== undefined) {
+      updateFields.push('relatedEpisodeIds = ?');
+      values.push(JSON.stringify(updates.relatedEpisodeIds));
+    }
+
+    if (updates.relationships !== undefined) {
+      updateFields.push('relationships = ?');
+      values.push(JSON.stringify(updates.relationships));
+    }
+
+    if (updates.sequenceId !== undefined) {
+      updateFields.push('sequenceId = ?');
+      values.push(updates.sequenceId);
+    }
+
+    if (updates.significance !== undefined) {
+      updateFields.push('significance = ?');
+      values.push(updates.significance.toString());
+    }
+
+    updateFields.push('updatedAt = ?');
+    values.push(new Date().toISOString());
+
+    values.push(id);
+
+    await this.client.execute({
+      sql: `UPDATE ${TABLE_EPISODES} SET ${updateFields.join(', ')} WHERE id = ?`,
+      args: values,
+    });
+
+    // Update resource categories if episode categories were updated
+    if (updates.categories !== undefined && updates.categories.length > 0) {
+      await this._updateResourceCategories(existingEpisode.resourceId, updates.categories);
+    }
+  }
+
+  async getCategoriesForResource({ resourceId }: { resourceId: string }): Promise<string[]> {
+    // Get categories from resource metadata
+    const resource = await this.getResourceById({ resourceId });
+    if (resource?.metadata?.episodeCategories) {
+      return resource.metadata.episodeCategories as string[];
+    }
+
+    // If no categories in metadata, dynamically build from all episodes
+    const result = await this.client.execute({
+      sql: `SELECT DISTINCT categories FROM ${TABLE_EPISODES} WHERE resourceId = ?`,
+      args: [resourceId],
+    });
+
+    const allCategories = new Set<string>();
+    for (const row of result.rows) {
+      const categories = JSON.parse(row.categories as string);
+      categories.forEach((cat: string) => allCategories.add(cat));
+    }
+
+    return Array.from(allCategories);
   }
 
   private async hasColumn(table: string, column: string): Promise<boolean> {

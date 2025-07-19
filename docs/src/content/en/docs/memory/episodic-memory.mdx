@@ -1,0 +1,165 @@
+# Episodic Memory
+
+Episodic memory enables agents to create and recall long-term memories that persist across all conversations with a user. Unlike conversation history which is scoped to individual threads, episodes represent significant events, facts, or experiences that agents can reference in any future interaction.
+
+## How It Works
+
+When episodic memory is enabled, agents can:
+- Automatically detect and store significant information from conversations
+- Create structured memories with titles, summaries, and categories
+- Link related episodes to form knowledge graphs
+- Retrieve relevant episodes based on context or direct queries
+
+Episodes are stored at the resource (user) level, making them available across all threads and conversations.
+
+## Key Concepts
+
+### Episode Structure
+
+Each episode contains:
+- **Title**: A brief descriptive title
+- **Short Summary**: One-line summary of the episode
+- **Detailed Summary**: Complete description with context
+- **Categories**: Semantic organization (e.g., "work", "health", "family")
+- **Significance**: Score from 0-1 indicating importance
+- **Message IDs**: Links to source conversation messages
+- **Timestamps**: Created and updated dates
+
+### Context Fields
+
+Episodes can include additional context:
+- **Causal Context**: Why something happened or what led to it
+- **Spatial Context**: Where events occurred (location, environment)
+- **Sequence ID**: Groups related episodes together
+- **Relationships**: Typed connections to other episodes
+
+### Relationship Types
+
+Episodes can be linked with specific relationship types:
+- `caused-by`: One event led to another
+- `leads-to`: Expected future consequence
+- `part-of`: Component of a larger event
+- `similar-to`: Related but distinct events
+- `related-to`: General relationship
+
+## Configuration
+
+Enable episodic memory when creating a Memory instance:
+
+```typescript filename="src/mastra/agents/index.ts"
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({
+  options: {
+    episodicMemory: {
+      enabled: true,
+      lastEpisodes: 5,
+    },
+  },
+  storage: myStorage,
+});
+```
+
+### Configuration Options
+
+- **enabled**: Whether episodic memory is active
+- **lastEpisodes**: Number of recent episodes to include in system context (default: 5)
+
+## Agent Integration
+
+### Automatic Episode Creation
+
+When episodic memory is enabled, agents have access to episode management tools. They can create episodes when they detect significant information:
+
+```typescript
+const agent = new Agent({
+  name: "MemoryAgent",
+  instructions: `You are a helpful assistant with long-term memory.
+    When users share important information about themselves, their life events,
+    preferences, or significant experiences, create episodes to remember them.`,
+  model: myModel,
+  memory,
+});
+```
+
+### Episode Tools
+
+Agents automatically receive these tools when episodic memory is enabled:
+- **createEpisode**: Store new memories
+- **searchEpisodes**: Find relevant past memories
+- **updateEpisode**: Modify existing memories
+- **linkEpisodes**: Connect related memories
+- **getRelatedEpisodes**: Explore memory connections
+
+### System Message Integration
+
+The most significant episodes are automatically included in the agent's system message:
+
+```
+## Episodic Memory (Long-term memories for this user)
+
+**Promoted to Senior Manager** (2024-01-15)
+User got promoted to Senior Engineering Manager at TechCorp
+Categories: work, life-event
+
+**Allergic to peanuts** (2024-01-10)
+User has severe peanut allergy and carries an EpiPen
+Categories: health, important
+```
+
+## Manual Episode Management
+
+You can also manage episodes programmatically:
+
+```typescript
+// Create an episode
+const episode = await memory.createEpisode({
+  resourceId: "user-123",
+  threadId: "thread-456",
+  title: "Started marathon training",
+  shortSummary: "User began training for first marathon",
+  detailedSummary: "User started a 16-week marathon training program...",
+  categories: ["health", "goals"],
+  significance: 0.8,
+  spatialContext: "Local running trails and gym",
+});
+
+// Link related episodes
+await memory.linkEpisodes({
+  episodeId1: episode.id,
+  episodeId2: "previous-fitness-goal-id",
+  relationshipType: "leads-to",
+});
+
+// Get episodes by category
+const healthEpisodes = await memory.getEpisodesByCategory({
+  resourceId: "user-123",
+  category: "health",
+});
+```
+
+## Storage Requirements
+
+Episodic memory requires a storage adapter that supports the episodes table. Currently supported:
+- LibSQL
+- PostgreSQL
+
+Other storage adapters will need to be updated to support episodic memory features.
+
+## Best Practices
+
+Agents are equipped with episodic memory tools that include built-in guidance for:
+- Selecting appropriate categories for different types of memories
+- Scoring significance based on the importance of information
+- Creating meaningful relationships between episodes
+
+The agent tools automatically handle these decisions based on context and content.
+
+## Integration with Other Memory Features
+
+Episodic memory complements other memory features:
+- **Working Memory**: Maintains current conversation context
+- **Semantic Recall**: Retrieves relevant past messages
+- **Episodic Memory**: Provides long-term factual memories
+
+Together, these create a comprehensive memory system that enables natural, context-aware conversations that span multiple interactions over time.

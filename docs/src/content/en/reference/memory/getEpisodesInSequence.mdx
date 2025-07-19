@@ -1,0 +1,96 @@
+# getEpisodesInSequence
+
+Retrieves all episodes that belong to the same sequence, sorted by creation date.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { randomUUID } from "crypto";
+
+const memory = new Memory({
+  options: {
+    episodicMemory: { enabled: true }
+  }
+});
+
+// Create episodes in a sequence
+const tripSequenceId = randomUUID();
+
+await memory.createEpisode({
+  resourceId: "user-123",
+  threadId: "thread-456",
+  title: "Day 1: Arrived in Tokyo",
+  shortSummary: "Landed and checked into hotel",
+  detailedSummary: "Smooth flight, took train to Shinjuku",
+  categories: ["travel", "vacation"],
+  sequenceId: tripSequenceId,
+});
+
+await memory.createEpisode({
+  resourceId: "user-123",
+  threadId: "thread-456",
+  title: "Day 2: Visited temples",
+  shortSummary: "Explored Asakusa district",
+  detailedSummary: "Visited Senso-ji temple and tried street food",
+  categories: ["travel", "vacation", "culture"],
+  sequenceId: tripSequenceId,
+});
+
+// Get all episodes in the trip sequence
+const tripEpisodes = await memory.getEpisodesInSequence({
+  sequenceId: tripSequenceId,
+  resourceId: "user-123",
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "sequenceId",
+      type: "string",
+      description:
+        "UUID of the sequence to retrieve episodes for",
+      isOptional: false,
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description:
+        "Resource ID to filter episodes (ensures episodes belong to the correct user)",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+Returns an array of `StorageEpisodeType` objects belonging to the sequence, sorted by creation date (oldest first).
+
+<PropertiesTable
+  content={[
+    {
+      name: "episodes",
+      type: "StorageEpisodeType[]",
+      description: "Array of episodes in the sequence, ordered chronologically",
+    },
+  ]}
+/>
+
+## Use Cases
+
+Sequences are useful for:
+- **Travel diaries**: Day-by-day travel experiences
+- **Project timelines**: Progress updates on long-term projects
+- **Medical history**: Series of related medical events
+- **Learning progress**: Stages of learning a new skill
+- **Multi-part events**: Conference days, workshop sessions
+
+### Related
+
+- [Memory Class Reference](/reference/memory/Memory.mdx)
+- [Episodic Memory Guide](/docs/memory/episodic-memory.mdx)
+- [createEpisode](/reference/memory/createEpisode.mdx)
+- [listEpisodes](/reference/memory/listEpisodes.mdx)

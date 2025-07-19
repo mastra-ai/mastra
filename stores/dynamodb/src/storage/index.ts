@@ -12,6 +12,7 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
   TABLE_TRACES,
+  TABLE_EPISODES,
 } from '@mastra/core/storage';
 import type {
   EvalRow,
@@ -39,7 +40,7 @@ export interface DynamoDBStoreConfig {
   };
 }
 
-type SUPPORTED_TABLE_NAMES = Exclude<TABLE_NAMES, typeof TABLE_RESOURCES>;
+type SUPPORTED_TABLE_NAMES = Exclude<TABLE_NAMES, typeof TABLE_RESOURCES | typeof TABLE_EPISODES>;
 
 // Define a type for our service that allows string indexing
 type MastraService = Service<Record<string, any>> & {

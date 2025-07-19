@@ -1,0 +1,357 @@
+# Episodic Memory Examples
+
+This page demonstrates various ways to use episodic memory in your Mastra agents.
+
+## Basic Setup
+
+First, configure memory with episodic memory enabled:
+
+```typescript filename="src/mastra/memory.ts"
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const memory = new Memory({
+  options: {
+    episodicMemory: {
+      enabled: true,
+      lastEpisodes: 5,
+    },
+  },
+  storage: new LibSQLStore({
+    url: "file:../mastra.db",
+  }),
+});
+```
+
+## Agent with Automatic Episode Creation
+
+Create an agent that automatically detects and stores important information:
+
+```typescript filename="src/mastra/agents/personal-assistant.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { memory } from "../memory";
+
+export const personalAssistant = new Agent({
+  name: "PersonalAssistant",
+  instructions: `You are a personal AI assistant with long-term memory.
+    
+    When users share:
+    - Life events (job changes, moves, achievements)
+    - Health information (allergies, conditions, medications)
+    - Personal details (family, relationships, preferences)
+    - Goals and aspirations
+    - Important dates or recurring events
+    
+    Use the createEpisode tool to store these as long-term memories.
+    
+    When relevant, search your episodic memory to provide personalized responses
+    based on what you know about the user.`,
+  model: openai("gpt-4o"),
+  memory,
+});
+```
+
+## Manual Episode Creation
+
+Create episodes programmatically in your application:
+
+```typescript filename="examples/create-episodes.ts"
+import { memory } from "../src/mastra/memory";
+
+async function createUserProfile(userId: string, threadId: string) {
+  // Create a health-related episode
+  const allergyEpisode = await memory.createEpisode({
+    resourceId: userId,
+    threadId,
+    title: "Severe peanut allergy",
+    shortSummary: "User has life-threatening peanut allergy",
+    detailedSummary: "User mentioned they have a severe peanut allergy and must carry an EpiPen at all times. Even trace amounts can trigger anaphylaxis.",
+    categories: ["health", "important", "medical"],
+    significance: 1.0, // Critical information
+  });
+
+  // Create a work-related episode
+  const jobEpisode = await memory.createEpisode({
+    resourceId: userId,
+    threadId,
+    title: "Senior Engineer at TechCorp",
+    shortSummary: "Works as Senior Software Engineer at TechCorp",
+    detailedSummary: "User is a Senior Software Engineer at TechCorp, working on the platform team. They specialize in distributed systems and have been there for 2 years.",
+    categories: ["work", "career"],
+    significance: 0.8,
+    spatialContext: "San Francisco, CA - TechCorp HQ",
+  });
+
+  // Create a personal goal episode
+  const goalEpisode = await memory.createEpisode({
+    resourceId: userId,
+    threadId,
+    title: "Training for first marathon",
+    shortSummary: "Currently training for NYC Marathon",
+    detailedSummary: "User started a 16-week training program for their first marathon. Running 4 times per week, with long runs on Saturdays.",
+    categories: ["health", "goals", "fitness"],
+    significance: 0.7,
+    causalContext: "Decided to get in better shape after turning 30",
+  });
+
+  return { allergyEpisode, jobEpisode, goalEpisode };
+}
+```
+
+## Linking Related Episodes
+
+Create relationships between episodes to build a knowledge graph:
+
+```typescript filename="examples/link-episodes.ts"
+async function linkLifeEvents(userId: string, threadId: string) {
+  // Create related episodes
+  const moveEpisode = await memory.createEpisode({
+    resourceId: userId,
+    threadId,
+    title: "Moved to San Francisco",
+    shortSummary: "Relocated to SF for new job",
+    detailedSummary: "User moved from Seattle to San Francisco in January 2024",
+    categories: ["life-event", "location"],
+    significance: 0.9,
+    spatialContext: "San Francisco, CA",
+  });
+
+  const jobEpisode = await memory.createEpisode({
+    resourceId: userId,
+    threadId,
+    title: "Started at TechCorp",
+    shortSummary: "Began Senior Engineer role",
+    detailedSummary: "Started new position as Senior Software Engineer at TechCorp",
+    categories: ["work", "life-event"],
+    significance: 0.9,
+    causalContext: "Moved to SF for this opportunity",
+  });
+
+  // Link the episodes
+  await memory.linkEpisodes({
+    episodeId1: moveEpisode.id,
+    episodeId2: jobEpisode.id,
+    relationshipType: "leads-to",
+  });
+
+  // Find related episodes
+  const related = await memory.getRelatedEpisodes({
+    episodeId: moveEpisode.id,
+  });
+  
+  console.log(`Found ${related.length} related episodes`);
+}
+```
+
+## Episode Sequences
+
+Group related episodes into sequences:
+
+```typescript filename="examples/episode-sequences.ts"
+import { randomUUID } from "crypto";
+
+async function createTravelDiary(userId: string, threadId: string) {
+  const tripSequenceId = randomUUID();
+  
+  // Day 1
+  await memory.createEpisode({
+    resourceId: userId,
+    threadId,
+    title: "Japan Trip: Arrived in Tokyo",
+    shortSummary: "Landed at Narita, checked into Shinjuku hotel",
+    detailedSummary: "Smooth flight, took Narita Express to Shinjuku. Hotel has amazing city views.",
+    categories: ["travel", "vacation"],
+    sequenceId: tripSequenceId,
+    spatialContext: "Tokyo, Japan - Shinjuku District",
+    significance: 0.7,
+  });
+
+  // Day 2
+  await memory.createEpisode({
+    resourceId: userId,
+    threadId,
+    title: "Japan Trip: Explored Asakusa",
+    shortSummary: "Visited Senso-ji temple and tried street food",
+    detailedSummary: "Beautiful temple, crowded but worth it. Had takoyaki and taiyaki from street vendors.",
+    categories: ["travel", "vacation", "culture"],
+    sequenceId: tripSequenceId,
+    spatialContext: "Tokyo, Japan - Asakusa District",
+    significance: 0.6,
+  });
+
+  // Day 3
+  await memory.createEpisode({
+    resourceId: userId,
+    threadId,
+    title: "Japan Trip: Mount Fuji Day Trip",
+    shortSummary: "Took bus tour to Mt. Fuji 5th station",
+    detailedSummary: "Clear weather, stunning views. Altitude was challenging but manageable.",
+    categories: ["travel", "vacation", "nature"],
+    sequenceId: tripSequenceId,
+    spatialContext: "Mount Fuji, Japan",
+    significance: 0.8,
+  });
+
+  // Get all episodes in the sequence
+  const tripEpisodes = await memory.getEpisodesInSequence({
+    sequenceId: tripSequenceId,
+    resourceId: userId,
+  });
+  
+  console.log(`Trip diary has ${tripEpisodes.length} entries`);
+}
+```
+
+## Searching and Filtering Episodes
+
+Find episodes by various criteria:
+
+```typescript filename="examples/search-episodes.ts"
+async function searchUserMemories(userId: string) {
+  // Get all episodes for a user
+  const allEpisodes = await memory.listEpisodes({
+    resourceId: userId,
+  });
+
+  // Get episodes by category
+  const healthEpisodes = await memory.getEpisodesByCategory({
+    resourceId: userId,
+    category: "health",
+  });
+
+  // Get all categories
+  const categories = await memory.getEpisodeCategories({
+    resourceId: userId,
+  });
+
+  // Filter by significance
+  const importantEpisodes = allEpisodes.filter(
+    episode => episode.significance && episode.significance >= 0.8
+  );
+
+  // Search by date range
+  const recentEpisodes = allEpisodes.filter(episode => {
+    const daysSinceCreated = 
+      (Date.now() - episode.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+    return daysSinceCreated <= 30;
+  });
+
+  return {
+    total: allEpisodes.length,
+    health: healthEpisodes.length,
+    important: importantEpisodes.length,
+    recent: recentEpisodes.length,
+    categories,
+  };
+}
+```
+
+## Cross-Thread Memory Access
+
+Episodes persist across all conversations:
+
+```typescript filename="examples/cross-thread-memory.ts"
+async function demonstrateCrossThreadMemory(userId: string) {
+  // Thread 1: User shares information
+  const thread1 = await memory.createThread({
+    id: randomUUID(),
+    resourceId: userId,
+    title: "Initial conversation",
+  });
+
+  await memory.createEpisode({
+    resourceId: userId,
+    threadId: thread1.id,
+    title: "Favorite coffee order",
+    shortSummary: "Oat milk latte, no sugar",
+    detailedSummary: "User always orders a large oat milk latte with an extra shot, no sugar",
+    categories: ["preferences", "food"],
+    significance: 0.4,
+  });
+
+  // Thread 2: Different conversation, same user
+  const thread2 = await memory.createThread({
+    id: randomUUID(),
+    resourceId: userId,
+    title: "New conversation",
+  });
+
+  // Episodes are available in the new thread
+  const episodes = await memory.listEpisodes({
+    resourceId: userId,
+  });
+
+  // Agent can reference the coffee preference in any thread
+  const coffeePreference = episodes.find(ep => 
+    ep.title.includes("coffee")
+  );
+  
+  console.log("User's coffee preference:", coffeePreference?.shortSummary);
+}
+```
+
+## Updating Episodes
+
+Modify existing episodes as information changes:
+
+```typescript filename="examples/update-episodes.ts"
+async function updateUserInformation(userId: string) {
+  // Find existing episode
+  const episodes = await memory.listEpisodes({ resourceId: userId });
+  const jobEpisode = episodes.find(ep => 
+    ep.categories.includes("work") && ep.title.includes("TechCorp")
+  );
+
+  if (jobEpisode) {
+    // Update with promotion
+    await memory.updateEpisode({
+      id: jobEpisode.id,
+      title: "Engineering Manager at TechCorp",
+      shortSummary: "Promoted to Engineering Manager at TechCorp",
+      detailedSummary: "User was promoted from Senior Engineer to Engineering Manager in March 2024. Now leads a team of 6 engineers.",
+      significance: 0.9, // Increased significance
+    });
+  }
+}
+```
+
+## Integration with Agent Conversations
+
+Example of how agents use episodic memory in practice:
+
+```typescript filename="examples/agent-conversation.ts"
+import { personalAssistant } from "../src/mastra/agents/personal-assistant";
+
+async function conversationExample(userId: string) {
+  const thread = await memory.createThread({
+    id: randomUUID(),
+    resourceId: userId,
+    title: "Planning dinner",
+  });
+
+  // User mentions their allergy (agent will create an episode)
+  const response1 = await personalAssistant.generate(
+    "I'm severely allergic to peanuts - even trace amounts can be dangerous.",
+    { threadId: thread.id, resourceId: userId }
+  );
+
+  // Later conversation - agent remembers the allergy
+  const response2 = await personalAssistant.generate(
+    "Can you suggest some Thai restaurants for dinner?",
+    { threadId: thread.id, resourceId: userId }
+  );
+  
+  // Agent will warn about peanut usage in Thai cuisine
+  console.log(response2.text);
+}
+```
+
+## Best Practices
+
+1. **Use consistent categories** across your application
+2. **Set appropriate significance scores** based on information importance
+3. **Link related episodes** to build comprehensive user knowledge
+4. **Include context fields** (causal, spatial) for richer memories
+5. **Use sequences** for temporally related events
+6. **Update episodes** as information changes rather than creating duplicates

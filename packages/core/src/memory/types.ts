@@ -79,6 +79,10 @@ export type MemoryConfig = {
         scope?: 'thread' | 'resource';
       };
   workingMemory?: WorkingMemory;
+  episodicMemory?: {
+    enabled: boolean;
+    lastEpisodes?: number;
+  };
   threads?: {
     generateTitle?:
       | boolean
@@ -123,4 +127,30 @@ export type WorkingMemoryFormat = 'json' | 'markdown';
 export type WorkingMemoryTemplate = {
   format: WorkingMemoryFormat;
   content: string;
+};
+
+export type EpisodeRelationship = {
+  episodeId: string;
+  type: 'caused-by' | 'leads-to' | 'part-of' | 'similar-to' | 'related-to';
+  metadata?: Record<string, any>;
+};
+
+export type StorageEpisodeType = {
+  id: string;
+  resourceId: string;
+  threadId: string;
+  title: string;
+  shortSummary: string;
+  detailedSummary: string;
+  categories: string[];
+  messageIds: string[];
+  causalContext?: string; // Why this happened, what led to it
+  spatialContext?: string; // Where it occurred (location, environment)
+  relatedEpisodeIds?: string[]; // Episodes that relate to this one
+  relationships?: EpisodeRelationship[]; // Detailed relationship information
+  sequenceId?: string; // For episodes that are part of a sequence
+  significance?: number; // Score indicating importance/surprise (0-1)
+  metadata?: Record<string, any>;
+  createdAt: Date;
+  updatedAt: Date;
 };
