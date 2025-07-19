@@ -13,6 +13,8 @@ import {
   TABLE_TRACES,
   TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
+  castThreadOrderBy,
+  castThreadSortDirection,
 } from '@mastra/core/storage';
 import type {
   EvalRow,
@@ -24,6 +26,7 @@ import type {
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
+  ThreadSortOptions,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -402,8 +405,10 @@ export class LibSQLStore extends MastraStorage {
   /**
    * @deprecated use getThreadsByResourceIdPaginated instead for paginated results.
    */
-  public async getThreadsByResourceId(args: { resourceId: string }): Promise<StorageThreadType[]> {
-    const { resourceId } = args;
+  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
+    const resourceId = args.resourceId;
+    const orderBy = castThreadOrderBy(args.orderBy);
+    const sortDirection = castThreadSortDirection(args.sortDirection);
 
     try {
       const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
@@ -420,7 +425,7 @@ export class LibSQLStore extends MastraStorage {
 
       // Non-paginated path
       const result = await this.client.execute({
-        sql: `SELECT * ${baseQuery} ORDER BY createdAt DESC`,
+        sql: `SELECT * ${baseQuery} ORDER BY ${orderBy} ${sortDirection}`,
         args: queryParams,
       });
 
@@ -434,7 +439,7 @@ export class LibSQLStore extends MastraStorage {
           id: 'LIBSQL_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
+          details: { resourceId, orderBy, sortDirection },
         },
         error,
       );
@@ -447,9 +452,12 @@ export class LibSQLStore extends MastraStorage {
   public async getThreadsByResourceIdPaginated(
     args: {
       resourceId: string;
-    } & PaginationArgs,
+    } & PaginationArgs &
+      ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     const { resourceId, page = 0, perPage = 100 } = args;
+    const orderBy = castThreadOrderBy(args.orderBy);
+    const sortDirection = castThreadSortDirection(args.sortDirection);
 
     try {
       const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
@@ -483,7 +491,7 @@ export class LibSQLStore extends MastraStorage {
       }
 
       const dataResult = await this.client.execute({
-        sql: `SELECT * ${baseQuery} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        sql: `SELECT * ${baseQuery} ORDER BY ${orderBy} ${sortDirection} LIMIT ? OFFSET ?`,
         args: [...queryParams, perPage, currentOffset],
       });
 

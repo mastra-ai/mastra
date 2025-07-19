@@ -10,9 +10,13 @@ import type {
   StorageColumn,
   StorageGetMessagesArg,
   StorageResourceType,
+  ThreadOrderBy,
+  ThreadSortDirection,
+  ThreadSortOptions,
   WorkflowRun,
   WorkflowRuns,
 } from './types';
+import { castThreadOrderBy, castThreadSortDirection } from './types';
 
 export class MockStore extends MastraStorage {
   private data: Record<TABLE_NAMES, Record<string, any>> = {
@@ -28,6 +32,19 @@ export class MockStore extends MastraStorage {
     super({ name: 'MockStore' });
     // MockStore doesn't need async initialization
     this.hasInitialized = Promise.resolve(true);
+  }
+
+  private sortThreads(threads: any[], orderBy: ThreadOrderBy, sortDirection: ThreadSortDirection): any[] {
+    return threads.sort((a, b) => {
+      const aValue = new Date(a[orderBy]).getTime();
+      const bValue = new Date(b[orderBy]).getTime();
+
+      if (sortDirection === 'ASC') {
+        return aValue - bValue;
+      } else {
+        return bValue - aValue;
+      }
+    });
   }
 
   async createTable(_: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void> {
@@ -75,11 +92,16 @@ export class MockStore extends MastraStorage {
     return thread ? (thread as StorageThreadType) : null;
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
+  async getThreadsByResourceId({
+    resourceId,
+    orderBy,
+    sortDirection,
+  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
     this.logger.debug(`MockStore: getThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Object.values(this.data.mastra_threads).filter((t: any) => t.resourceId === resourceId);
-    return threads as StorageThreadType[];
+    const sortedThreads = this.sortThreads(threads, castThreadOrderBy(orderBy), castThreadSortDirection(sortDirection));
+    return sortedThreads as StorageThreadType[];
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
@@ -386,20 +408,33 @@ export class MockStore extends MastraStorage {
     };
   }
 
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  async getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     this.logger.debug(`MockStore: getThreadsByResourceIdPaginated called for ${args.resourceId}`);
+
+    const { resourceId, page, perPage, orderBy, sortDirection } = args;
+
     // Mock implementation - find threads by resourceId
-    const threads = Object.values(this.data.mastra_threads).filter((t: any) => t.resourceId === args.resourceId);
+    const threads = Object.values(this.data.mastra_threads).filter((t: any) => t.resourceId === resourceId);
+    const sortedThreads = this.sortThreads(threads, castThreadOrderBy(orderBy), castThreadSortDirection(sortDirection));
+
+    // Apply pagination
+    const total = sortedThreads.length;
+    const startIndex = page * perPage;
+    const endIndex = (page + 1) * perPage;
+    const paginatedThreads = sortedThreads.slice(startIndex, endIndex);
+
     return {
-      threads: threads.slice(args.page * args.perPage, (args.page + 1) * args.perPage),
-      total: threads.length,
-      page: args.page,
-      perPage: args.perPage,
-      hasMore: threads.length > (args.page + 1) * args.perPage,
+      threads: paginatedThreads as StorageThreadType[],
+      total,
+      page,
+      perPage,
+      hasMore: total > (page + 1) * perPage,
     };
   }
 

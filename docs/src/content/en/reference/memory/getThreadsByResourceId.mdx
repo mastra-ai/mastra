@@ -1,6 +1,6 @@
 # getThreadsByResourceId Reference
 
-The `getThreadsByResourceId` function retrieves all threads associated with a specific resource ID from storage.
+The `getThreadsByResourceId` function retrieves all threads associated with a specific resource ID from storage. Threads can be sorted by creation or modification time in ascending or descending order.
 
 ## Usage Example
 
@@ -9,8 +9,16 @@ import { Memory } from "@mastra/core/memory";
 
 const memory = new Memory(config);
 
+// Basic usage - returns threads sorted by createdAt DESC (default)
 const threads = await memory.getThreadsByResourceId({
   resourceId: "resource-123",
+});
+
+// Custom sorting by updatedAt in ascending order
+const threadsByUpdate = await memory.getThreadsByResourceId({
+  resourceId: "resource-123",
+  orderBy: "updatedAt",
+  sortDirection: "ASC",
 });
 ```
 
@@ -24,8 +32,32 @@ const threads = await memory.getThreadsByResourceId({
       description: "The ID of the resource whose threads are to be retrieved.",
       isOptional: false,
     },
+    {
+      name: "orderBy",
+      type: "ThreadOrderBy",
+      description: "Field to sort threads by. Accepts 'createdAt' or 'updatedAt'. Default: 'createdAt'",
+      isOptional: true,
+    },
+    {
+      name: "sortDirection",
+      type: "ThreadSortDirection", 
+      description: "Sort order direction. Accepts 'ASC' or 'DESC'. Default: 'DESC'",
+      isOptional: true,
+    },
   ]}
 />
+
+## Type Definitions
+
+```typescript
+type ThreadOrderBy = 'createdAt' | 'updatedAt';
+type ThreadSortDirection = 'ASC' | 'DESC';
+
+interface ThreadSortOptions {
+  orderBy?: ThreadOrderBy;
+  sortDirection?: ThreadSortDirection;
+}
+```
 
 ## Returns
 

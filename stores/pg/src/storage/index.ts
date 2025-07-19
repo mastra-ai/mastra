@@ -11,6 +11,8 @@ import {
   TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
+  castThreadOrderBy,
+  castThreadSortDirection,
 } from '@mastra/core/storage';
 import type {
   EvalRow,
@@ -22,6 +24,9 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   PaginationArgs,
+  ThreadSortOptions,
+  ThreadOrderBy,
+  ThreadSortDirection,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -645,14 +650,16 @@ export class PostgresStore extends MastraStorage {
   /**
    * @deprecated use getThreadsByResourceIdPaginated instead
    */
-  public async getThreadsByResourceId(args: { resourceId: string }): Promise<StorageThreadType[]> {
-    const { resourceId } = args;
+  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
+    const resourceId = args.resourceId;
+    const orderBy = castThreadOrderBy(args.orderBy);
+    const sortDirection = castThreadSortDirection(args.sortDirection);
 
     try {
       const baseQuery = `FROM ${this.getTableName(TABLE_THREADS)} WHERE "resourceId" = $1`;
       const queryParams: any[] = [resourceId];
 
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "createdAt" DESC`;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${orderBy}" ${sortDirection}`;
       const rows = await this.db.manyOrNone(dataQuery, queryParams);
       return (rows || []).map(thread => ({
         ...thread,
@@ -661,7 +668,17 @@ export class PostgresStore extends MastraStorage {
         updatedAt: thread.updatedAt,
       }));
     } catch (error) {
-      this.logger.error(`Error getting threads for resource ${resourceId}:`, error);
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId, orderBy, sortDirection },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException(mastraError);
       return [];
     }
   }
@@ -669,9 +686,12 @@ export class PostgresStore extends MastraStorage {
   public async getThreadsByResourceIdPaginated(
     args: {
       resourceId: string;
-    } & PaginationArgs,
+    } & PaginationArgs &
+      ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     const { resourceId, page = 0, perPage: perPageInput } = args;
+    const orderBy = castThreadOrderBy(args.orderBy);
+    const sortDirection = castThreadSortDirection(args.sortDirection);
     try {
       const baseQuery = `FROM ${this.getTableName(TABLE_THREADS)} WHERE "resourceId" = $1`;
       const queryParams: any[] = [resourceId];
@@ -692,7 +712,7 @@ export class PostgresStore extends MastraStorage {
         };
       }
 
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "createdAt" DESC LIMIT $2 OFFSET $3`;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${orderBy}" ${sortDirection} LIMIT $2 OFFSET $3`;
       const rows = await this.db.manyOrNone(dataQuery, [...queryParams, perPage, currentOffset]);
 
       const threads = (rows || []).map(thread => ({
@@ -717,6 +737,8 @@ export class PostgresStore extends MastraStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             resourceId,
+            orderBy,
+            sortDirection,
             page,
           },
         },
