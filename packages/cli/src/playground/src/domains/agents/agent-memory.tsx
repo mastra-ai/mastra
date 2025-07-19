@@ -2,7 +2,8 @@ import { MemorySearch } from '@mastra/playground-ui';
 import { useMemorySearch } from '@/hooks/use-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
 import { useParams, useNavigate } from 'react-router';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import { cn } from '@/lib/utils';
 
 interface AgentMemoryProps {
   agentId: string;
@@ -11,6 +12,7 @@ interface AgentMemoryProps {
 export function AgentMemory({ agentId }: AgentMemoryProps) {
   const { threadId } = useParams();
   const navigate = useNavigate();
+  const [searchScope, setSearchScope] = useState<string | null>(null);
 
   // Get memory search hook
   const { searchMemory } = useMemorySearch({
@@ -21,7 +23,12 @@ export function AgentMemory({ agentId }: AgentMemoryProps) {
 
   // Wrap searchMemory to always pass lastMessages: 0 for semantic-only search
   const searchSemanticRecall = useCallback(async (query: string) => {
-    return searchMemory(query, { lastMessages: 0 });
+    const result = await searchMemory(query, { lastMessages: 0 });
+    // Update scope from response
+    if (result.searchScope) {
+      setSearchScope(result.searchScope);
+    }
+    return result;
   }, [searchMemory]);
 
   // Handle clicking on a search result to scroll to the message
@@ -48,10 +55,23 @@ export function AgentMemory({ agentId }: AgentMemoryProps) {
       {/* Memory Search Section */}
       <div className="p-4 border-b border-border1">
         <div className="mb-2">
-          <h3 className="text-sm font-medium text-icon5">Search Semantic Recall</h3>
-          {!threadId && (
-            <p className="text-xs text-icon3 mt-1">Searching across all threads</p>
-          )}
+          <div className="flex items-center gap-2 mb-2">
+            <h3 className="text-sm font-medium text-icon5">Search Semantic Recall</h3>
+            {searchScope && (
+              <span className={cn(
+                "text-xs font-medium px-2 py-0.5 rounded",
+                searchScope === 'resource' 
+                  ? 'bg-purple-500/20 text-purple-400' 
+                  : 'bg-blue-500/20 text-blue-400'
+              )}
+              title={searchScope === 'resource' 
+                ? 'Searching across all threads' 
+                : 'Searching within current thread only'}
+              >
+                {searchScope}
+              </span>
+            )}
+          </div>
         </div>
         <MemorySearch 
           searchMemory={searchSemanticRecall}
