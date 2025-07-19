@@ -8,28 +8,82 @@ import {
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { MongoDBConfig } from './index';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MongoDBStore } from './index';
+import type { ConnectorHandler } from './ConnectorHandler';
+import { Db, MongoClient } from 'mongodb';
+
+const TEST_CONFIG = {
+  url: process.env.MONGODB_URL || 'mongodb://localhost:27017',
+  dbName: process.env.MONGODB_DB_NAME || 'mastra-test-db',
+};
+
+class TestConnectorHandler implements ConnectorHandler {
+  #db?: Db;
+  #client: MongoClient;
+  readonly #dbName: string;
+  #isConnected: boolean;
+
+  constructor() {
+    this.#isConnected = false;
+    this.#client = new MongoClient(TEST_CONFIG.url);
+    this.#dbName = TEST_CONFIG.dbName;
+  }
+
+  private async getConnection(): Promise<Db> {
+    if (this.#isConnected) {
+      return this.#db!;
+    }
+
+    await this.#client.connect();
+    this.#db = this.#client.db(this.#dbName);
+    this.#isConnected = true;
+    return this.#db;
+  }
+
+  async getCollection(collectionName: string) {
+    const db = await this.getConnection();
+    return db.collection(collectionName);
+  }
+
+  async close() {
+    await this.#client.close();
+    this.#isConnected = false;
+  }
+}
 
 class Test {
   store: MongoDBStore;
+  handler?: ConnectorHandler;
 
-  constructor(store: MongoDBStore) {
+  constructor(store: MongoDBStore, handler?: ConnectorHandler) {
     this.store = store;
+    this.handler = handler;
   }
 
   build() {
     return this;
   }
 
+  static fromStore(store: MongoDBStore) {
+    return new Test(store);
+  }
+
+  static fromConnectorHandler() {
+    const handler = new TestConnectorHandler();
+    const store = new MongoDBStore({
+      connectorHandler: handler,
+    });
+    return new Test(store, handler);
+  }
+
   async clearTables() {
     try {
-      await this.store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
-      await this.store.clearTable({ tableName: TABLE_MESSAGES });
-      await this.store.clearTable({ tableName: TABLE_THREADS });
-      await this.store.clearTable({ tableName: TABLE_EVALS });
-      await this.store.clearTable({ tableName: TABLE_TRACES });
+      await this.store!.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      await this.store!.clearTable({ tableName: TABLE_MESSAGES });
+      await this.store!.clearTable({ tableName: TABLE_THREADS });
+      await this.store!.clearTable({ tableName: TABLE_EVALS });
+      await this.store!.clearTable({ tableName: TABLE_TRACES });
     } catch (error) {
       // Ignore errors during table clearing
       console.warn('Error clearing tables:', error);
@@ -139,11 +193,6 @@ class Test {
   }
 }
 
-const TEST_CONFIG: MongoDBConfig = {
-  url: process.env.MONGODB_URL || 'mongodb://localhost:27017',
-  dbName: process.env.MONGODB_DB_NAME || 'mastra-test-db',
-};
-
 describe('MongoDBStore', () => {
   let store: MongoDBStore;
 
@@ -154,26 +203,53 @@ describe('MongoDBStore', () => {
 
   // --- Validation tests ---
   describe('Validation', () => {
-    const validConfig = TEST_CONFIG;
-    it('throws if url is empty', () => {
-      expect(() => new MongoDBStore({ ...validConfig, url: '' })).toThrow(/url must be provided and cannot be empty/);
+    describe('with database options', () => {
+      const validConfig = TEST_CONFIG;
+      it('throws if url is empty', () => {
+        expect(() => new MongoDBStore({ ...validConfig, url: '' })).toThrow(/url must be provided and cannot be empty/);
+      });
+
+      it('throws if dbName is missing or empty', () => {
+        expect(() => new MongoDBStore({ ...validConfig, dbName: '' })).toThrow(
+          /dbName must be provided and cannot be empty/,
+        );
+        const { dbName, ...rest } = validConfig;
+        expect(() => new MongoDBStore(rest as any)).toThrow(/dbName must be provided and cannot be empty/);
+      });
+
+      it('does not throw on valid config (host-based)', () => {
+        expect(() => new MongoDBStore(validConfig)).not.toThrow();
+      });
     });
 
-    it('throws if dbName is missing or empty', () => {
-      expect(() => new MongoDBStore({ ...validConfig, dbName: '' })).toThrow(
-        /dbName must be provided and cannot be empty/,
-      );
-      const { dbName, ...rest } = validConfig;
-      expect(() => new MongoDBStore(rest as any)).toThrow(/dbName must be provided and cannot be empty/);
-    });
-    it('does not throw on valid config (host-based)', () => {
-      expect(() => new MongoDBStore(validConfig)).not.toThrow();
+    describe('with connection handler', () => {
+      const validWithConnectionHandlerConfig = {
+        connectorHandler: {} as ConnectorHandler,
+      };
+
+      it('not throws if url is empty', () => {
+        expect(() => new MongoDBStore({ ...validWithConnectionHandlerConfig, url: '' })).not.toThrow(
+          /url must be provided and cannot be empty/,
+        );
+      });
+
+      it('not throws if dbName is missing or empty', () => {
+        expect(() => new MongoDBStore({ ...validWithConnectionHandlerConfig, dbName: '' })).not.toThrow(
+          /dbName must be provided and cannot be empty/,
+        );
+        const { dbName, ...rest } = validWithConnectionHandlerConfig as any;
+        expect(() => new MongoDBStore(rest as any)).not.toThrow(/dbName must be provided and cannot be empty/);
+      });
+
+      it('does not throw on valid config', () => {
+        expect(() => new MongoDBStore(validWithConnectionHandlerConfig)).not.toThrow();
+      });
     });
   });
 
   describe('Thread Operations', () => {
     it('should create and retrieve a thread', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
       const thread = test.generateSampleThread();
 
@@ -187,7 +263,7 @@ describe('MongoDBStore', () => {
     });
 
     it('should return null for non-existent thread', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
 
       const result = await store.getThreadById({ threadId: 'non-existent' });
@@ -195,7 +271,7 @@ describe('MongoDBStore', () => {
     });
 
     it('should get threads by resource ID', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
 
       const thread1 = test.generateSampleThread();
@@ -210,7 +286,7 @@ describe('MongoDBStore', () => {
     });
 
     it('should update thread title and metadata', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
 
       const thread = test.generateSampleThread();
@@ -235,7 +311,7 @@ describe('MongoDBStore', () => {
     });
 
     it('should delete thread and its messages', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
 
       const thread = test.generateSampleThread();
@@ -259,7 +335,7 @@ describe('MongoDBStore', () => {
     });
 
     it('should not create duplicate threads with the same threadId but update the existing one', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
       const thread = test.generateSampleThread();
 
@@ -301,11 +377,33 @@ describe('MongoDBStore', () => {
       expect(updatedThread).toBeDefined();
       expect(updatedThread!.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
     });
+
+    describe('with connection handler', () => {
+      it('should create and retrieve a thread', async () => {
+        const test = Test.fromConnectorHandler().build();
+        await test.clearTables();
+        const thread = test.generateSampleThread();
+
+        // Create spy on getCollection while preserving original functionality
+        const getCollectionSpy = vi.spyOn(test.handler!, 'getCollection');
+
+        // Save thread
+        const savedThread = await test.store.saveThread({ thread });
+        expect(savedThread).toEqual(thread);
+
+        // Retrieve thread
+        const retrievedThread = await test.store.getThreadById({ threadId: thread.id });
+        expect(retrievedThread?.title).toEqual(thread.title);
+
+        // Verify connection handler was used
+        expect(getCollectionSpy).toBeCalled();
+      });
+    });
   });
 
   describe('Message Operations', () => {
     it('should save and retrieve messages', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
       const thread = test.generateSampleThread();
       await store.saveThread({ thread });
@@ -327,7 +425,7 @@ describe('MongoDBStore', () => {
     });
 
     it('should handle empty message array', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
 
       const result = await store.saveMessages({ messages: [] });
@@ -335,7 +433,7 @@ describe('MongoDBStore', () => {
     });
 
     it('should maintain message order', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
       const thread = test.generateSampleThread();
       await store.saveThread({ thread });
@@ -441,7 +539,7 @@ describe('MongoDBStore', () => {
     });
 
     // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
-    //   const test = new Test(store).build();
+    //   const test = new Test().withStore(store).build();
     //   const messages: MastraMessageV2[] = [
     //     test.generateSampleMessageV2({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
     //     test.generateSampleMessageV2({
@@ -595,7 +693,7 @@ describe('MongoDBStore', () => {
 
   describe('Edge Cases and Error Handling', () => {
     it('should handle large metadata objects', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
       const thread = test.generateSampleThread();
       const largeMetadata = {
@@ -615,7 +713,7 @@ describe('MongoDBStore', () => {
     });
 
     it('should handle special characters in thread titles', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
       const thread = test.generateSampleThread({
         title: 'Special \'quotes\' and "double quotes" and emoji 🎉',
@@ -628,7 +726,7 @@ describe('MongoDBStore', () => {
     });
 
     it('should handle concurrent thread updates', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
       const thread = test.generateSampleThread();
       await store.saveThread({ thread });
@@ -652,7 +750,7 @@ describe('MongoDBStore', () => {
 
   describe('Workflow Snapshots', () => {
     it('should persist and load workflow snapshots', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;
@@ -797,7 +895,7 @@ describe('MongoDBStore', () => {
 
   describe('getWorkflowRuns', () => {
     it('returns empty array when no workflows exist', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
 
       const { runs, total } = await store.getWorkflowRuns();
@@ -806,7 +904,7 @@ describe('MongoDBStore', () => {
     });
 
     it('returns all workflows by default', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
 
       const workflowName1 = 'default_test_1';
@@ -839,7 +937,7 @@ describe('MongoDBStore', () => {
     });
 
     it('filters by workflow name', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
       const workflowName1 = 'filter_test_1';
       const workflowName2 = 'filter_test_2';
@@ -864,7 +962,7 @@ describe('MongoDBStore', () => {
     });
 
     it('filters by date range', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
       const now = new Date();
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -931,7 +1029,7 @@ describe('MongoDBStore', () => {
     });
 
     it('handles pagination', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
       const workflowName1 = 'page_test_1';
       const workflowName2 = 'page_test_2';
@@ -1128,7 +1226,7 @@ describe('MongoDBStore', () => {
 
   describe('Eval Operations', () => {
     it('should retrieve evals by agent name', async () => {
-      const test = new Test(store).build();
+      const test = Test.fromStore(store).build();
       await test.clearTables();
       const agentName = `test-agent-${randomUUID()}`;
 
