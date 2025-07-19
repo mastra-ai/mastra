@@ -4,7 +4,7 @@ import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 
-export async function getInputOptions(entryFile: string, platform: 'node' | 'browser', env?: Record<string, string>) {
+export async function getInputOptions(entryFile: string, platform: 'node' | 'browser', env?: Record<string, string>, sourcemapEnabled: boolean = false) {
   const inputOptions = await getBundlerInputOptions(
     entryFile,
     {
@@ -14,6 +14,7 @@ export async function getInputOptions(entryFile: string, platform: 'node' | 'bro
     },
     platform,
     env,
+    sourcemapEnabled,
   );
 
   if (Array.isArray(inputOptions.plugins)) {
