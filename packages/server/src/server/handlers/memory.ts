@@ -65,6 +65,28 @@ export async function getMemoryStatusHandler({
   }
 }
 
+export async function getMemoryConfigHandler({
+  mastra,
+  agentId,
+  networkId,
+  runtimeContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'>) {
+  try {
+    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+
+    if (!memory) {
+      throw new HTTPException(400, { message: 'Memory is not initialized' });
+    }
+
+    // Get the merged configuration (defaults + custom)
+    const config = memory.getMergedThreadConfig({});
+    
+    return { config };
+  } catch (error) {
+    return handleError(error, 'Error getting memory configuration');
+  }
+}
+
 export async function getThreadsHandler({
   mastra,
   agentId,

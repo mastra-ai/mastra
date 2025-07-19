@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import {
   getMemoryStatusHandler as getOriginalMemoryStatusHandler,
+  getMemoryConfigHandler as getOriginalMemoryConfigHandler,
   getThreadsHandler as getOriginalThreadsHandler,
   getThreadByIdHandler as getOriginalThreadByIdHandler,
   saveMessagesHandler as getOriginalSaveMessagesHandler,
@@ -32,6 +33,24 @@ export async function getMemoryStatusHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error getting memory status');
+  }
+}
+
+export async function getMemoryConfigHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.query('agentId');
+    const networkId = c.req.query('networkId');
+
+    const result = await getOriginalMemoryConfigHandler({
+      mastra,
+      agentId,
+      networkId,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error getting memory configuration');
   }
 }
 

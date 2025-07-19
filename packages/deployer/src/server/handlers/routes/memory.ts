@@ -6,6 +6,7 @@ import {
   createThreadHandler,
   deleteThreadHandler,
   getMemoryStatusHandler,
+  getMemoryConfigHandler,
   getMessagesHandler,
   getThreadByIdHandler,
   getThreadsHandler,
@@ -306,6 +307,91 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getMemoryStatusHandler,
+  );
+
+  router.get(
+    '/config',
+    describeRoute({
+      description: 'Get memory configuration',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Memory configuration',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  config: {
+                    type: 'object',
+                    properties: {
+                      lastMessages: { 
+                        oneOf: [
+                          { type: 'number' },
+                          { type: 'boolean' }
+                        ]
+                      },
+                      semanticRecall: {
+                        oneOf: [
+                          { type: 'boolean' },
+                          { 
+                            type: 'object',
+                            properties: {
+                              topK: { type: 'number' },
+                              messageRange: { 
+                                oneOf: [
+                                  { type: 'number' },
+                                  { 
+                                    type: 'object',
+                                    properties: {
+                                      before: { type: 'number' },
+                                      after: { type: 'number' }
+                                    }
+                                  }
+                                ]
+                              },
+                              scope: { type: 'string', enum: ['thread', 'resource'] },
+                            }
+                          }
+                        ]
+                      },
+                      workingMemory: {
+                        type: 'object',
+                        properties: {
+                          enabled: { type: 'boolean' },
+                          scope: { type: 'string', enum: ['thread', 'resource'] },
+                          template: { type: 'string' },
+                        },
+                      },
+                      threads: {
+                        type: 'object',
+                        properties: {
+                          generateTitle: { 
+                            oneOf: [
+                              { type: 'boolean' },
+                              { type: 'object' }
+                            ]
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    getMemoryConfigHandler,
   );
 
   router.get(

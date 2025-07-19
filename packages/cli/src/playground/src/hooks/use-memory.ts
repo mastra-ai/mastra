@@ -17,6 +17,17 @@ export const useMemory = (agentId?: string) => {
   return { memory, isLoading, mutate };
 };
 
+export const useMemoryConfig = (agentId?: string) => {
+  const {
+    data: config,
+    isLoading,
+    mutate,
+  } = useSWR<any>(`/api/memory/config?agentId=${agentId}`, fetcher, {
+    isPaused: () => !agentId,
+  });
+  return { config: config?.config, isLoading, mutate };
+};
+
 export const useThreads = ({
   resourceid,
   agentId,
