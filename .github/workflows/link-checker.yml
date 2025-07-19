@@ -42,3 +42,30 @@ jobs:
 
       - name: Run validate-redirects
         run: node .github/scripts/validate-redirects.js
+
+  validate-docs-links:
+    name: Validate docs links
+    if: ${{ github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'Preview – mastra-docs' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies for docs
+        run: npm ci
+        working-directory: docs
+
+      - name: Install cheerio
+        run: npm install cheerio
+
+      - name: Set deployment URL as env var
+        run: echo "MASTRA_DEPLOYMENT_URL=${{ github.event.deployment_status.target_url }}" >> $GITHUB_ENV
+
+      - name: Run validate-links
+        run: node .github/scripts/validate-docs-links.js

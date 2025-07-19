@@ -80,6 +80,7 @@
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.12.4",
   "dependencies": {
+    "cheerio": "^1.1.0",
     "globby": "^14.1.0",
     "resolve-from": "^5.0.0"
   }
