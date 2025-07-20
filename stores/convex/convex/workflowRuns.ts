@@ -458,13 +458,7 @@ export const load = query({
       }
 
       const runs = await query.collect();
-      return {
-        page: runs.map(convertDbToAppModel),
-        isDone: true,
-        continueCursor: null,
-        total: runs.length,
-        totalPages: 1,
-      };
+      return runs.map(convertDbToAppModel);
     }
 
     throw new Error('Must provide one of: runId, status, or resourceId in keys');

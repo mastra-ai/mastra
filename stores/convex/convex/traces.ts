@@ -299,13 +299,7 @@ export const load = query({
       }
 
       const traces = await query.collect();
-      return {
-        page: traces,
-        isDone: true,
-        continueCursor: null,
-        total: traces.length,
-        totalPages: 1,
-      };
+      return traces;
     }
 
     // Handle traces by parentSpanId

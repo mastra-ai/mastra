@@ -10,7 +10,13 @@ import type {
 } from '@mastra/core';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
-import { TABLE_MESSAGES } from '@mastra/core/storage';
+import {
+  TABLE_EVALS,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_TRACES,
+  TABLE_WORKFLOW_SNAPSHOT,
+} from '@mastra/core/storage';
 import { describe, test, expect, afterAll } from 'vitest';
 import { api } from '../../convex/_generated/api';
 import { ConvexStorage } from './index';
@@ -82,6 +88,88 @@ describe('ConvexStorage Tests', () => {
   });
 
   describe('ConvexStorage Thread Tests', () => {
+    test('should insert a single thread using insert method', async () => {
+      const threadId = `thread-${Date.now()}`;
+      const thread = {
+        id: threadId,
+        title: 'Test Thread',
+        resourceId: 'test-resource',
+        metadata: { key: 'value' },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Insert the thread
+      await expect(
+        storage.insert({
+          tableName: TABLE_THREADS,
+          record: thread,
+        }),
+      ).resolves.not.toThrow();
+
+      // Verify the thread was inserted
+      const savedThread = await storage.load<StorageThreadType>({
+        tableName: TABLE_THREADS,
+        keys: { threadId },
+      });
+      console.log(savedThread);
+
+      expect(savedThread).toBeDefined();
+      // expect(savedThread?.id).toBe(threadId);
+      expect(savedThread?.title).toBe('Test Thread');
+      expect(savedThread?.resourceId).toBe('test-resource');
+    });
+
+    test('should batch insert multiple threads using batchInsert method', async () => {
+      const commonResourceId = `resource-${Date.now()}`;
+      const threads: StorageThreadType[] = [
+        {
+          id: `thread-1-${Date.now()}`,
+          title: 'Test Thread 1',
+          resourceId: commonResourceId,
+          metadata: { key: 'value1' },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: `thread-2-${Date.now()}`,
+          title: 'Test Thread 2',
+          resourceId: commonResourceId,
+          metadata: { key: 'value2' },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+
+      // Batch insert the threads
+      await expect(
+        storage.batchInsert({
+          tableName: TABLE_THREADS,
+          records: threads,
+        }),
+      ).resolves.not.toThrow();
+
+      // Verify all threads were inserted
+      const savedThreads = await storage.load<StorageThreadType[]>({
+        tableName: TABLE_THREADS,
+        keys: { resourceId: commonResourceId },
+      });
+
+      expect(savedThreads).toBeDefined();
+      expect(Array.isArray(savedThreads)).toBe(true);
+      expect(savedThreads?.length).toBe(2);
+
+      // Verify first thread
+      const firstThread = savedThreads?.find(t => t.title === 'Test Thread 1');
+      expect(firstThread).toBeDefined();
+      expect(firstThread?.resourceId).toBe(commonResourceId);
+
+      // Verify second thread
+      const secondThread = savedThreads?.find(t => t.title === 'Test Thread 2');
+      expect(secondThread).toBeDefined();
+      expect(secondThread?.resourceId).toBe(commonResourceId);
+    });
+
     test('should save a new thread', async () => {
       const thread: StorageThreadType = {
         id: 'test-thread-id-1',
@@ -753,6 +841,96 @@ describe('ConvexStorage Tests', () => {
       api,
     });
 
+    test('should insert a single evaluation using insert method', async () => {
+      const evalData: EvalRow = {
+        input: 'test input',
+        output: 'test output',
+        result: { score: 0.9 },
+        agentName: 'test-agent',
+        createdAt: new Date().toISOString(),
+        metricName: 'test-metric',
+        instructions: 'test instructions',
+        runId: 'test-run-1',
+        globalRunId: 'test-global-run-1',
+      };
+
+      // Insert the evaluation
+      await expect(
+        storage.insert({
+          tableName: TABLE_EVALS,
+          record: evalData,
+        }),
+      ).resolves.not.toThrow();
+
+      // Verify the evaluation was inserted
+      const savedEval = await storage.load<EvalRow>({
+        tableName: TABLE_EVALS,
+        keys: { runId: 'test-run-1' },
+      });
+
+      expect(savedEval).toBeDefined();
+      expect(savedEval?.runId).toBe('test-run-1');
+      expect(savedEval?.agentName).toBe('test-agent');
+      expect(savedEval?.metricName).toBe('test-metric');
+    });
+
+    test('should batch insert multiple evaluations using batchInsert method', async () => {
+      const evals = [
+        {
+          input: 'test input 1',
+          output: 'test output 1',
+          result: { score: 0.85 },
+          agentName: 'test-agent-1',
+          createdAt: new Date().toISOString(),
+          metricName: 'test-metric-1',
+          instructions: 'test instructions 1',
+          runId: 'batch-run-1',
+          globalRunId: 'test-batch-global-run-1',
+        },
+        {
+          input: 'test input 2',
+          output: 'test output 2',
+          result: { score: 0.92 },
+          agentName: 'test-agent-2',
+          createdAt: new Date().toISOString(),
+          metricName: 'test-metric-2',
+          instructions: 'test instructions 2',
+          runId: 'batch-run-2',
+          globalRunId: 'test-batch-global-run-1',
+        },
+      ];
+
+      // Batch insert the evaluations
+      await expect(
+        storage.batchInsert({
+          tableName: TABLE_EVALS,
+          records: evals,
+        }),
+      ).resolves.not.toThrow();
+
+      // Verify all evaluations were inserted
+      const savedEvals = await storage.load<EvalRow[]>({
+        tableName: TABLE_EVALS,
+        keys: { globalRunId: 'test-batch-global-run-1' },
+      });
+
+      expect(savedEvals).toBeDefined();
+      expect(Array.isArray(savedEvals)).toBe(true);
+      expect(savedEvals?.length).toBe(2);
+
+      // Verify first evaluation
+      const firstEval = savedEvals?.find(e => e.runId === 'batch-run-1');
+      expect(firstEval).toBeDefined();
+      expect(firstEval?.agentName).toBe('test-agent-1');
+      expect(firstEval?.metricName).toBe('test-metric-1');
+
+      // Verify second evaluation
+      const secondEval = savedEvals?.find(e => e.runId === 'batch-run-2');
+      expect(secondEval).toBeDefined();
+      expect(secondEval?.agentName).toBe('test-agent-2');
+      expect(secondEval?.metricName).toBe('test-metric-2');
+    });
+
     test('should save a new evaluation', async () => {
       // Create EvalRow with required fields based on the structure in evals.ts
       const evalData: EvalRow = {
@@ -996,6 +1174,106 @@ describe('ConvexStorage Tests', () => {
     const storage = new ConvexStorage({
       convexUrl: 'http://localhost:3210',
       api,
+    });
+
+    test('should insert a single trace using insert method', async () => {
+      const traceData: Trace = {
+        id: `trace-${Date.now()}`,
+        parentSpanId: `parent-span-${Date.now()}`,
+        name: 'test-trace',
+        traceId: 'test-trace-id-1',
+        kind: 0,
+        other: {},
+        createdAt: Date.now().toString(),
+        scope: 'test-scope',
+        attributes: { key: 'value' },
+        status: { code: 0, message: 'OK' },
+        startTime: Date.now() - 1000,
+        endTime: Date.now(),
+        events: [],
+        links: [],
+      };
+
+      // Insert the trace
+      await expect(
+        storage.insert({
+          tableName: TABLE_TRACES,
+          record: traceData,
+        }),
+      ).resolves.not.toThrow();
+
+      // Verify the trace was inserted
+      const savedTrace = await storage.load<Trace[]>({
+        tableName: TABLE_TRACES,
+        keys: { traceId: 'test-trace-id-1' },
+      });
+
+      expect(savedTrace).toBeDefined();
+      expect(savedTrace?.[0].traceId).toBe('test-trace-id-1');
+      expect(savedTrace?.[0].name).toBe('test-trace');
+      expect(savedTrace?.[0].status?.code).toBe(0);
+    });
+
+    test('should batch insert multiple traces using batchInsert method', async () => {
+      const commonTraceId = `batch-trace-${Date.now()}`;
+      const traces = [
+        {
+          id: `span-1-${Date.now()}`,
+          parentSpanId: `parent-${Date.now()}`,
+          name: 'test-trace-1',
+          traceId: commonTraceId,
+          scope: 'test-scope',
+          attributes: { key: 'value1' },
+          status: { code: 0, message: 'OK' },
+          startTime: Date.now() - 2000,
+          endTime: Date.now() - 1000,
+          events: [],
+          links: [],
+        },
+        {
+          id: `span-2-${Date.now()}`,
+          parentSpanId: `parent-${Date.now()}`,
+          name: 'test-trace-2',
+          traceId: commonTraceId,
+          scope: 'test-scope',
+          attributes: { key: 'value2' },
+          status: { code: 0, message: 'OK' },
+          startTime: Date.now() - 1000,
+          endTime: Date.now(),
+          events: [],
+          links: [],
+        },
+      ];
+
+      // Batch insert the traces
+      await expect(
+        storage.batchInsert({
+          tableName: TABLE_TRACES,
+          records: traces,
+        }),
+      ).resolves.not.toThrow();
+
+      // Verify all traces were inserted
+      const savedTraces = await storage.load<Trace[]>({
+        tableName: TABLE_TRACES,
+        keys: { traceId: commonTraceId },
+      });
+
+      expect(savedTraces).toBeDefined();
+      expect(Array.isArray(savedTraces)).toBe(true);
+      expect(savedTraces?.length).toBe(2);
+
+      // Verify first trace
+      const firstTrace = savedTraces?.[0];
+      expect(firstTrace).toBeDefined();
+      expect(firstTrace?.traceId).toBe(commonTraceId);
+      expect(firstTrace?.name).toContain('test-trace-');
+
+      // Verify second trace
+      const secondTrace = savedTraces?.[1];
+      expect(secondTrace).toBeDefined();
+      expect(secondTrace?.traceId).toBe(commonTraceId);
+      expect(secondTrace?.name).toContain('test-trace-');
     });
 
     test('should save a new trace', async () => {
@@ -1536,6 +1814,114 @@ describe('ConvexStorage Tests', () => {
     const storage = new ConvexStorage({
       convexUrl: 'http://localhost:3210',
       api,
+    });
+
+    test('should insert a single workflow run using insert method', async () => {
+      const runId = `run-${Date.now()}`;
+      const workflowRun = {
+        runId,
+        workflowName: 'test-workflow',
+        resourceId: 'test-resource',
+        status: 'running',
+        state: {
+          runId,
+          status: 'running',
+          value: { key: 'value' },
+          context: {},
+          serializedStepGraph: [],
+          activePaths: [],
+          suspendedPaths: {},
+          timestamp: Date.now(),
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Insert the workflow run
+      await expect(
+        storage.insert({
+          tableName: TABLE_WORKFLOW_SNAPSHOT,
+          record: workflowRun,
+        }),
+      ).resolves.not.toThrow();
+
+      // Verify the workflow run was inserted
+      const savedRun = await storage.load<WorkflowRun>({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keys: { runId },
+      });
+
+      expect(savedRun).toBeDefined();
+      expect(savedRun?.runId).toBe(runId);
+      expect(savedRun?.workflowName).toBe('test-workflow');
+    });
+
+    test('should batch insert multiple workflow runs using batchInsert method', async () => {
+      const commonResourceId = `resource-${Date.now()}`;
+      const workflowRuns = [
+        {
+          runId: `run-1-${Date.now()}`,
+          workflowName: 'test-workflow-1',
+          resourceId: commonResourceId,
+          status: 'running',
+          state: {
+            runId: `run-1-${Date.now()}`,
+            status: 'running',
+            value: { key: 'value1' },
+            context: {},
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            timestamp: Date.now(),
+          },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          runId: `run-2-${Date.now()}`,
+          workflowName: 'test-workflow-2',
+          resourceId: commonResourceId,
+          status: 'success',
+          state: {
+            runId: `run-2-${Date.now()}`,
+            status: 'success',
+            value: { key: 'value2' },
+            context: {},
+            serializedStepGraph: [],
+            activePaths: [],
+            suspendedPaths: {},
+            timestamp: Date.now() + 1000,
+          },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ];
+
+      // Batch insert the workflow runs
+      await expect(
+        storage.batchInsert({
+          tableName: TABLE_WORKFLOW_SNAPSHOT,
+          records: workflowRuns,
+        }),
+      ).resolves.not.toThrow();
+
+      // Verify all workflow runs were inserted
+      const savedRuns = await storage.load<WorkflowRun[]>({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keys: { resourceId: commonResourceId },
+      });
+
+      expect(savedRuns).toBeDefined();
+      expect(Array.isArray(savedRuns)).toBe(true);
+      expect(savedRuns?.length).toBe(2);
+
+      // Verify first workflow run
+      const firstRun = savedRuns?.find(r => r.workflowName === 'test-workflow-1');
+      expect(firstRun).toBeDefined();
+
+      // Verify second workflow run
+      const secondRun = savedRuns?.find(r => r.workflowName === 'test-workflow-2');
+      expect(secondRun).toBeDefined();
     });
 
     test('should save and get a workflow run', async () => {

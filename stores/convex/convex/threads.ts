@@ -73,7 +73,16 @@ export const getByResourceIdPaginated = query({
  * Save a thread
  */
 export const save = mutation({
-  args: { thread: v.any() },
+  args: {
+    thread: v.object({
+      id: v.string(),
+      resourceId: v.string(),
+      title: v.string(),
+      metadata: v.any(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }),
+  },
   handler: async (ctx, args) => {
     const { thread } = args;
     const existingThread = await ctx.db
@@ -123,6 +132,7 @@ export const batchSave = mutation({
         title: v.optional(v.string()),
         metadata: v.optional(v.any()),
         createdAt: v.optional(v.number()),
+        updatedAt: v.optional(v.number()),
       }),
     ),
   },
@@ -284,13 +294,14 @@ export const load = query({
 
       // Return all results if no pagination
       const threads = await query.collect();
-      return {
-        page: threads,
-        isDone: true,
-        continueCursor: null,
-        total: threads.length,
-        totalPages: 1,
-      };
+      return threads.map(thread => ({
+        id: thread.threadId,
+        title: thread.title,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+        metadata: thread.metadata,
+        resourceId: thread.resourceId,
+      }));
     }
 
     throw new Error('Must provide either threadId or resourceId in keys');

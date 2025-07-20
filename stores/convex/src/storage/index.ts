@@ -200,7 +200,14 @@ export class ConvexStorage extends MastraStorage {
       switch (tableName) {
         case TABLE_THREADS: {
           const threads = records as StorageThreadType[];
-          await this.httpClient.mutation(this.api.threads.batchSave, { threads });
+          const threadsToSave = threads.map(thread => {
+            return {
+              ...thread,
+              createdAt: thread.createdAt.getTime() || Date.now(),
+              updatedAt: thread.updatedAt.getTime() || Date.now(),
+            };
+          });
+          await this.httpClient.mutation(this.api.threads.batchSave, { threads: threadsToSave });
           break;
         }
         case TABLE_MESSAGES: {
