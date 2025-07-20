@@ -219,7 +219,6 @@ export const update = mutation({
       createdAt: existingThread.createdAt,
       updatedAt: Date.now(),
       metadata: args.metadata,
-      messages: [], // Messages are handled separately
     };
   },
 });

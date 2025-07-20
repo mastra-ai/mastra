@@ -209,7 +209,18 @@ export const getByStateType = query({
  * Update workflow runs
  */
 export const update = mutation({
-  args: { runs: v.array(v.any()) },
+  args: {
+    runs: v.array(
+      v.object({
+        runId: v.string(),
+        resourceId: v.string(),
+        workflowName: v.string(),
+        snapshot: v.any(),
+        createdAt: v.number(),
+        updatedAt: v.number(),
+      }),
+    ),
+  },
   handler: async (ctx, args) => {
     const { runs } = args;
     let updatedCount = 0;
@@ -218,7 +229,7 @@ export const update = mutation({
       // Find the run by ID
       const existingRun = await ctx.db
         .query('workflowRuns')
-        .withIndex('by_runId', q => q.eq('runId', run.runId || run.id))
+        .withIndex('by_runId', q => q.eq('runId', run.runId))
         .first();
 
       if (existingRun) {
@@ -228,36 +239,21 @@ export const update = mutation({
         };
 
         // Handle state field mapping to snapshot
-        if (run.state !== undefined) {
-          updateData.snapshot = run.state;
-        }
-
-        // Handle snapshot field directly
         if (run.snapshot !== undefined) {
           updateData.snapshot = run.snapshot;
         }
 
-        // Handle stateType field mapping to status
-        if (run.stateType !== undefined) {
-          updateData.status = run.stateType as WorkflowRunStatus;
-        }
-
-        // Handle status field directly
-        if (run.status !== undefined) {
-          updateData.status = run.status as WorkflowRunStatus;
-        }
-
         // Handle any error in the snapshot
-        if (run.error !== undefined) {
+        if (run.snapshot?.error !== undefined) {
           // Store error in the snapshot if there's an existing snapshot
           if (existingRun.snapshot && typeof existingRun.snapshot === 'object') {
             updateData.snapshot = {
               ...(existingRun.snapshot as object),
-              error: run.error,
+              error: run.snapshot.error,
             };
           } else {
             // Create new snapshot with just the error
-            updateData.snapshot = { error: run.error };
+            updateData.snapshot = { error: run.snapshot.error };
           }
         }
 

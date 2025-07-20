@@ -175,7 +175,7 @@ export class ConvexStorage extends MastraStorage {
         default:
           throw new Error(`Unsupported table name: ${tableName}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       throw new MastraError(
         {
           id: 'STORAGE_INSERT_ERROR',
@@ -552,8 +552,8 @@ export class ConvexStorage extends MastraStorage {
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     const threadToSave = {
       ...thread,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: thread.createdAt.getTime() || Date.now(),
+      updatedAt: thread.updatedAt.getTime() || Date.now(),
     };
     try {
       return await this.client.mutation(this.api.threads.save, { thread: threadToSave });
@@ -819,7 +819,6 @@ export class ConvexStorage extends MastraStorage {
           return {
             ...msg,
             createdAt: msg.createdAt.getTime(),
-            updatedAt: Date.now(),
           };
         });
         return await this.httpClient.mutation(this.api.messages.save, { messages: messageToSave });
@@ -851,7 +850,6 @@ export class ConvexStorage extends MastraStorage {
           return {
             ...msg,
             createdAt: msg.createdAt.getTime(),
-            updatedAt: Date.now(),
           };
         });
 
@@ -906,8 +904,7 @@ export class ConvexStorage extends MastraStorage {
     try {
       const traceToSave = {
         ...trace,
-        createdAt: new Date(trace.createdAt).getTime(),
-        updatedAt: Date.now(),
+        createdAt: trace.createdAt || new Date().toISOString(),
       };
       return await this.httpClient.mutation(this.api.traces.save, { trace: traceToSave });
     } catch (error) {
@@ -1062,8 +1059,7 @@ export class ConvexStorage extends MastraStorage {
     try {
       const evalToSave = {
         ...evalData,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: evalData.createdAt || new Date(),
       };
       return await this.httpClient.mutation(this.api.evals.save, { evalData: evalToSave });
     } catch (error) {

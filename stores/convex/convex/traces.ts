@@ -6,25 +6,42 @@ import { query, mutation } from './_generated/server';
  * Save a trace
  */
 export const save = mutation({
-  args: { trace: v.any() },
+  args: {
+    trace: v.object({
+      id: v.string(),
+      parentSpanId: v.optional(v.string()),
+      name: v.string(),
+      traceId: v.string(),
+      scope: v.optional(v.string()),
+      attributes: v.optional(v.any()),
+      status: v.optional(v.any()),
+      kind: v.optional(v.number()),
+      events: v.optional(v.array(v.any())),
+      links: v.optional(v.array(v.any())),
+      other: v.optional(v.any()),
+      startTime: v.number(),
+      endTime: v.number(),
+      createdAt: v.optional(v.string()),
+    }),
+  },
   handler: async (ctx, args) => {
     const { trace } = args;
 
     const traceData = {
       id: trace.id,
-      parentSpanId: trace.parentSpanId,
+      parentSpanId: trace.parentSpanId || '',
       name: trace.name,
       traceId: trace.traceId,
-      scope: trace.scope,
-      attributes: trace.attributes,
-      status: trace.status,
-      kind: trace.kind,
-      events: trace.events,
-      links: trace.links,
-      other: trace.other,
+      scope: trace.scope || '',
+      attributes: trace.attributes || {},
+      status: trace.status || {},
+      kind: trace.kind || 0,
+      events: trace.events || [],
+      links: trace.links || [],
+      other: trace.other || {},
       startTime: trace.startTime,
       endTime: trace.endTime,
-      createdAt: trace.createdAt,
+      createdAt: trace.createdAt ? new Date(trace.createdAt).getTime() : Date.now(),
     };
 
     // Check if trace already exists
@@ -65,7 +82,7 @@ export const batchSave = mutation({
         other: v.optional(v.any()),
         startTime: v.optional(v.number()),
         endTime: v.optional(v.number()),
-        createdAt: v.optional(v.number()),
+        createdAt: v.optional(v.string()),
       }),
     ),
   },
@@ -88,7 +105,7 @@ export const batchSave = mutation({
         other: trace.other || {},
         startTime: trace.startTime || Date.now(),
         endTime: trace.endTime || Date.now(),
-        createdAt: trace.createdAt || Date.now(),
+        createdAt: trace.createdAt ? new Date(trace.createdAt).getTime() : Date.now(),
       };
 
       // Check if trace already exists
@@ -249,11 +266,11 @@ export const getPaginated = query({
     // Return the paginated results with metadata
     // Structure the response to match the expected format with a 'traces' property
     return {
-      page: Math.ceil(args.paginationOpts.numItems ? paginationResult.page.length / args.paginationOpts.numItems : 1),
+      page: Math.ceil((skipCount + paginationResult.page.length) / numItems),
       perPage: args.paginationOpts.numItems || 10,
       total,
       totalPages: Math.ceil(total / numItems),
-      traces: paginationResult.page, // Include the traces array from the paginated results
+      traces: paginationResult.page,
     };
   },
 });
@@ -329,13 +346,7 @@ export const load = query({
       }
 
       const traces = await query.collect();
-      return {
-        page: traces,
-        isDone: true,
-        continueCursor: null,
-        total: traces.length,
-        totalPages: 1,
-      };
+      return traces;
     }
 
     throw new Error('Must provide either traceId or parentSpanId in keys');

@@ -5,7 +5,20 @@ import { query, mutation } from './_generated/server';
  * Save an evaluation
  */
 export const save = mutation({
-  args: { evalData: v.any() },
+  args: {
+    evalData: v.object({
+      input: v.string(),
+      output: v.string(),
+      result: v.any(),
+      agentName: v.string(),
+      createdAt: v.string(),
+      metricName: v.string(),
+      instructions: v.string(),
+      runId: v.string(),
+      globalRunId: v.string(),
+      testInfo: v.optional(v.any()),
+    }),
+  },
   handler: async (ctx, args) => {
     const { evalData } = args;
 
@@ -14,7 +27,7 @@ export const save = mutation({
       output: evalData.output,
       result: evalData.result,
       agentName: evalData.agentName,
-      createdAt: evalData.createdAt,
+      createdAt: new Date(evalData.createdAt).getTime(),
       metricName: evalData.metricName,
       instructions: evalData.instructions,
       runId: evalData.runId,

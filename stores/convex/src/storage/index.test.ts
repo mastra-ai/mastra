@@ -95,8 +95,8 @@ describe('ConvexStorage Tests', () => {
         title: 'Test Thread',
         resourceId: 'test-resource',
         metadata: { key: 'value' },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
 
       // Insert the thread
@@ -112,7 +112,6 @@ describe('ConvexStorage Tests', () => {
         tableName: TABLE_THREADS,
         keys: { threadId },
       });
-      console.log(savedThread);
 
       expect(savedThread).toBeDefined();
       // expect(savedThread?.id).toBe(threadId);
@@ -1184,7 +1183,7 @@ describe('ConvexStorage Tests', () => {
         traceId: 'test-trace-id-1',
         kind: 0,
         other: {},
-        createdAt: Date.now().toString(),
+        createdAt: new Date().toISOString(),
         scope: 'test-scope',
         attributes: { key: 'value' },
         status: { code: 0, message: 'OK' },
@@ -1739,7 +1738,7 @@ describe('ConvexStorage Tests', () => {
     test('should sort traces in ascending order when specified', async () => {
       const baseTimestamp = Date.now();
 
-      const traceData1 = {
+      const traceData1: Trace = {
         id: `trace-sort-asc-1-${baseTimestamp}`,
         traceId: 'trace-1',
         parentSpanId: `parent-span-sort-asc-1-${Date.now()}`,
@@ -1757,12 +1756,9 @@ describe('ConvexStorage Tests', () => {
         startTime: baseTimestamp,
         endTime: baseTimestamp,
         createdAt: Date.now().toString(),
-        properties: {},
-        spans: [],
-        spanDurations: {},
       };
 
-      const traceData2 = {
+      const traceData2: Trace = {
         id: `trace-sort-asc-2-${baseTimestamp}`,
         traceId: 'trace-2',
         parentSpanId: `parent-span-sort-asc-2-${Date.now()}`,
@@ -1780,9 +1776,6 @@ describe('ConvexStorage Tests', () => {
         startTime: baseTimestamp + 5000,
         endTime: baseTimestamp + 5000,
         createdAt: Date.now().toString(),
-        properties: {},
-        spans: [],
-        spanDurations: {},
       };
 
       await storage.saveTrace({ trace: traceData1 });

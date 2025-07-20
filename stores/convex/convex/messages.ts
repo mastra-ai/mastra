@@ -56,8 +56,30 @@ export const getByThreadId = query({
  */
 export const save = mutation({
   args: {
-    message: v.optional(v.any()),
-    messages: v.optional(v.array(v.any())),
+    message: v.optional(
+      v.object({
+        id: v.string(),
+        threadId: v.string(),
+        role: v.optional(v.string()),
+        type: v.optional(v.string()),
+        content: v.any(),
+        metadata: v.optional(v.any()),
+        createdAt: v.optional(v.number()),
+      }),
+    ),
+    messages: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          threadId: v.string(),
+          role: v.optional(v.string()),
+          type: v.optional(v.string()),
+          content: v.any(),
+          metadata: v.optional(v.any()),
+          createdAt: v.optional(v.number()),
+        }),
+      ),
+    ),
   },
   handler: async (ctx, args) => {
     // Handle single message
@@ -223,6 +245,7 @@ export const update = mutation({
       if (message.metadata !== undefined) {
         updateData.content = {
           ...existingMessage.content,
+          content: message.content.content,
           metadata: message.metadata,
         };
       }
