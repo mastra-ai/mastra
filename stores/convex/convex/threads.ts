@@ -112,6 +112,70 @@ export const save = mutation({
 });
 
 /**
+ * Save multiple threads in a batch
+ */
+export const batchSave = mutation({
+  args: {
+    threads: v.array(
+      v.object({
+        id: v.string(),
+        resourceId: v.optional(v.string()),
+        title: v.optional(v.string()),
+        metadata: v.optional(v.any()),
+        createdAt: v.optional(v.number()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const { threads } = args;
+    const savedThreads = [];
+
+    for (const thread of threads) {
+      const existingThread = await ctx.db
+        .query('threads')
+        .withIndex('by_threadId', q => q.eq('threadId', thread.id))
+        .first();
+
+      if (existingThread) {
+        // Update existing thread
+        await ctx.db.patch(existingThread._id, {
+          title: thread.title,
+          metadata: thread.metadata,
+          updatedAt: Date.now(),
+        });
+
+        savedThreads.push({
+          ...thread,
+          updatedAt: Date.now(),
+        });
+      } else {
+        // Create new thread
+        const threadData = {
+          threadId: thread.id,
+          resourceId: thread.resourceId,
+          title: thread.title,
+          metadata: thread.metadata || {},
+          createdAt: thread.createdAt || Date.now(),
+          updatedAt: Date.now(),
+        };
+
+        const id = await ctx.db.insert('threads', threadData);
+        savedThreads.push({
+          ...thread,
+          _id: id,
+        });
+      }
+    }
+
+    return {
+      success: true,
+      count: savedThreads.length,
+      threads: savedThreads,
+    };
+  },
+});
+
+/**
  * Update a thread
  */
 export const update = mutation({
@@ -166,5 +230,69 @@ export const deleteThread = mutation({
     }
 
     await ctx.db.delete(thread._id);
+  },
+});
+
+/**
+ * Load threads based on different key combinations
+ * @param keys Object containing one of:
+ *   - threadId: string - Get a single thread by its ID
+ *   - resourceId: string - Get threads for a resource
+ *   - paginationOpts?: PaginationOptions - Optional pagination options
+ *   - sortDirection?: 'asc' | 'desc' - Sort order (default: 'desc' for most recent first)
+ */
+export const load = query({
+  args: {
+    keys: v.record(v.string(), v.any()), // Using v.any() to support complex values like paginationOpts
+  },
+  handler: async (ctx, args) => {
+    const { keys } = args;
+
+    // Handle single thread by ID
+    if (keys.threadId && typeof keys.threadId === 'string') {
+      const thread = await ctx.db
+        .query('threads')
+        .withIndex('by_threadId', q => q.eq('threadId', keys.threadId))
+        .first();
+      return thread || null;
+    }
+
+    // Handle threads by resourceId
+    if (keys.resourceId && typeof keys.resourceId === 'string') {
+      const sortOrder = keys.sortDirection === 'asc' ? 'asc' : 'desc';
+      let query = ctx.db
+        .query('threads')
+        .withIndex('by_resourceId', q => q.eq('resourceId', keys.resourceId))
+        .order(sortOrder);
+
+      // Apply pagination if options are provided
+      if (keys.paginationOpts) {
+        const paginatedResults = await query.paginate(keys.paginationOpts);
+        // Get total count for pagination metadata
+        const total = await ctx.db
+          .query('threads')
+          .withIndex('by_resourceId', q => q.eq('resourceId', keys.resourceId))
+          .collect()
+          .then(results => results.length);
+
+        return {
+          ...paginatedResults,
+          total,
+          totalPages: Math.ceil(total / keys.paginationOpts.numItems),
+        };
+      }
+
+      // Return all results if no pagination
+      const threads = await query.collect();
+      return {
+        page: threads,
+        isDone: true,
+        continueCursor: null,
+        total: threads.length,
+        totalPages: 1,
+      };
+    }
+
+    throw new Error('Must provide either threadId or resourceId in keys');
   },
 });

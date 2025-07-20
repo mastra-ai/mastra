@@ -133,6 +133,62 @@ export const save = mutation({
 });
 
 /**
+ * Save multiple messages in a batch
+ */
+export const batchSave = mutation({
+  args: {
+    messages: v.array(
+      v.object({
+        id: v.string(),
+        threadId: v.string(),
+        role: v.optional(v.string()),
+        content: v.any(),
+        metadata: v.optional(v.any()),
+        createdAt: v.optional(v.number()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const { messages } = args;
+    const savedMessages = [];
+
+    for (const message of messages) {
+      const messageData = {
+        messageId: message.id,
+        threadId: message.threadId,
+        messageType: message.role || 'assistant',
+        content: {
+          content: message.content,
+          metadata: message.metadata || {},
+        },
+        createdAt: message.createdAt || Date.now(),
+      };
+
+      // Check if message already exists
+      const existingMessage = await ctx.db
+        .query('messages')
+        .withIndex('by_messageId', q => q.eq('messageId', message.id))
+        .first();
+
+      let savedMessage;
+      if (existingMessage) {
+        // Update existing message
+        await ctx.db.patch(existingMessage._id, messageData);
+        savedMessage = { ...messageData, _id: existingMessage._id };
+      } else {
+        // Insert new message
+        const id = await ctx.db.insert('messages', messageData);
+        savedMessage = { ...messageData, _id: id };
+      }
+
+      savedMessages.push(savedMessage);
+    }
+
+    return { success: true, count: savedMessages.length };
+  },
+});
+
+/**
  * Update messages
  */
 export const update = mutation({
@@ -278,5 +334,57 @@ export const getPaginated = query({
       perPage,
       hasMore,
     };
+  },
+});
+
+/**
+ * Load messages based on different key combinations
+ * @param keys Object containing one of:
+ *   - messageId: string - Get a single message by its ID
+ *   - threadId: string - Get messages for a thread
+ *   - paginationOpts?: PaginationOptions - Optional pagination options
+ *   - sortDirection?: 'asc' | 'desc' - Sort order (default: 'asc')
+ */
+export const load = query({
+  args: {
+    keys: v.record(v.string(), v.any()), // Using v.any() to support complex values like paginationOpts
+  },
+  handler: async (ctx, args) => {
+    const { keys } = args;
+
+    // Handle single message by ID
+    if (keys.messageId && typeof keys.messageId === 'string') {
+      const message = await ctx.db
+        .query('messages')
+        .withIndex('by_messageId', q => q.eq('messageId', keys.messageId))
+        .first();
+      return message || null;
+    }
+
+    // Handle messages by threadId
+    if (keys.threadId && typeof keys.threadId === 'string') {
+      const sortOrder = keys.sortDirection === 'desc' ? 'desc' : 'asc';
+      let query = ctx.db
+        .query('messages')
+        .withIndex('by_threadId', q => q.eq('threadId', keys.threadId))
+        .order(sortOrder);
+
+      // Apply pagination if options are provided
+      if (keys.paginationOpts) {
+        return await query.paginate(keys.paginationOpts);
+      }
+
+      // Return all results if no pagination
+      const messages = await query.collect();
+      return messages.map(message => ({
+        id: message.messageId,
+        threadId: message.threadId,
+        role: message.messageType,
+        content: message.content,
+        createdAt: message.createdAt,
+      }));
+    }
+
+    throw new Error('Must provide either messageId or threadId in keys');
   },
 });

@@ -10,6 +10,7 @@ import type {
 } from '@mastra/core';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
+import { TABLE_MESSAGES } from '@mastra/core/storage';
 import { describe, test, expect, afterAll } from 'vitest';
 import { api } from '../../convex/_generated/api';
 import { ConvexStorage } from './index';
@@ -302,9 +303,91 @@ describe('ConvexStorage Tests', () => {
   });
 
   describe('ConvexStorage Message Tests', () => {
-    const storage = new ConvexStorage({
-      convexUrl: 'http://localhost:3210',
-      api,
+    test('should insert a single message using insert method', async () => {
+      const message: MastraMessageV2 = {
+        id: 'test-msg-1',
+        threadId: 'test-thread-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'text',
+              text: 'Test message content',
+            },
+          ],
+        },
+        createdAt: new Date(),
+      };
+
+      // Test insert
+      await expect(
+        storage.insert({
+          tableName: TABLE_MESSAGES,
+          record: message,
+        }),
+      ).resolves.not.toThrow();
+
+      // Verify the message was inserted
+      const savedMessage = await storage.load<MastraMessageV2[]>({
+        tableName: TABLE_MESSAGES,
+        keys: { threadId: 'test-thread-1' },
+      });
+
+      expect(savedMessage).toBeDefined();
+      expect(savedMessage?.length).toBe(1);
+      expect(savedMessage?.[0].threadId).toBe('test-thread-1');
+      expect(savedMessage?.[0].role).toBe('user');
+      expect(savedMessage?.[0].content.content).toStrictEqual(message.content);
+    });
+
+    test('should batch insert multiple messages using batchInsert method', async () => {
+      const messages: MastraMessageV2[] = [
+        {
+          id: 'batch-msg-1',
+          threadId: 'test-thread-batch-1',
+          role: 'user',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Batch message 1' }],
+          },
+          createdAt: new Date(),
+        },
+        {
+          id: 'batch-msg-2',
+          threadId: 'test-thread-batch-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Batch message 2' }],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      // Test batch insert
+      await expect(
+        storage.batchInsert({
+          tableName: TABLE_MESSAGES,
+          records: messages,
+        }),
+      ).resolves.not.toThrow();
+
+      // Verify all messages were inserted
+      const savedMessages = await storage.load<MastraMessageV2[]>({
+        tableName: TABLE_MESSAGES,
+        keys: { threadId: 'test-thread-batch-1' },
+      });
+      expect(savedMessages).toBeDefined();
+      expect(savedMessages?.length).toBe(2);
+      expect(savedMessages?.[0].id).toBe('batch-msg-1');
+      expect(savedMessages?.[0].threadId).toBe('test-thread-batch-1');
+      expect(savedMessages?.[0].role).toBe('user');
+      expect(savedMessages?.[0].content.content).toStrictEqual(messages[0].content);
+      expect(savedMessages?.[1].id).toBe('batch-msg-2');
+      expect(savedMessages?.[1].threadId).toBe('test-thread-batch-1');
+      expect(savedMessages?.[1].role).toBe('assistant');
+      expect(savedMessages?.[1].content.content).toStrictEqual(messages[1].content);
     });
 
     test('should save a new message', async () => {

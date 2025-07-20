@@ -10,8 +10,23 @@ import type {
   WorkflowRun,
   WorkflowRuns,
 } from '@mastra/core/storage';
-import { MastraStorage } from '@mastra/core/storage';
+import {
+  MastraStorage,
+  TABLE_EVALS,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_TRACES,
+  TABLE_WORKFLOW_SNAPSHOT,
+} from '@mastra/core/storage';
 import { ConvexClient, ConvexHttpClient } from 'convex/browser';
+
+/**
+ * The Convex API type that matches the auto-generated API from Convex
+ * Import the actual API type from the generated file
+ */
+// import type { api as GeneratedApi } from '../../convex/_generated/api';
+
+// type ConvexPublicApi = typeof GeneratedApi;
 
 /**
  * Configuration options for ConvexStorage
@@ -131,7 +146,35 @@ export class ConvexStorage extends MastraStorage {
    */
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
-      await this.httpClient.mutation(this.api.system.insert, { tableName, record });
+      switch (tableName) {
+        case TABLE_THREADS: {
+          const thread = record as StorageThreadType;
+          await this.saveThread({ thread });
+          break;
+        }
+        case TABLE_MESSAGES: {
+          const message = record as MastraMessageV2;
+          await this.saveMessage({ message });
+          break;
+        }
+        case TABLE_TRACES: {
+          const trace = record as Trace;
+          await this.saveTrace({ trace });
+          break;
+        }
+        case TABLE_WORKFLOW_SNAPSHOT: {
+          const workflowRun = record as WorkflowRun;
+          await this.saveWorkflowRun({ workflowRun });
+          break;
+        }
+        case TABLE_EVALS: {
+          const evalData = record as EvalRow;
+          await this.saveEval({ evalData });
+          break;
+        }
+        default:
+          throw new Error(`Unsupported table name: ${tableName}`);
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -153,7 +196,42 @@ export class ConvexStorage extends MastraStorage {
    */
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     try {
-      await this.httpClient.mutation(this.api.system.batchInsert, { tableName, records });
+      // Use batch save functions for better performance
+      switch (tableName) {
+        case TABLE_THREADS: {
+          const threads = records as StorageThreadType[];
+          await this.httpClient.mutation(this.api.threads.batchSave, { threads });
+          break;
+        }
+        case TABLE_MESSAGES: {
+          const messages = records as MastraMessageV2[];
+          const messagesToSave = messages.map(message => {
+            return {
+              ...message,
+              createdAt: message.createdAt.getTime(),
+            };
+          });
+          await this.httpClient.mutation(this.api.messages.batchSave, { messages: messagesToSave });
+          break;
+        }
+        case TABLE_TRACES: {
+          const traces = records as Trace[];
+          await this.httpClient.mutation(this.api.traces.batchSave, { traces });
+          break;
+        }
+        case TABLE_WORKFLOW_SNAPSHOT: {
+          const workflowRuns = records as WorkflowRun[];
+          await this.httpClient.mutation(this.api.workflowRuns.batchSave, { workflowRuns });
+          break;
+        }
+        case TABLE_EVALS: {
+          const evalData = records as EvalRow[];
+          await this.httpClient.mutation(this.api.evals.batchSave, { evals: evalData });
+          break;
+        }
+        default:
+          throw new Error(`Unsupported table name: ${tableName}`);
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -176,7 +254,30 @@ export class ConvexStorage extends MastraStorage {
    */
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     try {
-      return (await this.httpClient.query(this.api.system.load, { tableName, keys })) as R | null;
+      switch (tableName) {
+        case TABLE_THREADS: {
+          const thread = await this.httpClient.query(this.api.threads.load, { keys });
+          return thread;
+        }
+        case TABLE_MESSAGES: {
+          const message = await this.httpClient.query(this.api.messages.load, { keys });
+          return message;
+        }
+        case TABLE_TRACES: {
+          const trace = await this.httpClient.query(this.api.traces.load, { keys });
+          return trace;
+        }
+        case TABLE_WORKFLOW_SNAPSHOT: {
+          const workflowRun = await this.httpClient.query(this.api.workflowRuns.load, { keys });
+          return workflowRun;
+        }
+        case TABLE_EVALS: {
+          const evalData = await this.httpClient.query(this.api.evals.load, { keys });
+          return evalData;
+        }
+        default:
+          throw new Error(`Unsupported table name: ${tableName}`);
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -634,7 +735,6 @@ export class ConvexStorage extends MastraStorage {
       const messageToSave = {
         ...message,
         createdAt: message.createdAt.getTime(),
-        updatedAt: Date.now(),
       };
       return await this.httpClient.mutation(this.api.messages.save, { message: messageToSave });
     } catch (error) {

@@ -46,6 +46,84 @@ export const save = mutation({
 });
 
 /**
+ * Save multiple traces in a batch
+ */
+export const batchSave = mutation({
+  args: {
+    traces: v.array(
+      v.object({
+        id: v.string(),
+        parentSpanId: v.optional(v.string()),
+        name: v.string(),
+        traceId: v.string(),
+        scope: v.optional(v.string()),
+        attributes: v.optional(v.any()),
+        status: v.optional(v.any()),
+        kind: v.optional(v.number()),
+        events: v.optional(v.array(v.any())),
+        links: v.optional(v.array(v.any())),
+        other: v.optional(v.any()),
+        startTime: v.optional(v.number()),
+        endTime: v.optional(v.number()),
+        createdAt: v.optional(v.number()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const { traces } = args;
+    const savedTraces = [];
+
+    for (const trace of traces) {
+      const traceData = {
+        id: trace.id,
+        parentSpanId: trace.parentSpanId || '', // Default empty string for required field
+        name: trace.name,
+        traceId: trace.traceId,
+        scope: trace.scope || '', // Default empty string for required field
+        attributes: trace.attributes || {},
+        status: trace.status || {},
+        kind: trace.kind || 0,
+        events: trace.events || [],
+        links: trace.links || [],
+        other: trace.other || {},
+        startTime: trace.startTime || Date.now(),
+        endTime: trace.endTime || Date.now(),
+        createdAt: trace.createdAt || Date.now(),
+      };
+
+      // Check if trace already exists
+      const existingTrace = await ctx.db
+        .query('traces')
+        .withIndex('by_traceId', q => q.eq('traceId', trace.id))
+        .first();
+
+      if (existingTrace) {
+        // Update existing trace
+        await ctx.db.patch(existingTrace._id, traceData);
+        savedTraces.push({
+          ...trace,
+          _id: existingTrace._id,
+          _creationTime: existingTrace._creationTime,
+        });
+      } else {
+        // Insert new trace
+        const id = await ctx.db.insert('traces', traceData);
+        savedTraces.push({
+          ...trace,
+          _id: id,
+        });
+      }
+    }
+
+    return {
+      success: true,
+      count: savedTraces.length,
+      traces: savedTraces,
+    };
+  },
+});
+
+/**
  * Get traces for a thread
  */
 export const getByTraceId = query({
@@ -177,5 +255,95 @@ export const getPaginated = query({
       totalPages: Math.ceil(total / numItems),
       traces: paginationResult.page, // Include the traces array from the paginated results
     };
+  },
+});
+
+/**
+ * Load traces based on different key combinations
+ * @param keys Object containing one of:
+ *   - traceId: string - Get traces by trace ID
+ *   - parentSpanId: string - Get child spans of a parent span
+ *   - startDate?: number - Filter traces after this timestamp
+ *   - endDate?: number - Filter traces before this timestamp
+ *   - paginationOpts?: PaginationOptions - Optional pagination options
+ *   - sortDirection?: 'asc' | 'desc' - Sort order (default: 'desc')
+ */
+export const load = query({
+  args: {
+    keys: v.record(v.string(), v.any()), // Using v.any() to support complex values like paginationOpts
+  },
+  handler: async (ctx, args) => {
+    const { keys } = args;
+    const sortOrder = keys.sortDirection === 'asc' ? 'asc' : 'desc';
+
+    // Handle traces by traceId
+    if (keys.traceId && typeof keys.traceId === 'string') {
+      let query = ctx.db
+        .query('traces')
+        .withIndex('by_traceId', q => q.eq('traceId', keys.traceId))
+        .order(sortOrder);
+
+      if (keys.paginationOpts) {
+        const paginatedResults = await query.paginate(keys.paginationOpts);
+        const total = await ctx.db
+          .query('traces')
+          .withIndex('by_traceId', q => q.eq('traceId', keys.traceId))
+          .collect()
+          .then(results => results.length);
+
+        return {
+          ...paginatedResults,
+          total,
+          totalPages: Math.ceil(total / keys.paginationOpts.numItems),
+        };
+      }
+
+      const traces = await query.collect();
+      return {
+        page: traces,
+        isDone: true,
+        continueCursor: null,
+        total: traces.length,
+        totalPages: 1,
+      };
+    }
+
+    // Handle traces by parentSpanId
+    if (keys.parentSpanId && typeof keys.parentSpanId === 'string') {
+      let query = ctx.db
+        .query('traces')
+        .withIndex('by_parentSpanId', q => q.eq('parentSpanId', keys.parentSpanId))
+        .order(sortOrder);
+
+      // Apply date filters if provided
+      if (keys.startDate) {
+        query = query.filter(q => q.gte(q.field('startTime'), Number(keys.startDate)));
+      }
+      if (keys.endDate) {
+        query = query.filter(q => q.lte(q.field('startTime'), Number(keys.endDate)));
+      }
+
+      if (keys.paginationOpts) {
+        const paginatedResults = await query.paginate(keys.paginationOpts);
+        const total = await query.collect().then(results => results.length);
+
+        return {
+          ...paginatedResults,
+          total,
+          totalPages: Math.ceil(total / keys.paginationOpts.numItems),
+        };
+      }
+
+      const traces = await query.collect();
+      return {
+        page: traces,
+        isDone: true,
+        continueCursor: null,
+        total: traces.length,
+        totalPages: 1,
+      };
+    }
+
+    throw new Error('Must provide either traceId or parentSpanId in keys');
   },
 });

@@ -64,6 +64,84 @@ export const save = mutation({
 });
 
 /**
+ * Save multiple workflow runs in a batch
+ */
+export const batchSave = mutation({
+  args: {
+    workflowRuns: v.array(
+      v.object({
+        runId: v.string(),
+        workflowName: v.optional(v.string()),
+        resourceId: v.optional(v.string()),
+        state: v.optional(v.any()),
+        snapshot: v.optional(v.any()),
+        stateType: v.optional(v.string()),
+        status: v.optional(v.string()),
+        createdAt: v.optional(v.union(v.string(), v.number())),
+        updatedAt: v.optional(v.union(v.string(), v.number())),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const { workflowRuns } = args;
+    const savedRuns = [];
+
+    for (const workflowRun of workflowRuns) {
+      // For stateType-based queries, respect explicit stateType or status from state/snapshot
+      const status = workflowRun.stateType || workflowRun.state?.status || workflowRun.snapshot?.status || 'pending';
+
+      // Convert dates to timestamps if they're strings
+      const createdAt = workflowRun.createdAt ? new Date(workflowRun.createdAt).getTime() : Date.now();
+      const updatedAt = workflowRun.updatedAt ? new Date(workflowRun.updatedAt).getTime() : Date.now();
+
+      const runData = {
+        runId: workflowRun.runId,
+        workflowName: workflowRun.workflowName || 'unknown',
+        resourceId: workflowRun.resourceId || '',
+        snapshot: workflowRun.state || workflowRun.snapshot || {},
+        status: status as WorkflowRunStatus,
+        createdAt,
+        updatedAt,
+      };
+
+      // Check if workflow run already exists
+      const existingRun = await ctx.db
+        .query('workflowRuns')
+        .withIndex('by_runId', q => q.eq('runId', workflowRun.runId))
+        .first();
+
+      let savedRun;
+      if (existingRun) {
+        // Update existing run
+        await ctx.db.patch(existingRun._id, {
+          ...runData,
+          updatedAt: Date.now(),
+        });
+        savedRun = {
+          ...workflowRun,
+          _id: existingRun._id,
+          _creationTime: existingRun._creationTime,
+        };
+      } else {
+        // Insert new run
+        const id = await ctx.db.insert('workflowRuns', runData);
+        savedRun = {
+          ...workflowRun,
+          _id: id,
+        };
+      }
+      savedRuns.push(savedRun);
+    }
+
+    return {
+      success: true,
+      count: savedRuns.length,
+      workflowRuns: savedRuns,
+    };
+  },
+});
+
+/**
  * Get a workflow run by ID
  */
 export const get = query({
@@ -288,5 +366,107 @@ export const getWithFilters = query({
       continueCursor: paginationResult.continueCursor,
       total: totalResults.length,
     };
+  },
+});
+
+/**
+ * Load workflow runs based on different key combinations
+ * @param keys Object containing one of:
+ *   - runId: string - Get a single workflow run by its ID
+ *   - status: WorkflowRunStatus - Get runs by status
+ *   - resourceId: string - Get runs for a specific resource
+ *   - workflowName: string - Get runs for a specific workflow
+ *   - paginationOpts?: PaginationOptions - Optional pagination options
+ *   - sortDirection?: 'asc' | 'desc' - Sort order (default: 'desc')
+ */
+export const load = query({
+  args: {
+    keys: v.record(v.string(), v.any()), // Using v.any() to support complex values like paginationOpts
+  },
+  handler: async (ctx, args) => {
+    const { keys } = args;
+    const sortOrder = keys.sortDirection === 'asc' ? 'asc' : 'desc';
+
+    // Handle single workflow run by ID
+    if (keys.runId && typeof keys.runId === 'string') {
+      const run = await ctx.db
+        .query('workflowRuns')
+        .withIndex('by_runId', q => q.eq('runId', keys.runId))
+        .first();
+
+      return run ? convertDbToAppModel(run) : null;
+    }
+
+    // Handle workflow runs by status
+    if (keys.status && typeof keys.status === 'string') {
+      let query = ctx.db
+        .query('workflowRuns')
+        .withIndex('by_status', q => q.eq('status', keys.status))
+        .order(sortOrder);
+
+      // Apply additional filters
+      if (keys.resourceId) {
+        query = query.filter(q => q.eq(q.field('resourceId'), keys.resourceId));
+      }
+      if (keys.workflowName) {
+        query = query.filter(q => q.eq(q.field('workflowName'), keys.workflowName));
+      }
+
+      if (keys.paginationOpts) {
+        const paginatedResults = await query.paginate(keys.paginationOpts);
+        const total = await query.collect().then(results => results.length);
+
+        return {
+          ...paginatedResults,
+          page: paginatedResults.page.map(convertDbToAppModel),
+          total,
+          totalPages: Math.ceil(total / keys.paginationOpts.numItems),
+        };
+      }
+
+      const runs = await query.collect();
+      return {
+        page: runs.map(convertDbToAppModel),
+        isDone: true,
+        continueCursor: null,
+        total: runs.length,
+        totalPages: 1,
+      };
+    }
+
+    // Handle workflow runs by resourceId
+    if (keys.resourceId && typeof keys.resourceId === 'string') {
+      let query = ctx.db
+        .query('workflowRuns')
+        .withIndex('by_resourceId', q => q.eq('resourceId', keys.resourceId))
+        .order(sortOrder);
+
+      if (keys.workflowName) {
+        query = query.filter(q => q.eq(q.field('workflowName'), keys.workflowName));
+      }
+
+      if (keys.paginationOpts) {
+        const paginatedResults = await query.paginate(keys.paginationOpts);
+        const total = await query.collect().then(results => results.length);
+
+        return {
+          ...paginatedResults,
+          page: paginatedResults.page.map(convertDbToAppModel),
+          total,
+          totalPages: Math.ceil(total / keys.paginationOpts.numItems),
+        };
+      }
+
+      const runs = await query.collect();
+      return {
+        page: runs.map(convertDbToAppModel),
+        isDone: true,
+        continueCursor: null,
+        total: runs.length,
+        totalPages: 1,
+      };
+    }
+
+    throw new Error('Must provide one of: runId, status, or resourceId in keys');
   },
 });
