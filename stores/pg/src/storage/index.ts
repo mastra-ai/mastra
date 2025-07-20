@@ -45,8 +45,9 @@ export type PostgresConfig = {
 );
 
 export class PostgresStore extends MastraStorage {
-  public db: pgPromise.IDatabase<{}>;
-  public pgp: pgPromise.IMain;
+  #db?: pgPromise.IDatabase<{}>;
+  #pgp?: pgPromise.IMain;
+  #config: PostgresConfig;
   private schema?: string;
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
@@ -75,9 +76,8 @@ export class PostgresStore extends MastraStorage {
         }
       }
       super({ name: 'PostgresStore' });
-      this.pgp = pgPromise();
       this.schema = config.schemaName;
-      this.db = this.pgp(
+      this.#config =
         `connectionString` in config
           ? { connectionString: config.connectionString }
           : {
@@ -87,8 +87,7 @@ export class PostgresStore extends MastraStorage {
               user: config.user,
               password: config.password,
               ssl: config.ssl,
-            },
-      );
+            };
     } catch (e) {
       throw new MastraError(
         {
@@ -99,6 +98,26 @@ export class PostgresStore extends MastraStorage {
         e,
       );
     }
+  }
+
+  async init(): Promise<void> {
+    this.#pgp = pgPromise();
+    this.#db = this.#pgp(this.#config);
+    await super.init();
+  }
+
+  public get db() {
+    if (!this.#db) {
+      throw new Error(`PostgresStore: Store is not initialized, please call "init()" first.`);
+    }
+    return this.#db;
+  }
+
+  public get pgp() {
+    if (!this.#pgp) {
+      throw new Error(`PostgresStore: Store is not initialized, please call "init()" first.`);
+    }
+    return this.#pgp;
   }
 
   public get supports(): {

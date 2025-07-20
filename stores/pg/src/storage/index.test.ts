@@ -50,6 +50,7 @@ describe('PostgresStore', () => {
     let testDB: PostgresStore;
     beforeAll(async () => {
       testDB = new PostgresStore(TEST_CONFIG);
+      await testDB.init();
     });
     afterAll(async () => {
       try {
@@ -157,6 +158,12 @@ describe('PostgresStore', () => {
     });
     it('does not throw on non-empty connection string', () => {
       expect(() => new PostgresStore({ connectionString })).not.toThrow();
+    });
+    it('throws if store is not initialized', () => {
+      expect(() => new PostgresStore(validConfig).db.any('SELECT 1')).toThrow(
+        /PostgresStore: Store is not initialized/,
+      );
+      expect(() => new PostgresStore(validConfig).pgp).toThrow(/PostgresStore: Store is not initialized/);
     });
   });
 
