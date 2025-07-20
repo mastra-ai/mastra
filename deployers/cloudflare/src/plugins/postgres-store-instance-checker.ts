@@ -13,8 +13,14 @@ export function postgresStoreInstanceChecker(): Plugin {
         plugins: [postgresStoreInstanceCheckerBabel],
       });
 
+      if (!result?.code) {
+        throw new Error(
+          'postgres-store-instance-checker plugin did not return code, there is likely a bug in the plugin.',
+        );
+      }
+
       return {
-        code: result?.code || code,
+        code: result.code,
         map: result?.map,
       };
     },

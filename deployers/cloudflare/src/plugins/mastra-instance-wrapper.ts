@@ -17,8 +17,12 @@ export function mastraInstanceWrapper(mastraEntryFile: string): Plugin {
         plugins: [mastraInstanceWrapperBabel],
       });
 
+      if (!result?.code) {
+        throw new Error('mastra-wrapper plugin did not return code, there is likely a bug in the plugin.');
+      }
+
       return {
-        code: result?.code || code,
+        code: result.code,
         map: result?.map,
       };
     },

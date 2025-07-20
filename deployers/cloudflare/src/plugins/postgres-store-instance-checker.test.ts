@@ -45,7 +45,7 @@ describe('Check PostgresStore instance', () => {
   it('should not bundle and throw an error', async () => {
     const file = join(_dirname, './__fixtures__/multiple-postgres-stores.js');
 
-    expect(
+    await expect(
       async () =>
         await rollup({
           logLevel: 'silent',
