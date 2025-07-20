@@ -26,7 +26,7 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake",
+    "build": "tsup src/index.ts --format esm,cjs --no-dts --clean --treeshake --sourcemap && tsc -p tsconfig.build.json",
     "build:watch": "pnpm build --watch",
     "lint": "eslint .",
     "start": "dts watch",

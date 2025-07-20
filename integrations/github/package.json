@@ -23,7 +23,7 @@
   },
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "cross-env NODE_OPTIONS='--max-old-space-size=8192' tsup src/index.ts --format esm,cjs --dts --clean --treeshake=smallest --splitting",
+    "build": "cross-env NODE_OPTIONS='--max-old-space-size=8192' tsup src/index.ts --format esm,cjs --no-dts --clean --treeshake=smallest --splitting --sourcemap && tsc -p tsconfig.build.json",
     "build:watch": "pnpm build --watch",
     "lint": "eslint .",
     "size": "size-limit",
