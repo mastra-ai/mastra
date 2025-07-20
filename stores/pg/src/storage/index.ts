@@ -51,6 +51,7 @@ export class PostgresStore extends MastraStorage {
   private schema?: string;
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
+  private isConnected: boolean = false;
 
   constructor(config: PostgresConfig) {
     // Validation: connectionString or host/database/user/password must not be empty
@@ -101,9 +102,26 @@ export class PostgresStore extends MastraStorage {
   }
 
   async init(): Promise<void> {
-    this.#pgp = pgPromise();
-    this.#db = this.#pgp(this.#config);
-    await super.init();
+    if (this.isConnected) {
+      return;
+    }
+
+    try {
+      this.isConnected = true;
+      this.#pgp = pgPromise();
+      this.#db = this.#pgp(this.#config);
+      await super.init();
+    } catch (error) {
+      this.isConnected = false;
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_POSTGRES_STORE_INIT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   public get db() {
