@@ -21,7 +21,7 @@ export default defineSchema({
   messages: defineTable({
     messageId: v.string(),
     threadId: v.string(),
-    messageType: v.string(), // 'user', 'assistant', 'system'
+    role: v.union(v.literal('user'), v.literal('assistant'), v.literal('system')),
     content: v.any(),
     createdAt: v.number(),
   })

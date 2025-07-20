@@ -1,4 +1,5 @@
 import { v } from 'convex/values';
+import type { DataModel } from './_generated/dataModel';
 import { query, mutation } from './_generated/server';
 
 /**
@@ -11,55 +12,37 @@ export const clearAllTables = mutation({
     // Schemas are managed via schema.ts and deployed with the app
 
     // For testing purposes only - clear all data from tables
-    try {
-      // Get all threads and delete them
-      const threads = await ctx.db.query('threads').collect();
-      for (const thread of threads) {
-        await ctx.db.delete(thread._id);
+    const clearTable = async <T extends keyof DataModel>(tableName: T) => {
+      try {
+        const items = await ctx.db.query(tableName).collect();
+        // Delete all items in parallel
+        await Promise.all(items.map(item => ctx.db.delete(item._id)));
+        return { tableName, success: true, count: items.length };
+      } catch (error) {
+        console.error(`Error deleting ${tableName}:`, error);
+        return { tableName, success: false, error: error instanceof Error ? error.message : String(error) };
       }
-    } catch (error) {
-      console.error('Error deleting threads:', error);
-    }
+    };
 
-    try {
-      // Get all messages and delete them
-      const messages = await ctx.db.query('messages').collect();
-      for (const message of messages) {
-        await ctx.db.delete(message._id);
-      }
-    } catch (error) {
-      console.error('Error deleting messages:', error);
-    }
+    // Clear all tables in parallel
+    const results = await Promise.allSettled([
+      clearTable('threads'),
+      clearTable('messages'),
+      clearTable('traces'),
+      clearTable('evals'),
+      clearTable('workflowRuns'),
+    ]);
 
-    try {
-      // Get all traces and delete them
-      const traces = await ctx.db.query('traces').collect();
-      for (const trace of traces) {
-        await ctx.db.delete(trace._id);
-      }
-    } catch (error) {
-      console.error('Error deleting traces:', error);
-    }
+    // Log summary of operations
+    const summary = results
+      .map(result =>
+        result.status === 'fulfilled'
+          ? `${result.value.tableName}: ${result.value.success ? `cleared ${result.value.count} items` : 'failed'}`
+          : 'Unknown error',
+      )
+      .join('\n');
 
-    try {
-      // Get all evals and delete them
-      const evals = await ctx.db.query('evals').collect();
-      for (const evalRecord of evals) {
-        await ctx.db.delete(evalRecord._id);
-      }
-    } catch (error) {
-      console.error('Error deleting evals:', error);
-    }
-
-    try {
-      // Get all workflow runs and delete them
-      const runs = await ctx.db.query('workflowRuns').collect();
-      for (const run of runs) {
-        await ctx.db.delete(run._id);
-      }
-    } catch (error) {
-      console.error('Error deleting workflow runs:', error);
-    }
+    console.log('Clear tables summary:\n' + summary);
   },
 });
 
@@ -102,7 +85,7 @@ export const getTableColumns = query({
       messages: [
         { name: 'messageId', type: 'STRING', primaryKey: true },
         { name: 'threadId', type: 'STRING' },
-        { name: 'messageType', type: 'STRING' },
+        { name: 'role', type: 'STRING' },
         { name: 'content', type: 'JSON' },
         { name: 'createdAt', type: 'NUMBER' },
       ],
@@ -151,10 +134,15 @@ export const clearTable = mutation({
     const { tableName } = args;
 
     try {
-      // This assumes the table name provided is valid in the database schema
-      const records = await ctx.db.query(tableName as any).collect();
+      const validTables = ['threads', 'messages', 'traces', 'evals', 'workflowRuns'] as const;
+      type ValidTableName = (typeof validTables)[number];
 
-      // Delete each record from the table
+      if (!validTables.includes(tableName as ValidTableName)) {
+        throw new Error(`Invalid table name: ${tableName}`);
+      }
+
+      const records = await ctx.db.query(tableName as ValidTableName).collect();
+
       for (const record of records) {
         await ctx.db.delete(record._id);
       }
@@ -162,7 +150,6 @@ export const clearTable = mutation({
       return { success: true, count: records.length };
     } catch (error: unknown) {
       console.error(`Error clearing table ${tableName}:`, error);
-      // Handle error.message safely with type checking
       const errorMessage = error instanceof Error ? error.message : String(error);
       return { success: false, error: errorMessage };
     }

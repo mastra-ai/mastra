@@ -628,7 +628,7 @@ export class ConvexStorage extends MastraStorage {
         id: message.messageId,
         threadId: message.threadId,
         content: message.content,
-        role: message.messageType,
+        role: message.role,
         createdAt: message.createdAt,
       };
     } catch (error) {
@@ -682,7 +682,7 @@ export class ConvexStorage extends MastraStorage {
         id: rawMsg.messageId,
         threadId: rawMsg.threadId,
         content: rawMsg.content.content,
-        role: rawMsg.messageType,
+        role: rawMsg.role,
         createdAt: rawMsg.createdAt,
       }));
 

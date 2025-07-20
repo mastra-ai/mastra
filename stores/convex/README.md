@@ -91,7 +91,7 @@ const message = await storage.saveMessage({
   message: {
     id: 'message-789',
     threadId: 'thread-123',
-    type: 'user',
+    role: 'user',
     content: 'Hello, world!',
     createdAt: Date.now(),
   },

@@ -3,6 +3,8 @@ import { v } from 'convex/values';
 import type { Doc } from './_generated/dataModel';
 import { query, mutation } from './_generated/server';
 
+type MessageType = 'user' | 'assistant' | 'system';
+
 /**
  * Get a message by its ID
  */
@@ -89,7 +91,7 @@ export const save = mutation({
       const messageData = {
         messageId: message.id,
         threadId: message.threadId,
-        messageType: message.role || 'assistant', // Use role property for message type
+        role: (message.role as MessageType) || 'assistant', // Use role property for message type
         content: {
           content: message.content,
           metadata: message.metadata || {},
@@ -122,7 +124,7 @@ export const save = mutation({
         const messageData = {
           messageId: message.id,
           threadId: message.threadId,
-          messageType: message.role || 'assistant', // Use role property for message type
+          role: (message.role as MessageType) || 'assistant', // Use role property for message type
           content: {
             content: message.content,
             metadata: message.metadata || {},
@@ -178,7 +180,7 @@ export const batchSave = mutation({
       const messageData = {
         messageId: message.id,
         threadId: message.threadId,
-        messageType: message.role || 'assistant',
+        role: (message.role as MessageType) || 'assistant',
         content: {
           content: message.content,
           metadata: message.metadata || {},
@@ -251,7 +253,7 @@ export const update = mutation({
       }
 
       if (message.type !== undefined) {
-        updateData.messageType = message.type;
+        updateData.role = message.type;
       }
 
       // Update the message
@@ -328,7 +330,7 @@ export const getPaginated = query({
     type ConvexMessage = Doc<'messages'> & {
       messageId: string;
       threadId: string;
-      messageType: string;
+      role: string;
       content: {
         content: any;
         metadata?: Record<string, any>;
@@ -340,7 +342,7 @@ export const getPaginated = query({
       return {
         id: doc.messageId,
         threadId: doc.threadId,
-        role: doc.messageType,
+        role: doc.role,
         content: doc.content.content,
         metadata: doc.content.metadata || {},
         createdAt: doc.createdAt, // Return as timestamp (number) instead of Date object
@@ -402,7 +404,7 @@ export const load = query({
       return messages.map(message => ({
         id: message.messageId,
         threadId: message.threadId,
-        role: message.messageType,
+        role: message.role,
         content: message.content,
         createdAt: message.createdAt,
       }));
