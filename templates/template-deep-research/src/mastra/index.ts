@@ -17,7 +17,7 @@ export const mastra = new Mastra({
     reportAgent,
     evaluationAgent,
     learningExtractionAgent,
-    webSummarizationAgent
+    webSummarizationAgent,
   },
   workflows: { generateReportWorkflow, researchWorkflow },
 });
