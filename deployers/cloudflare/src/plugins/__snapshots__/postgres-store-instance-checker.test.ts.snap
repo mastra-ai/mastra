@@ -9,7 +9,9 @@ import { createApiRoute } from '@mastra/core/server';
 import { PostgresStore } from '@mastra/pg';
 
 const mastra = new Mastra({
-  agents: { weatherAgent },
+  agents: {
+    weatherAgent
+  },
   storage: new PostgresStore({
     connectionString: process.env.DATABASE_URL
   }),
@@ -29,15 +31,13 @@ const mastra = new Mastra({
   server: {
     port: 3e3,
     timeout: 5e3,
-    apiRoutes: [
-      createApiRoute({
-        path: "/hello",
-        method: "get",
-        handler: async (req, res) => {
-          res.send("Hello World");
-        }
-      })
-    ]
+    apiRoutes: [createApiRoute({
+      path: "/hello",
+      method: "get",
+      handler: async (req, res) => {
+        res.send("Hello World");
+      }
+    })]
   },
   deployer: new TestDeployer()
 });

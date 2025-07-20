@@ -30,7 +30,7 @@ describe('Wrap Mastra instance', () => {
           },
           esbuild({
             target: `esnext`,
-            platform: 'node',
+            platform: 'browser',
             minify: false,
           }),
           mastraInstanceWrapper(file),

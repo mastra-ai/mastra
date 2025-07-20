@@ -26,10 +26,10 @@ describe('Check PostgresStore instance', () => {
             };
           },
         },
-        postgresStoreInstanceChecker,
+        postgresStoreInstanceChecker(),
         esbuild({
           target: `esnext`,
-          platform: 'node',
+          platform: 'browser',
           minify: false,
         }),
       ],
@@ -62,12 +62,12 @@ describe('Check PostgresStore instance', () => {
                 };
               },
             },
+            postgresStoreInstanceChecker(),
             esbuild({
               target: `esnext`,
-              platform: 'node',
+              platform: 'browser',
               minify: false,
             }),
-            postgresStoreInstanceChecker(),
           ],
         }),
     ).rejects.toThrow(/Only one PostgresStore instance should be created per Cloudflare Worker./);

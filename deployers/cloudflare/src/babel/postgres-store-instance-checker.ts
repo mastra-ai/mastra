@@ -31,7 +31,7 @@ export function postgresStoreInstanceChecker(): PluginObj {
           const location = path.node.loc
             ? `${filename}: line ${path.node.loc.start.line}, column ${path.node.loc.start.column}`
             : 'unknown location';
-          console.log('here', filename, location);
+
           instances.push({
             path,
             location,
