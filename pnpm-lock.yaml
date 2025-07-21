@@ -589,9 +589,6 @@ importers:
       eslint:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
-      husky:
-        specifier: ^9.1.7
-        version: 9.1.7
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.19.2)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.2)(typescript@5.8.3))
@@ -647,9 +644,6 @@ importers:
       eslint:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
-      husky:
-        specifier: ^9.1.7
-        version: 9.1.7
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.19.2)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.2)(typescript@5.8.3))
@@ -733,9 +727,6 @@ importers:
       '@types/node':
         specifier: ^20.17.57
         version: 20.19.2
-      husky:
-        specifier: ^9.1.7
-        version: 9.1.7
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.19.2)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@types/node@20.19.2)(typescript@5.8.3))
