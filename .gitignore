@@ -36,3 +36,6 @@ serviceAccount.json
 tsup.config.bundled_*
 CLAUDE.local.md
 .claude/settings.local.json
+
+# Generated source map files
+**/*.d.ts.map

@@ -22,7 +22,7 @@
   },
   "scripts": {
     "prepare-docs": "cross-env PREPARE=true node dist/prepare-docs/prepare.js",
-    "build:cli": "tsup src/stdio.ts src/prepare-docs/prepare.ts --format esm --experimental-dts --treeshake=smallest --splitting",
+    "build:cli": "tsup src/stdio.ts src/prepare-docs/prepare.ts --format esm --no-dts --treeshake=smallest --splitting && tsc -p tsconfig.build.json",
     "pretest": "pnpm turbo build --filter @mastra/mcp-docs-server",
     "test": "vitest run",
     "lint": "eslint ."

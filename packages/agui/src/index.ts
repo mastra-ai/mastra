@@ -334,7 +334,7 @@ export function registerCopilotKit<T extends Record<string, any> | unknown = unk
     }>,
     runtimeContext: RuntimeContext<T>,
   ) => void | Promise<void>;
-}) {
+}): ReturnType<typeof registerApiRoute> {
   return registerApiRoute(path, {
     method: `ALL`,
     handler: async c => {

@@ -21,7 +21,7 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --clean --experimental-dts --treeshake=smallest --splitting --publicDir",
+    "build": "tsup src/index.ts --format esm,cjs --clean --no-dts --treeshake=smallest --splitting --publicDir --sourcemap && tsc -p tsconfig.build.json",
     "build:watch": "pnpm build --watch",
     "test": "vitest run",
     "lint": "eslint ."

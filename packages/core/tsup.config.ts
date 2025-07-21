@@ -55,10 +55,11 @@ export default defineConfig({
   ],
   format: ['esm', 'cjs'],
   clean: true,
-  dts: true,
+  dts: false,
   splitting: true,
   treeshake: {
     preset: 'smallest',
   },
   plugins: [treeshakeDecorators],
+  sourcemap: true,
 });

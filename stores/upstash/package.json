@@ -23,7 +23,7 @@
     "test": "vitest run",
     "posttest": "docker compose down",
     "lint": "eslint .",
-    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
+    "build": "tsup src/index.ts --format esm,cjs --no-dts --clean --treeshake=smallest --splitting --sourcemap && tsc -p tsconfig.build.json",
     "build:watch": "pnpm build --watch"
   },
   "license": "MIT",

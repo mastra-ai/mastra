@@ -42,7 +42,7 @@ export class SarvamVoice extends MastraVoice {
   private model: SarvamTTSModel = 'bulbul:v1';
   private language: SarvamTTSLanguage = 'en-IN';
   private properties: Record<string, any> = {};
-  protected speaker: SarvamVoiceId = 'meera';
+  speaker: SarvamVoiceId = 'meera';
   private baseUrl = 'https://api.sarvam.ai';
 
   constructor({
