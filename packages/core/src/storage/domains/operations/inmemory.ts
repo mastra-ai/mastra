@@ -1,4 +1,5 @@
-import { TABLE_EVALS, TABLE_WORKFLOW_SNAPSHOT, type TABLE_NAMES } from '../../constants';
+import { TABLE_EVALS, TABLE_WORKFLOW_SNAPSHOT } from '../../constants';
+import type { TABLE_NAMES } from '../../constants';
 import type { StorageColumn } from '../../types';
 import { StoreOperations } from './base';
 

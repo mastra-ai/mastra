@@ -1,6 +1,6 @@
 import type { Trace } from '../../../telemetry';
 import { TABLE_TRACES } from '../../constants';
-import type { StorageGetTracesArg, PaginationInfo, PaginationArgs, StorageGetTracesPaginatedArg } from '../../types';
+import type { StorageGetTracesArg, PaginationInfo, StorageGetTracesPaginatedArg } from '../../types';
 import type { StoreOperations } from '../operations';
 import { TracesStorage } from './base';
 

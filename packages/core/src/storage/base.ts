@@ -17,11 +17,14 @@ import {
   TABLE_SCHEMAS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
-import type { LegacyEvalsStorage, MemoryStorage } from './domains';
-import type { StoreOperations } from './domains/operations';
-import type { ScoresStorage } from './domains/scores';
-import type { TracesStorage } from './domains/traces';
-import type { WorkflowsStorage } from './domains/workflows';
+import type {
+  ScoresStorage,
+  StoreOperations,
+  WorkflowsStorage,
+  TracesStorage,
+  MemoryStorage,
+  LegacyEvalsStorage,
+} from './domains';
 import type {
   EvalRow,
   PaginationInfo,
@@ -137,6 +140,8 @@ export abstract class MastraStorage extends MastraBase {
         return 'TEXT';
       case 'timestamp':
         return 'TIMESTAMP';
+      case 'float':
+        return 'FLOAT';
       case 'integer':
         return 'INTEGER';
       case 'bigint':
