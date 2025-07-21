@@ -973,6 +973,7 @@ describe('Workflow', () => {
 
       const result = await getWorkflowState();
 
+      expect.assertions(3);
       // Verify that the input property is preserved from the original snapshot context
       // This is the key test: input should come from snapshot.context.input, not from resumeData
       expect(result.steps.input).toEqual(originalInput);
