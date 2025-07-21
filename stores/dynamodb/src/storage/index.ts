@@ -5,6 +5,7 @@ import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV2, MastraMessageV1 } from '@mastra/core/memory';
 
+import type { ScoreRowData } from '@mastra/core/scores';
 import {
   MastraStorage,
   TABLE_THREADS,
@@ -21,8 +22,11 @@ import type {
   TABLE_NAMES,
   StorageGetTracesArg,
   PaginationInfo,
+  PaginationArgs,
+  StoragePagination,
   StorageColumn,
   TABLE_RESOURCES,
+  TABLE_SCORERS,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -39,7 +43,7 @@ export interface DynamoDBStoreConfig {
   };
 }
 
-type SUPPORTED_TABLE_NAMES = Exclude<TABLE_NAMES, typeof TABLE_RESOURCES>;
+type SUPPORTED_TABLE_NAMES = Exclude<TABLE_NAMES, typeof TABLE_RESOURCES | typeof TABLE_SCORERS>;
 
 // Define a type for our service that allows string indexing
 type MastraService = Service<Record<string, any>> & {
@@ -1379,5 +1383,104 @@ export class DynamoDBStore extends MastraStorage {
   }): Promise<MastraMessageV2[]> {
     this.logger.error('updateMessages is not yet implemented in DynamoDBStore');
     throw new Error('Method not implemented');
+  }
+
+  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new MastraError({
+      id: 'STORAGE_DYNAMODB_STORE_GET_SCORE_BY_ID_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { id },
+      text: 'getScoreById is not implemented yet in DynamoDBStore',
+    });
+  }
+
+  async saveScore(_score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    throw new MastraError({
+      id: 'STORAGE_DYNAMODB_STORE_SAVE_SCORE_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: {},
+      text: 'saveScore is not implemented yet in DynamoDBStore',
+    });
+  }
+
+  async getScoresByScorerId({
+    scorerId,
+    pagination: _pagination,
+    entityId,
+    entityType,
+  }: {
+    scorerId: string;
+    pagination: StoragePagination;
+    entityId?: string;
+    entityType?: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'STORAGE_DYNAMODB_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { scorerId, entityId: entityId || '', entityType: entityType || '' },
+      text: 'getScoresByScorerId is not implemented yet in DynamoDBStore',
+    });
+  }
+
+  async getScoresByRunId({
+    runId,
+    pagination: _pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'STORAGE_DYNAMODB_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { runId },
+      text: 'getScoresByRunId is not implemented yet in DynamoDBStore',
+    });
+  }
+
+  async getScoresByEntityId({
+    entityId,
+    entityType,
+    pagination: _pagination,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'STORAGE_DYNAMODB_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { entityId, entityType },
+      text: 'getScoresByEntityId is not implemented yet in DynamoDBStore',
+    });
+  }
+
+  async getEvals(
+    options: {
+      agentName?: string;
+      type?: 'test' | 'live';
+    } & PaginationArgs,
+  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
+    throw new MastraError({
+      id: 'STORAGE_DYNAMODB_STORE_GET_EVALS_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { agentName: options.agentName || '', type: options.type || '' },
+      text: 'getEvals is not implemented yet in DynamoDBStore',
+    });
+  }
+
+  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    throw new MastraError({
+      id: 'STORAGE_DYNAMODB_STORE_DROP_TABLE_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { tableName },
+      text: 'dropTable is not implemented yet in DynamoDBStore',
+    });
   }
 }

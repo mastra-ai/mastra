@@ -3,12 +3,15 @@ import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { ScoreRowData } from '@mastra/core/scores';
 import type {
   EvalRow,
+  PaginationArgs,
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
   StorageGetTracesArg,
+  StoragePagination,
   TABLE_NAMES,
   WorkflowRun,
 } from '@mastra/core/storage';
@@ -928,5 +931,104 @@ export class MongoDBStore extends MastraStorage {
   }): Promise<MastraMessageV2[]> {
     this.logger.error('updateMessages is not yet implemented in MongoDBStore');
     throw new Error('Method not implemented');
+  }
+
+  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new MastraError({
+      id: 'STORAGE_MONGODB_STORE_GET_SCORE_BY_ID_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { id },
+      text: 'getScoreById is not implemented yet in MongoDBStore',
+    });
+  }
+
+  async saveScore(_score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    throw new MastraError({
+      id: 'STORAGE_MONGODB_STORE_SAVE_SCORE_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: {},
+      text: 'saveScore is not implemented yet in MongoDBStore',
+    });
+  }
+
+  async getScoresByScorerId({
+    scorerId,
+    pagination: _pagination,
+    entityId,
+    entityType,
+  }: {
+    scorerId: string;
+    pagination: StoragePagination;
+    entityId?: string;
+    entityType?: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'STORAGE_MONGODB_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { scorerId, entityId: entityId || '', entityType: entityType || '' },
+      text: 'getScoresByScorerId is not implemented yet in MongoDBStore',
+    });
+  }
+
+  async getScoresByRunId({
+    runId,
+    pagination: _pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'STORAGE_MONGODB_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { runId },
+      text: 'getScoresByRunId is not implemented yet in MongoDBStore',
+    });
+  }
+
+  async getScoresByEntityId({
+    entityId,
+    entityType,
+    pagination: _pagination,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'STORAGE_MONGODB_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { entityId, entityType },
+      text: 'getScoresByEntityId is not implemented yet in MongoDBStore',
+    });
+  }
+
+  async getEvals(
+    options: {
+      agentName?: string;
+      type?: 'test' | 'live';
+    } & PaginationArgs,
+  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
+    throw new MastraError({
+      id: 'STORAGE_MONGODB_STORE_GET_EVALS_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { agentName: options.agentName || '', type: options.type || '' },
+      text: 'getEvals is not implemented yet in MongoDBStore',
+    });
+  }
+
+  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    throw new MastraError({
+      id: 'STORAGE_MONGODB_STORE_DROP_TABLE_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { tableName },
+      text: 'dropTable is not implemented yet in MongoDBStore',
+    });
   }
 }

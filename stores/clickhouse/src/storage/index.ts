@@ -5,11 +5,14 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { ScoreRowData } from '@mastra/core/scores';
+import type { StoragePagination, PaginationArgs } from '@mastra/core/storage';
 import {
   MastraStorage,
   TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_SCHEMAS,
+  TABLE_SCORERS,
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
@@ -75,11 +78,13 @@ export const TABLE_ENGINES: Record<SUPPORTED_TABLE_NAMES, string> = {
   [TABLE_TRACES]: `MergeTree()`,
   [TABLE_THREADS]: `ReplacingMergeTree()`,
   [TABLE_EVALS]: `MergeTree()`,
+  [TABLE_SCORERS]: `MergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {
   text: 'String',
   timestamp: 'DateTime64(3)',
+  float: 'Float64',
   uuid: 'String',
   jsonb: 'String',
   integer: 'Int64',
@@ -1460,5 +1465,101 @@ export class ClickhouseStore extends MastraStorage {
   }): Promise<MastraMessageV2[]> {
     this.logger.error('updateMessages is not yet implemented in ClickhouseStore');
     throw new Error('Method not implemented');
+  }
+
+  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_GET_SCORE_BY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoreById is not implemented in ClickhouseStore.',
+      details: { id },
+    });
+  }
+
+  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_SAVE_SCORE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'saveScore is not implemented in ClickhouseStore.',
+      details: { entityType: score.entityType, entityId: score.entityId, scorerId: score.scorerId },
+    });
+  }
+
+  async getScoresByScorerId({
+    scorerId,
+    pagination,
+    entityId,
+    entityType,
+  }: {
+    scorerId: string;
+    pagination: StoragePagination;
+    entityId?: string;
+    entityType?: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_GET_SCORES_BY_SCORER_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoresByScorerId is not implemented in ClickhouseStore.',
+      details: { scorerId, entityId: entityId ?? '', entityType: entityType ?? '' },
+    });
+  }
+
+  async getScoresByRunId({
+    runId,
+    pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_GET_SCORES_BY_RUN_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoresByRunId is not implemented in ClickhouseStore.',
+      details: { runId },
+    });
+  }
+
+  async getScoresByEntityId({
+    entityId,
+    entityType,
+    pagination,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_GET_SCORES_BY_ENTITY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoresByEntityId is not implemented in ClickhouseStore.',
+      details: { entityId, entityType },
+    });
+  }
+
+  async getEvals(
+    options: { agentName?: string; type?: 'test' | 'live' } & PaginationArgs,
+  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_GET_EVALS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getEvals is not implemented in ClickhouseStore.',
+      details: { agentName: options.agentName ?? '', type: options.type ?? '' },
+    });
+  }
+
+  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    throw new MastraError({
+      id: 'CLICKHOUSE_STORAGE_DROP_TABLE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'dropTable is not implemented in ClickhouseStore.',
+      details: { tableName },
+    });
   }
 }
