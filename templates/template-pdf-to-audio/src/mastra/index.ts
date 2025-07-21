@@ -2,15 +2,21 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
-import { weatherWorkflow } from './workflows/weather-workflow';
-import { weatherAgent } from './agents/weather-agent';
+import { pdfToAudioWorkflow } from './workflows/pdf-to-audio-workflow';
+import { pdfSummarizationAgent } from './agents/pdf-summarization-agent';
+import { audioGenerationAgent } from './agents/audio-generation-agent';
+import { pdfToAudioChatAgent } from './agents/pdf-to-audio-chat-agent';
 
 export const mastra = new Mastra({
-  workflows: { weatherWorkflow },
-  agents: { weatherAgent },
+  workflows: { pdfToAudioWorkflow },
+  agents: {
+    pdfSummarizationAgent,
+    audioGenerationAgent,
+    pdfToAudioChatAgent,
+  },
   storage: new LibSQLStore({
     // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
-    url: ":memory:",
+    url: ':memory:',
   }),
   logger: new PinoLogger({
     name: 'Mastra',
