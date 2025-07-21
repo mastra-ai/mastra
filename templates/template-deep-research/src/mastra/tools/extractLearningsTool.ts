@@ -33,16 +33,18 @@ export const extractLearningsTool = createTool({
 
             Respond with a JSON object containing:
             - learning: string with the key insight from the content
-            - followUpQuestions: array of up to 3 follow-up questions for deeper research`,
+            - followUpQuestions: array of up to 1 follow-up question for deeper research`,
           },
         ],
         {
           experimental_output: z.object({
             learning: z.string(),
-            followUpQuestions: z.array(z.string()).max(3),
+            followUpQuestions: z.array(z.string()).max(1),
           }),
         },
       );
+
+      console.log('Learning extraction response:', response.object);
 
       return response.object;
     } catch (error) {
