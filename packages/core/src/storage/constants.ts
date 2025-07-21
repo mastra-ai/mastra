@@ -6,6 +6,7 @@ export const TABLE_MESSAGES = 'mastra_messages';
 export const TABLE_THREADS = 'mastra_threads';
 export const TABLE_TRACES = 'mastra_traces';
 export const TABLE_RESOURCES = 'mastra_resources';
+export const TABLE_EPISODES = 'mastra_episodes';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -13,7 +14,8 @@ export type TABLE_NAMES =
   | typeof TABLE_MESSAGES
   | typeof TABLE_THREADS
   | typeof TABLE_TRACES
-  | typeof TABLE_RESOURCES;
+  | typeof TABLE_RESOURCES
+  | typeof TABLE_EPISODES;
 
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
@@ -107,6 +109,25 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_RESOURCES]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     workingMemory: { type: 'text', nullable: true },
+    metadata: { type: 'jsonb', nullable: true },
+    createdAt: { type: 'timestamp', nullable: false },
+    updatedAt: { type: 'timestamp', nullable: false },
+  },
+  [TABLE_EPISODES]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    resourceId: { type: 'text', nullable: false },
+    threadId: { type: 'text', nullable: false },
+    title: { type: 'text', nullable: false },
+    shortSummary: { type: 'text', nullable: false },
+    detailedSummary: { type: 'text', nullable: false },
+    categories: { type: 'text', nullable: false }, // JSON array
+    messageIds: { type: 'text', nullable: false }, // JSON array
+    causalContext: { type: 'text', nullable: true },
+    spatialContext: { type: 'text', nullable: true },
+    relatedEpisodeIds: { type: 'text', nullable: true }, // JSON array
+    relationships: { type: 'text', nullable: true }, // JSON array of EpisodeRelationship
+    sequenceId: { type: 'text', nullable: true },
+    significance: { type: 'text', nullable: true }, // Store as text for compatibility
     metadata: { type: 'jsonb', nullable: true },
     createdAt: { type: 'timestamp', nullable: false },
     updatedAt: { type: 'timestamp', nullable: false },

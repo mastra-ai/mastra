@@ -6,9 +6,11 @@ Memory is how agents manage the context that's available to them, it's a condens
 
 The context window is the total information visible to the language model at any given time.
 
-In Mastra, context is broken up into three parts: system instructions and information about the user ([working memory](./working-memory.mdx)), recent messages ([message history](#conversation-history)), and older messages that are relevant to the user’s query ([semantic recall](./semantic-recall.mdx)).
+In Mastra, context is broken up into four parts: system instructions and information about the user ([working memory](./working-memory.mdx)), long-term memories about the user ([episodic memory](./episodic-memory.mdx)), recent messages ([message history](#conversation-history)), and older messages that are relevant to the user's query ([semantic recall](./semantic-recall.mdx)).
 
 Working memory can persist at different scopes - either per conversation thread (default) or across all threads for the same user (resource-scoped), enabling persistent user profiles that remember context across conversations.
+
+Episodic memory stores significant events, facts, and experiences that persist across all conversations, allowing agents to build long-term knowledge about users.
 
 In addition, we provide [memory processors](./memory-processors.mdx) to trim context or remove information if the context is too long.
 
@@ -166,6 +168,10 @@ For more details on enabling and configuring tracing, see [Tracing](../observabi
 
 ## Next Steps
 
-Now that you understand the core concepts, continue to [semantic recall](./semantic-recall.mdx) to learn how to add RAG memory to your Mastra agents.
+Now that you understand the core concepts, explore these memory features:
+
+- [Episodic Memory](./episodic-memory.mdx) - Enable agents to create and recall long-term memories
+- [Semantic Recall](./semantic-recall.mdx) - Add RAG memory to retrieve relevant past messages
+- [Working Memory](./working-memory.mdx) - Maintain persistent user context
 
 Alternatively you can visit the [configuration reference](../../reference/memory/Memory.mdx) for available options, or browse [usage examples](../../examples/memory/use-chat.mdx).

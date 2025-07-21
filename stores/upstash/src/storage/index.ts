@@ -46,10 +46,12 @@ export class UpstashStore extends MastraStorage {
   public get supports(): {
     selectByIncludeResourceScope: boolean;
     resourceWorkingMemory: boolean;
+    resourceEpisodicMemory: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
+      resourceEpisodicMemory: false,
     };
   }
 

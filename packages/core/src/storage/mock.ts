@@ -22,6 +22,7 @@ export class MockStore extends MastraStorage {
     mastra_threads: {},
     mastra_traces: {},
     mastra_resources: {},
+    mastra_episodes: {},
   };
 
   constructor() {

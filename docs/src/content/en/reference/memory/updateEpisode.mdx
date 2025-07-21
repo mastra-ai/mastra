@@ -1,0 +1,122 @@
+# updateEpisode
+
+Updates an existing episode with new information. Only the fields provided will be updated; other fields remain unchanged.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({
+  options: {
+    episodicMemory: { enabled: true }
+  }
+});
+
+// Update an episode with new information
+await memory.updateEpisode({
+  id: "episode-123",
+  title: "Engineering Manager at TechCorp",
+  shortSummary: "Promoted to Engineering Manager",
+  detailedSummary: "User was promoted from Senior Engineer to Engineering Manager in March 2024. Now leads a team of 6 engineers.",
+  significance: 0.9, // Increased significance due to promotion
+  categories: ["work", "career", "milestone"], // Added milestone category
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description:
+        "Unique identifier of the episode to update",
+      isOptional: false,
+    },
+    {
+      name: "title",
+      type: "string",
+      description: "New title for the episode",
+      isOptional: true,
+    },
+    {
+      name: "shortSummary",
+      type: "string",
+      description: "New brief summary",
+      isOptional: true,
+    },
+    {
+      name: "detailedSummary",
+      type: "string",
+      description: "New detailed description",
+      isOptional: true,
+    },
+    {
+      name: "categories",
+      type: "string[]",
+      description:
+        "New category labels (replaces existing categories)",
+      isOptional: true,
+    },
+    {
+      name: "causalContext",
+      type: "string",
+      description:
+        "Updated causal context",
+      isOptional: true,
+    },
+    {
+      name: "spatialContext",
+      type: "string",
+      description:
+        "Updated spatial context",
+      isOptional: true,
+    },
+    {
+      name: "relatedEpisodeIds",
+      type: "string[]",
+      description:
+        "Updated list of related episode IDs",
+      isOptional: true,
+    },
+    {
+      name: "sequenceId",
+      type: "string",
+      description:
+        "Updated sequence ID",
+      isOptional: true,
+    },
+    {
+      name: "significance",
+      type: "number",
+      description:
+        "Updated significance score (0-1)",
+      isOptional: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "Updated custom metadata",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+Returns void. The episode is updated in the storage system.
+
+## Error Handling
+
+Throws an error if:
+- The episode with the given ID does not exist
+- The storage operation fails
+
+### Related
+
+- [Memory Class Reference](/reference/memory/Memory.mdx)
+- [Episodic Memory Guide](/docs/memory/episodic-memory.mdx)
+- [createEpisode](/reference/memory/createEpisode.mdx)
+- [listEpisodes](/reference/memory/listEpisodes.mdx)

@@ -1,0 +1,190 @@
+# createEpisode
+
+Creates a new episode in the episodic memory system. Episodes represent significant events, facts, or experiences that persist across all conversations for a given resource.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({
+  options: {
+    episodicMemory: { enabled: true }
+  }
+});
+
+const episode = await memory.createEpisode({
+  resourceId: "user-123",
+  threadId: "thread-456",
+  title: "Allergic to peanuts",
+  shortSummary: "User has severe peanut allergy",
+  detailedSummary: "User mentioned they have a severe peanut allergy and carry an EpiPen. Even trace amounts can trigger anaphylaxis.",
+  categories: ["health", "important"],
+  significance: 1.0,
+  causalContext: "Discovered after allergic reaction in childhood",
+  spatialContext: "Applies everywhere - must avoid all peanut products",
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description:
+        "Identifier for the resource (user) this episode belongs to",
+      isOptional: false,
+    },
+    {
+      name: "threadId",
+      type: "string",
+      description:
+        "ID of the thread where this episode was created or discovered",
+      isOptional: false,
+    },
+    {
+      name: "title",
+      type: "string",
+      description: "Brief descriptive title for the episode",
+      isOptional: false,
+    },
+    {
+      name: "shortSummary",
+      type: "string",
+      description: "One-line summary of the episode",
+      isOptional: false,
+    },
+    {
+      name: "detailedSummary",
+      type: "string",
+      description: "Complete description with full context",
+      isOptional: false,
+    },
+    {
+      name: "categories",
+      type: "string[]",
+      description:
+        "Array of category labels for semantic organization (e.g., 'health', 'work', 'family')",
+      isOptional: false,
+    },
+    {
+      name: "messageIds",
+      type: "string[]",
+      description:
+        "IDs of messages that contributed to this episode",
+      isOptional: true,
+      defaultValue: "[]",
+    },
+    {
+      name: "causalContext",
+      type: "string",
+      description:
+        "Why this happened or what led to it",
+      isOptional: true,
+    },
+    {
+      name: "spatialContext",
+      type: "string",
+      description:
+        "Where this occurred (location, environment)",
+      isOptional: true,
+    },
+    {
+      name: "relatedEpisodeIds",
+      type: "string[]",
+      description:
+        "IDs of other episodes that relate to this one",
+      isOptional: true,
+    },
+    {
+      name: "sequenceId",
+      type: "string",
+      description:
+        "UUID to group related episodes in a sequence",
+      isOptional: true,
+    },
+    {
+      name: "significance",
+      type: "number",
+      description:
+        "Score from 0-1 indicating importance (1.0 = critical)",
+      isOptional: true,
+      defaultValue: "0.5",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "Additional custom metadata",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+Returns a `StorageEpisodeType` object containing:
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier of the created episode",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "Resource ID associated with the episode",
+    },
+    {
+      name: "threadId",
+      type: "string",
+      description: "Thread ID where the episode was created",
+    },
+    {
+      name: "title",
+      type: "string",
+      description: "Title of the episode",
+    },
+    {
+      name: "shortSummary",
+      type: "string",
+      description: "Brief summary of the episode",
+    },
+    {
+      name: "detailedSummary",
+      type: "string",
+      description: "Full description of the episode",
+    },
+    {
+      name: "categories",
+      type: "string[]",
+      description: "Category labels for the episode",
+    },
+    {
+      name: "significance",
+      type: "number",
+      description: "Importance score (0-1)",
+    },
+    {
+      name: "createdAt",
+      type: "Date",
+      description: "Timestamp when the episode was created",
+    },
+    {
+      name: "updatedAt",
+      type: "Date",
+      description: "Timestamp when the episode was last updated",
+    },
+  ]}
+/>
+
+### Related
+
+- [Memory Class Reference](/reference/memory/Memory.mdx)
+- [Episodic Memory Guide](/docs/memory/episodic-memory.mdx)
+- [listEpisodes](/reference/memory/listEpisodes.mdx)
+- [updateEpisode](/reference/memory/updateEpisode.mdx)
+- [linkEpisodes](/reference/memory/linkEpisodes.mdx)

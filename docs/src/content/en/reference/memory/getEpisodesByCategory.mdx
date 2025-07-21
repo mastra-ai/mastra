@@ -1,0 +1,87 @@
+# getEpisodesByCategory
+
+Retrieves all episodes for a resource that belong to a specific category.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({
+  options: {
+    episodicMemory: { enabled: true }
+  }
+});
+
+// Get all health-related episodes
+const healthEpisodes = await memory.getEpisodesByCategory({
+  resourceId: "user-123",
+  category: "health",
+});
+
+// Get all work-related episodes
+const workEpisodes = await memory.getEpisodesByCategory({
+  resourceId: "user-123",
+  category: "work",
+});
+
+// Filter by significance
+const importantHealthEvents = healthEpisodes.filter(
+  episode => episode.significance && episode.significance >= 0.8
+);
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description:
+        "Identifier for the resource (user) whose episodes to retrieve",
+      isOptional: false,
+    },
+    {
+      name: "category",
+      type: "string",
+      description:
+        "Category name to filter by (case-sensitive)",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+Returns an array of `StorageEpisodeType` objects that have the specified category, sorted by creation date (newest first).
+
+<PropertiesTable
+  content={[
+    {
+      name: "episodes",
+      type: "StorageEpisodeType[]",
+      description: "Array of episodes matching the category",
+    },
+  ]}
+/>
+
+## Common Categories
+
+Recommended category naming conventions:
+
+- **Life Events**: `life-event`, `milestone`, `achievement`
+- **Health**: `health`, `medical`, `fitness`, `important`
+- **Work**: `work`, `career`, `education`, `professional`
+- **Personal**: `family`, `relationship`, `personal`
+- **Location**: `location`, `travel`, `move`
+- **Interests**: `hobbies`, `preferences`, `goals`
+- **Financial**: `financial`, `investment`, `purchase`
+
+### Related
+
+- [Memory Class Reference](/reference/memory/Memory.mdx)
+- [Episodic Memory Guide](/docs/memory/episodic-memory.mdx)
+- [listEpisodes](/reference/memory/listEpisodes.mdx)
+- [getEpisodeCategories](/reference/memory/getEpisodeCategories.mdx)
+- [createEpisode](/reference/memory/createEpisode.mdx)

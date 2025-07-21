@@ -1,0 +1,86 @@
+# getRelatedEpisodes
+
+Retrieves all episodes that are directly related to a specific episode through established relationships.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({
+  options: {
+    episodicMemory: { enabled: true }
+  }
+});
+
+// Get all episodes related to a specific episode
+const relatedEpisodes = await memory.getRelatedEpisodes({
+  episodeId: "episode-123",
+});
+
+// Process related episodes by relationship type
+relatedEpisodes.forEach(episode => {
+  const relationship = episode.relationships?.find(
+    rel => rel.episodeId === "episode-123"
+  );
+  console.log(`${episode.title} - Relationship: ${relationship?.type}`);
+});
+
+// Get related episodes including indirect relationships
+const allRelated = await memory.getRelatedEpisodes({
+  episodeId: "episode-123",
+  includeIndirect: true,
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "episodeId",
+      type: "string",
+      description:
+        "ID of the episode to find relationships for",
+      isOptional: false,
+    },
+    {
+      name: "includeIndirect",
+      type: "boolean",
+      description:
+        "Whether to include episodes related through intermediate episodes (transitive relationships)",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## Returns
+
+Returns an array of `StorageEpisodeType` objects representing the related episodes. Each episode will include its relationship information in the `relationships` field.
+
+<PropertiesTable
+  content={[
+    {
+      name: "episodes",
+      type: "StorageEpisodeType[]",
+      description: "Array of related episodes with their full details and relationship information",
+    },
+  ]}
+/>
+
+## Indirect Relationships
+
+When `includeIndirect` is true, the method will:
+1. Find all directly related episodes
+2. For each related episode, find their related episodes
+3. Return the combined set (excluding the original episode)
+
+This is useful for exploring broader connections in the knowledge graph.
+
+### Related
+
+- [Memory Class Reference](/reference/memory/Memory.mdx)
+- [Episodic Memory Guide](/docs/memory/episodic-memory.mdx)
+- [linkEpisodes](/reference/memory/linkEpisodes.mdx)
+- [createEpisode](/reference/memory/createEpisode.mdx)

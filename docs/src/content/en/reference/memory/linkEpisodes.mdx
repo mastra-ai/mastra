@@ -1,0 +1,80 @@
+# linkEpisodes
+
+Creates a typed relationship between two episodes. This allows building a knowledge graph of related memories.
+
+## Usage Example
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({
+  options: {
+    episodicMemory: { enabled: true }
+  }
+});
+
+// Link two episodes with a causal relationship
+await memory.linkEpisodes({
+  episodeId1: "episode-move-to-sf",
+  episodeId2: "episode-new-job",
+  relationshipType: "leads-to",
+});
+
+// The move to SF led to the new job
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "episodeId1",
+      type: "string",
+      description:
+        "ID of the first episode in the relationship",
+      isOptional: false,
+    },
+    {
+      name: "episodeId2",
+      type: "string",
+      description:
+        "ID of the second episode in the relationship",
+      isOptional: false,
+    },
+    {
+      name: "relationshipType",
+      type: "'caused-by' | 'leads-to' | 'part-of' | 'similar-to' | 'related-to'",
+      description:
+        "Type of relationship between the episodes",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Relationship Types
+
+- **`caused-by`**: Episode 2 was caused by Episode 1
+- **`leads-to`**: Episode 1 leads to Episode 2
+- **`part-of`**: Episode 2 is part of Episode 1
+- **`similar-to`**: The episodes are similar in nature
+- **`related-to`**: General relationship between episodes
+
+## Returns
+
+Returns void. The relationship is stored bidirectionally:
+- Episode 1 will have Episode 2 in its relationships
+- Episode 2 will have Episode 1 in its relationships
+
+## Error Handling
+
+Throws an error if:
+- Either episode does not exist
+- The episodes are already linked with the same relationship type
+- The storage operation fails
+
+### Related
+
+- [Memory Class Reference](/reference/memory/Memory.mdx)
+- [Episodic Memory Guide](/docs/memory/episodic-memory.mdx)
+- [createEpisode](/reference/memory/createEpisode.mdx)
+- [getRelatedEpisodes](/reference/memory/getRelatedEpisodes.mdx)

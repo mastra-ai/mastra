@@ -3,6 +3,7 @@ const meta = {
   "memory-with-pg": "Memory with PostgreSQL",
   "memory-with-upstash": "Memory with Upstash",
   "memory-with-mem0": "Memory with Mem0",
+  "episodic-memory": "Episodic Memory",
   "streaming-working-memory": "Streaming Working Memory",
   "streaming-working-memory-advanced": "Streaming Working Memory (Advanced)",
   "streaming-working-memory-structured": "Streaming Structured Working Memory",

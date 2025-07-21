@@ -13,6 +13,7 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EPISODES,
 } from '@mastra/core/storage';
 import type {
   EvalRow,
@@ -28,7 +29,7 @@ import type {
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
-type SUPPORTED_TABLE_NAMES = Exclude<TABLE_NAMES, typeof TABLE_RESOURCES>;
+type SUPPORTED_TABLE_NAMES = Exclude<TABLE_NAMES, typeof TABLE_RESOURCES | typeof TABLE_EPISODES>;
 
 function safelyParseJSON(jsonString: string): any {
   try {

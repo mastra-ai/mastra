@@ -57,6 +57,12 @@ const memory = new Memory({
 `,
     },
 
+    // Episodic memory configuration
+    episodicMemory: {
+      enabled: true,
+      lastEpisodes: 5,
+    },
+
     // Thread configuration
     threads: {
       generateTitle: true, // Enable title generation using agent's model
@@ -290,6 +296,15 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
         "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
     },
     {
+      name: "episodicMemory",
+      type: "{ enabled: boolean; lastEpisodes?: number }",
+      description:
+        "Configuration for episodic memory feature that enables long-term memory storage. When enabled, agents can create and recall significant events, facts, and experiences that persist across all conversations. lastEpisodes controls how many episodes are included in the system message (default: 5).",
+      isOptional: true,
+      defaultValue:
+        "{ enabled: false, lastEpisodes: 5 }",
+    },
+    {
       name: "threads",
       type: "{ generateTitle?: boolean | { model: LanguageModelV1 | ((ctx: RuntimeContext) => LanguageModelV1 | Promise<LanguageModelV1>), instructions?: string | ((ctx: RuntimeContext) => string | Promise<string>) } }",
       description:
@@ -302,11 +317,25 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
 
 ### Related
 
+#### Documentation
 - [Getting Started with Memory](/docs/memory/overview.mdx)
+- [Episodic Memory](/docs/memory/episodic-memory.mdx)
 - [Semantic Recall](/docs/memory/semantic-recall.mdx)
 - [Working Memory](/docs/memory/working-memory.mdx)
 - [Memory Processors](/docs/memory/memory-processors.mdx)
+
+#### Thread Methods
 - [createThread](/reference/memory/createThread.mdx)
 - [query](/reference/memory/query.mdx)
 - [getThreadById](/reference/memory/getThreadById.mdx)
 - [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.mdx)
+
+#### Episode Methods
+- [createEpisode](/reference/memory/createEpisode.mdx)
+- [listEpisodes](/reference/memory/listEpisodes.mdx)
+- [updateEpisode](/reference/memory/updateEpisode.mdx)
+- [linkEpisodes](/reference/memory/linkEpisodes.mdx)
+- [getRelatedEpisodes](/reference/memory/getRelatedEpisodes.mdx)
+- [getEpisodesInSequence](/reference/memory/getEpisodesInSequence.mdx)
+- [getEpisodesByCategory](/reference/memory/getEpisodesByCategory.mdx)
+- [getEpisodeCategories](/reference/memory/getEpisodeCategories.mdx)
