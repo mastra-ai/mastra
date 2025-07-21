@@ -3,7 +3,6 @@ import { join } from 'path';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import virtual from '@rollup/plugin-virtual';
-import { Cloudflare } from 'cloudflare';
 
 interface CFRoute {
   pattern: string;
@@ -24,40 +23,30 @@ interface KVNamespaceBinding {
 }
 
 export class CloudflareDeployer extends Deployer {
-  private cloudflare: Cloudflare | undefined;
   routes?: CFRoute[] = [];
   workerNamespace?: string;
-  scope: string;
   env?: Record<string, any>;
   projectName?: string;
   d1Databases?: D1DatabaseBinding[];
   kvNamespaces?: KVNamespaceBinding[];
 
   constructor({
-    scope,
     env,
     projectName = 'mastra',
     routes,
     workerNamespace,
-    auth,
     d1Databases,
     kvNamespaces,
   }: {
     env?: Record<string, any>;
-    scope: string;
     projectName?: string;
     routes?: CFRoute[];
     workerNamespace?: string;
-    auth: {
-      apiToken: string;
-      apiEmail?: string;
-    };
     d1Databases?: D1DatabaseBinding[];
     kvNamespaces?: KVNamespaceBinding[];
   }) {
     super({ name: 'CLOUDFLARE' });
 
-    this.scope = scope;
     this.projectName = projectName;
     this.routes = routes;
     this.workerNamespace = workerNamespace;
@@ -68,8 +57,6 @@ export class CloudflareDeployer extends Deployer {
 
     if (d1Databases) this.d1Databases = d1Databases;
     if (kvNamespaces) this.kvNamespaces = kvNamespaces;
-
-    this.cloudflare = new Cloudflare(auth);
   }
 
   async writeFiles(outputDirectory: string): Promise<void> {
@@ -196,25 +183,8 @@ process.versions.node = '${process.versions.node}';
     this.logger?.info('Deploying to Cloudflare failed. Please use the Cloudflare dashboard to deploy.');
   }
 
-  async tagWorker({
-    workerName,
-    namespace,
-    tags,
-    scope,
-  }: {
-    scope: string;
-    workerName: string;
-    namespace: string;
-    tags: string[];
-  }): Promise<void> {
-    if (!this.cloudflare) {
-      throw new Error('Cloudflare Deployer not initialized');
-    }
-
-    await this.cloudflare.workersForPlatforms.dispatch.namespaces.scripts.tags.update(namespace, workerName, {
-      account_id: scope,
-      body: tags,
-    });
+  async tagWorker(): Promise<void> {
+    throw new Error('tagWorker method is no longer supported. Use the Cloudflare dashboard or API directly.');
   }
 
   async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
