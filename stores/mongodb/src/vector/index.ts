@@ -312,15 +312,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         combinedFilter = documentMongoFilter;
       }
 
-      // pre-filter for candidate document IDs
-      const candidateIds =
-        Object.keys(combinedFilter).length > 0
-          ? await collection
-              .aggregate([{ $match: combinedFilter }, { $project: { _id: 1 } }])
-              .map(doc => doc._id)
-              .toArray()
-          : null;
-
       const vectorSearch: Document = {
         index: indexNameInternal,
         queryVector: queryVector,
@@ -329,7 +320,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         limit: topK,
       };
 
-      if (candidateIds !== null) {
+      if (Object.keys(combinedFilter).length > 0) {
+        // pre-filter for candidate document IDs
+        const candidateIds = await collection
+          .aggregate([{ $match: combinedFilter }, { $project: { _id: 1 } }])
+          .map(doc => doc._id)
+          .toArray();
+
         vectorSearch.filter = { _id: { $in: candidateIds } };
       }
 
