@@ -173,7 +173,6 @@ export function CustomChatInterface({
       </div>
 
       {/* Messages container */}
-      {/* <ScrollArea className="relative flex-1 p-4 w-full h-full" type="auto"> */}
       <StickToBottom
         className="flex-1 overflow-auto [&>div]:scrollbar-thin"
         resize="smooth"
@@ -211,10 +210,8 @@ export function CustomChatInterface({
               </div>
             );
           })}
-          {/* {isLoading && <ActivityIcon />} */}
         </StickToBottom.Content>
       </StickToBottom>
-      {/* </ScrollArea> */}
 
       {/* Input area */}
       <div className="p-4">
