@@ -1,9 +1,7 @@
-import { createSampleTraceForDB, createTestSuite } from '@internal/storage-test-utils';
-import { expect, test, vi } from 'vitest';
-
+import { createTestSuite } from '@internal/storage-test-utils';
+import { vi } from 'vitest';
 import { ClickhouseStore } from '.';
 import type { ClickhouseConfig } from '.';
-import { TABLE_TRACES } from '@mastra/core/storage';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
