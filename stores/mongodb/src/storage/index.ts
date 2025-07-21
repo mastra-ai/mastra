@@ -1,7 +1,7 @@
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import type { ScoreRowData } from '@mastra/core/scores';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { ScoreRowData } from '@mastra/core/scores';
 import type {
   EvalRow,
   PaginationArgs,
