@@ -1,5 +1,5 @@
 ---
-"@mastra/deployer-cloudflare": major
+"@mastra/deployer-cloudflare": minor
 ---
 
 Remove scope, auth, and cloudflare client from CloudflareDeployer
