@@ -22,7 +22,7 @@ export const MastraClientProvider = ({
   return <MastraClientContext.Provider value={{ client }}>{children}</MastraClientContext.Provider>;
 };
 
-export const useMastraClient = (options?: Partial<ClientOptions>) => {
+export const useMastraClient = () => {
   const context = useContext(MastraClientContext);
   if (context === undefined) {
     throw new Error('useMastraClient must be used within a MastraClientProvider');
