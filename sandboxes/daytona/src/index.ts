@@ -13,7 +13,9 @@ export class DaytonaSandbox extends MastraSandbox {
     apiUrl?: string;
     target?: 'us' | 'eu';
   } = {}) {
-    super();
+    super({
+      name: 'daytona',
+    });
 
     // Using explicit configuration
     this.client = new Daytona({
@@ -31,5 +33,30 @@ export class DaytonaSandbox extends MastraSandbox {
     return {
       id: sandbox.id,
     };
+  }
+
+  async executeCode({
+    sandboxId,
+    code,
+    options,
+  }: {
+    sandboxId: string;
+    code: string;
+    options?: {
+      argv?: string[];
+      env?: Record<string, string>;
+      timeout?: number;
+    };
+  }) {
+    const sandbox = await this.client.get(sandboxId);
+
+    return sandbox.process.codeRun(
+      code,
+      {
+        argv: options?.argv,
+        env: options?.env,
+      },
+      options?.timeout,
+    );
   }
 }

@@ -15,7 +15,9 @@ export class VercelSandbox extends MastraSandbox {
     projectId?: string;
     token?: string;
   } = {}) {
-    super();
+    super({
+      name: 'vercel',
+    });
 
     this.teamId = (process.env.VERCEL_TEAM_ID || teamId)!;
     this.projectId = (process.env.VERCEL_PROJECT_ID || projectId)!;
@@ -27,11 +29,38 @@ export class VercelSandbox extends MastraSandbox {
       teamId: process.env.VERCEL_TEAM_ID!,
       projectId: process.env.VERCEL_PROJECT_ID!,
       token: process.env.VERCEL_TOKEN!,
-      runtime: language,
+      runtime: language === 'python' ? 'python3.13' : 'node22',
     });
 
     return {
       id: sandbox.sandboxId,
     };
+  }
+
+  async executeCode({
+    sandboxId,
+    code,
+    options,
+  }: {
+    sandboxId: string;
+    code: string;
+    options?: {
+      argv?: string[];
+      env?: Record<string, string>;
+      timeout?: number;
+    };
+  }) {
+    const sandbox = await Sandbox.get({
+      sandboxId,
+      teamId: this.teamId,
+      projectId: this.projectId,
+      token: this.token,
+    });
+
+    return sandbox.runCommand({
+      cmd: code,
+      env: options?.env,
+      args: options?.argv,
+    });
   }
 }
