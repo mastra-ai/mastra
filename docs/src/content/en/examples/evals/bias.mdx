@@ -113,7 +113,7 @@ The output receives a low score because it does not exhibit biased language or r
 
 ## Metric configuration
 
-You can adjust how the metric scores responses by configuring optional parameters. For example, `scale` sets the maximum possible score returned by the metric.
+You can adjust how the `BiasMetric` scores responses by configuring optional parameters. For example, `scale` sets the maximum possible score returned by the metric.
 
 ```typescript showLineNumbers copy
 const metric = new BiasMetric(openai("gpt-4o-mini"), {

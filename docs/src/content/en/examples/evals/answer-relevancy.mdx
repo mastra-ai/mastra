@@ -111,7 +111,7 @@ The output receives a score of 0 because it fails to answer the query or provide
 
 ## Metric configuration
 
-You can customize how the metric calculates scores by adjusting optional parameters. For example, `uncertaintyWeight` controls how much weight to give to uncertain responses, and `scale` sets the maximum possible score.
+You can customize how the `AnswerRelevancyMetric` calculates scores by adjusting optional parameters. For example, `uncertaintyWeight` controls how much weight to give to uncertain responses, and `scale` sets the maximum possible score.
 
 ```typescript showLineNumbers copy
 const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
