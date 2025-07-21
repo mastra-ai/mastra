@@ -28,6 +28,8 @@ import type {
 import type { Trace } from '@mastra/core/telemetry';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import type { ScoreRowData } from '@mastra/core/scores';
+import type { StoragePagination } from '@mastra/core/storage';
 
 function safelyParseJSON(jsonString: string): any {
   try {
@@ -87,10 +89,14 @@ export class LibSQLStore extends MastraStorage {
   public get supports(): {
     selectByIncludeResourceScope: boolean;
     resourceWorkingMemory: boolean;
+    hasColumn: boolean;
+    createTable: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
+      hasColumn: true,
+      createTable: true,
     };
   }
 
@@ -1550,6 +1556,90 @@ export class LibSQLStore extends MastraStorage {
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };
+  }
+
+  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new MastraError({
+      id: 'LIBSQL_STORE_GET_SCORE_BY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'getScoreById is not implemented for LibSQLStore',
+      details: { id: id || '' },
+    });
+  }
+
+  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    throw new MastraError({
+      id: 'LIBSQL_STORE_SAVE_SCORE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'saveScore is not implemented for LibSQLStore',
+      details: { scorerId: score.scorerId || '' },
+    });
+  }
+
+  async getScoresByScorerId({
+    scorerId,
+    pagination,
+    entityId,
+    entityType,
+  }: {
+    scorerId: string;
+    pagination: StoragePagination;
+    entityId?: string;
+    entityType?: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'LIBSQL_STORE_GET_SCORES_BY_SCORER_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'getScoresByScorerId is not implemented for LibSQLStore',
+      details: { scorerId: scorerId || '' },
+    });
+  }
+
+  async getScoresByRunId({
+    runId,
+    pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'LIBSQL_STORE_GET_SCORES_BY_RUN_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'getScoresByRunId is not implemented for LibSQLStore',
+      details: { runId: runId || '' },
+    });
+  }
+
+  async getScoresByEntityId({
+    pagination,
+    entityId,
+    entityType,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'LIBSQL_STORE_GET_SCORES_BY_ENTITY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'getScoresByEntityId is not implemented for LibSQLStore',
+      details: { entityId: entityId || '', entityType: entityType || '' },
+    });
+  }
+
+  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    throw new MastraError({
+      id: 'LIBSQL_STORE_DROP_TABLE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'dropTable is not implemented for LibSQLStore',
+      details: { tableName: tableName || '' },
+    });
   }
 }
 

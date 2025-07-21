@@ -3,12 +3,14 @@
   "version": "0.0.16",
   "description": "",
   "type": "module",
-  "main": "src/default-tests.ts",
+  "main": "src/index.ts",
   "private": true,
-  "exports": {
-    ".": "./src/default-tests.ts"
+  "scripts": {
+    "test": "vitest run"
   },
-  "scripts": {},
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
