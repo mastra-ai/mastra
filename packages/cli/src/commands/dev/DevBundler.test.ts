@@ -50,7 +50,7 @@ describe('DevBundler', () => {
       // Assert
       expect(getWatcherInputOptions).toHaveBeenCalledWith('test-entry.js', 'node', {
         'process.env.NODE_ENV': JSON.stringify('test-env'),
-      });
+      }, false);
     });
 
     it('should default to development when NODE_ENV is not set', async () => {
@@ -65,7 +65,7 @@ describe('DevBundler', () => {
       // Assert
       expect(getWatcherInputOptions).toHaveBeenCalledWith('test-entry.js', 'node', {
         'process.env.NODE_ENV': JSON.stringify('development'),
-      });
+      }, false);
     });
   });
 });
