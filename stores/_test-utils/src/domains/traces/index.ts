@@ -1,10 +1,10 @@
 import { MastraStorage, TABLE_TRACES } from '@mastra/core/storage';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { createSampleTraceForDB } from './data';
 
 export function createTraceTests({ storage }: { storage: MastraStorage }) {
   describe('getTraces with pagination', () => {
-    afterEach(async () => {
+    beforeEach(async () => {
       await storage.clearTable({ tableName: TABLE_TRACES });
     });
 
