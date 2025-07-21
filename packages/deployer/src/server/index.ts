@@ -389,7 +389,7 @@ export async function createHonoServer(
   // Log routes
   app.route('/api/logs', logsRouter());
   // Tool routes
-  app.route('/api/tools', toolsRouter(bodyLimitOptions, tools));
+  app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
   // Vector routes
   app.route('/api/vector', vectorRouter(bodyLimitOptions));
 
