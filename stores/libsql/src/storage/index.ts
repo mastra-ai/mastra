@@ -5,6 +5,7 @@ import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
+import type { ScoreRowData } from '@mastra/core/scores';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -24,12 +25,11 @@ import type {
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
+  StoragePagination,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import type { ScoreRowData } from '@mastra/core/scores';
-import type { StoragePagination } from '@mastra/core/storage';
 
 function safelyParseJSON(jsonString: string): any {
   try {
@@ -1580,9 +1580,9 @@ export class LibSQLStore extends MastraStorage {
 
   async getScoresByScorerId({
     scorerId,
-    pagination,
-    entityId,
-    entityType,
+    pagination: _pagination,
+    entityId: _entityId,
+    entityType: _entityType,
   }: {
     scorerId: string;
     pagination: StoragePagination;
@@ -1590,45 +1590,45 @@ export class LibSQLStore extends MastraStorage {
     entityType?: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     throw new MastraError({
-      id: 'LIBSQL_STORE_GET_SCORES_BY_SCORER_ID_NOT_IMPLEMENTED',
+      id: 'LIBSQL_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
       domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: 'getScoresByScorerId is not implemented for LibSQLStore',
-      details: { scorerId: scorerId || '' },
+      category: ErrorCategory.THIRD_PARTY,
+      details: { scorerId, entityId: _entityId || '', entityType: _entityType || '' },
+      text: 'getScoresByScorerId is not implemented yet in LibSQLStore',
     });
   }
 
   async getScoresByRunId({
     runId,
-    pagination,
+    pagination: _pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     throw new MastraError({
-      id: 'LIBSQL_STORE_GET_SCORES_BY_RUN_ID_NOT_IMPLEMENTED',
+      id: 'LIBSQL_STORE_GET_SCORES_BY_RUN_ID_FAILED',
       domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: 'getScoresByRunId is not implemented for LibSQLStore',
-      details: { runId: runId || '' },
+      category: ErrorCategory.THIRD_PARTY,
+      details: { runId },
+      text: 'getScoresByRunId is not implemented yet in LibSQLStore',
     });
   }
 
   async getScoresByEntityId({
-    pagination,
-    entityId,
-    entityType,
+    entityId: _entityId,
+    entityType: _entityType,
+    pagination: _pagination,
   }: {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     throw new MastraError({
-      id: 'LIBSQL_STORE_GET_SCORES_BY_ENTITY_ID_NOT_IMPLEMENTED',
+      id: 'LIBSQL_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
       domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: 'getScoresByEntityId is not implemented for LibSQLStore',
-      details: { entityId: entityId || '', entityType: entityType || '' },
+      category: ErrorCategory.THIRD_PARTY,
+      details: { entityId: _entityId, entityType: _entityType },
+      text: 'getScoresByEntityId is not implemented yet in LibSQLStore',
     });
   }
 

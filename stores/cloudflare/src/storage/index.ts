@@ -3,6 +3,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
+import type { ScoreRowData } from '@mastra/core/scores';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -23,7 +24,6 @@ import type {
   PaginationArgs,
   StoragePagination,
 } from '@mastra/core/storage';
-import type { ScoreRowData } from '@mastra/core/scores';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
@@ -1876,7 +1876,7 @@ export class CloudflareStore extends MastraStorage {
 
   async getScoresByScorerId({
     scorerId,
-    pagination,
+    pagination: _pagination,
     entityId,
     entityType,
   }: {
@@ -1896,7 +1896,7 @@ export class CloudflareStore extends MastraStorage {
 
   async getScoresByRunId({
     runId,
-    pagination,
+    pagination: _pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
@@ -1913,7 +1913,7 @@ export class CloudflareStore extends MastraStorage {
   async getScoresByEntityId({
     entityId,
     entityType,
-    pagination,
+    pagination: _pagination,
   }: {
     pagination: StoragePagination;
     entityId: string;

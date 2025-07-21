@@ -5,6 +5,7 @@ import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV2, MastraMessageV1 } from '@mastra/core/memory';
 
+import type { ScoreRowData } from '@mastra/core/scores';
 import {
   MastraStorage,
   TABLE_THREADS,
@@ -31,7 +32,6 @@ import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
-import type { ScoreRowData } from '@mastra/core/scores';
 
 export interface DynamoDBStoreConfig {
   region?: string;
@@ -1395,7 +1395,7 @@ export class DynamoDBStore extends MastraStorage {
     });
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(_score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
     throw new MastraError({
       id: 'STORAGE_DYNAMODB_STORE_SAVE_SCORE_FAILED',
       domain: ErrorDomain.STORAGE,
@@ -1407,7 +1407,7 @@ export class DynamoDBStore extends MastraStorage {
 
   async getScoresByScorerId({
     scorerId,
-    pagination,
+    pagination: _pagination,
     entityId,
     entityType,
   }: {
@@ -1427,7 +1427,7 @@ export class DynamoDBStore extends MastraStorage {
 
   async getScoresByRunId({
     runId,
-    pagination,
+    pagination: _pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
@@ -1444,7 +1444,7 @@ export class DynamoDBStore extends MastraStorage {
   async getScoresByEntityId({
     entityId,
     entityType,
-    pagination,
+    pagination: _pagination,
   }: {
     pagination: StoragePagination;
     entityId: string;
