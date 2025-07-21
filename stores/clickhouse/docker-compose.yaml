@@ -8,7 +8,7 @@ services:
     environment:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-password}    
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-password}
     volumes:
       - clickhouse_data:/var/lib/clickhouse
 volumes:
