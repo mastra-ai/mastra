@@ -14,36 +14,73 @@ type ParamsFromPath<P extends string> = {
   [K in P extends `${string}:${infer Param}/${string}` | `${string}:${infer Param}` ? Param : never]: string;
 };
 
+type RegisterApiRoutePathError = `Param 'path' must not start with '/api', it is reserved for internal API routes.`;
+type ValidatePath<P extends string, T> = P extends `/api/${string}` ? RegisterApiRoutePathError : T;
+
+type RegisterApiRouteOptions<P extends string> = {
+  method: Methods;
+  openapi?: DescribeRouteOptions;
+  handler?: Handler<
+    {
+      Variables: {
+        mastra: Mastra;
+      };
+    },
+    P,
+    ParamsFromPath<P>
+  >;
+  createHandler?: (c: Context) => Promise<
+    Handler<
+      {
+        Variables: {
+          mastra: Mastra;
+        };
+      },
+      P,
+      ParamsFromPath<P>
+    >
+  >;
+  middleware?: MiddlewareHandler | MiddlewareHandler[];
+};
+
+function validateOptions<P extends string>(
+  path: P,
+  options: RegisterApiRoutePathError | RegisterApiRouteOptions<P>,
+): asserts options is RegisterApiRouteOptions<P> {
+  const opts = options as RegisterApiRouteOptions<P>;
+
+  if (opts.method === undefined) {
+    throw new MastraError({
+      id: 'MASTRA_SERVER_API_INVALID_ROUTE_OPTIONS',
+      text: `Invalid options for route "${path}", missing "method" property`,
+      domain: ErrorDomain.MASTRA_SERVER,
+      category: ErrorCategory.USER,
+    });
+  }
+
+  if (opts.handler === undefined && opts.createHandler === undefined) {
+    throw new MastraError({
+      id: 'MASTRA_SERVER_API_INVALID_ROUTE_OPTIONS',
+      text: `Invalid options for route "${path}", you must define a "handler" or "createHandler" property`,
+      domain: ErrorDomain.MASTRA_SERVER,
+      category: ErrorCategory.USER,
+    });
+  }
+
+  if (opts.handler !== undefined && opts.createHandler !== undefined) {
+    throw new MastraError({
+      id: 'MASTRA_SERVER_API_INVALID_ROUTE_OPTIONS',
+      text: `Invalid options for route "${path}", you can only define one of the following properties: "handler" or "createHandler"`,
+      domain: ErrorDomain.MASTRA_SERVER,
+      category: ErrorCategory.USER,
+    });
+  }
+}
+
 export function registerApiRoute<P extends string>(
   path: P,
-  options: P extends `/api/${string}`
-    ? never
-    : {
-        method: Methods;
-        openapi?: DescribeRouteOptions;
-        handler?: Handler<
-          {
-            Variables: {
-              mastra: Mastra;
-            };
-          },
-          P,
-          ParamsFromPath<P>
-        >;
-        createHandler?: (c: Context) => Promise<
-          Handler<
-            {
-              Variables: {
-                mastra: Mastra;
-              };
-            },
-            P,
-            ParamsFromPath<P>
-          >
-        >;
-        middleware?: MiddlewareHandler | MiddlewareHandler[];
-      },
-): P extends `/api/${string}` ? never : ApiRoute {
+  options: ValidatePath<P, RegisterApiRouteOptions<P>>,
+): ValidatePath<P, ApiRoute> {
   if (path.startsWith('/api/')) {
     throw new MastraError({
       id: 'MASTRA_SERVER_API_PATH_RESERVED',
@@ -53,6 +90,8 @@ export function registerApiRoute<P extends string>(
     });
   }
 
+  validateOptions(path, options);
+
   // @ts-expect-error
   return {
     path,
@@ -61,7 +100,7 @@ export function registerApiRoute<P extends string>(
     createHandler: options.createHandler,
     openapi: options.openapi,
     middleware: options.middleware,
-  } as ApiRoute;
+  };
 }
 
 export function defineAuth<TUser>(config: MastraAuthConfig<TUser>): MastraAuthConfig<TUser> {
