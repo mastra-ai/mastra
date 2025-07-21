@@ -84,7 +84,7 @@ export class LegacyEvalsStorageClickhouse extends LegacyEvalsStorage {
 
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     try {
-      const baseQuery = `SELECT *, toDateTime64(createdAt, 3) as createdAt FROM ${TABLE_EVALS} WHERE agent_name = {var_agent_name:String}`;
+      const baseQuery = `SELECT *, toDateTime64(created_at, 3) as createdAt FROM ${TABLE_EVALS} WHERE agent_name = {var_agent_name:String}`;
       const typeCondition =
         type === 'test'
           ? " AND test_info IS NOT NULL AND test_info != 'null' AND JSONExtractString(test_info, 'testPath') IS NOT NULL AND JSONExtractString(test_info, 'testPath') != ''"
