@@ -24,6 +24,8 @@ export default function Scorer() {
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
   const isLoading = scorerLoading || agentsLoading || workflowsLoading;
 
+  console.log({ scorer });
+
   const [selectedScore, setSelectedScore] = useState<any>(null);
   const [detailsIsOpened, setDetailsIsOpened] = useState<boolean>(false);
 

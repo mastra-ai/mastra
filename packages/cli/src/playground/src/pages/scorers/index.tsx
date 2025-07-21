@@ -1,6 +1,6 @@
 import { useScorers } from '@mastra/playground-ui';
 import { DataTable, Header, HeaderTitle, MainContentLayout } from '@mastra/playground-ui';
-import { scorersTableColumns } from '@/domains/agents/table.columns';
+import { scorersTableColumns } from '@/domains/scorers/table.columns';
 
 export default function Scorers() {
   const { scorers, isLoading } = useScorers();

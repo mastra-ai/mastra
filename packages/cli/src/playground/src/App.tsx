@@ -36,6 +36,8 @@ import VNextNetwork from './pages/networks/network/v-next';
 import Scorer from './pages/scorers/scorer';
 import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
+import Datasets from './pages/datasets';
+import Dataset from './pages/datasets/dataset';
 
 function App() {
   const [queryClient] = useState(() => new QueryClient());
@@ -56,6 +58,16 @@ function App() {
                 >
                   <Route path="/scorers" element={<Scorers />} />
                   <Route path="/scorers/:scorerId" element={<Scorer />} />
+                </Route>
+                <Route
+                  element={
+                    <Layout>
+                      <Outlet />
+                    </Layout>
+                  }
+                >
+                  <Route path="/datasets" element={<Datasets />} />
+                  <Route path="/datasets/:datasetId" element={<Dataset />} />
                 </Route>
 
                 <Route
