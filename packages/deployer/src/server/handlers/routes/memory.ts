@@ -7,6 +7,7 @@ import {
   deleteThreadHandler,
   getMemoryStatusHandler,
   getMessagesHandler,
+  getMessagesPaginatedHandler,
   getThreadByIdHandler,
   getThreadsHandler,
   getWorkingMemoryHandler,
@@ -368,6 +369,15 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
 
   router.get(
     '/threads/:threadId/messages',
+    async (c, next) => {
+      c.header('Deprecation', 'true');
+      c.header(
+        'Warning',
+        '299 - "This endpoint is deprecated, use /api/memory/threads/:threadId/messages/paginated instead"',
+      );
+      c.header('Link', '</api/memory/threads/:threadId/messages/paginated>; rel="successor-version"');
+      return next();
+    },
     describeRoute({
       description: 'Get messages for a thread',
       tags: ['memory'],
@@ -399,6 +409,63 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getMessagesHandler,
+  );
+
+  // @TODO: Temporary api as we inform users that we are deprecating the original /api/memory/threads/:threadId/messages api.
+  router.get(
+    '/threads/:threadId/messages/paginated',
+    describeRoute({
+      description: 'Get paginated messages for a thread',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'threadId',
+          in: 'path',
+          required: true,
+          description: 'The unique identifier of the thread',
+          schema: {
+            type: 'string',
+          },
+        },
+        {
+          name: 'resourceId',
+          in: 'query',
+          required: false,
+          description: 'Filter messages by resource ID',
+          schema: {
+            type: 'string',
+          },
+        },
+        {
+          name: 'format',
+          in: 'query',
+          required: false,
+          description: 'Message format to return',
+          schema: {
+            type: 'string',
+            enum: ['v1', 'v2'],
+            default: 'v1',
+          },
+        },
+        {
+          name: 'selectBy',
+          in: 'query',
+          required: false,
+          description: 'JSON string containing selection criteria for messages',
+          schema: {
+            type: 'string',
+            example:
+              '{"pagination":{"page":0,"perPage":20,"dateRange":{"start":"2024-01-01T00:00:00Z","end":"2024-12-31T23:59:59Z"}},"include":[{"id":"msg-123","withPreviousMessages":5,"withNextMessages":3}]}',
+          },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'List of messages',
+        },
+      },
+    }),
+    getMessagesPaginatedHandler,
   );
 
   router.get(

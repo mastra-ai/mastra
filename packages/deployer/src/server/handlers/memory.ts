@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core';
+import type { StorageGetMessagesArg, MastraMessageFormat } from '@mastra/core/storage';
 import {
   getMemoryStatusHandler as getOriginalMemoryStatusHandler,
   getThreadsHandler as getOriginalThreadsHandler,
@@ -8,6 +9,7 @@ import {
   updateThreadHandler as getOriginalUpdateThreadHandler,
   deleteThreadHandler as getOriginalDeleteThreadHandler,
   getMessagesHandler as getOriginalGetMessagesHandler,
+  getMessagesPaginatedHandler as getOriginalGetMessagesPaginatedHandler,
   getWorkingMemoryHandler as getOriginalGetWorkingMemoryHandler,
   updateWorkingMemoryHandler as getOriginalUpdateWorkingMemoryHandler,
 } from '@mastra/server/handlers/memory';
@@ -178,6 +180,39 @@ export async function getMessagesHandler(c: Context) {
       threadId,
       networkId,
       limit,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error getting messages');
+  }
+}
+
+export async function getMessagesPaginatedHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const threadId = c.req.param('threadId');
+    const resourceId = c.req.query('resourceId');
+    const format = (c.req.query('format') || 'v1') as MastraMessageFormat;
+    const selectByArgs = c.req.query('selectBy');
+
+    let selectBy = {} as StorageGetMessagesArg['selectBy'];
+
+    if (selectByArgs) {
+      try {
+        selectBy = JSON.parse(selectByArgs);
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      } catch (_error) {
+        // swallow
+      }
+    }
+
+    const result = await getOriginalGetMessagesPaginatedHandler({
+      mastra,
+      threadId,
+      resourceId,
+      format,
+      selectBy,
     });
 
     return c.json(result);

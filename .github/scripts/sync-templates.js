@@ -146,33 +146,70 @@ async function updateExistingRepo(repoName, description) {
 async function pushToRepo(repoName) {
   console.log(`Pushing to new repo: ${repoName}`);
   const templatePath = path.join(TEMPLATES_DIR, repoName);
+  const tempRoot = path.join(process.cwd(), '.temp');
   const tempDir = path.join(process.cwd(), '.temp', repoName);
 
   try {
     // Create temp directory
-    console.log(`Creating temp directory: ${tempDir}`);
-    fsExtra.ensureDirSync(tempDir);
+    console.log(`Creating temp directory: ${tempRoot}`);
+    fsExtra.ensureDirSync(tempRoot);
+
+    console.log(`Cloning repo into temp directory: ${tempRoot}`);
+    execSync(
+      ` 
+      git config --global user.name "${USERNAME}" &&
+      git config --global user.email "${EMAIL}" && 
+      git clone https://x-access-token:${GITHUB_TOKEN}@github.com/${ORGANIZATION}/${repoName}.git &&
+      cd ${repoName} &&
+      git fetch origin
+      `,
+      {
+        stdio: 'inherit',
+        cwd: tempRoot,
+      },
+    );
+
+    try {
+      console.log(`Check out to main branch in local`);
+      execSync(
+        ` 
+      git checkout main &&
+      git pull origin main
+      `,
+        {
+          stdio: 'inherit',
+          cwd: tempDir,
+        },
+      );
+    } catch (error) {
+      console.log(`No main branch found in local, creating new main branch`);
+      execSync(
+        `
+        git checkout -b main &&
+        git branch -M main
+      `,
+        { stdio: 'inherit', cwd: tempDir },
+      );
+    }
 
     // Copy template content to temp directory
     console.log(`Copying template content to temp directory: ${tempDir}`);
     fsExtra.copySync(templatePath, tempDir);
 
     // Initialize git and push to repo
-    console.log(`Initializing git and pushing to repo: ${repoName}`);
-    execSync(
-      `
-      git init &&
-      git config user.name "${USERNAME}" &&
-      git config user.email "${EMAIL}" &&
+    console.log(`Pushing to main branch`);
+    try {
+      execSync(
+        `
       git add . &&
       git commit -m "Update template from monorepo" &&
-      git branch -M main &&
-      git remote add origin https://x-access-token:${GITHUB_TOKEN}@github.com/${ORGANIZATION}/${repoName}.git  &&
-      git pull origin main &&
-      git push -u origin main --force
+      git push origin main
     `,
-      { stdio: 'inherit', cwd: tempDir },
-    );
+        { stdio: 'inherit', cwd: tempDir },
+      );
+    } catch (error) {
+      console.log(`No changes to push to main branch, skipping`);
+    }
 
     // setup different branches
     // TODO make more dynamic
@@ -180,19 +217,36 @@ async function pushToRepo(repoName) {
       provider,
       { model: defaultModel, package: providerPackage, apiKey: providerApiKey, name: providerName, url: providerUrl },
     ] of Object.entries(PROVIDERS)) {
+      console.log(`Setting up ${provider} branch`);
       // move to new branch
-      execSync(`git checkout main && git switch -c ${provider}${provider}`, {
+      execSync(`git checkout main && git pull origin main`, {
         stdio: 'inherit',
         cwd: tempDir,
       });
 
       try {
-        execSync(`git pull origin ${provider}`, {
+        execSync(`git checkout -b ${provider}`, {
           stdio: 'inherit',
           cwd: tempDir,
         });
+
+        try {
+          execSync(`git pull origin ${provider}`, {
+            stdio: 'inherit',
+            cwd: tempDir,
+          });
+        } catch (error) {
+          console.log(`No ${provider} branch found in origin, skipping`);
+        }
       } catch (error) {
-        console.log(`No ${provider} branch found in origin`);
+        console.log(`${provider} branch already exists in local`);
+        execSync(`git checkout ${provider} && git pull origin ${provider}`, {
+          stdio: 'inherit',
+          cwd: tempDir,
+        });
+        // Copy template content to temp directory
+        console.log(`Copying template content to temp directory: ${tempDir} for ${provider} branch`);
+        fsExtra.copySync(templatePath, tempDir);
       }
 
       //update llm provider agent files and workflow files
@@ -257,7 +311,9 @@ async function pushToRepo(repoName) {
       const envExamplePath = path.join(tempDir, '.env.example');
       let envExample = await readFile(envExamplePath, 'utf-8');
       envExample = envExample.replace('OPENAI_API_KEY', providerApiKey);
-      envExample = envExample + `\nMODEL=${defaultModel}`;
+      if (!envExample.includes('MODEL')) {
+        envExample = envExample + `\nMODEL=${defaultModel}`;
+      }
       await writeFile(envExamplePath, envExample);
 
       //update llm provider in README.md
@@ -270,15 +326,19 @@ async function pushToRepo(repoName) {
       readme = readme.replaceAll('https://platform.openai.com/api-keys', providerUrl);
       await writeFile(readmePath, readme);
 
-      // push branch
-      execSync(
-        `
+      try {
+        // push branch
+        execSync(
+          `
         git add . &&
         git commit -m "Update llm provider to ${provider}" &&
-        git push -u origin ${provider} --force
+        git push origin ${provider}
     `,
-        { stdio: 'inherit', cwd: tempDir },
-      );
+          { stdio: 'inherit', cwd: tempDir },
+        );
+      } catch (error) {
+        console.log(`No changes to push to ${provider} branch, skipping`);
+      }
     }
 
     console.log(`Successfully pushed template to ${repoName}`);
