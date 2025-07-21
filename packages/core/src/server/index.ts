@@ -92,7 +92,6 @@ export function registerApiRoute<P extends string>(
 
   validateOptions(path, options);
 
-  // @ts-expect-error
   return {
     path,
     method: options.method,
@@ -100,7 +99,7 @@ export function registerApiRoute<P extends string>(
     createHandler: options.createHandler,
     openapi: options.openapi,
     middleware: options.middleware,
-  };
+  } as unknown as ValidatePath<P, ApiRoute> ;
 }
 
 export function defineAuth<TUser>(config: MastraAuthConfig<TUser>): MastraAuthConfig<TUser> {
