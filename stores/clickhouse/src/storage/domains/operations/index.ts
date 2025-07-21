@@ -230,10 +230,8 @@ export class StoreOperationsClickhouse extends StoreOperations {
       ),
     }));
 
-    console.log({ recordsToBeInserted });
-
     try {
-      const result = await this.client.insert({
+      await this.client.insert({
         table: tableName,
         values: recordsToBeInserted,
         format: 'JSONEachRow',
@@ -244,7 +242,6 @@ export class StoreOperationsClickhouse extends StoreOperations {
           output_format_json_quote_64bit_integers: 0,
         },
       });
-      console.log(result);
     } catch (error: any) {
       throw new MastraError(
         {
