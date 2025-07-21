@@ -151,15 +151,23 @@ const metric = new CompletenessMetric();
 
 ## Understanding the results
 
-`CompletenessMetric` returns an object with the following structure:
+`CompletenessMetric` returns a result in the following shape:
 
-- `score`: A number between 0 and 1 indicating how completely the response covers the input.
-- `info`: A breakdown of the comparison between input and response, including:
+```typescript
+{
+  score: number,
+  info: {
+    inputElements: string[],
+    outputElements: string[],
+    missingElements: string[],
+    elementCounts: {
+      input: number,
+      output: number
+    }
+  }
+}
 
-  - `inputElements`: A list of key elements extracted from the input.
-  - `outputElements`: A list of key elements found in the response.
-  - `missingElements`: Input elements that were not found in the response.
-  - `elementCounts`: A count of total elements in both input and output.
+```
 
 ### Completeness score
 

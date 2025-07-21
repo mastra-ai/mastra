@@ -107,12 +107,16 @@ const metric = new ContentSimilarityMetric();
 
 ## Understanding the results
 
-`ContentSimilarityMetric` returns an object with the following structure:
+`ContentSimilarityMetric` returns a result in the following shape:
 
-- `score`: A number between 0 and 1 indicating how similar the response is to the query.
-- `info`: Additional similarity metadata, including:
-
-  - `similarity`: The calculated similarity value between the query and response.
+```typescript
+{
+  score: number,
+  info: {
+    similarity: number
+  }
+}
+```
 
 ### Similarity score
 

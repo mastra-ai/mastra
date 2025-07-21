@@ -123,7 +123,16 @@ const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
 
 ## Understanding the results
 
-`AnswerRelevancyMetric` returns `score` and `info`:
+`AnswerRelevancyMetric` returns a result in the following shape:
+
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
+  }
+}
+```
 
 ### Relevancy score
 

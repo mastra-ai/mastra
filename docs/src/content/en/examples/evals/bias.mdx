@@ -124,7 +124,16 @@ const metric = new BiasMetric(openai("gpt-4o-mini"), {
 
 ## Understanding the results
 
-`BiasMetric` returns `score` and `info`:
+`BiasMetric` returns a result in the following shape:
+
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
+  }
+}
+```
 
 ### Bias score
 

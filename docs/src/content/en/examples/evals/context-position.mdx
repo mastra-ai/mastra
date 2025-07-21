@@ -15,7 +15,7 @@ Use `ContextPositionMetric` to evaluate how well a response maintains the origin
 npm install @mastra/evals
 ```
 
-## High position adherence example
+## High position example
 
 In this example, the response directly answers the query using the first statement from the provided context. The surrounding context further supports the response with consistent and reinforcing information, resulting in strong positional alignment.
 
@@ -40,7 +40,7 @@ const result = await metric.measure(query, response);
 console.log(result);
 ```
 
-### High position adherence output
+### High position output
 
 The output receives a perfect score because the relevant information appears at the top of the context and directly supports the response without distraction or noise.
 
@@ -53,7 +53,7 @@ The output receives a perfect score because the relevant information appears at 
 }
 ```
 
-## Mixed position adherence example
+## Mixed position example
 
 In this example, the response combines highly relevant information with additional details drawn from later in the context. While the weight-related fact answers the query, the inclusion of less relevant facts reduces the response’s positional precision.
 
@@ -79,7 +79,7 @@ console.log(result);
 
 ```
 
-### Mixed position adherence output
+### Mixed position output
 
 The output receives a mid-range score because the relevant information is present but is blended with lower-priority context. This weakens the alignment between context order and response focus.
 
@@ -92,7 +92,7 @@ The output receives a mid-range score because the relevant information is presen
 }
 ```
 
-## Low position adherence example
+## Low position example
 
 In this example, the response references relevant information located at the end of the context. The earlier parts of the context introduce unrelated descriptive details, which disrupt the expected sequence of supporting information.
 
@@ -117,7 +117,7 @@ const result = await metric.measure(query, response);
 console.log(result);
 ```
 
-### Low position adherence output
+### Low position output
 
 The output receives a low score because the key supporting information appears late in the context, and earlier content provides little to no value in relation to the query.
 
@@ -144,22 +144,26 @@ const metric = new ContextPositionMetric(openai("gpt-4o-mini"), {
 
 ## Understanding the results
 
-`ContextPositionMetric` returns an object with the following structure:
+`ContextPositionMetric` returns a result in the following shape:
 
-- `score`: A number between 0 and 1 indicating how well the response aligns with the context order.
-- `info`: A detailed explanation of the score, including:
-
-  - `reason`: A justification describing the relevance and position of context elements in relation to the response.
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
+  }
+}
+```
 
 ### Position score
 
 A position score between 0 and 1:
 
-- **1.0**: Perfect position adherence – most relevant information appears first.
-- **0.7–0.9**: Strong position adherence – relevant information mostly at the beginning.
-- **0.4–0.6**: Mixed position adherence – relevant information scattered throughout.
-- **0.1–0.3**: Weak position adherence – relevant information mostly at the end.
-- **0.0**: No position adherence – completely irrelevant or reversed positioning.
+- **1.0**: Perfect position – most relevant information appears first.
+- **0.7–0.9**: Strong position – relevant information mostly at the beginning.
+- **0.4–0.6**: Mixed position – relevant information scattered throughout.
+- **0.1–0.3**: Weak position – relevant information mostly at the end.
+- **0.0**: No position – completely irrelevant or reversed positioning.
 
 ### Position info
 
