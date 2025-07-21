@@ -143,6 +143,8 @@ export abstract class MastraStorage extends MastraBase {
         return 'BIGINT';
       case 'jsonb':
         return 'JSONB';
+      case 'float':
+        return 'FLOAT';
       default:
         return 'TEXT';
     }
@@ -156,6 +158,7 @@ export abstract class MastraStorage extends MastraBase {
       case 'timestamp':
         return "DEFAULT '1970-01-01 00:00:00'";
       case 'integer':
+      case 'float':
       case 'bigint':
         return 'DEFAULT 0';
       case 'jsonb':
