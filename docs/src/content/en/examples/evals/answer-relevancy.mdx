@@ -37,7 +37,7 @@ console.log(result);
 
 The output receives a high score because it accurately answers the query without including unrelated information.
 
-```json
+```typescript
 {
   score: 1,
   info: {
@@ -69,7 +69,7 @@ console.log(result);
 
 The output receives a lower score because it partially answers the query. While some relevant information is included, unrelated details reduce the overall relevance.
 
-```json
+```typescript
 {
   score: 0.25,
   info: {
@@ -100,7 +100,7 @@ console.log(result);
 
 The output receives a score of 0 because it fails to answer the query or provide any relevant information.
 
-```json
+```typescript
 {
   score: 0,
   info: {

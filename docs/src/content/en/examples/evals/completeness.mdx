@@ -36,7 +36,7 @@ console.log(result);
 
 The output receives a score of 1 because all input elements are present in the response with no missing content.
 
-```json
+```typescript
 {
   score: 1,
   info: {
@@ -79,7 +79,7 @@ console.log(result);
 
 The output receives a high score because no input elements are missing. However, the response includes additional content that goes beyond the input.
 
-```json
+```typescript
 {
   score: 1,
   info: {
@@ -122,7 +122,7 @@ console.log(result);
 
 The output receives a lower score because one or more elements from the input are missing. The response overlaps in part, but does not fully reflect the original content.
 
-```json
+```typescript
 {
   score: 0.75,
   info: {

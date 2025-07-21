@@ -44,7 +44,7 @@ console.log(result);
 
 The output receives a perfect score because the relevant information appears at the top of the context and directly supports the response without distraction or noise.
 
-```json
+```typescript
 {
   score: 1,
   info: {
@@ -83,7 +83,7 @@ console.log(result);
 
 The output receives a mid-range score because the relevant information is present but is blended with lower-priority context. This weakens the alignment between context order and response focus.
 
-```json
+```typescript
 {
   score: 0.4,
   info: {
@@ -121,7 +121,7 @@ console.log(result);
 
 The output receives a low score because the key supporting information appears late in the context, and earlier content provides little to no value in relation to the query.
 
-```json
+```typescript
 {
   score: 0.12,
   info: {
