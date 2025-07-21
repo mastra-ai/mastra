@@ -46,8 +46,8 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
       <div
         className={cn(
           'bg-surface3 rounded-lg w-[300px] border-sm border-border1',
-          previousStep?.status === 'success' && nextStep && 'ring-2 ring-accent1',
-          previousStep?.status === 'failed' && nextStep && 'ring-2 ring-accent2',
+          previousStep?.status === 'success' && nextStep && 'ring-2 ring-accent1 bg-accent1Darker',
+          previousStep?.status === 'failed' && nextStep && 'ring-2 ring-accent2 bg-accent2Darker',
         )}
       >
         <Collapsible
@@ -79,7 +79,12 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                     <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
                       {({ className, style, tokens, getLineProps, getTokenProps }) => (
                         <pre
-                          className={`${className} relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs !bg-surface4 overflow-scroll`}
+                          className={cn(
+                            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs !bg-surface4 overflow-scroll',
+                            className,
+                            previousStep?.status === 'success' && nextStep && '!bg-accent1Dark',
+                            previousStep?.status === 'failed' && nextStep && '!bg-accent2Dark',
+                          )}
                           onClick={() => setOpenDialog(true)}
                           style={style}
                         >
@@ -151,7 +156,12 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
           )}
         </Collapsible>
 
-        <WorkflowStepActionBar stepName={nextStepId} input={previousStep?.output} mapConfig={data.mapConfig} />
+        <WorkflowStepActionBar
+          stepName={nextStepId}
+          input={previousStep?.output}
+          mapConfig={data.mapConfig}
+          status={nextStep ? previousStep?.status : undefined}
+        />
       </div>
 
       <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />

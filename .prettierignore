@@ -17,3 +17,7 @@ packages/cli/dist
 **/integrations/**
 packages/create-mastra/rollup.config.js
 docs/**/*.mdx
+explorations/longmemeval/data/**/*.json
+explorations/longmemeval/prepared-data/**/*.json
+explorations/longmemeval/.embedding-cache/**/*.json
+explorations/longmemeval/.temp-longmemeval/**/*.json

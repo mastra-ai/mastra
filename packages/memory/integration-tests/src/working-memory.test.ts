@@ -9,7 +9,8 @@ import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { ToolCallPart } from 'ai';
-import dotenv from 'dotenv';
+import { config } from 'dotenv';
+import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 
@@ -45,7 +46,7 @@ function extractUserData(obj: any) {
   return data;
 }
 
-dotenv.config({ path: '.env.test' });
+config({ path: '.env.test' });
 
 describe('Working Memory Tests', () => {
   let memory: Memory;
@@ -131,12 +132,12 @@ describe('Working Memory Tests', () => {
     });
 
     it('should initialize with default working memory template', async () => {
-      const workingMemory = await memory.getWorkingMemory({ threadId: thread.id });
-      expect(workingMemory).not.toBeNull();
-      if (workingMemory) {
+      const systemInstruction = await memory.getSystemMessage({ threadId: thread.id });
+      expect(systemInstruction).not.toBeNull();
+      if (systemInstruction) {
         // Should match our Markdown template
-        expect(workingMemory).toContain('# User Information');
-        expect(workingMemory).toContain('First Name');
+        expect(systemInstruction).toContain('# User Information');
+        expect(systemInstruction).toContain('First Name');
       }
     });
 
@@ -473,10 +474,7 @@ describe('Working Memory Tests', () => {
       thread = await memory.saveThread({
         thread: createTestThread('Working Memory Test Thread'),
       });
-      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
-      const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
-      const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
-      expect(extractUserData(wmObj)).toMatchObject({});
+      expect(await memory.getWorkingMemory({ threadId: thread.id })).toBeNull();
       agent = new Agent({
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
@@ -559,10 +557,7 @@ describe('Working Memory Tests', () => {
           thread: createTestThread('Working Memory Test Thread'),
         });
 
-        const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
-        const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
-        const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
-        expect(extractUserData(wmObj)).toMatchObject({});
+        expect(await memory.getWorkingMemory({ threadId: thread.id })).toBeNull();
 
         agent = new Agent({
           name: 'Memory Test Agent',
@@ -671,6 +666,212 @@ describe('Working Memory Tests', () => {
         const secondWorkingMemory = await memory.getWorkingMemory({ threadId: newThread.id });
         expect(secondWorkingMemory).toMatchObject({ city: 'Waterloo', temperature: 78 });
       });
+    });
+  });
+
+  describe('Working Memory with JSONSchema7', () => {
+    let agent: Agent;
+    let thread: any;
+    let memory: Memory;
+
+    beforeEach(async () => {
+      const dbPath = join(await mkdtemp(join(tmpdir(), `memory-jsonschema-test-${Date.now()}`)), 'test.db');
+      storage = new LibSQLStore({
+        url: `file:${dbPath}`,
+      });
+      vector = new LibSQLVector({
+        connectionUrl: `file:${dbPath}`,
+      });
+
+      const jsonSchema: JSONSchema7 = {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          age: { type: 'number' },
+          city: { type: 'string' },
+          preferences: {
+            type: 'object',
+            properties: {
+              theme: { type: 'string' },
+              notifications: { type: 'boolean' },
+            },
+          },
+        },
+        required: ['name', 'city'],
+      };
+
+      memory = new Memory({
+        storage,
+        vector,
+        embedder: fastembed,
+        options: {
+          workingMemory: {
+            enabled: true,
+            schema: jsonSchema,
+          },
+          lastMessages: 10,
+          semanticRecall: {
+            topK: 3,
+            messageRange: 2,
+          },
+          threads: {
+            generateTitle: false,
+          },
+        },
+      });
+
+      // Reset message counter
+      messageCounter = 0;
+
+      // Create a new thread for each test
+      thread = await memory.saveThread({
+        thread: createTestThread('JSONSchema7 Working Memory Test Thread'),
+      });
+
+      // Verify initial working memory is empty
+      expect(await memory.getWorkingMemory({ threadId: thread.id })).toBeNull();
+
+      agent = new Agent({
+        name: 'JSONSchema Memory Test Agent',
+        instructions: 'You are a helpful AI agent. Always update working memory with user information.',
+        model: openai('gpt-4o'),
+        memory,
+      });
+    });
+
+    afterEach(async () => {
+      //@ts-ignore
+      await storage.client.close();
+      //@ts-ignore
+      await vector.turso.close();
+    });
+
+    it('should accept JSONSchema7 in working memory configuration', async () => {
+      // Test that we can create a Memory instance with JSONSchema7 schema
+      const jsonSchema: JSONSchema7 = {
+        type: 'object',
+        properties: {
+          testField: { type: 'string' },
+        },
+        required: ['testField'],
+      };
+
+      const testMemory = new Memory({
+        storage,
+        options: {
+          workingMemory: {
+            enabled: true,
+            schema: jsonSchema,
+          },
+        },
+      });
+
+      // Get the working memory template
+      const template = await testMemory.getWorkingMemoryTemplate({
+        memoryConfig: {
+          workingMemory: {
+            enabled: true,
+            schema: jsonSchema,
+          },
+        },
+      });
+
+      expect(template).not.toBeNull();
+      expect(template?.format).toBe('json');
+      expect(template?.content).toContain('testField');
+      expect(template?.content).toContain('string');
+    });
+
+    it('should accept valid working memory updates matching the JSONSchema7', async () => {
+      await agent.generate(
+        'Hi, my name is John Doe, I am 30 years old and I live in Boston. I prefer dark theme and want notifications enabled.',
+        {
+          threadId: thread.id,
+          resourceId,
+        },
+      );
+
+      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
+      const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
+      const userData = extractUserData(wmObj);
+
+      expect(userData.name).toBe('John Doe');
+      expect(userData.age).toBe(30);
+      expect(userData.city).toBe('Boston');
+    });
+
+    it('should handle required and optional fields correctly with JSONSchema7', async () => {
+      // Test with only required fields
+      await agent.generate('My name is Jane Smith and I live in Portland.', {
+        threadId: thread.id,
+        resourceId,
+      });
+
+      const wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      const wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
+      const wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
+      const userData = extractUserData(wmObj);
+
+      expect(userData.name).toBe('Jane Smith');
+      expect(userData.city).toBe('Portland');
+      // Age is not required, so it might not be set
+    });
+
+    it('should update working memory progressively with JSONSchema7', async () => {
+      // First message with partial info
+      await agent.generate('Hi, I am Alex and I live in Miami.', {
+        threadId: thread.id,
+        resourceId,
+      });
+
+      let wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      let wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
+      let wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
+      let userData = extractUserData(wmObj);
+
+      expect(userData.name).toBe('Alex');
+      expect(userData.city).toBe('Miami');
+
+      // Second message adding more info
+      await agent.generate('I am 25 years old.', {
+        threadId: thread.id,
+        resourceId,
+      });
+
+      wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
+      wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
+      userData = extractUserData(wmObj);
+
+      expect(userData.name).toBe('Alex');
+      expect(userData.city).toBe('Miami');
+      expect(userData.age).toBe(25);
+    });
+
+    it('should persist working memory across multiple interactions with JSONSchema7', async () => {
+      // Set initial data
+      await agent.generate('My name is Sarah Wilson, I am 28 and live in Seattle.', {
+        threadId: thread.id,
+        resourceId,
+      });
+
+      // Verify working memory is set
+      let wmRaw = await memory.getWorkingMemory({ threadId: thread.id });
+      let wm = typeof wmRaw === 'string' ? JSON.parse(wmRaw) : wmRaw;
+      let wmObj = typeof wm === 'string' ? JSON.parse(wm) : wm;
+      let userData = extractUserData(wmObj);
+      expect(userData.name).toBe('Sarah Wilson');
+
+      // Ask a question that should use the working memory
+      const response = await agent.generate('What is my name and where do I live?', {
+        threadId: thread.id,
+        resourceId,
+      });
+
+      // The response should contain the information from working memory
+      expect(response.text.toLowerCase()).toContain('sarah');
+      expect(response.text.toLowerCase()).toContain('seattle');
     });
   });
 
@@ -841,7 +1042,6 @@ describe('Working Memory Tests', () => {
       const retrievedAsJson = await memory.getWorkingMemory({
         threadId: thread.id,
         resourceId,
-        format: 'json',
       });
 
       expect(retrievedAsJson).toBe(`{"name":"Charlie","age":30,"city":"Seattle"}`);

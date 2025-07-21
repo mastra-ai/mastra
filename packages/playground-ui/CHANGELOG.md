@@ -1,5 +1,119 @@
 # @mastra/playground-ui
 
+## 5.1.14-alpha.1
+
+### Patch Changes
+
+- 8f89bcd: fix traces pagination + sharing trace view with cloud
+- 59f0dcd: Add light background color for step statuses
+- cf8d497: factorize tabs component between cloud and core
+- 80692d5: refactor: sharing only the UI and not data fetching for traces
+  - @mastra/core@0.11.0-alpha.1
+  - @mastra/client-js@0.10.15-alpha.1
+
+## 5.1.14-alpha.0
+
+### Patch Changes
+
+- 0bf0bc8: fix link in shared components + add e2e tests
+- 7827943: Handle streaming large data
+- 808b493: wrap runtime context with tooltip provider for usage in cloud
+- Updated dependencies [7827943]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [cbddd18]
+  - @mastra/client-js@0.10.15-alpha.0
+  - @mastra/core@0.11.0-alpha.0
+
+## 5.1.13
+
+### Patch Changes
+
+- 5130bcb: dependencies updates:
+  - Updated dependency [`swr@^2.3.4` ↗︎](https://www.npmjs.com/package/swr/v/2.3.4) (from `^2.3.3`, in `dependencies`)
+- 984887a: dependencies updates:
+  - Updated dependency [`prettier@^3.6.2` ↗︎](https://www.npmjs.com/package/prettier/v/3.6.2) (from `^3.5.3`, in `dependencies`)
+- 593631d: allow to pass ref to the link abstraction
+- 5237998: Fix foreach output
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- d49334d: export tool list for usage in cloud
+- 9cdfcb5: fix infinite rerenders on agents table + share runtime context for cloud
+- 794d9f3: Fix thread creation in playground
+- aa9528a: Display reasoning in playground
+- 45174f3: share network list between core and cloud
+- 48f5532: export workflow list for usage in cloud
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- e1d0080: abstract Link component between cloud and core
+- f9b1508: add the same agent table as in cloud and export it from the playground
+- dfbeec6: Fix navigation to vnext AgentNetwork agents
+- Updated dependencies [31f9f6b]
+- Updated dependencies [0b56518]
+- Updated dependencies [db5cc15]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [5237998]
+- Updated dependencies [c3a30de]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [cf3a184]
+- Updated dependencies [d6bfd60]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/client-js@0.10.14
+  - @mastra/core@0.10.15
+
+## 5.1.13-alpha.2
+
+### Patch Changes
+
+- 794d9f3: Fix thread creation in playground
+- dfbeec6: Fix navigation to vnext AgentNetwork agents
+
+## 5.1.13-alpha.1
+
+### Patch Changes
+
+- d49334d: export tool list for usage in cloud
+- 9cdfcb5: fix infinite rerenders on agents table + share runtime context for cloud
+- 45174f3: share network list between core and cloud
+- 48f5532: export workflow list for usage in cloud
+- Updated dependencies [0b56518]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [c3a30de]
+- Updated dependencies [cf3a184]
+- Updated dependencies [d6bfd60]
+  - @mastra/core@0.10.15-alpha.1
+  - @mastra/client-js@0.10.14-alpha.1
+
+## 5.1.13-alpha.0
+
+### Patch Changes
+
+- 5130bcb: dependencies updates:
+  - Updated dependency [`swr@^2.3.4` ↗︎](https://www.npmjs.com/package/swr/v/2.3.4) (from `^2.3.3`, in `dependencies`)
+- 984887a: dependencies updates:
+  - Updated dependency [`prettier@^3.6.2` ↗︎](https://www.npmjs.com/package/prettier/v/3.6.2) (from `^3.5.3`, in `dependencies`)
+- 593631d: allow to pass ref to the link abstraction
+- 5237998: Fix foreach output
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- aa9528a: Display reasoning in playground
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- e1d0080: abstract Link component between cloud and core
+- f9b1508: add the same agent table as in cloud and export it from the playground
+- Updated dependencies [31f9f6b]
+- Updated dependencies [db5cc15]
+- Updated dependencies [5237998]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/client-js@0.10.14-alpha.0
+  - @mastra/core@0.10.15-alpha.0
+
 ## 5.1.12
 
 ### Patch Changes

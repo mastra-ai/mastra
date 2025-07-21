@@ -691,7 +691,6 @@ describe('Workflow', () => {
           payload: {
             id: 'sleep_mock-uuid-1',
             endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
             status: 'success',
             output: {
               result: 'success1',
@@ -859,7 +858,6 @@ describe('Workflow', () => {
           payload: {
             id: 'sleep_mock-uuid-1',
             endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
             status: 'success',
             output: {
               value: 1000,
@@ -7746,6 +7744,163 @@ describe('Workflow', () => {
 
       // @ts-ignore
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
+    });
+
+    it('should have access to runtimeContext from before suspension during workflow resume', async () => {
+      const testValue = 'test-dependency';
+      const resumeStep = createStep({
+        id: 'resume',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        resumeSchema: z.object({ value: z.number() }),
+        suspendSchema: z.object({ message: z.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          const finalValue = (resumeData?.value ?? 0) + inputData.value;
+
+          if (!resumeData?.value || finalValue < 10) {
+            return await suspend({
+              message: `Please provide additional information. now value is ${inputData.value}`,
+            });
+          }
+
+          return { value: finalValue };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData, runtimeContext }) => {
+          runtimeContext.set('testKey', testValue);
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(incrementStep)
+        .then(resumeStep)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData, runtimeContext }) => {
+              const testKey = runtimeContext.get('testKey');
+              expect(testKey).toBe(testValue);
+              return { value: inputData.value };
+            },
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRunAsync();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('suspended');
+
+      const resumeResult = await run.resume({
+        resumeData: { value: 21 },
+        step: ['resume'],
+      });
+
+      expect(resumeResult.status).toBe('success');
+    });
+
+    it('should not show removed runtimeContext values in subsequent steps', async () => {
+      const testValue = 'test-dependency';
+      const resumeStep = createStep({
+        id: 'resume',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        resumeSchema: z.object({ value: z.number() }),
+        suspendSchema: z.object({ message: z.string() }),
+        execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
+          const finalValue = (resumeData?.value ?? 0) + inputData.value;
+
+          if (!resumeData?.value || finalValue < 10) {
+            return await suspend({
+              message: `Please provide additional information. now value is ${inputData.value}`,
+            });
+          }
+
+          const testKey = runtimeContext.get('testKey');
+          expect(testKey).toBe(testValue);
+
+          runtimeContext.delete('testKey');
+
+          return { value: finalValue };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData, runtimeContext }) => {
+          runtimeContext.set('testKey', testValue);
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(incrementStep)
+        .then(resumeStep)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData, runtimeContext }) => {
+              const testKey = runtimeContext.get('testKey');
+              expect(testKey).toBeUndefined();
+              return { value: inputData.value };
+            },
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRunAsync();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('suspended');
+
+      const resumeResult = await run.resume({
+        resumeData: { value: 21 },
+        step: ['resume'],
+      });
+
+      expect(resumeResult.status).toBe('success');
     });
   });
 

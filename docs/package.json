@@ -3,7 +3,7 @@
   "version": "0.1.2",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
     "build": "gtx-cli translate && pnpm build:llms-txt && pnpm build:eval-context && next build",
     "build:llms-txt": "tsx src/scripts/build-llms-text-files.ts",
     "build:eval-context": "tsx src/scripts/build-eval-context.ts",
@@ -50,6 +50,7 @@
     "tailwindcss": "^4.0.17"
   },
   "devDependencies": {
+    "@shikijs/transformers": "^3.8.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
