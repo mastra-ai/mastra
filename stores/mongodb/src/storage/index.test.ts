@@ -8,10 +8,11 @@ import {
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
+import type { Db } from 'mongodb';
+import { MongoClient } from 'mongodb';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MongoDBStore } from './index';
 import type { ConnectorHandler } from './ConnectorHandler';
-import { Db, MongoClient } from 'mongodb';
+import { MongoDBStore } from './index';
 
 const TEST_CONFIG = {
   url: process.env.MONGODB_URL || 'mongodb://localhost:27017',
