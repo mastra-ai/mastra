@@ -3,6 +3,7 @@ import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { ScoreRowData } from '@mastra/core/scores';
 import type {
   EvalRow,
   PaginationArgs,
@@ -27,7 +28,6 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { Collection } from 'mongodb';
 import { MongoDBConnector } from './MongoDBConnector';
 import type { MongoDBConfig } from './types';
-import type { ScoreRowData } from '@mastra/core/scores';
 
 function safelyParseJSON(jsonString: string): any {
   try {
@@ -943,7 +943,7 @@ export class MongoDBStore extends MastraStorage {
     });
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(_score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
     throw new MastraError({
       id: 'STORAGE_MONGODB_STORE_SAVE_SCORE_FAILED',
       domain: ErrorDomain.STORAGE,
@@ -955,7 +955,7 @@ export class MongoDBStore extends MastraStorage {
 
   async getScoresByScorerId({
     scorerId,
-    pagination,
+    pagination: _pagination,
     entityId,
     entityType,
   }: {
@@ -975,7 +975,7 @@ export class MongoDBStore extends MastraStorage {
 
   async getScoresByRunId({
     runId,
-    pagination,
+    pagination: _pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
@@ -992,7 +992,7 @@ export class MongoDBStore extends MastraStorage {
   async getScoresByEntityId({
     entityId,
     entityType,
-    pagination,
+    pagination: _pagination,
   }: {
     pagination: StoragePagination;
     entityId: string;
