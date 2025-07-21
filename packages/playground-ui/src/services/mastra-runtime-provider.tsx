@@ -94,6 +94,7 @@ export function MastraRuntimeProvider({
   const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const {
     frequencyPenalty,
@@ -165,10 +166,6 @@ export function MastraRuntimeProvider({
     }
   }, [initialMessages, threadId, memory]);
 
-  const mastra = useMastraClient();
-
-  const agent = mastra.getAgent(agentId);
-
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
 
@@ -180,6 +177,13 @@ export function MastraRuntimeProvider({
       { role: 'user', content: input, attachments: message.attachments },
     ]);
     setIsRunning(true);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    // Get a client configured with the abort signal
+    const clientWithAbort = useMastraClient({ abortSignal: controller.signal });
+    const agent = clientWithAbort.getAgent(agentId);
 
     try {
       if (chatWithGenerate) {
@@ -517,21 +521,40 @@ export function MastraRuntimeProvider({
       setTimeout(() => {
         refreshThreadList?.();
       }, 500);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error occurred in MastraRuntimeProvider', error);
       setIsRunning(false);
+
+      // Handle cancellation gracefully
+      if (error.name === 'AbortError') {
+        // Don't add an error message for user-initiated cancellation
+        return;
+      }
+
       setMessages(currentConversation => [
         ...currentConversation,
         { role: 'assistant', content: [{ type: 'text', text: `${error}` as string }] },
       ]);
+    } finally {
+      // Clean up the abort controller reference
+      abortControllerRef.current = null;
     }
   };
 
-  const runtime = useExternalStoreRuntime<any>({
+  const onCancel = async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsRunning(false);
+    }
+  };
+
+  const runtime = useExternalStoreRuntime({
     isRunning,
     messages,
     convertMessage,
     onNew,
+    onCancel,
     adapters: {
       attachments: new CompositeAttachmentAdapter([
         new SimpleImageAttachmentAdapter(),
