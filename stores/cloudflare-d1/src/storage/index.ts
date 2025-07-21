@@ -1918,7 +1918,7 @@ export class D1Store extends MastraStorage {
 
   async getScoresByScorerId({
     scorerId,
-    pagination,
+    pagination: _pagination,
     entityId,
     entityType,
   }: {
@@ -1938,7 +1938,7 @@ export class D1Store extends MastraStorage {
 
   async getScoresByRunId({
     runId,
-    pagination,
+    pagination: _pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
@@ -1955,7 +1955,7 @@ export class D1Store extends MastraStorage {
   async getScoresByEntityId({
     entityId,
     entityType,
-    pagination,
+    pagination: _pagination,
   }: {
     pagination: StoragePagination;
     entityId: string;
