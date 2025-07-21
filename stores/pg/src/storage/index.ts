@@ -3,6 +3,7 @@ import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult } from '@mastra/core/eval';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
+import type { ScoreRowData } from '@mastra/core/scores';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -22,6 +23,7 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   PaginationArgs,
+  StoragePagination,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -104,10 +106,14 @@ export class PostgresStore extends MastraStorage {
   public get supports(): {
     selectByIncludeResourceScope: boolean;
     resourceWorkingMemory: boolean;
+    hasColumn: boolean;
+    createTable: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
+      hasColumn: true,
+      createTable: true,
     };
   }
 
@@ -1797,5 +1803,89 @@ export class PostgresStore extends MastraStorage {
     await this.db.none(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
 
     return updatedResource;
+  }
+
+  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new MastraError({
+      id: 'STORAGE_PG_STORE_GET_SCORE_BY_ID_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { id },
+      text: 'getScoreById is not implemented yet in PostgreSQLStore',
+    });
+  }
+
+  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    throw new MastraError({
+      id: 'STORAGE_PG_STORE_SAVE_SCORE_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: {},
+      text: 'saveScore is not implemented yet in PostgreSQLStore',
+    });
+  }
+
+  async getScoresByScorerId({
+    scorerId,
+    pagination,
+    entityId,
+    entityType,
+  }: {
+    scorerId: string;
+    pagination: StoragePagination;
+    entityId?: string;
+    entityType?: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'STORAGE_PG_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { scorerId, entityId: entityId || '', entityType: entityType || '' },
+      text: 'getScoresByScorerId is not implemented yet in PostgreSQLStore',
+    });
+  }
+
+  async getScoresByRunId({
+    runId,
+    pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'STORAGE_PG_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { runId },
+      text: 'getScoresByRunId is not implemented yet in PostgreSQLStore',
+    });
+  }
+
+  async getScoresByEntityId({
+    entityId,
+    entityType,
+    pagination,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'STORAGE_PG_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { entityId, entityType },
+      text: 'getScoresByEntityId is not implemented yet in PostgreSQLStore',
+    });
+  }
+
+  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    throw new MastraError({
+      id: 'STORAGE_PG_STORE_DROP_TABLE_FAILED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: { tableName },
+      text: 'dropTable is not implemented yet in PostgreSQLStore',
+    });
   }
 }

@@ -26,6 +26,8 @@ import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { DataType } from 'apache-arrow';
 import { Utf8, Int32, Float32, Binary, Schema, Field, Float64 } from 'apache-arrow';
+import type { ScoreRowData } from '@mastra/core/scores';
+import type { StoragePagination, PaginationArgs } from '@mastra/core/storage';
 
 export class LanceStorage extends MastraStorage {
   private lanceClient!: Connection;
@@ -180,7 +182,7 @@ export class LanceStorage extends MastraStorage {
    * Drop a table if it exists
    * @param tableName Name of the table to drop
    */
-  async dropTable(tableName: TABLE_NAMES): Promise<void> {
+  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       if (!this.lanceClient) {
         throw new Error('LanceDB client not initialized. Call LanceStorage.create() first.');
@@ -1093,7 +1095,7 @@ export class LanceStorage extends MastraStorage {
     page: number;
     perPage: number;
     attributes?: Record<string, string>;
-  }): Promise<TraceType[]> {
+  }): Promise<Trace[]> {
     try {
       const table = await this.lanceClient.openTable(TABLE_TRACES);
       const query = table.query();
@@ -1122,19 +1124,18 @@ export class LanceStorage extends MastraStorage {
       }
 
       const records = await query.toArray();
-      return records.map(record => {
-        return {
-          ...record,
-          attributes: JSON.parse(record.attributes),
-          status: JSON.parse(record.status),
-          events: JSON.parse(record.events),
-          links: JSON.parse(record.links),
-          other: JSON.parse(record.other),
-          startTime: new Date(record.startTime),
-          endTime: new Date(record.endTime),
-          createdAt: new Date(record.createdAt),
-        };
-      }) as TraceType[];
+      return records.map(record => ({
+        ...record,
+        attributes: JSON.parse(record.attributes),
+        status: JSON.parse(record.status),
+        events: JSON.parse(record.events),
+        links: JSON.parse(record.links),
+        other: JSON.parse(record.other),
+        startTime: new Date(record.startTime),
+        endTime: new Date(record.endTime),
+        createdAt: new Date(record.createdAt),
+        parentSpanId: record.parentSpanId ?? '',
+      }));
     } catch (error: any) {
       throw new MastraError(
         {
@@ -1443,5 +1444,91 @@ export class LanceStorage extends MastraStorage {
   }): Promise<MastraMessageV2[]> {
     this.logger.error('updateMessages is not yet implemented in LanceStore');
     throw new Error('Method not implemented');
+  }
+
+  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new MastraError({
+      id: 'LANCE_STORE_GET_SCORE_BY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoreById is not implemented in LanceStorage.',
+      details: { id },
+    });
+  }
+
+  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    throw new MastraError({
+      id: 'LANCE_STORE_SAVE_SCORE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'saveScore is not implemented in LanceStorage.',
+      details: { entityType: score.entityType, entityId: score.entityId, scorerId: score.scorerId },
+    });
+  }
+
+  async getScoresByScorerId({
+    scorerId,
+    pagination,
+    entityId,
+    entityType,
+  }: {
+    scorerId: string;
+    pagination: StoragePagination;
+    entityId?: string;
+    entityType?: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'LANCE_STORE_GET_SCORES_BY_SCORER_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoresByScorerId is not implemented in LanceStorage.',
+      details: { scorerId, entityId: entityId ?? '', entityType: entityType ?? '' },
+    });
+  }
+
+  async getScoresByRunId({
+    runId,
+    pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'LANCE_STORE_GET_SCORES_BY_RUN_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoresByRunId is not implemented in LanceStorage.',
+      details: { runId },
+    });
+  }
+
+  async getScoresByEntityId({
+    entityId,
+    entityType,
+    pagination,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'LANCE_STORE_GET_SCORES_BY_ENTITY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoresByEntityId is not implemented in LanceStorage.',
+      details: { entityId, entityType },
+    });
+  }
+
+  async getEvals(
+    options: { agentName?: string; type?: 'test' | 'live' } & PaginationArgs,
+  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
+    throw new MastraError({
+      id: 'LANCE_STORE_GET_EVALS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getEvals is not implemented in LanceStorage.',
+      details: { agentName: options.agentName ?? '', type: options.type ?? '' },
+    });
   }
 }

@@ -4,6 +4,7 @@ import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { ScoreRowData } from '@mastra/core/scores';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -17,6 +18,7 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
+  StoragePagination,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
@@ -1892,5 +1894,89 @@ export class D1Store extends MastraStorage {
   }): Promise<MastraMessageV2[]> {
     this.logger.error('updateMessages is not yet implemented in CloudflareD1Store');
     throw new Error('Method not implemented');
+  }
+
+  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new MastraError({
+      id: 'CLOUDFLARE_D1_STORAGE_GET_SCORE_BY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoreById is not implemented in D1Store.',
+      details: { id },
+    });
+  }
+
+  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    throw new MastraError({
+      id: 'CLOUDFLARE_D1_STORAGE_SAVE_SCORE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'saveScore is not implemented in D1Store.',
+      details: { entityType: score.entityType, entityId: score.entityId, scorerId: score.scorerId },
+    });
+  }
+
+  async getScoresByScorerId({
+    scorerId,
+    pagination,
+    entityId,
+    entityType,
+  }: {
+    scorerId: string;
+    pagination: StoragePagination;
+    entityId?: string;
+    entityType?: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'CLOUDFLARE_D1_STORAGE_GET_SCORES_BY_SCORER_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoresByScorerId is not implemented in D1Store.',
+      details: { scorerId, entityId: entityId ?? '', entityType: entityType ?? '' },
+    });
+  }
+
+  async getScoresByRunId({
+    runId,
+    pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'CLOUDFLARE_D1_STORAGE_GET_SCORES_BY_RUN_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoresByRunId is not implemented in D1Store.',
+      details: { runId },
+    });
+  }
+
+  async getScoresByEntityId({
+    entityId,
+    entityType,
+    pagination,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'CLOUDFLARE_D1_STORAGE_GET_SCORES_BY_ENTITY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoresByEntityId is not implemented in D1Store.',
+      details: { entityId, entityType },
+    });
+  }
+
+  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    throw new MastraError({
+      id: 'CLOUDFLARE_D1_STORAGE_DROP_TABLE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'dropTable is not implemented in D1Store.',
+      details: { tableName },
+    });
   }
 }
