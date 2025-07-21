@@ -5,6 +5,7 @@ import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
+import type { ScoreRowData } from '@mastra/core/scores';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -13,12 +14,14 @@ import {
   TABLE_TRACES,
   TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
+  safelyParseJSON,
 } from '@mastra/core/storage';
 import type {
   EvalRow,
   PaginationArgs,
   PaginationInfo,
   StorageColumn,
+  StoragePagination,
   StorageGetMessagesArg,
   StorageResourceType,
   TABLE_NAMES,
@@ -28,16 +31,6 @@ import type {
 import type { Trace } from '@mastra/core/telemetry';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import type { ScoreRowData } from '@mastra/core/scores';
-import type { StoragePagination } from '@mastra/core/storage';
-
-function safelyParseJSON(jsonString: string): any {
-  try {
-    return JSON.parse(jsonString);
-  } catch {
-    return {};
-  }
-}
 
 export interface LibSQLConfig {
   url: string;
@@ -1580,9 +1573,9 @@ export class LibSQLStore extends MastraStorage {
 
   async getScoresByScorerId({
     scorerId,
-    pagination,
-    entityId,
-    entityType,
+    pagination: _pagination,
+    entityId: _entityId,
+    entityType: _entityType,
   }: {
     scorerId: string;
     pagination: StoragePagination;
@@ -1600,7 +1593,7 @@ export class LibSQLStore extends MastraStorage {
 
   async getScoresByRunId({
     runId,
-    pagination,
+    pagination: _pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
@@ -1615,7 +1608,7 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async getScoresByEntityId({
-    pagination,
+    pagination: _pagination,
     entityId,
     entityType,
   }: {

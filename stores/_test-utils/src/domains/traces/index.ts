@@ -1,16 +1,17 @@
 import { MastraStorage, TABLE_TRACES } from '@mastra/core/storage';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createSampleTraceForDB } from './data';
 
 export function createTraceTests({ storage }: { storage: MastraStorage }) {
   describe('getTraces with pagination', () => {
-    beforeEach(async () => {
+    afterEach(async () => {
       await storage.clearTable({ tableName: TABLE_TRACES });
     });
 
     it('should return paginated traces with total count when returnPaginationResults is true', async () => {
       const scope = 'libsql-test-scope-traces';
       const traceRecords = Array.from({ length: 18 }, (_, i) => createSampleTraceForDB(`test-trace-${i}`, scope));
+
       await storage.batchInsert({ tableName: TABLE_TRACES, records: traceRecords.map(r => r as any) });
 
       const page1 = await storage.getTracesPaginated({
@@ -81,14 +82,40 @@ export function createTraceTests({ storage }: { storage: MastraStorage }) {
       const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
 
       const recordsToInsert = [
-        createSampleTraceForDB('t_dbf1', scope, undefined, dayBeforeYesterday),
-        createSampleTraceForDB('t_dbf2', scope, undefined, dayBeforeYesterday),
+        createSampleTraceForDB('t_dbf1', scope, {}, dayBeforeYesterday),
+        createSampleTraceForDB('t_dbf2', scope, {}, dayBeforeYesterday),
         createSampleTraceForDB('t_y1', scope, undefined, yesterday),
         createSampleTraceForDB('t_y3', scope, undefined, yesterday),
         createSampleTraceForDB('t_n1', scope, undefined, now),
         createSampleTraceForDB('t_n2', scope, undefined, now),
       ];
+
       await storage.batchInsert({ tableName: TABLE_TRACES, records: recordsToInsert.map(r => r as any) });
+
+      for (let i = 0; i < 5; i++) {
+        const res = await storage.getTracesPaginated({
+          page: 0,
+          perPage: 10,
+        });
+        if (res.total < recordsToInsert.length) {
+          await new Promise(resolve => {
+            setTimeout(() => {
+              resolve(true);
+            }, 1000);
+          });
+          await storage.batchInsert({
+            tableName: TABLE_TRACES,
+            records: recordsToInsert
+              .filter((r, i) => {
+                return !res.traces.some(t => t.id === r.id);
+              })
+              .map(r => r as any),
+          });
+          continue;
+        } else {
+          break;
+        }
+      }
 
       const fromYesterday = await storage.getTracesPaginated({
         scope,
