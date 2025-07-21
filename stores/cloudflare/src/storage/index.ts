@@ -20,7 +20,10 @@ import type {
   WorkflowRun,
   StorageGetTracesArg,
   PaginationInfo,
+  PaginationArgs,
+  StoragePagination,
 } from '@mastra/core/storage';
+import type { ScoreRowData } from '@mastra/core/scores';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
@@ -1849,5 +1852,101 @@ export class CloudflareStore extends MastraStorage {
   }): Promise<MastraMessageV2[]> {
     this.logger.error('updateMessages is not yet implemented in CloudflareStore');
     throw new Error('Method not implemented');
+  }
+
+  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
+    throw new MastraError({
+      id: 'CLOUDFLARE_STORAGE_GET_SCORE_BY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoreById is not implemented in CloudflareStore.',
+      details: { id },
+    });
+  }
+
+  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    throw new MastraError({
+      id: 'CLOUDFLARE_STORAGE_SAVE_SCORE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'saveScore is not implemented in CloudflareStore.',
+      details: { entityType: score.entityType, entityId: score.entityId, scorerId: score.scorerId },
+    });
+  }
+
+  async getScoresByScorerId({
+    scorerId,
+    pagination,
+    entityId,
+    entityType,
+  }: {
+    scorerId: string;
+    pagination: StoragePagination;
+    entityId?: string;
+    entityType?: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'CLOUDFLARE_STORAGE_GET_SCORES_BY_SCORER_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoresByScorerId is not implemented in CloudflareStore.',
+      details: { scorerId, entityId: entityId ?? '', entityType: entityType ?? '' },
+    });
+  }
+
+  async getScoresByRunId({
+    runId,
+    pagination,
+  }: {
+    runId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'CLOUDFLARE_STORAGE_GET_SCORES_BY_RUN_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoresByRunId is not implemented in CloudflareStore.',
+      details: { runId },
+    });
+  }
+
+  async getScoresByEntityId({
+    entityId,
+    entityType,
+    pagination,
+  }: {
+    pagination: StoragePagination;
+    entityId: string;
+    entityType: string;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'CLOUDFLARE_STORAGE_GET_SCORES_BY_ENTITY_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getScoresByEntityId is not implemented in CloudflareStore.',
+      details: { entityId, entityType },
+    });
+  }
+
+  async getEvals(
+    options: { agentName?: string; type?: 'test' | 'live' } & PaginationArgs,
+  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
+    throw new MastraError({
+      id: 'CLOUDFLARE_STORAGE_GET_EVALS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'getEvals is not implemented in CloudflareStore.',
+      details: { agentName: options.agentName ?? '', type: options.type ?? '' },
+    });
+  }
+
+  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    throw new MastraError({
+      id: 'CLOUDFLARE_STORAGE_DROP_TABLE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: 'dropTable is not implemented in CloudflareStore.',
+      details: { tableName },
+    });
   }
 }
