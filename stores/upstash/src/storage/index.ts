@@ -1173,9 +1173,10 @@ export class UpstashStore extends MastraStorage {
     namespace: string;
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    const { namespace = 'workflows', workflowName, runId, snapshot } = params;
+    const { namespace = 'workflows', workflowName, runId, snapshot, resourceId } = params;
     try {
       await this.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -1183,6 +1184,7 @@ export class UpstashStore extends MastraStorage {
           namespace,
           workflow_name: workflowName,
           run_id: runId,
+          resourceId,
           snapshot,
           createdAt: new Date(),
           updatedAt: new Date(),

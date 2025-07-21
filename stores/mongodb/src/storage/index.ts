@@ -693,10 +693,12 @@ export class MongoDBStore extends MastraStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
@@ -706,6 +708,7 @@ export class MongoDBStore extends MastraStorage {
         { workflow_name: workflowName, run_id: runId },
         {
           $set: {
+            resourceId,
             snapshot: JSON.stringify(snapshot),
             updatedAt: now,
           },

@@ -1140,10 +1140,12 @@ export class ClickhouseStore extends MastraStorage {
   async persistWorkflowSnapshot({
     workflowName,
     runId,
+    resourceId,
     snapshot,
   }: {
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
@@ -1162,6 +1164,7 @@ export class ClickhouseStore extends MastraStorage {
         : {
             workflow_name: workflowName,
             run_id: runId,
+            resourceId,
             snapshot: JSON.stringify(snapshot),
             createdAt: now.toISOString(),
             updatedAt: now.toISOString(),

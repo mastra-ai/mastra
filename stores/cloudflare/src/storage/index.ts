@@ -1384,11 +1384,12 @@ export class CloudflareStore extends MastraStorage {
     namespace: string;
     workflowName: string;
     runId: string;
+    resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
       this.validateWorkflowParams(params);
-      const { namespace, workflowName, runId, snapshot } = params;
+      const { namespace, workflowName, runId, snapshot, resourceId } = params;
 
       const normalizedState = this.normalizeWorkflowState(snapshot);
       this.validateWorkflowState(normalizedState);
@@ -1399,6 +1400,7 @@ export class CloudflareStore extends MastraStorage {
           namespace,
           workflow_name: workflowName,
           run_id: runId,
+          resourceId,
           snapshot: normalizedState,
           createdAt: new Date(),
           updatedAt: new Date(),

@@ -5893,6 +5893,132 @@ describe('Workflow', () => {
       expect(run3?.workflowName).toBe('test-workflow');
       expect(run3?.snapshot).toEqual(runs[0].snapshot);
     });
+
+    it('should create workflow run with resourceId', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      workflow.then(step1).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: {
+          'test-workflow': workflow,
+        },
+      });
+
+      const resourceId = 'user-123';
+
+      // Create run with resourceId
+      const run = await workflow.createRunAsync({ resourceId });
+
+      // Verify the run has the resourceId property
+      expect(run.resourceId).toBe(resourceId);
+
+      // Start the workflow to create a snapshot in storage
+      await run.start({ inputData: {} });
+
+      // Retrieve the workflow run from storage and verify resourceId is persisted
+      const storedRun = await workflow.getWorkflowRunById(run.runId);
+      expect(storedRun?.resourceId).toBe(resourceId);
+      expect(storedRun?.runId).toBe(run.runId);
+      expect(storedRun?.workflowName).toBe('test-workflow');
+    });
+
+    it('should filter workflow runs by resourceId', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      workflow.then(step1).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: {
+          'test-workflow': workflow,
+        },
+      });
+
+      const resourceId1 = 'user-123';
+      const resourceId2 = 'user-456';
+
+      // Create runs with different resourceIds
+      const run1 = await workflow.createRunAsync({ resourceId: resourceId1 });
+      await run1.start({ inputData: {} });
+
+      const run2 = await workflow.createRunAsync({ resourceId: resourceId1 });
+      await run2.start({ inputData: {} });
+
+      const run3 = await workflow.createRunAsync({ resourceId: resourceId2 });
+      await run3.start({ inputData: {} });
+
+      // Create a run without resourceId
+      const run4 = await workflow.createRunAsync();
+      await run4.start({ inputData: {} });
+
+      // Filter runs by resourceId1
+      const { runs: runs1, total: total1 } = await workflow.getWorkflowRuns({ resourceId: resourceId1 });
+      expect(total1).toBe(2);
+      expect(runs1).toHaveLength(2);
+      expect(runs1.every(run => run.resourceId === resourceId1)).toBe(true);
+      expect(runs1.map(r => r.runId)).toEqual(expect.arrayContaining([run1.runId, run2.runId]));
+
+      // Filter runs by resourceId2
+      const { runs: runs2, total: total2 } = await workflow.getWorkflowRuns({ resourceId: resourceId2 });
+      expect(total2).toBe(1);
+      expect(runs2).toHaveLength(1);
+      expect(runs2[0]?.resourceId).toBe(resourceId2);
+      expect(runs2[0]?.runId).toBe(run3.runId);
+
+      // Get all runs (no filter)
+      const { runs: allRuns, total: totalAll } = await workflow.getWorkflowRuns();
+      expect(totalAll).toBe(4);
+      expect(allRuns).toHaveLength(4);
+    });
+
+    it('should return empty result when filtering by non-existent resourceId', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({ id: 'test-workflow', inputSchema: z.object({}), outputSchema: z.object({}) });
+      workflow.then(step1).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: {
+          'test-workflow': workflow,
+        },
+      });
+
+      // Filter by a resourceId that doesn't exist
+      const { runs, total } = await workflow.getWorkflowRuns({ resourceId: 'non-existent-user' });
+      // Should return empty results
+      expect(total).toBe(0);
+      expect(runs).toHaveLength(0);
+      expect(runs).toEqual([]);
+    });
   });
 
   describe('Accessing Mastra', () => {
