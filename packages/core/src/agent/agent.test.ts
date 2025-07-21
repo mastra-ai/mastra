@@ -121,8 +121,36 @@ class MockMemory extends MastraMemory {
     return config || {};
   }
 
-  async updateWorkingMemory() {
-    return null;
+  async updateWorkingMemory({
+    threadId: _threadId,
+    resourceId: _resourceId,
+    workingMemory: _workingMemory,
+    memoryConfig: _memoryConfig,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string;
+    memoryConfig?: MemoryConfig;
+  }) {
+    // Mock implementation - just return void
+    return;
+  }
+
+  async __experimental_updateWorkingMemoryVNext({
+    threadId: _threadId,
+    resourceId: _resourceId,
+    workingMemory: _workingMemory,
+    searchString: _searchString,
+    memoryConfig: _memoryConfig,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string;
+    searchString?: string;
+    memoryConfig?: MemoryConfig;
+  }) {
+    // Mock implementation for abstract method
+    return { success: true, reason: 'Mock implementation' };
   }
 }
 
@@ -140,6 +168,27 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
 });
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+function assertNoDuplicateParts(parts: any[]) {
+  // Check for duplicate tool-invocation results by toolCallId
+  const seenToolResults = new Set();
+  for (const part of parts) {
+    if (part.type === 'tool-invocation' && part.toolInvocation.state === 'result') {
+      const key = `${part.toolInvocation.toolCallId}|${JSON.stringify(part.toolInvocation.result)}`;
+      expect(seenToolResults.has(key)).toBe(false);
+      seenToolResults.add(key);
+    }
+  }
+
+  // Check for duplicate text parts
+  const seenTexts = new Set();
+  for (const part of parts) {
+    if (part.type === 'text') {
+      expect(seenTexts.has(part.text)).toBe(false);
+      seenTexts.add(part.text);
+    }
+  }
+}
 
 describe('agent', () => {
   const integration = new TestIntegration();
@@ -568,7 +617,7 @@ describe('agent', () => {
     };
 
     // Add messages. addOne will merge toolCallTwo and toolResultTwo.
-    // toolResultOne is orphaned. toolCallThree is orphaned.
+    // toolCallThree is orphaned.
     messageList.add(toolResultOne_Core, 'memory');
     messageList.add(toolCallTwo_Core, 'memory');
     messageList.add(toolResultTwo_Core, 'memory');
@@ -576,27 +625,16 @@ describe('agent', () => {
 
     const finalCoreMessages = messageList.get.all.core();
 
-    // Expected: toolResultOne (orphaned tool result) should be gone.
-    // toolCallThree (orphaned assistant call) should be gone.
+    // Expected: toolCallThree (orphaned assistant call) should be gone.
+    // toolResultOne assumes the tool call was completed, so should be present
     // toolCallTwo and toolResultTwo should be present and correctly paired by convertToCoreMessages.
 
-    // Check that tool-1 (orphaned result) is not present
+    // Check that tool-1 is present, as a result assumes the tool call was completed
     expect(
       finalCoreMessages.find(
         m => m.role === 'tool' && (m.content as any[]).some(p => p.type === 'tool-result' && p.toolCallId === 'tool-1'),
       ),
-    ).toBeUndefined();
-    // Also check no lingering assistant message for tool-1 if it was an assistant message that only contained an orphaned result
-    expect(
-      finalCoreMessages.find(
-        m =>
-          m.role === 'assistant' &&
-          (m.content as any[]).some(p => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === 'tool-1') &&
-          (m.content as any[]).every(
-            p => p.type === 'tool-invocation' || p.type === 'step-start' || p.type === 'step-end',
-          ),
-      ),
-    ).toBeUndefined();
+    ).toBeDefined();
 
     // Check that tool-2 call and result are present
     const assistantCallForTool2 = finalCoreMessages.find(
@@ -628,7 +666,7 @@ describe('agent', () => {
       ),
     ).toBeUndefined();
 
-    expect(finalCoreMessages.length).toBe(2); // Assistant call for tool-2, Tool result for tool-2
+    expect(finalCoreMessages.length).toBe(4); // Assistant call for tool-1, Tool result for tool-1, Assistant call for tool-2, Tool result for tool-2
   });
 
   it('should preserve empty assistant messages after tool use', () => {
@@ -1072,7 +1110,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = systemMessage.content;
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
                 return {
                   rawCall: { rawPrompt: null, rawSettings: {} },
@@ -1134,7 +1175,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = systemMessage.content;
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
 
                 if (capturedPrompt.includes('簡潔なタイトル')) {
@@ -1229,7 +1273,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = systemMessage.content;
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
                 return {
                   rawCall: { rawPrompt: null, rawSettings: {} },
@@ -1352,7 +1399,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = systemMessage.content;
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
                 return {
                   rawCall: { rawPrompt: null, rawSettings: {} },
@@ -1401,7 +1451,10 @@ describe('agent', () => {
                 const messages = options.prompt;
                 const systemMessage = messages.find((msg: any) => msg.role === 'system');
                 if (systemMessage) {
-                  capturedPrompt = systemMessage.content;
+                  capturedPrompt =
+                    typeof systemMessage.content === 'string'
+                      ? systemMessage.content
+                      : JSON.stringify(systemMessage.content);
                 }
                 return {
                   rawCall: { rawPrompt: null, rawSettings: {} },
@@ -2040,6 +2093,17 @@ describe('Agent save message parts', () => {
         resourceId: 'resource-echo-generate',
       });
       expect(messages.length).toBeGreaterThan(0);
+
+      const assistantMsg = messages.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+      assertNoDuplicateParts(assistantMsg!.content.parts);
+
+      const toolResultIds = new Set(
+        assistantMsg!.content.parts
+          .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
+          .map(p => p.toolInvocation.toolCallId),
+      );
+      expect(assistantMsg!.content.toolInvocations.length).toBe(toolResultIds.size);
     }, 500000);
 
     it('should incrementally save messages with multiple tools and multi-step generation', async () => {
@@ -2094,6 +2158,16 @@ describe('Agent save message parts', () => {
         resourceId: 'resource-multi-generate',
       });
       expect(messages.length).toBeGreaterThan(0);
+      const assistantMsg = messages.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+      assertNoDuplicateParts(assistantMsg!.content.parts);
+
+      const toolResultIds = new Set(
+        assistantMsg!.content.parts
+          .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
+          .map(p => p.toolInvocation.toolCallId),
+      );
+      expect(assistantMsg!.content.toolInvocations.length).toBe(toolResultIds.size);
     }, 500000);
 
     it('should persist the full message after a successful run', async () => {
@@ -2321,6 +2395,16 @@ describe('Agent save message parts', () => {
       expect(saveCallCount).toBeGreaterThan(1);
       const messages = await mockMemory.getMessages({ threadId: 'thread-echo', resourceId: 'resource-echo' });
       expect(messages.length).toBeGreaterThan(0);
+      const assistantMsg = messages.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+      assertNoDuplicateParts(assistantMsg!.content.parts);
+
+      const toolResultIds = new Set(
+        assistantMsg!.content.parts
+          .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
+          .map(p => p.toolInvocation.toolCallId),
+      );
+      expect(assistantMsg!.content.toolInvocations.length).toBe(toolResultIds.size);
     }, 500000);
 
     it('should incrementally save messages with multiple tools and multi-step streaming', async () => {
@@ -2375,6 +2459,16 @@ describe('Agent save message parts', () => {
       expect(saveCallCount).toBeGreaterThan(1);
       const messages = await mockMemory.getMessages({ threadId: 'thread-multi', resourceId: 'resource-multi' });
       expect(messages.length).toBeGreaterThan(0);
+      const assistantMsg = messages.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+      assertNoDuplicateParts(assistantMsg!.content.parts);
+
+      const toolResultIds = new Set(
+        assistantMsg!.content.parts
+          .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
+          .map(p => p.toolInvocation.toolCallId),
+      );
+      expect(assistantMsg!.content.toolInvocations.length).toBe(toolResultIds.size);
     }, 500000);
 
     it('should persist the full message after a successful run', async () => {
@@ -2468,5 +2562,193 @@ describe('Agent save message parts', () => {
       const messages = await mockMemory.getMessages({ threadId: 'thread-3', resourceId: 'resource-3' });
       expect(messages.length).toBe(0);
     });
+  });
+});
+
+describe('dynamic memory configuration', () => {
+  let dummyModel: MockLanguageModelV1;
+  beforeEach(() => {
+    dummyModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: `Dummy response`,
+      }),
+    });
+  });
+
+  it('should support static memory configuration', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      name: 'static-memory-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    const memory = await agent.getMemory();
+    expect(memory).toBe(mockMemory);
+  });
+
+  it('should support dynamic memory configuration with runtimeContext', async () => {
+    const premiumMemory = new MockMemory();
+    const standardMemory = new MockMemory();
+
+    const agent = new Agent({
+      name: 'dynamic-memory-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: ({ runtimeContext }) => {
+        const userTier = runtimeContext.get('userTier');
+        return userTier === 'premium' ? premiumMemory : standardMemory;
+      },
+    });
+
+    // Test with premium context
+    const premiumContext = new RuntimeContext();
+    premiumContext.set('userTier', 'premium');
+    const premiumResult = await agent.getMemory({ runtimeContext: premiumContext });
+    expect(premiumResult).toBe(premiumMemory);
+
+    // Test with standard context
+    const standardContext = new RuntimeContext();
+    standardContext.set('userTier', 'standard');
+    const standardResult = await agent.getMemory({ runtimeContext: standardContext });
+    expect(standardResult).toBe(standardMemory);
+  });
+
+  it('should support async dynamic memory configuration', async () => {
+    const mockMemory = new MockMemory();
+
+    const agent = new Agent({
+      name: 'async-memory-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: async ({ runtimeContext }) => {
+        const userId = runtimeContext.get('userId') as string;
+        // Simulate async memory creation/retrieval
+        await new Promise(resolve => setTimeout(resolve, 10));
+        (mockMemory as any).threads[`user-${userId}`] = {
+          id: `user-${userId}`,
+          resourceId: userId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        return mockMemory;
+      },
+    });
+
+    const runtimeContext = new RuntimeContext();
+    runtimeContext.set('userId', 'user123');
+
+    const memory = await agent.getMemory({ runtimeContext });
+    expect(memory).toBe(mockMemory);
+    expect((memory as any)?.threads['user-user123']).toBeDefined();
+  });
+
+  it('should throw error when dynamic memory function returns empty value', async () => {
+    const agent = new Agent({
+      name: 'invalid-memory-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: () => null as any,
+    });
+
+    await expect(agent.getMemory()).rejects.toThrow('Function-based memory returned empty value');
+  });
+
+  it('should work with memory in generate method with dynamic configuration', async () => {
+    const mockMemory = new MockMemory();
+
+    const agent = new Agent({
+      name: 'generate-memory-agent',
+      instructions: 'test agent',
+      model: dummyModel,
+      memory: ({ runtimeContext }) => {
+        const environment = runtimeContext.get('environment');
+        if (environment === 'test') {
+          return mockMemory;
+        }
+        // Return a default mock memory instead of undefined
+        return new MockMemory();
+      },
+    });
+
+    const runtimeContext = new RuntimeContext();
+    runtimeContext.set('environment', 'test');
+
+    const response = await agent.generate('test message', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-1',
+        },
+      },
+      runtimeContext,
+    });
+
+    expect(response.text).toBe('Dummy response');
+
+    // Verify that thread was created in memory
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+    expect(thread).toBeDefined();
+    expect(thread?.resourceId).toBe('user-1');
+  });
+
+  it('should work with memory in stream method with dynamic configuration', async () => {
+    const mockMemory = new MockMemory();
+
+    const agent = new Agent({
+      name: 'stream-memory-agent',
+      instructions: 'test agent',
+      model: new MockLanguageModelV1({
+        doStream: async () => ({
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'text-delta', textDelta: 'Dynamic' },
+              { type: 'text-delta', textDelta: ' memory' },
+              { type: 'text-delta', textDelta: ' response' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { completionTokens: 10, promptTokens: 3 },
+              },
+            ],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        }),
+      }),
+      memory: ({ runtimeContext }) => {
+        const enableMemory = runtimeContext.get('enableMemory');
+        return enableMemory ? mockMemory : new MockMemory();
+      },
+    });
+
+    const runtimeContext = new RuntimeContext();
+    runtimeContext.set('enableMemory', true);
+
+    const stream = await agent.stream('test message', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-stream',
+        },
+      },
+      runtimeContext,
+    });
+
+    let finalText = '';
+    for await (const textPart of stream.textStream) {
+      finalText += textPart;
+    }
+
+    expect(finalText).toBe('Dynamic memory response');
+
+    // Verify that thread was created in memory
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-stream' });
+    expect(thread).toBeDefined();
+    expect(thread?.resourceId).toBe('user-1');
   });
 });

@@ -17,6 +17,8 @@ export interface ToolListProps {
   isLoading: boolean;
   tools: Record<string, GetToolResponse>;
   agents: Record<string, GetAgentResponse>;
+  computeLink: (toolId: string, agentId?: string) => string;
+  computeAgentLink: (toolId: string, agentId: string) => string;
 }
 
 interface ToolWithAgents {
@@ -25,7 +27,7 @@ interface ToolWithAgents {
   agents: Array<{ id: string; name: string }>;
 }
 
-export const ToolList = ({ tools, agents, isLoading }: ToolListProps) => {
+export const ToolList = ({ tools, agents, isLoading, computeLink, computeAgentLink }: ToolListProps) => {
   const toolsWithAgents = useMemo(() => prepareAgents(tools, agents), [tools, agents]);
 
   if (isLoading)
@@ -35,10 +37,20 @@ export const ToolList = ({ tools, agents, isLoading }: ToolListProps) => {
       </div>
     );
 
-  return <ToolListInner toolsWithAgents={toolsWithAgents} />;
+  return (
+    <ToolListInner toolsWithAgents={toolsWithAgents} computeLink={computeLink} computeAgentLink={computeAgentLink} />
+  );
 };
 
-const ToolListInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) => {
+const ToolListInner = ({
+  toolsWithAgents,
+  computeLink,
+  computeAgentLink,
+}: {
+  toolsWithAgents: ToolWithAgents[];
+  computeLink: (toolId: string, agentId?: string) => string;
+  computeAgentLink: (toolId: string, agentId: string) => string;
+}) => {
   const [filteredTools, setFilteredTools] = useState<ToolWithAgents[]>(toolsWithAgents);
   const [value, setValue] = useState('');
 
@@ -90,7 +102,7 @@ const ToolListInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] 
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 max-w-5xl mx-auto py-8">
         {filteredTools.map(tool => (
-          <ToolEntity key={tool.id} tool={tool} />
+          <ToolEntity key={tool.id} tool={tool} computeLink={computeLink} computeAgentLink={computeAgentLink} />
         ))}
       </div>
     </div>
@@ -99,9 +111,11 @@ const ToolListInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] 
 
 interface ToolEntityProps {
   tool: ToolWithAgents;
+  computeLink: (toolId: string, agentId?: string) => string;
+  computeAgentLink: (toolId: string, agentId: string) => string;
 }
 
-const ToolEntity = ({ tool }: ToolEntityProps) => {
+const ToolEntity = ({ tool, computeLink, computeAgentLink }: ToolEntityProps) => {
   const linkRef = useRef<HTMLAnchorElement>(null);
   const { Link } = useLinkComponent();
 
@@ -113,10 +127,7 @@ const ToolEntity = ({ tool }: ToolEntityProps) => {
 
       <EntityContent>
         <EntityName>
-          <Link
-            ref={linkRef}
-            href={tool.agents.length > 0 ? `/tools/${tool.agents[0].id}/${tool.id}` : `/tools/all/${tool.id}`}
-          >
+          <Link ref={linkRef} href={computeLink(tool.id, tool.agents[0]?.id)}>
             {tool.id}
           </Link>
         </EntityName>
@@ -126,7 +137,7 @@ const ToolEntity = ({ tool }: ToolEntityProps) => {
           {tool.agents.map(agent => {
             return (
               <Link
-                href={`/agents/${agent.id}/chat`}
+                href={computeAgentLink(tool.id, agent.id)}
                 onClick={e => e.stopPropagation()}
                 key={agent.id}
                 className="group/link"

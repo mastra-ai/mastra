@@ -1,9 +1,7 @@
 import { Header, HeaderTitle, MainContentLayout, NetworkTable, MainContentContent } from '@mastra/playground-ui';
 import { useNetworks, useVNextNetworks } from '@/hooks/use-networks';
-import { useNavigate } from 'react-router';
 
 function Networks() {
-  const navigate = useNavigate();
   const { networks, isLoading } = useNetworks();
   const { vNextNetworks, isLoading: isVNextLoading } = useVNextNetworks();
 
@@ -15,12 +13,14 @@ function Networks() {
         <HeaderTitle>Networks</HeaderTitle>
       </Header>
 
-      <MainContentContent isCentered={isEmpty}>
+      <MainContentContent isCentered={isEmpty && !isLoading}>
         <NetworkTable
           legacyNetworks={networks}
           networks={vNextNetworks}
           isLoading={isLoading || isVNextLoading}
-          onClickRow={networkId => navigate(`/networks/${networkId}/chat`)}
+          computeLink={(networkId: string, isVNext: boolean) => {
+            return isVNext ? `/networks/v-next/${networkId}/chat` : `/networks/${networkId}/chat`;
+          }}
         />
       </MainContentContent>
     </MainContentLayout>

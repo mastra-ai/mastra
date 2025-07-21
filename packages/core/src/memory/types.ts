@@ -54,6 +54,7 @@ type BaseWorkingMemory = {
 type TemplateWorkingMemory = BaseWorkingMemory & {
   template: string;
   schema?: never;
+  version?: 'stable' | 'vnext';
 };
 
 type SchemaWorkingMemory = BaseWorkingMemory & {

@@ -4,12 +4,14 @@ import esbuild from 'rollup-plugin-esbuild';
 import commonjs from '@rollup/plugin-commonjs';
 import { removeAllOptionsExceptTelemetry } from './babel/remove-all-options-telemetry';
 import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
+import type { IMastraLogger } from '@mastra/core/logger';
 
 export function getTelemetryBundler(
   entryFile: string,
   result: {
     hasCustomConfig: false;
   },
+  logger: IMastraLogger,
 ) {
   return rollup({
     logLevel: 'silent',
@@ -44,7 +46,7 @@ export function getTelemetryBundler(
                 babelrc: false,
                 configFile: false,
                 filename: id,
-                plugins: [removeAllOptionsExceptTelemetry(result)],
+                plugins: [removeAllOptionsExceptTelemetry(result, logger)],
               },
               (err, result) => {
                 if (err) {
@@ -86,10 +88,19 @@ export function getTelemetryBundler(
   });
 }
 
-export async function writeTelemetryConfig(
-  entryFile: string,
-  outputDir: string,
-): Promise<{
+export async function writeTelemetryConfig({
+  entryFile,
+  outputDir,
+  options = {},
+  logger,
+}: {
+  entryFile: string;
+  outputDir: string;
+  options: {
+    sourcemap?: boolean;
+  };
+  logger: IMastraLogger;
+}): Promise<{
   hasCustomConfig: boolean;
   externalDependencies: string[];
 }> {
@@ -97,12 +108,13 @@ export async function writeTelemetryConfig(
     hasCustomConfig: false,
   } as const;
 
-  const bundle = await getTelemetryBundler(entryFile, result);
+  const bundle = await getTelemetryBundler(entryFile, result, logger);
 
   const { output } = await bundle.write({
     dir: outputDir,
     format: 'es',
     entryFileNames: '[name].mjs',
+    sourcemap: options.sourcemap,
   });
   const externals = output[0].imports.filter(x => !x.startsWith('./'));
 

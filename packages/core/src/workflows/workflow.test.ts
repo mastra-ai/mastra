@@ -691,7 +691,6 @@ describe('Workflow', () => {
           payload: {
             id: 'sleep_mock-uuid-1',
             endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
             status: 'success',
             output: {
               result: 'success1',
@@ -859,7 +858,6 @@ describe('Workflow', () => {
           payload: {
             id: 'sleep_mock-uuid-1',
             endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
             status: 'success',
             output: {
               value: 1000,
