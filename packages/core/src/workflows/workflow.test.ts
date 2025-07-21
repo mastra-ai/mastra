@@ -7390,11 +7390,7 @@ describe('Workflow', () => {
         expect(last).toHaveBeenCalledTimes(1);
       });
 
-      it('should handle consecutive nested workflows with suspend/resume - bug #6065', async () => {
-        // This test reproduces the bug where consecutive nested workflows that both suspend
-        // cause "This workflow run was not suspended" error on the second resume
-
-        // Step 1: First nested workflow step that suspends
+      it('should handle consecutive nested workflows with suspend/resume', async () => {
         const step1 = vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
           if (!resumeData?.suspect) {
             return await suspend({ message: 'What is the suspect?' });
@@ -7410,7 +7406,6 @@ describe('Workflow', () => {
           execute: step1,
         });
 
-        // Step 2: Second nested workflow step that suspends
         const step2 = vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
           if (!resumeData?.suspect) {
             return await suspend({ message: 'What is the second suspect?' });
@@ -7426,7 +7421,6 @@ describe('Workflow', () => {
           execute: step2,
         });
 
-        // Create first nested workflow
         const subWorkflow1 = createWorkflow({
           id: 'sub-workflow-1',
           inputSchema: z.object({ suspect: z.string() }),
@@ -7435,7 +7429,6 @@ describe('Workflow', () => {
           .then(step1Definition)
           .commit();
 
-        // Create second nested workflow
         const subWorkflow2 = createWorkflow({
           id: 'sub-workflow-2',
           inputSchema: z.object({ suspect: z.string() }),
@@ -7444,7 +7437,6 @@ describe('Workflow', () => {
           .then(step2Definition)
           .commit();
 
-        // Main workflow with consecutive nested workflows
         const mainWorkflow = createWorkflow({
           id: 'main-workflow-bug-6065',
           inputSchema: z.object({ suspect: z.string() }),
@@ -7462,7 +7454,6 @@ describe('Workflow', () => {
 
         const run = mainWorkflow.createRun();
 
-        // Start the workflow - should suspend at first nested workflow
         const initialResult = await run.start({ inputData: { suspect: 'initial-suspect' } });
 
         expect(step1).toHaveBeenCalledTimes(1);
@@ -7472,7 +7463,6 @@ describe('Workflow', () => {
           status: 'suspended',
         });
 
-        // Resume first nested workflow
         const firstResumeResult = await run.resume({
           step: ['sub-workflow-1', 'step-1'],
           resumeData: { suspect: 'first-suspect' },
@@ -7488,139 +7478,21 @@ describe('Workflow', () => {
           status: 'suspended',
         });
 
-        // This SHOULD throw "This workflow run was not suspended" error
-        // This is the bug reproduction - the second resume should fail with the specific error
-        let caughtError: Error | null = null;
-        try {
-          await run.resume({
-            step: ['sub-workflow-2', 'step-2'],
-            resumeData: { suspect: 'second-suspect' },
-          });
-        } catch (error) {
-          caughtError = error as Error;
-        }
-
-        // Verify the bug is reproduced
-        expect(caughtError).toBeTruthy();
-        expect(caughtError?.message).toBe('This workflow run was not suspended');
-        expect(step1).toHaveBeenCalledTimes(2);
-        expect(step2).toHaveBeenCalledTimes(1); // step2 should only be called once (during the suspend)
-      });
-
-      it('should handle consecutive nested workflows with workaround dummy step - bug #6065', async () => {
-        // This test verifies that the workaround (dummy suspend step) fixes the issue
-
-        // Same steps as above
-        const step1 = vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
-          if (!resumeData?.suspect) {
-            return await suspend({ message: 'What is the suspect?' });
-          }
-          return { suspect: resumeData.suspect };
-        });
-        const step1Definition = createStep({
-          id: 'step-1',
-          inputSchema: z.object({ suspect: z.string() }),
-          outputSchema: z.object({ suspect: z.string() }),
-          suspendSchema: z.object({ message: z.string() }),
-          resumeSchema: z.object({ suspect: z.string() }),
-          execute: step1,
-        });
-
-        const step2 = vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
-          if (!resumeData?.suspect) {
-            return await suspend({ message: 'What is the second suspect?' });
-          }
-          return { suspect: resumeData.suspect };
-        });
-        const step2Definition = createStep({
-          id: 'step-2',
-          inputSchema: z.object({ suspect: z.string() }),
-          outputSchema: z.object({ suspect: z.string() }),
-          suspendSchema: z.object({ message: z.string() }),
-          resumeSchema: z.object({ suspect: z.string() }),
-          execute: step2,
-        });
-
-        // Workaround: dummy suspend step
-        const dummySuspend = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
-          if (!resumeData?.done) {
-            return await suspend({ message: 'Just a dummy suspend step' });
-          }
-          return { suspect: inputData.suspect }; // Pass through
-        });
-        const dummySuspendDefinition = createStep({
-          id: 'dummy-suspend',
-          inputSchema: z.object({ suspect: z.string() }),
-          outputSchema: z.object({ suspect: z.string() }),
-          suspendSchema: z.object({ message: z.string() }),
-          resumeSchema: z.object({ done: z.boolean() }),
-          execute: dummySuspend,
-        });
-
-        // Create nested workflows
-        const subWorkflow1 = createWorkflow({
-          id: 'sub-workflow-1-workaround',
-          inputSchema: z.object({ suspect: z.string() }),
-          outputSchema: z.object({ suspect: z.string() }),
-        })
-          .then(step1Definition)
-          .commit();
-
-        const subWorkflow2 = createWorkflow({
-          id: 'sub-workflow-2-workaround',
-          inputSchema: z.object({ suspect: z.string() }),
-          outputSchema: z.object({ suspect: z.string() }),
-        })
-          .then(step2Definition)
-          .commit();
-
-        // Main workflow with workaround dummy step
-        const workaroundWorkflow = createWorkflow({
-          id: 'workaround-workflow-bug-6065',
-          inputSchema: z.object({ suspect: z.string() }),
-          outputSchema: z.object({ suspect: z.string() }),
-        })
-          .then(subWorkflow1) // NestedWorkflow1 (with suspend)
-          .then(dummySuspendDefinition) // WORKAROUND: Dummy suspend step
-          .then(subWorkflow2) // NestedWorkflow2 (with suspend) - should work now
-          .commit();
-
-        new Mastra({
-          logger: false,
-          storage: testStorage,
-          workflows: { workaroundWorkflow },
-        });
-
-        const run = workaroundWorkflow.createRun();
-
-        // Start the workflow
-        const initialResult = await run.start({ inputData: { suspect: 'initial-suspect' } });
-        expect(initialResult.status).toBe('suspended');
-
-        // Resume first nested workflow
-        const firstResumeResult = await run.resume({
-          step: ['sub-workflow-1-workaround', 'step-1'],
-          resumeData: { suspect: 'first-suspect' },
-        });
-        expect(firstResumeResult.status).toBe('suspended');
-
-        // Resume dummy step
-        const dummyResumeResult = await run.resume({
-          step: 'dummy-suspend',
-          resumeData: { done: true },
-        });
-        expect(dummyResumeResult.status).toBe('suspended');
-
-        // Resume second nested workflow - should work with workaround
-        const finalResumeResult = await run.resume({
-          step: ['sub-workflow-2-workaround', 'step-2'],
+        const secondResumeResult = await run.resume({
+          step: ['sub-workflow-2', 'step-2'],
           resumeData: { suspect: 'second-suspect' },
         });
 
-        expect(finalResumeResult.status).toBe('success');
         expect(step1).toHaveBeenCalledTimes(2);
         expect(step2).toHaveBeenCalledTimes(2);
-        expect(dummySuspend).toHaveBeenCalledTimes(2);
+        expect(secondResumeResult.status).toBe('success');
+        expect(secondResumeResult.steps['sub-workflow-1']).toMatchObject({
+          status: 'success',
+        });
+        expect(secondResumeResult.steps['sub-workflow-2']).toMatchObject({
+          status: 'success',
+        });
+        expect((secondResumeResult as any).result).toEqual({ suspect: 'second-suspect' });
       });
     });
 
