@@ -28,12 +28,5 @@ export const useMastraClient = (options?: Partial<ClientOptions>) => {
     throw new Error('useMastraClient must be used within a MastraClientProvider');
   }
 
-  if (!options) {
-    return context.client;
-  }
-
-  return new MastraClient({
-    ...context.client.options,
-    ...options,
-  });
+  return context.client;
 };

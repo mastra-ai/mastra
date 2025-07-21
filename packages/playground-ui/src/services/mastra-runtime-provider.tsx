@@ -19,6 +19,7 @@ import { fileToBase64 } from '@/lib/file';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachments/pdfs-adapter';
+import { MastraClient } from '@mastra/client-js';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -166,6 +167,8 @@ export function MastraRuntimeProvider({
     }
   }, [initialMessages, threadId, memory]);
 
+  const baseClient = useMastraClient();
+
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
 
@@ -181,8 +184,12 @@ export function MastraRuntimeProvider({
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    // Get a client configured with the abort signal
-    const clientWithAbort = useMastraClient({ abortSignal: controller.signal });
+    // Create a new client instance with the abort signal
+    // We can't use useMastraClient hook here, so we'll create the client directly
+    const clientWithAbort = new MastraClient({
+      ...baseClient.options,
+      abortSignal: controller.signal,
+    });
     const agent = clientWithAbort.getAgent(agentId);
 
     try {
