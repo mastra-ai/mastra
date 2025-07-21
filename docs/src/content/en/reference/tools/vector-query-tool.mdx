@@ -575,7 +575,7 @@ const vectorQueryTool = createVectorQueryTool({
   model: openai.embedding("text-embedding-3-small"),
 });
 
-const RuntimeContext = new RuntimeContext();
+const runtimeContext = new RuntimeContext();
 const queryResult = await vectorQueryTool.execute({
   context: { queryText: "foo", topK: 1 },
   runtimeContext,
