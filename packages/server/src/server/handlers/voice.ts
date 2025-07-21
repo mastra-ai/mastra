@@ -44,7 +44,7 @@ export async function getSpeakersHandler({ mastra, agentId }: VoiceContext) {
 export async function generateSpeechHandler({
   mastra,
   agentId,
-  body,
+  body = {},
 }: VoiceContext & {
   body?: {
     text?: string;
@@ -52,13 +52,13 @@ export async function generateSpeechHandler({
   };
 }) {
   try {
+    const { text, speakerId, ...providerOptions } = body;
+
     if (!agentId) {
       throw new HTTPException(400, { message: 'Agent ID is required' });
     }
 
-    validateBody({
-      text: body?.text,
-    });
+    validateBody({ text });
 
     const agent = mastra.getAgent(agentId);
 
@@ -72,7 +72,7 @@ export async function generateSpeechHandler({
       throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
     }
 
-    const audioStream = await voice.speak(body!.text!, { speaker: body!.speakerId! });
+    const audioStream = await voice.speak(text!, { speaker: speakerId, ...providerOptions });
 
     if (!audioStream) {
       throw new HTTPException(500, { message: 'Failed to generate speech' });
