@@ -15,6 +15,14 @@ import {
 } from './constants';
 import type { TABLE_NAMES } from './constants';
 import type {
+  ScoresStorage,
+  StoreOperations,
+  WorkflowsStorage,
+  TracesStorage,
+  MemoryStorage,
+  LegacyEvalsStorage,
+} from './domains';
+import type {
   EvalRow,
   PaginationInfo,
   StorageColumn,
@@ -24,6 +32,15 @@ import type {
   WorkflowRun,
   WorkflowRuns,
 } from './types';
+
+export type StorageDomains = {
+  scores: ScoresStorage;
+  operations: StoreOperations;
+  workflows: WorkflowsStorage;
+  traces: TracesStorage;
+  memory: MemoryStorage;
+  legacyEvals: LegacyEvalsStorage;
+};
 
 export abstract class MastraStorage extends MastraBase {
   /** @deprecated import from { TABLE_WORKFLOW_SNAPSHOT } '@mastra/core/storage' instead */
@@ -40,6 +57,8 @@ export abstract class MastraStorage extends MastraBase {
   protected hasInitialized: null | Promise<boolean> = null;
   protected shouldCacheInit = true;
 
+  stores?: StorageDomains;
+
   constructor({ name }: { name: string }) {
     super({
       component: 'STORAGE',
@@ -50,10 +69,14 @@ export abstract class MastraStorage extends MastraBase {
   public get supports(): {
     selectByIncludeResourceScope: boolean;
     resourceWorkingMemory: boolean;
+    createTable?: boolean;
+    hasColumn?: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
       resourceWorkingMemory: false,
+      createTable: false,
+      hasColumn: false,
     };
   }
 
@@ -94,6 +117,8 @@ export abstract class MastraStorage extends MastraBase {
         return 'TEXT';
       case 'timestamp':
         return 'TIMESTAMP';
+      case 'float':
+        return 'FLOAT';
       case 'integer':
         return 'INTEGER';
       case 'bigint':
@@ -113,6 +138,7 @@ export abstract class MastraStorage extends MastraBase {
       case 'timestamp':
         return "DEFAULT '1970-01-01 00:00:00'";
       case 'integer':
+      case 'float':
       case 'bigint':
         return 'DEFAULT 0';
       case 'jsonb':

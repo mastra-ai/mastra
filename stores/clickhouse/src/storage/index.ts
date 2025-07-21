@@ -10,6 +10,7 @@ import {
   TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_SCHEMAS,
+  TABLE_SCORERS,
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
@@ -75,11 +76,13 @@ export const TABLE_ENGINES: Record<SUPPORTED_TABLE_NAMES, string> = {
   [TABLE_TRACES]: `MergeTree()`,
   [TABLE_THREADS]: `ReplacingMergeTree()`,
   [TABLE_EVALS]: `MergeTree()`,
+  [TABLE_SCORERS]: `MergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {
   text: 'String',
   timestamp: 'DateTime64(3)',
+  float: 'Float64',
   uuid: 'String',
   jsonb: 'String',
   integer: 'Int64',

@@ -23,6 +23,7 @@ import type {
   PaginationInfo,
   StorageColumn,
   TABLE_RESOURCES,
+  TABLE_SCORERS,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -39,7 +40,7 @@ export interface DynamoDBStoreConfig {
   };
 }
 
-type SUPPORTED_TABLE_NAMES = Exclude<TABLE_NAMES, typeof TABLE_RESOURCES>;
+type SUPPORTED_TABLE_NAMES = Exclude<TABLE_NAMES, typeof TABLE_RESOURCES | typeof TABLE_SCORERS>;
 
 // Define a type for our service that allows string indexing
 type MastraService = Service<Record<string, any>> & {

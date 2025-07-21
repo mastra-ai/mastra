@@ -1,0 +1,54 @@
+import { describe, beforeAll, afterAll } from 'vitest';
+import type { MastraStorage } from '@mastra/core/storage';
+import {
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_EVALS,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_RESOURCES,
+  TABLE_SCORERS,
+} from '@mastra/core/storage';
+// import { createScoresTest } from './domains/scores';
+import { createMemoryTest } from './domains/memory';
+import { createWorkflowsTests } from './domains/workflows';
+import { createTraceTests } from './domains/traces';
+import { createEvalsTests } from './domains/evals';
+import { createOperationsTests } from './domains/operations';
+export * from './domains/memory/data';
+export * from './domains/workflows/data';
+export * from './domains/evals/data';
+export * from './domains/traces/data';
+
+export function createTestSuite(storage: MastraStorage) {
+  describe(storage.constructor.name, () => {
+    beforeAll(async () => {
+      const start = Date.now();
+      console.log('Initializing storage...');
+      await storage.init();
+      const end = Date.now();
+      console.log(`Storage initialized in ${end - start}ms`);
+    });
+
+    afterAll(async () => {
+      // Clear tables after tests
+      await storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      await storage.clearTable({ tableName: TABLE_EVALS });
+      await storage.clearTable({ tableName: TABLE_MESSAGES });
+      await storage.clearTable({ tableName: TABLE_THREADS });
+      await storage.clearTable({ tableName: TABLE_RESOURCES });
+      await storage.clearTable({ tableName: TABLE_SCORERS });
+    });
+
+    createOperationsTests({ storage });
+
+    createWorkflowsTests({ storage });
+
+    createTraceTests({ storage });
+
+    createEvalsTests({ storage });
+
+    createMemoryTest({ storage });
+
+    // createScoresTest({ storage });
+  });
+}
