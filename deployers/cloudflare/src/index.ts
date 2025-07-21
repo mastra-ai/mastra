@@ -183,15 +183,7 @@ process.versions.node = '${process.versions.node}';
     this.logger?.info('Deploying to Cloudflare failed. Please use the Cloudflare dashboard to deploy.');
   }
 
-  async tagWorker({
-    workerName,
-    namespace,
-    tags,
-  }: {
-    workerName: string;
-    namespace: string;
-    tags: string[];
-  }): Promise<void> {
+  async tagWorker(): Promise<void> {
     throw new Error('tagWorker method is no longer supported. Use the Cloudflare dashboard or API directly.');
   }
 
