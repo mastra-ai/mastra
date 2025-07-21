@@ -65,12 +65,12 @@ export class DevBundler extends Bundler {
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
 
     const outputDir = join(outputDirectory, this.outputDir);
-    await writeTelemetryConfig({
+    await writeTelemetryConfig(
       entryFile,
       outputDir,
-      options: {},
-      logger: this.logger,
-    });
+      { sourcemap: sourcemapEnabled },
+      this.logger,
+    );
 
     const mastraFolder = dirname(entryFile);
     const fileService = new FileService();
