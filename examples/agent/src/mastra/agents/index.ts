@@ -5,6 +5,8 @@ import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
+import { AgentBuilder } from '@mastra/agent-builder';
+import { google } from '@ai-sdk/google';
 
 const memory = new Memory();
 
@@ -97,4 +99,10 @@ export const chefAgentResponses = new Agent({
   workflows: {
     myWorkflow,
   },
+});
+
+export const agentBuilder = new AgentBuilder({
+  model: openai('gpt-4.1'),
+  projectPath: '/Users/daniellew/Documents/Mastra/mastra-agent-builder-test',
+  summaryModel: google('gemini-2.0-flash-001'),
 });
