@@ -79,7 +79,9 @@ export class InMemoryLegacyEvals extends LegacyEvalsStorage {
     }
 
     return evals
-      .sort((a: StorageEvalRow, b: StorageEvalRow) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .sort(
+        (a: StorageEvalRow, b: StorageEvalRow) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      )
       .map(e => ({
         agentName: e.agent_name,
         input: e.input,
