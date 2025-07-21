@@ -50,7 +50,7 @@ export const downloadPdfTool = createTool({
       if (!pdfSummarizationAgent) {
         throw new Error('PDF summarization agent not found');
       }
-      
+
       const summaryResult = await pdfSummarizationAgent.generate([
         {
           role: 'user',

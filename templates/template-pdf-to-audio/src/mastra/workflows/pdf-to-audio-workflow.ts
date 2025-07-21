@@ -23,11 +23,13 @@ const audioOutputSchema = z.object({
   summary: z.string().describe('The text summary that was converted to audio'),
   duration: z.number().optional().describe('Estimated duration of the audio in seconds'),
   voice: z.string().describe('Voice used for the audio generation'),
-  pdfInfo: z.object({
-    fileSize: z.number().describe('Size of the original PDF in bytes'),
-    pagesCount: z.number().describe('Number of pages in the PDF'),
-    characterCount: z.number().describe('Number of characters extracted from the PDF'),
-  }).describe('Information about the processed PDF'),
+  pdfInfo: z
+    .object({
+      fileSize: z.number().describe('Size of the original PDF in bytes'),
+      pagesCount: z.number().describe('Number of pages in the PDF'),
+      characterCount: z.number().describe('Number of characters extracted from the PDF'),
+    })
+    .describe('Information about the processed PDF'),
   success: z.boolean().describe('Indicates if the entire process was successful'),
 });
 
@@ -71,19 +73,19 @@ const generateAudioFromSummaryStep = createStep({
 
     if (!summary) {
       console.error('Missing summary in audio generation step');
-      return { 
+      return {
         audioStream: null,
         summary: '',
         duration: 0,
         voice: voice || 'alloy',
         pdfInfo: { fileSize, pagesCount, characterCount },
-        success: false 
+        success: false,
       };
     }
 
     try {
       const result = await generateAudioFromTextTool.execute({
-        context: { 
+        context: {
           text: summary,
           voice: voice || 'alloy',
           speed: speed || 1.0,
@@ -99,7 +101,7 @@ const generateAudioFromSummaryStep = createStep({
       console.log(
         `Step generate-audio-from-summary: Succeeded - Generated audio from ${summary.length} character summary using voice "${result.voice}"`,
       );
-      
+
       return {
         audioStream: result.audioStream,
         summary: summary,
@@ -129,7 +131,8 @@ const generateAudioFromSummaryStep = createStep({
 // Define the workflow
 export const pdfToAudioWorkflow = createWorkflow({
   id: 'pdf-to-audio-workflow',
-  description: 'Downloads PDF from URL, generates an audio-friendly summary, and converts it to high-quality speech audio',
+  description:
+    'Downloads PDF from URL, generates an audio-friendly summary, and converts it to high-quality speech audio',
   inputSchema: pdfInputSchema,
   outputSchema: audioOutputSchema,
 })

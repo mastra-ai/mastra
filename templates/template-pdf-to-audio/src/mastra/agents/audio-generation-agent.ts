@@ -39,6 +39,6 @@ export const audioGenerationAgent = new Agent({
   model: openai('gpt-4o'),
   voice: new OpenAIVoice({
     speechModel: { name: 'tts-1-hd', apiKey: process.env.OPENAI_API_KEY },
-    speaker: 'alloy'
+    speaker: 'alloy',
   }),
 });

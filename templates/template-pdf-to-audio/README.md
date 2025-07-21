@@ -20,11 +20,13 @@ A Mastra template that processes PDF files and converts them into playable audio
 ## Setup
 
 1. Install dependencies:
+
 ```bash
 pnpm install
 ```
 
 2. Set your OpenAI API key:
+
 ```bash
 export OPENAI_API_KEY="your-openai-api-key-here"
 ```
@@ -36,15 +38,17 @@ export OPENAI_API_KEY="your-openai-api-key-here"
 The easiest way to use this template is through the **PDF to Audio Chat Agent** in the Mastra playground:
 
 1. Start the development server:
+
 ```bash
 pnpm dev
 ```
 
 2. Open the Mastra playground in your browser
 
-3. Select the "PDF to Audio Chat Agent" 
+3. Select the "PDF to Audio Chat Agent"
 
 4. Chat with the agent to convert PDFs:
+
 ```
 You: Can you convert this PDF to audio: https://example.com/document.pdf
 
@@ -60,6 +64,7 @@ Agent: Sure! Let me regenerate that with the 'nova' voice at 1.5x speed for a mo
 ```
 
 The chat agent can:
+
 - Process PDF URLs you provide
 - Generate audio-friendly summaries
 - Create high-quality speech audio
@@ -73,9 +78,9 @@ import { mastra } from './src/mastra';
 
 // Convert a PDF to audio
 const result = await mastra.workflow.pdfToAudioWorkflow.run({
-  pdfUrl: "https://example.com/document.pdf",
-  voice: "alloy",    // Optional: choose voice (alloy, echo, fable, onyx, nova, shimmer)
-  speed: 1.0         // Optional: speech speed (0.25-4.0)
+  pdfUrl: 'https://example.com/document.pdf',
+  voice: 'alloy', // Optional: choose voice (alloy, echo, fable, onyx, nova, shimmer)
+  speed: 1.0, // Optional: speech speed (0.25-4.0)
 });
 
 // The result contains:
@@ -95,16 +100,16 @@ import { mastra } from './src/mastra';
 
 // Step 1: Download and summarize PDF
 const pdfResult = await downloadPdfTool.execute({
-  context: { pdfUrl: "https://example.com/document.pdf" },
+  context: { pdfUrl: 'https://example.com/document.pdf' },
   mastra,
 });
 
 // Step 2: Convert summary to audio
 const audioResult = await generateAudioFromTextTool.execute({
-  context: { 
+  context: {
     text: pdfResult.summary,
-    voice: "nova",
-    speed: 1.2
+    voice: 'nova',
+    speed: 1.2,
   },
   mastra,
 });
@@ -119,21 +124,21 @@ import { pdfSummarizationAgent, audioGenerationAgent } from './src/mastra/agents
 const summaryResult = await pdfSummarizationAgent.generate([
   {
     role: 'user',
-    content: 'Please create an audio-friendly summary of this content: [your text here]'
-  }
+    content: 'Please create an audio-friendly summary of this content: [your text here]',
+  },
 ]);
 
 // The audioGenerationAgent has voice capabilities built-in
 const audioStream = await audioGenerationAgent.voice.speak(summaryResult.text, {
-  speaker: "fable",
-  speed: 0.9
+  speaker: 'fable',
+  speed: 0.9,
 });
 ```
 
 ## Available Scripts
 
 - `pnpm dev` - Start development server
-- `pnpm build` - Build the application  
+- `pnpm build` - Build the application
 - `pnpm start` - Start production server
 
 ## Voice Options
@@ -141,7 +146,7 @@ const audioStream = await audioGenerationAgent.voice.speak(summaryResult.text, {
 The template supports the following OpenAI voices:
 
 - **alloy** - Neutral, balanced voice
-- **echo** - Clear, crisp pronunciation  
+- **echo** - Clear, crisp pronunciation
 - **fable** - Warm, storytelling voice
 - **onyx** - Deep, authoritative voice
 - **nova** - Young, energetic voice
@@ -150,6 +155,7 @@ The template supports the following OpenAI voices:
 ## Speed Settings
 
 Speech speed can be adjusted from 0.25x to 4.0x:
+
 - **0.25-0.75**: Slow, good for complex content
 - **1.0**: Normal speaking pace (default)
 - **1.25-1.5**: Slightly faster, efficient listening
@@ -175,6 +181,7 @@ Speech speed can be adjusted from 0.25x to 4.0x:
 ## Error Handling
 
 The template includes comprehensive error handling:
+
 - Invalid PDF URLs or download failures
 - PDF parsing errors (empty files, corrupted content)
 - Text extraction failures
@@ -191,6 +198,7 @@ The template includes comprehensive error handling:
 ## Contributing
 
 This template demonstrates Mastra's capabilities for document processing and voice synthesis. Feel free to extend it with:
+
 - Additional voice providers
 - Different document formats
 - Custom summarization styles

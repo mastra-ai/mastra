@@ -7,7 +7,10 @@ export const generateAudioFromTextTool = createTool({
   description: 'Converts text content into high-quality audio using OpenAI text-to-speech',
   inputSchema: z.object({
     text: z.string().describe('Text content to convert to audio'),
-    voice: z.string().optional().describe('Voice to use for speech synthesis (alloy, echo, fable, onyx, nova, shimmer)'),
+    voice: z
+      .string()
+      .optional()
+      .describe('Voice to use for speech synthesis (alloy, echo, fable, onyx, nova, shimmer)'),
     speed: z.number().optional().describe('Speech speed (0.25-4.0, default: 1.0)'),
   }),
   outputSchema: z.object({
@@ -47,7 +50,7 @@ export const generateAudioFromTextTool = createTool({
           speechModel: { name: 'tts-1-hd', apiKey: process.env.OPENAI_API_KEY },
           speaker: voice,
         });
-        
+
         audioStream = await openAIVoice.speak(text, {
           speaker: voice,
           speed: speed,
@@ -60,7 +63,7 @@ export const generateAudioFromTextTool = createTool({
 
       // Estimate duration (rough calculation: ~150 words per minute for average speech)
       const wordCount = text.split(/\s+/).length;
-      const estimatedDuration = Math.ceil((wordCount / 150) * 60 / speed);
+      const estimatedDuration = Math.ceil(((wordCount / 150) * 60) / speed);
 
       console.log(`✅ Generated audio successfully`);
       console.log(`⏱️ Estimated duration: ${estimatedDuration} seconds`);
@@ -74,7 +77,7 @@ export const generateAudioFromTextTool = createTool({
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('❌ Audio generation failed:', errorMessage);
-      
+
       return {
         audioStream: null,
         duration: 0,
