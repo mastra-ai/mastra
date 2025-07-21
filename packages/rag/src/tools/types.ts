@@ -1,6 +1,6 @@
+import type { MastraVector } from '@mastra/core/vector';
 import type { EmbeddingModel } from 'ai';
 import type { RerankConfig } from '../rerank';
-import type { MastraVector } from '@mastra/core/vector';
 
 export interface PineconeConfig {
   namespace?: string;

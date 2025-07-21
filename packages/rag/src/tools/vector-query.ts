@@ -1,4 +1,5 @@
 import { createTool } from '@mastra/core/tools';
+import type { MastraVector } from '@mastra/core/vector';
 import type { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
@@ -8,7 +9,6 @@ import { vectorQuerySearch, defaultVectorQueryDescription, filterSchema, outputS
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
 import type { VectorQueryToolOptions } from './types';
-import type { MastraVector } from '@mastra/core/vector';
 
 export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
   const { id, description } = options;
