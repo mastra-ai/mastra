@@ -82,8 +82,8 @@ export function createTraceTests({ storage }: { storage: MastraStorage }) {
       const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
 
       const recordsToInsert = [
-        createSampleTraceForDB('t_dbf1', scope, {}, dayBeforeYesterday),
-        createSampleTraceForDB('t_dbf2', scope, {}, dayBeforeYesterday),
+        createSampleTraceForDB('t_dbf1', scope, undefined, dayBeforeYesterday),
+        createSampleTraceForDB('t_dbf2', scope, undefined, dayBeforeYesterday),
         createSampleTraceForDB('t_y1', scope, undefined, yesterday),
         createSampleTraceForDB('t_y3', scope, undefined, yesterday),
         createSampleTraceForDB('t_n1', scope, undefined, now),
