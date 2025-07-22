@@ -187,8 +187,6 @@ describe('MastraScorer', () => {
 
       const result = await scorer.run(baseScoringInput);
 
-      console.log(result);
-
       expect(llmAnalyzeFn).toHaveBeenCalledWith({
         ...baseScoringInput,
         extractStepResult: undefined,
@@ -223,8 +221,6 @@ describe('MastraScorer', () => {
         ...baseScoringInput,
         extractStepResult: {},
       });
-
-      console.log(result);
 
       expect(result).toMatchObject({
         ...baseScoringInput,

@@ -46,8 +46,6 @@ export class MastraScorer {
 
         const extractStepResult = await this.extract(inputData);
 
-        console.log('Extract step result', extractStepResult);
-
         return extractStepResult;
       },
     });
@@ -73,8 +71,6 @@ export class MastraScorer {
       execute: async ({ getStepResult }) => {
         const analyzeStepRes = getStepResult(analyzeStep);
         const extractStepResult = getStepResult(extractStep);
-
-        console.log('Reason step result', analyzeStepRes, extractStepResult);
 
         if (!this.reason) {
           return {
