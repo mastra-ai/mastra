@@ -58,6 +58,7 @@
   "devDependencies": {
     "@ai-sdk/openai": "^1.3.22",
     "@internal/lint": "workspace:*",
+    "@internal/storage-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",

@@ -34,6 +34,7 @@
     "build:clients": "pnpm turbo build --filter \"./client-sdks/*\"",
     "build:schema-compat": "pnpm turbo build --filter ./packages/schema-compat",
     "build:auth": "pnpm turbo build --filter \"./auth/*\" --filter \"./packages/auth\"",
+    "dev:playground": "pnpm turbo run dev:playground --filter ./packages/playground-ui --filter ./packages/cli",
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",

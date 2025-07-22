@@ -48,6 +48,7 @@ export const columns: ColumnDef<AgentTableColumn>[] = [
           <Badge
             variant="default"
             icon={providerMapToIcon[row.original.provider as keyof typeof providerMapToIcon] || <OpenAIIcon />}
+            className="truncate"
           >
             {row.original.modelId || 'N/A'}
           </Badge>

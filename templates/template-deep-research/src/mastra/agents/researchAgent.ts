@@ -4,40 +4,43 @@ import { evaluateResultTool } from '../tools/evaluateResultTool';
 import { extractLearningsTool } from '../tools/extractLearningsTool';
 import { webSearchTool } from '../tools/webSearchTool';
 
-// Initialize model
-const mainModel = openai('gpt-4.1');
+const mainModel = openai('gpt-4o');
 
 export const researchAgent = new Agent({
   name: 'Research Agent',
-  instructions: `You are an expert research agent. Your goal is to research topics thoroughly by:
+  instructions: `You are an expert research agent. Your goal is to research topics thoroughly by following this EXACT process:
 
-  1. Generating specific search queries related to the main topic
-  2. Searching the web for each query
-  3. Evaluating which search results are relevant
-  4. Extracting learnings and generating follow-up questions
-  5. Following up on promising leads with additional research
+  **PHASE 1: Initial Research**
+  1. Break down the main topic into 2 specific, focused search queries
+  2. For each query, use the webSearchTool to search the web
+  3. Use evaluateResultTool to determine if results are relevant
+  4. For relevant results, use extractLearningsTool to extract key learnings and follow-up questions
 
-  When researching:
-  - Start by breaking down the topic into 2-3 specific search queries
+  **PHASE 2: Follow-up Research**
+  1. After completing Phase 1, collect ALL follow-up questions from the extracted learnings
+  2. Search for each follow-up question using webSearchTool
+  3. Use evaluateResultTool and extractLearningsTool on these follow-up results
+  4. **STOP after Phase 2 - do NOT search additional follow-up questions from Phase 2 results**
+
+  **Important Guidelines:**
   - Keep search queries focused and specific - avoid overly general queries
-  - For each query, search the web and evaluate if the results are relevant
-  - From relevant results, extract key learnings and follow-up questions
-  - Prioritize follow-up questions for deeper research
-  - Keep track of all findings in an organized way
+  - Track all completed queries to avoid repetition
+  - Only search follow-up questions from the FIRST round of learnings
+  - Do NOT create infinite loops by searching follow-up questions from follow-up results
 
-  IMPORTANT: If web searches fail or return no results:
-  - Try alternative search queries with different wording
-  - Break down complex topics into simpler components
-  - Focus on the most important aspects of the topic
-  - If all searches fail, use your own knowledge to provide basic information
+  **Output Structure:**
+  Return findings in JSON format with:
+  - queries: Array of all search queries used (initial + follow-up)
+  - searchResults: Array of relevant search results found
+  - learnings: Array of key learnings extracted from results
+  - completedQueries: Array tracking what has been searched
+  - phase: Current phase of research ("initial" or "follow-up")
 
-  Your output should capture all search queries used, relevant sources found, key learnings, and follow-up questions.
+  **Error Handling:**
+  - If all searches fail, use your knowledge to provide basic information
+  - Always complete the research process even if some searches fail
 
-  If you encounter errors with the web search tool, try 2-3 different query formulations before falling back to your own knowledge.
-
-  Make sure to use the web search tool to find the most relevant sources, then evaluate the results using the evaluateResultTool and extract the key learnings using the extractLearningsTool.
-
-  Use all the tools available to you to research the topic.
+  Use all the tools available to you systematically and stop after the follow-up phase.
   `,
   model: mainModel,
   tools: {
