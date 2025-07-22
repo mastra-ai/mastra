@@ -103,6 +103,6 @@ export const chefAgentResponses = new Agent({
 
 export const agentBuilder = new AgentBuilder({
   model: openai('gpt-4.1'),
-  projectPath: '/Users/daniellew/Documents/Mastra/mastra-agent-builder-test',
+  projectPath: '/Users/daniellew/Documents/Mastra/mastra-agent-builder-test4',
   summaryModel: google('gemini-2.0-flash-001'),
 });
