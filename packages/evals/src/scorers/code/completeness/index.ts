@@ -99,17 +99,18 @@ export function createCompletenessScorer() {
       const outputElements = extractElements(outputDoc);
 
       return {
-        inputElements,
-        outputElements,
-        missingElements: inputElements.filter(e => !outputElements.includes(e)),
-        elementCounts: {
-          input: inputElements.length,
-          output: outputElements.length,
+        result: {
+          inputElements,
+          outputElements,
+          missingElements: inputElements.filter(e => !outputElements.includes(e)),
+          elementCounts: {
+            input: inputElements.length,
+            output: outputElements.length,
+          },
         },
       };
     },
     analyze: async run => {
-      console.log(`RUN`, JSON.stringify(run, null, 2));
       const inputElements = run.extractStepResult?.inputElements;
       const outputElements = run.extractStepResult?.outputElements;
 

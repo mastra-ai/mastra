@@ -9,14 +9,13 @@ export function createKeywordCoverageScorer() {
     extract: async run => {
       const input = run.input.map(i => i.content).join(', ');
       const output = run.output.text;
-      console.log({
-        input,
-        output,
-      });
+
       if (!input && !output) {
         return {
-          referenceKeywords: new Set<string>(),
-          responseKeywords: new Set<string>(),
+          result: {
+            referenceKeywords: new Set<string>(),
+            responseKeywords: new Set<string>(),
+          },
         };
       }
 
@@ -32,16 +31,20 @@ export function createKeywordCoverageScorer() {
       const referenceKeywords = new Set(extractKeywords(input));
       const responseKeywords = new Set(extractKeywords(output));
       return {
-        referenceKeywords,
-        responseKeywords,
+        result: {
+          referenceKeywords,
+          responseKeywords,
+        },
       };
     },
     analyze: async run => {
       if (!run.extractStepResult?.referenceKeywords.size && !run.extractStepResult?.responseKeywords.size) {
         return {
           score: 1,
-          totalKeywords: 0,
-          matchedKeywords: 0,
+          result: {
+            totalKeywords: 0,
+            matchedKeywords: 0,
+          },
         };
       }
 
@@ -53,8 +56,10 @@ export function createKeywordCoverageScorer() {
 
       return {
         score: coverage,
-        totalKeywords: run.extractStepResult?.referenceKeywords.size,
-        matchedKeywords: matchedKeywords.length,
+        result: {
+          totalKeywords: run.extractStepResult?.referenceKeywords.size,
+          matchedKeywords: matchedKeywords.length,
+        },
       };
     },
   });

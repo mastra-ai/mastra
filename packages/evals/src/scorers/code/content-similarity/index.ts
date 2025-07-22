@@ -28,12 +28,13 @@ export function createContentSimilarityScorer(
       }
 
       return {
-        processedInput,
-        processedOutput,
+        result: {
+          processedInput,
+          processedOutput,
+        },
       };
     },
     analyze: async run => {
-      console.log(`RUN`, JSON.stringify(run, null, 2));
       const similarity = stringSimilarity.compareTwoStrings(
         run.extractStepResult?.processedInput,
         run.extractStepResult?.processedOutput,
@@ -41,7 +42,9 @@ export function createContentSimilarityScorer(
 
       return {
         score: similarity,
-        similarity,
+        result: {
+          similarity,
+        },
       };
     },
   });

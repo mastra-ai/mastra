@@ -23,9 +23,11 @@ export function createTextualDifferenceScorer() {
 
       return {
         score: ratio,
-        confidence,
-        changes,
-        lengthDiff,
+        result: {
+          confidence,
+          changes,
+          lengthDiff,
+        },
       };
     },
   });

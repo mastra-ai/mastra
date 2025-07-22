@@ -20,7 +20,7 @@ export function createToneScorer() {
 
         return {
           score: normalizedScore,
-          info: {
+          result: {
             responseSentiment: responseSentiment.comparative,
             referenceSentiment: referenceSentiment.comparative,
             difference: sentimentDiff,
@@ -37,7 +37,7 @@ export function createToneScorer() {
 
       return {
         score: stability,
-        info: {
+        result: {
           avgSentiment,
           sentimentVariance: variance,
         },

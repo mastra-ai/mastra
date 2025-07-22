@@ -11,7 +11,6 @@ describe('TextualDifferenceMetric', () => {
     expect(result.score).toBe(1);
     expect(result.analyzeStepResult).toMatchObject({
       confidence: 1,
-      score: 1,
       changes: 0,
       lengthDiff: 0,
     });
@@ -80,7 +79,6 @@ describe('TextualDifferenceMetric', () => {
     const result = await scorer.run(createTestRun('The quick brown fox', 'The quick brown fox'));
     expect(result.analyzeStepResult).toMatchObject({
       confidence: 1,
-      score: 1,
       changes: 0,
       lengthDiff: 0,
     });
