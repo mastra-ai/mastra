@@ -2,6 +2,7 @@ import type { AiMessageType, MastraMessageV1, StorageThreadType as ThreadType } 
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 import useSWR, { useSWRConfig } from 'swr';
+import { useQuery } from '@tanstack/react-query';
 
 import { fetcher } from '@/lib/utils';
 import type { MemoryConfigResponse, MemorySearchResponse, MemorySearchParams } from '@/types/memory';
@@ -22,9 +23,11 @@ export const useMemoryConfig = (agentId?: string) => {
   const {
     data: config,
     isLoading,
-    mutate,
-  } = useSWR<MemoryConfigResponse>(`/api/memory/config?agentId=${agentId}`, fetcher, {
-    isPaused: () => !agentId,
+    refetch: mutate,
+  } = useQuery<MemoryConfigResponse>({
+    queryKey: ['memory', 'config', agentId],
+    queryFn: () => fetcher(`/api/memory/config?agentId=${agentId}`),
+    enabled: !!agentId,
   });
   return { config: config?.config, isLoading, mutate };
 };
