@@ -1737,6 +1737,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const { thread, messageObjects, convertedTools, messageList } = await before();
 
     const threadId = thread?.id;
+    let threadExists = !!(await memory?.getThreadById({ threadId: threadId || '' }));
 
     if (!output && experimental_output) {
       const result = await llm.__text({
@@ -1744,6 +1745,17 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         tools: convertedTools,
         onStepFinish: async (result: any) => {
           if (savePerStep) {
+            if (thread && !threadExists) {
+              await memory?.createThread({
+                threadId,
+                resourceId: thread.resourceId,
+                memoryConfig,
+                title: thread.title,
+                metadata: thread.metadata,
+              });
+              threadExists = true;
+            }
+
             await this.saveStepMessages({
               saveQueueManager,
               result,
@@ -1793,6 +1805,17 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         tools: convertedTools,
         onStepFinish: async (result: any) => {
           if (savePerStep) {
+            if (thread && !threadExists) {
+              await memory?.createThread({
+                threadId,
+                resourceId: thread.resourceId,
+                memoryConfig,
+                title: thread.title,
+                metadata: thread.metadata,
+              });
+              threadExists = true;
+            }
+
             await this.saveStepMessages({
               saveQueueManager,
               result,
@@ -1837,6 +1860,17 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       structuredOutput: output,
       onStepFinish: async (result: any) => {
         if (savePerStep) {
+          if (thread && !threadExists) {
+            await memory?.createThread({
+              threadId,
+              resourceId: thread.resourceId,
+              memoryConfig,
+              title: thread.title,
+              metadata: thread.metadata,
+            });
+            threadExists = true;
+          }
+
           await this.saveStepMessages({
             saveQueueManager,
             result,
@@ -1980,6 +2014,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const { thread, messageObjects, convertedTools, messageList } = await before();
 
     const threadId = thread?.id;
+    let threadExists = !!(await memory?.getThreadById({ threadId: threadId || '' }));
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
@@ -1992,6 +2027,17 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         tools: convertedTools,
         onStepFinish: async (result: any) => {
           if (savePerStep) {
+            if (thread && !threadExists) {
+              await memory?.createThread({
+                threadId,
+                resourceId: thread.resourceId,
+                memoryConfig,
+                title: thread.title,
+                metadata: thread.metadata,
+              });
+              threadExists = true;
+            }
+
             await this.saveStepMessages({
               saveQueueManager,
               result,
@@ -2048,6 +2094,17 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         tools: convertedTools,
         onStepFinish: async (result: any) => {
           if (savePerStep) {
+            if (thread && !threadExists) {
+              await memory?.createThread({
+                threadId,
+                resourceId: thread.resourceId,
+                memoryConfig,
+                title: thread.title,
+                metadata: thread.metadata,
+              });
+              threadExists = true;
+            }
+
             await this.saveStepMessages({
               saveQueueManager,
               result,
@@ -2102,6 +2159,17 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       structuredOutput: output,
       onStepFinish: async (result: any) => {
         if (savePerStep) {
+          if (thread && !threadExists) {
+            await memory?.createThread({
+              threadId,
+              resourceId: thread.resourceId,
+              memoryConfig,
+              title: thread.title,
+              metadata: thread.metadata,
+            });
+            threadExists = true;
+          }
+
           await this.saveStepMessages({
             saveQueueManager,
             result,
