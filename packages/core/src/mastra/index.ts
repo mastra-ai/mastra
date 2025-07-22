@@ -387,6 +387,36 @@ do:
     return this.#agents[name];
   }
 
+  public getAgentById(id: string): Agent {
+    let agent = Object.values(this.#agents).find(a => a.id === id);
+
+    if (!agent) {
+      try {
+        agent = this.getAgent(id as any);
+      } catch {
+        // do nothing
+      }
+    }
+
+    if (!agent) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_AGENT_BY_AGENT_ID_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Agent with id ${String(id)} not found`,
+        details: {
+          status: 404,
+          agentId: String(id),
+          agents: Object.keys(this.#agents ?? {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    return agent;
+  }
+
   public getAgents() {
     return this.#agents;
   }
@@ -470,6 +500,36 @@ do:
 
     if (serialized) {
       return { name: workflow.name } as TWorkflows[TWorkflowId];
+    }
+
+    return workflow;
+  }
+
+  public getWorkflowById(id: string): Workflow {
+    let workflow = Object.values(this.#workflows).find(a => a.id === id);
+
+    if (!workflow) {
+      try {
+        workflow = this.getWorkflow(id as any);
+      } catch {
+        // do nothing
+      }
+    }
+
+    if (!workflow) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_WORKFLOW_BY_ID_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Workflow with id ${String(id)} not found`,
+        details: {
+          status: 404,
+          workflowId: String(id),
+          workflows: Object.keys(this.#workflows ?? {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
     }
 
     return workflow;
