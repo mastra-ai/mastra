@@ -95,7 +95,7 @@ export const UserMessageAttachments = () => {
 export const UserMessage = () => {
   const message = useMessage();
   const messageId = message?.id;
-  
+
   return (
     <MessagePrimitive.Root className="w-full flex items-end pb-4 flex-col" data-message-id={messageId}>
       {/* <UserActionBar /> */}

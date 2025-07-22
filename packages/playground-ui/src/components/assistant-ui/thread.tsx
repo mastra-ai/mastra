@@ -117,7 +117,7 @@ const Composer = ({ hasMemory, onInputChange }: ComposerProps) => {
               placeholder="Enter your message..."
               name=""
               id=""
-              onChange={(e) => onInputChange?.(e.target.value)}
+              onChange={e => onInputChange?.(e.target.value)}
             ></textarea>
           </ComposerPrimitive.Input>
           <div className="flex justify-end gap-2">

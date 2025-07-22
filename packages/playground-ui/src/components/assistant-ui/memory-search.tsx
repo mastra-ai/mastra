@@ -84,7 +84,7 @@ export const MemorySearch = ({
       if (value.trim()) {
         const now = Date.now();
         const timeSinceLastSearch = now - lastSearchTimeRef.current;
-        
+
         // If it's been more than 500ms since last search, search immediately
         if (timeSinceLastSearch >= 500) {
           setIsSearching(true);
@@ -171,7 +171,7 @@ export const MemorySearch = ({
       if (chatInputValue.trim()) {
         const now = Date.now();
         const timeSinceLastSearch = now - lastSearchTimeRef.current;
-        
+
         // If it's been more than 500ms since last search, search immediately
         if (timeSinceLastSearch >= 500) {
           setIsSearching(true);

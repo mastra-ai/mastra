@@ -81,7 +81,7 @@ export async function getMemoryConfigHandler({
 
     // Get the merged configuration (defaults + custom)
     const config = memory.getMergedThreadConfig({});
-    
+
     return { config };
   } catch (error) {
     return handleError(error, 'Error getting memory configuration');

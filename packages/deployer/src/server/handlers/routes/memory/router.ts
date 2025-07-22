@@ -334,35 +334,32 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
                   config: {
                     type: 'object',
                     properties: {
-                      lastMessages: { 
-                        oneOf: [
-                          { type: 'number' },
-                          { type: 'boolean' }
-                        ]
+                      lastMessages: {
+                        oneOf: [{ type: 'number' }, { type: 'boolean' }],
                       },
                       semanticRecall: {
                         oneOf: [
                           { type: 'boolean' },
-                          { 
+                          {
                             type: 'object',
                             properties: {
                               topK: { type: 'number' },
-                              messageRange: { 
+                              messageRange: {
                                 oneOf: [
                                   { type: 'number' },
-                                  { 
+                                  {
                                     type: 'object',
                                     properties: {
                                       before: { type: 'number' },
-                                      after: { type: 'number' }
-                                    }
-                                  }
-                                ]
+                                      after: { type: 'number' },
+                                    },
+                                  },
+                                ],
                               },
                               scope: { type: 'string', enum: ['thread', 'resource'] },
-                            }
-                          }
-                        ]
+                            },
+                          },
+                        ],
                       },
                       workingMemory: {
                         type: 'object',
@@ -375,11 +372,8 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
                       threads: {
                         type: 'object',
                         properties: {
-                          generateTitle: { 
-                            oneOf: [
-                              { type: 'boolean' },
-                              { type: 'object' }
-                            ]
+                          generateTitle: {
+                            oneOf: [{ type: 'boolean' }, { type: 'object' }],
                           },
                         },
                       },

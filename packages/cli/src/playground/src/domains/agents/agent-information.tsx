@@ -69,7 +69,11 @@ export function AgentInformation({ agentId, chatInputValue }: { agentId: string;
             {agent && <AgentSettings />}
           </TabContent>
           <TabContent value="memory">
-            {isLoading ? <Skeleton className="h-full" /> : <AgentMemory agentId={agentId} chatInputValue={selectedTab === 'memory' ? chatInputValue : undefined} />}
+            {isLoading ? (
+              <Skeleton className="h-full" />
+            ) : (
+              <AgentMemory agentId={agentId} chatInputValue={selectedTab === 'memory' ? chatInputValue : undefined} />
+            )}
           </TabContent>
           <TabContent value="logs">
             {isLoading ? <Skeleton className="h-full" /> : <AgentLogs agentId={agentId} />}

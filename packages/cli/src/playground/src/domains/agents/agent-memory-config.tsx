@@ -26,14 +26,18 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
 
     // Memory is enabled if we have a config
     const memoryEnabled = !!config;
-    
+
     const sections: MemoryConfigSection[] = [
       {
         title: 'General',
         items: [
           { label: 'Memory Enabled', value: memoryEnabled, badge: memoryEnabled ? 'success' : undefined },
           { label: 'Last Messages', value: config.lastMessages || 0 },
-          { label: 'Auto-generate Titles', value: !!config.threads?.generateTitle, badge: config.threads?.generateTitle ? 'info' : undefined },
+          {
+            label: 'Auto-generate Titles',
+            value: !!config.threads?.generateTitle,
+            badge: config.threads?.generateTitle ? 'info' : undefined,
+          },
         ],
       },
     ];
@@ -42,21 +46,24 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
     if (config.semanticRecall !== undefined) {
       const semanticRecall = typeof config.semanticRecall === 'object' ? config.semanticRecall : {};
       const enabled = config.semanticRecall !== false;
-      
+
       sections.push({
         title: 'Semantic Recall',
         items: [
           { label: 'Enabled', value: enabled, badge: enabled ? 'success' : undefined },
-          ...(enabled ? [
-            { label: 'Scope', value: semanticRecall.scope || 'thread' },
-            { label: 'Top K Results', value: semanticRecall.topK || 5 },
-            { 
-              label: 'Message Range', 
-              value: typeof semanticRecall.messageRange === 'object' 
-                ? `${semanticRecall.messageRange.before || 0} before, ${semanticRecall.messageRange.after || 0} after`
-                : `${semanticRecall.messageRange || 20} messages`
-            },
-          ] : []),
+          ...(enabled
+            ? [
+                { label: 'Scope', value: semanticRecall.scope || 'thread' },
+                { label: 'Top K Results', value: semanticRecall.topK || 5 },
+                {
+                  label: 'Message Range',
+                  value:
+                    typeof semanticRecall.messageRange === 'object'
+                      ? `${semanticRecall.messageRange.before || 0} before, ${semanticRecall.messageRange.after || 0} after`
+                      : `${semanticRecall.messageRange || 20} messages`,
+                },
+              ]
+            : []),
         ],
       });
     }
@@ -66,11 +73,17 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
       sections.push({
         title: 'Working Memory',
         items: [
-          { label: 'Enabled', value: config.workingMemory.enabled, badge: config.workingMemory.enabled ? 'success' : undefined },
-          ...(config.workingMemory.enabled ? [
-            { label: 'Scope', value: config.workingMemory.scope || 'thread' },
-            { label: 'Template', value: config.workingMemory.template || 'default' },
-          ] : []),
+          {
+            label: 'Enabled',
+            value: config.workingMemory.enabled,
+            badge: config.workingMemory.enabled ? 'success' : undefined,
+          },
+          ...(config.workingMemory.enabled
+            ? [
+                { label: 'Scope', value: config.workingMemory.scope || 'thread' },
+                { label: 'Template', value: config.workingMemory.template || 'default' },
+              ]
+            : []),
         ],
       });
     }
@@ -91,12 +104,16 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
   const renderValue = (value: string | number | boolean, badge?: 'success' | 'info' | 'warning') => {
     if (typeof value === 'boolean') {
       return (
-        <span className={cn(
-          "text-xs font-medium px-2 py-0.5 rounded",
-          value 
-            ? badge === 'info' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'
-            : 'bg-red-500/20 text-red-400'
-        )}>
+        <span
+          className={cn(
+            'text-xs font-medium px-2 py-0.5 rounded',
+            value
+              ? badge === 'info'
+                ? 'bg-blue-500/20 text-blue-400'
+                : 'bg-green-500/20 text-green-400'
+              : 'bg-red-500/20 text-red-400',
+          )}
+        >
           {value ? 'Yes' : 'No'}
         </span>
       );
@@ -108,11 +125,7 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
         info: 'bg-blue-500/20 text-blue-400',
         warning: 'bg-yellow-500/20 text-yellow-400',
       };
-      return (
-        <span className={cn("text-xs font-medium px-2 py-0.5 rounded", badgeColors[badge])}>
-          {value}
-        </span>
-      );
+      return <span className={cn('text-xs font-medium px-2 py-0.5 rounded', badgeColors[badge])}>{value}</span>;
     }
 
     return <span className="text-xs text-icon3">{value}</span>;
@@ -139,7 +152,7 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
     <div className="p-4">
       <h3 className="text-sm font-medium text-icon5 mb-3">Memory Configuration</h3>
       <div className="space-y-2">
-        {configSections.map((section) => (
+        {configSections.map(section => (
           <div key={section.title} className="border border-border1 rounded-lg bg-surface3">
             <button
               onClick={() => toggleSection(section.title)}

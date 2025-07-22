@@ -19,7 +19,6 @@ export function AgentMemorySearch({ agentId }: AgentMemorySearchProps) {
     threadId: threadId || '',
   });
 
-
   // Handle clicking on a search result to scroll to the message
   const handleResultClick = useCallback((messageId: string) => {
     // Find the message element by id and scroll to it
@@ -50,11 +49,7 @@ export function AgentMemorySearch({ agentId }: AgentMemorySearchProps) {
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 flex-1">
-        <MemorySearch 
-          searchMemory={searchMemory}
-          onResultClick={handleResultClick}
-          className="w-full h-full"
-        />
+        <MemorySearch searchMemory={searchMemory} onResultClick={handleResultClick} className="w-full h-full" />
       </div>
     </div>
   );

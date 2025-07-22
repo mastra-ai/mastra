@@ -5,7 +5,15 @@ import { ChatProps } from '@/types';
 import { useAgentSettings } from '../context/agent-context';
 import { usePlaygroundStore } from '@/store/playground-store';
 
-export const AgentChat = ({ agentId, agentName, threadId, initialMessages, memory, refreshThreadList, onInputChange }: ChatProps) => {
+export const AgentChat = ({
+  agentId,
+  agentName,
+  threadId,
+  initialMessages,
+  memory,
+  refreshThreadList,
+  onInputChange,
+}: ChatProps) => {
   const { settings } = useAgentSettings();
   const { runtimeContext } = usePlaygroundStore();
   return (

@@ -33,24 +33,21 @@ export const AgentWorkingMemory = () => {
       <div>
         <div className="flex items-center gap-2 mb-2">
           <h3 className="text-sm font-medium text-icon5">Working Memory</h3>
-          <span className={cn(
-            "text-xs font-medium px-2 py-0.5 rounded",
-            workingMemorySource === 'resource' 
-              ? 'bg-purple-500/20 text-purple-400' 
-              : 'bg-blue-500/20 text-blue-400'
-          )}
-          title={workingMemorySource === 'resource' 
-            ? 'Shared across all threads for this agent' 
-            : 'Specific to this conversation thread'}
+          <span
+            className={cn(
+              'text-xs font-medium px-2 py-0.5 rounded',
+              workingMemorySource === 'resource' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400',
+            )}
+            title={
+              workingMemorySource === 'resource'
+                ? 'Shared across all threads for this agent'
+                : 'Specific to this conversation thread'
+            }
           >
             {workingMemorySource}
           </span>
         </div>
-        {!threadExists && (
-          <p className="text-xs text-icon3">
-            Send a message to the agent to enable working memory.
-          </p>
-        )}
+        {!threadExists && <p className="text-xs text-icon3">Send a message to the agent to enable working memory.</p>}
       </div>
 
       {!isEditing ? (
@@ -71,10 +68,10 @@ export const AgentWorkingMemory = () => {
       )}
       <div className="flex gap-2">
         {!isEditing ? (
-          <Button 
-            variant="secondary" 
+          <Button
+            variant="secondary"
             size="sm"
-            onClick={() => setIsEditing(true)} 
+            onClick={() => setIsEditing(true)}
             disabled={!threadExists || isUpdating}
             className="text-xs"
           >
