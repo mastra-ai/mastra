@@ -18,6 +18,7 @@ import { createOperationsTests } from './domains/operations';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/evals/data';
+export * from './domains/scores/data';
 export * from './domains/traces/data';
 
 export function createTestSuite(storage: MastraStorage) {

@@ -26,6 +26,7 @@ import type {
   StreamEvent,
   WorkflowRunState,
 } from './types';
+import type { MastraScorers } from '../scores';
 
 export type DefaultEngineType = {};
 
@@ -1081,6 +1082,34 @@ export class Workflow<
     }
 
     return run;
+  }
+
+  async getScorers({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): Promise<MastraScorers> {
+    const steps = this.steps;
+
+    if (!steps || Object.keys(steps).length === 0) {
+      return {};
+    }
+
+    const scorers: MastraScorers = {};
+
+    for (const step of Object.values(steps)) {
+      if (step.scorers) {
+        let scorersToUse = step.scorers;
+
+        if (typeof scorersToUse === 'function') {
+          scorersToUse = await scorersToUse({ runtimeContext });
+        }
+
+        for (const [id, scorer] of Object.entries(scorersToUse)) {
+          scorers[id] = scorer;
+        }
+      }
+    }
+
+    return scorers;
   }
 
   async execute({
