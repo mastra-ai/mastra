@@ -51,26 +51,27 @@ export const scoreResultSchema = z.object({
   analyzePrompt: z.string().optional(),
 });
 
-export type ScoringResult = z.infer<typeof scoreResultSchema>;
+export type ScoringAnalyzeStepResult = z.infer<typeof scoreResultSchema>;
 
 export type ScoringInputWithExtractStepResult<TExtract = any> = ScoringInput & {
   extractStepResult?: TExtract;
   extractPrompt?: string;
 };
 
-export type ScoringInputWithExtractStepResultAndScore<
+export type ScoringInputWithExtractStepResultAndAnalyzeStepResult<
   TExtract = any,
   TScore = any,
 > = ScoringInputWithExtractStepResult<TExtract> & {
-  score?: number;
+  score: number;
   analyzeStepResult?: TScore;
   analyzePrompt?: string;
 };
 
-export type ScoringInputWithExtractStepResultAndScoreAndReason = ScoringInputWithExtractStepResultAndScore & {
-  reason: string;
-  reasonPrompt?: string;
-};
+export type ScoringInputWithExtractStepResultAndScoreAndReason =
+  ScoringInputWithExtractStepResultAndAnalyzeStepResult & {
+    reason: string;
+    reasonPrompt?: string;
+  };
 
 export type ScoreRowData = ScoringInputWithExtractStepResultAndScoreAndReason & {
   id: string;
@@ -80,17 +81,19 @@ export type ScoreRowData = ScoringInputWithExtractStepResultAndScoreAndReason & 
   updatedAt: Date;
 };
 
-export type ExtractionStepFn = (run: ScoringInput) => Promise<Record<string, any>>;
-export type ScoreStepFn = (run: ScoringInputWithExtractStepResult) => Promise<ScoringResult>;
+export type ExtractionStepFn = (input: ScoringInput) => Promise<Record<string, any>>;
+
+export type AnalyzeStepFn = (input: ScoringInputWithExtractStepResult) => Promise<ScoringAnalyzeStepResult>;
+
 export type ReasonStepFn = (
-  run: ScoringInputWithExtractStepResultAndScore,
+  input: ScoringInputWithExtractStepResultAndAnalyzeStepResult,
 ) => Promise<{ reason: string; reasonPrompt?: string } | null>;
 
 export type ScorerOptions = {
   name: string;
   description: string;
   extract?: ExtractionStepFn;
-  analyze: ScoreStepFn;
+  analyze: AnalyzeStepFn;
   reason?: ReasonStepFn;
   metadata?: Record<string, any>;
   isLLMScorer?: boolean;
