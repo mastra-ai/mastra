@@ -95,23 +95,156 @@ const postCreate = ({ projectName }: { projectName: string }) => {
   `);
 };
 
+function isGitHubUrl(url: string): boolean {
+  try {
+    const parsedUrl = new URL(url);
+    return parsedUrl.hostname === 'github.com' && parsedUrl.pathname.split('/').length >= 3;
+  } catch {
+    return false;
+  }
+}
+
+async function validateGitHubProject(githubUrl: string): Promise<{ isValid: boolean; errors: string[] }> {
+  const errors: string[] = [];
+
+  try {
+    // Extract owner and repo from GitHub URL
+    const urlParts = new URL(githubUrl).pathname.split('/').filter(Boolean);
+    const owner = urlParts[0];
+    const repo = urlParts[1]?.replace('.git', ''); // Remove .git if present
+
+    if (!owner || !repo) {
+      throw new Error('Invalid GitHub URL format');
+    }
+
+    // Try to fetch from main branch first, fallback to master
+    const branches = ['main', 'master'];
+    let packageJsonContent: string | null = null;
+    let indexContent: string | null = null;
+
+    for (const branch of branches) {
+      try {
+        // Fetch package.json
+        const packageJsonUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/package.json`;
+        const packageJsonResponse = await fetch(packageJsonUrl);
+
+        if (packageJsonResponse.ok) {
+          packageJsonContent = await packageJsonResponse.text();
+
+          // If package.json found, try to fetch index.ts from same branch
+          const indexUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/src/mastra/index.ts`;
+          const indexResponse = await fetch(indexUrl);
+
+          if (indexResponse.ok) {
+            indexContent = await indexResponse.text();
+          }
+
+          break; // Found files, no need to check other branches
+        }
+      } catch {
+        // Continue to next branch
+      }
+    }
+
+    if (!packageJsonContent) {
+      errors.push('Could not fetch package.json from repository');
+      return { isValid: false, errors };
+    }
+
+    // Check for @mastra/core dependency
+    try {
+      const packageJson = JSON.parse(packageJsonContent);
+      const hasMastraCore =
+        packageJson.dependencies?.['@mastra/core'] ||
+        packageJson.devDependencies?.['@mastra/core'] ||
+        packageJson.peerDependencies?.['@mastra/core'];
+
+      if (!hasMastraCore) {
+        errors.push('Missing @mastra/core dependency in package.json');
+      }
+    } catch {
+      errors.push('Invalid package.json format');
+    }
+
+    // Check for src/mastra/index.ts
+    if (!indexContent) {
+      errors.push('Missing src/mastra/index.ts file');
+    } else {
+      // Check if it exports a Mastra instance
+      const hasMastraExport =
+        indexContent.includes('export') && (indexContent.includes('new Mastra') || indexContent.includes('Mastra('));
+
+      if (!hasMastraExport) {
+        errors.push('src/mastra/index.ts does not export a Mastra instance');
+      }
+    }
+
+    return { isValid: errors.length === 0, errors };
+  } catch (error) {
+    errors.push(`Failed to validate GitHub repository: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return { isValid: false, errors };
+  }
+}
+
+async function createFromGitHubUrl(url: string): Promise<Template> {
+  // Extract owner and repo from GitHub URL
+  const urlParts = new URL(url).pathname.split('/').filter(Boolean);
+  const owner = urlParts[0] || 'unknown';
+  const repo = urlParts[1] || 'unknown';
+
+  // Create a temporary Template object for GitHub URLs
+  return {
+    githubUrl: url,
+    title: `${owner}/${repo}`,
+    slug: repo,
+    agents: [],
+    mcp: [],
+    tools: [],
+    networks: [],
+    workflows: [],
+  };
+}
+
 async function createFromTemplate(args: { projectName?: string; template?: string | boolean; timeout?: number }) {
-  const templates = await loadTemplates();
-  let selectedTemplate;
+  let selectedTemplate: Template | undefined;
 
   if (args.template === true) {
-    selectedTemplate = await selectTemplate(templates);
-    if (!selectedTemplate) {
+    // Interactive template selection
+    const templates = await loadTemplates();
+    const selected = await selectTemplate(templates);
+    if (!selected) {
       p.log.info('No template selected. Exiting.');
       return;
     }
-  } else if (args.template) {
-    // Template name provided, find it
-    selectedTemplate = findTemplateByName(templates, args.template);
-    if (!selectedTemplate) {
-      p.log.error(`Template "${args.template}" not found. Available templates:`);
-      templates.forEach((t: Template) => p.log.info(`  - ${t.title} (use: ${t.slug.replace('template-', '')})`));
-      throw new Error(`Template "${args.template}" not found`);
+    selectedTemplate = selected;
+  } else if (args.template && typeof args.template === 'string') {
+    // Check if it's a GitHub URL
+    if (isGitHubUrl(args.template)) {
+      // Validate GitHub project before cloning
+      const spinner = p.spinner();
+      spinner.start('Validating GitHub repository...');
+
+      const validation = await validateGitHubProject(args.template);
+
+      if (!validation.isValid) {
+        spinner.stop('Validation failed');
+        p.log.error('This does not appear to be a valid Mastra project:');
+        validation.errors.forEach(error => p.log.error(`  - ${error}`));
+        throw new Error('Invalid Mastra project');
+      }
+
+      spinner.stop('Valid Mastra project ✓');
+      selectedTemplate = await createFromGitHubUrl(args.template);
+    } else {
+      // Template name provided, find it from the list
+      const templates = await loadTemplates();
+      const found = findTemplateByName(templates, args.template);
+      if (!found) {
+        p.log.error(`Template "${args.template}" not found. Available templates:`);
+        templates.forEach((t: Template) => p.log.info(`  - ${t.title} (use: ${t.slug.replace('template-', '')})`));
+        throw new Error(`Template "${args.template}" not found`);
+      }
+      selectedTemplate = found;
     }
   }
 
