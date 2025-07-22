@@ -500,7 +500,6 @@ describe('agent', () => {
             color: z.string(),
           }),
           execute: async () => {
-            q;
             console.log('SUHHH');
           },
         },
