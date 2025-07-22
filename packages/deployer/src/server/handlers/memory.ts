@@ -16,6 +16,7 @@ import {
 import type { Context } from 'hono';
 
 import { handleError } from './error';
+import { parseLimit } from './utils/query-parsers';
 
 // Memory handlers
 export async function getMemoryStatusHandler(c: Context) {
@@ -182,15 +183,7 @@ export async function getMessagesHandler(c: Context) {
     const agentId = c.req.query('agentId');
     const networkId = c.req.query('networkId');
     const threadId = c.req.param('threadId');
-    const rawLimit = c.req.query('limit');
-    let limit: number | undefined = undefined;
-
-    if (rawLimit !== undefined) {
-      const n = Number(rawLimit);
-      if (Number.isFinite(n) && Number.isInteger(n) && n > 0) {
-        limit = n;
-      }
-    }
+    const limit = parseLimit(c.req.query('limit'));
 
     const result = await getOriginalGetMessagesHandler({
       mastra,
@@ -257,7 +250,7 @@ export async function searchMemoryHandler(c: Context) {
     const searchQuery = c.req.query('searchQuery');
     const resourceId = c.req.query('resourceId');
     const threadId = c.req.query('threadId');
-    const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined;
+    const limit = parseLimit(c.req.query('limit'));
     const memoryConfig = c.req.query('memoryConfig') ? JSON.parse(c.req.query('memoryConfig')!) : undefined;
     const networkId = c.req.query('networkId');
     const runtimeContext = c.get('runtimeContext');
