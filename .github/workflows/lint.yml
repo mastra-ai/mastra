@@ -49,10 +49,13 @@ jobs:
     strategy:
       matrix:
         include:
-          - context: 'core/unit'
-            description: 'Core Package Tests'
-          - context: 'mcp/unit'
-            description: 'MCP Package Tests'
+          - description: 'Core Package Tests'
+          - description: 'MCP Package Tests'
+          - description: 'E2E Tests'
+          - description: 'Combined store Tests (vector+storage)'
+          - description: 'Memory Tests'
+          - description: 'RAG Tests'
+          - description: 'Tool Builder Tests'
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
