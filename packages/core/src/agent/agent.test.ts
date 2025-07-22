@@ -483,6 +483,34 @@ describe('agent', () => {
     expect(result.toolCalls.length).toBeGreaterThan(0);
   });
 
+  it('generate - should pass and call client side tools with experimental output', async () => {
+    const userAgent = new Agent({
+      name: 'User agent',
+      instructions: 'You are an agent that can get list of users using client side tools.',
+      model: openai('gpt-4o'),
+    });
+
+    const result = await userAgent.generate('Make it green', {
+      clientTools: {
+        changeColor: {
+          id: 'changeColor',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            color: z.string(),
+          }),
+          execute: async () => {
+            console.log('SUHHH');
+          },
+        },
+      },
+      experimental_output: z.object({
+        color: z.string(),
+      }),
+    });
+
+    expect(result.toolCalls.length).toBeGreaterThan(0);
+  });
+
   it('stream - should pass and call client side tools', async () => {
     const userAgent = new Agent({
       name: 'User agent',
@@ -536,6 +564,38 @@ describe('agent', () => {
     });
 
     expect(await result.finishReason).toBe('tool-calls');
+  });
+
+  it('stream - should pass and call client side tools with experimental output', async () => {
+    const userAgent = new Agent({
+      name: 'User agent',
+      instructions: 'You are an agent that can get list of users using client side tools.',
+      model: openai('gpt-4o'),
+    });
+
+    const result = await userAgent.stream('Make it green', {
+      clientTools: {
+        changeColor: {
+          id: 'changeColor',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            color: z.string(),
+          }),
+          execute: async () => {
+            console.log('SUHHH');
+          },
+        },
+      },
+      onFinish: props => {
+        expect(props.toolCalls.length).toBeGreaterThan(0);
+      },
+      experimental_output: z.object({
+        color: z.string(),
+      }),
+    });
+
+    for await (const _ of result.fullStream) {
+    }
   });
 
   it('should generate with default max steps', { timeout: 10000 }, async () => {

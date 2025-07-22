@@ -50,5 +50,5 @@ runs:
             --field context="${{ inputs.context }}" \
             --field description="${{ inputs.description }}"
         fi
-        
+
         echo "✅ Status '${{ inputs.status }}' set for context '${{ inputs.context }}'"
