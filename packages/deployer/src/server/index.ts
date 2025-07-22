@@ -44,7 +44,7 @@ type Variables = {
   isDev: boolean;
 };
 
-export async function getToolExports(tools: Record<string, Function>[]) {
+export function getToolExports(tools: Record<string, Function>[]) {
   try {
     return tools.reduce((acc, toolModule) => {
       Object.entries(toolModule).forEach(([key, tool]) => {

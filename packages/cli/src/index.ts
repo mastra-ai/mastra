@@ -63,7 +63,7 @@ program
   .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)')
   .option(
     '--template [template-name]',
-    'Create project from a template (use template name or leave blank to select from list)',
+    'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
   )
   .action(async (projectNameArg, args) => {
     // Unify: use argument if present, else option

@@ -7,6 +7,7 @@ import { RefreshCcwIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { CodeDisplay } from '@/components/ui/code-display';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 export const AgentWorkingMemory = () => {
   const { threadExists, workingMemoryData, workingMemorySource, isLoading, isUpdating, updateWorkingMemory } =
@@ -29,37 +30,58 @@ export const AgentWorkingMemory = () => {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <Txt variant="header-md">Working Memory (Scope: {workingMemorySource})</Txt>
-      {!threadExists && (
-        <Txt variant="ui-sm" className="text-icon3 flex items-center gap-2 pt-0.5">
-          Send a message to the agent to enable working memory.
-        </Txt>
-      )}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <h3 className="text-sm font-medium text-icon5">Working Memory</h3>
+          <span
+            className={cn(
+              'text-xs font-medium px-2 py-0.5 rounded',
+              workingMemorySource === 'resource' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400',
+            )}
+            title={
+              workingMemorySource === 'resource'
+                ? 'Shared across all threads for this agent'
+                : 'Specific to this conversation thread'
+            }
+          >
+            {workingMemorySource}
+          </span>
+        </div>
+        {!threadExists && <p className="text-xs text-icon3">Send a message to the agent to enable working memory.</p>}
+      </div>
 
       {!isEditing ? (
         <CodeDisplay
           content={workingMemoryData || ''}
           isCopied={isCopied}
           onCopy={handleCopy}
-          className="bg-surface2 text-[15px] font-mono min-h-[200px]"
+          className="bg-surface3 text-sm font-mono min-h-[150px] border border-border1 rounded-lg"
         />
       ) : (
         <textarea
-          className="w-full min-h-[200px] p-3 border border-border2 rounded bg-surface1 font-mono text-[15px] text-mastra-el-4"
+          className="w-full min-h-[150px] p-3 border border-border1 rounded-lg bg-surface3 font-mono text-sm text-icon5 resize-none focus:outline-none focus:ring-2 focus:ring-surface4"
           value={editValue}
           onChange={e => setEditValue(e.target.value)}
           disabled={isUpdating}
+          placeholder="Enter working memory content..."
         />
       )}
       <div className="flex gap-2">
         {!isEditing ? (
-          <Button variant="secondary" onClick={() => setIsEditing(true)} disabled={!threadExists || isUpdating}>
-            Edit
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsEditing(true)}
+            disabled={!threadExists || isUpdating}
+            className="text-xs"
+          >
+            Edit Working Memory
           </Button>
         ) : (
           <>
             <Button
               variant="default"
+              size="sm"
               onClick={async () => {
                 try {
                   await updateWorkingMemory(editValue);
@@ -69,16 +91,20 @@ export const AgentWorkingMemory = () => {
                   toast.error('Failed to update working memory');
                 }
               }}
+              disabled={isUpdating}
+              className="text-xs"
             >
-              {isUpdating ? <RefreshCcwIcon className="w-4 h-4 animate-spin" /> : 'Save'}
+              {isUpdating ? <RefreshCcwIcon className="w-3 h-3 animate-spin" /> : 'Save Changes'}
             </Button>
             <Button
               variant="secondary"
+              size="sm"
               onClick={() => {
                 setEditValue(workingMemoryData ?? '');
                 setIsEditing(false);
               }}
               disabled={isUpdating}
+              className="text-xs"
             >
               Cancel
             </Button>

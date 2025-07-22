@@ -230,7 +230,7 @@ describe('Tool Schema Compatibility', () => {
     // Unions of objects are not supported
     // Google Models
     openrouter('google/gemini-2.5-pro-preview-03-25'),
-    openrouter('google/gemini-2.5-flash-preview'),
+    openrouter('google/gemini-2.5-flash'),
     openrouter('google/gemini-2.0-flash-lite-001'),
 
     // OpenAI Models
