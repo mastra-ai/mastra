@@ -213,7 +213,7 @@ export class MastraLLM extends MastraLLMBase {
     try {
       const result: GenerateTextResult<Tools, Z> = await generateText(argsForExecute);
 
-      if (schema) {
+      if (schema && result.finishReason === 'stop') {
         result.object = (result as any).experimental_output;
       }
 
