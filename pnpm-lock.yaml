@@ -2466,6 +2466,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@internal/storage-test-utils':
+        specifier: workspace:*
+        version: link:../../stores/_test-utils
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
