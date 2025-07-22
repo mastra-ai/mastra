@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
-export type SamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
+export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
 export type ScoringSource = 'LIVE' | 'TEST';
+
 export type ScoringEntityType = 'AGENT' | 'WORKFLOW';
 
 export type ScoringPrompts = {
@@ -10,30 +11,30 @@ export type ScoringPrompts = {
   prompt: string;
 };
 
-export type ScoringRun = {
+export type ScoringInput = {
   runId: string;
-  traceId?: string;
   scorer: Record<string, any>;
   input: Record<string, any>[];
   output: Record<string, any>;
   metadata?: Record<string, any>;
   additionalContext?: Record<string, any>;
-  resourceId?: string;
-  threadId?: string;
   source: ScoringSource;
   entity: Record<string, any>;
   entityType: ScoringEntityType;
   runtimeContext: Record<string, any>;
   structuredOutput?: boolean;
+  traceId?: string;
+  resourceId?: string;
+  threadId?: string;
 };
 
-export const extractStepResultSchema = z.record(z.string(), z.any());
+export const scoringExtractStepResultSchema = z.record(z.string(), z.any());
 
-export type ExtractStepResult = z.infer<typeof extractStepResultSchema>;
+export type ScoringExtractStepResult = z.infer<typeof scoringExtractStepResultSchema>;
 
-export const scoreSchema = z.number();
+export const scoringValueSchema = z.number();
 
-const resultSchema = z.array(
+export const scoringResultSchema = z.array(
   z.object({
     result: z.string(),
     reason: z.string(),
@@ -43,39 +44,57 @@ const resultSchema = z.array(
 export const scoreResultSchema = z.object({
   analyzeStepResult: z
     .object({
-      results: resultSchema.optional(),
+      results: scoringResultSchema.optional(),
     })
     .optional(),
-  score: scoreSchema,
+  score: scoringValueSchema,
   analyzePrompt: z.string().optional(),
 });
 
-export type ScoreResult = z.infer<typeof scoreResultSchema>;
+export type ScoringAnalyzeStepResult = z.infer<typeof scoreResultSchema>;
 
-export type ScoringRunWithExtractStepResult<TExtract = any> = ScoringRun & {
+export type ScoringInputWithExtractStepResult<TExtract = any> = ScoringInput & {
   extractStepResult?: TExtract;
   extractPrompt?: string;
 };
 
-export type ScoringRunWithExtractStepResultAndScore<
+export type ScoringInputWithExtractStepResultAndAnalyzeStepResult<
   TExtract = any,
   TScore = any,
-> = ScoringRunWithExtractStepResult<TExtract> & {
-  score?: number;
-  results?: z.infer<typeof resultSchema>;
+> = ScoringInputWithExtractStepResult<TExtract> & {
+  score: number;
   analyzeStepResult?: TScore;
   analyzePrompt?: string;
 };
 
-export type ScoringRunWithExtractStepResultAndScoreAndReason = ScoringRunWithExtractStepResultAndScore & {
-  reason: string;
-  reasonPrompt?: string;
-};
+export type ScoringInputWithExtractStepResultAndScoreAndReason =
+  ScoringInputWithExtractStepResultAndAnalyzeStepResult & {
+    reason: string;
+    reasonPrompt?: string;
+  };
 
-export type ScoreRowData = ScoringRunWithExtractStepResultAndScoreAndReason & {
+export type ScoreRowData = ScoringInputWithExtractStepResultAndScoreAndReason & {
   id: string;
   entityId: string;
   scorerId: string;
   createdAt: Date;
   updatedAt: Date;
+};
+
+export type ExtractionStepFn = (input: ScoringInput) => Promise<Record<string, any>>;
+
+export type AnalyzeStepFn = (input: ScoringInputWithExtractStepResult) => Promise<ScoringAnalyzeStepResult>;
+
+export type ReasonStepFn = (
+  input: ScoringInputWithExtractStepResultAndAnalyzeStepResult,
+) => Promise<{ reason: string; reasonPrompt?: string } | null>;
+
+export type ScorerOptions = {
+  name: string;
+  description: string;
+  extract?: ExtractionStepFn;
+  analyze: AnalyzeStepFn;
+  reason?: ReasonStepFn;
+  metadata?: Record<string, any>;
+  isLLMScorer?: boolean;
 };
