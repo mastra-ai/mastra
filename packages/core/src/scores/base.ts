@@ -5,7 +5,7 @@ import type {
   ExtractionStepFn,
   ReasonStepFn,
   ScorerOptions,
-  ScoreStepFn,
+  AnalyzeStepFn,
   ScoringInput,
   ScoringInputWithExtractStepResultAndScoreAndReason,
 } from './types';
@@ -14,7 +14,7 @@ export class MastraScorer {
   name: string;
   description: string;
   extract?: ExtractionStepFn;
-  analyze: ScoreStepFn;
+  analyze: AnalyzeStepFn;
   reason?: ReasonStepFn;
   metadata?: Record<string, any>;
   isLLMScorer?: boolean;

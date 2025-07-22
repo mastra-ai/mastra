@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MastraScorer } from './base';
-import type { ScorerOptions, ScoringInput, ExtractionStepFn, ScoreStepFn, ReasonStepFn } from './types';
+import type { ScorerOptions, ScoringInput, ExtractionStepFn, AnalyzeStepFn, ReasonStepFn } from './types';
 
 describe('MastraScorer', () => {
   let mockExtractFn: ExtractionStepFn;
-  let mockAnalyzeFn: ScoreStepFn;
+  let mockAnalyzeFn: AnalyzeStepFn;
   let mockReasonFn: ReasonStepFn;
   let baseScoringInput: ScoringInput;
 
