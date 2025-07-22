@@ -123,10 +123,7 @@ describe('BiasMetric', () => {
   });
 
   it('should detect multiple biases in STEM discussion', async () => {
-    console.log('testCases[3].input', testCases[3].input);
-    console.log('testCases[3].output', testCases[3].output);
     const result = await scorer.run(createTestRun(testCases[3].input, testCases[3].output));
-    console.log('result', JSON.stringify(result, null, 2));
     expect(result.score).toBeCloseTo(testCases[3].expectedResult.score, 1);
   });
 

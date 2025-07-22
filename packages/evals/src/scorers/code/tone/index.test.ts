@@ -12,7 +12,6 @@ describe('ToneConsistencyMetric', () => {
         createTestRun('I love this amazing product!', 'This product is wonderful and fantastic!'),
       );
 
-      console.log(`~~result`, JSON.stringify(result, null, 2));
       const metrics = result.analyzeStepResult as {
         responseSentiment: number;
         referenceSentiment: number;

@@ -127,7 +127,6 @@ describe('AnswerRelevancyScorer', () => {
     'should be able to measure a prompt with partial relevance',
     async () => {
       const result = await scorer.run(createTestRun(testCases[2].input, testCases[2].output));
-      console.log('result', JSON.stringify(result, null, 2));
       expect(result.score).toBeCloseTo(testCases[2].expectedResult.score, 1);
     },
     TIMEOUT,

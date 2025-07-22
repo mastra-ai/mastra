@@ -313,7 +313,6 @@ describe('HallucinationMetric', () => {
     const testCase = testCases[16]!;
     const scorer = createHallucinationScorer({ model });
     const result = await scorer.run(createTestRun(testCase.input, testCase.output, testCase.context));
-    console.log('Result:', JSON.stringify(result, null, 2));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
 });

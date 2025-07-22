@@ -71,8 +71,6 @@ export class MastraScorer {
         const analyzeStepRes = getStepResult(analyzeStep);
         const extractStepResult = getStepResult(extractStep);
 
-        console.log(`Reasoning step input analyze:`, JSON.stringify(analyzeStepRes, null, 2));
-
         if (!this.reason) {
           return {
             extractStepResult: extractStepResult?.result,
