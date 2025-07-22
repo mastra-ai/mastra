@@ -1794,7 +1794,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
       const newResult = result as any;
 
-      newResult.object = result.experimental_output;
+      if (result.finishReason === 'stop') {
+        newResult.object = result.experimental_output;
+      }
 
       return newResult as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
     }
