@@ -662,12 +662,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           abort: () => {
             abortController?.abort();
           },
-          resume: {
-            steps: resume?.steps?.slice(1) || [],
-            resumePayload: resume?.resumePayload,
-            // @ts-ignore
-            runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
-          },
+          // Only pass resume data if this step was actually suspended before
+          // This prevents pending nested workflows from trying to resume instead of start
+          resume:
+            stepResults[step.id]?.status === 'suspended'
+              ? {
+                  steps: resume?.steps?.slice(1) || [],
+                  resumePayload: resume?.resumePayload,
+                  // @ts-ignore
+                  runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
+                }
+              : undefined,
           [EMITTER_SYMBOL]: emitter,
           engine: {},
           abortSignal: abortController?.signal,
