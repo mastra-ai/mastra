@@ -9,6 +9,7 @@ import { Agent } from '../agent';
 import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
+import type { MastraScorers } from '../scores';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
 import { EMITTER_SYMBOL } from './constants';
@@ -26,7 +27,6 @@ import type {
   StreamEvent,
   WorkflowRunState,
 } from './types';
-import type { MastraScorers } from '../scores';
 
 export type DefaultEngineType = {};
 
