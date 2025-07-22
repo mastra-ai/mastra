@@ -4359,7 +4359,6 @@ describe('MastraInngestWorkflow', () => {
       });
       expect(firstResumeResult.status).toBe('suspended');
 
-      // This should work with our fix - no "This workflow run was not suspended" error
       const secondResumeResult = await run.resume({
         step: ['sub-workflow-2', 'step-2'],
         resumeData: { suspect: 'second-suspect' },
