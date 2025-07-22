@@ -427,6 +427,11 @@ export class NewAgentNetwork extends MastraBase {
 
         const routingAgent = await this.getRoutingAgent({ runtimeContext: runtimeContextToUse });
 
+        const completionSchema = z.object({
+          isComplete: z.boolean(),
+          finalResult: z.string(),
+          completionReason: z.string(),
+        });
         let completionResult;
         if (inputData.resourceType !== 'none' && inputData?.result) {
           // Check if the task is complete
@@ -445,11 +450,7 @@ export class NewAgentNetwork extends MastraBase {
                     `;
 
           completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
-            output: z.object({
-              isComplete: z.boolean(),
-              finalResult: z.string(),
-              completionReason: z.string(),
-            }),
+            output: completionSchema,
             threadId: initData?.threadId ?? runId,
             resourceId: initData?.threadResourceId ?? this.name,
             runtimeContext: runtimeContextToUse,
@@ -719,7 +720,6 @@ export class NewAgentNetwork extends MastraBase {
               break;
 
             case 'start':
-            case 'finish':
             case 'step-start':
             case 'step-finish':
             case 'tool-call':
