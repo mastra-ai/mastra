@@ -54,6 +54,7 @@ import type {
   ToolsInput,
   AgentMemoryOption,
 } from './types';
+export type { ChunkType, MastraAgentStream } from '../stream/MastraAgentStream';
 
 export { MessageList };
 export * from './types';

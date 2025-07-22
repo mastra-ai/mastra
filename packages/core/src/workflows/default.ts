@@ -931,12 +931,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               [EMITTER_SYMBOL]: emitter,
               engine: {},
               abortSignal: abortController?.signal,
-              writer: new ToolStream({
-                prefix: 'step',
-                callId: randomUUID(),
-                name: 'conditional',
-                runId,
-              }),
+              writer: new ToolStream(
+                {
+                  prefix: 'step',
+                  callId: randomUUID(),
+                  name: 'conditional',
+                  runId,
+                },
+                writableStream,
+              ),
             });
             return result ? index : null;
           } catch (e: unknown) {
@@ -1096,12 +1099,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         [EMITTER_SYMBOL]: emitter,
         engine: {},
         abortSignal: abortController?.signal,
-        writer: new ToolStream({
-          prefix: 'step',
-          callId: randomUUID(),
-          name: 'loop',
-          runId,
-        }),
+        writer: new ToolStream(
+          {
+            prefix: 'step',
+            callId: randomUUID(),
+            name: 'loop',
+            runId,
+          },
+          writableStream,
+        ),
       });
     } while (entry.loopType === 'dowhile' ? isTrue : !isTrue);
 
