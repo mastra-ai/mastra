@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
-import { createContentSimilarityScorer } from './index';
 import { createTestRun } from '../../utils';
+import { createContentSimilarityScorer } from './index';
 
 describe('ContentSimilarityMetric', () => {
   const scorer = createContentSimilarityScorer();

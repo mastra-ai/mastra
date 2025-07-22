@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
-import { createKeywordCoverageScorer } from './index';
 import { createTestRun } from '../../utils';
+import { createKeywordCoverageScorer } from './index';
 
 describe('KeywordCoverageMetric', () => {
   const scorer = createKeywordCoverageScorer();

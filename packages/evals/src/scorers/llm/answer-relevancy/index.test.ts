@@ -2,8 +2,8 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 import type { TestCase } from '../../../metrics/llm/utils';
 import { isCloserTo } from '../../../metrics/llm/utils';
-import { createAnswerRelevancyScorer } from '.';
 import { createTestRun } from '../../utils';
+import { createAnswerRelevancyScorer } from '.';
 
 const testCases: TestCase[] = [
   {

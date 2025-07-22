@@ -1,5 +1,5 @@
-import { createLLMScorer } from '@mastra/core/scores';
 import type { LanguageModel } from '@mastra/core/llm';
+import { createLLMScorer } from '@mastra/core/scores';
 
 import { z } from 'zod';
 import { roundToTwoDecimals } from '../../utils';

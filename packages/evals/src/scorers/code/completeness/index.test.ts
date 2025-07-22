@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { createCompletenessScorer } from './index';
 import { createTestRun } from '../../utils';
+import { createCompletenessScorer } from './index';
 
 describe('CompletenessMetric', () => {
   let scorer;

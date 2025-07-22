@@ -1,7 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect, vi } from 'vitest';
-import { createBiasScorer } from './index';
 import { createTestRun } from '../../utils';
+import { createBiasScorer } from './index';
 
 const testCases = [
   {

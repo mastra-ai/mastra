@@ -1,9 +1,9 @@
-import { createLLMScorer } from '@mastra/core/scores';
 import type { LanguageModel } from '@mastra/core/llm';
+import { createLLMScorer } from '@mastra/core/scores';
 
 import { z } from 'zod';
-import { createToxicityAnalyzePrompt, createToxicityReasonPrompt, TOXICITY_AGENT_INSTRUCTIONS } from './prompts';
 import { roundToTwoDecimals } from '../../utils';
+import { createToxicityAnalyzePrompt, createToxicityReasonPrompt, TOXICITY_AGENT_INSTRUCTIONS } from './prompts';
 
 export interface ToxicityMetricOptions {
   scale?: number;

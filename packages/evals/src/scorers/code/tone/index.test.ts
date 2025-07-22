@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
-import { createToneScorer } from './index';
 import { createTestRun } from '../../utils';
+import { createToneScorer } from './index';
 
 describe('ToneConsistencyMetric', () => {
   const scorer = createToneScorer();

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
-import { createTextualDifferenceScorer } from './index';
 import { createTestRun } from '../../utils';
+import { createTextualDifferenceScorer } from './index';
 
 describe('TextualDifferenceMetric', () => {
   const scorer = createTextualDifferenceScorer();

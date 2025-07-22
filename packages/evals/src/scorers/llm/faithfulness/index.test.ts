@@ -1,8 +1,8 @@
 import { openai } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 
-import { createFaithfulnessScorer } from './index';
 import { createTestRun } from '../../utils';
+import { createFaithfulnessScorer } from './index';
 
 const testCases = [
   {
