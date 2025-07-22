@@ -149,10 +149,6 @@ export class MastraAgentStream<Output> extends ReadableStream<ChunkType> {
           payload: {},
         });
 
-        const stream = await createStream(writer, result => {
-          this.#resultAsObject = result;
-        });
-
         const updateUsageCount = (usage: {
           promptTokens?: `${number}` | number;
           completionTokens?: `${number}` | number;
@@ -163,35 +159,44 @@ export class MastraAgentStream<Output> extends ReadableStream<ChunkType> {
           this.#usageCount.totalTokens += parseInt(usage.totalTokens?.toString() ?? '0', 10);
         };
 
-        for await (const chunk of stream) {
-          convertFullStreamChunkToMastra(chunk, { runId }, chunk => {
-            switch (chunk.type) {
-              case 'text-delta':
-                this.#bufferedText.push(chunk.payload.text);
-                break;
-              case 'tool-call':
-                this.#toolCalls.push(chunk.payload);
-                break;
-              case 'tool-result':
-                this.#toolResults.push(chunk.payload);
-                break;
-              case 'step-finish':
-                if (chunk.payload.reason) {
-                  this.#finishReason = chunk.payload.reason;
-                }
-                break;
-              case 'finish':
-                updateUsageCount(chunk.payload.usage);
-                chunk.payload.totalUsage = this.#usageCount;
-                break;
-            }
-
-            controller.enqueue(chunk);
+        try {
+          const stream = await createStream(writer, result => {
+            this.#resultAsObject = result;
           });
-        }
 
-        controller.close();
-        deferredPromise.resolve();
+          for await (const chunk of stream) {
+            convertFullStreamChunkToMastra(chunk, { runId }, chunk => {
+              switch (chunk.type) {
+                case 'text-delta':
+                  this.#bufferedText.push(chunk.payload.text);
+                  break;
+                case 'tool-call':
+                  this.#toolCalls.push(chunk.payload);
+                  break;
+                case 'tool-result':
+                  this.#toolResults.push(chunk.payload);
+                  break;
+                case 'step-finish':
+                  if (chunk.payload.reason) {
+                    this.#finishReason = chunk.payload.reason;
+                  }
+                  break;
+                case 'finish':
+                  updateUsageCount(chunk.payload.usage);
+                  chunk.payload.totalUsage = this.#usageCount;
+                  break;
+              }
+
+              controller.enqueue(chunk);
+            });
+          }
+
+          controller.close();
+          deferredPromise.resolve();
+        } catch (error) {
+          controller.error(error);
+          deferredPromise.reject(error);
+        }
       },
     });
 
