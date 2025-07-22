@@ -6,7 +6,7 @@ settings:
 
 overrides:
   '@mastra/core': link:../../packages/core
-  mastra: link:../../packages/mastra
+  mastra: link:../../packages/cli
 
 importers:
 
@@ -23,8 +23,8 @@ importers:
         specifier: ^20.17.57
         version: 20.19.0
       mastra:
-        specifier: link:../../packages/mastra
-        version: link:../../packages/mastra
+        specifier: link:../../packages/cli
+        version: link:../../packages/cli
       tsx:
         specifier: ^4.19.3
         version: 4.19.3
@@ -1132,7 +1132,6 @@ packages:
 
   libsql@0.5.15:
     resolution: {integrity: sha512-N1ZhjpTadoxDW8UNssgJyZz+cAX/gi9OxOFHapH8AY6p7Qk/6umTC5UwQ+6bPnACDcxqbzhRlbLO+Mk60owFRA==}
-    cpu: [x64, arm64, wasm32, arm]
     os: [darwin, linux, win32]
 
   lodash.camelcase@4.3.0:

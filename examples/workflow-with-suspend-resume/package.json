@@ -26,7 +26,7 @@
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
-      "mastra": "link:../../packages/mastra"
+      "mastra": "link:../../packages/cli"
     }
   },
   "version": "0.0.1-alpha.2",
