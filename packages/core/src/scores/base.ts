@@ -45,6 +45,9 @@ export class Scorer {
         }
 
         const extractStepResult = await this.extract(inputData);
+
+        console.log('Extract step result', extractStepResult);
+
         return extractStepResult;
       },
     });
@@ -58,16 +61,7 @@ export class Scorer {
         const extractStepResult = this.isLLMScorer ? inputData.extractStepResult : inputData;
         const analyzeStepResult = await this.analyze({ ...input, extractStepResult });
 
-        if (this.isLLMScorer) {
-          return analyzeStepResult;
-        }
-
-        const { score, ...rest } = analyzeStepResult;
-
-        // TODO: fix types for non-LLM scorers.
-        // non-LLM scorers do not have analyzeStepResult they should just return score
-        // and additional information
-        return { score, analyzeStepResult: rest as any };
+        return analyzeStepResult;
       },
     });
 
@@ -77,29 +71,33 @@ export class Scorer {
       inputSchema: scoreResultSchema,
       outputSchema: z.any(),
       execute: async ({ getStepResult }) => {
-        const { score, analyzeStepResult, analyzePrompt } = getStepResult(analyzeStep);
-        const { extractStepResult, extractPrompt } = getStepResult(extractStep);
+        const analyzeStepRes = getStepResult(analyzeStep);
+        const extractStepResult = getStepResult(extractStep);
+
+        console.log('Reason step result', analyzeStepRes, extractStepResult);
+
         if (!this.reason) {
           return {
             extractStepResult,
-            analyzeStepResult,
-            analyzePrompt,
-            extractPrompt,
-            score,
+            analyzeStepResult: analyzeStepRes.analyzeStepResult,
+            analyzePrompt: analyzeStepRes.analyzePrompt,
+            extractPrompt: extractStepResult.extractPrompt,
+            score: analyzeStepRes.score,
           };
         }
 
         const reasonResult = await this.reason({
           ...input,
-          analyzeStepResult,
-          score,
+          analyzeStepResult: analyzeStepRes.analyzeStepResult,
+          score: analyzeStepRes.score,
         });
+
         return {
           extractStepResult,
-          analyzeStepResult,
-          analyzePrompt,
-          extractPrompt,
-          score,
+          analyzeStepResult: analyzeStepRes.analyzeStepResult,
+          analyzePrompt: analyzeStepRes.analyzePrompt,
+          extractPrompt: extractStepResult.extractPrompt,
+          score: analyzeStepRes.score,
           ...reasonResult,
         };
       },
