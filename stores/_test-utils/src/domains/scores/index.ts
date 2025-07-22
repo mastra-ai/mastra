@@ -1,51 +1,7 @@
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { ScoreRowData } from '@mastra/core/eval';
 import { TABLE_SCORERS, type MastraStorage } from '@mastra/core/storage';
-
-export function createMockScore({ scorerId }: { scorerId: string }): ScoreRowData {
-  return {
-    id: randomUUID(),
-    entityId: 'eval-agent',
-    entityType: 'AGENT',
-    scorerId,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    runId: randomUUID(),
-    reason: 'Sample reason',
-    extractStepResult: {
-      text: 'Sample extract step result',
-    },
-    analyzeStepResult: {
-      text: 'Sample analyze step result',
-    },
-    score: 0.8,
-    extractPrompt: 'Sample extract prompt',
-    analyzePrompt: 'Sample analyze prompt',
-    reasonPrompt: 'Sample reason prompt',
-    scorer: {
-      id: scorerId,
-      name: 'my-eval',
-      description: 'My eval',
-    },
-    input: [
-      {
-        id: randomUUID(),
-        name: 'input-1',
-        value: 'Sample input',
-      },
-    ],
-    output: {
-      text: 'Sample output',
-    },
-    source: 'LIVE',
-    entity: {
-      id: 'eval-agent',
-      name: 'Sample entity',
-    },
-    runtimeContext: {},
-  };
-}
+import { createSampleScore } from './data';
 
 export function createScoresTest({ storage }: { storage: MastraStorage }) {
   describe('Score Operations', () => {
@@ -57,9 +13,9 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       const scorerId = `scorer-${randomUUID()}`;
 
       // Create sample scores
-      const score1 = createMockScore({ scorerId });
-      const score2 = createMockScore({ scorerId });
-      const score3 = createMockScore({ scorerId });
+      const score1 = createSampleScore({ scorerId });
+      const score2 = createSampleScore({ scorerId });
+      const score3 = createSampleScore({ scorerId });
 
       // Insert evals
 
@@ -84,7 +40,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
 
     it('should save scorer', async () => {
       const scorerId = `scorer-${randomUUID()}`;
-      const scorer = createMockScore({ scorerId });
+      const scorer = createSampleScore({ scorerId });
       await storage.saveScore(scorer);
       const result = await storage.getScoresByRunId({ runId: scorer.runId, pagination: { page: 0, perPage: 10 } });
       expect(result.scores).toHaveLength(1);
@@ -95,7 +51,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
     });
 
     it('getScoresByEntityId should return paginated scores with total count when returnPaginationResults is true', async () => {
-      const scorer = createMockScore({ scorerId: `scorer-${randomUUID()}` });
+      const scorer = createSampleScore({ scorerId: `scorer-${randomUUID()}` });
       await storage.saveScore(scorer);
 
       const result = await storage.getScoresByEntityId({

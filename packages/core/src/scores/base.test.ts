@@ -12,10 +12,10 @@ describe('MastraScorer', () => {
     vi.resetAllMocks();
 
     // Mock functions
-    mockExtractFn = vi.fn().mockResolvedValue({ extractedData: 'test' });
+    mockExtractFn = vi.fn().mockResolvedValue({ result: { extractedData: 'test' } });
     mockAnalyzeFn = vi.fn().mockResolvedValue({
       score: 0.8,
-      analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
+      result: { results: [{ result: 'good', reason: 'quality analysis' }] },
     });
     mockReasonFn = vi.fn().mockResolvedValue({
       reason: 'test reasoning',
@@ -107,11 +107,11 @@ describe('MastraScorer', () => {
 
       expect(mockAnalyzeFn).toHaveBeenCalledWith({
         ...baseScoringInput,
-        extractStepResult: {},
+        extractStepResult: undefined,
       });
       expect(result).toMatchObject({
         ...baseScoringInput,
-        extractStepResult: {},
+        extractStepResult: undefined,
         score: 0.8,
         analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
       });
@@ -174,8 +174,8 @@ describe('MastraScorer', () => {
     it('should handle LLM scorer properly', async () => {
       const llmAnalyzeFn = vi.fn().mockResolvedValue({
         score: 0.9,
-        analyzeStepResult: { analysis: 'detailed analysis' },
-        analyzePrompt: 'Analyze this content',
+        result: { analysis: 'detailed analysis' },
+        prompt: 'Analyze this content',
       });
 
       const scorer = new MastraScorer({
@@ -194,7 +194,7 @@ describe('MastraScorer', () => {
 
       expect(result).toMatchObject({
         ...baseScoringInput,
-        extractStepResult: {},
+        extractStepResult: undefined,
         score: 0.9,
         analyzeStepResult: { analysis: 'detailed analysis' },
         analyzePrompt: 'Analyze this content',
@@ -203,7 +203,7 @@ describe('MastraScorer', () => {
 
     it('should handle non-LLM scorer properly', async () => {
       const nonLlmAnalyzeFn = vi.fn().mockResolvedValue({
-        analyzeStepResult: { additionalInfo: 'some info' },
+        result: { additionalInfo: 'some info' },
         score: 0.7,
         additionalInfo: 'some info',
       });
@@ -219,12 +219,12 @@ describe('MastraScorer', () => {
 
       expect(nonLlmAnalyzeFn).toHaveBeenCalledWith({
         ...baseScoringInput,
-        extractStepResult: {},
+        extractStepResult: undefined,
       });
 
       expect(result).toMatchObject({
         ...baseScoringInput,
-        extractStepResult: {},
+        extractStepResult: undefined,
         score: 0.7,
         analyzeStepResult: { additionalInfo: 'some info' },
       });
@@ -249,7 +249,7 @@ describe('MastraScorer', () => {
       });
       expect(result).toMatchObject({
         ...baseScoringInput,
-        extractStepResult: {},
+        extractStepResult: undefined,
         score: 0.8,
         analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
       });

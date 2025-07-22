@@ -1,6 +1,10 @@
 import type { z } from 'zod';
 import type { Mastra } from '../mastra';
 import type { RuntimeContext } from '../runtime-context';
+import type { MastraScorers } from '../scores';
+import type { ChunkType } from '../stream/MastraWorkflowStream';
+import type { ToolStream } from '../tools/stream';
+import type { DynamicArgument } from '../types';
 import type { EMITTER_SYMBOL } from './constants';
 import type { Emitter } from './types';
 import type { Workflow } from './workflow';
@@ -31,6 +35,7 @@ export type ExecuteFunctionParams<TStepInput, TResumeSchema, TSuspendSchema, Eng
   [EMITTER_SYMBOL]: Emitter;
   engine: EngineType;
   abortSignal: AbortSignal;
+  writer: ToolStream<ChunkType>;
 };
 
 export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
@@ -59,5 +64,6 @@ export interface Step<
     z.infer<TSuspendSchema>,
     TEngineType
   >;
+  scorers?: DynamicArgument<MastraScorers>;
   retries?: number;
 }

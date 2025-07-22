@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import EventEmitter from 'events';
-import type { ReadableStream } from 'node:stream/web';
+import type { ReadableStream, WritableStream } from 'node:stream/web';
 import { TransformStream } from 'node:stream/web';
 import { z } from 'zod';
 import type { Mastra, WorkflowRun } from '..';
@@ -9,6 +9,9 @@ import { Agent } from '../agent';
 import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
+import type { MastraScorers } from '../scores';
+import type { ChunkType } from '../stream/MastraAgentStream';
+import { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
 import { EMITTER_SYMBOL } from './constants';
@@ -1083,6 +1086,34 @@ export class Workflow<
     return run;
   }
 
+  async getScorers({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): Promise<MastraScorers> {
+    const steps = this.steps;
+
+    if (!steps || Object.keys(steps).length === 0) {
+      return {};
+    }
+
+    const scorers: MastraScorers = {};
+
+    for (const step of Object.values(steps)) {
+      if (step.scorers) {
+        let scorersToUse = step.scorers;
+
+        if (typeof scorersToUse === 'function') {
+          scorersToUse = await scorersToUse({ runtimeContext });
+        }
+
+        for (const [id, scorer] of Object.entries(scorersToUse)) {
+          scorers[id] = scorer;
+        }
+      }
+    }
+
+    return scorers;
+  }
+
   async execute({
     inputData,
     resumeData,
@@ -1341,9 +1372,11 @@ export class Run<
   async start({
     inputData,
     runtimeContext,
+    writableStream,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
     const result = await this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -1368,6 +1401,7 @@ export class Run<
       retryConfig: this.retryConfig,
       runtimeContext: runtimeContext ?? new RuntimeContext(),
       abortController: this.abortController,
+      writableStream,
     });
 
     if (result.status !== 'suspended') {
@@ -1428,6 +1462,103 @@ export class Run<
       stream: readable,
       getWorkflowState: () => this.executionResults!,
     };
+  }
+
+  /**
+   * Starts the workflow execution with the provided input as a stream
+   * @param input The input data for the workflow
+   * @returns A promise that resolves to the workflow output
+   */
+  streamVNext({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}) {
+    this.closeStreamAction = async () => {};
+
+    return new MastraWorkflowStream({
+      run: this,
+      createStream: writer => {
+        const { readable, writable } = new TransformStream<ChunkType, ChunkType>({
+          transform(chunk, controller) {
+            controller.enqueue(chunk);
+          },
+        });
+
+        let buffer: ChunkType[] = [];
+        let isWriting = false;
+        const tryWrite = async () => {
+          const chunkToWrite = buffer;
+          buffer = [];
+
+          if (chunkToWrite.length === 0 || isWriting) {
+            return;
+          }
+          isWriting = true;
+
+          let watchWriter = writer.getWriter();
+          try {
+            for (const chunk of chunkToWrite) {
+              await watchWriter.write(chunk);
+            }
+          } finally {
+            watchWriter.releaseLock();
+          }
+          isWriting = false;
+
+          setImmediate(tryWrite);
+        };
+
+        const unwatch = this.watch(async ({ type, payload }) => {
+          let newPayload: Record<string, any> = payload;
+
+          //@ts-ignore
+          if (type === 'step-start') {
+            const { payload: args, id, ...rest } = newPayload;
+            newPayload = {
+              args,
+              ...rest,
+            };
+            //@ts-ignore
+          } else if (type === 'step-result') {
+            const { output, id, ...rest } = newPayload;
+            newPayload = {
+              result: output,
+              ...rest,
+            };
+          }
+
+          buffer.push({
+            type,
+            runId: this.runId,
+            from: 'WORKFLOW',
+            payload: {
+              stepName: (payload as unknown as { id: string }).id,
+              ...newPayload,
+            },
+          });
+
+          await tryWrite();
+        }, 'watch-v2');
+
+        this.closeStreamAction = async () => {
+          unwatch();
+
+          try {
+            await writable.close();
+          } catch (err) {
+            console.error('Error closing stream:', err);
+          }
+        };
+
+        const executionResults = this.start({ inputData, runtimeContext, writableStream: writable }).then(result => {
+          if (result.status !== 'suspended') {
+            this.closeStreamAction?.().catch(() => {});
+          }
+
+          return result;
+        });
+        this.executionResults = executionResults;
+
+        return readable;
+      },
+    });
   }
 
   watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
@@ -1608,6 +1739,14 @@ export class Run<
     if (state.workflowState) {
       this.state.workflowState = deepMergeWorkflowState(this.state.workflowState ?? {}, state.workflowState ?? {});
     }
+  }
+
+  /**
+   * @access private
+   * @returns The execution results of the workflow run
+   */
+  _getExecutionResults() {
+    return this.executionResults;
   }
 }
 
