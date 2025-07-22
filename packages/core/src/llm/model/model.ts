@@ -213,7 +213,8 @@ export class MastraLLM extends MastraLLMBase {
     try {
       const result: GenerateTextResult<Tools, Z> = await generateText(argsForExecute);
 
-      if (schema) {
+      // Only try to access experimental_output if the model didn't call tools
+      if (schema && result.finishReason !== 'tool-calls' && (result as any).experimental_output !== undefined) {
         result.object = (result as any).experimental_output;
       }
 
