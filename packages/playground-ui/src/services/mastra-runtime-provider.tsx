@@ -216,7 +216,7 @@ export function MastraRuntimeProvider({
           ...(memory ? { threadId, resourceId: agentId } : {}),
           providerOptions: providerOptions as any,
         });
-        if (generateResponse.response) {
+        if (generateResponse.response && 'messages' in generateResponse.response) {
           const latestMessage = generateResponse.response.messages.reduce(
             (acc, message) => {
               const _content = Array.isArray(acc.content) ? acc.content : [];

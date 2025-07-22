@@ -30,6 +30,16 @@
         "default": "./dist/*/index.cjs"
       }
     },
+    "./tools/is-vercel-tool": {
+      "import": {
+        "types": "./dist/tools/is-vercel-tool.d.ts",
+        "default": "./dist/tools/is-vercel-tool.js"
+      },
+      "require": {
+        "types": "./dist/tools/is-vercel-tool.d.cts",
+        "default": "./dist/tools/is-vercel-tool.cjs"
+      }
+    },
     "./workflows/legacy": {
       "import": {
         "types": "./dist/workflows/legacy/index.d.ts",
