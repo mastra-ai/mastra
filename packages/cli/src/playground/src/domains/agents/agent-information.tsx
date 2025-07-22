@@ -51,7 +51,6 @@ export function AgentInformation({ agentId, chatInputValue }: { agentId: string;
             {memory?.result && <Tab value="memory">Memory</Tab>}
             <Tab value="logs">Log Drains</Tab>
           </TabList>
-
           <TabContent value="overview">
             {isLoading && <Skeleton className="h-full" />}
             {agent && (

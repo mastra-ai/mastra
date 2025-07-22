@@ -127,7 +127,7 @@ export class MastraScorer {
   }
 }
 export type MastraScorerEntry = {
-  scorer: ScorerOptions;
+  scorer: MastraScorer;
   sampling?: ScoringSamplingConfig;
 };
 
