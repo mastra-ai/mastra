@@ -1,7 +1,7 @@
 import type { MastraMessageContentV2 } from '../../../agent';
 import { MastraBase } from '../../../base';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../../../memory/types';
-import type { StorageGetMessagesArg, PaginationInfo, StorageResourceType } from '../../types';
+import type { StorageGetMessagesArg, PaginationInfo, StorageResourceType, ThreadSortOptions } from '../../types';
 
 export abstract class MemoryStorage extends MastraBase {
   constructor() {
@@ -13,7 +13,9 @@ export abstract class MemoryStorage extends MastraBase {
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
-  abstract getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]>;
+  abstract getThreadsByResourceId({
+    resourceId,
+  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]>;
 
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
@@ -52,11 +54,13 @@ export abstract class MemoryStorage extends MastraBase {
       }[];
   }): Promise<MastraMessageV2[]>;
 
-  abstract getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
+  abstract getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
 
   abstract getMessagesPaginated(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },

@@ -150,3 +150,30 @@ export type StorageMessageType = {
   createdAt: Date;
   resourceId: string | null;
 };
+
+export interface ThreadSortOptions {
+  orderBy?: ThreadOrderBy;
+  sortDirection?: ThreadSortDirection;
+}
+
+const THREAD_ORDER_BY_SET = {
+  createdAt: true,
+  updatedAt: true,
+} satisfies Record<'createdAt' | 'updatedAt', true>;
+
+const THREAD_THREAD_SORT_DIRECTION_SET = {
+  ASC: true,
+  DESC: true,
+} satisfies Record<'ASC' | 'DESC', true>;
+
+export type ThreadOrderBy = keyof typeof THREAD_ORDER_BY_SET;
+
+export type ThreadSortDirection = keyof typeof THREAD_THREAD_SORT_DIRECTION_SET;
+
+export function castThreadOrderBy(v: unknown): ThreadOrderBy {
+  return (v as string) in THREAD_ORDER_BY_SET ? (v as ThreadOrderBy) : 'createdAt';
+}
+
+export function castThreadSortDirection(v: unknown): ThreadSortDirection {
+  return (v as string) in THREAD_THREAD_SORT_DIRECTION_SET ? (v as ThreadSortDirection) : 'DESC';
+}
