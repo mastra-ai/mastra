@@ -2,6 +2,7 @@ import type { Mastra } from '@mastra/core';
 import type { StorageGetMessagesArg, MastraMessageFormat } from '@mastra/core/storage';
 import {
   getMemoryStatusHandler as getOriginalMemoryStatusHandler,
+  getMemoryConfigHandler as getOriginalMemoryConfigHandler,
   getThreadsHandler as getOriginalThreadsHandler,
   getThreadByIdHandler as getOriginalThreadByIdHandler,
   saveMessagesHandler as getOriginalSaveMessagesHandler,
@@ -12,10 +13,12 @@ import {
   getMessagesPaginatedHandler as getOriginalGetMessagesPaginatedHandler,
   getWorkingMemoryHandler as getOriginalGetWorkingMemoryHandler,
   updateWorkingMemoryHandler as getOriginalUpdateWorkingMemoryHandler,
+  searchMemoryHandler as getOriginalSearchMemoryHandler,
 } from '@mastra/server/handlers/memory';
 import type { Context } from 'hono';
 
 import { handleError } from '../../error';
+import { parseLimit } from '../../utils/query-parsers';
 
 // Memory handlers
 export async function getMemoryStatusHandler(c: Context) {
@@ -33,6 +36,24 @@ export async function getMemoryStatusHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error getting memory status');
+  }
+}
+
+export async function getMemoryConfigHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.query('agentId');
+    const networkId = c.req.query('networkId');
+
+    const result = await getOriginalMemoryConfigHandler({
+      mastra,
+      agentId,
+      networkId,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error getting memory configuration');
   }
 }
 
@@ -164,15 +185,7 @@ export async function getMessagesHandler(c: Context) {
     const agentId = c.req.query('agentId');
     const networkId = c.req.query('networkId');
     const threadId = c.req.param('threadId');
-    const rawLimit = c.req.query('limit');
-    let limit: number | undefined = undefined;
-
-    if (rawLimit !== undefined) {
-      const n = Number(rawLimit);
-      if (Number.isFinite(n) && Number.isInteger(n) && n > 0) {
-        limit = n;
-      }
-    }
+    const limit = parseLimit(c.req.query('limit'));
 
     const result = await getOriginalGetMessagesHandler({
       mastra,
@@ -262,5 +275,35 @@ export async function getWorkingMemoryHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error getting working memory');
+  }
+}
+
+export async function searchMemoryHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.query('agentId');
+    const searchQuery = c.req.query('searchQuery');
+    const resourceId = c.req.query('resourceId');
+    const threadId = c.req.query('threadId');
+    const limit = parseLimit(c.req.query('limit'));
+    const memoryConfig = c.req.query('memoryConfig') ? JSON.parse(c.req.query('memoryConfig')!) : undefined;
+    const networkId = c.req.query('networkId');
+    const runtimeContext = c.get('runtimeContext');
+
+    const result = await getOriginalSearchMemoryHandler({
+      mastra,
+      agentId,
+      searchQuery: searchQuery!,
+      resourceId: resourceId!,
+      threadId,
+      limit,
+      memoryConfig,
+      networkId,
+      runtimeContext,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error searching memory');
   }
 }
