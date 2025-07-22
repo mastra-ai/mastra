@@ -35,3 +35,4 @@ export type { TraceContextType } from './domains/traces/context/trace-context';
 
 export * from './store/playground-store';
 export * from './lib/framework';
+export { MemorySearch } from './components/assistant-ui/memory-search';

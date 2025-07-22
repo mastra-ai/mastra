@@ -4,13 +4,32 @@ import { Tabs, TabsContent, TabsList as TabListPrimitive, TabsTrigger } from './
 export interface PlaygroundTabsProps<T extends string> {
   children: React.ReactNode;
   defaultTab: T;
+  value?: T;
+  onValueChange?: (value: T) => void;
 }
 
-export const PlaygroundTabs = <T extends string>({ children, defaultTab }: PlaygroundTabsProps<T>) => {
-  const [tab, setTab] = useState<T>(defaultTab);
+export const PlaygroundTabs = <T extends string>({
+  children,
+  defaultTab,
+  value,
+  onValueChange,
+}: PlaygroundTabsProps<T>) => {
+  const [internalTab, setInternalTab] = useState<T>(defaultTab);
+
+  // Use controlled mode if value and onValueChange are provided
+  const isControlled = value !== undefined && onValueChange !== undefined;
+  const currentTab = isControlled ? value : internalTab;
+  const handleTabChange = (newValue: string) => {
+    const typedValue = newValue as T;
+    if (isControlled) {
+      onValueChange(typedValue);
+    } else {
+      setInternalTab(typedValue);
+    }
+  };
 
   return (
-    <Tabs value={tab} onValueChange={value => setTab(value as T)} className="h-full">
+    <Tabs value={currentTab} onValueChange={handleTabChange} className="h-full">
       {children}
     </Tabs>
   );
@@ -21,7 +40,11 @@ export interface TabListProps {
 }
 
 export const TabList = ({ children }: TabListProps) => {
-  return <TabListPrimitive className="border-b-sm border-border1 flex w-full shrink-0">{children}</TabListPrimitive>;
+  return (
+    <div className="w-full overflow-x-auto">
+      <TabListPrimitive className="border-b-sm border-border1 flex min-w-full shrink-0">{children}</TabListPrimitive>
+    </div>
+  );
 };
 
 export interface TabProps {
@@ -34,7 +57,7 @@ export const Tab = ({ children, value, onClick }: TabProps) => {
   return (
     <TabsTrigger
       value={value}
-      className="text-xs p-3 text-mastra-el-3 data-[state=active]:text-mastra-el-5 data-[state=active]:border-b-2"
+      className="text-xs p-3 text-mastra-el-3 data-[state=active]:text-mastra-el-5 data-[state=active]:border-b-2 whitespace-nowrap flex-shrink-0"
       onClick={onClick}
     >
       {children}
@@ -49,7 +72,7 @@ export interface TabContentProps {
 
 export const TabContent = ({ children, value }: TabContentProps) => {
   return (
-    <TabsContent value={value} className="h-full pb-5">
+    <TabsContent value={value} className="h-full overflow-hidden flex flex-col">
       {children}
     </TabsContent>
   );
