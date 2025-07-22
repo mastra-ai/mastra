@@ -7389,6 +7389,111 @@ describe('Workflow', () => {
         expect(final).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
       });
+
+      it('should handle consecutive nested workflows with suspend/resume', async () => {
+        const step1 = vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
+          if (!resumeData?.suspect) {
+            return await suspend({ message: 'What is the suspect?' });
+          }
+          return { suspect: resumeData.suspect };
+        });
+        const step1Definition = createStep({
+          id: 'step-1',
+          inputSchema: z.object({ suspect: z.string() }),
+          outputSchema: z.object({ suspect: z.string() }),
+          suspendSchema: z.object({ message: z.string() }),
+          resumeSchema: z.object({ suspect: z.string() }),
+          execute: step1,
+        });
+
+        const step2 = vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
+          if (!resumeData?.suspect) {
+            return await suspend({ message: 'What is the second suspect?' });
+          }
+          return { suspect: resumeData.suspect };
+        });
+        const step2Definition = createStep({
+          id: 'step-2',
+          inputSchema: z.object({ suspect: z.string() }),
+          outputSchema: z.object({ suspect: z.string() }),
+          suspendSchema: z.object({ message: z.string() }),
+          resumeSchema: z.object({ suspect: z.string() }),
+          execute: step2,
+        });
+
+        const subWorkflow1 = createWorkflow({
+          id: 'sub-workflow-1',
+          inputSchema: z.object({ suspect: z.string() }),
+          outputSchema: z.object({ suspect: z.string() }),
+        })
+          .then(step1Definition)
+          .commit();
+
+        const subWorkflow2 = createWorkflow({
+          id: 'sub-workflow-2',
+          inputSchema: z.object({ suspect: z.string() }),
+          outputSchema: z.object({ suspect: z.string() }),
+        })
+          .then(step2Definition)
+          .commit();
+
+        const mainWorkflow = createWorkflow({
+          id: 'main-workflow',
+          inputSchema: z.object({ suspect: z.string() }),
+          outputSchema: z.object({ suspect: z.string() }),
+        })
+          .then(subWorkflow1)
+          .then(subWorkflow2)
+          .commit();
+
+        new Mastra({
+          logger: false,
+          storage: testStorage,
+          workflows: { mainWorkflow },
+        });
+
+        const run = mainWorkflow.createRun();
+
+        const initialResult = await run.start({ inputData: { suspect: 'initial-suspect' } });
+
+        expect(step1).toHaveBeenCalledTimes(1);
+        expect(step2).toHaveBeenCalledTimes(0);
+        expect(initialResult.status).toBe('suspended');
+        expect(initialResult.steps['sub-workflow-1']).toMatchObject({
+          status: 'suspended',
+        });
+
+        const firstResumeResult = await run.resume({
+          step: ['sub-workflow-1', 'step-1'],
+          resumeData: { suspect: 'first-suspect' },
+        });
+
+        expect(step1).toHaveBeenCalledTimes(2);
+        expect(step2).toHaveBeenCalledTimes(1);
+        expect(firstResumeResult.status).toBe('suspended');
+        expect(firstResumeResult.steps['sub-workflow-1']).toMatchObject({
+          status: 'success',
+        });
+        expect(firstResumeResult.steps['sub-workflow-2']).toMatchObject({
+          status: 'suspended',
+        });
+
+        const secondResumeResult = await run.resume({
+          step: ['sub-workflow-2', 'step-2'],
+          resumeData: { suspect: 'second-suspect' },
+        });
+
+        expect(step1).toHaveBeenCalledTimes(2);
+        expect(step2).toHaveBeenCalledTimes(2);
+        expect(secondResumeResult.status).toBe('success');
+        expect(secondResumeResult.steps['sub-workflow-1']).toMatchObject({
+          status: 'success',
+        });
+        expect(secondResumeResult.steps['sub-workflow-2']).toMatchObject({
+          status: 'success',
+        });
+        expect((secondResumeResult as any).result).toEqual({ suspect: 'second-suspect' });
+      });
     });
 
     describe('Workflow results', () => {
