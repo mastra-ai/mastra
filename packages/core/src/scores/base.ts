@@ -10,7 +10,7 @@ import type {
   ScoringInputWithExtractStepResultAndScoreAndReason,
 } from './types';
 
-export class Scorer {
+export class MastraScorer {
   name: string;
   description: string;
   extract?: ExtractionStepFn;

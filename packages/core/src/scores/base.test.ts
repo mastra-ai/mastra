@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Scorer } from './base';
+import { MastraScorer } from './base';
 import type { ScorerOptions, ScoringInput, ExtractionStepFn, ScoreStepFn, ReasonStepFn } from './types';
 
-describe('Scorer', () => {
+describe('MastraScorer', () => {
   let mockExtractFn: ExtractionStepFn;
   let mockAnalyzeFn: ScoreStepFn;
   let mockReasonFn: ReasonStepFn;
@@ -49,7 +49,7 @@ describe('Scorer', () => {
         analyze: mockAnalyzeFn,
       };
 
-      const scorer = new Scorer(options);
+      const scorer = new MastraScorer(options);
 
       expect(scorer.name).toBe('test-scorer');
       expect(scorer.description).toBe('A test scorer');
@@ -71,7 +71,7 @@ describe('Scorer', () => {
         isLLMScorer: true,
       };
 
-      const scorer = new Scorer(options);
+      const scorer = new MastraScorer(options);
 
       expect(scorer.name).toBe('test-scorer');
       expect(scorer.description).toBe('A test scorer');
@@ -89,7 +89,7 @@ describe('Scorer', () => {
         analyze: mockAnalyzeFn,
       };
 
-      const scorer = new Scorer(options);
+      const scorer = new MastraScorer(options);
 
       expect(scorer.metadata).toEqual({});
     });
@@ -97,7 +97,7 @@ describe('Scorer', () => {
 
   describe('run method', () => {
     it('should execute workflow without extract function', async () => {
-      const scorer = new Scorer({
+      const scorer = new MastraScorer({
         name: 'test-scorer',
         description: 'A test scorer',
         analyze: mockAnalyzeFn,
@@ -118,7 +118,7 @@ describe('Scorer', () => {
     });
 
     it('should execute workflow with extract function', async () => {
-      const scorer = new Scorer({
+      const scorer = new MastraScorer({
         name: 'test-scorer',
         description: 'A test scorer',
         extract: mockExtractFn,
@@ -141,7 +141,7 @@ describe('Scorer', () => {
     });
 
     it('should execute workflow with reason function', async () => {
-      const scorer = new Scorer({
+      const scorer = new MastraScorer({
         name: 'test-scorer',
         description: 'A test scorer',
         extract: mockExtractFn,
@@ -178,7 +178,7 @@ describe('Scorer', () => {
         analyzePrompt: 'Analyze this content',
       });
 
-      const scorer = new Scorer({
+      const scorer = new MastraScorer({
         name: 'llm-scorer',
         description: 'An LLM scorer',
         analyze: llmAnalyzeFn,
@@ -210,7 +210,7 @@ describe('Scorer', () => {
         additionalInfo: 'some info',
       });
 
-      const scorer = new Scorer({
+      const scorer = new MastraScorer({
         name: 'non-llm-scorer',
         description: 'A non-LLM scorer',
         analyze: nonLlmAnalyzeFn,
@@ -237,7 +237,7 @@ describe('Scorer', () => {
     it('should handle reason function returning null', async () => {
       const nullReasonFn = vi.fn().mockResolvedValue(null);
 
-      const scorer = new Scorer({
+      const scorer = new MastraScorer({
         name: 'test-scorer',
         description: 'A test scorer',
         analyze: mockAnalyzeFn,
@@ -262,7 +262,7 @@ describe('Scorer', () => {
     it('should throw error when workflow execution fails', async () => {
       const failingAnalyzeFn = vi.fn().mockRejectedValue(new Error('Analysis failed'));
 
-      const scorer = new Scorer({
+      const scorer = new MastraScorer({
         name: 'failing-scorer',
         description: 'A failing scorer',
         analyze: failingAnalyzeFn,
@@ -274,7 +274,7 @@ describe('Scorer', () => {
     it('should handle extract function throwing error', async () => {
       const failingExtractFn = vi.fn().mockRejectedValue(new Error('Extract failed'));
 
-      const scorer = new Scorer({
+      const scorer = new MastraScorer({
         name: 'failing-extract-scorer',
         description: 'A scorer with failing extract',
         extract: failingExtractFn,
@@ -287,7 +287,7 @@ describe('Scorer', () => {
     it('should handle reason function throwing error', async () => {
       const failingReasonFn = vi.fn().mockRejectedValue(new Error('Reason failed'));
 
-      const scorer = new Scorer({
+      const scorer = new MastraScorer({
         name: 'failing-reason-scorer',
         description: 'A scorer with failing reason',
         analyze: mockAnalyzeFn,
@@ -298,13 +298,13 @@ describe('Scorer', () => {
     });
 
     it('should create unique workflow pipeline for each scorer', async () => {
-      const scorer1 = new Scorer({
+      const scorer1 = new MastraScorer({
         name: 'scorer-1',
         description: 'First scorer',
         analyze: mockAnalyzeFn,
       });
 
-      const scorer2 = new Scorer({
+      const scorer2 = new MastraScorer({
         name: 'scorer-2',
         description: 'Second scorer',
         analyze: mockAnalyzeFn,
@@ -318,7 +318,7 @@ describe('Scorer', () => {
     });
 
     it('should pass through all input data to the result', async () => {
-      const scorer = new Scorer({
+      const scorer = new MastraScorer({
         name: 'test-scorer',
         description: 'A test scorer',
         analyze: mockAnalyzeFn,
