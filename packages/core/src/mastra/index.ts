@@ -2,12 +2,14 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
 import type { NewAgentNetwork } from '../network/vNext';
+import type { ScoringInput } from '../scores';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -17,6 +19,68 @@ import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import type { LegacyWorkflow } from '../workflows/legacy';
+
+export function createOnScorerHook(mastra: Mastra) {
+  return async (hookData: ScoringInput) => {
+    if (!mastra.getStorage()) {
+      return;
+    }
+
+    const storage = mastra.getStorage();
+    const entityId = hookData.entity.id;
+    const entityType = hookData.entityType;
+    const scorer = hookData.scorer;
+
+    let scorerToUse;
+
+    if (entityType === 'AGENT') {
+      const agent = mastra.getAgentById(entityId);
+      const scorers = await agent.getScorers();
+      scorerToUse = scorers[scorer.id];
+    } else if (entityType === 'WORKFLOW') {
+      const workflow = mastra.getWorkflowById(entityId);
+      const scorers = await workflow.getScorers();
+      scorerToUse = scorers[scorer.id];
+    } else {
+      return;
+    }
+
+    if (!scorerToUse) {
+      throw new MastraError({
+        id: 'MASTRA_SCORER_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Scorer with ID ${hookData.scorer.id} not found`,
+      });
+    }
+
+    let input = hookData.input;
+    let output = hookData.output;
+
+    if (entityType === 'AGENT') {
+      input = hookData.input.filter(m => m.role === 'user');
+    } else {
+      output = { object: hookData.output };
+    }
+
+    const score = await scorerToUse.scorer.run({
+      ...hookData,
+      input,
+      output,
+    });
+
+    const { structuredOutput, ...rest } = score;
+
+    await storage?.saveScore({
+      ...rest,
+      entityId,
+      scorerId: hookData.scorer.id,
+      metadata: {
+        structuredOutput: !!structuredOutput,
+      },
+    });
+  };
+}
 
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
@@ -363,6 +427,8 @@ do:
     if (config?.server) {
       this.#server = config.server;
     }
+
+    registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
     this.setLogger({ logger });
   }

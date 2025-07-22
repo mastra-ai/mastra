@@ -25,6 +25,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { RuntimeContext } from '../runtime-context';
 import type { MastraScorers } from '../scores';
+import { runScorer } from '../scores/hooks';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
@@ -1259,7 +1260,7 @@ export class Agent<
     generateMessageId,
     saveQueueManager,
   }: {
-    instructions?: string;
+    instructions: string;
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
@@ -1495,6 +1496,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText,
         runId,
         messageList,
+        toolCallsCollection,
+        structuredOutput,
       }: {
         runId: string;
         result: Record<string, any>;
@@ -1503,6 +1506,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
         messageList: MessageList;
+        structuredOutput?: boolean;
+        toolCallsCollection: Map<string, any>;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -1641,8 +1646,85 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             });
           }
         }
+
+        const outputForScoring = {
+          text: result?.text,
+          object: result?.object,
+          usage: result?.usage,
+          toolCalls: Array.from(toolCallsCollection.values()),
+        };
+
+        await this.#runScorers({
+          messageList,
+          runId,
+          outputText,
+          output: outputForScoring,
+          instructions,
+          runtimeContext,
+          structuredOutput,
+        });
       },
     };
+  }
+
+  async #runScorers({
+    messageList,
+    runId,
+    outputText,
+    output,
+    instructions,
+    runtimeContext,
+    structuredOutput,
+  }: {
+    messageList: MessageList;
+    runId: string;
+    output: Record<string, any>;
+    outputText: string;
+    instructions: string;
+    runtimeContext: RuntimeContext;
+    structuredOutput?: boolean;
+  }) {
+    const agentName = this.name;
+    const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
+    const input = userInputMessages
+      .map(message => (typeof message.content === 'string' ? message.content : ''))
+      .join('\n');
+    const runIdToUse = runId || crypto.randomUUID();
+
+    if (Object.keys(this.evals || {}).length > 0) {
+      for (const metric of Object.values(this.evals || {})) {
+        executeHook(AvailableHooks.ON_GENERATION, {
+          input,
+          output: outputText,
+          runId: runIdToUse,
+          metric,
+          agentName,
+          instructions: instructions,
+        });
+      }
+    }
+
+    const scorers = await this.getScorers({ runtimeContext });
+
+    if (Object.keys(scorers || {}).length > 0) {
+      for (const [id, scorerObject] of Object.entries(scorers)) {
+        runScorer({
+          scorerId: id,
+          scorerObject: scorerObject,
+          runId,
+          input: userInputMessages,
+          output,
+          runtimeContext,
+          entity: {
+            id: this.id,
+            name: this.name,
+          },
+          source: 'LIVE',
+          entityType: 'AGENT',
+          structuredOutput: !!structuredOutput,
+        });
+      }
+    }
   }
 
   async generate<
@@ -1750,23 +1832,33 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const threadId = thread?.id;
 
+    const toolCallsCollection = new Map();
+    const onStepFinishFn = async (result: any) => {
+      if (savePerStep) {
+        await this.saveStepMessages({
+          saveQueueManager,
+          result,
+          messageList,
+          threadId,
+          memoryConfig,
+          runId,
+        });
+      }
+
+      if (result.finishReason === 'tool-calls') {
+        for (const toolCall of result.toolCalls) {
+          toolCallsCollection.set(toolCall.toolCallId, toolCall);
+        }
+      }
+
+      return onStepFinish?.({ ...result, runId });
+    };
+
     if (!output && experimental_output) {
       const result = await llm.__text({
         messages: messageObjects,
         tools: convertedTools,
-        onStepFinish: async (result: any) => {
-          if (savePerStep) {
-            await this.saveStepMessages({
-              saveQueueManager,
-              result,
-              messageList,
-              threadId,
-              memoryConfig,
-              runId,
-            });
-          }
-          return onStepFinish?.({ ...result, runId });
-        },
+        onStepFinish: onStepFinishFn,
         maxSteps: maxSteps,
         runId,
         temperature,
@@ -1790,6 +1882,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText,
         runId,
         messageList,
+        toolCallsCollection,
+        structuredOutput: true,
       });
 
       const newResult = result as any;
@@ -1805,19 +1899,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       const result = await llm.__text({
         messages: messageObjects,
         tools: convertedTools,
-        onStepFinish: async (result: any) => {
-          if (savePerStep) {
-            await this.saveStepMessages({
-              saveQueueManager,
-              result,
-              messageList,
-              threadId,
-              memoryConfig,
-              runId,
-            });
-          }
-          return onStepFinish?.({ ...result, runId });
-        },
+        onStepFinish: onStepFinishFn,
         maxSteps,
         runId,
         temperature,
@@ -1840,6 +1922,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText,
         runId,
         messageList,
+        toolCallsCollection,
       });
 
       return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1849,19 +1932,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       messages: messageObjects,
       tools: convertedTools,
       structuredOutput: output,
-      onStepFinish: async (result: any) => {
-        if (savePerStep) {
-          await this.saveStepMessages({
-            saveQueueManager,
-            result,
-            messageList,
-            threadId,
-            memoryConfig,
-            runId,
-          });
-        }
-        return onStepFinish?.({ ...result, runId });
-      },
+      onStepFinish: onStepFinishFn,
       maxSteps,
       runId,
       temperature,
@@ -1882,6 +1953,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText,
       runId,
       messageList,
+      toolCallsCollection,
+      structuredOutput: true,
     });
 
     return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1995,6 +2068,28 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const threadId = thread?.id;
 
+    const toolCallsCollection = new Map();
+    const onStepFinishFn = async (result: any) => {
+      if (savePerStep) {
+        await this.saveStepMessages({
+          saveQueueManager,
+          result,
+          messageList,
+          threadId,
+          memoryConfig,
+          runId,
+        });
+      }
+
+      if (result.finishReason === 'tool-calls') {
+        for (const toolCall of result.toolCalls) {
+          toolCallsCollection.set(toolCall.toolCallId, toolCall);
+        }
+      }
+
+      return onStepFinish?.({ ...result, runId });
+    };
+
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
         runId,
@@ -2004,19 +2099,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         messages: messageObjects,
         temperature,
         tools: convertedTools,
-        onStepFinish: async (result: any) => {
-          if (savePerStep) {
-            await this.saveStepMessages({
-              saveQueueManager,
-              result,
-              messageList,
-              threadId,
-              memoryConfig,
-              runId,
-            });
-          }
-          return onStepFinish?.({ ...result, runId });
-        },
+        onStepFinish: onStepFinishFn,
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
@@ -2028,6 +2111,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               outputText,
               runId,
               messageList,
+              toolCallsCollection,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -2060,19 +2144,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         messages: messageObjects,
         temperature,
         tools: convertedTools,
-        onStepFinish: async (result: any) => {
-          if (savePerStep) {
-            await this.saveStepMessages({
-              saveQueueManager,
-              result,
-              messageList,
-              threadId,
-              memoryConfig,
-              runId,
-            });
-          }
-          return onStepFinish?.({ ...result, runId });
-        },
+        onStepFinish: onStepFinishFn,
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
@@ -2084,6 +2156,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               outputText,
               runId,
               messageList,
+              toolCallsCollection,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -2114,19 +2187,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       tools: convertedTools,
       temperature,
       structuredOutput: output,
-      onStepFinish: async (result: any) => {
-        if (savePerStep) {
-          await this.saveStepMessages({
-            saveQueueManager,
-            result,
-            messageList,
-            threadId,
-            memoryConfig,
-            runId,
-          });
-        }
-        return onStepFinish?.({ ...result, runId });
-      },
+      onStepFinish: onStepFinishFn,
       onFinish: async (result: any) => {
         try {
           const outputText = JSON.stringify(result.object);
@@ -2138,6 +2199,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             outputText,
             runId,
             messageList,
+            toolCallsCollection,
           });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
