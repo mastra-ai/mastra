@@ -1,9 +1,9 @@
-import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
-import { weatherAgent } from '@/agents';
-import { TestDeployer } from '@mastra/deployer/test';
+import { Mastra } from '@mastra/core/mastra';
 import { createApiRoute } from '@mastra/core/server';
+import { TestDeployer } from '@mastra/deployer/test';
 import { PostgresStore } from '@mastra/pg';
+import { weatherAgent } from '@/agents';
 
 export const storage = new PostgresStore({
   connectionString: process.env.DATABASE_URL,
