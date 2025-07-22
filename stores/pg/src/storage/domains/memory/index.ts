@@ -8,8 +8,6 @@ import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
-  castThreadOrderBy,
-  castThreadSortDirection,
 } from '@mastra/core/storage';
 import type {
   StorageGetMessagesArg,
@@ -82,8 +80,8 @@ export class MemoryPG extends MemoryStorage {
    */
   public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
     const resourceId = args.resourceId;
-    const orderBy = castThreadOrderBy(args.orderBy);
-    const sortDirection = castThreadSortDirection(args.sortDirection);
+    const orderBy = this.castThreadOrderBy(args.orderBy);
+    const sortDirection = this.castThreadSortDirection(args.sortDirection);
 
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
@@ -112,8 +110,8 @@ export class MemoryPG extends MemoryStorage {
     } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     const { resourceId, page = 0, perPage: perPageInput } = args;
-    const orderBy = castThreadOrderBy(args.orderBy);
-    const sortDirection = castThreadSortDirection(args.sortDirection);
+    const orderBy = this.castThreadOrderBy(args.orderBy);
+    const sortDirection = this.castThreadSortDirection(args.sortDirection);
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
       const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;

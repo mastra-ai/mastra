@@ -9,7 +9,6 @@ import type {
   ThreadSortDirection,
   ThreadSortOptions,
 } from '../../types';
-import { castThreadOrderBy, castThreadSortDirection } from '../../types';
 import type { StoreOperations } from '../operations';
 import { MemoryStorage } from './base';
 
@@ -54,7 +53,11 @@ export class InMemoryMemory extends MemoryStorage {
     this.logger.debug(`MockStore: getThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
-    const sortedThreads = this.sortThreads(threads, castThreadOrderBy(orderBy), castThreadSortDirection(sortDirection));
+    const sortedThreads = this.sortThreads(
+      threads,
+      this.castThreadOrderBy(orderBy),
+      this.castThreadSortDirection(sortDirection),
+    );
     return sortedThreads.map(thread => ({
       ...thread,
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
@@ -364,7 +367,11 @@ export class InMemoryMemory extends MemoryStorage {
     this.logger.debug(`MockStore: getThreadsByResourceIdPaginated called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
-    const sortedThreads = this.sortThreads(threads, castThreadOrderBy(orderBy), castThreadSortDirection(sortDirection));
+    const sortedThreads = this.sortThreads(
+      threads,
+      this.castThreadOrderBy(orderBy),
+      this.castThreadSortDirection(sortDirection),
+    );
     const clonedThreads = sortedThreads.map(thread => ({
       ...thread,
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,

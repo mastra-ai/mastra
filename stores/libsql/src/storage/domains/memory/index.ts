@@ -16,8 +16,6 @@ import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
-  castThreadOrderBy,
-  castThreadSortDirection,
 } from '@mastra/core/storage';
 import type { StoreOperationsLibSQL } from '../operations';
 
@@ -578,8 +576,8 @@ export class MemoryLibSQL extends MemoryStorage {
    */
   public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
     const resourceId = args.resourceId;
-    const orderBy = castThreadOrderBy(args.orderBy);
-    const sortDirection = castThreadSortDirection(args.sortDirection);
+    const orderBy = this.castThreadOrderBy(args.orderBy);
+    const sortDirection = this.castThreadSortDirection(args.sortDirection);
 
     try {
       const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
@@ -628,8 +626,8 @@ export class MemoryLibSQL extends MemoryStorage {
     } & ThreadSortOptions,
   ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     const { resourceId, page = 0, perPage = 100 } = args;
-    const orderBy = castThreadOrderBy(args.orderBy);
-    const sortDirection = castThreadSortDirection(args.sortDirection);
+    const orderBy = this.castThreadOrderBy(args.orderBy);
+    const sortDirection = this.castThreadSortDirection(args.sortDirection);
 
     try {
       const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;

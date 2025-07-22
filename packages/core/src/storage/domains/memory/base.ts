@@ -1,7 +1,14 @@
 import type { MastraMessageContentV2 } from '../../../agent';
 import { MastraBase } from '../../../base';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../../../memory/types';
-import type { StorageGetMessagesArg, PaginationInfo, StorageResourceType, ThreadSortOptions } from '../../types';
+import type {
+  StorageGetMessagesArg,
+  PaginationInfo,
+  StorageResourceType,
+  ThreadOrderBy,
+  ThreadSortDirection,
+  ThreadSortOptions,
+} from '../../types';
 
 export abstract class MemoryStorage extends MastraBase {
   constructor() {
@@ -93,4 +100,22 @@ export abstract class MemoryStorage extends MastraBase {
         `To use per-resource working memory, switch to one of these supported storage adapters.`,
     );
   }
+
+  protected castThreadOrderBy(v: unknown): ThreadOrderBy {
+    return (v as string) in THREAD_ORDER_BY_SET ? (v as ThreadOrderBy) : 'createdAt';
+  }
+
+  protected castThreadSortDirection(v: unknown): ThreadSortDirection {
+    return (v as string) in THREAD_THREAD_SORT_DIRECTION_SET ? (v as ThreadSortDirection) : 'DESC';
+  }
 }
+
+const THREAD_ORDER_BY_SET: Record<ThreadOrderBy, true> = {
+  createdAt: true,
+  updatedAt: true,
+};
+
+const THREAD_THREAD_SORT_DIRECTION_SET: Record<ThreadSortDirection, true> = {
+  ASC: true,
+  DESC: true,
+};
