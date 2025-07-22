@@ -9,6 +9,7 @@ import { Agent } from '../agent';
 import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
+import type { MastraScorers } from '../scores';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
 import { EMITTER_SYMBOL } from './constants';
@@ -1081,6 +1082,34 @@ export class Workflow<
     }
 
     return run;
+  }
+
+  async getScorers({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): Promise<MastraScorers> {
+    const steps = this.steps;
+
+    if (!steps || Object.keys(steps).length === 0) {
+      return {};
+    }
+
+    const scorers: MastraScorers = {};
+
+    for (const step of Object.values(steps)) {
+      if (step.scorers) {
+        let scorersToUse = step.scorers;
+
+        if (typeof scorersToUse === 'function') {
+          scorersToUse = await scorersToUse({ runtimeContext });
+        }
+
+        for (const [id, scorer] of Object.entries(scorersToUse)) {
+          scorers[id] = scorer;
+        }
+      }
+    }
+
+    return scorers;
   }
 
   async execute({
