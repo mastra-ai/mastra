@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import useSWR, { useSWRConfig } from 'swr';
 
 import { fetcher } from '@/lib/utils';
+import type { MemoryConfigResponse, MemorySearchResponse, MemorySearchParams } from '@/types/memory';
 
 export const useMemory = (agentId?: string) => {
   const {
@@ -22,7 +23,7 @@ export const useMemoryConfig = (agentId?: string) => {
     data: config,
     isLoading,
     mutate,
-  } = useSWR<any>(`/api/memory/config?agentId=${agentId}`, fetcher, {
+  } = useSWR<MemoryConfigResponse>(`/api/memory/config?agentId=${agentId}`, fetcher, {
     isPaused: () => !agentId,
   });
   return { config: config?.config, isLoading, mutate };
@@ -142,7 +143,7 @@ export const useMemorySearch = ({
   resourceId: string;
   threadId?: string;
 }) => {
-  const searchMemory = async (searchQuery: string, memoryConfig?: any) => {
+  const searchMemory = async (searchQuery: string, memoryConfig?: MemorySearchParams) => {
     if (!searchQuery.trim()) {
       return { results: [], count: 0, query: searchQuery };
     }
@@ -175,7 +176,7 @@ export const useMemorySearch = ({
       throw new Error(errorData.message || errorData.error || 'Failed to search memory');
     }
 
-    return response.json();
+    return response.json() as Promise<MemorySearchResponse>;
   };
 
   return { searchMemory };

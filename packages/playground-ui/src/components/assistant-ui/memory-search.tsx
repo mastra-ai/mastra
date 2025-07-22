@@ -17,36 +17,10 @@ const formatRelativeTime = (date: Date): string => {
   return date.toLocaleDateString();
 };
 
-interface MemorySearchResult {
-  id: string;
-  role: string;
-  content: string;
-  createdAt: string;
-  threadId?: string;
-  threadTitle?: string;
-  context?: {
-    before?: Array<{
-      id: string;
-      role: string;
-      content: string;
-      createdAt: string;
-    }>;
-    after?: Array<{
-      id: string;
-      role: string;
-      content: string;
-      createdAt: string;
-    }>;
-  };
-}
+import type { MemorySearchResult, MemorySearchResponse } from '@/types/memory';
 
 interface MemorySearchProps {
-  searchMemory: (query: string) => Promise<{
-    results: MemorySearchResult[];
-    count: number;
-    query: string;
-    searchType?: string;
-  }>;
+  searchMemory: (query: string) => Promise<MemorySearchResponse>;
   onResultClick?: (messageId: string, threadId?: string) => void;
   className?: string;
   currentThreadId?: string;
