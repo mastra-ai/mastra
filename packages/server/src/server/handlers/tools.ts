@@ -1,6 +1,6 @@
 import type { RuntimeContext } from '@mastra/core/di';
-import { isVercelTool } from '@mastra/core/tools';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
+import { isVercelTool } from '@mastra/core/tools/is-vercel-tool';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';

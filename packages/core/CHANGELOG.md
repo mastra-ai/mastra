@@ -1,5 +1,35 @@
 # @mastra/core
 
+## 0.11.0-alpha.2
+
+### Patch Changes
+
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 2affc57: Fix output type of network loop
+- 66e13e3: Add methods to fetch workflow/agent by its true id
+- edd9482: Fix "workflow run was not suspended" error when attempting to resume a workflow with consecutive nested workflows.
+- 18344d7: Code and llm scorers
+- 9d372c2: Fix streamVNext error handling
+- 40c2525: Fix agent.generate error with experimental_output and clientTool
+- e473f27: Implement off the shelf Scorers
+- 032cb66: ClientJS
+- 703ac71: scores schema
+- a723d69: Pass workflowId through
+- 5889a31: Export storage domain types
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 4933192: Update Message List to ensure correct order of message parts
+- d1c77a4: Scorer interface
+- bea9dd1: Refactor Agent class to consolidate LLM generate and stream methods and improve type safety. This includes
+  extracting common logic into prepareLLMOptions(), enhancing type definitions, and fixing test annotations.
+
+  This changeset entry follows the established format in your project:
+  - Targets the @mastra/core package with a patch version bump
+  - Provides a concise description of the refactoring and type safety improvements
+  - Mentions the key changes without being too verbose
+
+- dcd4802: scores mastra server
+- 7ba91fa: Add scorer abstract methods for base storage
+
 ## 0.11.0-alpha.1
 
 ## 0.11.0-alpha.0

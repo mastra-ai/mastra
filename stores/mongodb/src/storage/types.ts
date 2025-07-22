@@ -1,5 +1,5 @@
 import type { MongoClientOptions } from 'mongodb';
-import type { ConnectorHandler } from './ConnectorHandler';
+import type { ConnectorHandler } from './connectors/base';
 
 export type MongoDBConfig =
   | DatabaseConfig
