@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { describeRoute } from 'hono-openapi';
-import type { BodyLimitOptions } from '../../types';
+import type { BodyLimitOptions } from '../../../types';
+import { generateSystemPromptHandler } from '../../prompt';
+import { executeAgentToolHandler } from '../tools/handlers';
 import {
   generateHandler,
   getAgentByIdHandler,
@@ -10,10 +12,8 @@ import {
   getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
   streamGenerateHandler,
-} from '../agents';
-import { generateSystemPromptHandler } from '../prompt';
-import { executeAgentToolHandler } from '../tools';
-import { getListenerHandler, getSpeakersHandler, speakHandler, listenHandler } from '../voice';
+} from './handlers';
+import { getListenerHandler, getSpeakersHandler, speakHandler, listenHandler } from './voice';
 
 export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
   const router = new Hono();

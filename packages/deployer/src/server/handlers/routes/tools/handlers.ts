@@ -7,7 +7,7 @@ import {
 } from '@mastra/server/handlers/tools';
 import type { Context } from 'hono';
 
-import { handleError } from './error';
+import { handleError } from '../../error';
 
 // Tool handlers
 export async function getToolsHandler(c: Context) {

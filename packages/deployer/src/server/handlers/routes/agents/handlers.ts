@@ -10,7 +10,7 @@ import {
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
 
-import { handleError } from './error';
+import { handleError } from '../../error';
 
 // Agent handlers
 export async function getAgentsHandler(c: Context) {

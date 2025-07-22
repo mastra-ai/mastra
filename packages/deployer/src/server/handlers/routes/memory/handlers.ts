@@ -15,7 +15,7 @@ import {
 } from '@mastra/server/handlers/memory';
 import type { Context } from 'hono';
 
-import { handleError } from './error';
+import { handleError } from '../../error';
 
 // Memory handlers
 export async function getMemoryStatusHandler(c: Context) {

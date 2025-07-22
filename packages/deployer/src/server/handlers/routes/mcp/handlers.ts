@@ -2,7 +2,7 @@ import type { Mastra } from '@mastra/core';
 import type { MCPServerBase, ServerInfo, ServerDetailInfo } from '@mastra/core/mcp';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context } from 'hono';
-import { handleError } from './error';
+import { handleError } from '../../error';
 
 // Helper function to get the Mastra instance from the context
 const getMastra = (c: Context): Mastra => c.get('mastra');

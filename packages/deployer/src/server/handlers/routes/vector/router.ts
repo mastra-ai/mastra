@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { describeRoute } from 'hono-openapi';
-import type { BodyLimitOptions } from '../../types';
-import { createIndex, deleteIndex, describeIndex, listIndexes, queryVectors, upsertVectors } from '../vector';
+import type { BodyLimitOptions } from '../../../types';
+import { createIndex, deleteIndex, describeIndex, listIndexes, queryVectors, upsertVectors } from './handlers';
 
 export function vectorRouter(bodyLimitOptions: BodyLimitOptions) {
   const router = new Hono();
