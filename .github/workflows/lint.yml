@@ -41,29 +41,6 @@ jobs:
       - name: Format
         run: pnpm prettier --check .
 
-  contributor-actions:
-    name: Setup actions with secrets
-    runs-on: ubuntu-latest
-    permissions:
-      statuses: write
-    strategy:
-      matrix:
-        include:
-          - context: 'core/unit'
-            description: 'Core Package Tests'
-          - context: 'mcp/unit'
-            description: 'MCP Package Tests'
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-      - name: Setup custom action
-        uses: ./.github/workflows/shared-actions/set-pr-status
-        with:
-          status: 'pending'
-          context: ${{ matrix.description }}
-          sha: ${{ github.event.pull_request.head.sha }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
   prebuild:
     name: Prebuild
     runs-on: ubuntu-latest
