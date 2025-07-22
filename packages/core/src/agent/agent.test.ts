@@ -2261,6 +2261,44 @@ describe('Agent save message parts', () => {
       });
       expect(messages.length).toBe(0);
     });
+
+    it('should not save thread if error occurs after starting response but before completion', async () => {
+      const mockMemory = new MockMemory();
+      const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
+
+      const errorModel = new MockLanguageModelV1({
+        doGenerate: async () => {
+          throw new Error('Simulated error during response');
+        },
+      });
+
+      const agent = new Agent({
+        name: 'error-agent',
+        instructions: 'test',
+        model: errorModel,
+        memory: mockMemory,
+      });
+
+      let errorCaught = false;
+      try {
+        await agent.generate('trigger error', {
+          memory: {
+            resource: 'user-err',
+            thread: {
+              id: 'thread-err',
+            },
+          },
+        });
+      } catch (err: any) {
+        errorCaught = true;
+        expect(err.message).toMatch(/Simulated error/);
+      }
+      expect(errorCaught).toBe(true);
+
+      expect(saveThreadSpy).not.toHaveBeenCalled();
+      const thread = await mockMemory.getThreadById({ threadId: 'thread-err' });
+      expect(thread).toBeNull();
+    });
   });
   describe('stream', () => {
     it('should rescue partial messages (including tool calls) if stream is aborted/interrupted', async () => {
@@ -2561,6 +2599,52 @@ describe('Agent save message parts', () => {
       expect(saveCallCount).toBe(0);
       const messages = await mockMemory.getMessages({ threadId: 'thread-3', resourceId: 'resource-3' });
       expect(messages.length).toBe(0);
+    });
+
+    it('should not save thread if error occurs after starting response but before completion', async () => {
+      const mockMemory = new MockMemory();
+      const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
+
+      const errorModel = new MockLanguageModelV1({
+        doStream: async () => {
+          const stream = new ReadableStream({
+            pull() {
+              throw new Error('Simulated stream error');
+            },
+          });
+          return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+        },
+      });
+
+      const agent = new Agent({
+        name: 'error-agent-stream',
+        instructions: 'test',
+        model: errorModel,
+        memory: mockMemory,
+      });
+
+      let errorCaught = false;
+      try {
+        const stream = await agent.stream('trigger error', {
+          memory: {
+            resource: 'user-err',
+            thread: {
+              id: 'thread-err-stream',
+            },
+          },
+        });
+        for await (const _ of stream.textStream) {
+          // Should throw
+        }
+      } catch (err: any) {
+        errorCaught = true;
+        expect(err.message).toMatch(/Simulated stream error/);
+      }
+      expect(errorCaught).toBe(true);
+
+      expect(saveThreadSpy).not.toHaveBeenCalled();
+      const thread = await mockMemory.getThreadById({ threadId: 'thread-err-stream' });
+      expect(thread).toBeNull();
     });
   });
 });
