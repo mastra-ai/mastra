@@ -3,7 +3,7 @@ import type { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent, Mastra, ToolExecutionContext, WorkflowRun, WorkflowRuns } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/di';
-import { Tool } from '@mastra/core/tools';
+import { Tool, ToolStream } from '@mastra/core/tools';
 import { Workflow, Run, DefaultExecutionEngine } from '@mastra/core/workflows';
 import type {
   ExecuteFunction,
@@ -20,6 +20,7 @@ import type {
   Emitter,
   WatchEvent,
   StreamEvent,
+  ChunkType,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -969,6 +970,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    writableStream,
   }: {
     workflowId: string;
     runId: string;
@@ -983,6 +985,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<StepResult<any, any, any, any>> {
     return super.executeStep({
       workflowId,
@@ -995,6 +998,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       emitter,
       abortController,
       runtimeContext,
+      writableStream,
     });
   }
 
@@ -1011,6 +1015,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    writableStream,
   }: {
     workflowId: string;
     runId: string;
@@ -1034,10 +1039,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<void> {
     let { duration, fn } = entry;
 
     if (fn) {
+      const stepCallId = randomUUID();
       duration = await this.inngestStep.run(`workflow.${workflowId}.sleep.${entry.id}`, async () => {
         return await fn({
           runId,
@@ -1069,6 +1076,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           [EMITTER_SYMBOL]: emitter,
           engine: { step: this.inngestStep },
           abortSignal: abortController?.signal,
+          writer: new ToolStream(
+            {
+              prefix: 'step',
+              callId: stepCallId,
+              name: 'sleep',
+              runId,
+            },
+            writableStream,
+          ),
         });
       });
     }
@@ -1085,6 +1101,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    writableStream,
   }: {
     workflowId: string;
     runId: string;
@@ -1108,11 +1125,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<void> {
     let { date, fn } = entry;
 
     if (fn) {
       date = await this.inngestStep.run(`workflow.${workflowId}.sleepUntil.${entry.id}`, async () => {
+        const stepCallId = randomUUID();
         return await fn({
           runId,
           workflowId,
@@ -1143,6 +1162,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           [EMITTER_SYMBOL]: emitter,
           engine: { step: this.inngestStep },
           abortSignal: abortController?.signal,
+          writer: new ToolStream(
+            {
+              prefix: 'step',
+              callId: stepCallId,
+              name: 'sleep',
+              runId,
+            },
+            writableStream,
+          ),
         });
       });
     }
@@ -1176,6 +1204,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    writableStream,
   }: {
     step: Step<string, any, any>;
     stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -1189,6 +1218,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<StepResult<any, any, any, any>> {
     const startedAt = await this.inngestStep.run(
       `workflow.${executionContext.workflowId}.run.${executionContext.runId}.step.${step.id}.running_ev`,
@@ -1432,6 +1462,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runId: executionContext.runId,
           mastra: this.mastra!,
           runtimeContext,
+          writableStream,
           inputData: prevOutput,
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           getInitData: () => stepResults?.input as any,
@@ -1617,6 +1648,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter,
     abortController,
     runtimeContext,
+    writableStream,
   }: {
     workflowId: string;
     runId: string;
@@ -1639,6 +1671,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     emitter: Emitter;
     abortController: AbortController;
     runtimeContext: RuntimeContext;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<StepResult<any, any, any, any>> {
     let execResults: any;
     const truthyIndexes = (
@@ -1678,6 +1711,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   step: this.inngestStep,
                 },
                 abortSignal: abortController.signal,
+                writer: new ToolStream(
+                  {
+                    prefix: 'step',
+                    callId: randomUUID(),
+                    name: 'conditional',
+                    runId,
+                  },
+                  writableStream,
+                ),
               });
               return result ? index : null;
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1711,6 +1753,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           emitter,
           abortController,
           runtimeContext,
+          writableStream,
         }),
       ),
     );
