@@ -194,7 +194,6 @@ export async function streamWorkflowHandler(c: Context) {
             await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
           }
         } catch (err) {
-          } catch (err) {
           logger.error('Error in workflow stream: ' + ((err as Error)?.message ?? 'Unknown error'));
         }
         await stream.close();

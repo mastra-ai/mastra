@@ -358,7 +358,7 @@ export function streamVNextGenerateHandler({
     const streamResult = agent.streamVNext(messages, {
       ...rest,
       runtimeContext: finalRuntimeContext,
-      signal: abortSignal,
+      abortSignal,
     });
 
     return streamResult;
