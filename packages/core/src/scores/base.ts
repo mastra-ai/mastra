@@ -42,7 +42,7 @@ export class MastraScorer {
       outputSchema: scoringExtractStepResultSchema,
       execute: async ({ inputData }) => {
         if (!this.extract) {
-          return {};
+          return;
         }
 
         const extractStepResult = await this.extract(inputData);
@@ -57,8 +57,7 @@ export class MastraScorer {
       inputSchema: scoringExtractStepResultSchema,
       outputSchema: scoreResultSchema,
       execute: async ({ inputData }) => {
-        const extractStepResult = this.isLLMScorer ? inputData.extractStepResult : inputData;
-        const analyzeStepResult = await this.analyze({ ...input, extractStepResult });
+        const analyzeStepResult = await this.analyze({ ...input, extractStepResult: inputData?.result });
 
         return analyzeStepResult;
       },
@@ -75,26 +74,26 @@ export class MastraScorer {
 
         if (!this.reason) {
           return {
-            extractStepResult,
-            analyzeStepResult: analyzeStepRes.analyzeStepResult,
-            analyzePrompt: analyzeStepRes.analyzePrompt,
-            extractPrompt: extractStepResult.extractPrompt,
-            score: analyzeStepRes.score,
+            extractStepResult: extractStepResult?.result,
+            analyzeStepResult: analyzeStepRes?.result,
+            analyzePrompt: analyzeStepRes?.prompt,
+            extractPrompt: extractStepResult?.prompt,
+            score: analyzeStepRes?.score,
           };
         }
 
         const reasonResult = await this.reason({
           ...input,
-          analyzeStepResult: analyzeStepRes.analyzeStepResult,
+          analyzeStepResult: analyzeStepRes.result,
           score: analyzeStepRes.score,
         });
 
         return {
-          extractStepResult,
-          analyzeStepResult: analyzeStepRes.analyzeStepResult,
-          analyzePrompt: analyzeStepRes.analyzePrompt,
-          extractPrompt: extractStepResult.extractPrompt,
-          score: analyzeStepRes.score,
+          extractStepResult: extractStepResult?.result,
+          analyzeStepResult: analyzeStepRes?.result,
+          analyzePrompt: analyzeStepRes?.prompt,
+          extractPrompt: extractStepResult?.prompt,
+          score: analyzeStepRes?.score,
           ...reasonResult,
         };
       },
