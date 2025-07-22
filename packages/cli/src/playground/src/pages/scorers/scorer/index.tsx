@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 
 import { useWorkflows } from '@/hooks/use-workflows';
 import { ClientScoreRowData } from '@mastra/client-js';
+import { CodeMirrorBlock } from '@/components/ui/code-mirror-block';
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
@@ -433,13 +434,13 @@ function ScoreDetails({
     }
   };
 
-  const prompts: Record<
-    string,
-    {
-      prompt: string;
-      description: string;
-    }
-  > = {};
+  const prompts: Record<string, string | undefined> = {
+    extractPrompt: score?.extractPrompt,
+    analyzePrompt: score?.analyzePrompt,
+    reasonPrompt: score?.reasonPrompt,
+  };
+
+  console.log('Score details:', JSON.stringify(score, null, 2));
 
   return (
     <Dialog.Root open={isOpen} onOpenChange={onClose}>
@@ -527,28 +528,28 @@ function ScoreDetails({
                 </div>
                 <div className="text-icon4 text-[0.875rem] p-[1.5rem] py-[1rem] break-all">
                   {score.output?.text && <MarkdownRenderer>{score.output.text}</MarkdownRenderer>}
-                  {score.output?.object?.result && <MarkdownRenderer>{score.output.object.result}</MarkdownRenderer>}
+                  {score.output?.object && <CodeMirrorBlock value={JSON.stringify(score.output.object, null, 2)} />}
                 </div>
               </div>
             </section>
-            {prompts && (
+            {prompts && Object.values(prompts).filter(Boolean).length > 0 && (
               <section className="border border-border1 rounded-lg">
                 <div className="flex items-center justify-between  p-[1rem] ">
                   <h3 className="px-[.5rem]">Prompts</h3>
                 </div>
 
-                {Object.entries(prompts || {}).map(([key, value]) => (
-                  <Fragment key={key}>
-                    <div className="flex gap-[1rem] text-[] py-[1rem] px-[1.5rem] border-y border-border1">
-                      <span className="text-icon5 font-bold text-[0.875rem]">{key}</span>
-                      <span className="text-icon2 text-[0.75rem]">{value?.description && `|`}</span>
-                      <span className="text-icon4 text-[0.875rem]">{value?.description || ''}</span>
-                    </div>
-                    <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
-                      {value?.prompt && <MarkdownRenderer>{value.prompt}</MarkdownRenderer>}
-                    </div>
-                  </Fragment>
-                ))}
+                {Object.entries(prompts || {}).map(([key, value]) =>
+                  value ? (
+                    <Fragment key={key}>
+                      <div className="flex gap-[1rem] text-[] py-[1rem] px-[1.5rem] border-y border-border1">
+                        <span className="text-icon5 font-bold text-[0.875rem]">{key}</span>
+                      </div>
+                      <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
+                        {value && <pre>{value}</pre>}
+                      </div>
+                    </Fragment>
+                  ) : null,
+                )}
               </section>
             )}
           </div>
