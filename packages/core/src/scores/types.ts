@@ -28,27 +28,16 @@ export type ScoringInput = {
   threadId?: string;
 };
 
-export const scoringExtractStepResultSchema = z.record(z.string(), z.any());
+export const scoringExtractStepResultSchema = z.record(z.string(), z.any()).optional();
 
 export type ScoringExtractStepResult = z.infer<typeof scoringExtractStepResultSchema>;
 
 export const scoringValueSchema = z.number();
 
-export const scoringResultSchema = z.array(
-  z.object({
-    result: z.string(),
-    reason: z.string(),
-  }),
-);
-
 export const scoreResultSchema = z.object({
-  analyzeStepResult: z
-    .object({
-      results: scoringResultSchema.optional(),
-    })
-    .optional(),
+  result: z.record(z.string(), z.any()).optional(),
   score: scoringValueSchema,
-  analyzePrompt: z.string().optional(),
+  prompt: z.string().optional(),
 });
 
 export type ScoringAnalyzeStepResult = z.infer<typeof scoreResultSchema>;
