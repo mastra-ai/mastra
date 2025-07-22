@@ -1201,6 +1201,7 @@ export class Agent<
     threadId,
     memoryConfig,
     runId,
+    createThread,
   }: {
     saveQueueManager: SaveQueueManager;
     result: any;
@@ -1208,7 +1209,28 @@ export class Agent<
     threadId?: string;
     memoryConfig?: MemoryConfig;
     runId?: string;
+    createThread?: {
+      memory: MastraMemory;
+      resourceId: string;
+      threadId?: string;
+      title?: string;
+      metadata?: Record<string, unknown>;
+      memoryConfig?: MemoryConfig;
+      saveThread?: boolean;
+    };
   }) {
+    if (createThread) {
+      const { memory, resourceId, threadId, title, metadata, memoryConfig } = createThread;
+      await memory.createThread({
+        threadId,
+        title,
+        metadata,
+        resourceId,
+        memoryConfig,
+        saveThread: true,
+      });
+    }
+
     try {
       messageList.add(result.response.messages, 'response');
       await saveQueueManager.batchMessages(messageList, threadId, memoryConfig);
@@ -1745,17 +1767,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         tools: convertedTools,
         onStepFinish: async (result: any) => {
           if (savePerStep) {
-            if (thread && !threadExists) {
-              await memory?.createThread({
-                threadId,
-                resourceId: thread.resourceId,
-                memoryConfig,
-                title: thread.title,
-                metadata: thread.metadata,
-              });
-              threadExists = true;
-            }
-
             await this.saveStepMessages({
               saveQueueManager,
               result,
@@ -1763,7 +1774,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               threadId,
               memoryConfig,
               runId,
+              createThread: memory && thread && !threadExists ? { memory, threadId, ...thread } : undefined,
             });
+            threadExists = true;
           }
           return onStepFinish?.({ ...result, runId });
         },
@@ -1805,17 +1818,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         tools: convertedTools,
         onStepFinish: async (result: any) => {
           if (savePerStep) {
-            if (thread && !threadExists) {
-              await memory?.createThread({
-                threadId,
-                resourceId: thread.resourceId,
-                memoryConfig,
-                title: thread.title,
-                metadata: thread.metadata,
-              });
-              threadExists = true;
-            }
-
             await this.saveStepMessages({
               saveQueueManager,
               result,
@@ -1823,7 +1825,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               threadId,
               memoryConfig,
               runId,
+              createThread: memory && thread && !threadExists ? { memory, threadId, ...thread } : undefined,
             });
+            threadExists = true;
           }
           return onStepFinish?.({ ...result, runId });
         },
@@ -1860,17 +1864,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       structuredOutput: output,
       onStepFinish: async (result: any) => {
         if (savePerStep) {
-          if (thread && !threadExists) {
-            await memory?.createThread({
-              threadId,
-              resourceId: thread.resourceId,
-              memoryConfig,
-              title: thread.title,
-              metadata: thread.metadata,
-            });
-            threadExists = true;
-          }
-
           await this.saveStepMessages({
             saveQueueManager,
             result,
@@ -1878,7 +1871,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             threadId,
             memoryConfig,
             runId,
+            createThread: memory && thread && !threadExists ? { memory, threadId, ...thread } : undefined,
           });
+          threadExists = true;
         }
         return onStepFinish?.({ ...result, runId });
       },
@@ -2027,17 +2022,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         tools: convertedTools,
         onStepFinish: async (result: any) => {
           if (savePerStep) {
-            if (thread && !threadExists) {
-              await memory?.createThread({
-                threadId,
-                resourceId: thread.resourceId,
-                memoryConfig,
-                title: thread.title,
-                metadata: thread.metadata,
-              });
-              threadExists = true;
-            }
-
             await this.saveStepMessages({
               saveQueueManager,
               result,
@@ -2045,7 +2029,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               threadId,
               memoryConfig,
               runId,
+              createThread: memory && thread && !threadExists ? { memory, threadId, ...thread } : undefined,
             });
+            threadExists = true;
           }
           return onStepFinish?.({ ...result, runId });
         },
@@ -2094,17 +2080,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         tools: convertedTools,
         onStepFinish: async (result: any) => {
           if (savePerStep) {
-            if (thread && !threadExists) {
-              await memory?.createThread({
-                threadId,
-                resourceId: thread.resourceId,
-                memoryConfig,
-                title: thread.title,
-                metadata: thread.metadata,
-              });
-              threadExists = true;
-            }
-
             await this.saveStepMessages({
               saveQueueManager,
               result,
@@ -2112,7 +2087,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               threadId,
               memoryConfig,
               runId,
+              createThread: memory && thread && !threadExists ? { memory, threadId, ...thread } : undefined,
             });
+            threadExists = true;
           }
           return onStepFinish?.({ ...result, runId });
         },
@@ -2159,17 +2136,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       structuredOutput: output,
       onStepFinish: async (result: any) => {
         if (savePerStep) {
-          if (thread && !threadExists) {
-            await memory?.createThread({
-              threadId,
-              resourceId: thread.resourceId,
-              memoryConfig,
-              title: thread.title,
-              metadata: thread.metadata,
-            });
-            threadExists = true;
-          }
-
           await this.saveStepMessages({
             saveQueueManager,
             result,
@@ -2177,7 +2143,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             threadId,
             memoryConfig,
             runId,
+            createThread: memory && thread && !threadExists ? { memory, threadId, ...thread } : undefined,
           });
+          threadExists = true;
         }
         return onStepFinish?.({ ...result, runId });
       },
