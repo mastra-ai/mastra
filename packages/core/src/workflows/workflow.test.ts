@@ -7438,12 +7438,12 @@ describe('Workflow', () => {
           .commit();
 
         const mainWorkflow = createWorkflow({
-          id: 'main-workflow-bug-6065',
+          id: 'main-workflow',
           inputSchema: z.object({ suspect: z.string() }),
           outputSchema: z.object({ suspect: z.string() }),
         })
-          .then(subWorkflow1) // NestedWorkflow1 (with suspend)
-          .then(subWorkflow2) // NestedWorkflow2 (with suspend) - this should cause the bug
+          .then(subWorkflow1)
+          .then(subWorkflow2)
           .commit();
 
         new Mastra({
