@@ -30,6 +30,7 @@ import type {
   WatchEvent,
   WorkflowRunState,
 } from './types';
+import { runScorer } from '../scores/hooks';
 
 export type DefaultEngineType = {};
 

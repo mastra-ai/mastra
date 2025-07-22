@@ -54,6 +54,7 @@ import type {
   ToolsInput,
   AgentMemoryOption,
 } from './types';
+import { runScorer } from '../scores/hooks';
 export type { ChunkType, MastraAgentStream } from '../stream/MastraAgentStream';
 
 export { MessageList };
@@ -1549,7 +1550,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         runId,
         messageList,
         toolCallsCollection,
-        structuredOutput,
+        structuredOutput = false,
       }: {
         runId: string;
         result: Record<string, any>;
@@ -1558,8 +1559,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
         messageList: MessageList;
-        structuredOutput?: boolean;
         toolCallsCollection: Map<string, any>;
+        structuredOutput?: boolean;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -1681,24 +1682,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           }
         }
 
-        if (Object.keys(this.evals || {}).length > 0) {
-          const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
-          const input = userInputMessages
-            .map(message => (typeof message.content === 'string' ? message.content : ''))
-            .join('\n');
-          const runIdToUse = runId || crypto.randomUUID();
-          for (const metric of Object.values(this.evals || {})) {
-            executeHook(AvailableHooks.ON_GENERATION, {
-              input,
-              output: outputText,
-              runId: runIdToUse,
-              metric,
-              agentName: this.name,
-              instructions: instructions || this.instructions,
-            });
-          }
-        }
-
         const outputForScoring = {
           text: result?.text,
           object: result?.object,
@@ -1717,6 +1700,66 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         });
       },
     };
+  }
+
+  async #runScorers({
+    messageList,
+    runId,
+    outputText,
+    output,
+    instructions,
+    runtimeContext,
+    structuredOutput,
+  }: {
+    messageList: MessageList;
+    runId: string;
+    output: Record<string, any>;
+    outputText: string;
+    instructions: string;
+    runtimeContext: RuntimeContext;
+    structuredOutput?: boolean;
+  }) {
+    const agentName = this.name;
+    const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
+    const input = userInputMessages
+      .map(message => (typeof message.content === 'string' ? message.content : ''))
+      .join('\n');
+    const runIdToUse = runId || crypto.randomUUID();
+
+    if (Object.keys(this.evals || {}).length > 0) {
+      for (const metric of Object.values(this.evals || {})) {
+        executeHook(AvailableHooks.ON_GENERATION, {
+          input,
+          output: outputText,
+          runId: runIdToUse,
+          metric,
+          agentName,
+          instructions: instructions,
+        });
+      }
+    }
+
+    const scorers = await this.getScorers({ runtimeContext });
+
+    if (Object.keys(scorers || {}).length > 0) {
+      for (const [id, scorerObject] of Object.entries(scorers)) {
+        runScorer({
+          scorerId: id,
+          scorerObject: scorerObject,
+          runId,
+          input: userInputMessages,
+          output,
+          runtimeContext,
+          entity: {
+            id: this.id,
+            name: this.name,
+          },
+          source: 'LIVE',
+          entityType: 'AGENT',
+          structuredOutput: !!structuredOutput,
+        });
+      }
+    }
   }
 
   private prepareLLMOptions<
@@ -1738,7 +1781,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         'runId'
       > & { runId: string }
     >;
-    after: (args: { result: GenerateReturn<any, Output, ExperimentalOutput>; outputText: string }) => Promise<void>;
+    after: (args: {
+      result: GenerateReturn<any, Output, ExperimentalOutput>;
+      outputText: string;
+      structuredOutput?: boolean;
+    }) => Promise<void>;
     llm: MastraLLMBase;
   }>;
   private prepareLLMOptions<
@@ -1763,6 +1810,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     after: (args: {
       result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
       outputText: string;
+      structuredOutput?: boolean;
     }) => Promise<void>;
     llm: MastraLLMBase;
   }>;
@@ -1865,6 +1913,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     let messageList: MessageList;
     let thread: StorageThreadType | null | undefined;
+
+    const toolCallsCollection = new Map();
     return {
       llm,
       before: async () => {
@@ -1897,6 +1947,13 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                 runId,
               });
             }
+
+            if (props.finishReason === 'tool-calls') {
+              for (const toolCall of props.toolCalls) {
+                toolCallsCollection.set(toolCall.toolCallId, toolCall);
+              }
+            }
+
             return onStepFinish?.({ ...props, runId });
           },
           ...args,
@@ -1907,9 +1964,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       after: async ({
         result,
         outputText,
+        structuredOutput = false,
       }:
-        | { result: GenerateReturn<any, Output, ExperimentalOutput>; outputText: string }
-        | { result: StreamReturn<any, Output, ExperimentalOutput>; outputText: string }) => {
+        | { result: GenerateReturn<any, Output, ExperimentalOutput>; outputText: string; structuredOutput?: boolean }
+        | {
+            result: StreamReturn<any, Output, ExperimentalOutput>;
+            outputText: string;
+            structuredOutput?: boolean;
+          }) => {
         await after({
           result,
           outputText,
@@ -1918,6 +1980,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           memoryConfig,
           runId,
           messageList,
+          toolCallsCollection,
+          structuredOutput,
         });
       },
     };
@@ -1982,6 +2046,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     await after({
       result,
       outputText,
+      structuredOutput: true,
     });
 
     return result as unknown as OUTPUT extends undefined
@@ -2087,6 +2152,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           await after({
             result,
             outputText,
+            structuredOutput: true,
           });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
@@ -2160,6 +2226,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                 await after({
                   result,
                   outputText,
+                  structuredOutput: true,
                 });
               } catch (e) {
                 this.logger.error('Error saving memory on finish', {
