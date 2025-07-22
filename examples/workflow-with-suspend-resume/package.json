@@ -26,6 +26,7 @@
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
+      "@mastra/libsql": "link:../../stores/libsql",
       "mastra": "link:../../packages/cli"
     }
   },
