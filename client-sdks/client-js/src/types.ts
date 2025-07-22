@@ -16,6 +16,7 @@ import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { MastraScorer, ScoreRowData } from '@mastra/core/scores';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
 import type {
   StepAction,
@@ -444,4 +445,58 @@ export interface McpToolInfo {
 
 export interface McpServerToolListResponse {
   tools: McpToolInfo[];
+}
+
+export type ClientScoreRowData = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> & {
+  createdAt: string;
+  updatedAt: string;
+};
+
+// Scores-related types
+export interface GetScoresByRunIdParams {
+  runId: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface GetScoresByScorerIdParams {
+  scorerId: string;
+  entityId?: string;
+  entityType?: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface GetScoresByEntityIdParams {
+  entityId: string;
+  entityType: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface SaveScoreParams {
+  score: ScoreRowData;
+}
+
+export interface GetScoresResponse {
+  pagination: {
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  };
+  scores: ClientScoreRowData[];
+}
+
+export interface SaveScoreResponse {
+  score: ClientScoreRowData;
+}
+
+export type GetScorerResponse = MastraScorer & {
+  agentIds: string[];
+  workflowIds: string[];
+};
+
+export interface GetScorersResponse {
+  scorers: Array<GetScorerResponse>;
 }
