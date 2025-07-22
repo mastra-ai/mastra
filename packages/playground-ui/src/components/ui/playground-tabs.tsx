@@ -37,7 +37,7 @@ export interface TabListProps {
 export const TabList = ({ children }: TabListProps) => {
   return (
     <div className="w-full overflow-x-auto">
-      <TabListPrimitive className="border-b-sm border-border1 flex min-w-full shrink-0 w-max">{children}</TabListPrimitive>
+      <TabListPrimitive className="border-b-sm border-border1 flex min-w-full shrink-0">{children}</TabListPrimitive>
     </div>
   );
 };
