@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.11.0-alpha.1
+
+## 0.11.0-alpha.0
+
+### Patch Changes
+
+- 7827943: Handle streaming large data
+- bf1e7e7: Configure agent memory using runtimeContext
+- cbddd18: Remove erroneous reassignment of `Mastra.prototype.#vectors`
+
 ## 0.10.15
 
 ### Patch Changes

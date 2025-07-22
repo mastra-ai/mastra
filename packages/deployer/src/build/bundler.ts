@@ -28,7 +28,7 @@ export async function getInputOptions(
         });
 
   const externalsCopy = new Set<string>();
-
+  debugger;
   // make all nested imports external from the same package
   for (const external of analyzedBundleInfo.externalDependencies) {
     if (external.startsWith('@')) {

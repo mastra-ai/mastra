@@ -69,7 +69,25 @@
     "@mastra/voice-playai": "0.10.4",
     "@mastra/voice-sarvam": "0.10.4",
     "@mastra/voice-speechify": "0.10.4",
-    "@mastra/inngest": "0.11.4"
+    "@mastra/inngest": "0.11.4",
+    "@mastra/mssql": "0.2.0"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_memory-5890-dependencies",
+    "bitter-carrots-itch",
+    "cyan-times-repair",
+    "eager-views-learn",
+    "giant-ends-repeat",
+    "grumpy-peas-prove",
+    "plain-cases-rush",
+    "puny-rats-fall",
+    "quiet-readers-work",
+    "red-bananas-sing",
+    "red-parrots-enter",
+    "salty-zoos-begin",
+    "silent-carpets-dream",
+    "smart-yaks-rush",
+    "strong-apes-draw",
+    "twelve-penguins-rhyme"
+  ]
 }

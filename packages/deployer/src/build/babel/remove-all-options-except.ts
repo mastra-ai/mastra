@@ -1,9 +1,11 @@
 import babel from '@babel/core';
 import type { NodePath, types } from '@babel/core';
+import type { IMastraLogger } from '@mastra/core/logger';
 
 export function removeAllOptionsFromMastraExcept(
   result: { hasCustomConfig: boolean },
   option: 'telemetry' | 'server' | 'bundler',
+  logger?: IMastraLogger,
 ) {
   const t = babel.types;
 
@@ -69,6 +71,32 @@ export function removeAllOptionsFromMastraExcept(
         );
 
         programPath.node.body.push(exportDeclaration);
+      },
+
+      Program: {
+        exit(path) {
+          // Add a fallback export if no mastra configuration was found
+          const hasExport = path.node.body.some(
+            node => node.type === 'ExportNamedDeclaration' || node.type === 'ExportDefaultDeclaration',
+          );
+
+          if (!hasExport) {
+            if (logger) {
+              logger.warn(`Mastra ${option} config could not be extracted. Make sure you entry file looks like
+export const mastra = new Mastra({
+  ${option}: <value>
+})
+
+`);
+            }
+
+            const fallbackExportDeclaration = t.exportNamedDeclaration(
+              t.variableDeclaration('const', [t.variableDeclarator(t.identifier(option), t.objectExpression([]))]),
+              [],
+            );
+            path.node.body.push(fallbackExportDeclaration);
+          }
+        },
       },
     },
   } as babel.PluginObj;

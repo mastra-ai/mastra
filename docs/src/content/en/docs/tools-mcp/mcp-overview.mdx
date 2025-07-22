@@ -122,7 +122,30 @@ The tabs help users understand how to connect to various MCP server providers an
 Each tab shows the specific URL patterns and configuration needed for that registry service.
 */}
 
-<Tabs items={["mcp.run", "Composio.dev", "Smithery.ai", "Ampersand"]}>
+<Tabs items={["Klavis AI", "mcp.run", "Composio.dev", "Smithery.ai", "Ampersand"]}>
+  <Tabs.Tab>
+    [Klavis AI](https://klavis.ai) provides hosted, enterprise-authenticated, high-quality MCP servers.
+
+    ```typescript
+    import { MCPClient } from "@mastra/mcp";
+
+    const mcp = new MCPClient({
+      servers: {
+        salesforce: {
+          url: new URL("https://salesforce-mcp-server.klavis.ai/mcp/?instance_id={private-instance-id}"),
+        },
+        hubspot: {
+          url: new URL("https://hubspot-mcp-server.klavis.ai/mcp/?instance_id={private-instance-id}"),
+        },
+      },
+    });
+    ```
+
+    Klavis AI offers enterprise-grade authentication and security for production deployments.
+
+    For more details on how to integrate Mastra with Klavis, check out their [documentation](https://docs.klavis.ai/documentation/ai-platform-integration/mastra).
+
+  </Tabs.Tab>
   <Tabs.Tab>
     [mcp.run](https://www.mcp.run/) provides pre-authenticated, managed MCP servers. Tools are grouped into Profiles, each with a unique, signed URL.
 

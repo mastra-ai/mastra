@@ -1,5 +1,27 @@
 # @mastra/deployer-cloudflare
 
+## 0.10.16-alpha.1
+
+### Patch Changes
+
+- 7983e53: Revert cloudflare omit install deps step
+- Updated dependencies [7983e53]
+  - @mastra/deployer@0.11.0-alpha.1
+  - @mastra/core@0.11.0-alpha.1
+
+## 0.10.16-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [0938991]
+- Updated dependencies [6f50efd]
+- Updated dependencies [bf6903e]
+- Updated dependencies [7827943]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [cbddd18]
+  - @mastra/deployer@0.11.0-alpha.0
+  - @mastra/core@0.11.0-alpha.0
+
 ## 0.10.15
 
 ### Patch Changes

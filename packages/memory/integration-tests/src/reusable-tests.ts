@@ -3,7 +3,7 @@ import * as path from 'path';
 import { Worker } from 'worker_threads';
 import type { MastraMessageV1, SharedMemoryConfig } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
-import type { LibSQLConfig } from '@mastra/libsql';
+import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';
 import type { PostgresConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
@@ -22,6 +22,7 @@ export enum StorageType {
 interface WorkerTestConfig {
   storageTypeForWorker: StorageType;
   storageConfigForWorker: LibSQLConfig | PostgresConfig | UpstashConfig;
+  vectorConfigForWorker?: LibSQLVectorConfig;
   memoryOptionsForWorker?: SharedMemoryConfig['options'];
 }
 
@@ -694,6 +695,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
                 storageType: workerTestConfig.storageTypeForWorker,
                 storageConfig: workerTestConfig.storageConfigForWorker,
                 memoryOptions: workerTestConfig.memoryOptionsForWorker || { threads: { generateTitle: false } },
+                vectorConfig: workerTestConfig.vectorConfigForWorker,
               },
             });
             worker.on('message', msg => {

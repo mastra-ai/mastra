@@ -24,8 +24,10 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { RuntimeContext } from '../runtime-context';
+import type { MastraScorers } from '../scores';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
+import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
@@ -42,7 +44,6 @@ import type {
   AiMessageType,
   ToolsetsInput,
   ToolsInput,
-  DynamicArgument,
   AgentMemoryOption,
 } from './types';
 
@@ -104,14 +105,13 @@ export class Agent<
   readonly #description?: string;
   readonly model?: DynamicArgument<MastraLanguageModel>;
   #mastra?: Mastra;
-  #memory?: MastraMemory;
+  #memory?: DynamicArgument<MastraMemory>;
   #workflows?: DynamicArgument<Record<string, Workflow>>;
   #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
   #tools: DynamicArgument<TTools>;
-  /** @deprecated This property is deprecated. Use evals instead. */
-  metrics: TMetrics;
   evals: TMetrics;
+  #scorers: DynamicArgument<MastraScorers>;
   #voice: CompositeVoice;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
@@ -121,7 +121,7 @@ export class Agent<
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
-    this.id = config.name;
+    this.id = config.id ?? config.name;
 
     this.#instructions = config.instructions;
     this.#description = config.description;
@@ -152,7 +152,6 @@ export class Agent<
 
     this.#tools = config.tools || ({} as TTools);
 
-    this.metrics = {} as TMetrics;
     this.evals = {} as TMetrics;
 
     if (config.mastra) {
@@ -163,11 +162,7 @@ export class Agent<
       });
     }
 
-    if (config.metrics) {
-      this.logger.warn('The metrics property is deprecated. Please use evals instead to add evaluation metrics.');
-      this.metrics = config.metrics;
-      this.evals = config.metrics;
-    }
+    this.#scorers = config.scorers || ({} as MastraScorers);
 
     if (config.evals) {
       this.evals = config.evals;
@@ -197,18 +192,45 @@ export class Agent<
     return Boolean(this.#memory);
   }
 
-  public getMemory(): MastraMemory | undefined {
-    const memory = this.#memory;
+  public async getMemory({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}): Promise<
+    MastraMemory | undefined
+  > {
+    if (!this.#memory) {
+      return undefined;
+    }
 
-    if (memory && !memory.hasOwnStorage && this.#mastra) {
-      const storage = this.#mastra.getStorage();
+    let resolvedMemory: MastraMemory;
 
-      if (storage) {
-        memory.setStorage(storage);
+    if (typeof this.#memory !== 'function') {
+      resolvedMemory = this.#memory;
+    } else {
+      const result = this.#memory({ runtimeContext });
+      resolvedMemory = await Promise.resolve(result);
+
+      if (!resolvedMemory) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_MEMORY_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based memory returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
       }
     }
 
-    return memory;
+    if (resolvedMemory && !resolvedMemory.hasOwnStorage && this.#mastra) {
+      const storage = this.#mastra.getStorage();
+      if (storage) {
+        resolvedMemory.setStorage(storage);
+      }
+    }
+
+    return resolvedMemory;
   }
 
   get voice() {
@@ -247,6 +269,34 @@ export class Agent<
     });
 
     return workflowRecord;
+  }
+
+  async getScorers({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): Promise<MastraScorers> {
+    if (typeof this.#scorers !== 'function') {
+      return this.#scorers;
+    }
+
+    const result = this.#scorers({ runtimeContext });
+    return resolveMaybePromise(result, scorers => {
+      if (!scorers) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_SCORERS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based scorers returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      return scorers;
+    });
   }
 
   public async getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}) {
@@ -659,6 +709,7 @@ export class Agent<
     userMessages,
     systemMessage,
     messageList = new MessageList({ threadId, resourceId }),
+    runtimeContext = new RuntimeContext(),
   }: {
     resourceId: string;
     threadId: string;
@@ -668,8 +719,9 @@ export class Agent<
     systemMessage?: CoreMessage;
     runId?: string;
     messageList?: MessageList;
+    runtimeContext?: RuntimeContext;
   }) {
-    const memory = this.getMemory();
+    const memory = await this.getMemory({ runtimeContext });
     if (memory) {
       const thread = passedThread ?? (await memory.getThreadById({ threadId }));
 
@@ -697,7 +749,7 @@ export class Agent<
                   config: memoryConfig,
                   vectorMessageSearch: messageList.getLatestUserContent() || '',
                 })
-                .then(r => r.messagesV2),
+                .then((r: any) => r.messagesV2),
               memory.getSystemMessage({ threadId, memoryConfig }),
             ])
           : [[], null];
@@ -761,7 +813,7 @@ export class Agent<
   }) {
     let convertedMemoryTools: Record<string, CoreTool> = {};
     // Get memory tools if available
-    const memory = this.getMemory();
+    const memory = await this.getMemory({ runtimeContext });
     const memoryTools = memory?.getTools?.();
 
     if (memoryTools) {
@@ -839,13 +891,15 @@ export class Agent<
     threadId,
     vectorMessageSearch,
     memoryConfig,
+    runtimeContext,
   }: {
     resourceId?: string;
     threadId: string;
     vectorMessageSearch: string;
     memoryConfig?: MemoryConfig;
+    runtimeContext: RuntimeContext;
   }) {
-    const memory = this.getMemory();
+    const memory = await this.getMemory({ runtimeContext });
     if (!memory) {
       return [];
     }
@@ -877,7 +931,7 @@ export class Agent<
 
     this.logger.debug(`[Agents:${this.name}] - Assembling assigned tools`, { runId, threadId, resourceId });
 
-    const memory = this.getMemory();
+    const memory = await this.getMemory({ runtimeContext });
 
     // Mastra tools passed into the Agent
 
@@ -936,7 +990,7 @@ export class Agent<
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
-    const memory = this.getMemory();
+    const memory = await this.getMemory({ runtimeContext });
     const toolsFromToolsets = Object.values(toolsets || {});
 
     if (toolsFromToolsets.length > 0) {
@@ -983,7 +1037,7 @@ export class Agent<
     clientTools?: ToolsInput;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
-    const memory = this.getMemory();
+    const memory = await this.getMemory({ runtimeContext });
     // Convert client tools
     const clientToolsForInput = Object.entries(clientTools || {});
     if (clientToolsForInput.length > 0) {
@@ -1224,7 +1278,7 @@ export class Agent<
           this.logger.debug(`[Agents:${this.name}] - Starting generation`, { runId });
         }
 
-        const memory = this.getMemory();
+        const memory = await this.getMemory({ runtimeContext });
 
         const toolEnhancements = [
           // toolsets
@@ -1241,7 +1295,7 @@ export class Agent<
           runId,
           toolsets: toolsets ? Object.keys(toolsets) : undefined,
           clientTools: clientTools ? Object.keys(clientTools) : undefined,
-          hasMemory: !!this.getMemory(),
+          hasMemory: !!memory,
           hasResourceId: !!resourceId,
         });
 
@@ -1336,6 +1390,7 @@ export class Agent<
                   threadId: threadObject.id,
                   vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
                   memoryConfig,
+                  runtimeContext,
                 }),
                 memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
               ])
@@ -1471,7 +1526,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           result: resToLog,
           threadId,
         });
-        const memory = this.getMemory();
         const messageListResponses = new MessageList({
           threadId,
           resourceId,
@@ -1485,6 +1539,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           m => m.role === 'tool' && m?.content?.some(c => c?.toolName === 'updateWorkingMemory'),
         );
         // working memory updates the thread, so we need to get the latest thread if we used it
+        const memory = await this.getMemory({ runtimeContext });
         const thread = usedWorkingMemory
           ? threadId
             ? await memory?.getThreadById({ threadId })
@@ -1661,7 +1716,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const resourceId = args.memory?.resource || resourceIdFromArgs;
     const memoryConfig = args.memory?.options || memoryConfigFromArgs;
 
-    if (resourceId && threadFromArgs && !this.getMemory()) {
+    if (resourceId && threadFromArgs && !this.hasOwnMemory()) {
       this.logger.warn(
         `[Agent:${this.name}] - No memory is configured but resourceId and threadId were passed in args. This will not work.`,
       );
@@ -1670,7 +1725,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
 
-    const memory = this.getMemory();
+    const memory = await this.getMemory({ runtimeContext });
     const saveQueueManager = new SaveQueueManager({
       logger: this.logger,
       memory,
@@ -1739,7 +1794,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
       const newResult = result as any;
 
-      newResult.object = result.experimental_output;
+      if (result.finishReason === 'stop') {
+        newResult.object = result.experimental_output;
+      }
 
       return newResult as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
     }
@@ -1903,7 +1960,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const resourceId = args.memory?.resource || resourceIdFromArgs;
     const memoryConfig = args.memory?.options || memoryConfigFromArgs;
 
-    if (resourceId && threadFromArgs && !this.getMemory()) {
+    if (resourceId && threadFromArgs && !this.hasOwnMemory()) {
       this.logger.warn(
         `[Agent:${this.name}] - No memory is configured but resourceId and threadId were passed in args. This will not work.`,
       );
@@ -1913,7 +1970,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
 
-    const memory = this.getMemory();
+    const memory = await this.getMemory({ runtimeContext });
     const saveQueueManager = new SaveQueueManager({
       logger: this.logger,
       memory,
