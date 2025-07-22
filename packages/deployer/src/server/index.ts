@@ -19,15 +19,17 @@ import { authenticationMiddleware, authorizationMiddleware } from './handlers/au
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { rootHandler } from './handlers/root';
-import { agentsRouterDev, agentsRouter } from './handlers/routes/agents';
-import { logsRouter } from './handlers/routes/logs';
-import { mcpRouter } from './handlers/routes/mcp';
-import { memoryRoutes } from './handlers/routes/memory';
-import { vNextNetworksRouter, networksRouter } from './handlers/routes/networks';
-import { telemetryRouter } from './handlers/routes/telemetry';
-import { toolsRouter } from './handlers/routes/tools';
-import { vectorRouter } from './handlers/routes/vector';
-import { workflowsRouter } from './handlers/routes/workflows';
+
+import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
+import { logsRouter } from './handlers/routes/logs/router';
+import { mcpRouter } from './handlers/routes/mcp/router';
+import { memoryRoutes } from './handlers/routes/memory/router';
+import { vNextNetworksRouter, networksRouter } from './handlers/routes/networks/router';
+import { scoresRouter } from './handlers/routes/scores/router';
+import { telemetryRouter } from './handlers/routes/telemetry/router';
+import { toolsRouter } from './handlers/routes/tools/router';
+import { vectorRouter } from './handlers/routes/vector/router';
+import { workflowsRouter } from './handlers/routes/workflows/router';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
 
@@ -388,6 +390,8 @@ export async function createHonoServer(
   app.route('/api/workflows', workflowsRouter(bodyLimitOptions));
   // Log routes
   app.route('/api/logs', logsRouter());
+  // Scores routes
+  app.route('/api/scores', scoresRouter(bodyLimitOptions));
   // Tool routes
   app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
   // Vector routes

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { describeRoute } from 'hono-openapi';
-import { getTelemetryHandler, storeTelemetryHandler } from '../telemetry';
+import { getTelemetryHandler, storeTelemetryHandler } from './handlers';
 
 export function telemetryRouter() {
   const router = new Hono();

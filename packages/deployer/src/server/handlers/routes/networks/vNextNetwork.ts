@@ -11,7 +11,7 @@ import {
 import type { Context } from 'hono';
 import { stream } from 'hono/streaming';
 
-import { handleError } from './error';
+import { handleError } from '../../error';
 
 export async function getVNextNetworksHandler(c: Context) {
   try {

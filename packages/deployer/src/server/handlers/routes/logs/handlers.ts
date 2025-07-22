@@ -7,7 +7,7 @@ import {
 } from '@mastra/server/handlers/logs';
 import type { Context } from 'hono';
 
-import { handleError } from './error';
+import { handleError } from '../../error';
 
 export async function getLogsHandler(c: Context) {
   try {

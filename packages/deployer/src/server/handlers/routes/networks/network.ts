@@ -8,7 +8,7 @@ import {
 } from '@mastra/server/handlers/network';
 import type { Context } from 'hono';
 
-import { handleError } from './error';
+import { handleError } from '../../error';
 
 export async function getNetworksHandler(c: Context) {
   try {
