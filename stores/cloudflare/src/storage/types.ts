@@ -74,9 +74,9 @@ export type RecordTypes = {
   [TABLE_MESSAGES]: MastraMessageV2;
   [TABLE_WORKFLOW_SNAPSHOT]: WorkflowRunState;
   [TABLE_EVALS]: EvalRow;
+  [TABLE_SCORERS]: ScoreRowData;
   [TABLE_TRACES]: any;
   [TABLE_RESOURCES]: StorageResourceType;
-  [TABLE_SCORERS]: ScoreRowData;
 };
 
 export type ListOptions = {

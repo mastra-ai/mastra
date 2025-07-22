@@ -1,23 +1,12 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
-import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { ScoreRowData } from '@mastra/core/scores';
-import type { StoragePagination, PaginationArgs } from '@mastra/core/storage';
-import {
-  MastraStorage,
-  TABLE_EVALS,
-  TABLE_MESSAGES,
-  TABLE_SCHEMAS,
-  TABLE_SCORERS,
-  TABLE_THREADS,
-  TABLE_TRACES,
-  TABLE_WORKFLOW_SNAPSHOT,
-} from '@mastra/core/storage';
+import { MastraStorage } from '@mastra/core/storage';
 import type {
+  TABLE_SCHEMAS,
   EvalRow,
   PaginationInfo,
   StorageColumn,
@@ -26,20 +15,20 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   StorageGetTracesArg,
-  TABLE_RESOURCES,
+  StorageGetTracesPaginatedArg,
+  StoragePagination,
+  StorageDomains,
+  PaginationArgs,
+  StorageResourceType,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-
-type SUPPORTED_TABLE_NAMES = Exclude<TABLE_NAMES, typeof TABLE_RESOURCES>;
-
-function safelyParseJSON(jsonString: string): any {
-  try {
-    return JSON.parse(jsonString);
-  } catch {
-    return {};
-  }
-}
+import { LegacyEvalsStorageClickhouse } from './domains/legacy-evals';
+import { MemoryStorageClickhouse } from './domains/memory';
+import { StoreOperationsClickhouse } from './domains/operations';
+import { ScoresStorageClickhouse } from './domains/scores';
+import { TracesStorageClickhouse } from './domains/traces';
+import { WorkflowsStorageClickhouse } from './domains/workflows';
 
 type IntervalUnit =
   | 'NANOSECOND'
@@ -72,49 +61,15 @@ export type ClickhouseConfig = {
   };
 };
 
-export const TABLE_ENGINES: Record<SUPPORTED_TABLE_NAMES, string> = {
-  [TABLE_MESSAGES]: `MergeTree()`,
-  [TABLE_WORKFLOW_SNAPSHOT]: `ReplacingMergeTree()`,
-  [TABLE_TRACES]: `MergeTree()`,
-  [TABLE_THREADS]: `ReplacingMergeTree()`,
-  [TABLE_EVALS]: `MergeTree()`,
-  [TABLE_SCORERS]: `MergeTree()`,
-};
-
-export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {
-  text: 'String',
-  timestamp: 'DateTime64(3)',
-  float: 'Float64',
-  uuid: 'String',
-  jsonb: 'String',
-  integer: 'Int64',
-  bigint: 'Int64',
-};
-
-function transformRows<R>(rows: any[]): R[] {
-  return rows.map((row: any) => transformRow<R>(row));
-}
-
-function transformRow<R>(row: any): R {
-  if (!row) {
-    return row;
-  }
-
-  if (row.createdAt) {
-    row.createdAt = new Date(row.createdAt);
-  }
-  if (row.updatedAt) {
-    row.updatedAt = new Date(row.updatedAt);
-  }
-  return row;
-}
-
 export class ClickhouseStore extends MastraStorage {
   protected db: ClickHouseClient;
   protected ttl: ClickhouseConfig['ttl'] = {};
 
+  stores: StorageDomains;
+
   constructor(config: ClickhouseConfig) {
     super({ name: 'ClickhouseStore' });
+
     this.db = createClient({
       url: config.url,
       username: config.username,
@@ -127,246 +82,51 @@ export class ClickhouseStore extends MastraStorage {
       },
     });
     this.ttl = config.ttl;
-  }
 
-  private transformEvalRow(row: Record<string, any>): EvalRow {
-    row = transformRow(row);
-    const resultValue = JSON.parse(row.result as string);
-    const testInfoValue = row.test_info ? JSON.parse(row.test_info as string) : undefined;
+    const operations = new StoreOperationsClickhouse({ client: this.db, ttl: this.ttl });
+    const workflows = new WorkflowsStorageClickhouse({ client: this.db, operations });
+    const scores = new ScoresStorageClickhouse({ client: this.db, operations });
+    const legacyEvals = new LegacyEvalsStorageClickhouse({ client: this.db, operations });
+    const traces = new TracesStorageClickhouse({ client: this.db, operations });
+    const memory = new MemoryStorageClickhouse({ client: this.db, operations });
 
-    if (!resultValue || typeof resultValue !== 'object' || !('score' in resultValue)) {
-      throw new MastraError({
-        id: 'CLICKHOUSE_STORAGE_INVALID_METRIC_FORMAT',
-        text: `Invalid MetricResult format: ${JSON.stringify(resultValue)}`,
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-      });
-    }
-
-    return {
-      input: row.input as string,
-      output: row.output as string,
-      result: resultValue as MetricResult,
-      agentName: row.agent_name as string,
-      metricName: row.metric_name as string,
-      instructions: row.instructions as string,
-      testInfo: testInfoValue as TestInfo,
-      globalRunId: row.global_run_id as string,
-      runId: row.run_id as string,
-      createdAt: row.created_at as string,
+    this.stores = {
+      operations,
+      workflows,
+      scores,
+      legacyEvals,
+      traces,
+      memory,
     };
   }
 
-  private escape(value: any): string {
-    if (typeof value === 'string') {
-      return `'${value.replace(/'/g, "''")}'`;
-    }
-    if (value instanceof Date) {
-      return `'${value.toISOString()}'`;
-    }
-    if (value === null || value === undefined) {
-      return 'NULL';
-    }
-    return value.toString();
+  get supports(): {
+    selectByIncludeResourceScope: boolean;
+    resourceWorkingMemory: boolean;
+    hasColumn: boolean;
+    createTable: boolean;
+  } {
+    return {
+      selectByIncludeResourceScope: true,
+      resourceWorkingMemory: true,
+      hasColumn: true,
+      createTable: true,
+    };
   }
 
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    try {
-      const baseQuery = `SELECT *, toDateTime64(createdAt, 3) as createdAt FROM ${TABLE_EVALS} WHERE agent_name = {var_agent_name:String}`;
-      const typeCondition =
-        type === 'test'
-          ? " AND test_info IS NOT NULL AND JSONExtractString(test_info, 'testPath') IS NOT NULL"
-          : type === 'live'
-            ? " AND (test_info IS NULL OR JSONExtractString(test_info, 'testPath') IS NULL)"
-            : '';
+    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
+  }
 
-      const result = await this.db.query({
-        query: `${baseQuery}${typeCondition} ORDER BY createdAt DESC`,
-        query_params: { var_agent_name: agentName },
-        clickhouse_settings: {
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-
-      if (!result) {
-        return [];
-      }
-
-      const rows = await result.json();
-      return rows.data.map((row: any) => this.transformEvalRow(row));
-    } catch (error: any) {
-      if (error?.message?.includes('no such table') || error?.message?.includes('does not exist')) {
-        return [];
-      }
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_GET_EVALS_BY_AGENT_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { agentName, type: type ?? null },
-        },
-        error,
-      );
-    }
+  async getEvals(
+    options: { agentName?: string; type?: 'test' | 'live' } & PaginationArgs,
+  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
+    return this.stores.legacyEvals.getEvals(options);
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    try {
-      await this.db.insert({
-        table: tableName,
-        values: records.map(record => ({
-          ...Object.fromEntries(
-            Object.entries(record).map(([key, value]) => [
-              key,
-              TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type === 'timestamp'
-                ? new Date(value).toISOString()
-                : value,
-            ]),
-          ),
-        })),
-        format: 'JSONEachRow',
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_BATCH_INSERT_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { tableName },
-        },
-        error,
-      );
-    }
-  }
-
-  async getTraces({
-    name,
-    scope,
-    page,
-    perPage,
-    attributes,
-    filters,
-    fromDate,
-    toDate,
-  }: {
-    name?: string;
-    scope?: string;
-    page: number;
-    perPage: number;
-    attributes?: Record<string, string>;
-    filters?: Record<string, any>;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<any[]> {
-    const limit = perPage;
-    const offset = page * perPage;
-
-    const args: Record<string, any> = {};
-
-    const conditions: string[] = [];
-    if (name) {
-      conditions.push(`name LIKE CONCAT({var_name:String}, '%')`);
-      args.var_name = name;
-    }
-    if (scope) {
-      conditions.push(`scope = {var_scope:String}`);
-      args.var_scope = scope;
-    }
-    if (attributes) {
-      Object.entries(attributes).forEach(([key, value]) => {
-        conditions.push(`JSONExtractString(attributes, '${key}') = {var_attr_${key}:String}`);
-        args[`var_attr_${key}`] = value;
-      });
-    }
-
-    if (filters) {
-      Object.entries(filters).forEach(([key, value]) => {
-        conditions.push(
-          `${key} = {var_col_${key}:${COLUMN_TYPES[TABLE_SCHEMAS.mastra_traces?.[key]?.type ?? 'text']}}`,
-        );
-        args[`var_col_${key}`] = value;
-      });
-    }
-
-    if (fromDate) {
-      conditions.push(`createdAt >= {var_from_date:DateTime64(3)}`);
-      args.var_from_date = fromDate.getTime() / 1000; // Convert to Unix timestamp
-    }
-
-    if (toDate) {
-      conditions.push(`createdAt <= {var_to_date:DateTime64(3)}`);
-      args.var_to_date = toDate.getTime() / 1000; // Convert to Unix timestamp
-    }
-
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    try {
-      const result = await this.db.query({
-        query: `SELECT *, toDateTime64(createdAt, 3) as createdAt FROM ${TABLE_TRACES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`,
-        query_params: args,
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-
-      if (!result) {
-        return [];
-      }
-
-      const resp = await result.json();
-      const rows: any[] = resp.data;
-      return rows.map(row => ({
-        id: row.id,
-        parentSpanId: row.parentSpanId,
-        traceId: row.traceId,
-        name: row.name,
-        scope: row.scope,
-        kind: row.kind,
-        status: safelyParseJSON(row.status as string),
-        events: safelyParseJSON(row.events as string),
-        links: safelyParseJSON(row.links as string),
-        attributes: safelyParseJSON(row.attributes as string),
-        startTime: row.startTime,
-        endTime: row.endTime,
-        other: safelyParseJSON(row.other as string),
-        createdAt: row.createdAt,
-      }));
-    } catch (error: any) {
-      if (error?.message?.includes('no such table') || error?.message?.includes('does not exist')) {
-        return [];
-      }
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_GET_TRACES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            name: name ?? null,
-            scope: scope ?? null,
-            page,
-            perPage,
-            attributes: attributes ? JSON.stringify(attributes) : null,
-            filters: filters ? JSON.stringify(filters) : null,
-            fromDate: fromDate?.toISOString() ?? null,
-            toDate: toDate?.toISOString() ?? null,
-          },
-        },
-        error,
-      );
-    }
+    await this.stores.operations.batchInsert({ tableName, records });
+    // await this.optimizeTable({ tableName });
   }
 
   async optimizeTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
@@ -409,88 +169,16 @@ export class ClickhouseStore extends MastraStorage {
     tableName,
     schema,
   }: {
-    tableName: SUPPORTED_TABLE_NAMES;
+    tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
-    try {
-      const columns = Object.entries(schema)
-        .map(([name, def]) => {
-          const constraints = [];
-          if (!def.nullable) constraints.push('NOT NULL');
-          const columnTtl = this.ttl?.[tableName]?.columns?.[name];
-          return `"${name}" ${COLUMN_TYPES[def.type]} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
-        })
-        .join(',\n');
-
-      const rowTtl = this.ttl?.[tableName]?.row;
-      const sql =
-        tableName === TABLE_WORKFLOW_SNAPSHOT
-          ? `
-        CREATE TABLE IF NOT EXISTS ${tableName} (
-          ${['id String'].concat(columns)}
-        )
-        ENGINE = ${TABLE_ENGINES[tableName]}
-        PRIMARY KEY (createdAt, run_id, workflow_name)
-        ORDER BY (createdAt, run_id, workflow_name)
-        ${rowTtl ? `TTL toDateTime(${rowTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${rowTtl.interval} ${rowTtl.unit}` : ''}
-        SETTINGS index_granularity = 8192
-          `
-          : `
-        CREATE TABLE IF NOT EXISTS ${tableName} (
-          ${columns}
-        )
-        ENGINE = ${TABLE_ENGINES[tableName]}
-        PRIMARY KEY (createdAt, ${tableName === TABLE_EVALS ? 'run_id' : 'id'})
-        ORDER BY (createdAt, ${tableName === TABLE_EVALS ? 'run_id' : 'id'})
-        ${this.ttl?.[tableName]?.row ? `TTL toDateTime(createdAt) + INTERVAL ${this.ttl[tableName].row.interval} ${this.ttl[tableName].row.unit}` : ''}
-        SETTINGS index_granularity = 8192
-      `;
-
-      await this.db.query({
-        query: sql,
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_CREATE_TABLE_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { tableName },
-        },
-        error,
-      );
-    }
+    return this.stores.operations.createTable({ tableName, schema });
   }
 
-  protected getSqlType(type: StorageColumn['type']): string {
-    switch (type) {
-      case 'text':
-        return 'String';
-      case 'timestamp':
-        return 'DateTime64(3)';
-      case 'integer':
-      case 'bigint':
-        return 'Int64';
-      case 'jsonb':
-        return 'String';
-      default:
-        return super.getSqlType(type); // fallback to base implementation
-    }
+  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    return this.stores.operations.dropTable({ tableName });
   }
 
-  /**
-   * Alters table schema to add columns if they don't exist
-   * @param tableName Name of the table
-   * @param schema Schema of the table
-   * @param ifNotExists Array of column names to add if they don't exist
-   */
   async alterTable({
     tableName,
     schema,
@@ -500,646 +188,19 @@ export class ClickhouseStore extends MastraStorage {
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
-    try {
-      // 1. Get existing columns
-      const describeSql = `DESCRIBE TABLE ${tableName}`;
-      const result = await this.db.query({
-        query: describeSql,
-      });
-      const rows = await result.json();
-      const existingColumnNames = new Set(rows.data.map((row: any) => row.name.toLowerCase()));
-
-      // 2. Add missing columns
-      for (const columnName of ifNotExists) {
-        if (!existingColumnNames.has(columnName.toLowerCase()) && schema[columnName]) {
-          const columnDef = schema[columnName];
-          let sqlType = this.getSqlType(columnDef.type);
-          if (columnDef.nullable !== false) {
-            sqlType = `Nullable(${sqlType})`;
-          }
-          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
-          // Use backticks or double quotes as needed for identifiers
-          const alterSql =
-            `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();
-
-          await this.db.query({
-            query: alterSql,
-          });
-          this.logger?.debug?.(`Added column ${columnName} to table ${tableName}`);
-        }
-      }
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_ALTER_TABLE_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { tableName },
-        },
-        error,
-      );
-    }
+    return this.stores.operations.alterTable({ tableName, schema, ifNotExists });
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    try {
-      await this.db.query({
-        query: `TRUNCATE TABLE ${tableName}`,
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_CLEAR_TABLE_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { tableName },
-        },
-        error,
-      );
-    }
+    return this.stores.operations.clearTable({ tableName });
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    try {
-      await this.db.insert({
-        table: tableName,
-        values: [
-          {
-            ...record,
-            createdAt: record.createdAt.toISOString(),
-            updatedAt: record.updatedAt.toISOString(),
-          },
-        ],
-        format: 'JSONEachRow',
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          output_format_json_quote_64bit_integers: 0,
-          date_time_input_format: 'best_effort',
-          use_client_time_zone: 1,
-        },
-      });
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_INSERT_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { tableName },
-        },
-        error,
-      );
-    }
+    return this.stores.operations.insert({ tableName, record });
   }
 
-  async load<R>({
-    tableName,
-    keys,
-  }: {
-    tableName: SUPPORTED_TABLE_NAMES;
-    keys: Record<string, string>;
-  }): Promise<R | null> {
-    try {
-      const keyEntries = Object.entries(keys);
-      const conditions = keyEntries
-        .map(
-          ([key]) =>
-            `"${key}" = {var_${key}:${COLUMN_TYPES[TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type ?? 'text']}}`,
-        )
-        .join(' AND ');
-      const values = keyEntries.reduce((acc, [key, value]) => {
-        return { ...acc, [`var_${key}`]: value };
-      }, {});
-
-      const result = await this.db.query({
-        query: `SELECT *, toDateTime64(createdAt, 3) as createdAt, toDateTime64(updatedAt, 3) as updatedAt FROM ${tableName} ${TABLE_ENGINES[tableName as SUPPORTED_TABLE_NAMES].startsWith('ReplacingMergeTree') ? 'FINAL' : ''} WHERE ${conditions}`,
-        query_params: values,
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-
-      if (!result) {
-        return null;
-      }
-
-      const rows = await result.json();
-      // If this is a workflow snapshot, parse the snapshot field
-      if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
-        const snapshot = rows.data[0] as any;
-        if (!snapshot) {
-          return null;
-        }
-        if (typeof snapshot.snapshot === 'string') {
-          snapshot.snapshot = JSON.parse(snapshot.snapshot);
-        }
-        return transformRow(snapshot);
-      }
-
-      const data: R = transformRow(rows.data[0]);
-      return data;
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_LOAD_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { tableName },
-        },
-        error,
-      );
-    }
-  }
-
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    try {
-      const result = await this.db.query({
-        query: `SELECT 
-          id,
-          "resourceId",
-          title,
-          metadata,
-          toDateTime64(createdAt, 3) as createdAt,
-          toDateTime64(updatedAt, 3) as updatedAt
-        FROM "${TABLE_THREADS}"
-        FINAL
-        WHERE id = {var_id:String}`,
-        query_params: { var_id: threadId },
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-
-      const rows = await result.json();
-      const thread = transformRow(rows.data[0]) as StorageThreadType;
-
-      if (!thread) {
-        return null;
-      }
-
-      return {
-        ...thread,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
-      };
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_GET_THREAD_BY_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
-        },
-        error,
-      );
-    }
-  }
-
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    try {
-      const result = await this.db.query({
-        query: `SELECT 
-          id,
-          "resourceId",
-          title,
-          metadata,
-          toDateTime64(createdAt, 3) as createdAt,
-          toDateTime64(updatedAt, 3) as updatedAt
-        FROM "${TABLE_THREADS}"
-        WHERE "resourceId" = {var_resourceId:String}`,
-        query_params: { var_resourceId: resourceId },
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-
-      const rows = await result.json();
-      const threads = transformRows(rows.data) as StorageThreadType[];
-
-      return threads.map((thread: StorageThreadType) => ({
-        ...thread,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
-      }));
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
-        },
-        error,
-      );
-    }
-  }
-
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    try {
-      await this.db.insert({
-        table: TABLE_THREADS,
-        values: [
-          {
-            ...thread,
-            createdAt: thread.createdAt.toISOString(),
-            updatedAt: thread.updatedAt.toISOString(),
-          },
-        ],
-        format: 'JSONEachRow',
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-
-      return thread;
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_SAVE_THREAD_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId: thread.id },
-        },
-        error,
-      );
-    }
-  }
-
-  async updateThread({
-    id,
-    title,
-    metadata,
-  }: {
-    id: string;
-    title: string;
-    metadata: Record<string, unknown>;
-  }): Promise<StorageThreadType> {
-    try {
-      // First get the existing thread to merge metadata
-      const existingThread = await this.getThreadById({ threadId: id });
-      if (!existingThread) {
-        throw new Error(`Thread ${id} not found`);
-      }
-
-      // Merge the existing metadata with the new metadata
-      const mergedMetadata = {
-        ...existingThread.metadata,
-        ...metadata,
-      };
-
-      const updatedThread = {
-        ...existingThread,
-        title,
-        metadata: mergedMetadata,
-        updatedAt: new Date(),
-      };
-
-      await this.db.insert({
-        table: TABLE_THREADS,
-        format: 'JSONEachRow',
-        values: [
-          {
-            id: updatedThread.id,
-            resourceId: updatedThread.resourceId,
-            title: updatedThread.title,
-            metadata: updatedThread.metadata,
-            createdAt: updatedThread.createdAt,
-            updatedAt: updatedThread.updatedAt.toISOString(),
-          },
-        ],
-        clickhouse_settings: {
-          date_time_input_format: 'best_effort',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-
-      return updatedThread;
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_UPDATE_THREAD_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId: id, title },
-        },
-        error,
-      );
-    }
-  }
-
-  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    try {
-      // First delete all messages associated with this thread
-      await this.db.command({
-        query: `DELETE FROM "${TABLE_MESSAGES}" WHERE thread_id = {var_thread_id:String};`,
-        query_params: { var_thread_id: threadId },
-        clickhouse_settings: {
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-
-      // Then delete the thread
-      await this.db.command({
-        query: `DELETE FROM "${TABLE_THREADS}" WHERE id = {var_id:String};`,
-        query_params: { var_id: threadId },
-        clickhouse_settings: {
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_DELETE_THREAD_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
-        },
-        error,
-      );
-    }
-  }
-
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    try {
-      const messages: any[] = [];
-      const limit = this.resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-      const include = selectBy?.include || [];
-
-      if (include.length) {
-        const includeResult = await this.db.query({
-          query: `
-          WITH ordered_messages AS (
-            SELECT 
-              *,
-              toDateTime64(createdAt, 3) as createdAt,
-              toDateTime64(updatedAt, 3) as updatedAt,
-              ROW_NUMBER() OVER (ORDER BY "createdAt" DESC) as row_num
-            FROM "${TABLE_MESSAGES}"
-            WHERE thread_id = {var_thread_id:String}
-          )
-          SELECT
-            m.id AS id, 
-            m.content as content, 
-            m.role as role, 
-            m.type as type,
-            m.createdAt as createdAt, 
-            m.updatedAt as updatedAt,
-            m.thread_id AS "threadId"
-          FROM ordered_messages m
-          WHERE m.id = ANY({var_include:Array(String)})
-          OR EXISTS (
-            SELECT 1 FROM ordered_messages target
-            WHERE target.id = ANY({var_include:Array(String)})
-            AND (
-              -- Get previous messages based on the max withPreviousMessages
-              (m.row_num <= target.row_num + {var_withPreviousMessages:Int64} AND m.row_num > target.row_num)
-              OR
-              -- Get next messages based on the max withNextMessages
-              (m.row_num >= target.row_num - {var_withNextMessages:Int64} AND m.row_num < target.row_num)
-            )
-          )
-          ORDER BY m."createdAt" DESC
-          `,
-          query_params: {
-            var_thread_id: threadId,
-            var_include: include.map(i => i.id),
-            var_withPreviousMessages: Math.max(...include.map(i => i.withPreviousMessages || 0)),
-            var_withNextMessages: Math.max(...include.map(i => i.withNextMessages || 0)),
-          },
-          clickhouse_settings: {
-            // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-            date_time_input_format: 'best_effort',
-            date_time_output_format: 'iso',
-            use_client_time_zone: 1,
-            output_format_json_quote_64bit_integers: 0,
-          },
-        });
-
-        const rows = await includeResult.json();
-        messages.push(...transformRows(rows.data));
-      }
-
-      // Then get the remaining messages, excluding the ids we just fetched
-      const result = await this.db.query({
-        query: `
-        SELECT 
-            id, 
-            content, 
-            role, 
-            type,
-            toDateTime64(createdAt, 3) as createdAt,
-            thread_id AS "threadId"
-        FROM "${TABLE_MESSAGES}"
-        WHERE thread_id = {threadId:String}
-        AND id NOT IN ({exclude:Array(String)})
-        ORDER BY "createdAt" DESC
-        LIMIT {limit:Int64}
-        `,
-        query_params: {
-          threadId,
-          exclude: messages.map(m => m.id),
-          limit,
-        },
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-
-      const rows = await result.json();
-      messages.push(...transformRows(rows.data));
-
-      // Sort all messages by creation date
-      messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-      // Parse message content
-      messages.forEach(message => {
-        if (typeof message.content === 'string') {
-          try {
-            message.content = JSON.parse(message.content);
-          } catch {
-            // If parsing fails, leave as string
-          }
-        }
-      });
-
-      const list = new MessageList({ threadId, resourceId }).add(messages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_GET_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId, resourceId: resourceId ?? '' },
-        },
-        error,
-      );
-    }
-  }
-
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
-    const { messages, format = 'v1' } = args;
-    if (messages.length === 0) return messages;
-
-    try {
-      const threadId = messages[0]?.threadId;
-      const resourceId = messages[0]?.resourceId;
-      if (!threadId) {
-        throw new Error('Thread ID is required');
-      }
-
-      // Check if thread exists
-      const thread = await this.getThreadById({ threadId });
-      if (!thread) {
-        throw new Error(`Thread ${threadId} not found`);
-      }
-
-      // Clickhouse's MergeTree engine does not support native upserts or unique constraints on (id, thread_id).
-      // Note: We cannot switch to ReplacingMergeTree without a schema migration,
-      // as it would require altering the table engine.
-      // To ensure correct upsert behavior, we first fetch existing (id, thread_id) pairs for the incoming messages.
-      const existingResult = await this.db.query({
-        query: `SELECT id, thread_id FROM ${TABLE_MESSAGES} WHERE id IN ({ids:Array(String)})`,
-        query_params: {
-          ids: messages.map(m => m.id),
-        },
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          date_time_output_format: 'iso',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-        format: 'JSONEachRow',
-      });
-      const existingRows: Array<{ id: string; thread_id: string }> = await existingResult.json();
-
-      const existingSet = new Set(existingRows.map(row => `${row.id}::${row.thread_id}`));
-      // Partition the batch into new inserts and updates:
-      // New messages are inserted in bulk.
-      const toInsert = messages.filter(m => !existingSet.has(`${m.id}::${threadId}`));
-      // Existing messages are updated via ALTER TABLE ... UPDATE.
-      const toUpdate = messages.filter(m => existingSet.has(`${m.id}::${threadId}`));
-      const updatePromises = toUpdate.map(message =>
-        this.db.command({
-          query: `
-      ALTER TABLE ${TABLE_MESSAGES}
-      UPDATE content = {var_content:String}, role = {var_role:String}, type = {var_type:String}
-      WHERE id = {var_id:String} AND thread_id = {var_thread_id:String}
-    `,
-          query_params: {
-            var_content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-            var_role: message.role,
-            var_type: message.type || 'v2',
-            var_id: message.id,
-            var_thread_id: threadId,
-          },
-          clickhouse_settings: {
-            // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-            date_time_input_format: 'best_effort',
-            use_client_time_zone: 1,
-            output_format_json_quote_64bit_integers: 0,
-          },
-        }),
-      );
-
-      // Execute message inserts and thread update in parallel for better performance
-      await Promise.all([
-        // Insert messages
-        this.db.insert({
-          table: TABLE_MESSAGES,
-          format: 'JSONEachRow',
-          values: toInsert.map(message => ({
-            id: message.id,
-            thread_id: threadId,
-            content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-            createdAt: message.createdAt.toISOString(),
-            role: message.role,
-            type: message.type || 'v2',
-          })),
-          clickhouse_settings: {
-            // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-            date_time_input_format: 'best_effort',
-            use_client_time_zone: 1,
-            output_format_json_quote_64bit_integers: 0,
-          },
-        }),
-        ...updatePromises,
-        // Update thread's updatedAt timestamp
-        this.db.insert({
-          table: TABLE_THREADS,
-          format: 'JSONEachRow',
-          values: [
-            {
-              id: thread.id,
-              resourceId: thread.resourceId,
-              title: thread.title,
-              metadata: thread.metadata,
-              createdAt: thread.createdAt,
-              updatedAt: new Date().toISOString(),
-            },
-          ],
-          clickhouse_settings: {
-            date_time_input_format: 'best_effort',
-            use_client_time_zone: 1,
-            output_format_json_quote_64bit_integers: 0,
-          },
-        }),
-      ]);
-
-      const list = new MessageList({ threadId, resourceId }).add(messages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_SAVE_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
-    }
+  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
+    return this.stores.operations.load({ tableName, keys });
   }
 
   async persistWorkflowSnapshot({
@@ -1151,49 +212,7 @@ export class ClickhouseStore extends MastraStorage {
     runId: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    try {
-      const currentSnapshot = await this.load({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: { workflow_name: workflowName, run_id: runId },
-      });
-
-      const now = new Date();
-      const persisting = currentSnapshot
-        ? {
-            ...currentSnapshot,
-            snapshot: JSON.stringify(snapshot),
-            updatedAt: now.toISOString(),
-          }
-        : {
-            workflow_name: workflowName,
-            run_id: runId,
-            snapshot: JSON.stringify(snapshot),
-            createdAt: now.toISOString(),
-            updatedAt: now.toISOString(),
-          };
-
-      await this.db.insert({
-        table: TABLE_WORKFLOW_SNAPSHOT,
-        format: 'JSONEachRow',
-        values: [persisting],
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
-        },
-        error,
-      );
-    }
+    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot });
   }
 
   async loadWorkflowSnapshot({
@@ -1203,52 +222,7 @@ export class ClickhouseStore extends MastraStorage {
     workflowName: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
-    try {
-      const result = await this.load({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: {
-          workflow_name: workflowName,
-          run_id: runId,
-        },
-      });
-
-      if (!result) {
-        return null;
-      }
-
-      return (result as any).snapshot;
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
-        },
-        error,
-      );
-    }
-  }
-
-  private parseWorkflowRun(row: any): WorkflowRun {
-    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-    if (typeof parsedSnapshot === 'string') {
-      try {
-        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-      } catch (e) {
-        // If parsing fails, return the raw snapshot string
-        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-      }
-    }
-
-    return {
-      workflowName: row.workflow_name,
-      runId: row.run_id,
-      snapshot: parsedSnapshot,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-      resourceId: row.resourceId,
-    };
+    return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
   }
 
   async getWorkflowRuns({
@@ -1266,90 +240,7 @@ export class ClickhouseStore extends MastraStorage {
     offset?: number;
     resourceId?: string;
   } = {}): Promise<WorkflowRuns> {
-    try {
-      const conditions: string[] = [];
-      const values: Record<string, any> = {};
-
-      if (workflowName) {
-        conditions.push(`workflow_name = {var_workflow_name:String}`);
-        values.var_workflow_name = workflowName;
-      }
-
-      if (resourceId) {
-        const hasResourceId = await this.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
-        if (hasResourceId) {
-          conditions.push(`resourceId = {var_resourceId:String}`);
-          values.var_resourceId = resourceId;
-        } else {
-          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
-        }
-      }
-
-      if (fromDate) {
-        conditions.push(`createdAt >= {var_from_date:DateTime64(3)}`);
-        values.var_from_date = fromDate.getTime() / 1000; // Convert to Unix timestamp
-      }
-
-      if (toDate) {
-        conditions.push(`createdAt <= {var_to_date:DateTime64(3)}`);
-        values.var_to_date = toDate.getTime() / 1000; // Convert to Unix timestamp
-      }
-
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-      const limitClause = limit !== undefined ? `LIMIT ${limit}` : '';
-      const offsetClause = offset !== undefined ? `OFFSET ${offset}` : '';
-
-      let total = 0;
-      // Only get total count when using pagination
-      if (limit !== undefined && offset !== undefined) {
-        const countResult = await this.db.query({
-          query: `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${TABLE_ENGINES[TABLE_WORKFLOW_SNAPSHOT].startsWith('ReplacingMergeTree') ? 'FINAL' : ''} ${whereClause}`,
-          query_params: values,
-          format: 'JSONEachRow',
-        });
-        const countRows = await countResult.json();
-        total = Number((countRows as Array<{ count: string | number }>)[0]?.count ?? 0);
-      }
-
-      // Get results
-      const result = await this.db.query({
-        query: `
-          SELECT 
-            workflow_name,
-            run_id,
-            snapshot,
-            toDateTime64(createdAt, 3) as createdAt,
-            toDateTime64(updatedAt, 3) as updatedAt,
-            resourceId
-          FROM ${TABLE_WORKFLOW_SNAPSHOT} ${TABLE_ENGINES[TABLE_WORKFLOW_SNAPSHOT].startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
-          ${whereClause}
-          ORDER BY createdAt DESC
-          ${limitClause}
-          ${offsetClause}
-        `,
-        query_params: values,
-        format: 'JSONEachRow',
-      });
-
-      const resultJson = await result.json();
-      const rows = resultJson as any[];
-      const runs = rows.map(row => {
-        return this.parseWorkflowRun(row);
-      });
-
-      // Use runs.length as total when not paginating
-      return { runs, total: total || runs.length };
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_GET_WORKFLOW_RUNS_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName: workflowName ?? '', resourceId: resourceId ?? '' },
-        },
-        error,
-      );
-    }
+    return this.stores.workflows.getWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
   }
 
   async getWorkflowRunById({
@@ -1359,152 +250,118 @@ export class ClickhouseStore extends MastraStorage {
     runId: string;
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
-    try {
-      const conditions: string[] = [];
-      const values: Record<string, any> = {};
-
-      if (runId) {
-        conditions.push(`run_id = {var_runId:String}`);
-        values.var_runId = runId;
-      }
-
-      if (workflowName) {
-        conditions.push(`workflow_name = {var_workflow_name:String}`);
-        values.var_workflow_name = workflowName;
-      }
-
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-      // Get results
-      const result = await this.db.query({
-        query: `
-          SELECT 
-            workflow_name,
-            run_id,
-            snapshot,
-            toDateTime64(createdAt, 3) as createdAt,
-            toDateTime64(updatedAt, 3) as updatedAt,
-            resourceId
-          FROM ${TABLE_WORKFLOW_SNAPSHOT} ${TABLE_ENGINES[TABLE_WORKFLOW_SNAPSHOT].startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
-          ${whereClause}
-        `,
-        query_params: values,
-        format: 'JSONEachRow',
-      });
-
-      const resultJson = await result.json();
-      if (!Array.isArray(resultJson) || resultJson.length === 0) {
-        return null;
-      }
-      return this.parseWorkflowRun(resultJson[0]);
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'CLICKHOUSE_STORAGE_GET_WORKFLOW_RUN_BY_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { runId: runId ?? '', workflowName: workflowName ?? '' },
-        },
-        error,
-      );
-    }
+    return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
-  private async hasColumn(table: string, column: string): Promise<boolean> {
-    const result = await this.db.query({
-      query: `DESCRIBE TABLE ${table}`,
-      format: 'JSONEachRow',
-    });
-    const columns = (await result.json()) as { name: string }[];
-    return columns.some(c => c.name === column);
+  async getTraces(args: StorageGetTracesArg): Promise<any[]> {
+    return this.stores.traces.getTraces(args);
   }
 
-  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
-    throw new MastraError({
-      id: 'CLICKHOUSE_STORAGE_GET_TRACES_PAGINATED_FAILED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.USER,
-      text: 'Method not implemented.',
-    });
+  async getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    return this.stores.traces.getTracesPaginated(args);
   }
 
-  async getThreadsByResourceIdPaginated(_args: {
+  async batchTraceInsert(args: { records: Trace[] }): Promise<void> {
+    return this.stores.traces.batchTraceInsert(args);
+  }
+
+  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+    return this.stores.memory.getThreadById({ threadId });
+  }
+
+  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
+    return this.stores.memory.getThreadsByResourceId({ resourceId });
+  }
+
+  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+    return this.stores.memory.saveThread({ thread });
+  }
+
+  async updateThread({
+    id,
+    title,
+    metadata,
+  }: {
+    id: string;
+    title: string;
+    metadata: Record<string, unknown>;
+  }): Promise<StorageThreadType> {
+    return this.stores.memory.updateThread({ id, title, metadata });
+  }
+
+  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    return this.stores.memory.deleteThread({ threadId });
+  }
+
+  async getThreadsByResourceIdPaginated(args: {
     resourceId: string;
-    page?: number;
-    perPage?: number;
+    page: number;
+    perPage: number;
   }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    throw new MastraError({
-      id: 'CLICKHOUSE_STORAGE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.USER,
-      text: 'Method not implemented.',
-    });
+    return this.stores.memory.getThreadsByResourceIdPaginated(args);
+  }
+
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    resourceId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    return this.stores.memory.getMessages({ threadId, resourceId, selectBy, format });
+  }
+
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
+  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    return this.stores.memory.saveMessages(args);
   }
 
   async getMessagesPaginated(
-    _args: StorageGetMessagesArg,
+    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    throw new MastraError({
-      id: 'CLICKHOUSE_STORAGE_GET_MESSAGES_PAGINATED_FAILED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.USER,
-      text: 'Method not implemented.',
-    });
+    return this.stores.memory.getMessagesPaginated(args);
   }
 
-  async close(): Promise<void> {
-    await this.db.close();
-  }
-
-  async updateMessages(_args: {
-    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
-      {
-        id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-      }[];
+  async updateMessages(args: {
+    messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
+      id: string;
+      threadId?: string;
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+    })[];
   }): Promise<MastraMessageV2[]> {
-    this.logger.error('updateMessages is not yet implemented in ClickhouseStore');
-    throw new Error('Method not implemented');
+    return this.stores.memory.updateMessages(args);
+  }
+
+  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
+    return this.stores.memory.getResourceById({ resourceId });
+  }
+
+  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    return this.stores.memory.saveResource({ resource });
+  }
+
+  async updateResource({
+    resourceId,
+    workingMemory,
+    metadata,
+  }: {
+    resourceId: string;
+    workingMemory?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<StorageResourceType> {
+    return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    throw new MastraError({
-      id: 'CLICKHOUSE_STORAGE_GET_SCORE_BY_ID_NOT_IMPLEMENTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.USER,
-      text: 'getScoreById is not implemented in ClickhouseStore.',
-      details: { id },
-    });
+    return this.stores.scores.getScoreById({ id });
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
-    throw new MastraError({
-      id: 'CLICKHOUSE_STORAGE_SAVE_SCORE_NOT_IMPLEMENTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.USER,
-      text: 'saveScore is not implemented in ClickhouseStore.',
-      details: { entityType: score.entityType, entityId: score.entityId, scorerId: score.scorerId },
-    });
-  }
-
-  async getScoresByScorerId({
-    scorerId,
-    pagination,
-    entityId,
-    entityType,
-  }: {
-    scorerId: string;
-    pagination: StoragePagination;
-    entityId?: string;
-    entityType?: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    throw new MastraError({
-      id: 'CLICKHOUSE_STORAGE_GET_SCORES_BY_SCORER_ID_NOT_IMPLEMENTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.USER,
-      text: 'getScoresByScorerId is not implemented in ClickhouseStore.',
-      details: { scorerId, entityId: entityId ?? '', entityType: entityType ?? '' },
-    });
+  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+    return this.stores.scores.saveScore(_score);
   }
 
   async getScoresByRunId({
@@ -1514,13 +371,7 @@ export class ClickhouseStore extends MastraStorage {
     runId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    throw new MastraError({
-      id: 'CLICKHOUSE_STORAGE_GET_SCORES_BY_RUN_ID_NOT_IMPLEMENTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.USER,
-      text: 'getScoresByRunId is not implemented in ClickhouseStore.',
-      details: { runId },
-    });
+    return this.stores.scores.getScoresByRunId({ runId, pagination });
   }
 
   async getScoresByEntityId({
@@ -1532,34 +383,20 @@ export class ClickhouseStore extends MastraStorage {
     entityId: string;
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    throw new MastraError({
-      id: 'CLICKHOUSE_STORAGE_GET_SCORES_BY_ENTITY_ID_NOT_IMPLEMENTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.USER,
-      text: 'getScoresByEntityId is not implemented in ClickhouseStore.',
-      details: { entityId, entityType },
-    });
+    return this.stores.scores.getScoresByEntityId({ entityId, entityType, pagination });
   }
 
-  async getEvals(
-    options: { agentName?: string; type?: 'test' | 'live' } & PaginationArgs,
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    throw new MastraError({
-      id: 'CLICKHOUSE_STORAGE_GET_EVALS_NOT_IMPLEMENTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.USER,
-      text: 'getEvals is not implemented in ClickhouseStore.',
-      details: { agentName: options.agentName ?? '', type: options.type ?? '' },
-    });
+  async getScoresByScorerId({
+    scorerId,
+    pagination,
+  }: {
+    scorerId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    return this.stores.scores.getScoresByScorerId({ scorerId, pagination });
   }
 
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    throw new MastraError({
-      id: 'CLICKHOUSE_STORAGE_DROP_TABLE_NOT_IMPLEMENTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.USER,
-      text: 'dropTable is not implemented in ClickhouseStore.',
-      details: { tableName },
-    });
+  async close(): Promise<void> {
+    await this.db.close();
   }
 }

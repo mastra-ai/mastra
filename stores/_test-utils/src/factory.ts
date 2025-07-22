@@ -7,6 +7,7 @@ import {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_TRACES,
 } from '@mastra/core/storage';
 // import { createScoresTest } from './domains/scores';
 import { createMemoryTest } from './domains/memory';
@@ -17,6 +18,7 @@ import { createOperationsTests } from './domains/operations';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/evals/data';
+export * from './domains/scores/data';
 export * from './domains/traces/data';
 
 export function createTestSuite(storage: MastraStorage) {
@@ -31,12 +33,15 @@ export function createTestSuite(storage: MastraStorage) {
 
     afterAll(async () => {
       // Clear tables after tests
-      await storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
-      await storage.clearTable({ tableName: TABLE_EVALS });
-      await storage.clearTable({ tableName: TABLE_MESSAGES });
-      await storage.clearTable({ tableName: TABLE_THREADS });
-      await storage.clearTable({ tableName: TABLE_RESOURCES });
-      await storage.clearTable({ tableName: TABLE_SCORERS });
+      await Promise.all([
+        storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT }),
+        storage.clearTable({ tableName: TABLE_EVALS }),
+        storage.clearTable({ tableName: TABLE_MESSAGES }),
+        storage.clearTable({ tableName: TABLE_THREADS }),
+        storage.clearTable({ tableName: TABLE_RESOURCES }),
+        storage.clearTable({ tableName: TABLE_SCORERS }),
+        storage.clearTable({ tableName: TABLE_TRACES }),
+      ]);
     });
 
     createOperationsTests({ storage });
