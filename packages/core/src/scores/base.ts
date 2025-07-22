@@ -75,7 +75,7 @@ export class MastraScorer {
         if (!this.reason) {
           return {
             extractStepResult,
-            analyzeStepResult: analyzeStepRes.analyzeStepResult,
+            analyzeStepResult: analyzeStepRes,
             analyzePrompt: analyzeStepRes.analyzePrompt,
             extractPrompt: extractStepResult.extractPrompt,
             score: analyzeStepRes.score,
@@ -84,7 +84,7 @@ export class MastraScorer {
 
         const reasonResult = await this.reason({
           ...input,
-          analyzeStepResult: analyzeStepRes.analyzeStepResult,
+          analyzeStepResult: analyzeStepRes,
           score: analyzeStepRes.score,
         });
 
