@@ -13,5 +13,8 @@ export * from './registry';
 // Abstract base class
 export { MastraAITelemetry, telemetryDefaultOptions } from './base';
 
+// Exporters
+export { LangfuseExporter } from './exporters/langfuse';
+
 // Decorators
 export { withSpan, InstrumentClass } from './decorators';

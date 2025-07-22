@@ -95,9 +95,9 @@ export interface AgentRunMetadata extends BaseMetadata {
  */
 export interface LLMGenerationMetadata extends BaseMetadata {
   /** Model name (e.g., 'gpt-4', 'claude-3') */
-  model: string;
+  model?: string;
   /** Model provider (e.g., 'openai', 'anthropic') */
-  provider: string;
+  provider?: string;
   /** Type of result/output this LLM call produced */
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning' | 'evaluation';
   /** Input messages/prompts */

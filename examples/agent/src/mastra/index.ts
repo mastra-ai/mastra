@@ -5,7 +5,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { chefAgent, chefAgentResponses, dynamicAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { myWorkflow } from './workflows';
-import { DefaultConsoleExporter } from '@mastra/core/telemetry_vnext';
+import { DefaultConsoleExporter, LangfuseExporter } from '@mastra/core/telemetry_vnext';
 
 const storage = new LibSQLStore({
   url: 'file:./mastra.db',
@@ -30,6 +30,20 @@ export const mastra = new Mastra({
   telemetryVNext: {
     enabled: true,
     serviceName: 'quickstart-example',
-    exporters: [new DefaultConsoleExporter()],
+    exporters: [
+      new DefaultConsoleExporter(),
+      ...(process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY
+        ? [
+            new LangfuseExporter({
+              publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+              secretKey: process.env.LANGFUSE_SECRET_KEY,
+              baseUrl: process.env.LANGFUSE_BASE_URL,
+              options: {
+                debug: process.env.NODE_ENV === 'development',
+              },
+            }),
+          ]
+        : []),
+    ],
   },
 });

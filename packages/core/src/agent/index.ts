@@ -832,7 +832,7 @@ export class Agent<
                         );
                         this.logger.trackException(mastraError);
                         this.logger.error(mastraError.toString());
-                        toolSpan?.error(mastraError, true)
+                        toolSpan?.error(mastraError, true);
                         throw mastraError;
                       }
                     }
@@ -1039,7 +1039,7 @@ export class Agent<
                 toolType: 'workflow',
                 input: args,
               };
-              const toolSpan = agentSpan?.createChildSpan({name: workflowName, type: SpanType.TOOL_CALL, metadata});
+              const toolSpan = agentSpan?.createChildSpan({ name: workflowName, type: SpanType.TOOL_CALL, metadata });
 
               try {
                 this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
@@ -1077,7 +1077,7 @@ export class Agent<
                 );
                 this.logger.trackException(mastraError);
                 this.logger.error(mastraError.toString());
-                toolSpan?.error(mastraError, true)
+                toolSpan?.error(mastraError, true);
                 throw mastraError;
               }
             },
@@ -1245,28 +1245,28 @@ export class Agent<
         }
 
         let agentSpan: AISpan<AgentRunMetadata> | undefined;
-        
+
         const vnextTelemetry = this.#mastra?.getTelemetryVNext();
         if (vnextTelemetry) {
           const metadata: AgentRunMetadata = {
-              agentId: this.id,
-              instructions,
-              availableTools: [
-                ...(toolsets ? Object.keys(toolsets) : []),
-                ...(clientTools ? Object.keys(clientTools) : []),
-              ],
-              attributes: {
-                runId,
-                resourceId,
-                threadId: thread?.id,
-              },
-          }
-    
+            agentId: this.id,
+            instructions,
+            availableTools: [
+              ...(toolsets ? Object.keys(toolsets) : []),
+              ...(clientTools ? Object.keys(clientTools) : []),
+            ],
+            attributes: {
+              runId,
+              resourceId,
+              threadId: thread?.id,
+            },
+          };
+
           agentSpan = vnextTelemetry.startAgentRunSpan({
-              name: `agent-${this.id}`,
-              metadata,
-              parent: parentSpan,
-            }) as AISpan<AgentRunMetadata>;
+            name: `agent-${this.id}`,
+            metadata,
+            parent: parentSpan,
+          }) as AISpan<AgentRunMetadata>;
         }
 
         const memory = this.getMemory();
@@ -1999,6 +1999,7 @@ export class Agent<
         runtimeContext,
         threadId: thread?.id,
         resourceId,
+        aiSpan: agentSpan,
         ...args,
       });
 
@@ -2055,6 +2056,7 @@ export class Agent<
         runtimeContext,
         threadId: thread?.id,
         resourceId,
+        aiSpan: agentSpan,
         ...args,
       }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
     }
@@ -2109,6 +2111,7 @@ export class Agent<
       runtimeContext,
       threadId: thread?.id,
       resourceId,
+      aiSpan: agentSpan,
       ...args,
     }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
   }

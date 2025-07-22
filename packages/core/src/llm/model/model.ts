@@ -29,9 +29,8 @@ import type { MastraMemory } from '../../memory/memory';
 import { delay } from '../../utils';
 
 import { MastraLLMBase } from './base';
-import { SpanType, type AISpan, type ToolCallMetadata } from '../../telemetry_vnext';
+import { SpanType, type AISpan, type LLMGenerationMetadata, type ToolCallMetadata } from '../../telemetry_vnext';
 import type { CoreTool } from '../../tools';
-import { openAPISpecs } from 'hono-openapi';
 
 export class MastraLLM extends MastraLLMBase {
   #model: LanguageModel;
@@ -99,29 +98,31 @@ export class MastraLLM extends MastraLLMBase {
     });
   }
 
-  private wrapTool(tool: CoreTool, aiSpan?: AISpan) : CoreTool {
-    console.log("Wrapping tool: %s : %s with aiSpan: %s", tool.id, tool.description, aiSpan ? "exists": "false");
+  private wrapTool(tool: CoreTool, aiSpan?: AISpan): CoreTool {
+    console.log('Wrapping tool: %s : %s with aiSpan: %s', tool.id, tool.description, aiSpan ? 'exists' : 'false');
     if (!aiSpan || !tool.execute) {
       return tool;
     }
 
     const wrappedExecute = async (params: any, options: ToolExecutionOptions) => {
-      console.log("EXECUTING TOOL: %s : %s", tool.id, tool.description)
+      console.log('EXECUTING TOOL: %s : %s', tool.id, tool.description);
       const metadata: ToolCallMetadata = {
         input: params,
       };
 
-      const toolSpan = aiSpan.createChildSpan({name: `tool-${tool.id}`, type: SpanType.TOOL_CALL, metadata});
+      const toolSpan = aiSpan.createChildSpan({ name: `tool-${tool.id}`, type: SpanType.TOOL_CALL, metadata });
       const result = await tool.execute?.(params, options);
-      toolSpan.end({output: result});
+      toolSpan.end({ output: result });
       return result;
-    }
+    };
 
     return {
       ...tool,
       execute: wrappedExecute,
     };
   }
+
+  private wrapModel(model: LanguageModel, aiSpan?: AISpan): LanguageModel {}
 
   async __text<Z extends ZodSchema | JSONSchema7 | undefined>({
     runId,
@@ -149,17 +150,38 @@ export class MastraLLM extends MastraLLMBase {
       threadId,
       resourceId,
       tools: Object.keys(tools),
-      agentSpan: aiSpan? "exists" : "missing"
+      agentSpan: aiSpan ? 'exists' : 'missing',
+    });
+
+    const startMetadata: LLMGenerationMetadata = {
+      input: {
+        messages,
+        tools: Object.keys(tools),
+        toolChoice,
+        maxSteps,
+      },
+      model: model.modelId,
+      provider: model.provider,
+      parameters: {
+        temperature,
+      },
+      attributes: {
+        runId,
+        threadId,
+        resourceId,
+      },
+    };
+
+    const llmSpan = aiSpan?.createChildSpan({
+      name: `${model.modelId}_text`,
+      type: SpanType.LLM_GENERATION,
+      metadata: startMetadata,
     });
 
     const argsForExecute = {
       model,
       temperature,
-      tools: Object.fromEntries(
-        Object.entries(tools).map(
-          ([key, tool]) => [key, this.wrapTool(tool, aiSpan)]
-        )
-      ),
+      tools: Object.fromEntries(Object.entries(tools).map(([key, tool]) => [key, this.wrapTool(tool, aiSpan)])),
       toolChoice,
       maxSteps,
       onStepFinish: async (props: any) => {
@@ -186,6 +208,7 @@ export class MastraLLM extends MastraLLMBase {
             e,
           );
           this.logger.trackException(mastraError);
+          llmSpan?.error(mastraError, true);
           throw mastraError;
         }
 
@@ -226,7 +249,7 @@ export class MastraLLM extends MastraLLMBase {
     }
 
     try {
-      return await generateText({
+      const results = await generateText({
         messages,
         ...argsForExecute,
         experimental_telemetry: {
@@ -239,6 +262,14 @@ export class MastraLLM extends MastraLLMBase {
             })
           : undefined,
       });
+
+      const endMetadata: LLMGenerationMetadata = {
+        output: results,
+      };
+
+      llmSpan?.end(endMetadata);
+
+      return results;
     } catch (e: unknown) {
       const mastraError = new MastraError(
         {
@@ -256,6 +287,7 @@ export class MastraLLM extends MastraLLMBase {
         e,
       );
       this.logger.trackException(mastraError);
+      llmSpan?.error(mastraError, true);
       throw mastraError;
     }
   }
@@ -388,6 +420,7 @@ export class MastraLLM extends MastraLLMBase {
     resourceId,
     memory,
     runtimeContext,
+    aiSpan,
     ...rest
   }: LLMInnerStreamOptions<Z> & { memory?: MastraMemory }) {
     const model = this.#model;
@@ -398,6 +431,32 @@ export class MastraLLM extends MastraLLMBase {
       messages,
       maxSteps,
       tools: Object.keys(tools || {}),
+      agentSpan: aiSpan ? 'exists' : 'missing',
+    });
+
+    const startMetadata: LLMGenerationMetadata = {
+      input: {
+        messages,
+        tools: Object.keys(tools),
+        toolChoice,
+        maxSteps,
+      },
+      model: model.modelId,
+      provider: model.provider,
+      parameters: {
+        temperature,
+      },
+      attributes: {
+        runId,
+        threadId,
+        resourceId,
+      },
+    };
+
+    const llmSpan = aiSpan?.createChildSpan({
+      name: `${model.modelId}_stream`,
+      type: SpanType.LLM_GENERATION,
+      metadata: startMetadata,
     });
 
     const argsForExecute = {
@@ -432,6 +491,7 @@ export class MastraLLM extends MastraLLMBase {
             e,
           );
           this.logger.trackException(mastraError);
+          llmSpan?.error(mastraError, true);
           throw mastraError;
         }
 
@@ -476,6 +536,7 @@ export class MastraLLM extends MastraLLMBase {
             e,
           );
           this.logger.trackException(mastraError);
+          llmSpan?.error(mastraError, true);
           throw mastraError;
         }
 
@@ -510,7 +571,7 @@ export class MastraLLM extends MastraLLMBase {
     }
 
     try {
-      return await streamText({
+      const results = await streamText({
         messages,
         ...argsForExecute,
         experimental_telemetry: {
@@ -523,6 +584,13 @@ export class MastraLLM extends MastraLLMBase {
             })
           : undefined,
       });
+
+      const endMetadata: LLMGenerationMetadata = {
+        output: results,
+      };
+
+      llmSpan?.end(endMetadata);
+      return results;
     } catch (e: unknown) {
       const mastraError = new MastraError(
         {
