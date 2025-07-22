@@ -24,11 +24,14 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
   const configSections: MemoryConfigSection[] = useMemo(() => {
     if (!config) return [];
 
+    // Memory is enabled if we have a config
+    const memoryEnabled = !!config;
+    
     const sections: MemoryConfigSection[] = [
       {
         title: 'General',
         items: [
-          { label: 'Memory Enabled', value: true, badge: 'success' },
+          { label: 'Memory Enabled', value: memoryEnabled, badge: memoryEnabled ? 'success' : undefined },
           { label: 'Last Messages', value: config.lastMessages || 0 },
           { label: 'Auto-generate Titles', value: !!config.threads?.generateTitle, badge: config.threads?.generateTitle ? 'info' : undefined },
         ],
