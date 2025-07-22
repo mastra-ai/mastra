@@ -306,25 +306,34 @@ async function pushToRepo(repoName) {
       packageJson.dependencies[providerPackage] = `^${latestVersion}`;
       await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
 
-      //update llm provider in .env.example
       console.log(`Updating .env.example for ${provider}`);
       const envExamplePath = path.join(tempDir, '.env.example');
-      let envExample = await readFile(envExamplePath, 'utf-8');
-      envExample = envExample.replace('OPENAI_API_KEY', providerApiKey);
-      if (!envExample.includes('MODEL')) {
-        envExample = envExample + `\nMODEL=${defaultModel}`;
+      if (fs.existsSync(envExamplePath)) {
+        //update llm provider in .env.example
+        let envExample = await readFile(envExamplePath, 'utf-8');
+        envExample = envExample.replace('OPENAI_API_KEY', providerApiKey);
+        envExample = envExample.replaceAll('https://platform.openai.com/api-keys', providerUrl);
+        if (!envExample.includes('MODEL')) {
+          envExample = envExample + `\nMODEL=${defaultModel}`;
+        }
+        await writeFile(envExamplePath, envExample);
+      } else {
+        console.log(`${envExamplePath} does not exist, skipping`);
       }
-      await writeFile(envExamplePath, envExample);
 
       //update llm provider in README.md
       console.log(`Updating README.md for ${provider}`);
       const readmePath = path.join(tempDir, 'README.md');
-      let readme = await readFile(readmePath, 'utf-8');
-      readme = readme.replaceAll('OpenAI', providerName);
-      readme = readme.replaceAll('OPENAI_API_KEY', providerApiKey);
-      readme = readme.replaceAll('@ai-sdk/openai', providerPackage);
-      readme = readme.replaceAll('https://platform.openai.com/api-keys', providerUrl);
-      await writeFile(readmePath, readme);
+      if (fs.existsSync(readmePath)) {
+        let readme = await readFile(readmePath, 'utf-8');
+        readme = readme.replaceAll('OpenAI', providerName);
+        readme = readme.replaceAll('OPENAI_API_KEY', providerApiKey);
+        readme = readme.replaceAll('@ai-sdk/openai', providerPackage);
+        readme = readme.replaceAll('https://platform.openai.com/api-keys', providerUrl);
+        await writeFile(readmePath, readme);
+      } else {
+        console.log(`${readmePath} does not exist, skipping`);
+      }
 
       try {
         // push branch
