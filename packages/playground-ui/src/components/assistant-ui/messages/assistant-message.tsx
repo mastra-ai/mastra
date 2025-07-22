@@ -12,11 +12,12 @@ export interface AssistantMessageProps {
 
 export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom }: AssistantMessageProps) => {
   const data = useMessage();
+  const messageId = data.id;
 
   const isToolCallAndOrReasoning = data.content.every(({ type }) => type === 'tool-call' || type === 'reasoning');
 
   return (
-    <MessagePrimitive.Root className="max-w-full">
+    <MessagePrimitive.Root className="max-w-full" data-message-id={messageId}>
       <div className="text-icon6 text-ui-lg leading-ui-lg">
         <MessagePrimitive.Content
           components={{
