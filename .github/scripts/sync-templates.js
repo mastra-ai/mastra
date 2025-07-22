@@ -311,6 +311,7 @@ async function pushToRepo(repoName) {
       const envExamplePath = path.join(tempDir, '.env.example');
       let envExample = await readFile(envExamplePath, 'utf-8');
       envExample = envExample.replace('OPENAI_API_KEY', providerApiKey);
+      readme = readme.replaceAll('https://platform.openai.com/api-keys', providerUrl);
       if (!envExample.includes('MODEL')) {
         envExample = envExample + `\nMODEL=${defaultModel}`;
       }
