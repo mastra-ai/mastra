@@ -51,8 +51,12 @@ const researchStep = createStep({
 
     try {
       const agent = mastra.getAgent('researchAgent');
-      const researchPrompt = `Research the following topic thoroughly: "${query}".
-      Return findings in JSON format with queries, searchResults, learnings, and completedQueries.`;
+      const researchPrompt = `Research the following topic thoroughly using the two-phase process: "${query}".
+
+      Phase 1: Search for 2-3 initial queries about this topic
+      Phase 2: Search for follow-up questions from the learnings (then STOP)
+
+      Return findings in JSON format with queries, searchResults, learnings, completedQueries, and phase.`;
 
       const result = await agent.generate(
         [
@@ -62,7 +66,7 @@ const researchStep = createStep({
           },
         ],
         {
-          maxSteps: 5,
+          maxSteps: 15,
           experimental_output: z.object({
             queries: z.array(z.string()),
             searchResults: z.array(
@@ -80,6 +84,7 @@ const researchStep = createStep({
               }),
             ),
             completedQueries: z.array(z.string()),
+            phase: z.string().optional(),
           }),
         },
       );

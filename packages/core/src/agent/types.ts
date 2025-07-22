@@ -1,14 +1,6 @@
-import type {
-  GenerateTextOnStepFinishCallback,
-  LanguageModelV1,
-  StreamObjectOnFinishCallback,
-  StreamTextOnFinishCallback,
-  StreamTextOnStepFinishCallback,
-  TelemetrySettings,
-} from 'ai';
+import type { GenerateTextOnStepFinishCallback, LanguageModelV1, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
-
+import type { ZodSchema } from 'zod';
 import type { Metric } from '../eval';
 import type {
   CoreMessage,
@@ -18,13 +10,21 @@ import type {
   DefaultLLMTextOptions,
   OutputType,
 } from '../llm';
+import type {
+  StreamTextOnFinishCallback,
+  StreamTextOnStepFinishCallback,
+  StreamObjectOnFinishCallback,
+} from '../llm/model/base.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { RuntimeContext } from '../runtime-context';
+import type { MastraScorers } from '../scores';
 import type { ToolAction, VercelTool } from '../tools';
+import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
+import type { AgentVNextStreamOptions } from './agent.types';
 
 export type { MastraMessageV2, MastraMessageContentV2, MessageList } from './message-list/index.ts';
 export type { Message as AiMessageType } from 'ai';
@@ -35,13 +35,12 @@ export type ToolsetsInput = Record<string, ToolsInput>;
 
 export type MastraLanguageModel = LanguageModelV1;
 
-export type DynamicArgument<T> = T | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => Promise<T> | T);
-
 export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
+  id?: TAgentId;
   name: TAgentId;
   description?: string;
   instructions: DynamicArgument<string>;
@@ -50,12 +49,12 @@ export interface AgentConfig<
   workflows?: DynamicArgument<Record<string, Workflow>>;
   defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
   defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
+  defaultVNextStreamOptions?: DynamicArgument<AgentVNextStreamOptions>;
   mastra?: Mastra;
+  scorers?: DynamicArgument<MastraScorers>;
   evals?: TMetrics;
   memory?: DynamicArgument<MastraMemory>;
   voice?: CompositeVoice;
-  /** @deprecated This property is deprecated. Use evals instead to add evaluation metrics. */
-  metrics?: TMetrics;
 }
 
 export type AgentMemoryOption = {
@@ -89,11 +88,7 @@ export type AgentGenerateOptions<
   /** Unique ID for this generation run */
   runId?: string;
   /** Callback fired after each generation step completes */
-  onStepFinish?: OUTPUT extends undefined
-    ? EXPERIMENTAL_OUTPUT extends undefined
-      ? GenerateTextOnStepFinishCallback<any>
-      : GenerateTextOnStepFinishCallback<any>
-    : never;
+  onStepFinish?: OUTPUT extends undefined ? GenerateTextOnStepFinishCallback<any> : never;
   /** Maximum number of steps allowed for generation */
   maxSteps?: number;
   /** Schema for structured output, does not work with tools, use experimental_output instead */
@@ -160,17 +155,9 @@ export type AgentStreamOptions<
   /** Unique ID for this generation run */
   runId?: string;
   /** Callback fired when streaming completes */
-  onFinish?: OUTPUT extends undefined
-    ? StreamTextOnFinishCallback<any>
-    : OUTPUT extends ZodSchema
-      ? StreamObjectOnFinishCallback<z.infer<OUTPUT>>
-      : StreamObjectOnFinishCallback<any>;
+  onFinish?: OUTPUT extends undefined ? StreamTextOnFinishCallback<any> : StreamObjectOnFinishCallback<OUTPUT>;
   /** Callback fired after each generation step completes */
-  onStepFinish?: OUTPUT extends undefined
-    ? EXPERIMENTAL_OUTPUT extends undefined
-      ? StreamTextOnStepFinishCallback<any>
-      : StreamTextOnStepFinishCallback<any>
-    : never;
+  onStepFinish?: OUTPUT extends undefined ? StreamTextOnStepFinishCallback<any> : never;
   /** Maximum number of steps allowed for generation */
   maxSteps?: number;
   /** Schema for structured output */

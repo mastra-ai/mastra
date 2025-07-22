@@ -191,6 +191,15 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * Creates a new workflow run (alias for createRun)
+   * @param params - Optional object containing the optional runId
+   * @returns Promise containing the runId of the created run
+   */
+  createRunAsync(params?: { runId?: string }): Promise<{ runId: string }> {
+    return this.createRun(params);
+  }
+
+  /**
    * Starts a workflow run synchronously without waiting for the workflow to complete
    * @param params - Object containing the runId, inputData and runtimeContext
    * @returns Promise containing success message

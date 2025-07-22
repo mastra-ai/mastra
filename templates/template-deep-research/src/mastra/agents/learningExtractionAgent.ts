@@ -10,7 +10,7 @@ export const learningExtractionAgent = new Agent({
 
   1. Analyze search results from research queries
   2. Extract the most important learning or insight from the content
-  3. Generate 2-3 relevant follow-up questions that would deepen the research
+  3. Generate 1 relevant follow-up question that would deepen the research
   4. Focus on actionable insights and specific information rather than general observations
 
   When extracting learnings:
@@ -19,6 +19,6 @@ export const learningExtractionAgent = new Agent({
   - Ensure follow-up questions are focused and would lead to deeper understanding
   - Consider the original research query context when extracting insights
 
-  3. Generate 2-3 relevant follow-up questions that would deepen the research`,
+  3. Generate 1 relevant follow-up question that would deepen the research`,
   model: mainModel,
 });

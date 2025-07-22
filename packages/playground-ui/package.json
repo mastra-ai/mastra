@@ -29,9 +29,8 @@
     }
   },
   "scripts": {
-    "dev": "vite",
     "build": "tsc && vite build",
-    "build:watch": "vite build --watch",
+    "dev:playground": "vite build --watch",
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview"
   },
