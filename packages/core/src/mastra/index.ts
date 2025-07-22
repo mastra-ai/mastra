@@ -518,14 +518,14 @@ do:
 
     if (!workflow) {
       const error = new MastraError({
-        id: 'MASTRA_GET_AGENT_BY_AGENT_ID_NOT_FOUND',
+        id: 'MASTRA_GET_WORKFLOW_BY_ID_NOT_FOUND',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
-        text: `Agent with id ${String(id)} not found`,
+        text: `Workflow with id ${String(id)} not found`,
         details: {
           status: 404,
-          agentId: String(id),
-          agents: Object.keys(this.#agents ?? {}).join(', '),
+          workflowId: String(id),
+          workflows: Object.keys(this.#workflows ?? {}).join(', '),
         },
       });
       this.#logger?.trackException(error);
