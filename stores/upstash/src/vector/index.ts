@@ -229,54 +229,21 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
       );
     }
 
-    const points: any = {
-      id: id,
-    };
-
-    if (update.vector) {
-      points.vector = update.vector;
-    }
-    if (update.metadata) {
-      points.metadata = update.metadata;
-    }
-    if (update.sparseVector) {
-      points.sparseVector = update.sparseVector;
+    // The upstash client throws an exception as: 'This index requires dense/sparse vectors' when
+    // only metadata is present in the update object.
+    if ((!update.vector && !update.sparseVector) && update.metadata) {
+      throw new Error('Both vector and metadata must be provided for an update');
     }
 
     try {
-      // First attempt: try the update as provided
-      await this.client.upsert(points, {
-        namespace,
-      });
-    } catch (error: any) {
-      // If it's a hybrid index error and we have a dense vector but no sparse vector, retry with a default sparse vector
-      if (
-        error?.message?.includes('requires sparse vectors') &&
-        update.vector &&
-        !update.sparseVector
-      ) {
-        try {
-          // Retry with a minimal default sparse vector for hybrid indexes
-          points.sparseVector = { indices: [0], values: [0.1] };
-          await this.client.upsert(points, {
-            namespace,
-          });
-          return; // Success on retry
-        } catch (retryError) {
-          // If retry also fails, throw the retry error
-          throw new MastraError(
-            {
-              id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
-              domain: ErrorDomain.STORAGE,
-              category: ErrorCategory.THIRD_PARTY,
-              details: { namespace, id },
-            },
-            retryError,
-          );
-        }
-      }
+      const points: any = { id };
+      
+      if (update.vector) points.vector = update.vector;
+      if (update.metadata) points.metadata = update.metadata;
+      if (update.sparseVector) points.sparseVector = update.sparseVector;
 
-      // For any other error, throw it wrapped in MastraError
+      await this.client.upsert(points, { namespace });
+    } catch (error) {
       throw new MastraError(
         {
           id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',

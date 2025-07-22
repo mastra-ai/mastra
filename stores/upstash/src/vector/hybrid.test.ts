@@ -156,6 +156,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
         const update = {
           vector: newVector,
+          sparseVector: _createSparseVector(),
           metadata: newMetaData,
         };
 
@@ -191,13 +192,13 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         };
 
         await expect(vectorStore.updateVector({ indexName: testIndexName, id: 'id', update })).rejects.toThrow(
-          'Upserted data cannot be null',
+          'Both vector and metadata must be provided for an update',
         );
       });
 
       it('should only update vector embeddings by id', async () => {
         const ids = await vectorStore.upsert({ 
-          indexName: testIndexName, 
+          indexName: testIndexName,
           vectors: testVectors,
           sparseVectors: testVectors.map(() => _createSparseVector())
         });
@@ -208,7 +209,8 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
         const update = {
           vector: newVector,
-        };
+          sparseVector: _createSparseVector(),
+        }
 
         await vectorStore.updateVector({ indexName: testIndexName, id: idToBeUpdated, update });
 

@@ -168,7 +168,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         };
 
         await expect(vectorStore.updateVector({ indexName: testIndexName, id: 'id', update })).rejects.toThrow(
-          'Upserted data cannot be null',
+          'Both vector and metadata must be provided for an update',
         );
       });
 
