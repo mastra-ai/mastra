@@ -10,6 +10,7 @@ import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
 import type { MastraScorers } from '../scores';
+import { runScorer } from '../scores/hooks';
 import type { ChunkType } from '../stream/MastraAgentStream';
 import { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 import { Tool } from '../tools';
@@ -30,7 +31,6 @@ import type {
   WatchEvent,
   WorkflowRunState,
 } from './types';
-import { runScorer } from '../scores/hooks';
 
 export type DefaultEngineType = {};
 

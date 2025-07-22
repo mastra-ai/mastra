@@ -30,6 +30,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { RuntimeContext } from '../runtime-context';
 import type { MastraScorers } from '../scores';
+import { runScorer } from '../scores/hooks';
 import { MastraAgentStream } from '../stream/MastraAgentStream';
 import type { ChunkType } from '../stream/MastraAgentStream';
 import { InstrumentClass } from '../telemetry';
@@ -54,7 +55,6 @@ import type {
   ToolsInput,
   AgentMemoryOption,
 } from './types';
-import { runScorer } from '../scores/hooks';
 export type { ChunkType, MastraAgentStream } from '../stream/MastraAgentStream';
 
 export { MessageList };
