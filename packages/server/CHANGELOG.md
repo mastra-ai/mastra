@@ -1,5 +1,12 @@
 # @mastra/deployer
 
+## 0.11.0-alpha.3
+
+### Patch Changes
+
+- 62007b3: Fix upserting memory messages via hono endpoints
+  - @mastra/core@0.11.0-alpha.3
+
 ## 0.11.0-alpha.2
 
 ### Patch Changes
