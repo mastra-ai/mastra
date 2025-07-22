@@ -65,8 +65,8 @@ export function createLLMScorer<TExtractOutput extends Record<string, any> = any
         });
 
         return {
-          extractStepResult: extractResult.object as Record<string, any>,
-          extractPrompt: prompt,
+          result: extractResult.object as Record<string, any>,
+          prompt,
         };
       },
     }),
@@ -96,9 +96,9 @@ export function createLLMScorer<TExtractOutput extends Record<string, any> = any
       (runWithScoreResult as ScoringInputWithExtractStepResultAndAnalyzeStepResult).score = score;
 
       return {
-        analyzeStepResult: analyzeResult.object!,
+        result: analyzeResult.object!,
         score: score,
-        analyzePrompt: prompt,
+        prompt,
       };
     },
     reason: opts.reason
