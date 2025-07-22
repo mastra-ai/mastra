@@ -1,4 +1,4 @@
-import { createLLMScorer } from '@mastra/core/eval';
+import { createLLMScorer } from '@mastra/core/scores';
 import type { LanguageModel } from '@mastra/core/llm';
 
 import { z } from 'zod';
@@ -34,7 +34,6 @@ export function createFaithfulnessScorer({
       outputSchema: z.array(z.string()),
       createPrompt: ({ run }) => {
         const prompt = createFaithfulnessExtractPrompt({ output: run.output.text });
-        console.log(`Prompt: ${prompt}`);
         return prompt;
       },
     },
@@ -46,12 +45,10 @@ export function createFaithfulnessScorer({
           claims: run.extractStepResult || [],
           context: options?.context || [],
         });
-        console.log(`Prompt: ${prompt}`);
         return prompt;
       },
     },
     calculateScore: ({ run }) => {
-      console.log(run);
       const totalClaims = run.analyzeStepResult.length;
       const supportedClaims = run.analyzeStepResult.filter(v => v.verdict === 'yes').length;
 
@@ -74,7 +71,6 @@ export function createFaithfulnessScorer({
           scale: options?.scale || 1,
           verdicts: run.analyzeStepResult || [],
         });
-        console.log(`Prompt: ${prompt}`);
         return prompt;
       },
     },

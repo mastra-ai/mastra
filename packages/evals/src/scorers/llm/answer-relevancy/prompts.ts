@@ -97,7 +97,7 @@ export const createScorePrompt = (
           * "The weather is nice" for "Who is the president?"
 
       Example:
-      Input: "What color is the sky during daytime?"
+      Input: [{ "role": "user", "content": "What color is the sky during daytime?" }]
       Statements: [
         "The sky is blue during daytime",
         "The sky is full of clouds", 

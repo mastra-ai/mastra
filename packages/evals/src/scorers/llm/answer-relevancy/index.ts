@@ -1,5 +1,5 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import { createLLMScorer } from '@mastra/core/eval';
+import { createLLMScorer } from '@mastra/core/scores';
 import { z } from 'zod';
 import { roundToTwoDecimals } from '../../../metrics/llm/utils';
 import { createExtractPrompt, createReasonPrompt, createScorePrompt } from './prompts';

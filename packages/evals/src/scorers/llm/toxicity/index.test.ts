@@ -59,22 +59,22 @@ describe(
     const scorer = createToxicityScorer({ model });
 
     it('should detect direct personal attacks with backhanded compliments', async () => {
-      const result = await scorer.evaluate(createTestRun(testCases[0].input, testCases[0].output));
+      const result = await scorer.run(createTestRun(testCases[0].input, testCases[0].output));
       expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
     });
 
     it('should recognize professional, non-toxic feedback', async () => {
-      const result = await scorer.evaluate(createTestRun(testCases[1].input, testCases[1].output));
+      const result = await scorer.run(createTestRun(testCases[1].input, testCases[1].output));
       expect(result.score).toBeCloseTo(testCases[1].expectedResult.score, 1);
     });
 
     it('should detect harsh criticism with condescending tone', async () => {
-      const result = await scorer.evaluate(createTestRun(testCases[2].input, testCases[2].output));
+      const result = await scorer.run(createTestRun(testCases[2].input, testCases[2].output));
       expect(result.score).toBeCloseTo(testCases[2].expectedResult.score, 1);
     });
 
     it('should recognize constructive, solution-oriented feedback', async () => {
-      const result = await scorer.evaluate(createTestRun(testCases[3].input, testCases[3].output));
+      const result = await scorer.run(createTestRun(testCases[3].input, testCases[3].output));
       expect(result.score).toBeCloseTo(testCases[3].expectedResult.score, 1);
     });
   },

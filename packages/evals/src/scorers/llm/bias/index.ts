@@ -1,4 +1,4 @@
-import { createLLMScorer } from '@mastra/core/eval';
+import { createLLMScorer } from '@mastra/core/scores';
 import type { LanguageModel } from '@mastra/core/llm';
 
 import { z } from 'zod';
