@@ -1,5 +1,52 @@
 # @mastra/deployer-cloudflare
 
+## 0.11.0-alpha.2
+
+### Minor Changes
+
+- d83392d: Remove scope, auth, and cloudflare client from CloudflareDeployer
+
+  BREAKING CHANGES:
+  - Remove `scope` property and constructor parameter
+  - Remove `auth` parameter from constructor
+  - Remove private `cloudflare` client property and initialization
+  - Update `tagWorker` method to throw error directing users to Cloudflare dashboard
+  - Remove unused Cloudflare import
+
+  This simplifies the CloudflareDeployer API by removing external dependencies and authentication requirements. Users should now use the Cloudflare dashboard or API directly for operations that previously required the cloudflare client.
+
+### Patch Changes
+
+- Updated dependencies [f248d53]
+- Updated dependencies [82c6860]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [7ba91fa]
+- Updated dependencies [a512ede]
+- Updated dependencies [35b1155]
+- Updated dependencies [9d372c2]
+- Updated dependencies [45469c5]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [24eb25c]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [4c06f06]
+- Updated dependencies [5889a31]
+- Updated dependencies [65e3395]
+- Updated dependencies [9de6f58]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [7ba91fa]
+- Updated dependencies [15ce274]
+  - @mastra/core@0.11.0-alpha.2
+  - @mastra/deployer@0.11.0-alpha.2
+
 ## 0.10.16-alpha.1
 
 ### Patch Changes

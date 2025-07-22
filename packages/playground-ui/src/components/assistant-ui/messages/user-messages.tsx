@@ -1,6 +1,6 @@
 'use client';
 
-import { AttachmentPrimitive, MessagePrimitive, TextContentPart, useAttachment } from '@assistant-ui/react';
+import { AttachmentPrimitive, MessagePrimitive, TextContentPart, useAttachment, useMessage } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -93,8 +93,11 @@ export const UserMessageAttachments = () => {
 };
 
 export const UserMessage = () => {
+  const message = useMessage();
+  const messageId = message?.id;
+
   return (
-    <MessagePrimitive.Root className="w-full flex items-end pb-4 flex-col">
+    <MessagePrimitive.Root className="w-full flex items-end pb-4 flex-col" data-message-id={messageId}>
       {/* <UserActionBar /> */}
 
       <div className="max-w-[366px] px-5 py-3 text-icon6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">

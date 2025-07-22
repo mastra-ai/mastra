@@ -19,15 +19,17 @@ import { authenticationMiddleware, authorizationMiddleware } from './handlers/au
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { rootHandler } from './handlers/root';
-import { agentsRouterDev, agentsRouter } from './handlers/routes/agents';
-import { logsRouter } from './handlers/routes/logs';
-import { mcpRouter } from './handlers/routes/mcp';
-import { memoryRoutes } from './handlers/routes/memory';
-import { vNextNetworksRouter, networksRouter } from './handlers/routes/networks';
-import { telemetryRouter } from './handlers/routes/telemetry';
-import { toolsRouter } from './handlers/routes/tools';
-import { vectorRouter } from './handlers/routes/vector';
-import { workflowsRouter } from './handlers/routes/workflows';
+
+import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
+import { logsRouter } from './handlers/routes/logs/router';
+import { mcpRouter } from './handlers/routes/mcp/router';
+import { memoryRoutes } from './handlers/routes/memory/router';
+import { vNextNetworksRouter, networksRouter } from './handlers/routes/networks/router';
+import { scoresRouter } from './handlers/routes/scores/router';
+import { telemetryRouter } from './handlers/routes/telemetry/router';
+import { toolsRouter } from './handlers/routes/tools/router';
+import { vectorRouter } from './handlers/routes/vector/router';
+import { workflowsRouter } from './handlers/routes/workflows/router';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
 
@@ -37,24 +39,14 @@ type Variables = {
   mastra: Mastra;
   runtimeContext: RuntimeContext;
   clients: Set<{ controller: ReadableStreamDefaultController }>;
-  tools: Record<string, any>;
+  tools: Record<string, Tool>;
   playground: boolean;
   isDev: boolean;
 };
 
-export async function createHonoServer(mastra: Mastra, options: ServerBundleOptions = {}) {
-  // Create typed Hono app
-  const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
-  const server = mastra.getServer();
-
-  // app.route('/api/agents', agentsRoutes(bodyLimitOptions))
-
-  let tools: Record<string, any> = {};
+export function getToolExports(tools: Record<string, Function>[]) {
   try {
-    // @ts-expect-error Tools is generated dependency
-    const toolImports = (await import('#tools')).tools as Record<string, Function>[];
-
-    tools = toolImports.reduce((acc, toolModule) => {
+    return tools.reduce((acc, toolModule) => {
       Object.entries(toolModule).forEach(([key, tool]) => {
         if (tool instanceof Tool) {
           acc[key] = tool;
@@ -71,6 +63,17 @@ ${err.stack.split('\n').slice(1).join('\n')}
       err,
     );
   }
+}
+
+export async function createHonoServer(
+  mastra: Mastra,
+  options: ServerBundleOptions = {
+    tools: {},
+  },
+) {
+  // Create typed Hono app
+  const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+  const server = mastra.getServer();
 
   // Middleware
   app.use('*', async function setTelemetryInfo(c, next) {
@@ -117,7 +120,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
 
     c.set('runtimeContext', runtimeContext);
     c.set('mastra', mastra);
-    c.set('tools', tools);
+    c.set('tools', options.tools);
     c.set('playground', options.playground === true);
     c.set('isDev', options.isDev === true);
     return next();
@@ -387,8 +390,10 @@ ${err.stack.split('\n').slice(1).join('\n')}
   app.route('/api/workflows', workflowsRouter(bodyLimitOptions));
   // Log routes
   app.route('/api/logs', logsRouter());
+  // Scores routes
+  app.route('/api/scores', scoresRouter(bodyLimitOptions));
   // Tool routes
-  app.route('/api/tools', toolsRouter(bodyLimitOptions, tools));
+  app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
   // Vector routes
   app.route('/api/vector', vectorRouter(bodyLimitOptions));
 
@@ -488,7 +493,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
   return app;
 }
 
-export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = {}) {
+export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = { tools: {} }) {
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
 
