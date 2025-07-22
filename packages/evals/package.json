@@ -49,6 +49,26 @@
         "default": "./dist/metrics/llm/index.cjs"
       }
     },
+    "./scorers/llm": {
+      "import": {
+        "types": "./dist/scorers/llm/index.d.ts",
+        "default": "./dist/scorers/llm/index.js"
+      },
+      "require": {
+        "types": "./dist/scorers/llm/index.d.cts",
+        "default": "./dist/scorers/llm/index.cjs"
+      }
+    },
+    "./scorers/code": {
+      "import": {
+        "types": "./dist/scorers/code/index.d.ts",
+        "default": "./dist/scorers/code/index.js"
+      },
+      "require": {
+        "types": "./dist/scorers/code/index.d.cts",
+        "default": "./dist/scorers/code/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
