@@ -12,7 +12,7 @@ import type { Context } from 'hono';
 
 import { HTTPException } from 'hono/http-exception';
 
-import { handleError } from './error';
+import { handleError } from '../../error';
 
 interface UpsertRequest {
   indexName: string;

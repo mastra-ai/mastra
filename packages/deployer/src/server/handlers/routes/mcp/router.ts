@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { describeRoute } from 'hono-openapi';
-import type { BodyLimitOptions } from '../../types';
+import type { BodyLimitOptions } from '../../../types';
 import {
   getMcpServerMessageHandler,
   getMcpServerSseHandler,
@@ -10,7 +10,7 @@ import {
   listMcpServerToolsHandler,
   getMcpServerToolDetailHandler,
   executeMcpServerToolHandler,
-} from '../mcp';
+} from './handlers';
 
 export function mcpRouter(bodyLimitOptions: BodyLimitOptions) {
   const router = new Hono();
