@@ -4,7 +4,7 @@ import {
   AgentSettingsProvider,
   WorkingMemoryProvider,
 } from '@mastra/playground-ui';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
 
@@ -20,6 +20,7 @@ function Agent() {
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { memory } = useMemory(agentId!);
   const navigate = useNavigate();
+  const [chatInputValue, setChatInputValue] = useState('');
   const { messages, isLoading: isMessagesLoading } = useMessages({
     agentId: agentId!,
     threadId: threadId!,
@@ -79,10 +80,11 @@ function Agent() {
               initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
               memory={memory?.result}
               refreshThreadList={refreshThreads}
+              onInputChange={setChatInputValue}
             />
           </div>
 
-          <AgentInformation agentId={agentId!} />
+          <AgentInformation agentId={agentId!} chatInputValue={chatInputValue} />
         </MainContentContent>
       </WorkingMemoryProvider>
     </AgentSettingsProvider>

@@ -23,7 +23,7 @@ import { useMemory } from '@/hooks/use-memory';
 import { AgentMemory } from './agent-memory';
 import { useState, useEffect } from 'react';
 
-export function AgentInformation({ agentId }: { agentId: string }) {
+export function AgentInformation({ agentId, chatInputValue }: { agentId: string; chatInputValue?: string }) {
   const { agent, isLoading } = useAgent(agentId);
   const { memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { handleCopy } = useCopyToClipboard({ text: agentId });
@@ -113,7 +113,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             {agent && <AgentSettings />}
           </TabContent>
           <TabContent value="memory">
-            {isLoading ? <Skeleton className="h-full" /> : <AgentMemory agentId={agentId} />}
+            {isLoading ? <Skeleton className="h-full" /> : <AgentMemory agentId={agentId} chatInputValue={selectedTab === 'memory' ? chatInputValue : undefined} />}
           </TabContent>
           <TabContent value="endpoints">
             {isLoading ? <Skeleton className="h-full" /> : <AgentEndpoints agentId={agentId} />}

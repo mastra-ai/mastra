@@ -24,9 +24,10 @@ interface MemorySearchProps {
   onResultClick?: (messageId: string, threadId?: string) => void;
   className?: string;
   currentThreadId?: string;
+  chatInputValue?: string;
 }
 
-export const MemorySearch = ({ searchMemory, onResultClick, className, currentThreadId }: MemorySearchProps) => {
+export const MemorySearch = ({ searchMemory, onResultClick, className, currentThreadId, chatInputValue }: MemorySearchProps) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<MemorySearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -126,6 +127,21 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
     }
     prevThreadIdRef.current = currentThreadId;
   }, [currentThreadId, query, handleSearch]);
+
+  // Sync chat input value with internal state when provided
+  useEffect(() => {
+    if (chatInputValue !== undefined && chatInputValue !== query) {
+      setQuery(chatInputValue);
+      // Trigger search if there's a value
+      if (chatInputValue.trim()) {
+        handleSearch(chatInputValue);
+      } else {
+        // Clear results if chat input is empty
+        setResults([]);
+        setError(null);
+      }
+    }
+  }, [chatInputValue]);
 
   const handleResultClick = (messageId: string, threadId?: string) => {
     onResultClick?.(messageId, threadId);

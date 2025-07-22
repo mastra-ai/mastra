@@ -8,9 +8,10 @@ import { cn } from '@/lib/utils';
 
 interface AgentMemoryProps {
   agentId: string;
+  chatInputValue?: string;
 }
 
-export function AgentMemory({ agentId }: AgentMemoryProps) {
+export function AgentMemory({ agentId, chatInputValue }: AgentMemoryProps) {
   const { threadId } = useParams();
   const navigate = useNavigate();
   const [searchScope, setSearchScope] = useState<string | null>(null);
@@ -84,6 +85,7 @@ export function AgentMemory({ agentId }: AgentMemoryProps) {
           onResultClick={handleResultClick}
           currentThreadId={threadId}
           className="w-full"
+          chatInputValue={chatInputValue}
         />
       </div>
 
