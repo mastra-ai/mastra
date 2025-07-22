@@ -81,12 +81,14 @@ export const MemorySearch = ({
 
       // Set new timeout for debounced search
       if (value.trim()) {
+        setIsSearching(true); // Show searching state while debouncing
         searchTimeoutRef.current = setTimeout(() => {
           handleSearch(value);
         }, 500);
       } else {
         setResults([]);
         setIsOpen(false);
+        setIsSearching(false);
       }
     },
     [handleSearch],
@@ -148,12 +150,14 @@ export const MemorySearch = ({
       }
 
       if (chatInputValue.trim()) {
+        setIsSearching(true); // Show searching state while debouncing
         searchTimeoutRef.current = setTimeout(() => {
           handleSearch(chatInputValue);
         }, 500);
       } else {
         setResults([]);
         setIsOpen(false);
+        setIsSearching(false);
       }
     }
 
@@ -208,7 +212,7 @@ export const MemorySearch = ({
       </div>
 
       {/* Search results dropdown */}
-      {(isOpen || (query && results.length === 0 && !isSearching)) && (
+      {(isOpen || (query && (isSearching || results.length === 0))) && (
         <div className="mt-2 flex-1 bg-surface3 border border-border1 rounded-lg shadow-lg overflow-y-auto">
           {error ? (
             <div className="p-4 text-center">
