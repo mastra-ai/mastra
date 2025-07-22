@@ -58,7 +58,7 @@ export type ScoringInputWithExtractStepResultAndAnalyzeStepResult<
 
 export type ScoringInputWithExtractStepResultAndScoreAndReason =
   ScoringInputWithExtractStepResultAndAnalyzeStepResult & {
-    reason: string;
+    reason?: string;
     reasonPrompt?: string;
   };
 
