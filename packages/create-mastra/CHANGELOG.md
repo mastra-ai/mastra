@@ -1,5 +1,16 @@
 # create-mastra
 
+## 0.10.13-alpha.2
+
+### Patch Changes
+
+- dd2a4c9: change the way we start the dev process of playground
+- af1f902: share thread list between agent, network and cloud
+- 2affc57: Fix output type of network loop
+- f6c4d75: fix date picker on change
+- 698518b: Allow external templates from github
+- 09464dd: Share AgentMetadata component with cloud
+
 ## 0.10.13-alpha.1
 
 ### Patch Changes
