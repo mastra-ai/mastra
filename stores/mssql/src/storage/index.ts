@@ -2058,7 +2058,7 @@ export class MSSQLStore extends MastraStorage {
     });
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(_score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
     throw new MastraError({
       id: 'STORAGE_MONGODB_STORE_SAVE_SCORE_FAILED',
       domain: ErrorDomain.STORAGE,
@@ -2070,7 +2070,7 @@ export class MSSQLStore extends MastraStorage {
 
   async getScoresByScorerId({
     scorerId,
-    pagination,
+    pagination: _pagination,
     entityId,
     entityType,
   }: {
@@ -2090,7 +2090,7 @@ export class MSSQLStore extends MastraStorage {
 
   async getScoresByRunId({
     runId,
-    pagination,
+    pagination: _pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
@@ -2107,7 +2107,7 @@ export class MSSQLStore extends MastraStorage {
   async getScoresByEntityId({
     entityId,
     entityType,
-    pagination,
+    pagination: _pagination,
   }: {
     pagination: StoragePagination;
     entityId: string;
