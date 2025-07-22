@@ -1,5 +1,5 @@
 import { createTestSuite } from '@internal/storage-test-utils';
-import { vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { MSSQLStore } from '.';
 import type { MSSQLConfig } from '.';
@@ -19,6 +19,12 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 console.log('Not running MSSQL tests in CI. You can enable them if you want to test them locally.');
 if (process.env.ENABLE_TESTS === 'true') {
   createTestSuite(new MSSQLStore(TEST_CONFIG));
+} else {
+  describe('MSSQLStore', () => {
+    it('should be defined', () => {
+      expect(MSSQLStore).toBeDefined();
+    });
+  });
 }
 
 // describe('MSSQLStore', () => {
