@@ -127,11 +127,15 @@ const sdk = new NodeSDK({
   instrumentations: [getNodeAutoInstrumentations()],
 });
 
-sdk.start();
+if (telemetry.enabled !== false) {
+  sdk.start();
 
-// gracefully shut down the SDK on process exit
-process.on('SIGTERM', () => {
-  sdk.shutdown().catch(() => {
-    // do nothing
+  // gracefully shut down the SDK on process exit
+  process.on('SIGTERM', () => {
+    sdk.shutdown().catch(() => {
+      // do nothing
+    });
   });
-});
+}
+
+

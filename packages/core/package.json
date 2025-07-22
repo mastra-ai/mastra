@@ -30,6 +30,16 @@
         "default": "./dist/*/index.cjs"
       }
     },
+    "./tools/is-vercel-tool": {
+      "import": {
+        "types": "./dist/tools/is-vercel-tool.d.ts",
+        "default": "./dist/tools/is-vercel-tool.js"
+      },
+      "require": {
+        "types": "./dist/tools/is-vercel-tool.d.cts",
+        "default": "./dist/tools/is-vercel-tool.cjs"
+      }
+    },
     "./workflows/legacy": {
       "import": {
         "types": "./dist/workflows/legacy/index.d.ts",
@@ -105,12 +115,10 @@
   "sideEffects": false,
   "scripts": {
     "check": "tsc --noEmit",
-    "analyze": "size-limit --why",
     "lint": "eslint .",
     "pre-build": "tsup --silent --config tsup.config.ts --format esm,cjs",
     "build": "node ./tools/commonjs-tsc-fixer.js",
     "build:watch": "pnpm build --watch",
-    "size": "size-limit",
     "test": "vitest run"
   },
   "dependencies": {
@@ -155,7 +163,6 @@
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@openrouter/ai-sdk-provider": "^0.4.6",
-    "@size-limit/preset-small-lib": "^11.2.0",
     "@types/babel__core": "^7.20.5",
     "@types/json-schema": "^7.0.15",
     "@types/lodash-es": "^4.17.12",
@@ -166,7 +173,6 @@
     "fast-deep-equal": "^3.1.3",
     "globby": "^14.1.0",
     "rollup": "^4.42.0",
-    "size-limit": "^11.2.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
