@@ -87,7 +87,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
       </EntityHeader>
 
       <div className="flex-1 overflow-hidden border-t-sm border-border1 flex flex-col">
-        <PlaygroundTabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange}>
+        <PlaygroundTabs value={selectedTab} onValueChange={handleTabChange}>
           <TabList>
             <Tab value="overview">Overview</Tab>
             <Tab value="model-settings">Model Settings</Tab>
