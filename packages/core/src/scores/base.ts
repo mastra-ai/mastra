@@ -8,6 +8,7 @@ import type {
   AnalyzeStepFn,
   ScoringInput,
   ScoringInputWithExtractStepResultAndScoreAndReason,
+  ScoringSamplingConfig,
 } from './types';
 
 export class MastraScorer {
@@ -126,3 +127,9 @@ export class MastraScorer {
     return { ...input, ...execution.result };
   }
 }
+export type MastraScorerEntry = {
+  scorer: ScorerOptions;
+  sampling?: ScoringSamplingConfig;
+};
+
+export type MastraScorers = Record<string, MastraScorerEntry>;

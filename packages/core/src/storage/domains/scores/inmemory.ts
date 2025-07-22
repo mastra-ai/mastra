@@ -17,7 +17,7 @@ export class ScoresInMemory extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
-    const newScore = { ...score, id: crypto.randomUUID(), createdAt: new Date(), updatedAt: new Date() };
+    const newScore = { id: crypto.randomUUID(), createdAt: new Date(), updatedAt: new Date(), ...score };
     this.scores.set(newScore.id, newScore);
     return { score: newScore };
   }
