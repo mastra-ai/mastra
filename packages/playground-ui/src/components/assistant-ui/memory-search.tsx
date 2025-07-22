@@ -42,6 +42,8 @@ export const MemorySearch = ({
   const searchTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const prevThreadIdRef = useRef<string | undefined>(currentThreadId);
+  const lastSearchTimeRef = useRef<number>(0);
+  const pendingSearchRef = useRef<string | null>(null);
 
   // Debounced search
   const handleSearch = useCallback(
@@ -79,16 +81,33 @@ export const MemorySearch = ({
         clearTimeout(searchTimeoutRef.current);
       }
 
-      // Set new timeout for debounced search
       if (value.trim()) {
-        setIsSearching(true); // Show searching state while debouncing
-        searchTimeoutRef.current = setTimeout(() => {
+        const now = Date.now();
+        const timeSinceLastSearch = now - lastSearchTimeRef.current;
+        
+        // If it's been more than 500ms since last search, search immediately
+        if (timeSinceLastSearch >= 500) {
+          setIsSearching(true);
           handleSearch(value);
-        }, 500);
+          lastSearchTimeRef.current = now;
+        } else {
+          // Otherwise, set a timeout for the remaining time
+          setIsSearching(true); // Show searching state while debouncing
+          pendingSearchRef.current = value;
+          const remainingTime = 500 - timeSinceLastSearch;
+          searchTimeoutRef.current = setTimeout(() => {
+            if (pendingSearchRef.current) {
+              handleSearch(pendingSearchRef.current);
+              lastSearchTimeRef.current = Date.now();
+              pendingSearchRef.current = null;
+            }
+          }, remainingTime);
+        }
       } else {
         setResults([]);
         setIsOpen(false);
         setIsSearching(false);
+        pendingSearchRef.current = null;
       }
     },
     [handleSearch],
@@ -150,14 +169,32 @@ export const MemorySearch = ({
       }
 
       if (chatInputValue.trim()) {
-        setIsSearching(true); // Show searching state while debouncing
-        searchTimeoutRef.current = setTimeout(() => {
+        const now = Date.now();
+        const timeSinceLastSearch = now - lastSearchTimeRef.current;
+        
+        // If it's been more than 500ms since last search, search immediately
+        if (timeSinceLastSearch >= 500) {
+          setIsSearching(true);
           handleSearch(chatInputValue);
-        }, 500);
+          lastSearchTimeRef.current = now;
+        } else {
+          // Otherwise, set a timeout for the remaining time
+          setIsSearching(true); // Show searching state while debouncing
+          pendingSearchRef.current = chatInputValue;
+          const remainingTime = 500 - timeSinceLastSearch;
+          searchTimeoutRef.current = setTimeout(() => {
+            if (pendingSearchRef.current) {
+              handleSearch(pendingSearchRef.current);
+              lastSearchTimeRef.current = Date.now();
+              pendingSearchRef.current = null;
+            }
+          }, remainingTime);
+        }
       } else {
         setResults([]);
         setIsOpen(false);
         setIsSearching(false);
+        pendingSearchRef.current = null;
       }
     }
 
