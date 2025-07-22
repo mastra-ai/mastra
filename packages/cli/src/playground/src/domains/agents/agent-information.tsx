@@ -41,6 +41,14 @@ export function AgentInformation({ agentId }: { agentId: string }) {
     sessionStorage.setItem(STORAGE_KEY, value);
   };
 
+  // Switch away from memory tab if memory is disabled (not just loading)
+  useEffect(() => {
+    if (!isMemoryLoading && !memory?.result && selectedTab === 'memory') {
+      // Switch to overview tab if memory is disabled
+      handleTabChange('overview');
+    }
+  }, [isMemoryLoading, memory?.result, selectedTab]);
+
   return (
     <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto border-l-sm border-border1">
       <EntityHeader icon={<AgentIcon />} title={agent?.name || ''} isLoading={isLoading || isMemoryLoading}>
