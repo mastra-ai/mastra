@@ -1193,6 +1193,7 @@ export class Agent<
    * @param threadId - The thread ID.
    * @param memoryConfig - The memory configuration for saving.
    * @param runId - (Optional) The run ID for logging.
+   * @param createThread - (Optional) If provided, creates a new thread in memory with the given parameters.
    */
   private async saveStepMessages({
     saveQueueManager,
