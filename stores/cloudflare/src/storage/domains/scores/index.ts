@@ -1,5 +1,5 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import type { ScoreRowData } from '@mastra/core/eval';
+import type { ScoreRowData } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type { StoreOperationsCloudflare } from '../operations';
