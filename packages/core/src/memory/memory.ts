@@ -304,12 +304,14 @@ export abstract class MastraMemory extends MastraBase {
     title,
     metadata,
     memoryConfig,
+    saveThread = true,
   }: {
     resourceId: string;
     threadId?: string;
     title?: string;
     metadata?: Record<string, unknown>;
     memoryConfig?: MemoryConfig;
+    saveThread?: boolean;
   }): Promise<StorageThreadType> {
     const thread: StorageThreadType = {
       id: threadId || this.generateId(),
@@ -320,7 +322,7 @@ export abstract class MastraMemory extends MastraBase {
       metadata,
     };
 
-    return this.saveThread({ thread, memoryConfig });
+    return saveThread ? this.saveThread({ thread, memoryConfig }) : thread;
   }
 
   /**

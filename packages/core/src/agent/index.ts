@@ -1356,11 +1356,12 @@ export class Agent<
             title: thread.title,
             memoryConfig,
             resourceId,
+            saveThread: false,
           });
         }
 
         let [memoryMessages, memorySystemMessage] =
-          thread.id && memory
+          thread.id && memory && existingThread
             ? await Promise.all([
                 this.getMemoryMessages({
                   resourceId,
@@ -1542,6 +1543,16 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             }
             if (responseMessages) {
               messageList.add(responseMessages, 'response');
+            }
+
+            if (!(await memory?.getThreadById({ threadId: thread.id }))) {
+              await memory.createThread({
+                threadId: thread.id,
+                metadata: thread.metadata,
+                title: thread.title,
+                memoryConfig,
+                resourceId: thread.resourceId,
+              });
             }
 
             // Parallelize title generation and message saving
