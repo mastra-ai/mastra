@@ -1,18 +1,7 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { describeRoute } from 'hono-openapi';
-import type { BodyLimitOptions } from '../../types';
-import {
-  createLegacyWorkflowRunHandler,
-  getLegacyWorkflowByIdHandler,
-  getLegacyWorkflowRunsHandler,
-  getLegacyWorkflowsHandler,
-  resumeAsyncLegacyWorkflowHandler,
-  resumeLegacyWorkflowHandler,
-  startAsyncLegacyWorkflowHandler,
-  startLegacyWorkflowRunHandler,
-  watchLegacyWorkflowHandler,
-} from '../legacyWorkflows.js';
+import type { BodyLimitOptions } from '../../../types';
 import {
   cancelWorkflowRunHandler,
   createWorkflowRunHandler,
@@ -28,7 +17,18 @@ import {
   startWorkflowRunHandler,
   streamWorkflowHandler,
   watchWorkflowHandler,
-} from '../workflows.js';
+} from './handlers';
+import {
+  createLegacyWorkflowRunHandler,
+  getLegacyWorkflowByIdHandler,
+  getLegacyWorkflowRunsHandler,
+  getLegacyWorkflowsHandler,
+  resumeAsyncLegacyWorkflowHandler,
+  resumeLegacyWorkflowHandler,
+  startAsyncLegacyWorkflowHandler,
+  startLegacyWorkflowRunHandler,
+  watchLegacyWorkflowHandler,
+} from './legacyWorkflows';
 
 export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
   const router = new Hono();

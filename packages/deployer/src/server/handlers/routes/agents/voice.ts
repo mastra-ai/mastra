@@ -8,7 +8,7 @@ import {
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 
-import { handleError } from './error.js';
+import { handleError } from '../../error.js';
 
 /**
  * Get available speakers for an agent
