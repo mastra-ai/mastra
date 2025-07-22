@@ -7,7 +7,7 @@ import { AlertDialog } from '@/components/ui/alert-dialog';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { StorageThreadType } from '@mastra/core';
+import { StorageThreadType } from '@mastra/core/memory';
 import { useDeleteNetworkThread } from '@/hooks/use-network-memory';
 
 const formatDay = (date: Date) => {
