@@ -155,7 +155,7 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
             {expandedSections.has(section.title) && (
               <div className="px-3 pb-2 space-y-1">
                 {section.items.map((item, index) => (
-                  <div key={index} className="flex items-center justify-between py-1">
+                  <div key={`${section.title}-${item.label}`} className="flex items-center justify-between py-1">
                     <span className="text-xs text-icon3">{item.label}</span>
                     {renderValue(item.value, item.badge)}
                   </div>
