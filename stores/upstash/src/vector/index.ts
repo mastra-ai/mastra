@@ -7,16 +7,16 @@ import type {
   DescribeIndexParams,
   IndexStats,
   QueryResult,
-  QueryVectorParams,
-  UpdateVectorParams,
-  UpsertVectorParams,
 } from '@mastra/core/vector';
 import { Index } from '@upstash/vector';
 
 import { UpstashFilterTranslator } from './filter';
 import type { UpstashVectorFilter } from './filter';
-
-type UpstashQueryVectorParams = QueryVectorParams<UpstashVectorFilter>;
+import type {
+  UpstashUpsertVectorParams, 
+  UpstashQueryVectorParams,
+  UpstashUpdateVectorParams
+} from './types';
 
 export class UpstashVector extends MastraVector<UpstashVectorFilter> {
   private client: Index;
@@ -40,12 +40,13 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
    * @param {UpsertVectorParams} params - The parameters for the upsert operation.
    * @returns {Promise<string[]>} A promise that resolves to the IDs of the upserted vectors.
    */
-  async upsert({ indexName: namespace, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+  async upsert({ indexName: namespace, vectors, metadata, ids, sparseVectors }: UpstashUpsertVectorParams): Promise<string[]> {
     const generatedIds = ids || vectors.map(() => crypto.randomUUID());
 
     const points = vectors.map((vector, index) => ({
       id: generatedIds[index]!,
       vector,
+      ...(sparseVectors?.[index] && { sparseVector: sparseVectors[index] }),
       metadata: metadata?.[index],
     }));
 
@@ -97,6 +98,9 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     topK = 10,
     filter,
     includeVector = false,
+    sparseVector,
+    fusionAlgorithm,
+    queryMode,
   }: UpstashQueryVectorParams): Promise<QueryResult[]> {
     try {
       const ns = this.client.namespace(namespace);
@@ -105,9 +109,12 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
       const results = await ns.query({
         topK,
         vector: queryVector,
+        ...(sparseVector && { sparseVector }),
         includeVectors: includeVector,
         includeMetadata: true,
         ...(filterString ? { filter: filterString } : {}),
+        ...(fusionAlgorithm && { fusionAlgorithm }),
+        ...(queryMode && { queryMode }),
       });
 
       // Map the results to our expected format
@@ -209,18 +216,8 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName: namespace, id, update }: UpdateVectorParams): Promise<void> {
-    try {
-      if (!update.vector && !update.metadata) {
-        throw new Error('No update data provided');
-      }
-
-      // The upstash client throws an exception as: 'This index requires dense vectors' when
-      // only metadata is present in the update object.
-      if (!update.vector && update.metadata) {
-        throw new Error('Both vector and metadata must be provided for an update');
-      }
-    } catch (error) {
+    async updateVector({ indexName: namespace, id, update }: UpstashUpdateVectorParams): Promise<void> {
+    if (!update.vector && !update.metadata && !update.sparseVector) {
       throw new MastraError(
         {
           id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
@@ -228,29 +225,58 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
           category: ErrorCategory.THIRD_PARTY,
           details: { namespace, id },
         },
-        error,
+        new Error('No update data provided'),
       );
     }
 
+    const points: any = {
+      id: id,
+    };
+
+    if (update.vector) {
+      points.vector = update.vector;
+    }
+    if (update.metadata) {
+      points.metadata = update.metadata;
+    }
+    if (update.sparseVector) {
+      points.sparseVector = update.sparseVector;
+    }
+
     try {
-      const updatePayload: any = { id: id };
-      if (update.vector) {
-        updatePayload.vector = update.vector;
-      }
-      if (update.metadata) {
-        updatePayload.metadata = update.metadata;
-      }
-
-      const points = {
-        id: updatePayload.id,
-        vector: updatePayload.vector,
-        metadata: updatePayload.metadata,
-      };
-
+      // First attempt: try the update as provided
       await this.client.upsert(points, {
         namespace,
       });
-    } catch (error) {
+    } catch (error: any) {
+      // If it's a hybrid index error and we have a dense vector but no sparse vector, retry with a default sparse vector
+      if (
+        error?.message?.includes('requires sparse vectors') &&
+        update.vector &&
+        !update.sparseVector
+      ) {
+        try {
+          // Retry with a minimal default sparse vector for hybrid indexes
+          points.sparseVector = { indices: [0], values: [0.1] };
+          await this.client.upsert(points, {
+            namespace,
+          });
+          return; // Success on retry
+        } catch (retryError) {
+          // If retry also fails, throw the retry error
+          throw new MastraError(
+            {
+              id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.THIRD_PARTY,
+              details: { namespace, id },
+            },
+            retryError,
+          );
+        }
+      }
+
+      // For any other error, throw it wrapped in MastraError
       throw new MastraError(
         {
           id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
