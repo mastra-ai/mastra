@@ -14,30 +14,23 @@ import {
   TABLE_TRACES,
   TABLE_RESOURCES,
   TABLE_WORKFLOW_SNAPSHOT,
+  safelyParseJSON,
 } from '@mastra/core/storage';
 import type {
   EvalRow,
   PaginationArgs,
   PaginationInfo,
   StorageColumn,
+  StoragePagination,
   StorageGetMessagesArg,
   StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
-  StoragePagination,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-
-function safelyParseJSON(jsonString: string): any {
-  try {
-    return JSON.parse(jsonString);
-  } catch {
-    return {};
-  }
-}
 
 export interface LibSQLConfig {
   url: string;
@@ -1615,8 +1608,8 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async getScoresByEntityId({
-    entityId: _entityId,
-    entityType: _entityType,
+    entityId,
+    entityType,
     pagination: _pagination,
   }: {
     pagination: StoragePagination;
@@ -1627,7 +1620,7 @@ export class LibSQLStore extends MastraStorage {
       id: 'LIBSQL_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.THIRD_PARTY,
-      details: { entityId: _entityId, entityType: _entityType },
+      details: { entityId, entityType },
       text: 'getScoresByEntityId is not implemented yet in LibSQLStore',
     });
   }
