@@ -1,9 +1,8 @@
-import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { PaginationInfo, StorageGetTracesArg, StorageGetTracesPaginatedArg } from '@mastra/core/storage';
 import { TABLE_TRACES, TracesStorage } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import { createSqlBuilder } from '../../sql-builder';
-import type { SqlQueryOptions } from '../../sql-builder';
 import type { StoreOperationsD1 } from '../operations';
 import { deserializeValue } from '../utils';
 
