@@ -231,6 +231,7 @@ export class InngestRun<
       data: {
         inputData: params.resumeData,
         runId: this.runId,
+        workflowId: this.workflowId,
         stepResults: snapshot?.context as any,
         resume: {
           steps,
@@ -1040,6 +1041,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       duration = await this.inngestStep.run(`workflow.${workflowId}.sleep.${entry.id}`, async () => {
         return await fn({
           runId,
+          workflowId,
           mastra: this.mastra!,
           runtimeContext,
           inputData: prevOutput,
@@ -1113,6 +1115,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       date = await this.inngestStep.run(`workflow.${workflowId}.sleepUntil.${entry.id}`, async () => {
         return await fn({
           runId,
+          workflowId,
           mastra: this.mastra!,
           runtimeContext,
           inputData: prevOutput,
@@ -1645,6 +1648,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             try {
               const result = await cond({
                 runId,
+                workflowId,
                 mastra: this.mastra!,
                 runtimeContext,
                 runCount: -1,
