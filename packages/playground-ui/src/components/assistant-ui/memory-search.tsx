@@ -84,6 +84,9 @@ export const MemorySearch = ({
         searchTimeoutRef.current = setTimeout(() => {
           handleSearch(value);
         }, 500);
+      } else {
+        setResults([]);
+        setIsOpen(false);
       }
     },
     [handleSearch],
@@ -148,6 +151,9 @@ export const MemorySearch = ({
         searchTimeoutRef.current = setTimeout(() => {
           handleSearch(chatInputValue);
         }, 500);
+      } else {
+        setResults([]);
+        setIsOpen(false);
       }
     }
 
