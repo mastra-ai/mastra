@@ -27,7 +27,13 @@ interface MemorySearchProps {
   chatInputValue?: string;
 }
 
-export const MemorySearch = ({ searchMemory, onResultClick, className, currentThreadId, chatInputValue }: MemorySearchProps) => {
+export const MemorySearch = ({
+  searchMemory,
+  onResultClick,
+  className,
+  currentThreadId,
+  chatInputValue,
+}: MemorySearchProps) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<MemorySearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -41,7 +47,6 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
   const handleSearch = useCallback(
     async (searchQuery: string) => {
       if (!searchQuery.trim()) {
-        setResults([]);
         setError(null);
         return;
       }
@@ -52,7 +57,7 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
       try {
         const response = await searchMemory(searchQuery);
         setResults(response.results);
-        setIsOpen(response.results.length > 0);
+        setIsOpen(prev => prev || response.results.length > 0);
       } catch (err) {
         setError('Failed to search memory');
         console.error('Memory search error:', err);
@@ -75,9 +80,11 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
       }
 
       // Set new timeout for debounced search
-      searchTimeoutRef.current = setTimeout(() => {
-        handleSearch(value);
-      }, 300);
+      if (value.trim()) {
+        searchTimeoutRef.current = setTimeout(() => {
+          handleSearch(value);
+        }, 500);
+      }
     },
     [handleSearch],
   );
@@ -132,15 +139,23 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
   useEffect(() => {
     if (chatInputValue !== undefined && chatInputValue !== query) {
       setQuery(chatInputValue);
-      // Trigger search if there's a value
+
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+
       if (chatInputValue.trim()) {
-        handleSearch(chatInputValue);
-      } else {
-        // Clear results if chat input is empty
-        setResults([]);
-        setError(null);
+        searchTimeoutRef.current = setTimeout(() => {
+          handleSearch(chatInputValue);
+        }, 500);
       }
     }
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
   }, [chatInputValue]);
 
   const handleResultClick = (messageId: string, threadId?: string) => {
@@ -195,7 +210,7 @@ export const MemorySearch = ({ searchMemory, onResultClick, className, currentTh
                 {error}
               </Txt>
             </div>
-          ) : isSearching ? (
+          ) : isSearching && results.length === 0 ? (
             <div className="p-4 text-center">
               <Txt variant="ui-sm" className="text-icon3">
                 Searching...
