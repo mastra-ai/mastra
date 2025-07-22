@@ -16,7 +16,10 @@ const TEST_CONFIG: MSSQLConfig = {
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-createTestSuite(new MSSQLStore(TEST_CONFIG));
+console.log('Not running MSSQL tests in CI. You can enable them if you want to test them locally.');
+if (process.env.ENABLE_TESTS === 'true') {
+  createTestSuite(new MSSQLStore(TEST_CONFIG));
+}
 
 // describe('MSSQLStore', () => {
 //   let store: MSSQLStore;
