@@ -143,7 +143,7 @@ export async function streamVNextGenerateHandler(c: Context): Promise<Response |
             await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
           }
         } catch (err) {
-          logger.error('Error in watch stream: ' + ((err as Error)?.message ?? 'Unknown error'));
+          logger.error('Error in streamVNext generate: ' + ((err as Error)?.message ?? 'Unknown error'));
         }
 
         await stream.close();
