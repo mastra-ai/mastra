@@ -8,7 +8,7 @@ import { AlertDialog } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { useDeleteThread } from '@/hooks/use-memory';
-import { StorageThreadType } from '@mastra/core';
+import { StorageThreadType } from '@mastra/core/memory';
 
 const formatDay = (date: Date) => {
   const options: Intl.DateTimeFormatOptions = {

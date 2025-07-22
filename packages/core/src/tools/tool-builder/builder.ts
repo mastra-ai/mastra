@@ -15,6 +15,7 @@ import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
+import { ToolStream } from '../stream';
 import type { CoreTool, ToolAction, VercelTool } from '../types';
 
 export type ToolToConvert = VercelTool | ToolAction<any, any, any>;
@@ -131,6 +132,15 @@ export class CoreToolBuilder extends MastraBase {
             memory: options.memory,
             runId: options.runId,
             runtimeContext: options.runtimeContext ?? new RuntimeContext(),
+            writer: new ToolStream(
+              {
+                prefix: 'tool',
+                callId: execOptions.toolCallId,
+                name: options.name,
+                runId: options.runId!,
+              },
+              options.writableStream,
+            ),
           },
           execOptions,
         ) ?? undefined
@@ -141,7 +151,18 @@ export class CoreToolBuilder extends MastraBase {
       let logger = options.logger || this.logger;
       try {
         logger.debug(start, { ...rest, args });
-        return await execFunction(args, execOptions);
+
+        // there is a small delay in stream output so we add an immediate to ensure the stream is ready
+        return await new Promise((resolve, reject) => {
+          setImmediate(async () => {
+            try {
+              const result = await execFunction(args, execOptions);
+              resolve(result);
+            } catch (err) {
+              reject(err);
+            }
+          });
+        });
       } catch (err) {
         const mastraError = new MastraError(
           {
