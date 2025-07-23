@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.11.1
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+- Updated dependencies [417fd92]
+- Updated dependencies [ce088f5]
+  - @mastra/server@0.11.1
+  - @mastra/core@0.11.1
+
 ## 0.11.0
 
 ### Minor Changes

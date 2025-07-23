@@ -1,5 +1,11 @@
 # @mastra/deployer-vercel
 
+## 0.11.8
+
+### Patch Changes
+
+- 1a45f3a: Fix peerdeps
+
 ## 0.11.7
 
 ### Patch Changes

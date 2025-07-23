@@ -1,5 +1,14 @@
 # @mastra/mcp-docs-server
 
+## 0.13.6
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+- Updated dependencies [ce088f5]
+  - @mastra/mcp@0.10.7
+  - @mastra/core@0.11.1
+
 ## 0.13.5
 
 ### Patch Changes
