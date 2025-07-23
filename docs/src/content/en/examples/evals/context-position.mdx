@@ -7,7 +7,7 @@ import { GithubLink } from "@/components/github-link";
 
 # Context Position Evaluation
 
-Use `ContextPositionMetric` to evaluate how well a response maintains the original order of information in a given query. The metric accepts a `query` and a `response`, and returns a score and reason based on the positional alignment of key elements.
+Use `ContextPositionMetric` to evaluate whether the response is supported by the most relevant context segments. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 
 ## Installation
 

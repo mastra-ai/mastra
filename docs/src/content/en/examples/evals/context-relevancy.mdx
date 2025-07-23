@@ -7,7 +7,7 @@ import { GithubLink } from "@/components/github-link";
 
 # Context Relevancy Evaluation
 
-Use `ContextRelevancyMetric` to evaluate how relevant the provided context is to a given query. The metric accepts a `context` array and a `query`, and returns a score and explanation based on how well the context aligns with the question.
+Use `ContextRelevancyMetric` to evaluate how well the retrieved context aligns with the original query. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 
 ## Installation
 

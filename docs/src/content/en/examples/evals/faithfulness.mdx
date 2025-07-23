@@ -7,7 +7,7 @@ import { GithubLink } from "@/components/github-link";
 
 ## Faithfulness Evaluation
 
-Use `FaithfulnessMetric` to evaluate how accurately a response reflects the provided context. The metric accepts a `query` and a `response`, and returns a score and reason based on how well the output aligns with the source material.
+Use `FaithfulnessMetric` to evaluate whether the response makes claims that are supported by the provided context. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 
 ## Installation
 

@@ -7,7 +7,7 @@ import { GithubLink } from "@/components/github-link";
 
 # Context Precision Evaluation
 
-Use `ContextPrecisionMetric` to evaluate how precisely a response uses the provided context. The metric accepts a `query` and a `response`, and returns a score and reason based on the inclusion of relevant versus irrelevant context information.
+Use `ContextPrecisionMetric` to evaluate whether the response relies on the most relevant parts of the provided context. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 
 ## Installation
 

@@ -7,7 +7,7 @@ import { GithubLink } from "@/components/github-link";
 
 # Textual Difference Evaluation
 
-Use `TextualDifference` to evaluate the similarity between two text strings by analyzing sequence differences and edit operations. The metric accepts a `query` and a `response`, and returns a score and detailed info based on their textual similarity.
+Use `TextualDifferenceMetric` to evaluate the similarity between two text strings by analyzing sequence differences and edit operations. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing confidence, ratio, number of changes, and length difference.
 
 ## Installation
 

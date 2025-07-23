@@ -7,7 +7,7 @@ import { GithubLink } from "@/components/github-link";
 
 # Content Similarity Evaluation
 
-Use `ContentSimilarityMetric` to evaluate how similar a response is to a given query. The metric accepts a `query` and a `response`, and returns a score and reason based on the degree of textual similarity.
+Use `ContentSimilarityMetric` to evaluate how similar the response is to a reference based on content overlap. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a similarity value.
 
 ## Installation
 
@@ -37,7 +37,12 @@ console.log(result);
 The output receives a high score because the response preserves the intent and content of the query with only subtle wording changes.
 
 ```typescript
-{ score: 0.7761194029850746, info: { similarity: 0.7761194029850746 } }
+{
+  score: 0.7761194029850746,
+  info: {
+    similarity: 0.7761194029850746
+  }
+}
 ```
 
 ## Moderate similarity example
@@ -64,7 +69,9 @@ The output receives a mid-range score because the response captures the general 
 ```typescript
 {
   score: 0.40540540540540543,
-  info: { similarity: 0.40540540540540543 }
+  info: {
+    similarity: 0.40540540540540543
+  }
 }
 ```
 
@@ -92,7 +99,9 @@ The output receives a low score because the response does not align with the con
 ```typescript
 {
   score: 0.25806451612903225,
-  info: { similarity: 0.25806451612903225 }
+  info: {
+    similarity: 0.25806451612903225
+  }
 }
 ```
 
