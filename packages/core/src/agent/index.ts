@@ -42,9 +42,12 @@ import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import type { AgentVNextStreamOptions } from './agent.types';
+import type { InputProcessor } from './input-processor';
+import { runInputProcessors } from './input-processor/runner';
 import { MessageList } from './message-list';
 import type { MessageInput } from './message-list';
 import { SaveQueueManager } from './save-queue';
+import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -56,6 +59,8 @@ import type {
   AgentMemoryOption,
 } from './types';
 export type { ChunkType, MastraAgentStream } from '../stream/MastraAgentStream';
+export type { InputProcessor } from './input-processor';
+export { createInputProcessor } from './input-processor';
 
 export { MessageList };
 export * from './types';
@@ -124,6 +129,7 @@ export class Agent<
   evals: TMetrics;
   #scorers: DynamicArgument<MastraScorers>;
   #voice: CompositeVoice;
+  #inputProcessors?: DynamicArgument<InputProcessor[]>;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -194,6 +200,10 @@ export class Agent<
       }
     } else {
       this.#voice = new DefaultVoice();
+    }
+
+    if (config.inputProcessors) {
+      this.#inputProcessors = config.inputProcessors;
     }
 
     // @ts-ignore Flag for agent network messages
@@ -1364,7 +1374,7 @@ export class Agent<
           writableStream,
         });
 
-        const messageList = new MessageList({
+        let messageList = new MessageList({
           threadId,
           resourceId,
           generateMessageId,
@@ -1376,6 +1386,15 @@ export class Agent<
             content: instructions || `${this.instructions}.`,
           })
           .add(context || [], 'context');
+
+        if (this.#inputProcessors) {
+          const processors =
+            typeof this.#inputProcessors === 'function'
+              ? await this.#inputProcessors({ runtimeContext })
+              : this.#inputProcessors;
+
+          messageList = await runInputProcessors(processors, messageList);
+        }
 
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
