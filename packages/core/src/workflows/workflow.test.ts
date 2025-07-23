@@ -7498,6 +7498,127 @@ describe('Workflow', () => {
         });
         expect((secondResumeResult as any).result).toEqual({ suspect: 'second-suspect' });
       });
+
+      it('should preserve runtime context in nested workflows after suspend/resume', async () => {
+        const testStorage = new MockStore();
+
+        // Step that sets runtime context data
+        const setupStep = createStep({
+          id: 'setup-step',
+          inputSchema: z.object({}),
+          outputSchema: z.object({
+            setup: z.boolean(),
+          }),
+          execute: async ({ runtimeContext }) => {
+            runtimeContext.set('test-key', 'test-context-value');
+            return { setup: true };
+          },
+        });
+
+        // Suspend step
+        const suspendStep = createStep({
+          id: 'suspend-step',
+          inputSchema: z.object({
+            setup: z.boolean(),
+          }),
+          outputSchema: z.object({
+            resumed: z.boolean(),
+          }),
+          suspendSchema: z.object({
+            message: z.string(),
+          }),
+          resumeSchema: z.object({
+            confirmed: z.boolean(),
+          }),
+          execute: async ({ resumeData, suspend, runtimeContext }) => {
+            // Verify runtime context is still available during suspend
+            expect(runtimeContext.get('test-key')).toBe('test-context-value');
+
+            if (!resumeData?.confirmed) {
+              return await suspend({ message: 'Workflow suspended for testing' });
+            }
+            return { resumed: true };
+          },
+        });
+
+        // Step in nested workflow that verifies runtime context access
+        const verifyContextStep = createStep({
+          id: 'verify-context-step',
+          inputSchema: z.object({
+            resumed: z.boolean(),
+          }),
+          outputSchema: z.object({
+            success: z.boolean(),
+            hasTestData: z.boolean(),
+          }),
+          execute: async ({ runtimeContext, mastra, getInitData, inputData }) => {
+            // Verify all context is available in nested workflow after suspend/resume
+            const testData = runtimeContext.get('test-key');
+            const initData = getInitData();
+
+            expect(testData).toBe('test-context-value');
+            expect(mastra).toBeDefined();
+            expect(runtimeContext).toBeDefined();
+            expect(inputData).toEqual({ resumed: true });
+            expect(initData).toEqual({ resumed: true });
+
+            return { success: true, hasTestData: !!testData };
+          },
+        });
+
+        // Nested workflow that runs after suspend/resume
+        const nestedWorkflow = createWorkflow({
+          id: 'nested-workflow-after-suspend',
+          inputSchema: z.object({
+            resumed: z.boolean(),
+          }),
+          outputSchema: z.object({
+            success: z.boolean(),
+            hasTestData: z.boolean(),
+          }),
+        })
+          .then(verifyContextStep)
+          .commit();
+
+        // Main workflow
+        const mainWorkflow = createWorkflow({
+          id: 'main-workflow-with-suspend',
+          inputSchema: z.object({}),
+          outputSchema: z.object({
+            success: z.boolean(),
+            hasTestData: z.boolean(),
+          }),
+        })
+          .then(setupStep)
+          .then(suspendStep)
+          .then(nestedWorkflow)
+          .commit();
+
+        // Initialize Mastra with storage for suspend/resume
+        new Mastra({
+          logger: false,
+          storage: testStorage,
+          workflows: { mainWorkflow, nestedWorkflow },
+        });
+
+        const run = mainWorkflow.createRun();
+
+        // Start workflow (should suspend)
+        const suspendResult = await run.start({ inputData: {} });
+        expect(suspendResult.status).toBe('suspended');
+
+        // Resume workflow
+        const resumeResult = await run.resume({
+          step: 'suspend-step',
+          resumeData: { confirmed: true },
+        });
+
+        expect(resumeResult.status).toBe('success');
+        if (resumeResult.status === 'success') {
+          expect(resumeResult.result.success).toBe(true);
+          expect(resumeResult.result.hasTestData).toBe(true);
+        }
+      });
     });
 
     describe('Workflow results', () => {
