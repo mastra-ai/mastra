@@ -28,7 +28,7 @@ const metric = new SummarizationMetric(openai("gpt-4o-mini"));
 const query =
   "The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, the Roadster, was launched in 2008.";
 const response =
-  "Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car,the Roadster, in 2008. Elon Musk joined as the largest investor in 2004 and became CEO in 2008.";
+  "Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car, the Roadster, in 2008. Elon Musk joined as the largest investor in 2004 and became CEO in 2008.";
 
 const result = await metric.measure(query, response);
 ```

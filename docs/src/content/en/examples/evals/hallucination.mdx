@@ -107,7 +107,7 @@ const metric = new HallucinationMetric(openai("gpt-4o-mini"), {
 });
 
 const query = "When did the Wright brothers first fly?";
-const response = "he Wright brothers achieved their historic first flight in 1908. The flight lasted about 2 minutes and covered nearly a mile.";
+const response = "The Wright brothers achieved their historic first flight in 1908. The flight lasted about 2 minutes and covered nearly a mile.";
 
 const result = await metric.measure(query, response);
 

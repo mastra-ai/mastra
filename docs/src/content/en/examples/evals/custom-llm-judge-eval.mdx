@@ -7,7 +7,7 @@ import { GithubLink } from "@/components/github-link";
 
 # LLM as a Judge Evaluation
 
-This example shows how to create a custom LLM-base evaluation metric to determine real countries of the world. The metric accepts a `query` and a `response`, and returns a score and reason based on how accurately the response matches the query.
+This example shows how to create a custom LLM-based evaluation metric to determine real countries of the world. The metric accepts a `query` and a `response`, and returns a score and reason based on how accurately the response matches the query.
 
 ## Installation
 
@@ -45,7 +45,7 @@ Return:
 {
   "score": number (0 to 1),
   "info": {
-    "reason": string
+    "reason": string,
     "matches": [string, string],
     "misses": [string]
   }
