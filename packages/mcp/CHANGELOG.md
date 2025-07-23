@@ -1,5 +1,12 @@
 # @mastra/mcp
 
+## 0.10.7
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+  - @mastra/core@0.11.1
+
 ## 0.10.6
 
 ### Patch Changes

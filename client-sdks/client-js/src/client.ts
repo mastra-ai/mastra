@@ -39,6 +39,13 @@ import type {
   GetNetworkMemoryThreadParams,
   CreateNetworkMemoryThreadParams,
   SaveNetworkMessageToMemoryParams,
+  GetScorerResponse,
+  GetScoresByScorerIdParams,
+  GetScoresResponse,
+  GetScoresByRunIdParams,
+  GetScoresByEntityIdParams,
+  SaveScoreParams,
+  SaveScoreResponse,
 } from './types';
 
 export class MastraClient extends BaseResource {
@@ -521,6 +528,96 @@ export class MastraClient extends BaseResource {
         workingMemory,
         resourceId,
       },
+    });
+  }
+
+  /**
+   * Retrieves all available scorers
+   * @returns Promise containing list of available scorers
+   */
+  public getScorers(): Promise<Record<string, GetScorerResponse>> {
+    return this.request('/api/scores/scorers');
+  }
+
+  /**
+   * Retrieves a scorer by ID
+   * @param scorerId - ID of the scorer to retrieve
+   * @returns Promise containing the scorer
+   */
+  public getScorer(scorerId: string): Promise<GetScorerResponse> {
+    return this.request(`/api/scores/scorers/${scorerId}`);
+  }
+
+  public getScoresByScorerId(params: GetScoresByScorerIdParams): Promise<GetScoresResponse> {
+    const { page, perPage, scorerId, entityId, entityType } = params;
+    const searchParams = new URLSearchParams();
+
+    if (entityId) {
+      searchParams.set('entityId', entityId);
+    }
+    if (entityType) {
+      searchParams.set('entityType', entityType);
+    }
+
+    if (page !== undefined) {
+      searchParams.set('page', String(page));
+    }
+    if (perPage !== undefined) {
+      searchParams.set('perPage', String(perPage));
+    }
+    const queryString = searchParams.toString();
+    return this.request(`/api/scores/scorer/${scorerId}${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Retrieves scores by run ID
+   * @param params - Parameters containing run ID and pagination options
+   * @returns Promise containing scores and pagination info
+   */
+  public getScoresByRunId(params: GetScoresByRunIdParams): Promise<GetScoresResponse> {
+    const { runId, page, perPage } = params;
+    const searchParams = new URLSearchParams();
+
+    if (page !== undefined) {
+      searchParams.set('page', String(page));
+    }
+    if (perPage !== undefined) {
+      searchParams.set('perPage', String(perPage));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/scores/run/${runId}${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Retrieves scores by entity ID and type
+   * @param params - Parameters containing entity ID, type, and pagination options
+   * @returns Promise containing scores and pagination info
+   */
+  public getScoresByEntityId(params: GetScoresByEntityIdParams): Promise<GetScoresResponse> {
+    const { entityId, entityType, page, perPage } = params;
+    const searchParams = new URLSearchParams();
+
+    if (page !== undefined) {
+      searchParams.set('page', String(page));
+    }
+    if (perPage !== undefined) {
+      searchParams.set('perPage', String(perPage));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/scores/entity/${entityType}/${entityId}${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Saves a score
+   * @param params - Parameters containing the score data to save
+   * @returns Promise containing the saved score
+   */
+  public saveScore(params: SaveScoreParams): Promise<SaveScoreResponse> {
+    return this.request('/api/scores', {
+      method: 'POST',
+      body: params,
     });
   }
 }

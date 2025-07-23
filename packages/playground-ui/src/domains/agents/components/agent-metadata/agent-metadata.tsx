@@ -9,6 +9,7 @@ import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
 import { ReactNode } from 'react';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+import { ScorerList } from '@/domains/scores';
 
 export interface AgentMetadataProps {
   agent: GetAgentResponse;
@@ -73,6 +74,9 @@ export const AgentMetadata = ({
         <AgentMetadataWorkflowList workflows={workflows} computeWorkflowLink={computeWorkflowLink} />
       </AgentMetadataSection>
 
+      <AgentMetadataSection title="Scorers">
+        <AgentMetadataScorerList entityId={agent.name} />
+      </AgentMetadataSection>
       <AgentMetadataSection title="System Prompt">{promptSlot}</AgentMetadataSection>
     </AgentMetadataWrapper>
   );
@@ -100,6 +104,14 @@ export const AgentMetadataToolList = ({ tools, computeToolLink }: AgentMetadataT
         </AgentMetadataListItem>
       ))}
     </AgentMetadataList>
+  );
+};
+
+export const AgentMetadataScorerList = ({ entityId }: { entityId: string }) => {
+  return (
+    <div className="px-5 pb-5">
+      <ScorerList entityId={entityId} entityType="AGENT" />
+    </div>
   );
 };
 
