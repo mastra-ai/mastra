@@ -130,7 +130,7 @@ export class MastraScorer {
       );
     }
 
-    return { ...input, runId, ...execution.result };
+    return { runId, ...execution.result };
   }
 }
 export type MastraScorerEntry = {
