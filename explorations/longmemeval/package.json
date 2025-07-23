@@ -1,6 +1,6 @@
 {
   "name": "@mastra/longmemeval",
-  "version": "0.1.2-alpha.3",
+  "version": "0.1.2",
   "description": "LongMemEval benchmark implementation for Mastra Memory",
   "scripts": {
     "test": "vitest",

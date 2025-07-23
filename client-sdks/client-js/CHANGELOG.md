@@ -1,5 +1,40 @@
 # @mastra/client-js
 
+## 0.10.15
+
+### Patch Changes
+
+- 4832752: Do not set content-type header when making POST/PUT requests without a body
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 2affc57: Fix output type of network loop
+- 032cb66: ClientJS
+- 7827943: Handle streaming large data
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 80c2b06: Fix agent chat stop button to cancel stream/generate reqs in the playground
+- 6f6e651: Alias createRun -> createRunAsync to match Mastra Workflow class
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [7827943]
+- Updated dependencies [5889a31]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [cbddd18]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0
+
 ## 0.10.15-alpha.3
 
 ### Patch Changes

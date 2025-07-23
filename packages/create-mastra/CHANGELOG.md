@@ -1,5 +1,23 @@
 # create-mastra
 
+## 0.10.13
+
+### Patch Changes
+
+- dd2a4c9: change the way we start the dev process of playground
+- af1f902: share thread list between agent, network and cloud
+- 8f89bcd: fix traces pagination + sharing trace view with cloud
+- 0bf0bc8: fix link in shared components + add e2e tests
+- 2affc57: Fix output type of network loop
+- f6c4d75: fix date picker on change
+- 59f0dcd: Add light background color for step statuses
+- 698518b: Allow external templates from github
+- cf8d497: factorize tabs component between cloud and core
+- 7827943: Handle streaming large data
+- 808b493: wrap runtime context with tooltip provider for usage in cloud
+- 09464dd: Share AgentMetadata component with cloud
+- 80692d5: refactor: sharing only the UI and not data fetching for traces
+
 ## 0.10.13-alpha.2
 
 ### Patch Changes

@@ -1,5 +1,60 @@
 # @mastra/deployer
 
+## 0.11.0
+
+### Minor Changes
+
+- 0938991: Refactored the hono server structure by extracting route logic into route groups based on namespace.
+
+### Patch Changes
+
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 82c6860: fix tool import
+- 7ba91fa: Throw mastra errors methods not implemented yet
+- a512ede: Add scores to deployer routes
+- 35b1155: Added "Semantic recall search" to playground UI chat sidebar, to search for messages and find them in the chat list
+- 45469c5: Resolve dependency of tsConfigPath modules
+- 6f50efd: Only enforce authorization on protected routes
+- 24eb25c: Provide fallback for extracted mastra options during bundling
+- bf6903e: Fix dependency resolving with directories
+
+  Follow import from `import x from 'pkg/dir'` => `import x from 'pkg/dir/index.js'`
+
+- 703ac71: scores schema
+- 4c06f06: Fix #tools import after the tools import rework
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 9de6f58: Unlocks the dev playground if auth is enabled
+- 7983e53: Revert cloudflare omit install deps step
+- 15ce274: Pipe all env vars in deloyer install
+
+  Fixes and issue with cloudflare
+
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [35b1155]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [7827943]
+- Updated dependencies [5889a31]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [62007b3]
+- Updated dependencies [dcd4802]
+- Updated dependencies [cbddd18]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0
+  - @mastra/server@0.11.0
+
 ## 0.11.0-alpha.3
 
 ### Patch Changes

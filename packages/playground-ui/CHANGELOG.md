@@ -1,5 +1,51 @@
 # @mastra/playground-ui
 
+## 5.1.14
+
+### Patch Changes
+
+- dd2a4c9: change the way we start the dev process of playground
+- af1f902: share thread list between agent, network and cloud
+- 8f89bcd: fix traces pagination + sharing trace view with cloud
+- 0bf0bc8: fix link in shared components + add e2e tests
+- f6c4d75: fix date picker on change
+- 59f0dcd: Add light background color for step statuses
+- 35b1155: Added "Semantic recall search" to playground UI chat sidebar, to search for messages and find them in the chat list
+- 8aa97c7: Show docs link in place of semantic recall + working memory in playground if they're not enabled
+- cf8d497: factorize tabs component between cloud and core
+- 7827943: Handle streaming large data
+- 808b493: wrap runtime context with tooltip provider for usage in cloud
+- 09464dd: Share AgentMetadata component with cloud
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 80692d5: refactor: sharing only the UI and not data fetching for traces
+- 80c2b06: Fix agent chat stop button to cancel stream/generate reqs in the playground
+- Updated dependencies [4832752]
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [7827943]
+- Updated dependencies [5889a31]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [cbddd18]
+- Updated dependencies [80c2b06]
+- Updated dependencies [7ba91fa]
+- Updated dependencies [6f6e651]
+  - @mastra/client-js@0.10.15
+  - @mastra/core@0.11.0
+
 ## 5.1.14-alpha.3
 
 ### Patch Changes
