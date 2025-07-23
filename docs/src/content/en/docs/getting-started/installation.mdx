@@ -8,14 +8,14 @@ import { Tabs, Tab } from "@/components/tabs";
 
 # Install Mastra
 
-To get started with Mastra, you’ll need access to a large language model (LLM). By default, Mastra is set up to work with [OpenAI](https://platform.openai.com/), so you’ll need an API key to begin.
+To get started with Mastra, you'll need access to a large language model (LLM). By default, Mastra is set up to work with [OpenAI](https://platform.openai.com/), so you'll need an API key to begin.
 
 Mastra also supports other LLM providers. For a full list of supported models and setup instructions, see [Model Providers](/docs/getting-started/model-providers).
 
 
 ## Prerequisites
 
-- Node.js `v20.0` or higher
+- Node.js `v20.0` or higher (or Deno `v1.40` or higher)  
 - An API key from a supported [Model Provider](/docs/getting-started/model-providers)
 
 <Steps>
@@ -26,12 +26,12 @@ Our CLI is the fastest way to get started with Mastra. Run the following command
 
 {/*
 LLM CONTEXT: This Tabs component shows different package manager commands for creating a new Mastra project.
-Each tab displays the equivalent command for that specific package manager (npx, npm, yarn, pnpm, bun).
+Each tab displays the equivalent command for that specific package manager (npx, npm, yarn, pnpm, bun, deno).
 This helps users choose their preferred package manager while following the same installation process.
 All commands achieve the same result - creating a new Mastra project with the interactive setup.
 */}
 
-<Tabs items={["npx", "npm", "yarn", "pnpm", "bun"]}>
+<Tabs items={["npx", "npm", "yarn", "pnpm", "bun", "deno"]}>
   <Tab>
     ```bash copy
     npx create-mastra@latest
@@ -57,6 +57,11 @@ All commands achieve the same result - creating a new Mastra project with the in
     bun create mastra@latest
     ```
   </Tab>
+  <Tab>
+    ```bash copy
+    deno run -A npm:create-mastra@latest
+    ```
+  </Tab>
 </Tabs>
 
 
@@ -79,7 +84,7 @@ OPENAI_API_KEY=<your-api-key>
 ```
 > This example uses OpenAI. Each LLM provider uses a unique name. See [Model Capabilities](/docs/getting-started/model-capability) for more information.
 
-You can now launch the [Mastra Development Server](/docs/server-db/local-dev-playground) and test your agent using the Mastra Playground.
+You can now launch the [Mastra Development Server](/docs/server-db/local-dev-playground) and test your agent using the Mastra Playground.     
 
 </Steps>
 
@@ -106,7 +111,7 @@ dev dependencies installation, and core Mastra packages installation.
 This helps users manually set up a Mastra project with their preferred package manager.
 */}
 
-<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+<Tabs items={["npm", "pnpm", "yarn", "bun", "deno"]}>
 
   <Tab>
     ```bash copy
@@ -148,6 +153,16 @@ This helps users manually set up a Mastra project with their preferred package m
     ```
 
   </Tab>
+  <Tab>
+    ```bash copy
+    deno init
+
+    deno add npm:typescript npm:tsx npm:@types/node npm:mastra@latest
+
+    deno add npm:@mastra/core@latest npm:zod@^3 npm:@ai-sdk/openai
+    ```
+
+  </Tab>
 </Tabs>
 
 Add the `dev` and `build` scripts to `package.json`:
@@ -161,6 +176,8 @@ Add the `dev` and `build` scripts to `package.json`:
   }
 }
 ```
+
+> **Note for Deno users**: You can also run Mastra commands directly with `deno run -A npm:mastra dev` and `deno run -A npm:mastra build`.
 
 ### Initialize TypeScript
 
@@ -264,7 +281,7 @@ export const weatherAgent = new Agent({
 
       Your primary function is to help users get weather details for specific locations. When responding:
       - Always ask for a location if none is provided
-      - If the location name isn’t in English, please translate it
+      - If the location name isn't in English, please translate it
       - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
       - Include relevant details like humidity, wind conditions, and precipitation
       - Keep responses concise but informative
@@ -295,7 +312,7 @@ export const mastra = new Mastra({
 });
 ```
 
-You can now launch the [Mastra Development Server](/docs/server-db/local-dev-playground) and test your agent using the Mastra Playground.
+You can now launch the [Mastra Development Server](/docs/server-db/local-dev-playground) and test your agent using the Mastra Playground.     
 
 </Steps>
 
@@ -319,6 +336,3 @@ To install Mastra in an existing project, use the `mastra init` command.
 
 - [Local Development](/docs/server-db/local-dev-playground)
 - [Deploy to Mastra Cloud](/docs/deployment/overview)
-
-
-/docs/server-db/local-dev-playground
