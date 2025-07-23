@@ -1,5 +1,4 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ChatThreads } from '@mastra/playground-ui';
 import { StorageThreadType } from '@mastra/core/memory';
@@ -19,11 +18,8 @@ export function NetworkSidebar({
   const { deleteThread } = useDeleteNetworkThread();
   const navigate = useNavigate();
 
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-
-  const handleDelete = async () => {
+  const handleDelete = async (deleteId: string) => {
     await deleteThread({ threadId: deleteId!, resourceid: networkId, networkId });
-    setDeleteId(null);
     if (deleteId === threadId) {
       navigate(`/networks/v-next/${networkId}/chat/${uuid()}`);
     }

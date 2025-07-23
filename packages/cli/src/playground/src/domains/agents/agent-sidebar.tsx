@@ -1,5 +1,4 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ChatThreads } from '@mastra/playground-ui';
 
@@ -20,11 +19,8 @@ export function AgentSidebar({
   const { deleteThread } = useDeleteThread();
   const navigate = useNavigate();
 
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-
-  const handleDelete = async () => {
+  const handleDelete = async (deleteId: string) => {
     await deleteThread({ threadId: deleteId!, resourceid: agentId, agentId });
-    setDeleteId(null);
     if (deleteId === threadId) {
       navigate(`/agents/${agentId}/chat/${uuid()}`);
     }
