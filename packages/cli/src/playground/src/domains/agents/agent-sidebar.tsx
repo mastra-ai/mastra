@@ -20,7 +20,7 @@ export function AgentSidebar({
   const { deleteThread } = useDeleteThread();
   const navigate = useNavigate();
 
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(threadId);
 
   const handleDelete = async () => {
     await deleteThread({ threadId: deleteId!, resourceid: agentId, agentId });
