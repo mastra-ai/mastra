@@ -501,8 +501,7 @@ function ScoreDetails({
                   key={index}
                   className="border-b border-border1 last:border-b-0 py-[1rem] px-[1.5rem] text-[0.875rem] text-icon4 break-all"
                 >
-                  {input?.content && <MarkdownRenderer>{input.content}</MarkdownRenderer>}
-                  {input?.ingredient && <MarkdownRenderer>{input.ingredient}</MarkdownRenderer>}
+                  {input && <CodeMirrorBlock value={JSON.stringify(input, null, 2)} />}
                 </div>
               ))}
             </section>
