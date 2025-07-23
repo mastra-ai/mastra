@@ -7,7 +7,6 @@ const meta = {
   "context-precision": "Context Precision",
   "context-relevancy": "Context Relevancy",
   "contextual-recall": "Contextual Recall",
-  "custom-eval": "Custom Eval",
   faithfulness: "Faithfulness",
   hallucination: "Hallucination",
   "keyword-coverage": "Keyword Coverage",
@@ -16,6 +15,7 @@ const meta = {
   "textual-difference": "Textual Difference",
   "tone-consistency": "Tone Consistency",
   toxicity: "Toxicity",
-  "word-inclusion": "Word Inclusion",
+  "custom-llm-judge-eval": "LLM as a Judge",
+  "custom-native-javascript-eval": "Native JavaScript",
 };
 export default meta;
