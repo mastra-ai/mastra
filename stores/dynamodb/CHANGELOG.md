@@ -1,5 +1,12 @@
 # @mastra/dynamodb
 
+## 0.13.2
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+  - @mastra/core@0.11.1
+
 ## 0.13.1
 
 ### Patch Changes

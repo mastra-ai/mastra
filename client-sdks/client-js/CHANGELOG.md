@@ -1,5 +1,11 @@
 # @mastra/client-js
 
+## 0.10.16
+
+### Patch Changes
+
+- @mastra/core@0.11.1
+
 ## 0.10.15
 
 ### Patch Changes

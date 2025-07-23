@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mssql",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "MSSQL provider for Mastra - db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
