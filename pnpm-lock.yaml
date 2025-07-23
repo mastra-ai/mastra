@@ -1792,6 +1792,9 @@ importers:
 
   packages/mcp-docs-server:
     dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../core
       '@mastra/mcp':
         specifier: workspace:^
         version: link:../mcp
@@ -1826,9 +1829,6 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../core
       '@types/jsdom':
         specifier: ^21.1.7
         version: 21.1.7
@@ -29551,7 +29551,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.10.0)
+      retry-axios: 2.6.0(axios@1.10.0(debug@4.4.1))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -32832,7 +32832,7 @@ snapshots:
       onetime: 7.0.0
       signal-exit: 4.1.0
 
-  retry-axios@2.6.0(axios@1.10.0):
+  retry-axios@2.6.0(axios@1.10.0(debug@4.4.1)):
     dependencies:
       axios: 1.10.0(debug@4.4.1)
 
