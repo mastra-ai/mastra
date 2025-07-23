@@ -12,16 +12,16 @@ export type ScoringPrompts = {
 };
 
 export type ScoringInput = {
-  runId: string;
-  scorer: Record<string, any>;
+  runId?: string;
+  scorer?: Record<string, any>;
   input: Record<string, any>[];
   output: Record<string, any>;
   metadata?: Record<string, any>;
   additionalContext?: Record<string, any>;
-  source: ScoringSource;
-  entity: Record<string, any>;
-  entityType: ScoringEntityType;
-  runtimeContext: Record<string, any>;
+  source?: ScoringSource;
+  entity?: Record<string, any>;
+  entityType?: ScoringEntityType;
+  runtimeContext?: Record<string, any>;
   structuredOutput?: boolean;
   traceId?: string;
   resourceId?: string;
@@ -43,6 +43,7 @@ export const scoreResultSchema = z.object({
 export type ScoringAnalyzeStepResult = z.infer<typeof scoreResultSchema>;
 
 export type ScoringInputWithExtractStepResult<TExtract = any> = ScoringInput & {
+  runId: string;
   extractStepResult?: TExtract;
   extractPrompt?: string;
 };
