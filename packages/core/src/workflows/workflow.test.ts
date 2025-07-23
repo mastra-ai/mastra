@@ -7896,6 +7896,193 @@ describe('Workflow', () => {
       expect(last).toHaveBeenCalledTimes(1);
       expect(passthroughSpy).toHaveBeenCalledTimes(2);
     });
+
+    it('should not execute incorrect branches after resuming from suspended nested workflow', async () => {
+      const testStorage = new MockStore();
+
+      // Mock functions to track execution
+      const fetchItemsAction = vi.fn().mockResolvedValue([
+        { id: '1', name: 'Item 1', type: 'first' },
+        { id: '2', name: 'Item 2', type: 'second' },
+        { id: '3', name: 'Item 3', type: 'third' },
+      ]);
+
+      const selectItemAction = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+        if (!resumeData) {
+          return await suspend({ message: 'Select an item' });
+        }
+        return resumeData;
+      });
+
+      const firstItemAction = vi.fn().mockResolvedValue({ processed: 'first' });
+      const thirdItemAction = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+        if (!resumeData) {
+          return await suspend({ message: 'Select date for third item' });
+        }
+        return { processed: 'third', date: resumeData };
+      });
+
+      const secondItemDateAction = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+        if (!resumeData) {
+          return await suspend({ message: 'Select date for second item' });
+        }
+        return { processed: 'second', date: resumeData };
+      });
+
+      const finalProcessingAction = vi.fn().mockImplementation(async ({ inputData }) => {
+        return { result: 'processed', input: inputData };
+      });
+
+      const fetchItems = createStep({
+        id: 'fetch-items',
+        inputSchema: z.object({}),
+        outputSchema: z.array(z.object({ id: z.string(), name: z.string(), type: z.string() })),
+        execute: fetchItemsAction,
+      });
+
+      const selectItem = createStep({
+        id: 'select-item',
+        inputSchema: z.array(z.object({ id: z.string(), name: z.string(), type: z.string() })),
+        outputSchema: z.object({ id: z.string(), name: z.string(), type: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ id: z.string(), name: z.string(), type: z.string() }),
+        execute: selectItemAction,
+      });
+
+      const firstItemStep = createStep({
+        id: 'first-item-step',
+        inputSchema: z.object({ id: z.string(), name: z.string(), type: z.string() }),
+        outputSchema: z.object({ processed: z.string() }),
+        execute: firstItemAction,
+      });
+
+      const thirdItemStep = createStep({
+        id: 'third-item-step',
+        inputSchema: z.object({ id: z.string(), name: z.string(), type: z.string() }),
+        outputSchema: z.object({ processed: z.string(), date: z.date() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.date(),
+        execute: thirdItemAction,
+      });
+
+      const secondItemDateStep = createStep({
+        id: 'second-item-date-step',
+        inputSchema: z.object({ id: z.string(), name: z.string(), type: z.string() }),
+        outputSchema: z.object({ processed: z.string(), date: z.date() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.date(),
+        execute: secondItemDateAction,
+      });
+
+      const finalProcessingStep = createStep({
+        id: 'final-processing',
+        inputSchema: z.object({
+          processed: z.string(),
+          date: z.date().optional(),
+        }),
+        outputSchema: z.object({ result: z.string(), input: z.any() }),
+        execute: finalProcessingAction,
+      });
+
+      // Create nested workflow for second item
+      const secondItemWorkflow = createWorkflow({
+        id: 'second-item-workflow',
+        inputSchema: z.object({ id: z.string(), name: z.string(), type: z.string() }),
+        outputSchema: z.object({ processed: z.string(), date: z.date() }),
+      })
+        .then(secondItemDateStep)
+        .commit();
+
+      // Create main workflow with conditional branching
+      const mainWorkflow = createWorkflow({
+        id: 'main-workflow-branch-bug',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), input: z.any() }),
+      })
+        .then(fetchItems)
+        .then(selectItem)
+        .branch([
+          [async ({ inputData }) => inputData.type === 'first', firstItemStep],
+          [async ({ inputData }) => inputData.type === 'second', secondItemWorkflow],
+          [async ({ inputData }) => inputData.type === 'third', thirdItemStep],
+        ])
+        .map(async ({ inputData }) => {
+          // This map step simulates the original issue (#6212) where results from ALL branches
+          // are processed instead of just the correct one
+          if (inputData['first-item-step']) {
+            return inputData['first-item-step'];
+          } else if (inputData['second-item-workflow']) {
+            return inputData['second-item-workflow'];
+          } else if (inputData['third-item-step']) {
+            return inputData['third-item-step'];
+          }
+          throw new Error('No valid branch result found');
+        })
+        .then(finalProcessingStep)
+        .commit();
+
+      // Initialize Mastra with storage
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { mainWorkflow, secondItemWorkflow },
+      });
+
+      const run = await mainWorkflow.createRunAsync();
+
+      // Start workflow - should suspend at select-item
+      const initialResult = await run.start({ inputData: {} });
+      expect(initialResult.status).toBe('suspended');
+      expect(selectItemAction).toHaveBeenCalledTimes(1);
+
+      if (initialResult.status !== 'suspended') {
+        expect.fail('Expected workflow to be suspended');
+      }
+
+      // Resume with "second" item selection
+      const resumedResult = await run.resume({
+        step: initialResult.suspended[0],
+        resumeData: { id: '2', name: 'Item 2', type: 'second' },
+      });
+
+      expect(resumedResult.status).toBe('suspended');
+      expect(selectItemAction).toHaveBeenCalledTimes(2);
+      expect(secondItemDateAction).toHaveBeenCalledTimes(1);
+
+      if (resumedResult.status !== 'suspended') {
+        expect.fail('Expected workflow to be suspended');
+      }
+
+      // Resume with date for second item
+      const finalResult = await run.resume({
+        step: resumedResult.suspended[0],
+        resumeData: new Date('2024-12-31'),
+      });
+
+      expect(finalResult.status).toBe('success');
+      expect(secondItemDateAction).toHaveBeenCalledTimes(2);
+
+      // BUG CHECK: Only the second workflow should have executed
+      // The first and third item steps should NOT have been called
+      expect(firstItemAction).not.toHaveBeenCalled();
+      expect(thirdItemAction).not.toHaveBeenCalled();
+
+      // Only the correct steps should be present in the result
+      expect(finalResult.steps['first-item-step']).toBeUndefined();
+      expect(finalResult.steps['third-item-step']).toBeUndefined();
+      expect(finalResult.steps['second-item-workflow']).toBeDefined();
+      expect(finalResult.steps['second-item-workflow'].status).toBe('success');
+
+      // The final processing step should have been called exactly once
+      expect(finalProcessingAction).toHaveBeenCalledTimes(1);
+
+      // The final processing should only receive the result from the second workflow
+      const finalProcessingCall = finalProcessingAction.mock.calls[0][0];
+      expect(finalProcessingCall.inputData).toEqual({
+        processed: 'second',
+        date: new Date('2024-12-31'),
+      });
+    });
   });
 
   describe('Dependency Injection', () => {
