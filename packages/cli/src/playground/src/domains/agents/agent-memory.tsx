@@ -19,7 +19,7 @@ export function AgentMemory({ agentId, chatInputValue }: AgentMemoryProps) {
 
   // Get memory config to check if semantic recall is enabled
   const { config } = useMemoryConfig(agentId);
-  
+
   // Check if semantic recall is enabled
   const isSemanticRecallEnabled = config && config.semanticRecall !== false;
 
