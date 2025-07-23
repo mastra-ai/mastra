@@ -13,14 +13,22 @@ export type ScoringPrompts = {
 
 export type ScoringInput = {
   runId?: string;
-  scorer?: Record<string, any>;
+  input: Record<string, any>[];
+  output: Record<string, any>;
+  additionalContext?: Record<string, any>;
+  runtimeContext?: Record<string, any>;
+};
+
+export type ScoringHookInput = {
+  runId?: string;
+  scorer: Record<string, any>;
   input: Record<string, any>[];
   output: Record<string, any>;
   metadata?: Record<string, any>;
   additionalContext?: Record<string, any>;
-  source?: ScoringSource;
-  entity?: Record<string, any>;
-  entityType?: ScoringEntityType;
+  source: ScoringSource;
+  entity: Record<string, any>;
+  entityType: ScoringEntityType;
   runtimeContext?: Record<string, any>;
   structuredOutput?: boolean;
   traceId?: string;
@@ -63,13 +71,14 @@ export type ScoringInputWithExtractStepResultAndScoreAndReason =
     reasonPrompt?: string;
   };
 
-export type ScoreRowData = ScoringInputWithExtractStepResultAndScoreAndReason & {
-  id: string;
-  entityId: string;
-  scorerId: string;
-  createdAt: Date;
-  updatedAt: Date;
-};
+export type ScoreRowData = ScoringInputWithExtractStepResultAndScoreAndReason &
+  ScoringHookInput & {
+    id: string;
+    entityId: string;
+    scorerId: string;
+    createdAt: Date;
+    updatedAt: Date;
+  };
 
 export type ExtractionStepFn = (input: ScoringInput) => Promise<Record<string, any>>;
 
