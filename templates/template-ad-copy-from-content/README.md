@@ -24,7 +24,7 @@ A Mastra template that generates compelling ad copy and promotional images from 
 
    ```
    OPENAI_API_KEY=your_openai_api_key
-   
+
    # For web content extraction (optional - only needed for URL input type)
    BROWSERBASE_API_KEY=your_browserbase_api_key
    BROWSERBASE_PROJECT_ID=your_browserbase_project_id

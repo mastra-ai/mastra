@@ -142,9 +142,10 @@ const extractContentStep = createStep({
         const webContentAgent = mastra.getAgent('webContentAgent');
 
         // Use the agent to extract content
-        const response = await webContentAgent.generate([{
-          role: 'user',
-          content: `Please extract the complete content from this URL for marketing ad copy generation: ${contentInput}
+        const response = await webContentAgent.generate([
+          {
+            role: 'user',
+            content: `Please extract the complete content from this URL for marketing ad copy generation: ${contentInput}
 
           Focus on text content only.
 
@@ -155,8 +156,9 @@ const extractContentStep = createStep({
           - Target audience information
           - Supporting evidence or testimonials
 
-          This content will be used to generate compelling ad copy, so be thorough and marketing-focused.`
-        }]);
+          This content will be used to generate compelling ad copy, so be thorough and marketing-focused.`,
+          },
+        ]);
 
         const extractedContent = response.text;
 
@@ -164,8 +166,9 @@ const extractContentStep = createStep({
         const lines = extractedContent.split('\n').filter((line: string) => line.trim());
         const summaryMatch = lines.find((line: string) => line.includes('Summary:') || line.includes('summary:'));
 
-        const marketingSummary = summaryMatch ? summaryMatch.replace(/Summary:\s*/i, '') :
-                               extractedContent.substring(0, 500) + '...';
+        const marketingSummary = summaryMatch
+          ? summaryMatch.replace(/Summary:\s*/i, '')
+          : extractedContent.substring(0, 500) + '...';
 
         return {
           processedContent: extractedContent,
