@@ -3,8 +3,7 @@ title: "Amazon EC2"
 description: "Deploy your Mastra applications to Amazon EC2."
 ---
 
-import { Callout, Steps } from "nextra/components";
-import ServerConfig from "@/components/content-blocks/server-config.mdx";
+import { Callout, Steps, Tabs } from "nextra/components";
 
 ## Amazon EC2
 
@@ -17,50 +16,85 @@ Deploy your Mastra applications to Amazon EC2 (Elastic Cloud Compute).
   refer to our [getting started guide](/docs/getting-started/installation)
 </Callout>
 
-### Setting up EC2
+### Prerequisites
+
+- An AWS account with [EC2](https://aws.amazon.com/ec2/) access
+- An EC2 instance running Ubuntu 24+ or Amazon Linux
+- A domain name with an A record pointing to your instance
+- A reverse proxy configured (e.g., using [nginx](https://nginx.org/))
+- SSL certificate configured (e.g., using [Let's Encrypt](https://letsencrypt.org/))
+- Node.js 18+ installed on your instance
+
+### Deployment Steps
 
 <Steps>
 
-#### Log into your AWS console
+#### Clone your Mastra application
 
-Navigate to the [AWS Management Console](https://aws.amazon.com/console/) and sign in to your account.
+Connect to your EC2 instance and clone your repository:
 
-#### Navigate to EC2
+<Tabs items={["Public Repository", "Private Repository"]}>
+<Tabs.Tab>
 
-Head over to **All services** in the left side navigation. Under **Compute**, click on **EC2**.
+```bash copy
+git clone https://github.com/<your-username>/<your-repository>.git
+```
 
-#### Launch a virtual server instance
+</Tabs.Tab>
 
-Click on **Launch instance** to create a new EC2 instance.
+<Tabs.Tab>
 
-#### Configure your instance details
+```bash copy
+git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
+```
 
-Add the following details for your instance:
+</Tabs.Tab>
+</Tabs>
 
-- **Name**: Give your instance a descriptive name
-- **Application and OS Images**: For this example, we'll use the **Amazon Linux** environment
-- **Instance type**: Select **t3.micro** (eligible for free tier)
-- **Key pair**: Select an existing key pair or create a new one for secure login
-- **Network settings**: Ensure to **allow HTTPS and HTTP traffic from the internet** by checking the appropriate boxes
+Navigate to the repository directory:
 
-#### Launch your instance
+```bash copy
+cd "<your-repository>"
+```
 
-Review your configuration and click **Launch instance**.
+#### Install dependencies
 
-#### Connect to your instance
+```bash copy
+npm install
+```
 
-You'll be redirected to a next steps page. You can connect to your instance either:
+#### Set up environment variables
 
-- **Through the browser**: Click the **Connect** button for browser-based access
-- **Via SSH**: Use your key pair to SSH into the instance (instructions available when you click **Connect**)
+Create a `.env` file and add your environment variables:
+
+```bash copy
+touch .env
+```
+
+Edit the `.env` file and add your environment variables:
+
+```bash copy
+OPENAI_API_KEY=<your-openai-api-key>
+# Add other required environment variables
+```
+
+#### Build the application
+
+```bash copy
+npm run build
+```
+
+#### Run the application
+
+```bash copy
+node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
+```
+
+<Callout>
+Your Mastra application will run on port 4111 by default. Ensure your reverse proxy is configured to forward requests to this port.
+</Callout>
 
 </Steps>
-
-### Server Configuration
-
-Once you have access to your EC2 instance (either via SSH or browser), follow these steps to set up your server environment:
-
-<ServerConfig />
 
 ### Connect to your Mastra server
 

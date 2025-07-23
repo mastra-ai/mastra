@@ -3,8 +3,13 @@ import type { MemoryConfig } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
 import type { LegacyWorkflowRunState } from '../workflows/legacy';
 
+export type StoragePagination = {
+  page: number;
+  perPage: number;
+};
+
 export interface StorageColumn {
-  type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'bigint';
+  type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'float' | 'bigint';
   primaryKey?: boolean;
   nullable?: boolean;
   references?: {
@@ -32,6 +37,13 @@ export interface WorkflowRuns {
   total: number;
 }
 
+export interface StorageWorkflowRun {
+  workflow_name: string;
+  run_id: string;
+  snapshot: WorkflowRunState | string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 export interface WorkflowRun {
   workflowName: string;
   runId: string;
@@ -77,6 +89,19 @@ export type StorageGetMessagesArg = {
   format?: MastraMessageFormat;
 };
 
+export type StorageEvalRow = {
+  input: string;
+  output: string;
+  result: Record<string, any>;
+  agent_name: string;
+  metric_name: string;
+  instructions: string;
+  test_info: Record<string, any> | null;
+  global_run_id: string;
+  run_id: string;
+  created_at: Date;
+};
+
 export type EvalRow = {
   input: string;
   output: string;
@@ -101,10 +126,27 @@ export type StorageGetTracesArg = {
   toDate?: Date;
 };
 
+export type StorageGetTracesPaginatedArg = {
+  name?: string;
+  scope?: string;
+  attributes?: Record<string, string>;
+  filters?: Record<string, any>;
+} & PaginationArgs;
+
 export type StorageResourceType = {
   id: string;
   workingMemory?: string;
   metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
+};
+
+export type StorageMessageType = {
+  id: string;
+  thread_id: string;
+  content: string;
+  role: string;
+  type: string;
+  createdAt: Date;
+  resourceId: string | null;
 };
