@@ -231,7 +231,7 @@ async function pushToRepo(repoName) {
         });
 
         try {
-          execSync(`git pull origin ${provider}`, {
+          execSync(`git pull origin ${provider} --rebase=false`, {
             stdio: 'inherit',
             cwd: tempDir,
           });
