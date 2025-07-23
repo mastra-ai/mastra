@@ -231,7 +231,7 @@ async function pushToRepo(repoName) {
         });
 
         try {
-          execSync(`git pull origin ${provider}`, {
+          execSync(`git pull origin ${provider} --rebase=false`, {
             stdio: 'inherit',
             cwd: tempDir,
           });
@@ -240,14 +240,14 @@ async function pushToRepo(repoName) {
         }
       } catch (error) {
         console.log(`${provider} branch already exists in local`);
-        execSync(`git checkout ${provider} && git pull origin ${provider}`, {
+        execSync(`git checkout ${provider} && git pull origin ${provider} --rebase=false`, {
           stdio: 'inherit',
           cwd: tempDir,
         });
-        // Copy template content to temp directory
-        console.log(`Copying template content to temp directory: ${tempDir} for ${provider} branch`);
-        fsExtra.copySync(templatePath, tempDir);
       }
+      // Copy template content to temp directory
+      console.log(`Copying template content to temp directory: ${tempDir} for ${provider} branch`);
+      fsExtra.copySync(templatePath, tempDir);
 
       //update llm provider agent files and workflow files
       let agentDir = '';

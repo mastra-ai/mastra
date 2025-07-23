@@ -10,23 +10,25 @@ import { MastraBase } from '../base';
 import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
 import type { MastraScorers } from '../scores';
+import { runScorer } from '../scores/hooks';
 import type { ChunkType } from '../stream/MastraAgentStream';
 import { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
+import type { DynamicArgument } from '../types';
 import { EMITTER_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
-import type { ExecuteFunction, Step } from './step';
+import type { ExecuteFunction, ExecuteFunctionParams, Step } from './step';
 import type {
-  StepsRecord,
-  StepResult,
-  WatchEvent,
-  ExtractSchemaType,
-  ExtractSchemaFromStep,
-  PathsToStringProps,
   DynamicMapping,
+  ExtractSchemaFromStep,
+  ExtractSchemaType,
+  PathsToStringProps,
+  StepResult,
+  StepsRecord,
   StreamEvent,
+  WatchEvent,
   WorkflowRunState,
 } from './types';
 
@@ -146,6 +148,40 @@ export function mapVariable(config: any): any {
   return config;
 }
 
+type StepParams<
+  TStepId extends string,
+  TStepInput extends z.ZodType<any>,
+  TStepOutput extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+> = {
+  id: TStepId;
+  description?: string;
+  inputSchema: TStepInput;
+  outputSchema: TStepOutput;
+  resumeSchema?: TResumeSchema;
+  suspendSchema?: TSuspendSchema;
+  retries?: number;
+  scorers?: DynamicArgument<MastraScorers>;
+  execute: ExecuteFunction<
+    z.infer<TStepInput>,
+    z.infer<TStepOutput>,
+    z.infer<TResumeSchema>,
+    z.infer<TSuspendSchema>,
+    DefaultEngineType
+  >;
+};
+
+type ToolStep<
+  TSchemaIn extends z.ZodType<any>,
+  TSchemaOut extends z.ZodType<any>,
+  TContext extends ToolExecutionContext<TSchemaIn>,
+> = Tool<TSchemaIn, TSchemaOut, TContext> & {
+  inputSchema: TSchemaIn;
+  outputSchema: TSchemaOut;
+  execute: (context: TContext) => Promise<any>;
+};
+
 /**
  * Creates a new workflow step
  * @param params Configuration parameters for the step
@@ -162,22 +198,9 @@ export function createStep<
   TStepOutput extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
->(params: {
-  id: TStepId;
-  description?: string;
-  inputSchema: TStepInput;
-  outputSchema: TStepOutput;
-  resumeSchema?: TResumeSchema;
-  suspendSchema?: TSuspendSchema;
-  retries?: number;
-  execute: ExecuteFunction<
-    z.infer<TStepInput>,
-    z.infer<TStepOutput>,
-    z.infer<TResumeSchema>,
-    z.infer<TSuspendSchema>,
-    DefaultEngineType
-  >;
-}): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
+>(
+  params: StepParams<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>,
+): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
 
 export function createStep<
   TStepId extends string,
@@ -194,11 +217,7 @@ export function createStep<
   TSchemaOut extends z.ZodType<any>,
   TContext extends ToolExecutionContext<TSchemaIn>,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TContext> & {
-    inputSchema: TSchemaIn;
-    outputSchema: TSchemaOut;
-    execute: (context: TContext) => Promise<any>;
-  },
+  tool: ToolStep<TSchemaIn, TSchemaOut, TContext>,
 ): Step<string, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, DefaultEngineType>;
 
 export function createStep<
@@ -209,29 +228,65 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   params:
-    | {
-        id: TStepId;
-        description?: string;
-        inputSchema: TStepInput;
-        outputSchema: TStepOutput;
-        resumeSchema?: TResumeSchema;
-        suspendSchema?: TSuspendSchema;
-        retries?: number;
-        execute: ExecuteFunction<
-          z.infer<TStepInput>,
-          z.infer<TStepOutput>,
-          z.infer<TResumeSchema>,
-          z.infer<TSuspendSchema>,
-          DefaultEngineType
-        >;
-      }
+    | StepParams<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
     | Agent<any, any, any>
-    | (Tool<TStepInput, TStepOutput, any> & {
-        inputSchema: TStepInput;
-        outputSchema: TStepOutput;
-        execute: (context: ToolExecutionContext<TStepInput>) => Promise<any>;
-      }),
+    | ToolStep<TStepInput, TStepOutput, any>,
 ): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType> {
+  const wrapExecute = (
+    execute: ExecuteFunction<
+      z.infer<TStepInput>,
+      z.infer<TStepOutput>,
+      z.infer<TResumeSchema>,
+      z.infer<TSuspendSchema>,
+      DefaultEngineType
+    >,
+  ) => {
+    return async (
+      executeParams: ExecuteFunctionParams<
+        z.infer<TStepInput>,
+        z.infer<TResumeSchema>,
+        z.infer<TSuspendSchema>,
+        DefaultEngineType
+      >,
+    ) => {
+      const executeResult = await execute(executeParams);
+
+      if (params instanceof Agent || params instanceof Tool) {
+        return executeResult;
+      }
+
+      let scorersToUse = params.scorers;
+
+      if (typeof scorersToUse === 'function') {
+        scorersToUse = await scorersToUse({
+          runtimeContext: executeParams.runtimeContext,
+        });
+      }
+
+      if (scorersToUse && Object.keys(scorersToUse || {}).length > 0) {
+        for (const [id, scorerObject] of Object.entries(scorersToUse || {})) {
+          runScorer({
+            scorerId: id,
+            scorerObject: scorerObject,
+            runId: executeParams.runId,
+            input: [executeParams.inputData],
+            output: executeResult,
+            runtimeContext: executeParams.runtimeContext,
+            entity: {
+              id: executeParams.workflowId,
+              stepId: params.id,
+            },
+            structuredOutput: true,
+            source: 'LIVE',
+            entityType: 'WORKFLOW',
+          });
+        }
+      }
+
+      return executeResult;
+    };
+  };
+
   if (params instanceof Agent) {
     return {
       id: params.name,
@@ -245,7 +300,7 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort }) => {
+      execute: wrapExecute(async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext, abortSignal, abort }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -308,7 +363,7 @@ export function createStep<
         return {
           text: await streamPromise.promise,
         };
-      },
+      }),
     };
   }
 
@@ -323,13 +378,13 @@ export function createStep<
       id: params.id,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, runtimeContext }) => {
+      execute: wrapExecute(async ({ inputData, mastra, runtimeContext }) => {
         return params.execute({
           context: inputData,
           mastra,
           runtimeContext,
         });
-      },
+      }),
     };
   }
 
@@ -340,8 +395,9 @@ export function createStep<
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
+    scorers: params.scorers,
     retries: params.retries,
-    execute: params.execute,
+    execute: wrapExecute(params.execute),
   };
 }
 

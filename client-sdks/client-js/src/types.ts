@@ -16,7 +16,7 @@ import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
-import type { MastraScorer, ScoreRowData } from '@mastra/core/scores';
+import type { MastraScorer, MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
 import type {
   StepAction,
@@ -492,7 +492,7 @@ export interface SaveScoreResponse {
   score: ClientScoreRowData;
 }
 
-export type GetScorerResponse = MastraScorer & {
+export type GetScorerResponse = MastraScorerEntry & {
   agentIds: string[];
   workflowIds: string[];
 };

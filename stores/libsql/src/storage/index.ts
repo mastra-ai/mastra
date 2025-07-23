@@ -69,7 +69,10 @@ export class LibSQLStore extends MastraStorage {
         this.shouldCacheInit = false;
       }
 
-      this.client = createClient({ url: config.url });
+      this.client = createClient({
+        url: config.url,
+        ...(config.authToken ? { authToken: config.authToken } : {}),
+      });
 
       // Set PRAGMAs for better concurrency, especially for file-based databases
       if (config.url.startsWith('file:') || config.url.includes(':memory:')) {
