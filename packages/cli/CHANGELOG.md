@@ -1,5 +1,11 @@
 # mastra
 
+## 0.10.14-alpha.3
+
+### Patch Changes
+
+- 8364fac: Fix displaying scorer input
+
 ## 0.10.14-alpha.2
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 5.1.14-alpha.3
+
+### Patch Changes
+
+- 8aa97c7: Show docs link in place of semantic recall + working memory in playground if they're not enabled
+
 ## 5.1.14-alpha.2
 
 ### Patch Changes
