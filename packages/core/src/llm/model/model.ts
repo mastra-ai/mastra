@@ -122,7 +122,132 @@ export class MastraLLM extends MastraLLMBase {
     };
   }
 
-  private wrapModel(model: LanguageModel, aiSpan?: AISpan): LanguageModel {}
+  private wrapModel(model: LanguageModel, aiSpan?: AISpan): LanguageModel {
+    if (!aiSpan) {
+      return model;
+    }
+
+    const wrappedDoGenerate = async (options: any) => {
+      const startMetadata: LLMGenerationMetadata = {
+        input: {
+          messages: options.prompt,
+          mode: options.mode,
+        },
+        model: model.modelId,
+        provider: model.provider,
+        parameters: {
+          temperature: options.temperature,
+          maxTokens: options.maxTokens,
+          topP: options.topP,
+          frequencyPenalty: options.frequencyPenalty,
+          presencePenalty: options.presencePenalty,
+          stop: options.stop,
+        },
+        streaming: false,
+        attributes: options.headers ? { headers: options.headers } : {},
+      };
+
+      const llmSpan = aiSpan.createChildSpan({
+        name: `${model.modelId}_generate`,
+        type: SpanType.LLM_GENERATION,
+        metadata: startMetadata,
+      });
+
+      try {
+        const result = await model.doGenerate(options);
+        
+        const endMetadata: LLMGenerationMetadata = {
+          output: result.response,
+          usage: result.usage ? {
+            promptTokens: result.usage.promptTokens,
+            completionTokens: result.usage.completionTokens,
+          } : undefined,
+        };
+
+        llmSpan.end(endMetadata);
+        return result;
+      } catch (error) {
+        llmSpan.error(error as Error, true);
+        throw error;
+      }
+    };
+
+    const wrappedDoStream = async (options: any) => {
+      const startMetadata: LLMGenerationMetadata = {
+        input: {
+          messages: options.prompt,
+          mode: options.mode,
+        },
+        model: model.modelId,
+        provider: model.provider,
+        parameters: {
+          temperature: options.temperature,
+          maxTokens: options.maxTokens,
+          topP: options.topP,
+          frequencyPenalty: options.frequencyPenalty,
+          presencePenalty: options.presencePenalty,
+          stop: options.stop,
+        },
+        streaming: true,
+        attributes: options.headers ? { headers: options.headers } : {},
+      };
+
+      const llmSpan = aiSpan.createChildSpan({
+        name: `${model.modelId}_stream`,
+        type: SpanType.LLM_GENERATION,
+        metadata: startMetadata,
+      });
+
+      try {
+        const result = await model.doStream(options);
+        
+        // Create a wrapped stream that tracks the final result
+        const originalStream = result.stream;
+        let finalResponse: any = null;
+        let finalUsage: any = null;
+
+        const wrappedStream = originalStream.pipeThrough(
+          new TransformStream({
+            transform(chunk, controller) {
+              // if (chunk.type === 'response-metadata' && chunk.usage) {
+              //   finalUsage = chunk.usage;
+              // }
+              if (chunk.type === 'finish') {
+                finalResponse = chunk;
+              }
+              controller.enqueue(chunk);
+            },
+            flush() {
+              const endMetadata: LLMGenerationMetadata = {
+                output: finalResponse,
+                usage: finalUsage ? {
+                  promptTokens: finalUsage.promptTokens,
+                  completionTokens: finalUsage.completionTokens,
+                  totalTokens: finalUsage.totalTokens,
+                } : undefined,
+              };
+
+              llmSpan.end(endMetadata);
+            }
+          })
+        );
+
+        return {
+          ...result,
+          stream: wrappedStream,
+        };
+      } catch (error) {
+        llmSpan.error(error as Error, true);
+        throw error;
+      }
+    };
+
+    return {
+      ...model,
+      doGenerate: wrappedDoGenerate,
+      doStream: wrappedDoStream,
+    };
+  }
 
   async __text<Z extends ZodSchema | JSONSchema7 | undefined>({
     runId,
@@ -179,7 +304,7 @@ export class MastraLLM extends MastraLLMBase {
     });
 
     const argsForExecute = {
-      model,
+      model: this.wrapModel(model, aiSpan),
       temperature,
       tools: Object.fromEntries(Object.entries(tools).map(([key, tool]) => [key, this.wrapTool(tool, aiSpan)])),
       toolChoice,
@@ -460,7 +585,7 @@ export class MastraLLM extends MastraLLMBase {
     });
 
     const argsForExecute = {
-      model,
+      model: this.wrapModel(model, aiSpan),
       temperature,
       tools: {
         ...tools,
