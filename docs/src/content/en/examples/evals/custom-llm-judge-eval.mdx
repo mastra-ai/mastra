@@ -1,6 +1,6 @@
 ---
-title: "Example: Custom Eval | Evals | Mastra Docs"
-description: Example of creating custom LLM-based evaluation metrics in Mastra.
+title: "Example: Real World Countries | Evals | Mastra Docs"
+description: Example of creating a custom LLM-based evaluation metric.
 ---
 
 import { GithubLink } from "@/components/github-link";
@@ -17,7 +17,7 @@ npm install @mastra/evals
 
 ## Create a custom eval
 
-A custom eval in Mastra uses an LLM to judge the quality of a response based on structured prompts and evaluation criteria. It consists of four core components:
+A custom eval in Mastra can use an LLM to judge the quality of a response based on structured prompts and evaluation criteria. It consists of four core components:
 
 1. [**Instructions**](#eval-instructions)
 2. [**Prompt**](#eval-prompt)
@@ -26,7 +26,7 @@ A custom eval in Mastra uses an LLM to judge the quality of a response based on 
 
 Together, these allow you to define custom evaluation logic that might not be covered by Mastra's built-in metrics.
 
-```typescript filename="src/example-real-world-countries.ts" showLineNumbers copy
+```typescript filename="src/mastra/evals/example-real-world-countries.ts" showLineNumbers copy
 import { Metric, type MetricResult } from "@mastra/core";
 import { MastraAgentJudge } from "@mastra/evals/judge";
 import { type LanguageModel } from "@mastra/core/llm";
@@ -112,9 +112,9 @@ Extends Mastra’s `Metric` class and acts as the main evaluation entry point. I
 
 This example shows a strong alignment between the response and the evaluation criteria. The metric assigns a high score and includes supporting details to explain why the output meets expectations.
 
-```typescript filename="src/example-high-custom.ts" showLineNumbers copy
+```typescript filename="src/example-high-real-world-countries.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
-import { WorldCountryMetric } from "./example-real-world-countries";
+import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
 
 const metric = new WorldCountryMetric(openai("gpt-4o-mini"));
 
@@ -145,9 +145,9 @@ The output receives a high score because everything in the response matches what
 
 In this example, the response includes a mix of correct and incorrect elements. The metric returns a mid-range score to reflect this and provides details to explain what was right and what was missed.
 
-```typescript filename="src/example-partial-custom.ts" showLineNumbers copy
+```typescript filename="src/example-partial-real-world-countries.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
-import { WorldCountryMetric } from "./example-real-world-countries";
+import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
 
 const metric = new WorldCountryMetric(openai("gpt-4o-mini"));
 
@@ -178,9 +178,9 @@ The score reflects partial success because the response includes some valid, and
 
 In this example, the response doesn’t meet the evaluation criteria at all. None of the expected elements are present, so the metric returns a low score.
 
-```typescript filename="src/example-low-custom.ts" showLineNumbers copy
+```typescript filename="src/example-low-real-world-countries.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
-import { WorldCountryMetric } from "./example-real-world-countries";
+import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
 
 const metric = new WorldCountryMetric(openai("gpt-4o-mini"));
 
@@ -224,7 +224,7 @@ The score is 0 because the response doesn’t include any of the required elemen
 
 ### Custom score
 
-A score between 0 and 1 reflects how well the response meets the evaluation criteria:
+A score between 0 and 1:
 
 - **1.0**: The response includes only valid items with no mistakes.
 - **0.7–0.9**: The response is mostly correct but may include one or two incorrect entries.
@@ -234,7 +234,7 @@ A score between 0 and 1 reflects how well the response meets the evaluation crit
 
 ### Custom info
 
-Additional metadata explaining the score:
+An explanation for the score, with details including:
 
 - A plain-language reason for the result.
 - A `matches` array listing correct elements found in the response.

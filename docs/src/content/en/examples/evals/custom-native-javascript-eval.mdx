@@ -1,158 +1,179 @@
 ---
 title: "Example: Word Inclusion | Evals | Mastra Docs"
-description: Example of creating a custom metric to evaluate word inclusion in output text.
+description: Example of creating a custom native JavaScript evaluation metric.
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# Native JavaScript Evaluation
+# Custom Native JavaScript Evaluation
 
-This example demonstrates how to create a custom metric in Mastra that evaluates whether specific words appear in the output text.
-This is a simplified version of our own [keyword coverage eval](/reference/evals/keyword-coverage).
+This example shows how to create a custom evaluation metric using JavaScript logic. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing the total and matched words.
 
-## Overview
+## Installation
 
-The example shows how to:
-
-1. Create a custom metric class
-2. Evaluate word presence in responses
-3. Calculate inclusion scores
-4. Handle different inclusion scenarios
-
-## Setup
-
-### Dependencies
-
-Import the necessary dependencies:
-
-```typescript copy showLineNumbers filename="src/index.ts"
-import { Metric, type MetricResult } from "@mastra/core/eval";
+```bash
+npm install @mastra/evals
 ```
 
-## Metric Implementation
+## Create a custom eval
 
-Create the Word Inclusion metric:
+A custom eval in Mastra can use native JavaScript methods to evaluate conditions.
 
-```typescript copy showLineNumbers{3} filename="src/index.ts"
-interface WordInclusionResult extends MetricResult {
-  score: number;
-  info: {
-    totalWords: number;
-    matchedWords: number;
-  };
-}
+```typescript filename="src/mastra/evals/example-word-inclusion.ts" showLineNumbers copy
+import { Metric, type MetricResult } from "@mastra/core";
 
 export class WordInclusionMetric extends Metric {
-  private referenceWords: Set<string>;
-
-  constructor(words: string[]) {
+  constructor() {
     super();
-    this.referenceWords = new Set(words);
   }
 
-  async measure(input: string, output: string): Promise<WordInclusionResult> {
-    const matchedWords = [...this.referenceWords].filter((k) =>
-      output.includes(k),
-    );
-    const totalWords = this.referenceWords.size;
-    const coverage = totalWords > 0 ? matchedWords.length / totalWords : 0;
+  async measure(input: string, output: string): Promise<MetricResult> {
+    const tokenize = (text: string) => text.toLowerCase().match(/\b\w+\b/g) || [];
+
+    const referenceWords = [...new Set(tokenize(input))];
+    const outputText = output.toLowerCase();
+
+    const matchedWords = referenceWords.filter((word) => outputText.includes(word));
+
+    const totalWords = referenceWords.length;
+    const score = totalWords > 0 ? matchedWords.length / totalWords : 0;
 
     return {
-      score: coverage,
+      score,
       info: {
-        totalWords: this.referenceWords.size,
-        matchedWords: matchedWords.length,
-      },
+        totalWords,
+        matchedWords: matchedWords.length
+      }
     };
   }
 }
 ```
 
-## Example Usage
+## High custom example
 
-### Full Word Inclusion Example
+In this example, the response contains all the words listed in the input query. The metric returns a high score indicating complete word inclusion.
 
-Test when all words are present in the output:
+```typescript filename="src/example-high-word-inclusion.ts" showLineNumbers copy
+import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
 
-```typescript copy showLineNumbers{46} filename="src/index.ts"
-const words1 = ["apple", "banana", "orange"];
-const metric1 = new WordInclusionMetric(words1);
+const metric = new WordInclusionMetric();
 
-const input1 = "List some fruits";
-const output1 = "Here are some fruits: apple, banana, and orange.";
+const query = "apple, banana, orange";
+const response = "My favorite fruits are: apple, banana, and orange.";
 
-const result1 = await metric1.measure(input1, output1);
-console.log("Metric Result:", {
-  score: result1.score,
-  info: result1.info,
-});
-// Example Output:
-// Metric Result: { score: 1, info: { totalWords: 3, matchedWords: 3 } }
+const result = await metric.measure(query, response);
+
+console.log(result);
 ```
 
-### Partial Word Inclusion Example
+### High custom output
 
-Test when some words are present:
+The output receives a high score because all the unique words from the input are present in the response, demonstrating full coverage.
 
-```typescript copy showLineNumbers{64} filename="src/index.ts"
-const words2 = ["python", "javascript", "typescript", "rust"];
-const metric2 = new WordInclusionMetric(words2);
-
-const input2 = "What programming languages do you know?";
-const output2 = "I know python and javascript very well.";
-
-const result2 = await metric2.measure(input2, output2);
-console.log("Metric Result:", {
-  score: result2.score,
-  info: result2.info,
-});
-// Example Output:
-// Metric Result: { score: 0.5, info: { totalWords: 4, matchedWords: 2 } }
-```
-
-### No Word Inclusion Example
-
-Test when no words are present:
-
-```typescript copy showLineNumbers{82} filename="src/index.ts"
-const words3 = ["cloud", "server", "database"];
-const metric3 = new WordInclusionMetric(words3);
-
-const input3 = "Tell me about your infrastructure";
-const output3 = "We use modern technology for our systems.";
-
-const result3 = await metric3.measure(input3, output3);
-console.log("Metric Result:", {
-  score: result3.score,
-  info: result3.info,
-});
-// Example Output:
-// Metric Result: { score: 0, info: { totalWords: 3, matchedWords: 0 } }
-```
-
-## Understanding the Results
-
-The metric provides:
-
-1. A word inclusion score between 0 and 1:
-
-   - 1.0: Complete inclusion - all words present
-   - 0.5-0.9: Partial inclusion - some words present
-   - 0.0: No inclusion - no words found
-
-2. Detailed statistics including:
-   - Total words to check
-   - Number of matched words
-   - Inclusion ratio calculation
-   - Empty input handling
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/word-inclusion"
+```typescript
+{
+  score: 1,
+  info: {
+    totalWords: 3,
+    matchedWords: 3
   }
+}
+```
+
+## Partial custom example
+
+In this example, the response includes some but not all of the words from the input query. The metric returns a partial score reflecting this incomplete word coverage.
+
+```typescript filename="src/example-partial-word-inclusion.ts" showLineNumbers copy
+import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
+
+const metric = new WordInclusionMetric();
+
+const query = "cats, dogs, rabbits";
+const response = "I like dogs and rabbits";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Partial custom output
+
+The score reflects partial success because the response contains only a subset of the unique words from the input, indicating incomplete word inclusion.
+
+```typescript
+{
+  score: 0.6666666666666666,
+  info: {
+    totalWords: 3,
+    matchedWords: 2
+  }
+}
+```
+
+## Low custom example
+
+In this example, the response does not contain any of the words from the input query. The metric returns a low score indicating no word inclusion.
+
+```typescript filename="src/example-low-word-inclusion.ts" showLineNumbers copy
+import { WordInclusionMetric } from "./mastra/evals/example-word-inclusion";
+
+const metric = new WordInclusionMetric();
+
+const query = "Colombia, Brazil, Panama";
+const response = "Let's go to Mexico";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Low custom output
+
+The score is 0 because none of the unique words from the input appear in the response, indicating no overlap between the texts.
+
+```typescript
+{
+  score: 0,
+  info: {
+    totalWords: 3,
+    matchedWords: 0
+  }
+}
+```
+
+## Understanding the results
+
+`WordInclusionMetric` returns a result in the following shape:
+
+```typescript
+{
+  score: number,
+  info: {
+    totalWords: number,
+    matchedWords: number
+  }
+}
+```
+
+### Custom score
+
+A score between 0 and 1:
+
+- **1.0**: The response includes all words from the input.
+- **0.5–0.9**: The response includes some but not all words.
+- **0.0**: None of the input words appear in the response.
+
+### Custom info
+
+An explanation for the score, with details including:
+
+- `totalWords` is the number of unique words found in the input.
+- `matchedWords` is the count of those words that also appear in the response.
+- The score is calculated as `matchedWords / totalWords`.
+- If no valid words are found in the input, the score defaults to `0`.
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/word-inclusion"
 />
