@@ -1463,6 +1463,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           messageList,
           // add old processed messages + new input messages
           messageObjects: processedList,
+          threadExists: !!existingThread,
         };
       },
       after: async ({
@@ -1473,6 +1474,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText,
         runId,
         messageList,
+        threadExists,
       }: {
         runId: string;
         result: Record<string, any>;
@@ -1481,6 +1483,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
         messageList: MessageList;
+        threadExists: boolean;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -1518,8 +1521,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         );
         // working memory updates the thread, so we need to get the latest thread if we used it
         const memory = await this.getMemory({ runtimeContext });
-        const existingThread = threadId ? await memory?.getThreadById({ threadId }) : undefined;
-        const thread = usedWorkingMemory ? existingThread : threadAfter;
+        const thread = usedWorkingMemory
+          ? threadId
+            ? await memory?.getThreadById({ threadId })
+            : undefined
+          : threadAfter;
 
         if (memory && resourceId && thread) {
           try {
@@ -1542,7 +1548,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               messageList.add(responseMessages, 'response');
             }
 
-            if (!existingThread) {
+            if (!threadExists) {
               await memory.createThread({
                 threadId: thread.id,
                 metadata: thread.metadata,
@@ -1731,10 +1737,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       saveQueueManager,
     });
 
-    const { thread, messageObjects, convertedTools, messageList } = await before();
+    const beforeResults = await before();
+    const { thread, messageObjects, convertedTools, messageList } = beforeResults;
+    let threadExists = beforeResults.threadExists || false;
 
     const threadId = thread?.id;
-    let threadExists = !!(await memory?.getThreadById({ threadId: threadId || '' }));
 
     if (!output && experimental_output) {
       const result = await llm.__text({
@@ -1787,6 +1794,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText,
         runId,
         messageList,
+        threadExists,
       });
 
       const newResult = result as any;
@@ -1846,6 +1854,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText,
         runId,
         messageList,
+        threadExists,
       });
 
       return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1899,6 +1908,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText,
       runId,
       messageList,
+      threadExists,
     });
 
     return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -2008,10 +2018,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       saveQueueManager,
     });
 
-    const { thread, messageObjects, convertedTools, messageList } = await before();
+    const beforeResults = await before();
+    const { thread, messageObjects, convertedTools, messageList } = beforeResults;
+    let threadExists = beforeResults.threadExists || false;
 
     const threadId = thread?.id;
-    let threadExists = !!(await memory?.getThreadById({ threadId: threadId || '' }));
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
@@ -2057,6 +2068,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               outputText,
               runId,
               messageList,
+              threadExists,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -2124,6 +2136,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               outputText,
               runId,
               messageList,
+              threadExists,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -2189,6 +2202,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             outputText,
             runId,
             messageList,
+            threadExists,
           });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
