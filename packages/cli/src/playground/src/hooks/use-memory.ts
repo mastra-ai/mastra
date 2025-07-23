@@ -2,8 +2,10 @@ import type { AiMessageType, MastraMessageV1, StorageThreadType as ThreadType } 
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 import useSWR, { useSWRConfig } from 'swr';
+import { useQuery } from '@tanstack/react-query';
 
 import { fetcher } from '@/lib/utils';
+import type { MemoryConfigResponse, MemorySearchResponse, MemorySearchParams } from '@/types/memory';
 
 export const useMemory = (agentId?: string) => {
   const {
@@ -15,6 +17,19 @@ export const useMemory = (agentId?: string) => {
     isPaused: () => !agentId,
   });
   return { memory, isLoading, mutate };
+};
+
+export const useMemoryConfig = (agentId?: string) => {
+  const {
+    data: config,
+    isLoading,
+    refetch: mutate,
+  } = useQuery<MemoryConfigResponse>({
+    queryKey: ['memory', 'config', agentId],
+    queryFn: () => fetcher(`/api/memory/config?agentId=${agentId}`),
+    enabled: !!agentId,
+  });
+  return { config: config?.config, isLoading, mutate };
 };
 
 export const useThreads = ({
@@ -120,4 +135,52 @@ export const useDeleteThread = () => {
   };
 
   return { deleteThread };
+};
+
+export const useMemorySearch = ({
+  agentId,
+  resourceId,
+  threadId,
+}: {
+  agentId: string;
+  resourceId: string;
+  threadId?: string;
+}) => {
+  const searchMemory = async (searchQuery: string, memoryConfig?: MemorySearchParams) => {
+    if (!searchQuery.trim()) {
+      return { results: [], count: 0, query: searchQuery };
+    }
+
+    const params = new URLSearchParams({
+      searchQuery,
+      resourceId,
+      agentId,
+    });
+
+    if (threadId) {
+      params.append('threadId', threadId);
+    }
+
+    if (memoryConfig) {
+      params.append('memoryConfig', JSON.stringify(memoryConfig));
+    }
+
+    const response = await fetch(`/api/memory/search?${params}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-mastra-dev-playground': 'true',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+      console.error('Search memory error:', errorData);
+      throw new Error(errorData.message || errorData.error || 'Failed to search memory');
+    }
+
+    return response.json() as Promise<MemorySearchResponse>;
+  };
+
+  return { searchMemory };
 };

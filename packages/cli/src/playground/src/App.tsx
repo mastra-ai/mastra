@@ -1,4 +1,4 @@
-import { Routes, Route, BrowserRouter, Outlet } from 'react-router';
+import { Routes, Route, BrowserRouter, Outlet, useNavigate } from 'react-router';
 
 import { Layout } from '@/components/layout';
 
@@ -25,26 +25,47 @@ import { PostHogProvider } from './lib/analytics';
 import RuntimeContext from './pages/runtime-context';
 import MCPs from './pages/mcps';
 import MCPServerToolExecutor from './pages/mcps/tool';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
-import { QueryClient } from '@tanstack/react-query';
+
 import { McpServerPage } from './pages/mcps/[serverId]';
 import { WorkflowGraphLayout } from './pages/workflows/layouts/workflow-graph-layout';
-import { LinkComponentProvider, MastraClientProvider } from '@mastra/playground-ui';
+import { LinkComponentProvider, MastraClientProvider, PlaygroundQueryClient } from '@mastra/playground-ui';
 import VNextNetwork from './pages/networks/network/v-next';
 import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
+import Scorers from './pages/scorers';
+import Scorer from './pages/scorers/scorer';
 
-function App() {
-  const [queryClient] = useState(() => new QueryClient());
+const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
+  const navigate = useNavigate();
+  const frameworkNavigate = (path: string) => {
+    navigate(path);
+  };
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <LinkComponentProvider Link={Link} navigate={frameworkNavigate}>
+      {children}
+    </LinkComponentProvider>
+  );
+};
+
+function App() {
+  return (
+    <PlaygroundQueryClient>
       <PostHogProvider>
         <MastraClientProvider>
           <BrowserRouter>
-            <LinkComponentProvider Link={Link}>
+            <LinkComponentWrapper>
               <Routes>
+                <Route
+                  element={
+                    <Layout>
+                      <Outlet />
+                    </Layout>
+                  }
+                >
+                  <Route path="/scorers" element={<Scorers />} />
+                  <Route path="/scorers/:scorerId" element={<Scorer />} />
+                </Route>
                 <Route
                   element={
                     <Layout>
@@ -159,11 +180,11 @@ function App() {
                   <Route path="/runtime-context" element={<RuntimeContext />} />
                 </Route>
               </Routes>
-            </LinkComponentProvider>
+            </LinkComponentWrapper>
           </BrowserRouter>
         </MastraClientProvider>
       </PostHogProvider>
-    </QueryClientProvider>
+    </PlaygroundQueryClient>
   );
 }
 

@@ -64,6 +64,7 @@ export interface ChatProps {
   refreshThreadList?: () => void;
   settings?: AgentSettingsType;
   runtimeContext?: Record<string, any>;
+  onInputChange?: (value: string) => void;
 }
 
 export type SpanStatus = {

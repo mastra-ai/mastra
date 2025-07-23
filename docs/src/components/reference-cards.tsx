@@ -7,7 +7,7 @@ export const ReferenceCards = () => {
         "Core",
         "CLI",
         "Agents",
-        "Tools & MCP",
+        "Tools",
         "Workflows",
         "Networks",
         "Memory",
@@ -16,7 +16,7 @@ export const ReferenceCards = () => {
         "Evals",
         "Voice",
         "Observability",
-        "Client SDK - JS",
+        "Client SDK",
         "Deployer",
       ]}
       items={{
@@ -28,6 +28,10 @@ export const ReferenceCards = () => {
         ],
         CLI: [
           {
+            title: "create-mastra",
+            href: "/reference/cli/create-mastra",
+          },
+          {
             title: "mastra init",
             href: "/reference/cli/init",
           },
@@ -36,12 +40,20 @@ export const ReferenceCards = () => {
             href: "/reference/cli/dev",
           },
           {
-            title: "mastra deploy",
-            href: "/reference/cli/deploy",
-          },
-          {
             title: "mastra build",
             href: "/reference/cli/build",
+          },
+          {
+            title: "mastra start",
+            href: "/reference/cli/start",
+          },
+          {
+            title: "mastra lint",
+            href: "/reference/cli/lint",
+          },
+          {
+            title: "mcp-docs-server",
+            href: "/reference/cli/mcp-docs-server",
           },
         ],
         Agents: [
@@ -65,8 +77,44 @@ export const ReferenceCards = () => {
             title: "stream()",
             href: "/reference/agents/stream",
           },
+          {
+            title: "getWorkflows()",
+            href: "/reference/agents/getWorkflows",
+          },
+          {
+            title: "getVoice()",
+            href: "/reference/agents/getVoice",
+          },
+          {
+            title: "getInstructions()",
+            href: "/reference/agents/getInstructions",
+          },
+          {
+            title: "getTools()",
+            href: "/reference/agents/getTools",
+          },
+          {
+            title: "getModel()",
+            href: "/reference/agents/getModel",
+          },
+          {
+            title: "getMemory()",
+            href: "/reference/agents/getMemory",
+          },
         ],
-        "Tools & MCP": [
+        Tools: [
+          {
+            title: "createTool()",
+            href: "/reference/tools/create-tool",
+          },
+          {
+            title: "MCPClient",
+            href: "/reference/tools/mcp-client",
+          },
+          {
+            title: "MCPServer",
+            href: "/reference/tools/mcp-server",
+          },
           {
             title: "createDocumentChunkerTool()",
             href: "/reference/tools/document-chunker-tool",
@@ -79,14 +127,6 @@ export const ReferenceCards = () => {
             title: "createVectorQueryTool()",
             href: "/reference/tools/vector-query-tool",
           },
-          {
-            title: "MastraMCPClient",
-            href: "/reference/tools/client",
-          },
-          {
-            title: "MCPClient",
-            href: "/reference/tools/mcp-client",
-          },
         ],
         Workflows: [
           {
@@ -94,92 +134,84 @@ export const ReferenceCards = () => {
             href: "/reference/workflows/workflow",
           },
           {
-            title: "Step",
-            href: "/reference/workflows/step-class",
+            title: "createStep()",
+            href: "/reference/workflows/step",
           },
           {
-            title: "StepOptions",
-            href: "/reference/workflows/step-options",
-          },
-          {
-            title: "StepCondition",
-            href: "/reference/workflows/step-condition",
-          },
-          {
-            title: ".step()",
-            href: "/reference/workflows/step-function",
-          },
-          {
-            title: ".after()",
-            href: "/reference/workflows/after",
-          },
-          {
-            title: ".then()",
+            title: "then()",
             href: "/reference/workflows/then",
           },
           {
-            title: ".until()",
-            href: "/reference/workflows/until",
+            title: "parallel()",
+            href: "/reference/workflows/parallel",
           },
           {
-            title: ".while()",
-            href: "/reference/workflows/while",
+            title: "branch()",
+            href: "/reference/workflows/branch",
           },
           {
-            title: ".if()",
-            href: "/reference/workflows/if",
+            title: "dowhile()",
+            href: "/reference/workflows/dowhile",
           },
           {
-            title: ".else()",
-            href: "/reference/workflows/else",
+            title: "dountil()",
+            href: "/reference/workflows/dountil",
           },
           {
-            title: ".createRun()",
-            href: "/reference/workflows/createRun",
+            title: "foreach()",
+            href: "/reference/workflows/foreach",
           },
           {
-            title: ".start()",
-            href: "/reference/workflows/start",
+            title: "map()",
+            href: "/reference/workflows/map",
           },
           {
-            title: ".execute()",
-            href: "/reference/workflows/execute",
+            title: "sleep()",
+            href: "/reference/workflows/sleep",
           },
           {
-            title: ".suspend()",
-            href: "/reference/workflows/suspend",
+            title: "sleepUntil()",
+            href: "/reference/workflows/sleepUntil",
+          },
+          {
+            title: "waitForEvent()",
+            href: "/reference/workflows/waitForEvent",
+          },
+          {
+            title: "sendEvent()",
+            href: "/reference/workflows/sendEvent",
+          },
+          {
+            title: "commit()",
+            href: "/reference/workflows/commit",
+          },
+          {
+            title: "createRunAsync()",
+            href: "/reference/workflows/create-run",
           },
           {
             title: "Snapshots",
             href: "/reference/workflows/snapshots",
           },
           {
-            title: ".resume()",
-            href: "/reference/workflows/resume",
-          },
-          {
-            title: ".commit()",
-            href: "/reference/workflows/commit",
-          },
-          {
-            title: ".watch()",
+            title: "watch()",
             href: "/reference/workflows/watch",
           },
           {
-            title: "Event-Driven Workflows",
-            href: "/reference/workflows/events",
+            title: "stream()",
+            href: "/reference/workflows/stream",
           },
           {
-            title: ".afterEvent()",
-            href: "/reference/workflows/afterEvent",
+            title: "execute()",
+            href: "/reference/workflows/execute",
           },
           {
-            title: ".resumeWithEvent()",
-            href: "/reference/workflows/resumeWithEvent",
+            title: "resume()",
+            href: "/reference/workflows/resume",
           },
           {
-            title: "Step Retries",
-            href: "/reference/workflows/step-retries",
+            title: "start()",
+            href: "/reference/workflows/start",
           },
         ],
         Networks: [
@@ -223,8 +255,24 @@ export const ReferenceCards = () => {
             title: "Upstash Storage",
             href: "/reference/storage/upstash",
           },
+          {
+            title: "Cloudflare KV Storage",
+            href: "/reference/storage/cloudflare",
+          },
+          {
+            title: "Cloudflare D1 Storage",
+            href: "/reference/storage/cloudflare-d1",
+          },
+          {
+            title: "DynamoDB Storage",
+            href: "/reference/storage/dynamodb",
+          },
         ],
         RAG: [
+          {
+            title: "MDocument",
+            href: "/reference/rag/document",
+          },
           {
             title: ".chunk()",
             href: "/reference/rag/chunk",
@@ -242,12 +290,16 @@ export const ReferenceCards = () => {
             href: "/reference/rag/rerank",
           },
           {
-            title: "MDocument",
-            href: "/reference/rag/document",
+            title: "rerankWithScorer()",
+            href: "/reference/rag/rerankWithScorer",
           },
           {
             title: "Metadata Filters",
             href: "/reference/rag/metadata-filters",
+          },
+          {
+            title: "DatabaseConfig",
+            href: "/reference/rag/database-config",
           },
           {
             title: "GraphRAG",
@@ -274,6 +326,18 @@ export const ReferenceCards = () => {
             href: "/reference/rag/libsql",
           },
           {
+            title: "MongoDBVector",
+            href: "/reference/rag/mongodb",
+          },
+          {
+            title: "CouchbaseVector",
+            href: "/reference/rag/couchbase",
+          },
+          {
+            title: "OpenSearchVector",
+            href: "/reference/rag/opensearch",
+          },
+          {
             title: "PineconeVector",
             href: "/reference/rag/pinecone",
           },
@@ -288,6 +352,10 @@ export const ReferenceCards = () => {
           {
             title: "UpstashVector",
             href: "/reference/rag/upstash",
+          },
+          {
+            title: "LanceVector",
+            href: "/reference/rag/lance",
           },
         ],
         Evals: [
@@ -358,12 +426,108 @@ export const ReferenceCards = () => {
         ],
         Voice: [
           {
-            title: "Text to Speech",
-            href: "/reference/voice/text-to-speech",
+            title: "Mastra Voice",
+            href: "/reference/voice/mastra-voice",
           },
           {
-            title: "Speech to Text",
-            href: "/reference/voice/speech-to-text",
+            title: "Composite Voice",
+            href: "/reference/voice/composite-voice",
+          },
+          {
+            title: ".speak()",
+            href: "/reference/voice/voice.speak",
+          },
+          {
+            title: ".listen()",
+            href: "/reference/voice/voice.listen",
+          },
+          {
+            title: ".getSpeakers()",
+            href: "/reference/voice/voice.getSpeakers",
+          },
+          {
+            title: ".connect()",
+            href: "/reference/voice/voice.connect",
+          },
+          {
+            title: ".send()",
+            href: "/reference/voice/voice.send",
+          },
+          {
+            title: ".answer()",
+            href: "/reference/voice/voice.answer",
+          },
+          {
+            title: ".on()",
+            href: "/reference/voice/voice.on",
+          },
+          {
+            title: "events",
+            href: "/reference/voice/voice.events",
+          },
+          {
+            title: ".off()",
+            href: "/reference/voice/voice.off",
+          },
+          {
+            title: ".close()",
+            href: "/reference/voice/voice.close",
+          },
+          {
+            title: ".addInstructions()",
+            href: "/reference/voice/voice.addInstructions",
+          },
+          {
+            title: ".addTools()",
+            href: "/reference/voice/voice.addTools",
+          },
+          {
+            title: ".updateConfig()",
+            href: "/reference/voice/voice.updateConfig",
+          },
+          {
+            title: "Deepgram",
+            href: "/reference/voice/deepgram",
+          },
+          {
+            title: "ElevenLabs",
+            href: "/reference/voice/elevenlabs",
+          },
+          {
+            title: "Google",
+            href: "/reference/voice/google",
+          },
+          {
+            title: "Murf",
+            href: "/reference/voice/murf",
+          },
+          {
+            title: "OpenAI",
+            href: "/reference/voice/openai",
+          },
+          {
+            title: "OpenAI Realtime",
+            href: "/reference/voice/openai-realtime",
+          },
+          {
+            title: "PlayAI",
+            href: "/reference/voice/playai",
+          },
+          {
+            title: "Sarvam",
+            href: "/reference/voice/sarvam",
+          },
+          {
+            title: "Speechify",
+            href: "/reference/voice/speechify",
+          },
+          {
+            title: "Azure",
+            href: "/reference/voice/azure",
+          },
+          {
+            title: "Cloudflare",
+            href: "/reference/voice/cloudflare",
           },
         ],
         Observability: [
@@ -380,7 +544,7 @@ export const ReferenceCards = () => {
             href: "/reference/observability/otel-config",
           },
         ],
-        "Client SDK - JS": [
+        "Client SDK": [
           {
             title: "Agents API",
             href: "/reference/client-js/agents",
@@ -396,6 +560,10 @@ export const ReferenceCards = () => {
           {
             title: "Workflows API",
             href: "/reference/client-js/workflows",
+          },
+          {
+            title: "Workflows (Legacy) API",
+            href: "/reference/client-js/workflows-legacy",
           },
           {
             title: "Vectors API",
@@ -433,6 +601,6 @@ export const ReferenceCards = () => {
           },
         ],
       }}
-    ></CardItems>
+    />
   );
 };

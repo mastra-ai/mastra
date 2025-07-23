@@ -186,6 +186,11 @@ export async function dev({
 
   const loadedEnv = await bundler.loadEnvVars();
 
+  // spread loadedEnv into process.env
+  for (const [key, value] of loadedEnv.entries()) {
+    process.env[key] = value;
+  }
+
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
 
   let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
