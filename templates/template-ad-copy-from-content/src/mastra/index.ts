@@ -6,6 +6,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { adCopyAgent } from './agents/ad-copy-agent';
 import { contentSummarizerAgent } from './agents/content-summarizer-agent';
 import { copywritingAgent } from './agents/copywriting-agent';
+import { webContentAgent } from './agents/web-content-agent';
 
 // Import workflows
 import { adCopyGenerationWorkflow } from './workflows/ad-copy-generation-workflow';
@@ -18,6 +19,7 @@ export const mastra = new Mastra({
     adCopyAgent,
     contentSummarizerAgent,
     copywritingAgent,
+    webContentAgent,
   },
   storage: new LibSQLStore({
     url: 'file:../mastra.db',

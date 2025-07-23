@@ -11,9 +11,9 @@ export const imageGeneratorTool = createTool({
     style: z
       .enum(['photographic', 'digital_art', 'illustration', 'minimalist', 'vintage', 'modern'])
       .optional()
-      .default('modern'),
+      .default('minimalist'),
     platform: z.enum(['facebook', 'instagram', 'linkedin', 'twitter', 'generic']).optional().default('generic'),
-    size: z.enum(['1024x1024', '1792x1024', '1024x1792']).optional().default('1024x1024'),
+    size: z.enum(['480x480', '1024x1024', '1792x1024', '1024x1792']).optional().default('480x480'),
   }),
   outputSchema: z.object({
     imageUrl: z.string().describe('Direct URL of the generated image'),
@@ -30,27 +30,15 @@ export const imageGeneratorTool = createTool({
     console.log(`🎨 Generating image with DALL-E 3 via AI package: "${prompt.substring(0, 50)}..."`);
 
     try {
-      // Build enhanced prompt based on parameters
-      const platformDimensions = {
-        facebook: { width: 1200, height: 630, ratio: '1.91:1' },
-        instagram: { width: 1080, height: 1080, ratio: '1:1' },
-        linkedin: { width: 1200, height: 627, ratio: '1.91:1' },
-        twitter: { width: 1200, height: 675, ratio: '16:9' },
-        generic: { width: 1024, height: 1024, ratio: '1:1' },
-      };
-
-      const dimensions = platformDimensions[platform];
-
       const enhancedPrompt = `Create a ${style} promotional image optimized for ${platform}.
 
       Original concept: ${prompt}
 
       Style requirements:
       - ${style} visual style
-      - High-quality, professional appearance
+      - high-quality, professional appearance
       - Suitable for advertising and marketing use
       - Eye-catching and engaging composition
-      - Optimized for ${platform} (${dimensions.ratio} aspect ratio)
       - Brand-appropriate aesthetic
       - Strong visual hierarchy`;
 

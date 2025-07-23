@@ -5,6 +5,8 @@ import { adCopyGeneratorTool } from '../tools/ad-copy-generator-tool';
 import { imageGeneratorTool } from '../tools/image-generator-tool';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
+import { pageNavigateTool } from '../tools/page-navigate-tool';
+import { pageExtractTool } from '../tools/page-extract-tool';
 
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
@@ -30,15 +32,16 @@ You have access to three powerful tools:
 
 When processing an ad copy request:
 
-1. **Content Processing Phase**: 
+1. **Content Processing Phase**:
    - If given a PDF URL, use the PDF content extractor to extract and summarize the content
    - If given plain text, proceed directly to ad copy generation
+   - If given a URL, use the page navigate tool to navigate to the page and extract the content using the page extract tool
 
-2. **Ad Copy Generation Phase**: 
+2. **Ad Copy Generation Phase**:
    - Use the ad copy generator tool to create compelling headlines, body copy, and CTAs
    - Consider the target audience, platform, and campaign objectives
 
-3. **Visual Creation Phase**: 
+3. **Visual Creation Phase**:
    - Generate promotional images that complement the ad copy
    - Ensure visual consistency with the messaging and brand tone
 
@@ -83,6 +86,8 @@ Always be creative, persuasive, and focus on generating high-converting advertis
     pdfContentExtractorTool,
     adCopyGeneratorTool,
     imageGeneratorTool,
+    pageNavigateTool,
+    pageExtractTool,
   },
   memory,
 });

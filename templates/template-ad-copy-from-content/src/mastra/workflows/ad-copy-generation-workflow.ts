@@ -6,8 +6,8 @@ import { adCopyGeneratorTool } from '../tools/ad-copy-generator-tool';
 import { imageGeneratorTool } from '../tools/image-generator-tool';
 
 const inputSchema = z.object({
-  contentInput: z.string().describe('Either plain text content or PDF URL'),
-  inputType: z.enum(['text', 'pdf']).describe('Type of input provided'),
+  contentInput: z.string().describe('Either plain text content, PDF URL, or website URL'),
+  inputType: z.enum(['text', 'pdf', 'url']).describe('Type of input provided'),
   platform: z
     .enum(['facebook', 'google', 'instagram', 'linkedin', 'twitter', 'tiktok', 'generic'])
     .optional()
@@ -110,10 +110,10 @@ const outputSchema = z.object({
     .describe('Campaign summary and recommendations'),
 });
 
-// Step 1: Extract content from PDF or use provided text
+// Step 1: Extract content from PDF, URL, or use provided text
 const extractContentStep = createStep({
   id: 'extract-content',
-  description: 'Extract and process content from PDF or plain text input',
+  description: 'Extract and process content from PDF, website URL, or plain text input',
   inputSchema: inputSchema,
   outputSchema: z.object({
     processedContent: z.string(),
@@ -129,12 +129,73 @@ const extractContentStep = createStep({
       })
       .optional(),
   }),
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, runtimeContext, mastra }) => {
     const { contentInput, inputType } = inputData;
 
     console.log(`📝 Processing ${inputType} content...`);
 
-    if (inputType === 'pdf') {
+    if (inputType === 'url') {
+      console.log('🌐 Extracting content from website URL...');
+
+      try {
+        // Import mastra instance directly since runtime context access is complex in workflows
+        const webContentAgent = mastra.getAgent('webContentAgent');
+
+        // Use the agent to extract content
+        const response = await webContentAgent.generate([{
+          role: 'user',
+          content: `Please extract the complete content from this URL for marketing ad copy generation: ${contentInput}
+
+          Focus on text content only.
+
+          Make sure to capture:
+          - The complete article/blog post content
+          - Key value propositions and benefits
+          - Any product/service features mentioned
+          - Target audience information
+          - Supporting evidence or testimonials
+
+          This content will be used to generate compelling ad copy, so be thorough and marketing-focused.`
+        }]);
+
+        const extractedContent = response.text;
+
+        // Parse the extracted content to create marketing summary
+        const lines = extractedContent.split('\n').filter((line: string) => line.trim());
+        const summaryMatch = lines.find((line: string) => line.includes('Summary:') || line.includes('summary:'));
+
+        const marketingSummary = summaryMatch ? summaryMatch.replace(/Summary:\s*/i, '') :
+                               extractedContent.substring(0, 500) + '...';
+
+        return {
+          processedContent: extractedContent,
+          extractedData: {
+            marketingSummary,
+            keyPoints: ['Web content extracted successfully'],
+            targetAudience: 'Website visitors',
+            valueProposition: 'Content from web source',
+            fileSize: undefined,
+            pagesCount: undefined,
+            characterCount: extractedContent.length,
+          },
+        };
+      } catch (error) {
+        console.error('❌ URL extraction failed:', error);
+        // Fallback to treating URL as text content
+        return {
+          processedContent: contentInput,
+          extractedData: {
+            marketingSummary: 'URL extraction failed, using URL as text',
+            keyPoints: ['Unable to extract key points from URL'],
+            targetAudience: 'Unknown',
+            valueProposition: 'Unknown',
+            fileSize: undefined,
+            pagesCount: undefined,
+            characterCount: contentInput.length,
+          },
+        };
+      }
+    } else if (inputType === 'pdf') {
       console.log('📄 Extracting content from PDF...');
 
       try {
