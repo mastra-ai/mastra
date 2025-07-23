@@ -18,8 +18,8 @@ export interface UpstashQueryVectorParams extends QueryVectorParams<UpstashVecto
 }
 
 export interface UpstashUpdateVectorParams extends UpdateVectorParams {
-  update: { 
-    vector?: number[]; 
+  update: {
+    vector?: number[];
     metadata?: Record<string, any>;
     sparseVector?: UpstashSparseVector;
   };

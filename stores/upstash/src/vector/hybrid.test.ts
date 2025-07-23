@@ -36,7 +36,7 @@ function waitUntilVectorsIndexed(vector: UpstashVector, indexName: string, expec
 function _createSparseVector() {
   return {
     indices: [0, 1, 2, 10, 50],
-    values: [0.1, 0.2, 0.3, 0.4, 0.5]
+    values: [0.1, 0.2, 0.3, 0.4, 0.5],
   };
 }
 
@@ -99,12 +99,12 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       const testMetadata = [{ label: 'first-dimension' }, { label: 'second-dimension' }, { label: 'third-dimension' }];
 
       // Upsert vectors
-      vectorIds = await vectorStore.upsert({ 
-      indexName: testIndexName, 
-      vectors: testVectors, 
-      metadata: testMetadata,
-      sparseVectors: testVectors.map(() => _createSparseVector())
-    });
+      vectorIds = await vectorStore.upsert({
+        indexName: testIndexName,
+        vectors: testVectors,
+        metadata: testMetadata,
+        sparseVectors: testVectors.map(() => _createSparseVector()),
+      });
 
       expect(vectorIds).toHaveLength(3);
       await waitUntilVectorsIndexed(vectorStore, testIndexName, 3);
@@ -141,10 +141,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should update the vector by id', async () => {
-        const ids = await vectorStore.upsert({ 
-          indexName: testIndexName, 
+        const ids = await vectorStore.upsert({
+          indexName: testIndexName,
           vectors: testVectors,
-          sparseVectors: testVectors.map(() => _createSparseVector())
+          sparseVectors: testVectors.map(() => _createSparseVector()),
         });
         expect(ids).toHaveLength(3);
 
@@ -176,10 +176,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       }, 500000);
 
       it('should only update the metadata by id', async () => {
-        const ids = await vectorStore.upsert({ 
-          indexName: testIndexName, 
+        const ids = await vectorStore.upsert({
+          indexName: testIndexName,
           vectors: testVectors,
-          sparseVectors: testVectors.map(() => _createSparseVector())
+          sparseVectors: testVectors.map(() => _createSparseVector()),
         });
         expect(ids).toHaveLength(3);
 
@@ -197,10 +197,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should only update vector embeddings by id', async () => {
-        const ids = await vectorStore.upsert({ 
+        const ids = await vectorStore.upsert({
           indexName: testIndexName,
           vectors: testVectors,
-          sparseVectors: testVectors.map(() => _createSparseVector())
+          sparseVectors: testVectors.map(() => _createSparseVector()),
         });
         expect(ids).toHaveLength(3);
 
@@ -210,7 +210,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         const update = {
           vector: newVector,
           sparseVector: _createSparseVector(),
-        }
+        };
 
         await vectorStore.updateVector({ indexName: testIndexName, id: idToBeUpdated, update });
 
@@ -241,10 +241,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should delete the vector by id', async () => {
-        const ids = await vectorStore.upsert({ 
-          indexName: testIndexName, 
+        const ids = await vectorStore.upsert({
+          indexName: testIndexName,
           vectors: testVectors,
-          sparseVectors: testVectors.map(() => _createSparseVector())
+          sparseVectors: testVectors.map(() => _createSparseVector()),
         });
         expect(ids).toHaveLength(3);
         const idToBeDeleted = ids[0];
@@ -274,10 +274,10 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       // since, we do not have to create index explictly in case of upstash. Upserts are enough
       // for testing the listIndexes() function
       // await vectorStore.createIndex({ indexName: testIndexName, dimension: 3, metric: 'cosine' });
-      const ids = await vectorStore.upsert({ 
-        indexName: testIndexName, 
+      const ids = await vectorStore.upsert({
+        indexName: testIndexName,
         vectors: [createVector(0, 1.0)],
-        sparseVectors: [_createSparseVector()]
+        sparseVectors: [_createSparseVector()],
       });
       expect(ids).toHaveLength(1);
       const indexes = await vectorStore.listIndexes();

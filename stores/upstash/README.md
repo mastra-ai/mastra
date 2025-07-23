@@ -94,13 +94,13 @@ const denseResults = await vectorStore.query({
 
 // Query only the dense component for custom reranking
 const denseOnlyResults = await vectorStore.query({
-  indexName: 'hybrid-index', 
+  indexName: 'hybrid-index',
   queryVector: [0.1, 0.2, 0.3, ...],
   queryMode: QueryMode.DENSE,
   topK: 10
 });
 
-// Query only the sparse component for custom reranking  
+// Query only the sparse component for custom reranking
 const sparseOnlyResults = await vectorStore.query({
   indexName: 'hybrid-index',
   queryVector: [0.1, 0.2, 0.3, ...],              // Still needed for dense index structure
