@@ -1,5 +1,7 @@
 # @internal/lint
 
+## 0.0.19
+
 ## 0.0.18
 
 ### Patch Changes

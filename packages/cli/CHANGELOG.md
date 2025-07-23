@@ -1,5 +1,11 @@
 # mastra
 
+## 0.10.15
+
+### Patch Changes
+
+- 1a45f3a: Fix peerdeps
+
 ## 0.10.14
 
 ### Patch Changes
