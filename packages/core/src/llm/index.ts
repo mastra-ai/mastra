@@ -76,6 +76,14 @@ export type {
   GenerateTextResult,
   StreamObjectResult,
   StreamTextResult,
+  GenerateTextResultWithTripwire,
+  GenerateObjectResultWithTripwire,
+  StreamTextResultWithTripwire,
+  StreamObjectResultWithTripwire,
+  GenerateReturnWithTripwire,
+  StreamReturnWithTripwire,
+  TripwireProperties,
+  BeforeResultWithTripwire,
 } from './model/base.types';
 
 export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;

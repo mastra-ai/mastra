@@ -30,16 +30,6 @@
         "default": "./dist/*/index.cjs"
       }
     },
-    "./agent/input-processor": {
-      "import": {
-        "types": "./dist/agent/input-processor/index.d.ts",
-        "default": "./dist/agent/input-processor/index.js"
-      },
-      "require": {
-        "types": "./dist/agent/input-processor/index.d.cts",
-        "default": "./dist/agent/input-processor/index.cjs"
-      }
-    },
     "./tools/is-vercel-tool": {
       "import": {
         "types": "./dist/tools/is-vercel-tool.d.ts",
