@@ -1,5 +1,11 @@
 # @mastra/deployer-cloudflare
 
+## 0.11.1
+
+### Patch Changes
+
+- 1a45f3a: Fix peerdeps
+
 ## 0.11.0
 
 ### Minor Changes
