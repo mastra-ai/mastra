@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { createStep, createWorkflow } from '../workflows';
 import { scoreResultSchema, scoringExtractStepResultSchema } from './types';
@@ -10,7 +11,6 @@ import type {
   ScoringInputWithExtractStepResultAndScoreAndReason,
   ScoringSamplingConfig,
 } from './types';
-import { randomUUID } from 'crypto';
 
 export class MastraScorer {
   name: string;

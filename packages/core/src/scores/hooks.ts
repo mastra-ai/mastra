@@ -1,6 +1,6 @@
 import { AvailableHooks, executeHook } from '../hooks';
 import type { MastraScorerEntry } from './base';
-import type { ScoringEntityType, ScoringHookInput, ScoringInput, ScoringSource } from './types';
+import type { ScoringEntityType, ScoringHookInput, ScoringSource } from './types';
 
 export function runScorer({
   runId,
