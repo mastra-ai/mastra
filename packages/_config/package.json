@@ -1,6 +1,6 @@
 {
   "name": "@internal/lint",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "description": "",
   "type": "module",
   "main": "src/index.js",
