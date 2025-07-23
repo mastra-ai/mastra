@@ -1,4 +1,4 @@
-import { createMockModel } from '@mastra/core';
+import { createMockModel } from '@mastra/core/test-utils';
 import type { Workflow } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
