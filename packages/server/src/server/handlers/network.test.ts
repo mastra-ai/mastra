@@ -1,4 +1,4 @@
-import { createMockModel } from '@mastra/core';
+import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { AgentNetwork } from '@mastra/core/network';

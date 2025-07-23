@@ -6,7 +6,7 @@ import { RuntimeContext } from '../../runtime-context';
 import { createTool } from '../../tools';
 import { makeCoreTool } from '../../utils';
 
-import { MockProvider } from './mock';
+import { MockProvider } from '../../test-utils/llm-mock';
 
 describe('MastraLLM', () => {
   const mockMastra = {

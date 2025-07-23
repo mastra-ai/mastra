@@ -1,7 +1,7 @@
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 
-import { MastraLLM } from './model';
+import { MastraLLM } from '../llm/model/model';
 
 export function createMockModel({
   objectGenerationMode,
