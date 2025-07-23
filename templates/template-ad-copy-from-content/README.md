@@ -13,12 +13,14 @@ A Mastra template that generates compelling ad copy and promotional images from 
 ## Quick Start
 
 1. **Install dependencies**:
+
    ```bash
    pnpm install
    ```
 
 2. **Set up environment variables**:
    Create a `.env` file with:
+
    ```
    OPENAI_API_KEY=your_openai_api_key
    ```
@@ -37,24 +39,24 @@ import { mastra } from './src/mastra';
 
 // Generate ad copy from text content
 const result = await mastra.runWorkflow('ad-copy-generation-workflow', {
-  contentInput: "Your product description or marketing content here...",
-  inputType: "text",
-  platform: "facebook",
-  campaignType: "conversion",
-  targetAudience: "Small business owners aged 25-45",
-  tone: "professional",
+  contentInput: 'Your product description or marketing content here...',
+  inputType: 'text',
+  platform: 'facebook',
+  campaignType: 'conversion',
+  targetAudience: 'Small business owners aged 25-45',
+  tone: 'professional',
   generateImages: true,
-  imageStyle: "modern"
+  imageStyle: 'modern',
 });
 
 // Generate ad copy from PDF
 const pdfResult = await mastra.runWorkflow('ad-copy-generation-workflow', {
-  contentInput: "https://example.com/product-brochure.pdf",
-  inputType: "pdf",
-  platform: "linkedin",
-  campaignType: "awareness",
-  tone: "authoritative",
-  brandColors: ["#1E3A8A", "#FFFFFF"]
+  contentInput: 'https://example.com/product-brochure.pdf',
+  inputType: 'pdf',
+  platform: 'linkedin',
+  campaignType: 'awareness',
+  tone: 'authoritative',
+  brandColors: ['#1E3A8A', '#FFFFFF'],
 });
 ```
 
@@ -65,14 +67,14 @@ const pdfResult = await mastra.runWorkflow('ad-copy-generation-workflow', {
 const adCopy = await mastra.getAgent('adCopyAgent').generate([
   {
     role: 'user',
-    content: 'Create Facebook ad copy for a new productivity app targeting remote workers'
-  }
+    content: 'Create Facebook ad copy for a new productivity app targeting remote workers',
+  },
 ]);
 
 // Extract content from PDF
 const pdfContent = await mastra.getTool('pdf-content-extractor').execute({
   context: { pdfUrl: 'https://example.com/whitepaper.pdf' },
-  mastra
+  mastra,
 });
 ```
 
@@ -94,6 +96,7 @@ const pdfContent = await mastra.getTool('pdf-content-extractor').execute({
 ### Workflows
 
 **Ad Copy Generation Workflow**: End-to-end process that:
+
 1. Extracts content (from PDF or text)
 2. Generates multiple ad copy variations
 3. Creates promotional images
@@ -120,17 +123,20 @@ const pdfContent = await mastra.getTool('pdf-content-extractor').execute({
 The workflow generates:
 
 ### Ad Copy Variations
+
 - 5+ headline variations (short, medium, long)
 - 4+ body copy variations (short, medium, long, bullets)
 - 6+ call-to-action variations
 - 3+ complete ad set combinations
 
 ### Images
+
 - Platform-optimized promotional images
 - Multiple style variations
 - Brand-consistent visual elements
 
 ### Recommendations
+
 - Platform-specific best practices
 - A/B testing suggestions
 - Performance optimization tips
@@ -138,22 +144,24 @@ The workflow generates:
 ## Advanced Configuration
 
 ### Custom Brand Colors
+
 ```typescript
 const result = await mastra.runWorkflow('ad-copy-generation-workflow', {
   // ... other params
-  brandColors: ["#FF6B6B", "#4ECDC4", "#45B7D1"],
-  imageStyle: "modern"
+  brandColors: ['#FF6B6B', '#4ECDC4', '#45B7D1'],
+  imageStyle: 'modern',
 });
 ```
 
 ### Specific Focus Areas
+
 ```typescript
 const result = await mastra.getTool('pdf-content-extractor').execute({
   context: {
     pdfUrl: 'https://example.com/content.pdf',
-    focusAreas: ['benefits', 'pricing', 'testimonials']
+    focusAreas: ['benefits', 'pricing', 'testimonials'],
   },
-  mastra
+  mastra,
 });
 ```
 

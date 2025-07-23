@@ -8,7 +8,10 @@ export const imageGeneratorTool = createTool({
   description: 'Generates promotional images using DALL-E 3 via the AI package, returning the direct URL',
   inputSchema: z.object({
     prompt: z.string().describe('Description of the image to generate'),
-    style: z.enum(['photographic', 'digital_art', 'illustration', 'minimalist', 'vintage', 'modern']).optional().default('modern'),
+    style: z
+      .enum(['photographic', 'digital_art', 'illustration', 'minimalist', 'vintage', 'modern'])
+      .optional()
+      .default('modern'),
     platform: z.enum(['facebook', 'instagram', 'linkedin', 'twitter', 'generic']).optional().default('generic'),
     size: z.enum(['1024x1024', '1792x1024', '1024x1792']).optional().default('1024x1024'),
   }),
@@ -33,7 +36,7 @@ export const imageGeneratorTool = createTool({
         instagram: { width: 1080, height: 1080, ratio: '1:1' },
         linkedin: { width: 1200, height: 627, ratio: '1.91:1' },
         twitter: { width: 1200, height: 675, ratio: '16:9' },
-        generic: { width: 1024, height: 1024, ratio: '1:1' }
+        generic: { width: 1024, height: 1024, ratio: '1:1' },
       };
 
       const dimensions = platformDimensions[platform];

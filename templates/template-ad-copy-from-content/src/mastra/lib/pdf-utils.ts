@@ -14,7 +14,7 @@ export interface PDFExtractionResult {
 export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<PDFExtractionResult> {
   return new Promise((resolve, reject) => {
     const pdfParser = new (PDFParser as any)(null, true);
-    
+
     pdfParser.on('pdfParser_dataError', (errData: any) => {
       console.error('PDF parsing error:', errData.parserError);
       reject(new Error(`PDF parsing failed: ${errData.parserError}`));
@@ -27,7 +27,7 @@ export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<PDFExtracti
 
         if (pdfData && pdfData.Pages && Array.isArray(pdfData.Pages)) {
           pagesCount = pdfData.Pages.length;
-          
+
           for (const page of pdfData.Pages) {
             if (page.Texts && Array.isArray(page.Texts)) {
               for (const text of page.Texts) {

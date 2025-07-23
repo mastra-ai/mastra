@@ -8,70 +8,106 @@ import { imageGeneratorTool } from '../tools/image-generator-tool';
 const inputSchema = z.object({
   contentInput: z.string().describe('Either plain text content or PDF URL'),
   inputType: z.enum(['text', 'pdf']).describe('Type of input provided'),
-  platform: z.enum(['facebook', 'google', 'instagram', 'linkedin', 'twitter', 'tiktok', 'generic']).optional().default('generic').describe('Target advertising platform'),
-  campaignType: z.enum(['awareness', 'consideration', 'conversion', 'retention']).optional().default('consideration').describe('Campaign objective'),
+  platform: z
+    .enum(['facebook', 'google', 'instagram', 'linkedin', 'twitter', 'tiktok', 'generic'])
+    .optional()
+    .default('generic')
+    .describe('Target advertising platform'),
+  campaignType: z
+    .enum(['awareness', 'consideration', 'conversion', 'retention'])
+    .optional()
+    .default('consideration')
+    .describe('Campaign objective'),
   targetAudience: z.string().optional().describe('Description of target audience'),
-  tone: z.enum(['professional', 'casual', 'playful', 'urgent', 'inspirational', 'authoritative']).optional().default('professional').describe('Tone of voice'),
+  tone: z
+    .enum(['professional', 'casual', 'playful', 'urgent', 'inspirational', 'authoritative'])
+    .optional()
+    .default('professional')
+    .describe('Tone of voice'),
   productType: z.string().optional().describe('Type of product or service'),
   generateImages: z.boolean().optional().default(true).describe('Whether to generate promotional images'),
-  imageStyle: z.enum(['photographic', 'digital_art', 'illustration', 'minimalist', 'vintage', 'modern']).optional().default('modern').describe('Style for generated images'),
+  imageStyle: z
+    .enum(['photographic', 'digital_art', 'illustration', 'minimalist', 'vintage', 'modern'])
+    .optional()
+    .default('modern')
+    .describe('Style for generated images'),
   brandColors: z.array(z.string()).optional().describe('Brand colors to use (hex codes)'),
 });
 
 const outputSchema = z.object({
-  extractedContent: z.object({
-    marketingSummary: z.string(),
-    keyPoints: z.array(z.string()),
-    targetAudience: z.string().optional(),
-    valueProposition: z.string().optional(),
-    fileSize: z.number().optional(),
-    pagesCount: z.number().optional(),
-    characterCount: z.number().optional(),
-  }).optional().describe('Content extracted from PDF (if applicable)'),
-  adCopy: z.object({
-    headlines: z.array(z.object({
-      text: z.string(),
-      variation: z.string(),
-      length: z.number(),
-    })),
-    bodyCopy: z.array(z.object({
-      text: z.string(),
-      variation: z.string(),
-      length: z.number(),
-    })),
-    ctas: z.array(z.object({
-      text: z.string(),
-      variation: z.string(),
-    })),
-    adSets: z.array(z.object({
-      name: z.string(),
-      headline: z.string(),
-      body: z.string(),
-      cta: z.string(),
-      description: z.string(),
-    })),
-    platformRecommendations: z.object({
-      characterLimits: z.record(z.number()).optional(),
-      bestPractices: z.array(z.string()),
-      optimizationTips: z.array(z.string()),
-    }),
-  }).describe('Generated ad copy variations'),
-  images: z.array(z.object({
-    imageUrl: z.string(),
-    revisedPrompt: z.string(),
-    dimensions: z.object({
-      width: z.number(),
-      height: z.number(),
-    }),
-    generatedAt: z.string(),
-  })).optional().describe('Generated promotional images with direct DALL-E URLs'),
-  campaignSummary: z.object({
-    platform: z.string(),
-    campaignType: z.string(),
-    targetAudience: z.string(),
-    totalVariations: z.number(),
-    recommendedNext: z.array(z.string()),
-  }).describe('Campaign summary and recommendations'),
+  extractedContent: z
+    .object({
+      marketingSummary: z.string(),
+      keyPoints: z.array(z.string()),
+      targetAudience: z.string().optional(),
+      valueProposition: z.string().optional(),
+      fileSize: z.number().optional(),
+      pagesCount: z.number().optional(),
+      characterCount: z.number().optional(),
+    })
+    .optional()
+    .describe('Content extracted from PDF (if applicable)'),
+  adCopy: z
+    .object({
+      headlines: z.array(
+        z.object({
+          text: z.string(),
+          variation: z.string(),
+          length: z.number(),
+        }),
+      ),
+      bodyCopy: z.array(
+        z.object({
+          text: z.string(),
+          variation: z.string(),
+          length: z.number(),
+        }),
+      ),
+      ctas: z.array(
+        z.object({
+          text: z.string(),
+          variation: z.string(),
+        }),
+      ),
+      adSets: z.array(
+        z.object({
+          name: z.string(),
+          headline: z.string(),
+          body: z.string(),
+          cta: z.string(),
+          description: z.string(),
+        }),
+      ),
+      platformRecommendations: z.object({
+        characterLimits: z.record(z.number()).optional(),
+        bestPractices: z.array(z.string()),
+        optimizationTips: z.array(z.string()),
+      }),
+    })
+    .describe('Generated ad copy variations'),
+  images: z
+    .array(
+      z.object({
+        imageUrl: z.string(),
+        revisedPrompt: z.string(),
+        dimensions: z.object({
+          width: z.number(),
+          height: z.number(),
+        }),
+        generatedAt: z.string(),
+      }),
+    )
+    .optional()
+    .describe('Generated promotional images with direct DALL-E URLs'),
+  campaignSummary: z
+    .object({
+      platform: z.string(),
+      campaignType: z.string(),
+      targetAudience: z.string(),
+      totalVariations: z.number(),
+      recommendedNext: z.array(z.string()),
+    })
+    .describe('Campaign summary and recommendations'),
 });
 
 // Step 1: Extract content from PDF or use provided text
@@ -81,15 +117,17 @@ const extractContentStep = createStep({
   inputSchema: inputSchema,
   outputSchema: z.object({
     processedContent: z.string(),
-    extractedData: z.object({
-      marketingSummary: z.string(),
-      keyPoints: z.array(z.string()),
-      targetAudience: z.string().optional(),
-      valueProposition: z.string().optional(),
-      fileSize: z.number().optional(),
-      pagesCount: z.number().optional(),
-      characterCount: z.number().optional(),
-    }).optional(),
+    extractedData: z
+      .object({
+        marketingSummary: z.string(),
+        keyPoints: z.array(z.string()),
+        targetAudience: z.string().optional(),
+        valueProposition: z.string().optional(),
+        fileSize: z.number().optional(),
+        pagesCount: z.number().optional(),
+        characterCount: z.number().optional(),
+      })
+      .optional(),
   }),
   execute: async ({ inputData, runtimeContext }) => {
     const { contentInput, inputType } = inputData;
@@ -162,27 +200,35 @@ const generateAdCopyStep = createStep({
     productType: z.string().optional(),
   }),
   outputSchema: z.object({
-    headlines: z.array(z.object({
-      text: z.string(),
-      variation: z.string(),
-      length: z.number(),
-    })),
-    bodyCopy: z.array(z.object({
-      text: z.string(),
-      variation: z.string(),
-      length: z.number(),
-    })),
-    ctas: z.array(z.object({
-      text: z.string(),
-      variation: z.string(),
-    })),
-    adSets: z.array(z.object({
-      name: z.string(),
-      headline: z.string(),
-      body: z.string(),
-      cta: z.string(),
-      description: z.string(),
-    })),
+    headlines: z.array(
+      z.object({
+        text: z.string(),
+        variation: z.string(),
+        length: z.number(),
+      }),
+    ),
+    bodyCopy: z.array(
+      z.object({
+        text: z.string(),
+        variation: z.string(),
+        length: z.number(),
+      }),
+    ),
+    ctas: z.array(
+      z.object({
+        text: z.string(),
+        variation: z.string(),
+      }),
+    ),
+    adSets: z.array(
+      z.object({
+        name: z.string(),
+        headline: z.string(),
+        body: z.string(),
+        cta: z.string(),
+        description: z.string(),
+      }),
+    ),
     platformRecommendations: z.object({
       characterLimits: z.record(z.number()).optional(),
       bestPractices: z.array(z.string()),
@@ -220,13 +266,29 @@ const generateAdCopyStep = createStep({
       // Fallback to mock data if tool fails
       return {
         headlines: [
-          { text: `Amazing ${productType || 'Product'} for ${finalTargetAudience}`, variation: 'benefit-focused', length: 50 },
-          { text: `Transform Your Life with ${productType || 'Our Solution'}`, variation: 'transformation', length: 45 },
+          {
+            text: `Amazing ${productType || 'Product'} for ${finalTargetAudience}`,
+            variation: 'benefit-focused',
+            length: 50,
+          },
+          {
+            text: `Transform Your Life with ${productType || 'Our Solution'}`,
+            variation: 'transformation',
+            length: 45,
+          },
           { text: `Get Results with ${productType || 'Premium Solution'}`, variation: 'result-oriented', length: 40 },
         ],
         bodyCopy: [
-          { text: `Discover how ${processedContent.substring(0, 50)}... can change everything for you.`, variation: 'storytelling', length: 80 },
-          { text: `Join thousands who chose ${productType || 'our solution'} for ${campaignType} results.`, variation: 'social-proof', length: 75 },
+          {
+            text: `Discover how ${processedContent.substring(0, 50)}... can change everything for you.`,
+            variation: 'storytelling',
+            length: 80,
+          },
+          {
+            text: `Join thousands who chose ${productType || 'our solution'} for ${campaignType} results.`,
+            variation: 'social-proof',
+            length: 75,
+          },
         ],
         ctas: [
           { text: 'Get Started Now', variation: 'direct' },
@@ -268,22 +330,28 @@ const generateImagesStep = createStep({
     imageStyle: z.enum(['photographic', 'digital_art', 'illustration', 'minimalist', 'vintage', 'modern']).optional(),
     platform: z.enum(['facebook', 'google', 'instagram', 'linkedin', 'twitter', 'tiktok', 'generic']).optional(),
     brandColors: z.array(z.string()).optional(),
-    adSets: z.array(z.object({
-      name: z.string(),
-      headline: z.string(),
-      body: z.string(),
-    })),
+    adSets: z.array(
+      z.object({
+        name: z.string(),
+        headline: z.string(),
+        body: z.string(),
+      }),
+    ),
   }),
   outputSchema: z.object({
-    images: z.array(z.object({
-      imageUrl: z.string(),
-      revisedPrompt: z.string(),
-      dimensions: z.object({
-        width: z.number(),
-        height: z.number(),
-      }),
-      generatedAt: z.string(),
-    })).optional(),
+    images: z
+      .array(
+        z.object({
+          imageUrl: z.string(),
+          revisedPrompt: z.string(),
+          dimensions: z.object({
+            width: z.number(),
+            height: z.number(),
+          }),
+          generatedAt: z.string(),
+        }),
+      )
+      .optional(),
   }),
   execute: async ({ inputData, runtimeContext }) => {
     const { generateImages, imageStyle = 'modern', platform, adSets } = inputData;
@@ -310,7 +378,10 @@ const generateImagesStep = createStep({
           context: {
             prompt: imagePrompt,
             style: imageStyle as 'photographic' | 'digital_art' | 'illustration' | 'minimalist' | 'vintage' | 'modern',
-            platform: (platform === 'google' || platform === 'tiktok') ? 'generic' : (platform as 'facebook' | 'instagram' | 'linkedin' | 'twitter' | 'generic') || 'generic',
+            platform:
+              platform === 'google' || platform === 'tiktok'
+                ? 'generic'
+                : (platform as 'facebook' | 'instagram' | 'linkedin' | 'twitter' | 'generic') || 'generic',
             size: platform === 'instagram' ? '1024x1024' : '1792x1024',
           },
           runtimeContext: runtimeContext || new RuntimeContext(),
@@ -353,7 +424,8 @@ const createSummaryStep = createStep({
     recommendedNext: z.array(z.string()),
   }),
   execute: async ({ inputData }) => {
-    const { platform, campaignType, targetAudience, extractedTargetAudience, headlines, bodyCopy, ctas, images } = inputData;
+    const { platform, campaignType, targetAudience, extractedTargetAudience, headlines, bodyCopy, ctas, images } =
+      inputData;
 
     console.log('📊 Creating campaign summary...');
 
@@ -472,11 +544,13 @@ export const adCopyGenerationWorkflow = createWorkflow({
     adSets: {
       step: generateAdCopyStep,
       path: 'adSets',
-      schema: z.array(z.object({
-        name: z.string(),
-        headline: z.string(),
-        body: z.string(),
-      })),
+      schema: z.array(
+        z.object({
+          name: z.string(),
+          headline: z.string(),
+          body: z.string(),
+        }),
+      ),
     },
   })
   .then(generateImagesStep)
@@ -533,15 +607,17 @@ export const adCopyGenerationWorkflow = createWorkflow({
   .then(createSummaryStep)
   .map({
     extractedContent: {
-      schema: z.object({
-        marketingSummary: z.string(),
-        keyPoints: z.array(z.string()),
-        targetAudience: z.string().optional(),
-        valueProposition: z.string().optional(),
-        fileSize: z.number().optional(),
-        pagesCount: z.number().optional(),
-        characterCount: z.number().optional(),
-      }).optional(),
+      schema: z
+        .object({
+          marketingSummary: z.string(),
+          keyPoints: z.array(z.string()),
+          targetAudience: z.string().optional(),
+          valueProposition: z.string().optional(),
+          fileSize: z.number().optional(),
+          pagesCount: z.number().optional(),
+          characterCount: z.number().optional(),
+        })
+        .optional(),
       fn: async ({ getStepResult }) => {
         const contentResult = getStepResult(extractContentStep);
         return contentResult.extractedData;
@@ -551,27 +627,35 @@ export const adCopyGenerationWorkflow = createWorkflow({
       step: generateAdCopyStep,
       path: '',
       schema: z.object({
-        headlines: z.array(z.object({
-          text: z.string(),
-          variation: z.string(),
-          length: z.number(),
-        })),
-        bodyCopy: z.array(z.object({
-          text: z.string(),
-          variation: z.string(),
-          length: z.number(),
-        })),
-        ctas: z.array(z.object({
-          text: z.string(),
-          variation: z.string(),
-        })),
-        adSets: z.array(z.object({
-          name: z.string(),
-          headline: z.string(),
-          body: z.string(),
-          cta: z.string(),
-          description: z.string(),
-        })),
+        headlines: z.array(
+          z.object({
+            text: z.string(),
+            variation: z.string(),
+            length: z.number(),
+          }),
+        ),
+        bodyCopy: z.array(
+          z.object({
+            text: z.string(),
+            variation: z.string(),
+            length: z.number(),
+          }),
+        ),
+        ctas: z.array(
+          z.object({
+            text: z.string(),
+            variation: z.string(),
+          }),
+        ),
+        adSets: z.array(
+          z.object({
+            name: z.string(),
+            headline: z.string(),
+            body: z.string(),
+            cta: z.string(),
+            description: z.string(),
+          }),
+        ),
         platformRecommendations: z.object({
           characterLimits: z.record(z.number()).optional(),
           bestPractices: z.array(z.string()),
@@ -582,15 +666,19 @@ export const adCopyGenerationWorkflow = createWorkflow({
     images: {
       step: generateImagesStep,
       path: 'images',
-      schema: z.array(z.object({
-        imageUrl: z.string(),
-        revisedPrompt: z.string(),
-        dimensions: z.object({
-          width: z.number(),
-          height: z.number(),
-        }),
-        generatedAt: z.string(),
-      })).optional(),
+      schema: z
+        .array(
+          z.object({
+            imageUrl: z.string(),
+            revisedPrompt: z.string(),
+            dimensions: z.object({
+              width: z.number(),
+              height: z.number(),
+            }),
+            generatedAt: z.string(),
+          }),
+        )
+        .optional(),
     },
     campaignSummary: {
       step: createSummaryStep,

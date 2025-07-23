@@ -1,4 +1,3 @@
-
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
@@ -13,7 +12,7 @@ import { adCopyGenerationWorkflow } from './workflows/ad-copy-generation-workflo
 
 export const mastra = new Mastra({
   workflows: {
-    adCopyGenerationWorkflow
+    adCopyGenerationWorkflow,
   },
   agents: {
     adCopyAgent,
@@ -21,7 +20,7 @@ export const mastra = new Mastra({
     copywritingAgent,
   },
   storage: new LibSQLStore({
-    url: "file:../mastra.db",
+    url: 'file:../mastra.db',
   }),
   logger: new PinoLogger({
     name: 'Mastra Ad Copy Template',

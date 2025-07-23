@@ -7,7 +7,10 @@ export const pdfContentExtractorTool = createTool({
   description: 'Downloads a PDF from a URL, extracts content, and creates a marketing-focused summary',
   inputSchema: z.object({
     pdfUrl: z.string().describe('URL to the PDF file to download'),
-    focusAreas: z.array(z.string()).optional().describe('Specific areas to focus on (e.g., "benefits", "features", "pricing")'),
+    focusAreas: z
+      .array(z.string())
+      .optional()
+      .describe('Specific areas to focus on (e.g., "benefits", "features", "pricing")'),
   }),
   outputSchema: z.object({
     marketingSummary: z.string().describe('Marketing-focused summary of the PDF content'),
@@ -45,7 +48,7 @@ export const pdfContentExtractorTool = createTool({
       }
 
       console.log(
-        `✅ Extracted ${extractionResult.extractedText.length} characters from ${extractionResult.pagesCount} pages`
+        `✅ Extracted ${extractionResult.extractedText.length} characters from ${extractionResult.pagesCount} pages`,
       );
 
       // Step 3: Create marketing-focused summary

@@ -6,51 +6,73 @@ export const adCopyGeneratorTool = createTool({
   description: 'Generates compelling ad copy variations from content including headlines, body copy, and CTAs',
   inputSchema: z.object({
     content: z.string().describe('The content to create ad copy from'),
-    platform: z.enum(['facebook', 'google', 'instagram', 'linkedin', 'twitter', 'tiktok', 'generic']).optional().default('generic').describe('Target advertising platform'),
-    campaignType: z.enum(['awareness', 'consideration', 'conversion', 'retention']).optional().default('consideration').describe('Campaign objective'),
+    platform: z
+      .enum(['facebook', 'google', 'instagram', 'linkedin', 'twitter', 'tiktok', 'generic'])
+      .optional()
+      .default('generic')
+      .describe('Target advertising platform'),
+    campaignType: z
+      .enum(['awareness', 'consideration', 'conversion', 'retention'])
+      .optional()
+      .default('consideration')
+      .describe('Campaign objective'),
     targetAudience: z.string().optional().describe('Description of target audience'),
-    tone: z.enum(['professional', 'casual', 'playful', 'urgent', 'inspirational', 'authoritative']).optional().default('professional').describe('Tone of voice for the ad copy'),
+    tone: z
+      .enum(['professional', 'casual', 'playful', 'urgent', 'inspirational', 'authoritative'])
+      .optional()
+      .default('professional')
+      .describe('Tone of voice for the ad copy'),
     productType: z.string().optional().describe('Type of product or service being advertised'),
     keyBenefits: z.array(z.string()).optional().describe('Key benefits to highlight'),
   }),
   outputSchema: z.object({
-    headlines: z.array(z.object({
-      text: z.string(),
-      variation: z.string(),
-      length: z.number(),
-    })).describe('Generated headline variations'),
-    bodyCopy: z.array(z.object({
-      text: z.string(),
-      variation: z.string(),
-      length: z.number(),
-    })).describe('Generated body copy variations'),
-    ctas: z.array(z.object({
-      text: z.string(),
-      variation: z.string(),
-    })).describe('Generated call-to-action variations'),
-    adSets: z.array(z.object({
-      name: z.string(),
-      headline: z.string(),
-      body: z.string(),
-      cta: z.string(),
-      description: z.string(),
-    })).describe('Complete ad set combinations'),
-    platformRecommendations: z.object({
-      characterLimits: z.record(z.number()).optional(),
-      bestPractices: z.array(z.string()),
-      optimizationTips: z.array(z.string()),
-    }).describe('Platform-specific recommendations'),
+    headlines: z
+      .array(
+        z.object({
+          text: z.string(),
+          variation: z.string(),
+          length: z.number(),
+        }),
+      )
+      .describe('Generated headline variations'),
+    bodyCopy: z
+      .array(
+        z.object({
+          text: z.string(),
+          variation: z.string(),
+          length: z.number(),
+        }),
+      )
+      .describe('Generated body copy variations'),
+    ctas: z
+      .array(
+        z.object({
+          text: z.string(),
+          variation: z.string(),
+        }),
+      )
+      .describe('Generated call-to-action variations'),
+    adSets: z
+      .array(
+        z.object({
+          name: z.string(),
+          headline: z.string(),
+          body: z.string(),
+          cta: z.string(),
+          description: z.string(),
+        }),
+      )
+      .describe('Complete ad set combinations'),
+    platformRecommendations: z
+      .object({
+        characterLimits: z.record(z.number()).optional(),
+        bestPractices: z.array(z.string()),
+        optimizationTips: z.array(z.string()),
+      })
+      .describe('Platform-specific recommendations'),
   }),
   execute: async ({ context, mastra }) => {
-    const { 
-      content, 
-      platform, 
-      campaignType, 
-      targetAudience, 
-      tone, 
-      productType,
-      keyBenefits = []
-    } = context;
+    const { content, platform, campaignType, targetAudience, tone, productType, keyBenefits = [] } = context;
 
     console.log(`🎯 Generating ad copy for ${platform} platform with ${tone} tone`);
 
@@ -120,31 +142,33 @@ Format your response as JSON with the exact structure requested in the output sc
         // Create a fallback response
         parsedCopy = {
           headlines: [
-            { text: "Transform Your Business Today", variation: "transformation", length: 28 },
-            { text: "Discover What You've Been Missing", variation: "discovery", length: 34 },
-            { text: "The Solution You've Been Looking For", variation: "solution", length: 37 }
+            { text: 'Transform Your Business Today', variation: 'transformation', length: 28 },
+            { text: "Discover What You've Been Missing", variation: 'discovery', length: 34 },
+            { text: "The Solution You've Been Looking For", variation: 'solution', length: 37 },
           ],
           bodyCopy: [
-            { 
-              text: "Ready to take your business to the next level? Our proven solution delivers results that matter.",
-              variation: "short",
-              length: 95
-            }
+            {
+              text: 'Ready to take your business to the next level? Our proven solution delivers results that matter.',
+              variation: 'short',
+              length: 95,
+            },
           ],
           ctas: [
-            { text: "Get Started Now", variation: "action" },
-            { text: "Learn More", variation: "info" },
-            { text: "Try It Free", variation: "trial" }
+            { text: 'Get Started Now', variation: 'action' },
+            { text: 'Learn More', variation: 'info' },
+            { text: 'Try It Free', variation: 'trial' },
           ],
           adSets: [],
           platformRecommendations: {
-            bestPractices: ["Use engaging visuals", "Test multiple variations"],
-            optimizationTips: ["A/B test headlines", "Monitor performance metrics"]
-          }
+            bestPractices: ['Use engaging visuals', 'Test multiple variations'],
+            optimizationTips: ['A/B test headlines', 'Monitor performance metrics'],
+          },
         };
       }
 
-      console.log(`✅ Generated ${parsedCopy.headlines?.length || 0} headlines and ${parsedCopy.bodyCopy?.length || 0} body copy variations`);
+      console.log(
+        `✅ Generated ${parsedCopy.headlines?.length || 0} headlines and ${parsedCopy.bodyCopy?.length || 0} body copy variations`,
+      );
 
       return {
         headlines: parsedCopy.headlines || [],
@@ -153,7 +177,7 @@ Format your response as JSON with the exact structure requested in the output sc
         adSets: parsedCopy.adSets || [],
         platformRecommendations: parsedCopy.platformRecommendations || {
           bestPractices: [],
-          optimizationTips: []
+          optimizationTips: [],
         },
       };
     } catch (error) {
