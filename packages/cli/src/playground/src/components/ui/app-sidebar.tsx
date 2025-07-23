@@ -229,23 +229,6 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Deploy to Mastra Cloud" asChild>
-                  <a
-                    className={`group/icon bg-accent1 text-black hover:bg-accent1/80 hover:text-black active:bg-accent1/90 active:text-black`}
-                    href="https://mastra.ai/cloud"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    <Icon>
-                      <Cloudy />
-                    </Icon>
-
-                    <span className="text-[0.8rem] font-normal">Deploy to Mastra Cloud</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
                 <SidebarMenuButton tooltip="Mastra APIs" asChild>
                   <a className={`group/icon text-[#939393]`} href="/swagger-ui" target="_blank" rel="noopener">
                     <Icon>
@@ -284,6 +267,23 @@ export function AppSidebar() {
                       <GithubIcon />
                     </Icon>
                     <span className="text-[0.8rem] font-normal">Github</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Deploy to Mastra Cloud" asChild>
+                  <a
+                    className={`group/icon bg-accent1 text-black hover:bg-accent1/80 hover:text-black active:bg-accent1/90 active:text-black`}
+                    href="https://mastra.ai/cloud"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    <Icon>
+                      <Cloudy />
+                    </Icon>
+
+                    <span className="text-[0.8rem] font-normal">Deploy to Mastra Cloud</span>
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
