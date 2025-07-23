@@ -114,6 +114,7 @@ export class Agent<
   evals: TMetrics;
   #voice: CompositeVoice;
 
+  private memoryThreadCache: Record<string, StorageThreadType> = {};
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
 
@@ -891,6 +892,24 @@ export class Agent<
       .then(r => r.messagesV2);
   }
 
+  private async getMemoryThread({ threadId, runtimeContext }: { threadId: string; runtimeContext: RuntimeContext }) {
+    if (this.memoryThreadCache[threadId]) {
+      return this.memoryThreadCache[threadId];
+    }
+
+    const memory = await this.getMemory({ runtimeContext });
+    if (!memory) {
+      return undefined;
+    }
+
+    const memoryThread = await memory.getThreadById({ threadId });
+    if (memoryThread) {
+      this.memoryThreadCache[threadId] = memoryThread;
+    }
+
+    return memoryThread;
+  }
+
   private async getAssignedTools({
     runtimeContext,
     runId,
@@ -1463,7 +1482,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           messageList,
           // add old processed messages + new input messages
           messageObjects: processedList,
-          threadExists: !!existingThread,
         };
       },
       after: async ({
@@ -1474,7 +1492,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText,
         runId,
         messageList,
-        threadExists,
       }: {
         runId: string;
         result: Record<string, any>;
@@ -1483,7 +1500,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
         messageList: MessageList;
-        threadExists: boolean;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -1523,7 +1539,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const memory = await this.getMemory({ runtimeContext });
         const thread = usedWorkingMemory
           ? threadId
-            ? await memory?.getThreadById({ threadId })
+            ? await this.getMemoryThread({ threadId, runtimeContext })
             : undefined
           : threadAfter;
 
@@ -1548,14 +1564,16 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               messageList.add(responseMessages, 'response');
             }
 
+            let threadExists = await this.getMemoryThread({ threadId: thread.id, runtimeContext });
             if (!threadExists) {
-              await memory.createThread({
+              const memoryThread = await memory.createThread({
                 threadId: thread.id,
                 metadata: thread.metadata,
                 title: thread.title,
                 memoryConfig,
                 resourceId: thread.resourceId,
               });
+              this.memoryThreadCache[thread.id] = memoryThread;
             }
 
             // Parallelize title generation and message saving
@@ -1574,17 +1592,23 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
               if (shouldGenerate && userMessage) {
                 promises.push(
-                  this.genTitle(userMessage, runtimeContext, titleModel, titleInstructions).then(title => {
-                    if (title) {
-                      return memory.createThread({
-                        threadId: thread.id,
-                        resourceId,
-                        memoryConfig,
-                        title,
-                        metadata: thread.metadata,
-                      });
-                    }
-                  }),
+                  this.genTitle(userMessage, runtimeContext, titleModel, titleInstructions)
+                    .then(title => {
+                      if (title) {
+                        return memory.createThread({
+                          threadId: thread.id,
+                          resourceId,
+                          memoryConfig,
+                          title,
+                          metadata: thread.metadata,
+                        });
+                      }
+                    })
+                    .then(memoryThread => {
+                      if (memoryThread) {
+                        this.memoryThreadCache[thread.id] = memoryThread;
+                      }
+                    }),
                 );
               }
             }
@@ -1737,11 +1761,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       saveQueueManager,
     });
 
-    const beforeResults = await before();
-    const { thread, messageObjects, convertedTools, messageList } = beforeResults;
-    let threadExists = beforeResults.threadExists || false;
+    const { thread, messageObjects, convertedTools, messageList } = await before();
 
     const threadId = thread?.id;
+    let threadExists = threadId ? await this.getMemoryThread({ threadId, runtimeContext }) : false;
 
     if (!output && experimental_output) {
       const result = await llm.__text({
@@ -1750,13 +1773,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         onStepFinish: async (result: any) => {
           if (savePerStep) {
             if (!threadExists && memory && thread) {
-              await memory.createThread({
+              const memoryThread = await memory.createThread({
                 threadId,
                 title: thread.title,
                 metadata: thread.metadata,
                 resourceId: thread.resourceId,
                 memoryConfig,
               });
+              this.memoryThreadCache[thread.id] = memoryThread;
               threadExists = true;
             }
 
@@ -1794,7 +1818,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText,
         runId,
         messageList,
-        threadExists,
       });
 
       const newResult = result as any;
@@ -1811,13 +1834,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         onStepFinish: async (result: any) => {
           if (savePerStep) {
             if (!threadExists && memory && thread) {
-              await memory.createThread({
+              const memoryThread = await memory.createThread({
                 threadId,
                 title: thread.title,
                 metadata: thread.metadata,
                 resourceId: thread.resourceId,
                 memoryConfig,
               });
+              this.memoryThreadCache[thread.id] = memoryThread;
               threadExists = true;
             }
 
@@ -1854,7 +1878,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText,
         runId,
         messageList,
-        threadExists,
       });
 
       return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1867,13 +1890,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       onStepFinish: async (result: any) => {
         if (savePerStep) {
           if (!threadExists && memory && thread) {
-            await memory.createThread({
+            const memoryThread = await memory.createThread({
               threadId,
               title: thread.title,
               metadata: thread.metadata,
               resourceId: thread.resourceId,
               memoryConfig,
             });
+            this.memoryThreadCache[thread.id] = memoryThread;
             threadExists = true;
           }
 
@@ -1908,7 +1932,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       outputText,
       runId,
       messageList,
-      threadExists,
     });
 
     return result as unknown as GenerateReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -2018,11 +2041,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       saveQueueManager,
     });
 
-    const beforeResults = await before();
-    const { thread, messageObjects, convertedTools, messageList } = beforeResults;
-    let threadExists = beforeResults.threadExists || false;
+    const { thread, messageObjects, convertedTools, messageList } = await before();
 
     const threadId = thread?.id;
+    let threadExists = threadId ? await this.getMemoryThread({ threadId, runtimeContext }) : false;
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
@@ -2036,13 +2058,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         onStepFinish: async (result: any) => {
           if (savePerStep) {
             if (!threadExists && memory && thread) {
-              await memory.createThread({
+              const memoryThread = await memory.createThread({
                 threadId,
                 title: thread.title,
                 metadata: thread.metadata,
                 resourceId: thread.resourceId,
                 memoryConfig,
               });
+              this.memoryThreadCache[thread.id] = memoryThread;
               threadExists = true;
             }
 
@@ -2068,7 +2091,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               outputText,
               runId,
               messageList,
-              threadExists,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -2104,13 +2126,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         onStepFinish: async (result: any) => {
           if (savePerStep) {
             if (!threadExists && memory && thread) {
-              await memory.createThread({
+              const memoryThread = await memory.createThread({
                 threadId,
                 title: thread.title,
                 metadata: thread.metadata,
                 resourceId: thread.resourceId,
                 memoryConfig,
               });
+              this.memoryThreadCache[thread.id] = memoryThread;
               threadExists = true;
             }
 
@@ -2136,7 +2159,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               outputText,
               runId,
               messageList,
-              threadExists,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -2170,13 +2192,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       onStepFinish: async (result: any) => {
         if (savePerStep) {
           if (!threadExists && memory && thread) {
-            await memory.createThread({
+            const memoryThread = await memory.createThread({
               threadId,
               title: thread.title,
               metadata: thread.metadata,
               resourceId: thread.resourceId,
               memoryConfig,
             });
+            this.memoryThreadCache[thread.id] = memoryThread;
             threadExists = true;
           }
 
@@ -2202,7 +2225,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             outputText,
             runId,
             messageList,
-            threadExists,
           });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
