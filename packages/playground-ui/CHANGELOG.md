@@ -1,5 +1,13 @@
 # @mastra/playground-ui
 
+## 5.1.15
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+  - @mastra/core@0.11.1
+  - @mastra/client-js@0.10.16
+
 ## 5.1.14
 
 ### Patch Changes

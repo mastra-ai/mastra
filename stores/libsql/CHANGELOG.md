@@ -1,5 +1,13 @@
 # @mastra/libsql
 
+## 0.11.2
+
+### Patch Changes
+
+- 3cc50c7: Update mastra core peer dep version
+- ce088f5: Update all peerdeps to latest core
+  - @mastra/core@0.11.1
+
 ## 0.11.1
 
 ### Patch Changes
