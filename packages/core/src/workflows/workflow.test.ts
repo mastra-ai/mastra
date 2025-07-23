@@ -7897,8 +7897,7 @@ describe('Workflow', () => {
       expect(passthroughSpy).toHaveBeenCalledTimes(2);
     });
 
-    it('should not execute incorrect branches after resuming from suspended nested workflow - issue #6212', async () => {
-      // Test for bug where conditional branches execute incorrect steps after suspend/resume
+    it('should not execute incorrect branches after resuming from suspended nested workflow', async () => {
       const testStorage = new MockStore();
 
       // Mock functions to track execution
@@ -7931,12 +7930,9 @@ describe('Workflow', () => {
       });
 
       const finalProcessingAction = vi.fn().mockImplementation(async ({ inputData }) => {
-        // This step processes the results from the branch
-        // In the bug, this step would receive results from ALL branches instead of just the correct one
         return { result: 'processed', input: inputData };
       });
 
-      // Create steps
       const fetchItems = createStep({
         id: 'fetch-items',
         inputSchema: z.object({}),
@@ -8011,7 +8007,7 @@ describe('Workflow', () => {
           [async ({ inputData }) => inputData.type === 'third', thirdItemStep],
         ])
         .map(async ({ inputData }) => {
-          // This map step simulates the original issue where results from ALL branches
+          // This map step simulates the original issue (#6212) where results from ALL branches
           // are processed instead of just the correct one
           if (inputData['first-item-step']) {
             return inputData['first-item-step'];
@@ -8039,6 +8035,10 @@ describe('Workflow', () => {
       expect(initialResult.status).toBe('suspended');
       expect(selectItemAction).toHaveBeenCalledTimes(1);
 
+      if (initialResult.status !== 'suspended') {
+        expect.fail('Expected workflow to be suspended');
+      }
+
       // Resume with "second" item selection
       const resumedResult = await run.resume({
         step: initialResult.suspended[0],
@@ -8048,6 +8048,10 @@ describe('Workflow', () => {
       expect(resumedResult.status).toBe('suspended');
       expect(selectItemAction).toHaveBeenCalledTimes(2);
       expect(secondItemDateAction).toHaveBeenCalledTimes(1);
+
+      if (resumedResult.status !== 'suspended') {
+        expect.fail('Expected workflow to be suspended');
+      }
 
       // Resume with date for second item
       const finalResult = await run.resume({
