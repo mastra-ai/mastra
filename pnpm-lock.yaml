@@ -1964,7 +1964,7 @@ importers:
   packages/memory:
     dependencies:
       '@upstash/redis':
-        specifier: ^1.35.0
+        specifier: ^1.35.1
         version: 1.35.1
       ai:
         specifier: ^4.3.16
@@ -3111,7 +3111,7 @@ importers:
   stores/upstash:
     dependencies:
       '@upstash/redis':
-        specifier: ^1.35.0
+        specifier: ^1.35.1
         version: 1.35.1
       '@upstash/vector':
         specifier: ^1.2.2
