@@ -44,6 +44,7 @@ export default defineConfig({
     'src/utils.ts',
     '!src/action/index.ts',
     'src/*/index.ts',
+    'src/tools/is-vercel-tool.ts',
     'src/workflows/legacy/index.ts',
     'src/workflows/constants.ts',
     'src/network/index.ts',

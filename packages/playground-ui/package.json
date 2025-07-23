@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "5.1.14-alpha.1",
+  "version": "5.1.15",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -29,9 +29,8 @@
     }
   },
   "scripts": {
-    "dev": "vite",
     "build": "tsc && vite build",
-    "build:watch": "vite build --watch",
+    "dev:playground": "vite build --watch",
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview"
   },
@@ -59,6 +58,7 @@
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-checkbox": "^1.3.2",
     "@radix-ui/react-collapsible": "^1.1.11",
+    "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-label": "^2.1.7",
     "@radix-ui/react-popover": "^1.1.14",
@@ -104,7 +104,7 @@
     "zustand": "^5.0.5"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.11-0 <0.11.0-0",
+    "@mastra/core": ">=0.11.0-0 <0.12.0-0",
     "lucide-react": "^0.474.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
