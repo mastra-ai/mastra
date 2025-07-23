@@ -3,7 +3,7 @@ title: "Create a custom eval"
 description: "Mastra allows so create your own evals, here is how."
 ---
 
-# Create a custom eval
+# Create a Custom Eval
 
 Create a custom eval by extending the `Metric` class and implementing the `measure` method. This gives you full control over how scores are calculated and what information is returned. For LLM-based evaluations, extend the `MastraAgentJudge` class to define how the model reasons and scores output.
 
@@ -13,7 +13,7 @@ You can write lightweight custom metrics using plain JavaScript/TypeScript. Thes
 
 See our [Word Inclusion example](/examples/evals/custom-native-javascript-eval.mdx), which scores responses based on the number of reference words found in the output.
 
-## LLM as a Judge Evaluation
+## LLM as a judge evaluation
 
 For more complex evaluations, you can build a judge powered by an LLM. This lets you capture more nuanced criteria, like factual accuracy, tone, or reasoning.
 
