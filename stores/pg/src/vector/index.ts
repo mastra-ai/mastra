@@ -200,6 +200,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
     const client = await this.pool.connect();
     try {
+      await client.query('BEGIN');
       const vectorStr = `[${queryVector.join(',')}]`;
       const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore, topK);
@@ -237,6 +238,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         ORDER BY score DESC
         LIMIT $2`;
       const result = await client.query(query, filterValues);
+      await client.query('COMMIT');
 
       return result.rows.map(({ id, score, metadata, embedding }) => ({
         id,
@@ -245,6 +247,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
       }));
     } catch (error) {
+      await client.query('ROLLBACK');
       const mastraError = new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_VECTOR_QUERY_FAILED',

@@ -12,6 +12,7 @@ import {
   getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
   streamGenerateHandler,
+  streamVNextGenerateHandler,
 } from './handlers';
 import { getListenerHandler, getSpeakersHandler, speakHandler, listenHandler } from './voice';
 
@@ -203,6 +204,72 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     streamGenerateHandler,
+  );
+
+  router.post(
+    '/:agentId/streamVNext',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Stream a response from an agent using the VNext streaming API',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messages: {
+                  type: 'array',
+                  items: { type: 'object' },
+                },
+                runId: { type: 'string' },
+                output: { type: 'object' },
+                experimental_output: { type: 'object' },
+                instructions: { type: 'string' },
+                toolsets: { type: 'object' },
+                clientTools: { type: 'object' },
+                context: {
+                  type: 'array',
+                  items: { type: 'object' },
+                },
+                memory: {
+                  type: 'object',
+                  properties: {
+                    threadId: { type: 'string' },
+                    resourceId: { type: 'string', description: 'The resource ID for the conversation' },
+                  },
+                },
+                toolChoice: {
+                  oneOf: [
+                    { type: 'string', enum: ['auto', 'none', 'required'] },
+                    { type: 'object', properties: { type: { type: 'string' }, toolName: { type: 'string' } } },
+                  ],
+                },
+              },
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Streamed response',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    streamVNextGenerateHandler,
   );
 
   router.get(

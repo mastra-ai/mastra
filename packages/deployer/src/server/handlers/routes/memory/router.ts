@@ -6,12 +6,14 @@ import {
   createThreadHandler,
   deleteThreadHandler,
   getMemoryStatusHandler,
+  getMemoryConfigHandler,
   getMessagesHandler,
   getMessagesPaginatedHandler,
   getThreadByIdHandler,
   getThreadsHandler,
   getWorkingMemoryHandler,
   saveMessagesHandler,
+  searchMemoryHandler,
   updateThreadHandler,
   updateWorkingMemoryHandler,
 } from './handlers';
@@ -309,6 +311,85 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
   );
 
   router.get(
+    '/config',
+    describeRoute({
+      description: 'Get memory configuration',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Memory configuration',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  config: {
+                    type: 'object',
+                    properties: {
+                      lastMessages: {
+                        oneOf: [{ type: 'number' }, { type: 'boolean' }],
+                      },
+                      semanticRecall: {
+                        oneOf: [
+                          { type: 'boolean' },
+                          {
+                            type: 'object',
+                            properties: {
+                              topK: { type: 'number' },
+                              messageRange: {
+                                oneOf: [
+                                  { type: 'number' },
+                                  {
+                                    type: 'object',
+                                    properties: {
+                                      before: { type: 'number' },
+                                      after: { type: 'number' },
+                                    },
+                                  },
+                                ],
+                              },
+                              scope: { type: 'string', enum: ['thread', 'resource'] },
+                            },
+                          },
+                        ],
+                      },
+                      workingMemory: {
+                        type: 'object',
+                        properties: {
+                          enabled: { type: 'boolean' },
+                          scope: { type: 'string', enum: ['thread', 'resource'] },
+                          template: { type: 'string' },
+                        },
+                      },
+                      threads: {
+                        type: 'object',
+                        properties: {
+                          generateTitle: {
+                            oneOf: [{ type: 'boolean' }, { type: 'object' }],
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    getMemoryConfigHandler,
+  );
+
+  router.get(
     '/threads',
     describeRoute({
       description: 'Get all threads',
@@ -466,6 +547,96 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getMessagesPaginatedHandler,
+  );
+
+  router.get(
+    '/search',
+    describeRoute({
+      description: 'Search messages in a thread',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'searchQuery',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+          description: 'The text to search for',
+        },
+        {
+          name: 'resourceId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+          description: 'The resource ID (user/org) to validate thread ownership',
+        },
+        {
+          name: 'threadId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+          description: 'The thread ID to search within (optional - searches all threads if not provided)',
+        },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+          description: 'The agent ID',
+        },
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+          description: 'Maximum number of results to return (default: 20)',
+        },
+        {
+          name: 'memoryConfig',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+          description: 'JSON-encoded memory configuration (e.g., {"lastMessages": 0} for semantic-only search)',
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Search results',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  results: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        role: { type: 'string' },
+                        content: { type: 'string' },
+                        createdAt: { type: 'string' },
+                      },
+                    },
+                  },
+                  count: { type: 'number' },
+                  query: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Bad request',
+        },
+        403: {
+          description: 'Thread does not belong to the specified resource',
+        },
+        404: {
+          description: 'Thread not found',
+        },
+      },
+    }),
+    searchMemoryHandler,
   );
 
   router.get(

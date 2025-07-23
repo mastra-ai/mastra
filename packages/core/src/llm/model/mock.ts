@@ -137,7 +137,7 @@ export class MockProvider extends MastraLLM {
   }
 
   // @ts-ignore
-  stream(...args: any) {
+  stream(...args: any): PromiseLike<StreamReturn<any, any, any>> {
     // @ts-ignore
     const result = super.stream(...args);
 
@@ -152,7 +152,7 @@ export class MockProvider extends MastraLLM {
   }
 
   // @ts-ignore
-  __streamObject(...args) {
+  __streamObject(...args): PromiseLike<StreamObjectResult<any>> {
     // @ts-ignore
     const result = super.__streamObject(...args);
 
