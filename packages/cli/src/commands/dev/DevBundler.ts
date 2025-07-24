@@ -58,10 +58,15 @@ export class DevBundler extends Bundler {
     } catch (error) {
       this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
     }
-    
-    const inputOptions = await getWatcherInputOptions(entryFile, 'node', {
-      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
-    }, sourcemapEnabled);
+
+    const inputOptions = await getWatcherInputOptions(
+      entryFile,
+      'node',
+      {
+        'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+      },
+      sourcemapEnabled,
+    );
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
 
     const outputDir = join(outputDirectory, this.outputDir);

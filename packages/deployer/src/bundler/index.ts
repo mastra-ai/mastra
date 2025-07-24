@@ -168,9 +168,15 @@ export abstract class Bundler extends MastraBundler {
     toolsPaths: string[],
     sourcemapEnabled: boolean = false,
   ) {
-    const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node', {
-      'process.env.NODE_ENV': JSON.stringify('production'),
-    }, sourcemapEnabled);
+    const inputOptions: InputOptions = await getInputOptions(
+      mastraEntryFile,
+      analyzedBundleInfo,
+      'node',
+      {
+        'process.env.NODE_ENV': JSON.stringify('production'),
+      },
+      sourcemapEnabled,
+    );
     const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);

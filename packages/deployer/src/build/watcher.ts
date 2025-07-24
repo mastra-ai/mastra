@@ -5,7 +5,12 @@ import { aliasHono } from './plugins/hono-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 
-export async function getInputOptions(entryFile: string, platform: 'node' | 'browser', env?: Record<string, string>, sourcemapEnabled: boolean = false) {
+export async function getInputOptions(
+  entryFile: string,
+  platform: 'node' | 'browser',
+  env?: Record<string, string>,
+  sourcemapEnabled: boolean = false,
+) {
   const inputOptions = await getBundlerInputOptions(
     entryFile,
     {
