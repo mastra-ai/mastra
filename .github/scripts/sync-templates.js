@@ -147,7 +147,8 @@ async function pushToRepo(repoName) {
   console.log(`Pushing to new repo: ${repoName}`);
   const templatePath = path.join(TEMPLATES_DIR, repoName);
   const tempRoot = path.join(process.cwd(), '.temp');
-  const tempDir = path.join(process.cwd(), '.temp', repoName);
+  const tempGitDir = path.join(tempRoot, '.temp-git');
+  const tempDir = path.join(tempRoot, repoName);
 
   try {
     // Create temp directory
@@ -192,9 +193,19 @@ async function pushToRepo(repoName) {
       );
     }
 
-    // remove everyting in the temp directory
+    // remove everyting in the temp directory except .git
     console.log(`Removing everything in the temp directory: ${tempDir}`);
+    //check if .git exists in temp directory
+    if (fs.existsSync(path.join(tempDir, '.git'))) {
+      //copy .git to a temp folder outside of temp directory
+      const gitDir = path.join(tempDir, '.git');
+      fsExtra.copySync(gitDir, tempGitDir);
+    }
     fsExtra.removeSync(tempDir);
+    //copy .git back to temp directory
+    fsExtra.copySync(tempGitDir, path.join(tempDir, '.git'));
+    //remove temp git directory
+    fsExtra.removeSync(tempGitDir);
 
     // Copy template content to temp directory
     console.log(`Copying template content to temp directory: ${tempDir}`);
@@ -249,9 +260,19 @@ async function pushToRepo(repoName) {
           cwd: tempDir,
         });
       }
-      // remove everyting in the temp directory
+      // remove everyting in the temp directory except .git
       console.log(`Removing everything in the temp directory: ${tempDir} for ${provider} branch`);
+      //check if .git exists in temp directory
+      if (fs.existsSync(path.join(tempDir, '.git'))) {
+        //copy .git to a temp folder outside of temp directory
+        const gitDir = path.join(tempDir, '.git');
+        fsExtra.copySync(gitDir, tempGitDir);
+      }
       fsExtra.removeSync(tempDir);
+      //copy .git back to temp directory
+      fsExtra.copySync(tempGitDir, path.join(tempDir, '.git'));
+      //remove temp git directory
+      fsExtra.removeSync(tempGitDir);
 
       // Copy template content to temp directory
       console.log(`Copying template content to temp directory: ${tempDir} for ${provider} branch`);
