@@ -35,7 +35,7 @@ export const mastra = new Mastra({
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with the [Mastra Client SDK](/docs/client-js/overview) must include a valid JWT in the `Authorization` header:
+When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid JWT in the `Authorization` header:
 
 ```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -48,7 +48,7 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-> See [Mastra Client SDK](/docs/client-js/overview) for more configuration options.
+> See [Mastra Client SDK](/docs/server-db/mastra-client.mdx) for more configuration options.
 
 ### Making authenticated requests
 
