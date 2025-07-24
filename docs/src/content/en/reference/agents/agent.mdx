@@ -62,6 +62,13 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
         "Tools that the agent can use. Can be a static object or a function that returns tools.",
     },
     {
+      name: "inputProcessors",
+      type: "InputProcessor[] | ({ runtimeContext: RuntimeContext }) => InputProcessor[] | Promise<InputProcessor[]>",
+      isOptional: true,
+      description:
+        "Input processors that run before messages are sent to the language model. These middleware components can intercept, modify, validate, or filter messages. Can be a static array or a function that returns processors based on runtime context.",
+    },
+    {
       name: "defaultGenerateOptions",
       type: "AgentGenerateOptions",
       isOptional: true,

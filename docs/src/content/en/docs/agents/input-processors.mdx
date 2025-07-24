@@ -1,0 +1,483 @@
+---
+title: "Input Processors"
+description: "Learn how to use input processors to intercept and modify agent messages before they reach the language model."
+---
+
+# Input Processors
+
+Input processors are powerful middleware components that allow you to intercept, modify, validate, or filter messages before they are sent to the language model. They provide a flexible way to implement pre-processing logic, content filtering, message transformation, and early termination of agent requests.
+
+## Overview
+
+Input processors run in sequence before the agent sends messages to the language model. Each processor receives:
+- **`messages`**: Access to the current message list (use `ctx.messages.get.all.prompt()` to get current messages)
+- **`abort(reason?)`**: Function to terminate processing early with an optional reason
+- **`next()`**: Function to continue to the next processor in the chain
+
+**Note**: Runtime context is not directly available within processors. To access runtime values (like user IDs), use dynamic processors that create processors based on runtime context.
+
+This design allows you to build sophisticated message processing pipelines with validation, transformation, and conditional logic.
+
+## Basic Usage
+
+### Creating an Input Processor
+
+Use the `createInputProcessor` function to create a processor:
+
+```typescript
+import { Agent, createInputProcessor } from "@mastra/core/agent";
+
+const contentFilter = createInputProcessor('content-filter', async (ctx) => {
+  const messages = await ctx.messages.get.all.prompt();
+  
+  // Check for inappropriate content
+  const hasInappropriate = messages.some(msg => 
+    Array.isArray(msg.content) && 
+    msg.content.some(part => 
+      part.type === 'text' && part.text.includes('inappropriate')
+    )
+  );
+  
+  if (hasInappropriate) {
+    ctx.abort('Content validation failed');
+  }
+  
+  // Continue to next processor
+  await ctx.next();
+});
+```
+
+### Adding Processors to an Agent
+
+Add processors to your agent configuration:
+
+```typescript
+const agent = new Agent({
+  name: 'content-aware-agent',
+  instructions: 'You are a helpful assistant',
+  model: myLanguageModel,
+  inputProcessors: [contentFilter]
+});
+```
+
+## Message Manipulation
+
+Input processors can modify the message list using the various methods available:
+
+### Adding Messages
+
+```typescript
+const messageEnhancer = createInputProcessor('enhancer', async (ctx) => {
+  // Add context or instructions
+  ctx.messages.add('Please be concise in your response.', 'system');
+  
+  // Add user message modifications
+  ctx.messages.add('Additional context: This is a formal conversation.', 'user');
+  
+  await ctx.next();
+});
+```
+
+### Modifying Existing Messages
+
+```typescript
+const messageModifier = createInputProcessor('modifier', async (ctx) => {
+  // Modify messages by ID
+  ctx.messages.modifyById('some-message-id', (message) => {
+    if (Array.isArray(message.content)) {
+      message.content.push({
+        type: 'text',
+        text: ' [MODIFIED]'
+      });
+    }
+    return message;
+  });
+  
+  // Modify all user messages
+  ctx.messages.modifyWhere(
+    (message) => message.role === 'user',
+    (message) => {
+      // Add prefix to user messages
+      if (Array.isArray(message.content)) {
+        const textParts = message.content.filter(part => part.type === 'text');
+        if (textParts.length > 0) {
+          textParts[0].text = `PRIORITY: ${textParts[0].text}`;
+        }
+      }
+      return message;
+    }
+  );
+  
+  await ctx.next();
+});
+```
+
+### Filtering Messages
+
+```typescript
+const messageFilter = createInputProcessor('filter', async (ctx) => {
+  // Remove messages by role
+  ctx.messages.removeByRole('assistant');
+  
+  // Remove messages matching a condition
+  ctx.messages.removeWhere((message) => 
+    Array.isArray(message.content) && 
+    message.content.some(part => 
+      part.type === 'text' && part.text.includes('debug')
+    )
+  );
+  
+  await ctx.next();
+});
+```
+
+## TripWire (Early Termination)
+
+The `abort()` function allows processors to terminate the agent flow early and return a special response:
+
+### Basic Abort
+
+```typescript
+const validator = createInputProcessor('validator', async (ctx) => {
+  const messages = await ctx.messages.get.all.prompt();
+  
+  if (messages.length === 0) {
+    ctx.abort(); // Uses default message
+  }
+  
+  await ctx.next();
+});
+```
+
+### Custom Abort Message
+
+```typescript
+const customValidator = createInputProcessor('custom-validator', async (ctx) => {
+  const messages = await ctx.messages.get.all.prompt();
+  
+  if (someValidationFails(messages)) {
+    ctx.abort('Custom validation failed: specific reason');
+  }
+  
+  await ctx.next();
+});
+```
+
+### Handling TripWire Responses
+
+When a processor calls `abort()`, the agent returns a special response:
+
+```typescript
+const result = await agent.generate('Some input');
+
+if (result.tripwire) {
+  console.log('Request was aborted:', result.tripwireReason);
+  // result.text will be empty
+  // Handle the abort case appropriately
+} else {
+  console.log('Normal response:', result.text);
+}
+```
+
+## Dynamic Input Processors
+
+Since runtime context is not directly available within processors, you should use dynamic processors to access runtime values. Dynamic processors are functions that create processors based on runtime context:
+
+```typescript
+const agent = new Agent({
+  name: 'dynamic-agent',
+  instructions: 'You are a helpful assistant',
+  model: myLanguageModel,
+  inputProcessors: ({ runtimeContext }) => {
+    const userRole = runtimeContext.get('userRole');
+    const userId = runtimeContext.get('userId');
+    
+    const processors = [];
+    
+    // Add role-based processor
+    if (userRole === 'admin') {
+      processors.push(
+        createInputProcessor('admin-processor', async (ctx) => {
+          ctx.messages.add('Admin mode activated', 'system');
+          await ctx.next();
+        })
+      );
+    } else {
+      processors.push(
+        createInputProcessor('user-processor', async (ctx) => {
+          ctx.messages.add('Standard user mode', 'system');
+          await ctx.next();
+        })
+      );
+    }
+    
+    // Add user-specific processors if userId is available
+    if (userId) {
+      processors.push(
+        createInputProcessor('user-specific', async (ctx) => {
+          ctx.messages.add(`Processing for user: ${userId}`, 'system');
+          await ctx.next();
+        })
+      );
+    }
+    
+    return processors;
+  }
+});
+
+// Usage:
+const runtimeContext = new RuntimeContext();
+runtimeContext.set('userRole', 'admin');
+runtimeContext.set('userId', 'user123');
+
+await agent.generate('Hello', { runtimeContext });
+```
+
+## Processor Execution Flow
+
+Processors execute in sequence with the following flow:
+
+1. **Sequential Execution**: Processors run in the order they're defined
+2. **Async Support**: Each processor can perform async operations
+3. **Next() Control**: Processors must call `await ctx.next()` to continue
+4. **Early Termination**: Any processor can call `ctx.abort()` to stop execution
+5. **Message State**: Changes to messages persist between processors
+
+```typescript
+const processors = [
+  createInputProcessor('first', async (ctx) => {
+    console.log('First processor running');
+    ctx.messages.add('First processor was here', 'system');
+    await ctx.next(); // Continue to second processor
+  }),
+  
+  createInputProcessor('second', async (ctx) => {
+    console.log('Second processor running');
+    const messages = await ctx.messages.get.all.prompt();
+    
+    if (messages.length > 5) {
+      ctx.abort('Too many messages'); // Stops here, third processor won't run
+    }
+    
+    await ctx.next(); // Continue to third processor if not aborted
+  }),
+  
+  createInputProcessor('third', async (ctx) => {
+    console.log('Third processor running');
+    ctx.messages.add('All processors completed', 'system');
+    await ctx.next(); // No more processors, flow continues to LLM
+  })
+];
+```
+
+## Best Practices
+
+### 1. Always Call next()
+
+Unless you're calling `abort()`, always call `await ctx.next()`:
+
+```typescript
+// ✅ Good
+const processor = createInputProcessor('good', async (ctx) => {
+  // Do work
+  await ctx.next();
+});
+
+// ❌ Bad - breaks the chain
+const processor = createInputProcessor('bad', async (ctx) => {
+  // Do work
+  // Missing ctx.next() - subsequent processors won't run
+});
+```
+
+### 2. Handle Errors Gracefully
+
+```typescript
+const robustProcessor = createInputProcessor('robust', async (ctx) => {
+  try {
+    // Risky operation
+    await performValidation(ctx.messages);
+    await ctx.next();
+  } catch (error) {
+    // Log error and decide whether to abort or continue
+    console.error('Processor error:', error);
+    ctx.abort('Processing failed due to validation error');
+  }
+});
+```
+
+### 3. Use Descriptive Names
+
+```typescript
+// ✅ Good - clear purpose
+createInputProcessor('profanity-filter', async (ctx) => { /* ... */ });
+createInputProcessor('message-length-limiter', async (ctx) => { /* ... */ });
+createInputProcessor('context-injector', async (ctx) => { /* ... */ });
+
+// ❌ Bad - unclear purpose
+createInputProcessor('processor1', async (ctx) => { /* ... */ });
+createInputProcessor('helper', async (ctx) => { /* ... */ });
+```
+
+### 4. Keep Processors Focused
+
+Each processor should have a single, clear responsibility:
+
+```typescript
+// ✅ Good - focused responsibility
+const lengthValidator = createInputProcessor('length-validator', async (ctx) => {
+  const messages = await ctx.messages.get.all.prompt();
+  const totalLength = messages.reduce((sum, msg) => sum + JSON.stringify(msg).length, 0);
+  
+  if (totalLength > 10000) {
+    ctx.abort('Message too long');
+  }
+  
+  await ctx.next();
+});
+
+// ✅ Good - separate concern
+const contentFilter = createInputProcessor('content-filter', async (ctx) => {
+  // Handle content filtering separately
+  await ctx.next();
+});
+```
+
+## Common Use Cases
+
+### Content Moderation
+
+```typescript
+const moderationProcessor = createInputProcessor('moderation', async (ctx) => {
+  const messages = await ctx.messages.get.all.prompt();
+  
+  for (const message of messages) {
+    if (message.role === 'user' && Array.isArray(message.content)) {
+      const textContent = message.content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join(' ');
+      
+      if (await isInappropriate(textContent)) {
+        ctx.abort('Content violates community guidelines');
+      }
+    }
+  }
+  
+  await ctx.next();
+});
+```
+
+### Rate Limiting
+
+```typescript
+// Create a rate limiter with closure to capture user context
+const createRateLimiter = (userId: string) => {
+  return createInputProcessor('rate-limiter', async (ctx) => {
+    if (await isRateLimited(userId)) {
+      ctx.abort('Rate limit exceeded. Please try again later.');
+    }
+    
+    await ctx.next();
+  });
+};
+
+// Usage with dynamic processors:
+const agent = new Agent({
+  name: 'rate-limited-agent',
+  instructions: 'You are a helpful assistant',
+  model: myLanguageModel,
+  inputProcessors: ({ runtimeContext }) => {
+    const userId = runtimeContext.get('userId') || 'anonymous';
+    return [createRateLimiter(userId)];
+  }
+});
+
+// Pass userId via runtime context
+const runtimeContext = new RuntimeContext();
+runtimeContext.set('userId', 'user123');
+await agent.generate('Hello', { runtimeContext });
+```
+
+### Context Injection
+
+```typescript
+const createContextInjector = (userId: string) => {
+  return createInputProcessor('context-injector', async (ctx) => {
+    const userMessage = ctx.messages.get.user.latest();
+    
+    if (userMessage && needsContext(userMessage)) {
+      // Fetch context based on user message content and user ID
+      const context = await fetchRelevantContext(userMessage, userId);
+      ctx.messages.add(`Relevant context: ${context}`, 'system');
+    }
+    
+    await ctx.next();
+  });
+};
+
+// Usage with dynamic processors:
+const agent = new Agent({
+  name: 'context-aware-agent',
+  instructions: 'You are a helpful assistant',
+  model: myLanguageModel,
+  inputProcessors: ({ runtimeContext }) => {
+    const userId = runtimeContext.get('userId');
+    if (userId) {
+      return [createContextInjector(userId)];
+    }
+    return [];
+  }
+});
+```
+
+### Message Transformation
+
+```typescript
+const urlExpander = createInputProcessor('url-expander', async (ctx) => {
+  ctx.messages.modifyWhere(
+    (message) => message.role === 'user',
+    async (message) => {
+      if (Array.isArray(message.content)) {
+        for (const part of message.content) {
+          if (part.type === 'text') {
+            part.text = await expandUrls(part.text);
+          }
+        }
+      }
+      return message;
+    }
+  );
+  
+  await ctx.next();
+});
+```
+
+## Integration with Streaming
+
+Input processors work seamlessly with both `generate()` and `stream()` methods:
+
+```typescript
+const agent = new Agent({
+  name: 'streaming-agent',
+  instructions: 'You are a helpful assistant',
+  model: myLanguageModel,
+  inputProcessors: [
+    createInputProcessor('stream-processor', async (ctx) => {
+      ctx.messages.add('Streaming mode enabled', 'system');
+      await ctx.next();
+    })
+  ]
+});
+
+// Works with generate
+const result = await agent.generate('Hello');
+
+// Also works with stream
+const stream = await agent.stream('Hello');
+for await (const chunk of stream.textStream) {
+  console.log(chunk);
+}
+```
+
+Input processors provide a powerful way to implement sophisticated message processing logic while maintaining clean separation of concerns in your agent architecture. 
