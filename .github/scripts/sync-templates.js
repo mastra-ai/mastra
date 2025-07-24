@@ -147,7 +147,6 @@ async function pushToRepo(repoName) {
   console.log(`Pushing to new repo: ${repoName}`);
   const templatePath = path.join(TEMPLATES_DIR, repoName);
   const tempRoot = path.join(process.cwd(), '.temp');
-  const tempGitDir = path.join(tempRoot, '.temp-git');
   const tempDir = path.join(tempRoot, repoName);
 
   try {
@@ -208,7 +207,13 @@ async function pushToRepo(repoName) {
     }
 
     const filesAndDirsPostDelete = fs.readdirSync(tempDir);
-    console.log(`Files and directories after delete: ${filesAndDirsPostDelete.join(', ')}`);
+    console.log(`Files and directories left after delete: ${filesAndDirsPostDelete.join(', ')}`);
+
+    //commit deletion
+    execSync(`git add . && git commit -m "Delete everything in the temp directory"`, {
+      stdio: 'inherit',
+      cwd: tempDir,
+    });
 
     // Copy template content to temp directory
     console.log(`Copying template content to temp directory: ${tempDir}`);
@@ -279,7 +284,15 @@ async function pushToRepo(repoName) {
       }
 
       const filesAndDirsPostDelete = fs.readdirSync(tempDir);
-      console.log(`Files and directories after delete: ${filesAndDirsPostDelete.join(', ')} for ${provider} branch`);
+      console.log(
+        `Files and directories left after delete: ${filesAndDirsPostDelete.join(', ')} for ${provider} branch`,
+      );
+
+      //commit deletion
+      execSync(`git add . && git commit -m "Delete everything in the temp directory for ${provider} branch"`, {
+        stdio: 'inherit',
+        cwd: tempDir,
+      });
 
       // Copy template content to temp directory
       console.log(`Copying template content to temp directory: ${tempDir} for ${provider} branch`);
