@@ -27,6 +27,7 @@ const globalExternals = [
   'sqlite3',
   'fastembed',
   'nodemailer',
+  '#tools',
 ];
 
 function findExternalImporter(module: OutputChunk, external: string, allOutputs: OutputChunk[]): OutputChunk | null {
@@ -275,6 +276,10 @@ async function bundleExternals(
 
   for (const o of filteredChunks.filter(o => o.isEntry || o.isDynamicEntry)) {
     for (const external of allExternals) {
+      if (external === '#tools') {
+        continue;
+      }
+
       const importer = findExternalImporter(o, external, filteredChunks);
 
       if (importer) {

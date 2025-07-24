@@ -1,22 +1,22 @@
 ---
-title: "Create your own Eval"
-description: "Mastra allows so create your own evals, here is how."
+title: "Create a custom eval"
+description: "Mastra allows you to create your own evals, here is how."
 ---
 
-# Create your own Eval
+# Create a Custom Eval
 
-Creating your own eval is as easy as creating a new function. You simply create a class that extends the `Metric` class and implement the `measure` method.
+Create a custom eval by extending the `Metric` class and implementing the `measure` method. This gives you full control over how scores are calculated and what information is returned. For LLM-based evaluations, extend the `MastraAgentJudge` class to define how the model reasons and scores output.
 
-## Basic example
+## Native JavaScript evaluation
 
-For a simple example of creating a custom metric that checks if the output contains certain words, see our [Word Inclusion example](/examples/evals/word-inclusion).
+You can write lightweight custom metrics using plain JavaScript/TypeScript. These are ideal for simple string comparisons, pattern checks, or other rule-based logic.
 
-## Creating a custom LLM-Judge
+See our [Word Inclusion example](/examples/evals/custom-native-javascript-eval.mdx), which scores responses based on the number of reference words found in the output.
 
-A custom LLM judge helps evaluate specific aspects of your AI's responses. Think of it like having an expert reviewer for your particular use case:
+## LLM as a judge evaluation
 
-- Medical Q&A → Judge checks for medical accuracy and safety
-- Customer Service → Judge evaluates tone and helpfulness
-- Code Generation → Judge verifies code correctness and style
+For more complex evaluations, you can build a judge powered by an LLM. This lets you capture more nuanced criteria, like factual accuracy, tone, or reasoning.
 
-For a practical example, see how we evaluate [Chef Michel's](/docs/guides/chef-michel) recipes for gluten content in our [Gluten Checker example](/examples/evals/custom-eval).
+See the [Real World Countries example](/examples/evals/custom-llm-judge-eval.mdx) for a complete walkthrough of building a custom judge and metric that evaluates real-world factual accuracy.
+
+

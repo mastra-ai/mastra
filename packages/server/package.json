@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "0.11.0-alpha.1",
+  "version": "0.11.1",
   "description": "",
   "type": "module",
   "files": [
@@ -52,12 +52,13 @@
   "author": "",
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@mastra/core": ">=0.10.9-0 <0.11.0-0",
+    "@mastra/core": ">=0.11.0-0 <0.12.0-0",
     "zod": "^3.0.0"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.3.22",
     "@internal/lint": "workspace:*",
+    "@internal/storage-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",

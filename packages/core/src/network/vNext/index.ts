@@ -3,11 +3,12 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { Mastra, MastraMessageV2, Tool } from '../..';
 import { Agent } from '../../agent';
-import type { DynamicArgument, MastraLanguageModel } from '../../agent';
+import type { MastraLanguageModel } from '../../agent';
 import { MastraBase } from '../../base';
 import { RegisteredLogger } from '../../logger';
 import type { MastraMemory } from '../../memory';
 import { RuntimeContext } from '../../runtime-context';
+import type { DynamicArgument } from '../../types';
 import type { Workflow } from '../../workflows';
 import { EMITTER_SYMBOL } from '../../workflows/constants';
 import { createWorkflow, createStep } from '../../workflows/workflow';
@@ -426,6 +427,11 @@ export class NewAgentNetwork extends MastraBase {
 
         const routingAgent = await this.getRoutingAgent({ runtimeContext: runtimeContextToUse });
 
+        const completionSchema = z.object({
+          isComplete: z.boolean(),
+          finalResult: z.string(),
+          completionReason: z.string(),
+        });
         let completionResult;
         if (inputData.resourceType !== 'none' && inputData?.result) {
           // Check if the task is complete
@@ -444,11 +450,7 @@ export class NewAgentNetwork extends MastraBase {
                     `;
 
           completionResult = await routingAgent.generate([{ role: 'assistant', content: completionPrompt }], {
-            output: z.object({
-              isComplete: z.boolean(),
-              finalResult: z.string(),
-              completionReason: z.string(),
-            }),
+            output: completionSchema,
             threadId: initData?.threadId ?? runId,
             resourceId: initData?.threadResourceId ?? this.name,
             runtimeContext: runtimeContextToUse,
@@ -718,7 +720,6 @@ export class NewAgentNetwork extends MastraBase {
               break;
 
             case 'start':
-            case 'finish':
             case 'step-start':
             case 'step-finish':
             case 'tool-call':
