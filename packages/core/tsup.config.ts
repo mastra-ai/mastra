@@ -49,6 +49,7 @@ export default defineConfig({
     'src/workflows/constants.ts',
     'src/network/index.ts',
     'src/network/vNext/index.ts',
+    'src/vector/filter/index.ts',
     'src/telemetry/otel-vendor.ts',
   ],
   format: ['esm', 'cjs'],

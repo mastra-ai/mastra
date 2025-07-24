@@ -3206,7 +3206,7 @@ describe('dynamic memory configuration', () => {
   });
 });
 
-describe.only('Input Processors', () => {
+describe('Input Processors', () => {
   let mockModel: MockLanguageModelV1;
 
   beforeEach(() => {

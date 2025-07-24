@@ -969,7 +969,6 @@ export class Agent<
         if (error instanceof TripWire) {
           tripwireTriggered = true;
           tripwireReason = error.message;
-          // Don't return yet - continue to build the return object properly
         } else {
           throw error;
         }
@@ -2044,7 +2043,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
             return onStepFinish?.({ ...props, runId });
           },
-          // Preserve tripwire properties if they exist
           ...(beforeResult.tripwire && {
             tripwire: beforeResult.tripwire,
             tripwireReason: beforeResult.tripwireReason,
