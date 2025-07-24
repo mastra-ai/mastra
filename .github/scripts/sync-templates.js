@@ -209,12 +209,6 @@ async function pushToRepo(repoName) {
     const filesAndDirsPostDelete = fs.readdirSync(tempDir);
     console.log(`Files and directories left after delete: ${filesAndDirsPostDelete.join(', ')}`);
 
-    //commit deletion
-    execSync(`git add . && git commit -m "Delete everything in the temp directory"`, {
-      stdio: 'inherit',
-      cwd: tempDir,
-    });
-
     // Copy template content to temp directory
     console.log(`Copying template content to temp directory: ${tempDir}`);
     fsExtra.copySync(templatePath, tempDir);
