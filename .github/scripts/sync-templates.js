@@ -192,6 +192,10 @@ async function pushToRepo(repoName) {
       );
     }
 
+    // remove everyting in the temp directory
+    console.log(`Removing everything in the temp directory: ${tempDir}`);
+    fsExtra.removeSync(tempDir);
+
     // Copy template content to temp directory
     console.log(`Copying template content to temp directory: ${tempDir}`);
     fsExtra.copySync(templatePath, tempDir);
@@ -245,6 +249,10 @@ async function pushToRepo(repoName) {
           cwd: tempDir,
         });
       }
+      // remove everyting in the temp directory
+      console.log(`Removing everything in the temp directory: ${tempDir} for ${provider} branch`);
+      fsExtra.removeSync(tempDir);
+
       // Copy template content to temp directory
       console.log(`Copying template content to temp directory: ${tempDir} for ${provider} branch`);
       fsExtra.copySync(templatePath, tempDir);
