@@ -2,7 +2,21 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { ScoreRowData } from '@mastra/core/scores';
-import type { EvalRow, PaginationArgs, PaginationInfo, StorageColumn, StorageDomains, StorageGetMessagesArg, StorageGetTracesArg, StorageGetTracesPaginatedArg, StoragePagination, StorageResourceType, TABLE_NAMES, WorkflowRun, WorkflowRuns, } from '@mastra/core/storage';
+import type {
+  EvalRow,
+  PaginationArgs,
+  PaginationInfo,
+  StorageColumn,
+  StorageDomains,
+  StorageGetMessagesArg,
+  StorageGetTracesArg,
+  StorageGetTracesPaginatedArg,
+  StoragePagination,
+  StorageResourceType,
+  TABLE_NAMES,
+  WorkflowRun,
+  WorkflowRuns,
+} from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -49,7 +63,7 @@ const loadConnector = (config: MongoDBConfig): MongoDBConnector => {
       error,
     );
   }
-}
+};
 
 export class MongoDBStore extends MastraStorage {
   #connector: MongoDBConnector;
@@ -112,9 +126,9 @@ export class MongoDBStore extends MastraStorage {
   }
 
   async createTable({
-                      tableName,
-                      schema,
-                    }: {
+    tableName,
+    schema,
+  }: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
@@ -162,10 +176,10 @@ export class MongoDBStore extends MastraStorage {
   }
 
   async updateThread({
-                       id,
-                       title,
-                       metadata,
-                     }: {
+    id,
+    title,
+    metadata,
+  }: {
     id: string;
     title: string;
     metadata: Record<string, unknown>;
@@ -180,10 +194,10 @@ export class MongoDBStore extends MastraStorage {
   public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   public async getMessages({
-                             threadId,
-                             selectBy,
-                             format,
-                           }: StorageGetMessagesArg & {
+    threadId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & {
     format?: 'v1' | 'v2';
   }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     return this.stores.memory.getMessages({ threadId, selectBy, format });
@@ -254,10 +268,10 @@ export class MongoDBStore extends MastraStorage {
   }
 
   async persistWorkflowSnapshot({
-                                  workflowName,
-                                  runId,
-                                  snapshot,
-                                }: {
+    workflowName,
+    runId,
+    snapshot,
+  }: {
     workflowName: string;
     runId: string;
     snapshot: WorkflowRunState;
@@ -266,9 +280,9 @@ export class MongoDBStore extends MastraStorage {
   }
 
   async loadWorkflowSnapshot({
-                               workflowName,
-                               runId,
-                             }: {
+    workflowName,
+    runId,
+  }: {
     workflowName: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
@@ -276,9 +290,9 @@ export class MongoDBStore extends MastraStorage {
   }
 
   async getWorkflowRunById({
-                             runId,
-                             workflowName,
-                           }: {
+    runId,
+    workflowName,
+  }: {
     runId: string;
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
@@ -312,9 +326,9 @@ export class MongoDBStore extends MastraStorage {
   }
 
   async getScoresByRunId({
-                           runId,
-                           pagination,
-                         }: {
+    runId,
+    pagination,
+  }: {
     runId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
@@ -322,10 +336,10 @@ export class MongoDBStore extends MastraStorage {
   }
 
   async getScoresByEntityId({
-                              entityId,
-                              entityType,
-                              pagination,
-                            }: {
+    entityId,
+    entityType,
+    pagination,
+  }: {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
@@ -334,11 +348,11 @@ export class MongoDBStore extends MastraStorage {
   }
 
   async getScoresByScorerId({
-                              scorerId,
-                              pagination,
-                              entityId,
-                              entityType,
-                            }: {
+    scorerId,
+    pagination,
+    entityId,
+    entityType,
+  }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
@@ -359,10 +373,10 @@ export class MongoDBStore extends MastraStorage {
   }
 
   async updateResource({
-                         resourceId,
-                         workingMemory,
-                         metadata,
-                       }: {
+    resourceId,
+    workingMemory,
+    metadata,
+  }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;

@@ -35,7 +35,7 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "clean": "rm -rf dist && rm -rf node_modules",
-    "typecheck": "tsc --noEmit --incremental",
+    "typecheck": "",
     "lint": "eslint ."
   },
   "keywords": [

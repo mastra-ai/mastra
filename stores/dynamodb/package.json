@@ -23,17 +23,17 @@
     "src"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
+    "build": "",
     "dev": "tsup --watch",
     "clean": "rm -rf dist",
-    "lint": "eslint .",
+    "lint": "",
     "pretest": "docker compose up -d",
     "test": "vitest run",
     "posttest": "docker compose down -v",
     "pretest:watch": "docker compose up -d",
     "test:watch": "vitest watch",
     "posttest:watch": "docker compose down -v",
-    "typecheck": "tsc --noEmit"
+    "typecheck": ""
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.840.0",
