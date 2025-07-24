@@ -1269,8 +1269,8 @@ importers:
         specifier: ^17.1.3
         version: 17.1.3
       xstate:
-        specifier: ^5.19.4
-        version: 5.20.0
+        specifier: ^5.20.1
+        version: 5.20.1
       zod-to-json-schema:
         specifier: ^3.24.5
         version: 3.24.6(zod@3.25.76)
@@ -16501,8 +16501,8 @@ packages:
   xmlchars@2.2.0:
     resolution: {integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==}
 
-  xstate@5.20.0:
-    resolution: {integrity: sha512-lFQ0fLwVa0OMZnjNP8zUkt2fwIS85ZBNPvxE41APVYhYj0++aTssgmsnTAiBHdKYbgnd6+L8DRTZ9jPZAFPuyw==}
+  xstate@5.20.1:
+    resolution: {integrity: sha512-i9ZpNnm/XhCOMUxae1suT8PjYNTStZWbhmuKt4xeTPaYG5TS0Fz0i+Ka5yxoNPpaHW3VW6JIowrwFgSTZONxig==}
 
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
@@ -32508,7 +32508,7 @@ snapshots:
 
   xmlchars@2.2.0: {}
 
-  xstate@5.20.0: {}
+  xstate@5.20.1: {}
 
   xtend@4.0.2: {}
 
