@@ -341,7 +341,7 @@ export class InMemoryMemory extends MemoryStorage {
 
   async deleteMessage({ messageId }: { messageId: string }): Promise<void> {
     this.logger.debug(`MockStore: deleteMessage called for ${messageId}`);
-    
+
     const message = this.collection.messages.get(messageId);
     if (!message) {
       throw new Error(`Message with id ${messageId} not found`);

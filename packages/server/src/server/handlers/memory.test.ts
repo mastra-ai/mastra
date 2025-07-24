@@ -501,9 +501,9 @@ describe('Memory Handlers', () => {
         },
       });
 
-      await expect(deleteMessageHandler({ mastra, messageId: undefined as any, agentId: 'test-agent' })).rejects.toThrow(
-        new HTTPException(400, { message: 'Argument "messageId" is required' }),
-      );
+      await expect(
+        deleteMessageHandler({ mastra, messageId: undefined as any, agentId: 'test-agent' }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "messageId" is required' }));
     });
 
     it('should throw error when memory is not initialized', async () => {
@@ -527,10 +527,10 @@ describe('Memory Handlers', () => {
 
       mockMemory.deleteMessage.mockResolvedValue(undefined);
 
-      const result = await deleteMessageHandler({ 
-        mastra, 
-        messageId: 'test-message-id', 
-        agentId: 'test-agent' 
+      const result = await deleteMessageHandler({
+        mastra,
+        messageId: 'test-message-id',
+        agentId: 'test-agent',
       });
 
       expect(result).toEqual({ success: true, message: 'Message deleted successfully' });
@@ -549,11 +549,11 @@ describe('Memory Handlers', () => {
       mockMemory.deleteMessage.mockRejectedValue(new Error(errorMessage));
 
       await expect(
-        deleteMessageHandler({ 
-          mastra, 
-          messageId: 'non-existent-id', 
-          agentId: 'test-agent' 
-        })
+        deleteMessageHandler({
+          mastra,
+          messageId: 'non-existent-id',
+          agentId: 'test-agent',
+        }),
       ).rejects.toThrow(errorMessage);
     });
 
@@ -567,10 +567,10 @@ describe('Memory Handlers', () => {
 
       mockMemory.deleteMessage.mockResolvedValue(undefined);
 
-      await deleteMessageHandler({ 
-        mastra, 
-        messageId: 'test-message-id', 
-        agentId: 'test-agent' 
+      await deleteMessageHandler({
+        mastra,
+        messageId: 'test-message-id',
+        agentId: 'test-agent',
       });
 
       expect(mockMemory.deleteMessage).toHaveBeenCalledWith({ messageId: 'test-message-id' });
