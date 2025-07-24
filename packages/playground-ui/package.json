@@ -101,7 +101,7 @@
     "unified": "^11.0.5",
     "use-debounce": "^10.0.5",
     "zod": "^3.25.67",
-    "zustand": "^5.0.5"
+    "zustand": "^5.0.6"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.11.0-0 <0.12.0-0",
