@@ -2028,8 +2028,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
       await after({
         result: result as unknown as OUTPUT extends undefined
-        ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
-        : GenerateObjectResult<OUTPUT>,
+          ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
+          : GenerateObjectResult<OUTPUT>,
         outputText: result.text,
       });
 

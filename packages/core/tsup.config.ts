@@ -53,6 +53,7 @@ export default defineConfig({
     'src/vector/libsql/index.ts',
     'src/vector/filter/index.ts',
     'src/telemetry/otel-vendor.ts',
+    'src/test-utils/llm-mock.ts',
   ],
   format: ['esm', 'cjs'],
   clean: true,
