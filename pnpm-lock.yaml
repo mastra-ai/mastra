@@ -1263,7 +1263,7 @@ importers:
         specifier: ^13.0.0
         version: 13.0.0
       radash:
-        specifier: ^12.1.0
+        specifier: ^12.1.1
         version: 12.1.1
       sift:
         specifier: ^17.1.3
