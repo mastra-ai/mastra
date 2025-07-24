@@ -4,14 +4,20 @@ import { Agent } from '@mastra/core';
 export class VoiceAttachmentAdapter implements SpeechSynthesisAdapter {
   constructor(private readonly agent: Agent) {}
   speak(text: string): SpeechSynthesisAdapter.Utterance {
-    let _audioBufferSourceNode: AudioBufferSourceNode | undefined;
+    let _cleanup = () => {};
+
+    const handleEnd = (reason: 'finished' | 'error' | 'cancelled', error?: unknown) => {
+      if (res.status.type === 'ended') return;
+
+      res.status = { type: 'ended', reason, error };
+
+      _cleanup();
+    };
 
     const res: SpeechSynthesisAdapter.Utterance = {
       status: { type: 'running' },
       cancel: () => {
-        if (_audioBufferSourceNode) {
-          _audioBufferSourceNode.stop();
-        }
+        handleEnd('cancelled');
       },
       subscribe: callback => {
         this.agent.voice
@@ -26,10 +32,17 @@ export class VoiceAttachmentAdapter implements SpeechSynthesisAdapter {
               return playStreamWithWebAudio(readableStream);
             }
           })
-          .then(source => {
-            _audioBufferSourceNode = source;
+          .then(cleanup => {
+            if (cleanup) {
+              _cleanup = cleanup;
+            }
+
+            callback();
+          })
+          .catch(error => {
+            handleEnd('error', error);
           });
-        callback();
+
         return () => {};
       },
     };
@@ -67,5 +80,8 @@ async function playStreamWithWebAudio(stream: ReadableStream) {
   source.connect(audioContext.destination);
   source.start();
 
-  return source;
+  return () => {
+    source.stop();
+    audioContext.close();
+  };
 }
