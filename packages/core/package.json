@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.11.0-alpha.1",
+  "version": "0.11.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -28,6 +28,16 @@
       "require": {
         "types": "./dist/*/index.d.cts",
         "default": "./dist/*/index.cjs"
+      }
+    },
+    "./tools/is-vercel-tool": {
+      "import": {
+        "types": "./dist/tools/is-vercel-tool.d.ts",
+        "default": "./dist/tools/is-vercel-tool.js"
+      },
+      "require": {
+        "types": "./dist/tools/is-vercel-tool.d.cts",
+        "default": "./dist/tools/is-vercel-tool.cjs"
       }
     },
     "./workflows/legacy": {
@@ -98,6 +108,18 @@
       "require": {
         "types": "./dist/telemetry/otel-vendor.d.cts",
         "default": "./dist/telemetry/otel-vendor.cjs"
+      }
+    },
+    "./test-utils/llm-mock": {
+      "development": {
+        "import": {
+          "types": "./dist/test-utils/llm-mock.d.ts",
+          "default": "./dist/test-utils/llm-mock.js"
+        },
+        "require": {
+          "types": "./dist/test-utils/llm-mock.d.cts",
+          "default": "./dist/test-utils/llm-mock.cjs"
+        }
       }
     },
     "./package.json": "./package.json"

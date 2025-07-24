@@ -29,7 +29,7 @@ async function getScorersFromSystem({
           scorersMap.set(scorerId, {
             workflowIds: [],
             ...scorer,
-            agentIds: [agentId],
+            agentIds: [agent.name],
           });
         }
       }

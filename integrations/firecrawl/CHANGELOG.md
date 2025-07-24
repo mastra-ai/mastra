@@ -1,5 +1,14 @@
 # @mastra/firecrawl
 
+## 1.2.8
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+- Updated dependencies [ce088f5]
+  - @mastra/rag@1.0.4
+  - @mastra/core@0.11.1
+
 ## 1.2.7
 
 ### Patch Changes

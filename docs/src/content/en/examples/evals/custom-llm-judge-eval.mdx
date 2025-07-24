@@ -1,0 +1,246 @@
+---
+title: "Example: Real World Countries | Evals | Mastra Docs"
+description: Example of creating a custom LLM-based evaluation metric.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# LLM as a Judge Evaluation
+
+This example shows how to create a custom LLM-based evaluation metric to determine real countries of the world. The metric accepts a `query` and a `response`, and returns a score and reason based on how accurately the response matches the query.
+
+## Installation
+
+```bash copy
+npm install @mastra/evals
+```
+
+## Create a custom eval
+
+A custom eval in Mastra can use an LLM to judge the quality of a response based on structured prompts and evaluation criteria. It consists of four core components:
+
+1. [**Instructions**](#eval-instructions)
+2. [**Prompt**](#eval-prompt)
+3. [**Judge**](#eval-judge)
+4. [**Metric**](#eval-metric)
+
+Together, these allow you to define custom evaluation logic that might not be covered by Mastra's built-in metrics.
+
+```typescript filename="src/mastra/evals/example-real-world-countries.ts" showLineNumbers copy
+import { Metric, type MetricResult } from "@mastra/core";
+import { MastraAgentJudge } from "@mastra/evals/judge";
+import { type LanguageModel } from "@mastra/core/llm";
+import { z } from "zod";
+
+const INSTRUCTIONS = `You are a geography expert. Score how many valid countries are listed in a response, based on the original question.`;
+
+const generatePrompt = (query: string, response: string) => `
+
+Here is the query: "${query}"
+Here is the response: "${response}"
+
+Evaluate how many valid, real countries are listed in the response.
+
+Return:
+{
+  "score": number (0 to 1),
+  "info": {
+    "reason": string,
+    "matches": [string, string],
+    "misses": [string]
+  }
+}
+`;
+
+class WorldCountryJudge extends MastraAgentJudge {
+  constructor(model: LanguageModel) {
+    super("WorldCountryJudge", INSTRUCTIONS, model);
+  }
+
+  async evaluate(query: string, response: string): Promise<MetricResult> {
+    const prompt = generatePrompt(query, response);
+    const result = await this.agent.generate(prompt, {
+      output: z.object({
+        score: z.number().min(0).max(1),
+        info: z.object({
+          reason: z.string(),
+          matches: z.array(z.string()),
+          misses: z.array(z.string())
+        })
+      })
+    });
+
+    return result.object;
+  }
+}
+
+export class WorldCountryMetric extends Metric {
+  judge: WorldCountryJudge;
+
+  constructor(model: LanguageModel) {
+    super();
+    this.judge = new WorldCountryJudge(model);
+  }
+
+  async measure(query: string, response: string): Promise<MetricResult> {
+    return this.judge.evaluate(query, response);
+  }
+}
+```
+
+### Eval instructions
+
+Defines the role of the judge and sets expectations for how the LLM should assess the response.
+
+### Eval prompt
+
+Builds a consistent evaluation prompt using the `query` and `response`, guiding the LLM to return a `score` and a structured `info` object.
+
+### Eval judge
+
+Extends `MastraAgentJudge` to manage prompt generation and scoring.
+
+- `generatePrompt()` combines instructions with the query and response.
+- `evaluate()` sends the prompt to the LLM and validates the output with a Zod schema.
+- Returns a `MetricResult` with a numeric `score` and a customizable `info` object.
+
+### Eval metric
+
+Extends Mastra’s `Metric` class and acts as the main evaluation entry point. It uses the judge to compute and return results via `measure()`.
+
+## High custom example
+
+This example shows a strong alignment between the response and the evaluation criteria. The metric assigns a high score and includes supporting details to explain why the output meets expectations.
+
+```typescript filename="src/example-high-real-world-countries.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
+
+const metric = new WorldCountryMetric(openai("gpt-4o-mini"));
+
+const query = "Name some countries of the World.";
+const response = "France, Japan, Argentina";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### High custom output
+
+The output receives a high score because everything in the response matches what the judge is looking for. The `info` object adds useful context to help understand why the score was awarded.
+
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'All listed countries are valid and recognized countries in the world.',
+    matches: [ 'France', 'Japan', 'Argentina' ],
+    misses: []
+  }
+}
+```
+
+## Partial custom example
+
+In this example, the response includes a mix of correct and incorrect elements. The metric returns a mid-range score to reflect this and provides details to explain what was right and what was missed.
+
+```typescript filename="src/example-partial-real-world-countries.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
+
+const metric = new WorldCountryMetric(openai("gpt-4o-mini"));
+
+const query = "Name some countries of the World.";
+const response = "Germany, Narnia, Australia";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Partial custom output
+
+The score reflects partial success because the response includes some valid, and some invalid items that don’t meet the criteria. The `info` field gives a breakdown of what matched and what didn’t.
+
+```typescript
+{
+  score: 0.67,
+  info: {
+    reason: 'Two out of three listed are valid countries.',
+    matches: [ 'Germany', 'Australia' ],
+    misses: [ 'Narnia' ]
+  }
+}
+```
+
+## Low custom example
+
+In this example, the response doesn’t meet the evaluation criteria at all. None of the expected elements are present, so the metric returns a low score.
+
+```typescript filename="src/example-low-real-world-countries.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { WorldCountryMetric } from "./mastra/evals/example-real-world-countries";
+
+const metric = new WorldCountryMetric(openai("gpt-4o-mini"));
+
+const query = "Name some countries of the World.";
+const response = "Gotham, Wakanda, Atlantis";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Low custom output
+
+The score is 0 because the response doesn’t include any of the required elements. The `info` field explains the outcome and lists the gaps that led to the result.
+
+```typescript
+{
+  score: 0,
+  info: {
+    reason: 'The response contains fictional places rather than real countries.',
+    matches: [],
+    misses: [ 'Gotham', 'Wakanda', 'Atlantis' ]
+  }
+}
+```
+
+## Understanding the results
+
+`WorldCountryMetric` returns a result in the following shape:
+
+```typescript
+{
+  score: number,
+  info: {
+    reason: string,
+    matches: string[],
+    misses: string[]
+  }
+}
+```
+
+### Custom score
+
+A score between 0 and 1:
+
+- **1.0**: The response includes only valid items with no mistakes.
+- **0.7–0.9**: The response is mostly correct but may include one or two incorrect entries.
+- **0.4–0.6**: The response is mixed—some valid, some invalid.
+- **0.1–0.3**: The response contains mostly incorrect or irrelevant entries.
+- **0.0**: The response includes no valid content based on the evaluation criteria.
+
+### Custom info
+
+An explanation for the score, with details including:
+
+- A plain-language reason for the result.
+- A `matches` array listing correct elements found in the response.
+- A `misses` array showing items that were incorrect or did not meet the criteria.
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/custom-eval"
+/>
