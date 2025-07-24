@@ -3453,6 +3453,42 @@ describe('Input Processors', () => {
       }
       expect(textReceived).toBe('');
     });
+
+    it('should include deployer methods when tripwire is triggered in streaming', async () => {
+      const deployerAbortProcessor = createInputProcessor('deployer-abort', async ctx => {
+        ctx.abort('Deployer test abort');
+      });
+
+      const agentWithDeployerAbort = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: [deployerAbortProcessor],
+      });
+
+      const stream = await agentWithDeployerAbort.stream('Deployer abort test');
+
+      expect(stream.tripwire).toBe(true);
+      expect(stream.tripwireReason).toBe('Deployer test abort');
+
+      // Verify deployer methods exist and return Response objects
+      expect(typeof stream.toDataStreamResponse).toBe('function');
+      expect(typeof stream.toTextStreamResponse).toBe('function');
+
+      const dataStreamResponse = stream.toDataStreamResponse();
+      const textStreamResponse = stream.toTextStreamResponse();
+
+      expect(dataStreamResponse).toBeInstanceOf(Response);
+      expect(textStreamResponse).toBeInstanceOf(Response);
+      expect(dataStreamResponse.status).toBe(200);
+      expect(textStreamResponse.status).toBe(200);
+
+      // Verify other required methods are present
+      expect(typeof stream.pipeDataStreamToResponse).toBe('function');
+      expect(typeof stream.pipeTextStreamToResponse).toBe('function');
+      expect(stream.experimental_partialOutputStream).toBeDefined();
+      expect(typeof stream.experimental_partialOutputStream[Symbol.asyncIterator]).toBe('function');
+    });
   });
 
   describe('dynamic input processors', () => {

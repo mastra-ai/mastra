@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { jsonSchema, tool } from 'ai';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
+import { Agent, createInputProcessor } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 
@@ -97,4 +97,25 @@ export const chefAgentResponses = new Agent({
   workflows: {
     myWorkflow,
   },
+  inputProcessors: [
+    createInputProcessor('add-user-message', async (ctx, next) => {
+      ctx.messages.add('hello from the input processor', 'user');
+      await next();
+    }),
+    createInputProcessor('no-soup-for-you', async (ctx, next) => {
+      const hasSoup = (await ctx.messages.get.all.prompt()).some(msg => {
+        if (Array.isArray(msg.content)) {
+          return msg.content.some(part => part.type === 'text' && part.text.includes('soup'));
+        } else if (typeof msg.content === 'string' && msg.content.includes('soup')) {
+          return true;
+        }
+        return false;
+      });
+
+      if (hasSoup) {
+        ctx.abort('No soup for you!');
+      }
+      await next();
+    }),
+  ],
 });

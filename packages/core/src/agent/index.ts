@@ -98,6 +98,7 @@ function resolveThreadIdFromArgs(args: {
     '__primitive',
     '__registerMastra',
     '__registerPrimitives',
+    '__runInputProcessors',
     '__setTools',
     '__setLogger',
     '__setTelemetry',
@@ -957,14 +958,37 @@ export class Agent<
   }> {
     let tripwireTriggered = false;
     let tripwireReason = '';
+
     if (this.#inputProcessors) {
       const processors =
         typeof this.#inputProcessors === 'function'
           ? await this.#inputProcessors({ runtimeContext })
           : this.#inputProcessors;
 
+      // Create traced version of runInputProcessors similar to workflow _runStep pattern
+      const tracedRunInputProcessors = (processors: any[], messageList: MessageList) => {
+        const telemetry = this.#mastra?.getTelemetry();
+        if (!telemetry) {
+          return runInputProcessors(processors, messageList, undefined);
+        }
+
+        return telemetry.traceMethod(
+          async (data: { processors: any[]; messageList: MessageList }) => {
+            return runInputProcessors(data.processors, data.messageList, telemetry);
+          },
+          {
+            spanName: `agent.${this.name}.inputProcessors`,
+            attributes: {
+              'agent.name': this.name,
+              'inputProcessors.count': processors.length.toString(),
+              'inputProcessors.names': processors.map(p => p.name).join(','),
+            },
+          },
+        )({ processors, messageList });
+      };
+
       try {
-        messageList = await runInputProcessors(processors, messageList);
+        messageList = await tracedRunInputProcessors(processors, messageList);
       } catch (error) {
         if (error instanceof TripWire) {
           tripwireTriggered = true;
@@ -2282,8 +2306,15 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             });
             return emptyStream;
           }),
-        pipeAIStreamToResponse: () => Promise.resolve(),
+        get experimental_partialOutputStream() {
+          return (async function* () {
+            // Empty async generator for partial output stream
+          })();
+        },
+        pipeDataStreamToResponse: () => Promise.resolve(),
         pipeTextStreamToResponse: () => Promise.resolve(),
+        toDataStreamResponse: () => new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+        toTextStreamResponse: () => new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
       };
 
       return emptyResult as unknown as
