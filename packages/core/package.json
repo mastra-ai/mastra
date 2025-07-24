@@ -111,15 +111,13 @@
       }
     },
     "./test-utils/llm-mock": {
-      "development": {
-        "import": {
-          "types": "./dist/test-utils/llm-mock.d.ts",
-          "default": "./dist/test-utils/llm-mock.js"
-        },
-        "require": {
-          "types": "./dist/test-utils/llm-mock.d.cts",
-          "default": "./dist/test-utils/llm-mock.cjs"
-        }
+      "import": {
+        "types": "./dist/test-utils/llm-mock.d.ts",
+        "default": "./dist/test-utils/llm-mock.js"
+      },
+      "require": {
+        "types": "./dist/test-utils/llm-mock.d.cts",
+        "default": "./dist/test-utils/llm-mock.cjs"
       }
     },
     "./package.json": "./package.json"
