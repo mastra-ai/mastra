@@ -128,7 +128,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "lint": "eslint .",
-    "pre-build": "tsup --silent --config tsup.config.ts --format esm,cjs",
+    "pre-build": "tsup --silent --config tsup.config.ts --no-dts",
     "build": "node ./tools/commonjs-tsc-fixer.js",
     "build:watch": "pnpm build --watch",
     "test": "vitest run"

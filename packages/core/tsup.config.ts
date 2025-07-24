@@ -60,14 +60,13 @@ export default defineConfig({
   ],
   format: ['esm', 'cjs'],
   clean: true,
-  dts: false,
   splitting: true,
   treeshake: {
     preset: 'smallest',
   },
   plugins: [treeshakeDecorators],
   onSuccess: async () => {
-    await exec('tsc', ['--project', 'tsconfig.build.json'], {
+    await exec('pnpm', ['tsc', '-p', 'tsconfig.build.json'], {
       stdio: 'inherit',
     });
   },
