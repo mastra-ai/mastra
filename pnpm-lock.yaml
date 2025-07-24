@@ -3371,8 +3371,8 @@ importers:
   voice/openai:
     dependencies:
       openai:
-        specifier: ^4.104.0
-        version: 4.104.0(encoding@0.1.13)(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)
+        specifier: ^5.10.1
+        version: 5.10.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)
       zod:
         specifier: ^3.25.67
         version: 3.25.76
@@ -29681,7 +29681,6 @@ snapshots:
     optionalDependencies:
       ws: 8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       zod: 3.25.76
-    optional: true
 
   openapi-types@12.1.3: {}
 
