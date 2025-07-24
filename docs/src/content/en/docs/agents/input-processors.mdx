@@ -404,8 +404,9 @@ await agent.generate('Hello', { runtimeContext });
 ```typescript
 const createContextInjector = (userId: string) => {
   return createInputProcessor('context-injector', async (ctx) => {
-    const userMessage = ctx.messages.get.user.latest();
-    
+    const messages = await ctx.messages.get.all.prompt();
+    const userMessage = messages.filter(msg => msg.role === 'user').pop();
+        
     if (userMessage && needsContext(userMessage)) {
       // Fetch context based on user message content and user ID
       const context = await fetchRelevantContext(userMessage, userId);
@@ -437,11 +438,11 @@ const agent = new Agent({
 const urlExpander = createInputProcessor('url-expander', async (ctx) => {
   ctx.messages.modifyWhere(
     (message) => message.role === 'user',
-    async (message) => {
+    (message) => {
       if (Array.isArray(message.content)) {
         for (const part of message.content) {
           if (part.type === 'text') {
-            part.text = await expandUrls(part.text);
+            part.text = expandUrls(part.text);
           }
         }
       }

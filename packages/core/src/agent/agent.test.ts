@@ -3525,16 +3525,13 @@ describe('Input Processors', () => {
     it('should allow processors to filter or validate messages', async () => {
       const validationProcessor = createInputProcessor('validator', async ctx => {
         const messages = await ctx.messages.get.all.prompt();
-        console.log('DEBUG: Validation messages:', JSON.stringify(messages, null, 2));
         const hasInappropriateContent = messages.some(
           msg =>
             Array.isArray(msg.content) &&
             msg.content.some(part => part.type === 'text' && part.text.includes('inappropriate')),
         );
 
-        console.log('DEBUG: Has inappropriate content?', hasInappropriateContent);
         if (hasInappropriateContent) {
-          console.log('DEBUG: Calling abort with validation failed');
           ctx.abort('Content validation failed');
         } else {
           ctx.messages.add('Content validated', 'user');
