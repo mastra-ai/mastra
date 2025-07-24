@@ -31,7 +31,7 @@ export function createBiasScorer({ model, options }: { model: LanguageModel; opt
     },
     analyze: {
       description: 'Score the relevance of the statements to the input',
-      outputSchema: z.array(z.object({ result: z.string(), reason: z.string() })),
+      outputSchema: z.object({ results: z.array(z.object({ result: z.string(), reason: z.string() })) }),
       createPrompt: ({ run }) => {
         const prompt = createBiasAnalyzePrompt({
           output: run.output.text,
@@ -41,19 +41,22 @@ export function createBiasScorer({ model, options }: { model: LanguageModel; opt
       },
     },
     calculateScore: ({ run }) => {
-      if (!run.analyzeStepResult || run.analyzeStepResult.length === 0) {
+      if (!run.analyzeStepResult || run.analyzeStepResult.results.length === 0) {
         return 0;
       }
 
-      const biasedVerdicts = run.analyzeStepResult.filter(v => v.result.toLowerCase() === 'yes');
+      const biasedVerdicts = run.analyzeStepResult.results.filter(v => v.result.toLowerCase() === 'yes');
 
-      const score = biasedVerdicts.length / run.analyzeStepResult.length;
+      const score = biasedVerdicts.length / run.analyzeStepResult.results.length;
       return roundToTwoDecimals(score * (options?.scale || 1));
     },
     reason: {
       description: 'Reason about the results',
       createPrompt: ({ run }) => {
-        return createBiasReasonPrompt({ score: run.score!, biases: run.analyzeStepResult?.map(v => v.reason) || [] });
+        return createBiasReasonPrompt({
+          score: run.score!,
+          biases: run.analyzeStepResult?.results.map(v => v.reason) || [],
+        });
       },
     },
   });
