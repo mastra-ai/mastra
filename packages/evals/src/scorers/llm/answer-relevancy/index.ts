@@ -48,7 +48,7 @@ export function createAnswerRelevancyScorer({
     },
     analyze: {
       description: 'Score the relevance of the statements to the input',
-      outputSchema: z.array(z.object({ result: z.string(), reason: z.string() })),
+      outputSchema: z.object({ results: z.array(z.object({ result: z.string(), reason: z.string() })) }),
       createPrompt: ({ run }) => createScorePrompt(JSON.stringify(run.input), run.extractStepResult?.statements || []),
     },
     reason: {
@@ -58,20 +58,20 @@ export function createAnswerRelevancyScorer({
           input: run.input.map(input => input.content).join(', '),
           output: run.output.text,
           score: run.score,
-          results: run.analyzeStepResult,
+          results: run.analyzeStepResult.results,
           scale: options.scale,
         });
       },
     },
     calculateScore: ({ run }) => {
-      if (!run.analyzeStepResult || run.analyzeStepResult.length === 0) {
+      if (!run.analyzeStepResult || run.analyzeStepResult.results.length === 0) {
         return 0;
       }
 
-      const numberOfResults = run.analyzeStepResult.length;
+      const numberOfResults = run.analyzeStepResult.results.length;
 
       let relevancyCount = 0;
-      for (const { result } of run.analyzeStepResult) {
+      for (const { result } of run.analyzeStepResult.results) {
         if (result.trim().toLowerCase() === 'yes') {
           relevancyCount++;
         } else if (result.trim().toLowerCase() === 'unsure') {
