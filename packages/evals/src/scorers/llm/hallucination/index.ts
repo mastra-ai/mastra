@@ -40,7 +40,9 @@ export function createHallucinationScorer({
     },
     analyze: {
       description: 'Score the relevance of the statements to the input',
-      outputSchema: z.array(z.object({ statement: z.string(), verdict: z.string(), reason: z.string() })),
+      outputSchema: z.object({
+        verdicts: z.array(z.object({ statement: z.string(), verdict: z.string(), reason: z.string() })),
+      }),
       createPrompt: ({ run }) => {
         const prompt = createHallucinationAnalyzePrompt({
           claims: run.extractStepResult.claims,
@@ -50,8 +52,8 @@ export function createHallucinationScorer({
       },
     },
     calculateScore: ({ run }) => {
-      const totalStatements = run.analyzeStepResult.length;
-      const contradictedStatements = run.analyzeStepResult.filter(v => v.verdict === 'yes').length;
+      const totalStatements = run.analyzeStepResult.verdicts.length;
+      const contradictedStatements = run.analyzeStepResult.verdicts.filter(v => v.verdict === 'yes').length;
 
       if (totalStatements === 0) {
         return 0;
@@ -70,7 +72,7 @@ export function createHallucinationScorer({
           context: run?.additionalContext?.context || [],
           score: run.score,
           scale: options?.scale || 1,
-          verdicts: run.analyzeStepResult || [],
+          verdicts: run.analyzeStepResult?.verdicts || [],
         });
         return prompt;
       },

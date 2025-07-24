@@ -12,7 +12,15 @@ export type ScoringPrompts = {
 };
 
 export type ScoringInput = {
-  runId: string;
+  runId?: string;
+  input: Record<string, any>[];
+  output: Record<string, any>;
+  additionalContext?: Record<string, any>;
+  runtimeContext?: Record<string, any>;
+};
+
+export type ScoringHookInput = {
+  runId?: string;
   scorer: Record<string, any>;
   input: Record<string, any>[];
   output: Record<string, any>;
@@ -21,7 +29,7 @@ export type ScoringInput = {
   source: ScoringSource;
   entity: Record<string, any>;
   entityType: ScoringEntityType;
-  runtimeContext: Record<string, any>;
+  runtimeContext?: Record<string, any>;
   structuredOutput?: boolean;
   traceId?: string;
   resourceId?: string;
@@ -43,6 +51,7 @@ export const scoreResultSchema = z.object({
 export type ScoringAnalyzeStepResult = z.infer<typeof scoreResultSchema>;
 
 export type ScoringInputWithExtractStepResult<TExtract = any> = ScoringInput & {
+  runId: string;
   extractStepResult?: TExtract;
   extractPrompt?: string;
 };
@@ -62,13 +71,14 @@ export type ScoringInputWithExtractStepResultAndScoreAndReason =
     reasonPrompt?: string;
   };
 
-export type ScoreRowData = ScoringInputWithExtractStepResultAndScoreAndReason & {
-  id: string;
-  entityId: string;
-  scorerId: string;
-  createdAt: Date;
-  updatedAt: Date;
-};
+export type ScoreRowData = ScoringInputWithExtractStepResultAndScoreAndReason &
+  ScoringHookInput & {
+    id: string;
+    entityId: string;
+    scorerId: string;
+    createdAt: Date;
+    updatedAt: Date;
+  };
 
 export type ExtractionStepFn = (input: ScoringInput) => Promise<Record<string, any>>;
 

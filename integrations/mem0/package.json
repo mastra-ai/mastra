@@ -45,7 +45,7 @@
     "zod": "^3.25.67"
   },
   "dependencies": {
-    "mem0ai": "^2.1.31"
+    "mem0ai": "^2.1.36"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.10.7-0 <0.12.0-0",

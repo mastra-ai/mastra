@@ -18,8 +18,8 @@ Deploy your Mastra applications to Azure App Services.
 
 ### Prerequisites
 
-- An Azure account with an active subscription
-- A GitHub repository containing your Mastra application
+- An [Azure account](https://azure.microsoft.com/) with an active subscription
+- A [GitHub repository](https://github.com/) containing your Mastra application
 - Your Mastra application should be created using `npx create-mastra@latest`
 
 ### Deployment Steps
@@ -29,7 +29,7 @@ Deploy your Mastra applications to Azure App Services.
 #### Create a new App Service
 
 - Log in to the [Azure Portal](https://portal.azure.com)
-- Navigate to **App Services** or search for it in the top search bar
+- Navigate to **[App Services](https://docs.microsoft.com/en-us/azure/app-service/)** or search for it in the top search bar
 - Click **Create** to create a new App Service
 - In the drop-down, select **Web App**
 
@@ -67,7 +67,7 @@ Before setting up deployment, configure your environment variables:
 - Navigate to **Deployment Center** in the left sidebar
 - Select **GitHub** as your source
 - Sign in to GitHub if you're not already authenticated with Azure
-- In this example, we will keep GitHub Actions as our provider.
+- In this example, we will keep [GitHub Actions](https://docs.github.com/en/actions) as our provider
 - Select your organization, repository, and branch
 - Azure will generate a GitHub workflow file and you can preview it before proceeding
 - Click **Save** (the save button is located at the top of the page)
@@ -84,7 +84,7 @@ Pull the latest changes to your local repository and modify the generated workfl
 
 1. **Update the build step**: Find the step named "npm install, build, and test" and:
    - Change the step name to "npm install and build"
-   - Remove the `npm test` command from the run section
+   - If you haven't set up proper tests in your Mastra application, remove the `npm test` command from the run section as the default test script will fail and disrupt deployment. If you have working tests, you can keep the test command.
 
 2. **Update the zip artifact step**: Find the "Zip artifact for deployment" step and replace the zip command with:
 
@@ -133,4 +133,5 @@ such as `LibSQLStore` with a file URL. Consider using cloud-based storage soluti
 - [Mastra Client SDK](/docs/client-js/overview)
 - [Configure custom domains](https://docs.microsoft.com/en-us/azure/app-service/app-service-web-tutorial-custom-domain)
 - [Enable HTTPS](https://docs.microsoft.com/en-us/azure/app-service/configure-ssl-bindings)
+- [Azure App Service documentation](https://docs.microsoft.com/en-us/azure/app-service/)
 
