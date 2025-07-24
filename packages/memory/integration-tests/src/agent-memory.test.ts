@@ -116,7 +116,7 @@ describe('Agent Memory Tests', () => {
 
     const agent = mastra.getAgent('testAgent');
     const memory = await agent.getMemory();
-    
+
     expect(memory).toBeDefined();
 
     // Create a thread
