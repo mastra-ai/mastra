@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { ReadableStream, WritableStream } from 'stream/web';
 import type { CoreMessage, StreamObjectResult, StreamTextResult, TextPart, Tool, UIMessage } from 'ai';
-import { context as otelContext } from '@opentelemetry/api';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, z } from 'zod';
@@ -35,7 +34,7 @@ import { runScorer } from '../scores/hooks';
 import { MastraAgentStream } from '../stream/MastraAgentStream';
 import type { ChunkType } from '../stream/MastraAgentStream';
 import { InstrumentClass } from '../telemetry';
-import { setActiveSpanAttributes } from '../telemetry/utility';
+import { Telemetry } from '../telemetry/telemetry';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
@@ -1892,23 +1891,18 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const llm = await this.getLLM({ runtimeContext });
 
     // Set thread ID context for telemetry
-    let enhancedContext = otelContext.active();
     if (threadFromArgs?.id) {
-      const telemetryAttributes: Record<string, string> = {
-        threadId: threadFromArgs.id,
-      };
-
-      // Add resource ID if available
-      if (resourceId) {
-        telemetryAttributes.resourceId = resourceId;
+      const activeSpan = Telemetry.getActiveSpan();
+      if (activeSpan) {
+        activeSpan.setAttribute('threadId', threadFromArgs.id);
       }
 
-      // Add agent context
-      telemetryAttributes.agentName = this.name;
-      telemetryAttributes.agentId = this.id;
+      // Create enhanced context with baggage for propagation
+      const baggageEntries: Record<string, { value: string }> = {
+        threadId: { value: threadFromArgs.id },
+      };
 
-      // Set attributes on active span and create enhanced context
-      enhancedContext = setActiveSpanAttributes(telemetryAttributes);
+      Telemetry.setBaggage(baggageEntries);
     }
 
     const memory = await this.getMemory({ runtimeContext });
@@ -1940,51 +1934,48 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     return {
       llm,
       before: async () => {
-        // Execute within the enhanced telemetry context
-        return await otelContext.with(enhancedContext, async () => {
-          const beforeResult = await before();
-          const { messageObjects, convertedTools } = beforeResult;
-          messageList = beforeResult.messageList;
-          thread = beforeResult.thread;
+        const beforeResult = await before();
+        const { messageObjects, convertedTools } = beforeResult;
+        messageList = beforeResult.messageList;
+        thread = beforeResult.thread;
 
-          const threadId = thread?.id;
+        const threadId = thread?.id;
 
-          // can't type this properly sadly :(
-          const result = {
-            ...options,
-            messages: messageObjects,
-            tools: convertedTools as Record<string, Tool>,
-            runId,
-            temperature,
-            toolChoice,
-            threadId,
-            resourceId,
-            runtimeContext,
-            onStepFinish: async (props: any) => {
-              if (savePerStep) {
-                await this.saveStepMessages({
-                  saveQueueManager,
-                  result: props,
-                  messageList,
-                  threadId,
-                  memoryConfig,
-                  runId,
-                });
+        // can't type this properly sadly :(
+        const result = {
+          ...options,
+          messages: messageObjects,
+          tools: convertedTools as Record<string, Tool>,
+          runId,
+          temperature,
+          toolChoice,
+          threadId,
+          resourceId,
+          runtimeContext,
+          onStepFinish: async (props: any) => {
+            if (savePerStep) {
+              await this.saveStepMessages({
+                saveQueueManager,
+                result: props,
+                messageList,
+                threadId,
+                memoryConfig,
+                runId,
+              });
+            }
+
+            if (props.finishReason === 'tool-calls') {
+              for (const toolCall of props.toolCalls) {
+                toolCallsCollection.set(toolCall.toolCallId, toolCall);
               }
+            }
 
-              if (props.finishReason === 'tool-calls') {
-                for (const toolCall of props.toolCalls) {
-                  toolCallsCollection.set(toolCall.toolCallId, toolCall);
-                }
-              }
+            return onStepFinish?.({ ...props, runId });
+          },
+          ...args,
+        } as any;
 
-              return onStepFinish?.({ ...props, runId });
-            },
-            ...args,
-          } as any;
-
-          return result;
-        });
+        return result;
       },
       after: async ({
         result,
@@ -1997,19 +1988,16 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             outputText: string;
             structuredOutput?: boolean;
           }) => {
-        // Execute within the enhanced telemetry context
-        await otelContext.with(enhancedContext, async () => {
-          await after({
-            result,
-            outputText,
-            threadId: thread?.id,
-            thread,
-            memoryConfig,
-            runId,
-            messageList,
-            toolCallsCollection,
-            structuredOutput,
-          });
+        await after({
+          result,
+          outputText,
+          threadId: thread?.id,
+          thread,
+          memoryConfig,
+          runId,
+          messageList,
+          toolCallsCollection,
+          structuredOutput,
         });
       },
     };
