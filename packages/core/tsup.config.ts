@@ -1,14 +1,17 @@
+import { spawn } from 'child_process';
+import { promisify } from 'util';
 import babel from '@babel/core';
 import { defineConfig } from 'tsup';
 import type { Options } from 'tsup';
-
 import treeshakeDecoratorsBabelPlugin from './tools/treeshake-decorators';
 
 type Plugin = NonNullable<Options['plugins']>[number];
 
+const exec = promisify(spawn);
+
 let treeshakeDecorators = {
   name: 'treeshake-decorators',
-  renderChunk(code, info) {
+  renderChunk(code: string, info: { path: string }) {
     if (!code.includes('__decoratorStart')) {
       return null;
     }
@@ -57,10 +60,14 @@ export default defineConfig({
   ],
   format: ['esm', 'cjs'],
   clean: true,
-  dts: true,
   splitting: true,
   treeshake: {
     preset: 'smallest',
   },
   plugins: [treeshakeDecorators],
+  onSuccess: async () => {
+    await exec('pnpm', ['tsc', '-p', 'tsconfig.build.json'], {
+      stdio: 'inherit',
+    });
+  },
 });
