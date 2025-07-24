@@ -3314,15 +3314,14 @@ describe('Input Processors', () => {
       expect(result.text).toContain('Second processor');
     });
 
-    it('should support async processors with next() flow control', async () => {
-      const processor1 = createInputProcessor('async-processor-1', async (ctx, next) => {
-        await next();
-        ctx.messages.add('After next', 'user');
+    it('should support async processors running in sequence', async () => {
+      const processor1 = createInputProcessor('async-processor-1', async ctx => {
+        ctx.messages.add('First processor', 'user');
       });
 
       const processor2 = createInputProcessor('async-processor-2', async ctx => {
         await new Promise(resolve => setTimeout(resolve, 10));
-        ctx.messages.add('Before next', 'user');
+        ctx.messages.add('Second processor', 'user');
       });
 
       const agentWithAsyncProcessors = new Agent({
@@ -3334,9 +3333,9 @@ describe('Input Processors', () => {
 
       const result = await agentWithAsyncProcessors.generate('Test async');
 
-      // Due to next() flow control, "Before next" should appear before "After next"
-      expect(result.text).toContain('Before next');
-      expect(result.text).toContain('After next');
+      // Processors run sequentially, so "First processor" should appear before "Second processor"
+      expect(result.text).toContain('First processor');
+      expect(result.text).toContain('Second processor');
     });
   });
 
@@ -3536,10 +3535,10 @@ describe('Input Processors', () => {
     it('should allow processors to modify message content', async () => {
       const messageModifierProcessor = createInputProcessor('message-modifier', async ctx => {
         // Access existing messages and modify them
-        const messages = await ctx.messages.get.all.prompt();
+        const messages = ctx.messages.getAll();
         const lastMessage = messages[messages.length - 1];
 
-        if (lastMessage && Array.isArray(lastMessage.content)) {
+        if (lastMessage && lastMessage.content.parts.length > 0) {
           // Add a prefix to user messages
           ctx.messages.add('MODIFIED: Original message was received', 'user');
         }
@@ -3560,12 +3559,8 @@ describe('Input Processors', () => {
 
     it('should allow processors to filter or validate messages', async () => {
       const validationProcessor = createInputProcessor('validator', async ctx => {
-        const messages = await ctx.messages.get.all.prompt();
-        const hasInappropriateContent = messages.some(
-          msg =>
-            Array.isArray(msg.content) &&
-            msg.content.some(part => part.type === 'text' && part.text.includes('inappropriate')),
-        );
+        const textContent = ctx.messages.getTextContent();
+        const hasInappropriateContent = textContent.includes('inappropriate');
 
         if (hasInappropriateContent) {
           ctx.abort('Content validation failed');

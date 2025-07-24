@@ -1,5 +1,6 @@
-import type { MessageList } from '../message-list';
+import { MessageList } from '../message-list';
 import { TripWire } from '../trip-wire';
+import { ProcessorMessages } from './processor-messages';
 import type { InputProcessor } from './index';
 
 export async function runInputProcessors(
@@ -7,21 +8,22 @@ export async function runInputProcessors(
   messageList: MessageList,
   telemetry?: any,
 ): Promise<MessageList> {
-  const ctx: { messages: MessageList; abort: () => never } = {
-    messages: messageList,
+  // Use the same v2 format for both MessageList and ProcessorMessages
+  const v2Messages = messageList.get.all.v2();
+  const processorMessages = new ProcessorMessages(v2Messages);
+
+  const ctx: { messages: ProcessorMessages; abort: () => never } = {
+    messages: processorMessages,
     abort: () => {
       throw new TripWire('Tripwire triggered');
     },
   };
 
-  const runProcessor = async (index: number): Promise<void> => {
-    if (index >= processors.length) {
-      return;
-    }
-
+  // Run all processors sequentially
+  for (let index = 0; index < processors.length; index++) {
     const processor = processors[index];
     if (!processor) {
-      return;
+      continue;
     }
 
     const abort = (reason?: string): never => {
@@ -30,21 +32,13 @@ export async function runInputProcessors(
 
     ctx.abort = abort;
 
-    let nextCalled = false;
-    const next = async (): Promise<void> => {
-      nextCalled = true;
-      return await runProcessor(index + 1);
-    };
-
-    // Wrap processor execution in telemetry span, but preserve original control flow
-    const executeProcessor = async () => {
-      if (!telemetry) {
-        return processor.process(ctx, next);
-      }
-
-      return telemetry.traceMethod(
+    // Wrap processor execution in telemetry span
+    if (!telemetry) {
+      await processor.process(ctx);
+    } else {
+      await telemetry.traceMethod(
         async () => {
-          return processor.process(ctx, next);
+          return processor.process(ctx);
         },
         {
           spanName: `agent.inputProcessor.${processor.name}`,
@@ -55,16 +49,12 @@ export async function runInputProcessors(
           },
         },
       )();
-    };
-
-    await executeProcessor();
-
-    if (!nextCalled) {
-      await runProcessor(index + 1);
     }
-  };
+  }
 
-  await runProcessor(0);
-
-  return ctx.messages;
+  // Convert back to MessageList - use the processed v2 messages directly
+  const processedV2Messages = ctx.messages.getAll();
+  const newMessageList = new MessageList();
+  messageList.add(processedV2Messages, 'user');
+  return newMessageList;
 }

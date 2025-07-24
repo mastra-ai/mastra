@@ -45,10 +45,9 @@ describe('runInputProcessors', () => {
     ]);
   });
 
-  it('should wait for the next processor to be called', async () => {
+  it('should run processors sequentially in order', async () => {
     const processors = [
-      createInputProcessor('processor1', async (ctx, next) => {
-        await next();
+      createInputProcessor('processor1', async ctx => {
         ctx.messages.add('extra message A', 'user');
       }),
       createInputProcessor('processor2', async ctx => {
@@ -68,7 +67,7 @@ describe('runInputProcessors', () => {
       {
         content: [
           {
-            text: 'extra message B',
+            text: 'extra message A',
             type: 'text',
           },
         ],
@@ -77,7 +76,7 @@ describe('runInputProcessors', () => {
       {
         content: [
           {
-            text: 'extra message A',
+            text: 'extra message B',
             type: 'text',
           },
         ],
@@ -88,8 +87,7 @@ describe('runInputProcessors', () => {
 
   it('should abort if tripwire is triggered', async () => {
     const processors = [
-      createInputProcessor('processor1', async (ctx, next) => {
-        await next();
+      createInputProcessor('processor1', async ctx => {
         ctx.messages.add('extra message A', 'user');
       }),
       createInputProcessor('processor2', async ctx => {
@@ -141,9 +139,8 @@ describe('runInputProcessors', () => {
     let executedProcessors: string[] = [];
 
     const processors = [
-      createInputProcessor('processor1', async (ctx, next) => {
+      createInputProcessor('processor1', async ctx => {
         executedProcessors.push('processor1');
-        await next();
       }),
       createInputProcessor('processor2', async ctx => {
         executedProcessors.push('processor2');
@@ -191,7 +188,7 @@ describe('runInputProcessors', () => {
         resourceId: '456',
       });
 
-      await runInputProcessors(processors, messageList, mockTelemetry);
+      messageList = await runInputProcessors(processors, messageList, mockTelemetry);
 
       // Verify telemetry.traceMethod was called for each processor
       expect(mockTraceMethod).toHaveBeenCalledTimes(2);
@@ -236,7 +233,7 @@ describe('runInputProcessors', () => {
       });
 
       // Should work fine without telemetry
-      await runInputProcessors(processors, messageList, undefined);
+      messageList = await runInputProcessors(processors, messageList, undefined);
 
       const result = await messageList.get.all.prompt();
       expect(result).toHaveLength(1);

@@ -1463,7 +1463,7 @@ export class Agent<
             messageList,
           });
           return {
-            messageObjects: messageList.get.all.prompt(),
+            messageObjects: messageListWithInputProcessors.get.all.prompt(),
             convertedTools,
             messageList: messageListWithInputProcessors,
             thread: undefined,

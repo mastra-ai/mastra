@@ -1,8 +1,8 @@
-import type { MessageList } from '../message-list';
+import type { ProcessorMessages } from './processor-messages';
 
 export interface InputProcessor {
   readonly name: string;
-  process(args: { messages: MessageList; abort: (reason?: string) => never }, next: () => Promise<void>): Promise<void>;
+  process(args: { messages: ProcessorMessages; abort: (reason?: string) => never }): Promise<void>;
 }
 
 export function createInputProcessor(name: string, handler: InputProcessor['process']): InputProcessor {
@@ -11,3 +11,5 @@ export function createInputProcessor(name: string, handler: InputProcessor['proc
     process: handler,
   };
 }
+
+export { ProcessorMessages } from './processor-messages';
