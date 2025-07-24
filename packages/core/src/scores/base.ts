@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { createStep, createWorkflow } from '../workflows';
 import { scoreResultSchema, scoringExtractStepResultSchema } from './types';
@@ -35,6 +36,11 @@ export class MastraScorer {
   }
 
   async run(input: ScoringInput): Promise<ScoringInputWithExtractStepResultAndScoreAndReason> {
+    let runId = input.runId;
+    if (!runId) {
+      runId = randomUUID();
+    }
+
     const extractStep = createStep({
       id: 'extract',
       description: 'Extract relevant element from the run',
@@ -57,7 +63,7 @@ export class MastraScorer {
       inputSchema: scoringExtractStepResultSchema,
       outputSchema: scoreResultSchema,
       execute: async ({ inputData }) => {
-        const analyzeStepResult = await this.analyze({ ...input, extractStepResult: inputData?.result });
+        const analyzeStepResult = await this.analyze({ ...input, runId, extractStepResult: inputData?.result });
 
         return analyzeStepResult;
       },
@@ -86,6 +92,7 @@ export class MastraScorer {
           ...input,
           analyzeStepResult: analyzeStepRes.result,
           score: analyzeStepRes.score,
+          runId,
         });
 
         return {
@@ -123,7 +130,7 @@ export class MastraScorer {
       );
     }
 
-    return { ...input, ...execution.result };
+    return { runId, ...execution.result };
   }
 }
 export type MastraScorerEntry = {

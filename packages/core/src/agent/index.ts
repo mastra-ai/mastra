@@ -2027,7 +2027,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       });
 
       await after({
-        result,
+        result: result as unknown as OUTPUT extends undefined
+          ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
+          : GenerateObjectResult<OUTPUT>,
         outputText: result.text,
       });
 
@@ -2044,7 +2046,9 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const outputText = JSON.stringify(result.object);
 
     await after({
-      result,
+      result: result as unknown as OUTPUT extends undefined
+        ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
+        : GenerateObjectResult<OUTPUT>,
       outputText,
       structuredOutput: true,
     });
