@@ -195,7 +195,7 @@ async function pushToRepo(repoName) {
     // remove everything in the temp directory except .git
     console.log(`Removing everything (except .git) in the temp directory: ${tempDir}`);
 
-    // get all fles and directories in the temp directory
+    // get all files and directories in the temp directory
     const filesAndDirs = fs.readdirSync(tempDir);
     console.log(`Found ${filesAndDirs.length} files and directories in the temp directory: ${tempDir}`);
     // remove all files and directories in the temp directory except .git
@@ -264,7 +264,7 @@ async function pushToRepo(repoName) {
       }
       // remove everything in the temp directory except .git
       console.log(`Removing everything in the temp directory: ${tempDir} for ${provider} branch`);
-      // get all fles and directories in the temp directory
+      // get all files and directories in the temp directory
       const filesAndDirs = fs.readdirSync(tempDir);
       console.log(
         `Found ${filesAndDirs.length} files and directories in the temp directory: ${tempDir} for ${provider} branch`,
