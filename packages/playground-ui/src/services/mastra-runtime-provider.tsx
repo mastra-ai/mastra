@@ -5,21 +5,18 @@ import {
   ThreadMessageLike,
   AppendMessage,
   AssistantRuntimeProvider,
-  SimpleImageAttachmentAdapter,
-  CompositeAttachmentAdapter,
-  SimpleTextAttachmentAdapter,
 } from '@assistant-ui/react';
 import { useState, ReactNode, useEffect, useRef } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
 
-import { ChatProps, Message } from '@/types';
+import { ChatProps } from '@/types';
 
 import { CoreUserMessage } from '@mastra/core';
 import { fileToBase64 } from '@/lib/file';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
-import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachments/pdfs-adapter';
 import { MastraClient } from '@mastra/client-js';
+import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -556,20 +553,18 @@ export function MastraRuntimeProvider({
     }
   };
 
+  const { adapters, isReady } = useAdapters(agentId);
+
   const runtime = useExternalStoreRuntime({
     isRunning,
     messages,
     convertMessage,
     onNew,
     onCancel,
-    adapters: {
-      attachments: new CompositeAttachmentAdapter([
-        new SimpleImageAttachmentAdapter(),
-        new SimpleTextAttachmentAdapter(),
-        new PDFAttachmentAdapter(),
-      ]),
-    },
+    adapters: isReady ? adapters : undefined,
   });
+
+  if (!isReady) return null;
 
   return <AssistantRuntimeProvider runtime={runtime}> {children} </AssistantRuntimeProvider>;
 }
