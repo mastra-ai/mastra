@@ -3,6 +3,8 @@ title: "MastraJwtAuth"
 description: "Documentation for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens."
 ---
 
+import { Tabs, Tab } from "@/components/tabs";
+
 # MastraJwtAuth
 
 The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `experimental_auth` option.
@@ -23,53 +25,75 @@ export const mastra = new Mastra({
   // ..
   server: {
     experimental_auth: new MastraJwtAuth({
-        secret: "<secret>"
+        secret: process.env.MASTRA_JWT_SECRET
     }),
   },
 });
 ```
 
+> See the [MastraJwtAuth](/reference/auth/jwt.mdx) API reference for all available configuration options.
+
 ## Configuring `MastraClient`
 
-With `experimental_auth` enabled, all requests made to Mastra using the [Mastra Client SDK](/docs/client-js/overview) will require a secret be sent in the authorization header:
+When `experimental_auth` is enabled, all requests made with the [Mastra Client SDK](/docs/client-js/overview) must include a valid JWT in the `Authorization` header:
 
-```typescript filename="lib/mastra/mastra-client.ts" showLineNumbers copy
+```typescript {6} filename="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
   baseUrl: "https://<mastra-api-url>",
   headers: {
-    Authorization: `Bearer <secret>`
+    Authorization: `Bearer ${process.env.MASTRA_JWT_TOKEN}`
   }
 });
 ```
 
-## Testing
-
-```bash {3} copy
-curl -X POST https://<mastra-api-url>/api/agents/weatherAgent/generate \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <secret>" \
-  -d '{
-    "messages": [
-      {
-        "role": "user",
-        "content": "What'\''s the weather in London"
-      }
-    ]
-  }'
-```
-
-If the Authorization was successful you'll see your agent's response. If Authorization fails, you'll see the following message:
-
-```echo
-Error: ....
-```
-
 > See [Mastra Client SDK](/docs/client-js/overview) for more configuration options.
 
-## Mastra Cloud Playground
+### Making authenticated requests
 
-To access the Playground in Mastra Cloud with `experimental_auth` enabled...
+Once `MastraClient` is configured, you can send authenticated requests from your frontend application, or use `curl` for quick local testing:
 
+<Tabs items={["MastraClient", "curl"]}>
+  <Tab>
+    ```tsx filename="src/components/test-agent.tsx" showLineNumbers copy
+    import { mastraClient } from "../../lib/mastra-client";
 
+    export const TestAgent = () => {
+      async function handleClick() {
+        const agent = mastraClient.getAgent("weatherAgent");
+
+        const response = await agent.generate({
+          messages: "Weather in London"
+        });
+
+        console.log(response);
+      }
+
+      return <button onClick={handleClick}>Test Agent</button>;
+    };
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-jwt>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+## Creating a JWT
+
+To authenticate requests to your Mastra server, you'll need a valid JSON Web Token (JWT) signed with your `MASTRA_JWT_SECRET`.
+
+The easiest way to generate one is using [jwt.io](https://www.jwt.io/):
+
+1. Select **JWT Encoder**.
+2. Scroll down to the **Sign JWT: Secret** section.
+3. Enter your secret (for example: `supersecretdevkeythatishs256safe!`).
+4. Click **Generate example** to create a valid JWT.
+5. Copy the generated token and set it as `MASTRA_JWT_TOKEN` in your `.env` file.

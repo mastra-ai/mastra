@@ -1,6 +1,5 @@
 const meta = {
-  jwt: "JWT",
-  auth0: "Auth0",
+  jwt: "JSON Web Token",
 };
 
 export default meta;
