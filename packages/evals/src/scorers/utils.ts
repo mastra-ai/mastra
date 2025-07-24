@@ -23,19 +23,9 @@ export type TestCaseWithContext = TestCase & {
 
 export const createTestRun = (input: string, output: string, context?: string[]): ScoringInput => {
   return {
-    runId: 'test-run-id',
-    traceId: 'test-trace-id',
-    scorer: {},
     input: [{ role: 'user', content: input }],
     output: { role: 'assistant', text: output },
-    metadata: {},
     additionalContext: { context },
-    resourceId: 'test-resource-id',
-    threadId: 'test-thread-id',
-    source: 'LIVE',
-    entity: {},
-    entityType: 'AGENT',
     runtimeContext: {},
-    structuredOutput: false,
   };
 };
