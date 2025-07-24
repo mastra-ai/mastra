@@ -12,11 +12,7 @@ import { Index } from '@upstash/vector';
 
 import { UpstashFilterTranslator } from './filter';
 import type { UpstashVectorFilter } from './filter';
-import type {
-  UpstashUpsertVectorParams, 
-  UpstashQueryVectorParams,
-  UpstashUpdateVectorParams
-} from './types';
+import type { UpstashUpsertVectorParams, UpstashQueryVectorParams, UpstashUpdateVectorParams } from './types';
 
 export class UpstashVector extends MastraVector<UpstashVectorFilter> {
   private client: Index;
@@ -40,7 +36,13 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
    * @param {UpsertVectorParams} params - The parameters for the upsert operation.
    * @returns {Promise<string[]>} A promise that resolves to the IDs of the upserted vectors.
    */
-  async upsert({ indexName: namespace, vectors, metadata, ids, sparseVectors }: UpstashUpsertVectorParams): Promise<string[]> {
+  async upsert({
+    indexName: namespace,
+    vectors,
+    metadata,
+    ids,
+    sparseVectors,
+  }: UpstashUpsertVectorParams): Promise<string[]> {
     const generatedIds = ids || vectors.map(() => crypto.randomUUID());
 
     const points = vectors.map((vector, index) => ({
@@ -216,7 +218,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-    async updateVector({ indexName: namespace, id, update }: UpstashUpdateVectorParams): Promise<void> {
+  async updateVector({ indexName: namespace, id, update }: UpstashUpdateVectorParams): Promise<void> {
     if (!update.vector && !update.metadata && !update.sparseVector) {
       throw new MastraError(
         {
@@ -231,7 +233,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
 
     // The upstash client throws an exception as: 'This index requires dense/sparse vectors' when
     // only metadata is present in the update object.
-    if ((!update.vector && !update.sparseVector) && update.metadata) {
+    if (!update.vector && !update.sparseVector && update.metadata) {
       throw new MastraError(
         {
           id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
@@ -245,7 +247,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
 
     try {
       const points: any = { id };
-      
+
       if (update.vector) points.vector = update.vector;
       if (update.metadata) points.metadata = update.metadata;
       if (update.sparseVector) points.sparseVector = update.sparseVector;
