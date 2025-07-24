@@ -45,7 +45,7 @@
     "zod": "^3.0.0"
   },
   "devDependencies": {
-    "@babel/preset-env": "^7.27.2",
+    "@babel/preset-env": "^7.28.0",
     "@babel/preset-typescript": "^7.27.1",
     "@internal/lint": "workspace:*",
     "@tsconfig/recommended": "^1.0.9",
