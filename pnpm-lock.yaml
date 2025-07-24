@@ -2250,7 +2250,7 @@ importers:
         specifier: ^3.25.67
         version: 3.25.76
       zustand:
-        specifier: ^5.0.5
+        specifier: ^5.0.6
         version: 5.0.6(@types/react@19.1.8)(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0))
     devDependencies:
       '@mastra/core':
