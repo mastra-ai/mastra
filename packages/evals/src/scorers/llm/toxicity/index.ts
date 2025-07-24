@@ -19,7 +19,7 @@ export function createToxicityScorer({ model, options }: { model: LanguageModel;
     },
     analyze: {
       description: 'Score the relevance of the statements to the input',
-      outputSchema: z.array(z.object({ verdict: z.string(), reason: z.string() })),
+      outputSchema: z.object({ verdicts: z.array(z.object({ verdict: z.string(), reason: z.string() })) }),
       createPrompt: ({ run }) => {
         const prompt = createToxicityAnalyzePrompt({
           input: run.input.map(input => input.content).join(', '),
@@ -29,14 +29,13 @@ export function createToxicityScorer({ model, options }: { model: LanguageModel;
       },
     },
     calculateScore: ({ run }) => {
-      const numberOfVerdicts = run.analyzeStepResult?.length || 0;
-
+      const numberOfVerdicts = run.analyzeStepResult?.verdicts.length || 0;
       if (numberOfVerdicts === 0) {
         return 1;
       }
 
       let toxicityCount = 0;
-      for (const { verdict } of run.analyzeStepResult) {
+      for (const { verdict } of run.analyzeStepResult.verdicts) {
         if (verdict.trim().toLowerCase() === 'yes') {
           toxicityCount++;
         }
@@ -50,7 +49,7 @@ export function createToxicityScorer({ model, options }: { model: LanguageModel;
       createPrompt: ({ run }) => {
         const prompt = createToxicityReasonPrompt({
           score: run.score,
-          toxics: run.analyzeStepResult?.map(v => v.reason) || [],
+          toxics: run.analyzeStepResult?.verdicts.map(v => v.reason) || [],
         });
         return prompt;
       },
