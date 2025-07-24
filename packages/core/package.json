@@ -16,7 +16,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -26,7 +26,7 @@
         "default": "./dist/*/index.js"
       },
       "require": {
-        "types": "./dist/*/index.d.cts",
+        "types": "./dist/*/index.d.ts",
         "default": "./dist/*/index.cjs"
       }
     },
@@ -36,7 +36,7 @@
         "default": "./dist/tools/is-vercel-tool.js"
       },
       "require": {
-        "types": "./dist/tools/is-vercel-tool.d.cts",
+        "types": "./dist/tools/is-vercel-tool.d.ts",
         "default": "./dist/tools/is-vercel-tool.cjs"
       }
     },
@@ -46,7 +46,7 @@
         "default": "./dist/workflows/legacy/index.js"
       },
       "require": {
-        "types": "./dist/workflows/legacy/index.d.cts",
+        "types": "./dist/workflows/legacy/index.d.ts",
         "default": "./dist/workflows/legacy/index.cjs"
       }
     },
@@ -56,7 +56,7 @@
         "default": "./dist/workflows/constants.js"
       },
       "require": {
-        "types": "./dist/workflows/constants.d.cts",
+        "types": "./dist/workflows/constants.d.ts",
         "default": "./dist/workflows/constants.cjs"
       }
     },
@@ -66,7 +66,7 @@
         "default": "./dist/network/vNext/index.js"
       },
       "require": {
-        "types": "./dist/network/vNext/index.d.cts",
+        "types": "./dist/network/vNext/index.d.ts",
         "default": "./dist/network/vNext/index.cjs"
       }
     },
@@ -76,7 +76,7 @@
         "default": "./dist/vector/filter/index.js"
       },
       "require": {
-        "types": "./dist/vector/filter/index.d.cts",
+        "types": "./dist/vector/filter/index.d.ts",
         "default": "./dist/vector/filter/index.cjs"
       }
     },
@@ -86,7 +86,7 @@
         "default": "./dist/utils.js"
       },
       "require": {
-        "types": "./dist/utils.d.cts",
+        "types": "./dist/utils.d.ts",
         "default": "./dist/utils.cjs"
       }
     },
@@ -96,7 +96,7 @@
         "default": "./dist/base.js"
       },
       "require": {
-        "types": "./dist/base.d.cts",
+        "types": "./dist/base.d.ts",
         "default": "./dist/base.cjs"
       }
     },
@@ -106,20 +106,18 @@
         "default": "./dist/telemetry/otel-vendor.js"
       },
       "require": {
-        "types": "./dist/telemetry/otel-vendor.d.cts",
+        "types": "./dist/telemetry/otel-vendor.d.ts",
         "default": "./dist/telemetry/otel-vendor.cjs"
       }
     },
     "./test-utils/llm-mock": {
-      "development": {
-        "import": {
-          "types": "./dist/test-utils/llm-mock.d.ts",
-          "default": "./dist/test-utils/llm-mock.js"
-        },
-        "require": {
-          "types": "./dist/test-utils/llm-mock.d.cts",
-          "default": "./dist/test-utils/llm-mock.cjs"
-        }
+      "import": {
+        "types": "./dist/test-utils/llm-mock.d.ts",
+        "default": "./dist/test-utils/llm-mock.js"
+      },
+      "require": {
+        "types": "./dist/test-utils/llm-mock.d.ts",
+        "default": "./dist/test-utils/llm-mock.cjs"
       }
     },
     "./package.json": "./package.json"
@@ -128,7 +126,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "lint": "eslint .",
-    "pre-build": "tsup --silent --config tsup.config.ts --format esm,cjs",
+    "pre-build": "tsup --silent --config tsup.config.ts --no-dts",
     "build": "node ./tools/commonjs-tsc-fixer.js",
     "build:watch": "pnpm build --watch",
     "test": "vitest run"

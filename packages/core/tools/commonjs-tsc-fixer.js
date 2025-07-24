@@ -34,6 +34,7 @@ async function writeDtsFiles() {
           const filename = key.replace('*', dir.replace(join(rootPath, 'dist/'), ''));
 
           const targetPath = join(rootPath, filename) + '.d.ts';
+          console.log(targetPath);
           await mkdir(dirname(targetPath), { recursive: true });
 
           await writeFile(
