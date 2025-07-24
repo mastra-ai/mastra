@@ -18,9 +18,8 @@ export const useAdapters = (agentId: string) => {
 
   useEffect(() => {
     const check = async () => {
-      const controller = new AbortController();
-
       const agent = baseClient.getAgent(agentId);
+
       try {
         await agent.voice.getSpeakers();
         setSpeechAdapter(new VoiceAttachmentAdapter(agent as unknown as Agent));
