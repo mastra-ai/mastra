@@ -1,5 +1,125 @@
 # @mastra/core
 
+## 0.11.1
+
+### Patch Changes
+
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 2affc57: Fix output type of network loop
+- 66e13e3: Add methods to fetch workflow/agent by its true id
+- edd9482: Fix "workflow run was not suspended" error when attempting to resume a workflow with consecutive nested workflows.
+- 18344d7: Code and llm scorers
+- 9d372c2: Fix streamVNext error handling
+- 40c2525: Fix agent.generate error with experimental_output and clientTool
+- e473f27: Implement off the shelf Scorers
+- 032cb66: ClientJS
+- 703ac71: scores schema
+- a723d69: Pass workflowId through
+- 7827943: Handle streaming large data
+- 5889a31: Export storage domain types
+- bf1e7e7: Configure agent memory using runtimeContext
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 4933192: Update Message List to ensure correct order of message parts
+- d1c77a4: Scorer interface
+- bea9dd1: Refactor Agent class to consolidate LLM generate and stream methods and improve type safety. This includes
+  extracting common logic into prepareLLMOptions(), enhancing type definitions, and fixing test annotations.
+
+  This changeset entry follows the established format in your project:
+  - Targets the @mastra/core package with a patch version bump
+  - Provides a concise description of the refactoring and type safety improvements
+  - Mentions the key changes without being too verbose
+
+- dcd4802: scores mastra server
+- cbddd18: Remove erroneous reassignment of `Mastra.prototype.#vectors`
+- 7ba91fa: Add scorer abstract methods for base storage
+
+## 0.11.0-alpha.2
+
+### Patch Changes
+
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 2affc57: Fix output type of network loop
+- 66e13e3: Add methods to fetch workflow/agent by its true id
+- edd9482: Fix "workflow run was not suspended" error when attempting to resume a workflow with consecutive nested workflows.
+- 18344d7: Code and llm scorers
+- 9d372c2: Fix streamVNext error handling
+- 40c2525: Fix agent.generate error with experimental_output and clientTool
+- e473f27: Implement off the shelf Scorers
+- 032cb66: ClientJS
+- 703ac71: scores schema
+- a723d69: Pass workflowId through
+- 5889a31: Export storage domain types
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 4933192: Update Message List to ensure correct order of message parts
+- d1c77a4: Scorer interface
+- bea9dd1: Refactor Agent class to consolidate LLM generate and stream methods and improve type safety. This includes
+  extracting common logic into prepareLLMOptions(), enhancing type definitions, and fixing test annotations.
+
+  This changeset entry follows the established format in your project:
+  - Targets the @mastra/core package with a patch version bump
+  - Provides a concise description of the refactoring and type safety improvements
+  - Mentions the key changes without being too verbose
+
+- dcd4802: scores mastra server
+- 7ba91fa: Add scorer abstract methods for base storage
+
+## 0.11.0-alpha.1
+
+## 0.11.0-alpha.0
+
+### Patch Changes
+
+- 7827943: Handle streaming large data
+- bf1e7e7: Configure agent memory using runtimeContext
+- cbddd18: Remove erroneous reassignment of `Mastra.prototype.#vectors`
+
+## 0.10.15
+
+### Patch Changes
+
+- 0b56518: Ensure removed runtimeContext values are not saved in snapshot
+- db5cc15: Create thread if it does not exist yet in agent network stream, generate and loopStream
+- 2ba5b76: Allow passing jsonSchema into workingMemory schema
+- 5237998: Fix foreach output
+- c3a30de: added new experimental vnext working memory
+- 37c1acd: Format semantic recall messages grouped by dates and labeled by if they're from a different thread or not, to improve longmemeval scores
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- 89ec9d4: remove cohere-ai client dependency and just make a fetch call
+- cf3a184: Add warning log when memory is not configured but threadId/resourceId are passed to agent
+- d6bfd60: Simplify Message-List Merge Logic and Updates
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- c22a91f: Fix nested workflow resume in loop workflow breaking
+- f7403ab: Only change workflow status to success after all steps are successful
+- 6c89d7f: Save runtimeContext in snapshot
+- Updated dependencies [4da943f]
+  - @mastra/schema-compat@0.10.5
+
+## 0.10.15-alpha.1
+
+### Patch Changes
+
+- 0b56518: Ensure removed runtimeContext values are not saved in snapshot
+- 2ba5b76: Allow passing jsonSchema into workingMemory schema
+- c3a30de: added new experimental vnext working memory
+- cf3a184: Add warning log when memory is not configured but threadId/resourceId are passed to agent
+- d6bfd60: Simplify Message-List Merge Logic and Updates
+- Updated dependencies [4da943f]
+  - @mastra/schema-compat@0.10.5-alpha.0
+
+## 0.10.15-alpha.0
+
+### Patch Changes
+
+- db5cc15: Create thread if it does not exist yet in agent network stream, generate and loopStream
+- 5237998: Fix foreach output
+- 37c1acd: Format semantic recall messages grouped by dates and labeled by if they're from a different thread or not, to improve longmemeval scores
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- 89ec9d4: remove cohere-ai client dependency and just make a fetch call
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- c22a91f: Fix nested workflow resume in loop workflow breaking
+- f7403ab: Only change workflow status to success after all steps are successful
+- 6c89d7f: Save runtimeContext in snapshot
+
 ## 0.10.14
 
 ### Patch Changes

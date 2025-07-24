@@ -1,4 +1,3 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useNetwork, useVNextNetwork } from '@/hooks/use-networks';
 import { NetworkDetails } from './network-details';
 import { NetworkAgents } from './network-agents';
@@ -6,6 +5,8 @@ import { NetworkEndpoints } from './network-endpoints';
 import { NetworkWorkflows } from './network-workflows';
 import { GetVNextNetworkResponse } from '@mastra/client-js';
 import { NetworkTools } from './network-tools';
+import { EntityHeader, PlaygroundTabs, Tab, TabContent, TabList } from '@mastra/playground-ui';
+import { NetworkIcon } from 'lucide-react';
 
 export function NetworkInformation({ networkId, isVNext }: { networkId: string; isVNext?: boolean }) {
   const { network, isLoading } = useNetwork(networkId, !isVNext);
@@ -19,59 +20,44 @@ export function NetworkInformation({ networkId, isVNext }: { networkId: string; 
   }
 
   return (
-    <Tabs defaultValue="details" className="overflow-y-auto grid grid-rows-[auto_1fr] h-full">
-      <TabsList className="flex shrink-0 border-b">
-        <TabsTrigger value="details" className="group">
-          <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-            Details
-          </p>
-        </TabsTrigger>
-        <TabsTrigger value="agents" className="group">
-          <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-            Agents
-          </p>
-        </TabsTrigger>
-        {isVNext ? (
-          <>
-            <TabsTrigger value="workflows" className="group">
-              <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-                Workflows
-              </p>
-            </TabsTrigger>
-            <TabsTrigger value="tools" className="group">
-              <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-                Tools
-              </p>
-            </TabsTrigger>
-          </>
-        ) : null}
-        <TabsTrigger value="endpoints" className="group">
-          <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-            Endpoints
-          </p>
-        </TabsTrigger>
-      </TabsList>
-      <div className="overflow-y-auto">
-        <TabsContent value="details">
-          <NetworkDetails network={networkToUse} isVNext={isVNext} />
-        </TabsContent>
-        <TabsContent value="agents">
-          <NetworkAgents network={networkToUse} />
-        </TabsContent>
-        {isVNext ? (
-          <>
-            <TabsContent value="workflows">
-              <NetworkWorkflows network={networkToUse as GetVNextNetworkResponse} />
-            </TabsContent>
-            <TabsContent value="tools">
-              <NetworkTools network={networkToUse as GetVNextNetworkResponse} />
-            </TabsContent>
-          </>
-        ) : null}
-        <TabsContent value="endpoints">
-          <NetworkEndpoints networkId={networkId} isVNext={isVNext} />
-        </TabsContent>
+    <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto border-l-sm border-border1">
+      <EntityHeader icon={<NetworkIcon />} title={networkToUse?.name || ''} isLoading={isLoadingToUse} />
+
+      <div className="overflow-y-auto border-t-sm border-border1">
+        <PlaygroundTabs defaultTab="details">
+          <TabList>
+            <Tab value="details">Details</Tab>
+            <Tab value="agents">Agents</Tab>
+            {isVNext ? (
+              <>
+                <Tab value="workflows">Workflows</Tab>
+                <Tab value="tools">Tools</Tab>
+              </>
+            ) : null}
+            <Tab value="endpoints">Endpoints</Tab>
+          </TabList>
+
+          <TabContent value="details">
+            <NetworkDetails network={networkToUse} isVNext={isVNext} />
+          </TabContent>
+          <TabContent value="agents">
+            <NetworkAgents network={networkToUse} />
+          </TabContent>
+          {isVNext ? (
+            <>
+              <TabContent value="workflows">
+                <NetworkWorkflows network={networkToUse as GetVNextNetworkResponse} />
+              </TabContent>
+              <TabContent value="tools">
+                <NetworkTools network={networkToUse as GetVNextNetworkResponse} />
+              </TabContent>
+            </>
+          ) : null}
+          <TabContent value="endpoints">
+            <NetworkEndpoints networkId={networkId} isVNext={isVNext} />
+          </TabContent>
+        </PlaygroundTabs>
       </div>
-    </Tabs>
+    </div>
   );
 }

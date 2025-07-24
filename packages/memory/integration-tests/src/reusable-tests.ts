@@ -2,7 +2,8 @@ import { randomUUID } from 'crypto';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
 import type { MastraMessageV1, SharedMemoryConfig } from '@mastra/core';
-import type { LibSQLConfig } from '@mastra/libsql';
+import { MessageList } from '@mastra/core/agent';
+import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';
 import type { PostgresConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
@@ -21,6 +22,7 @@ export enum StorageType {
 interface WorkerTestConfig {
   storageTypeForWorker: StorageType;
   storageConfigForWorker: LibSQLConfig | PostgresConfig | UpstashConfig;
+  vectorConfigForWorker?: LibSQLVectorConfig;
   memoryOptionsForWorker?: SharedMemoryConfig['options'];
 }
 
@@ -494,8 +496,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
     describe('Message Types and Roles', () => {
       it('should handle different message types', async () => {
-        const messages = [
-          createTestMessage(thread.id, 'Hello', 'user', 'text'),
+        const userMessage = createTestMessage(thread.id, 'Hello', 'user', 'text');
+        const assistantMessages = [
           createTestMessage(
             thread.id,
             [{ type: 'tool-call', toolCallId: '1', args: {}, toolName: 'ok' }],
@@ -509,6 +511,12 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
             'tool-result',
           ),
         ];
+
+        const messageList = new MessageList();
+        messageList.add(userMessage, 'user');
+        messageList.add(assistantMessages, 'response');
+
+        const messages = messageList.get.all.v2();
 
         await memory.saveMessages({ messages });
         const result = await memory.rememberMessages({
@@ -687,6 +695,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
                 storageType: workerTestConfig.storageTypeForWorker,
                 storageConfig: workerTestConfig.storageConfigForWorker,
                 memoryOptions: workerTestConfig.memoryOptionsForWorker || { threads: { generateTitle: false } },
+                vectorConfig: workerTestConfig.vectorConfigForWorker,
               },
             });
             worker.on('message', msg => {

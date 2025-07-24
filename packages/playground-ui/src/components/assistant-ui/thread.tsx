@@ -24,9 +24,10 @@ export interface ThreadProps {
   ToolFallback?: ToolCallContentPartComponent;
   agentName?: string;
   hasMemory?: boolean;
+  onInputChange?: (value: string) => void;
 }
 
-export const Thread = ({ ToolFallback, agentName, hasMemory }: ThreadProps) => {
+export const Thread = ({ ToolFallback, agentName, hasMemory, onInputChange }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
@@ -54,7 +55,7 @@ export const Thread = ({ ToolFallback, agentName, hasMemory }: ThreadProps) => {
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} />
+      <Composer hasMemory={hasMemory} onInputChange={onInputChange} />
     </ThreadWrapper>
   );
 };
@@ -97,9 +98,10 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 
 interface ComposerProps {
   hasMemory?: boolean;
+  onInputChange?: (value: string) => void;
 }
 
-const Composer = ({ hasMemory }: ComposerProps) => {
+const Composer = ({ hasMemory, onInputChange }: ComposerProps) => {
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
@@ -115,6 +117,7 @@ const Composer = ({ hasMemory }: ComposerProps) => {
               placeholder="Enter your message..."
               name=""
               id=""
+              onChange={e => onInputChange?.(e.target.value)}
             ></textarea>
           </ComposerPrimitive.Input>
           <div className="flex justify-end gap-2">

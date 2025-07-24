@@ -88,10 +88,10 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
     },
     {
       name: "memory",
-      type: "MastraMemory",
+      type: "MastraMemory | ({ runtimeContext: RuntimeContext }) => MastraMemory | Promise<MastraMemory>",
       isOptional: true,
       description:
-        "Memory system for the agent to store and retrieve information.",
+        "Memory system for the agent to store and retrieve information. Can be a static memory instance or a function that returns a memory instance based on runtime context.",
     },
     {
       name: "voice",

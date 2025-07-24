@@ -3,6 +3,8 @@ import type { z } from 'zod';
 import type { ExecuteFunction, Step } from './step';
 import type { SerializedStepFlowEntry } from './workflow';
 
+export type { ChunkType, MastraWorkflowStream } from '../stream/MastraWorkflowStream';
+
 export type Emitter = {
   emit: (event: string, data: any) => Promise<void>;
   on: (event: string, callback: (data: any) => void) => void;
@@ -120,6 +122,11 @@ export type StreamEvent =
     }
   | {
       type: 'step-waiting';
+      payload: any;
+      id: string;
+    }
+  | {
+      type: 'step-result';
       payload: any;
       id: string;
     };
