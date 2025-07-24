@@ -522,7 +522,7 @@ const queryTool = createVectorQueryTool({
 });
 ```
 
-When using runtime context, provide required parameters at execution time via the runtime context:
+When using runtime context, provide required parameters at execution time via the runtime context (deprecated - use dynamic arguments instead):
 
 ```typescript
 const runtimeContext = new RuntimeContext<{
@@ -549,10 +549,41 @@ const response = await agent.generate(
 );
 ```
 
+
+## Example with Dynamic Arguments
+You can also set most options by passing them as dynamic arguments that receive a RuntimeContext.
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { createVectorQueryTool } from "@mastra/rag";
+
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: ({ runtimeContext }) => {
+    // Use different models based on user tier
+    const userTier = runtimeContext.get('user-tier');
+    return userTier === "enterprise" 
+      ? openai.embedding("text-embedding-3-large")
+      : openai.embedding("text-embedding-3-small");
+  },
+});
+
+const runtimeContext = new RuntimeContext();
+runtimeContext.set("user-tier", "enterprise");
+
+const response = await agent.generate(
+  "Find documentation from the knowledge base.",
+  { runtimeContext }
+);
+```
+
+
 For more information on runtime context, please see:
 
 - [Runtime Variables](../../docs/agents/runtime-variables)
 - [Dynamic Context](../../docs/tools-mcp/dynamic-context)
+
 
 ## Tool Details
 
