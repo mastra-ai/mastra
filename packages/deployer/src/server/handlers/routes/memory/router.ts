@@ -16,6 +16,7 @@ import {
   searchMemoryHandler,
   updateThreadHandler,
   updateWorkingMemoryHandler,
+  deleteMessageHandler,
 } from './handlers';
 
 export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
@@ -285,6 +286,45 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     saveMessagesHandler,
+  );
+
+  router.delete(
+    '/network/messages/:messageId',
+    describeRoute({
+      description: 'Delete a message',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'messageId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Message deleted successfully',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean' },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    deleteMessageHandler,
   );
 
   // Memory routes
@@ -870,6 +910,45 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     saveMessagesHandler,
+  );
+
+  router.delete(
+    '/messages/:messageId',
+    describeRoute({
+      description: 'Delete a message',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'messageId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Message deleted successfully',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean' },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    deleteMessageHandler,
   );
 
   return router;

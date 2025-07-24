@@ -942,4 +942,22 @@ ${
 
     return this.storage.updateMessages({ messages });
   }
+
+  /**
+   * Deletes a message by ID
+   * @param messageId - The ID of the message to delete
+   * @returns Promise that resolves when the message is deleted
+   */
+  public async deleteMessage({ messageId }: { messageId: string }): Promise<void> {
+    if (!messageId) {
+      throw new Error('Message ID is required');
+    }
+
+    // Delete from storage
+    await this.storage.deleteMessage({ messageId });
+
+    // TODO: Delete from vector store if semantic recall is enabled
+    // This would require getting the message first to know its threadId/resourceId
+    // and then querying the vector store to delete associated embeddings
+  }
 }

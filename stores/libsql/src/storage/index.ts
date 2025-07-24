@@ -249,6 +249,10 @@ export class LibSQLStore extends MastraStorage {
     return this.stores.memory.updateMessages({ messages });
   }
 
+  async deleteMessage({ messageId }: { messageId: string }): Promise<void> {
+    return this.stores.memory.deleteMessage({ messageId });
+  }
+
   /** @deprecated use getEvals instead */
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);

@@ -456,6 +456,32 @@ interface SearchResponse {
  * @param threadId - the thread id to search within
  * @param limit - maximum number of results to return (default: 20)
  */
+export async function deleteMessageHandler({
+  mastra,
+  agentId,
+  messageId,
+  networkId,
+  runtimeContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'> & {
+  messageId: string;
+}) {
+  try {
+    validateBody({ messageId });
+
+    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    if (!memory) {
+      throw new HTTPException(400, { message: 'Memory is not initialized' });
+    }
+
+    // Delete the message
+    await memory.deleteMessage({ messageId });
+
+    return { success: true, message: 'Message deleted successfully' };
+  } catch (error) {
+    return handleError(error, 'Error deleting message');
+  }
+}
+
 export async function searchMemoryHandler({
   mastra,
   agentId,

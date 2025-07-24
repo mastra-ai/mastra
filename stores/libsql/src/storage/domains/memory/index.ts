@@ -439,6 +439,50 @@ export class MemoryLibSQL extends MemoryStorage {
     return updatedResult.rows.map(row => this.parseRow(row));
   }
 
+  async deleteMessage({ messageId }: { messageId: string }): Promise<void> {
+    try {
+      // Check if message exists first
+      const result = await this.client.execute({
+        sql: `SELECT id, thread_id FROM ${TABLE_MESSAGES} WHERE id = ?`,
+        args: [messageId],
+      });
+
+      if (!result.rows || result.rows.length === 0) {
+        throw new Error(`Message with id ${messageId} not found`);
+      }
+
+      const threadId = result.rows[0].thread_id;
+
+      // Delete the message
+      await this.client.execute({
+        sql: `DELETE FROM ${TABLE_MESSAGES} WHERE id = ?`,
+        args: [messageId],
+      });
+
+      // Update thread's updatedAt timestamp
+      if (threadId) {
+        await this.client.execute({
+          sql: `UPDATE ${TABLE_THREADS} SET updatedAt = ? WHERE id = ?`,
+          args: [new Date().toISOString(), threadId],
+        });
+      }
+
+      // TODO: Delete from vector store if semantic recall is enabled
+      // This would require checking if vector store is configured and
+      // removing embeddings associated with this message_id
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_DELETE_MESSAGE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageId },
+        },
+        error,
+      );
+    }
+  }
+
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     const result = await this.operations.load<StorageResourceType>({
       tableName: TABLE_RESOURCES,

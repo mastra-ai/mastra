@@ -217,6 +217,10 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.updateMessages(args);
   }
 
+  async deleteMessage({ messageId }: { messageId: string }): Promise<void> {
+    return this.stores.memory.deleteMessage({ messageId });
+  }
+
   async getThreadsByResourceIdPaginated(args: {
     resourceId: string;
     page: number;
