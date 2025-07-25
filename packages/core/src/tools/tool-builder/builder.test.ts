@@ -3,8 +3,8 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { LanguageModel } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { Agent } from '@mastra/core/agent';
-import { createTool } from '@mastra/core/tools';
+import { Agent } from '../../agent';
+import { createTool } from '../../tools';
 import 'dotenv/config';
 
 type Result = {
