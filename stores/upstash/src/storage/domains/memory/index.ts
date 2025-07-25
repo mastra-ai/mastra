@@ -906,7 +906,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
 
     try {
-      const pipeline = this.client.pipeline();
       const threadIds = new Set<string>();
       const messageKeys: string[] = [];
 
@@ -926,6 +925,13 @@ export class StoreMemoryUpstash extends MemoryStorage {
           }
         }
       }
+
+      if (messageKeys.length === 0) {
+        // none of the message ids existed
+        return;
+      }
+
+      const pipeline = this.client.pipeline();
 
       // Delete all messages
       for (const key of messageKeys) {
