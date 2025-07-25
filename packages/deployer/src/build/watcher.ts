@@ -9,7 +9,7 @@ export async function getInputOptions(
   entryFile: string,
   platform: 'node' | 'browser',
   env?: Record<string, string>,
-  sourcemapEnabled: boolean = false,
+  { sourcemap = false }: { sourcemap?: boolean } = {},
 ) {
   const inputOptions = await getBundlerInputOptions(
     entryFile,
@@ -20,7 +20,7 @@ export async function getInputOptions(
     },
     platform,
     env,
-    sourcemapEnabled,
+    { sourcemap },
   );
 
   if (Array.isArray(inputOptions.plugins)) {

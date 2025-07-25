@@ -175,7 +175,7 @@ export abstract class Bundler extends MastraBundler {
       {
         'process.env.NODE_ENV': JSON.stringify('production'),
       },
-      sourcemapEnabled,
+      { sourcemap: sourcemapEnabled },
     );
     const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 

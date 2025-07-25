@@ -54,7 +54,7 @@ describe('DevBundler', () => {
         {
           'process.env.NODE_ENV': JSON.stringify('test-env'),
         },
-        false,
+        { sourcemap: false },
       );
     });
 
@@ -74,7 +74,7 @@ describe('DevBundler', () => {
         {
           'process.env.NODE_ENV': JSON.stringify('development'),
         },
-        false,
+        { sourcemap: false },
       );
     });
   });

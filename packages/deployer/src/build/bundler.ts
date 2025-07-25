@@ -15,7 +15,7 @@ export async function getInputOptions(
   analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
   platform: 'node' | 'browser',
   env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
-  sourcemapEnabled: boolean = false,
+  { sourcemap = false }: { sourcemap?: boolean } = {},
 ): Promise<InputOptions> {
   let nodeResolvePlugin =
     platform === 'node'
@@ -134,7 +134,7 @@ export async function getInputOptions(
       // },
       // },
       json(),
-      removeDeployer(entryFile, { sourcemap: sourcemapEnabled }),
+      removeDeployer(entryFile, { sourcemap }),
       // treeshake unused imports
       esbuild({
         include: entryFile,
