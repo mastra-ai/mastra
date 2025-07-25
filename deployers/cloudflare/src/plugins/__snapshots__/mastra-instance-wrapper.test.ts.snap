@@ -1,0 +1,56 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Wrap Mastra instance > should wrap Mastra instance in ./__fixtures__/basic.js 1`] = `
+"import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
+import { weatherAgent } from '@/agents';
+import { TestDeployer } from '@mastra/deployer/test';
+import { createApiRoute } from '@mastra/core/server';
+import { PostgresStore } from '@mastra/pg';
+
+const mastra = () => new Mastra({
+  agents: {
+    weatherAgent
+  },
+  storage: new PostgresStore({
+    connectionString: process.env.DATABASE_URL
+  }),
+  logger: createLogger({
+    name: "Mastra",
+    level: "info"
+  }),
+  telemetry: {
+    enabled: true,
+    serviceName: "my-app",
+    export: {
+      type: "otlp",
+      endpoint: "http://localhost:4318"
+      // SigNoz local endpoint
+    }
+  },
+  server: {
+    port: 3e3,
+    timeout: 5e3,
+    apiRoutes: [createApiRoute({
+      path: "/hello",
+      method: "get",
+      handler: async (req, res) => {
+        res.send("Hello World");
+      }
+    })]
+  },
+  deployer: new TestDeployer()
+});
+
+export { mastra };
+"
+`;
+
+exports[`Wrap Mastra instance > should wrap Mastra instance in ./__fixtures__/empty-mastra.js 1`] = `
+"import { Mastra } from '@mastra/core/mastra';
+
+const mastra = () => new Mastra();
+
+export { mastra };
+"
+`;
