@@ -31,6 +31,8 @@ import { WorkflowsPG } from './domains/workflows';
 
 export type PostgresConfig = {
   schemaName?: string;
+  max?: number;
+  idleTimeoutMillis?: number;
 } & (
   | {
       host: string;
@@ -79,8 +81,10 @@ export class PostgresStore extends MastraStorage {
       }
       super({ name: 'PostgresStore' });
       this.schema = config.schemaName || 'public';
-      this.#config =
-        `connectionString` in config
+      this.#config = {
+        max: config.max,
+        idleTimeoutMillis: config.idleTimeoutMillis,
+        ...(`connectionString` in config
           ? { connectionString: config.connectionString }
           : {
               host: config.host,
@@ -89,7 +93,8 @@ export class PostgresStore extends MastraStorage {
               user: config.user,
               password: config.password,
               ssl: config.ssl,
-            };
+            }),
+      };
       this.stores = {} as StorageDomains;
     } catch (e) {
       throw new MastraError(
@@ -112,7 +117,6 @@ export class PostgresStore extends MastraStorage {
       this.isConnected = true;
       this.#pgp = pgPromise();
       this.#db = this.#pgp(this.#config);
-      await super.init();
 
       const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
       const scores = new ScoresPG({ client: this.#db, operations });
@@ -129,6 +133,8 @@ export class PostgresStore extends MastraStorage {
         legacyEvals,
         memory,
       };
+
+      await super.init();
     } catch (error) {
       this.isConnected = false;
       throw new MastraError(
