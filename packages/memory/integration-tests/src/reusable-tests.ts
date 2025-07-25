@@ -620,9 +620,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       it('should throw error when deleting non-existent message', async () => {
         const nonExistentId = randomUUID();
 
-        await expect(memory.deleteMessage({ messageId: nonExistentId })).rejects.toThrow(
-          `Message with id ${nonExistentId} not found`,
-        );
+        await expect(memory.deleteMessage({ messageId: nonExistentId })).rejects.toThrow();
       });
 
       it('should update thread updatedAt timestamp after deletion', async () => {

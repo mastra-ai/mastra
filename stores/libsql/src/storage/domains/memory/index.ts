@@ -448,10 +448,16 @@ export class MemoryLibSQL extends MemoryStorage {
       });
 
       if (!result.rows || result.rows.length === 0) {
-        throw new Error(`Message with id ${messageId} not found`);
+        throw new MastraError({
+          id: 'LIBSQL_STORE_MESSAGE_NOT_FOUND',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Message with id ${messageId} not found`,
+          details: { messageId },
+        });
       }
 
-      const threadId = result.rows[0].thread_id;
+      const threadId = result.rows[0]?.thread_id;
 
       // Delete the message
       await this.client.execute({
