@@ -226,8 +226,8 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { namespace, id },
+          text: 'No update data provided',
         },
-        new Error('No update data provided'),
       );
     }
 
@@ -240,8 +240,8 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { namespace, id },
+          text: 'Both vector and metadata must be provided for an update'
         },
-        new Error('Both vector and metadata must be provided for an update'),
       );
     }
 
