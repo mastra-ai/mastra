@@ -1872,8 +1872,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     before: () => Promise<
       Omit<
         Output extends undefined
-          ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
-          : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+          ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
+          : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
               output?: Output;
               experimental_output?: never;
             },
@@ -1938,8 +1938,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       | (() => Promise<
           Omit<
             Output extends undefined
-              ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
-              : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+              ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
+              : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
                   output?: Output;
                   experimental_output?: never;
                 },
