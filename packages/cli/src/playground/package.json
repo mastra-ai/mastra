@@ -35,7 +35,7 @@
     "@tanstack/react-virtual": "^3.13.12",
     "@uiw/codemirror-theme-dracula": "^4.23.14",
     "@uiw/react-codemirror": "^4.23.14",
-    "@xyflow/react": "^12.8.1",
+    "@xyflow/react": "^12.8.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
