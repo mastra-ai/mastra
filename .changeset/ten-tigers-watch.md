@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Adds traceId to telemetry spans for agent invocations
+Adds traceId and resourceId to telemetry spans for agent invocations

@@ -1890,18 +1890,25 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
 
-    // Set thread ID context for telemetry
+    // Set thread ID and resource ID context for telemetry
+    const activeSpan = Telemetry.getActiveSpan();
+    const baggageEntries: Record<string, { value: string }> = {};
+
     if (threadFromArgs?.id) {
-      const activeSpan = Telemetry.getActiveSpan();
       if (activeSpan) {
         activeSpan.setAttribute('threadId', threadFromArgs.id);
       }
+      baggageEntries.threadId = { value: threadFromArgs.id };
+    }
 
-      // Create enhanced context with baggage for propagation
-      const baggageEntries: Record<string, { value: string }> = {
-        threadId: { value: threadFromArgs.id },
-      };
+    if (resourceId) {
+      if (activeSpan) {
+        activeSpan.setAttribute('resourceId', resourceId);
+      }
+      baggageEntries.resourceId = { value: resourceId };
+    }
 
+    if (Object.keys(baggageEntries).length > 0) {
       Telemetry.setBaggage(baggageEntries);
     }
 

@@ -21,10 +21,12 @@ export function getBaggageValues(ctx: Context) {
   const componentName = currentBaggage?.getEntry('componentName')?.value;
   const runId = currentBaggage?.getEntry('runId')?.value;
   const threadId = currentBaggage?.getEntry('threadId')?.value;
+  const resourceId = currentBaggage?.getEntry('resourceId')?.value;
   return {
     requestId,
     componentName,
     runId,
     threadId,
+    resourceId,
   };
 }

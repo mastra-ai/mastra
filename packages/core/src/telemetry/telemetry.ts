@@ -179,7 +179,7 @@ export class Telemetry {
         throw error;
       }
       try {
-        const { requestId, componentName, runId, threadId } = getBaggageValues(ctx);
+        const { requestId, componentName, runId, threadId, resourceId } = getBaggageValues(ctx);
 
         // Add all context attributes to span
         if (context.attributes) {
@@ -192,6 +192,10 @@ export class Telemetry {
 
         if (threadId) {
           span.setAttribute('threadId', threadId);
+        }
+
+        if (resourceId) {
+          span.setAttribute('resourceId', resourceId);
         }
 
         if (context.attributes?.componentName) {
@@ -222,6 +226,10 @@ export class Telemetry {
                 runId: { value: this.runId },
                 // @ts-ignore
                 'http.request_id': { value: requestId },
+                // @ts-ignore
+                threadId: { value: threadId },
+                // @ts-ignore
+                resourceId: { value: resourceId },
               }),
             );
           }
@@ -279,7 +287,7 @@ class BaggageTracer implements Tracer {
   startSpan(name: string, options: SpanOptions = {}, ctx: Context) {
     ctx = ctx ?? otlpContext.active();
     const span = this._tracer.startSpan(name, options, ctx);
-    const { componentName, runId, requestId, threadId } = getBaggageValues(ctx);
+    const { componentName, runId, requestId, threadId, resourceId } = getBaggageValues(ctx);
     // @ts-ignore
     span.setAttribute('componentName', componentName);
     // @ts-ignore
@@ -288,6 +296,8 @@ class BaggageTracer implements Tracer {
     span.setAttribute('http.request_id', requestId);
     // @ts-ignore
     span.setAttribute('threadId', threadId);
+    // @ts-ignore
+    span.setAttribute('resourceId', resourceId);
 
     return span;
   }
@@ -308,7 +318,7 @@ class BaggageTracer implements Tracer {
   ): ReturnType<F> {
     if (typeof optionsOrFn === 'function') {
       const wrappedFn = (span: Span) => {
-        const { componentName, runId, requestId, threadId } = getBaggageValues(otlpContext.active());
+        const { componentName, runId, requestId, threadId, resourceId } = getBaggageValues(otlpContext.active());
         // @ts-ignore
         span.setAttribute('componentName', componentName);
         // @ts-ignore
@@ -317,6 +327,8 @@ class BaggageTracer implements Tracer {
         span.setAttribute('http.request_id', requestId);
         // @ts-ignore
         span.setAttribute('threadId', threadId);
+        // @ts-ignore
+        span.setAttribute('resourceId', resourceId);
 
         return optionsOrFn(span);
       };
@@ -324,7 +336,7 @@ class BaggageTracer implements Tracer {
     }
     if (typeof ctxOrFn === 'function') {
       const wrappedFn = (span: Span) => {
-        const { componentName, runId, requestId, threadId } = getBaggageValues(otlpContext.active());
+        const { componentName, runId, requestId, threadId, resourceId } = getBaggageValues(otlpContext.active());
         // @ts-ignore
         span.setAttribute('componentName', componentName);
         // @ts-ignore
@@ -333,13 +345,17 @@ class BaggageTracer implements Tracer {
         span.setAttribute('http.request_id', requestId);
         // @ts-ignore
         span.setAttribute('threadId', threadId);
+        // @ts-ignore
+        span.setAttribute('resourceId', resourceId);
 
         return ctxOrFn(span);
       };
       return this._tracer.startActiveSpan(name, optionsOrFn, context.active(), wrappedFn as F);
     }
     const wrappedFn = (span: Span) => {
-      const { componentName, runId, requestId, threadId } = getBaggageValues(ctxOrFn ?? otlpContext.active());
+      const { componentName, runId, requestId, threadId, resourceId } = getBaggageValues(
+        ctxOrFn ?? otlpContext.active(),
+      );
       // @ts-ignore
       span.setAttribute('componentName', componentName);
       // @ts-ignore
@@ -348,6 +364,8 @@ class BaggageTracer implements Tracer {
       span.setAttribute('http.request_id', requestId);
       // @ts-ignore
       span.setAttribute('threadId', threadId);
+      // @ts-ignore
+      span.setAttribute('resourceId', resourceId);
 
       return fn!(span);
     };

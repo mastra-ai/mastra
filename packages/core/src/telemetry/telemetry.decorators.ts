@@ -49,13 +49,17 @@ export function withSpan(options: {
         }
       });
 
-      const { requestId, componentName, runId, threadId } = getBaggageValues(ctx);
+      const { requestId, componentName, runId, threadId, resourceId } = getBaggageValues(ctx);
       if (requestId) {
         span.setAttribute('http.request_id', requestId);
       }
 
       if (threadId) {
         span.setAttribute('threadId', threadId);
+      }
+
+      if (resourceId) {
+        span.setAttribute('resourceId', resourceId);
       }
 
       if (componentName) {
@@ -79,6 +83,8 @@ export function withSpan(options: {
             'http.request_id': { value: requestId },
             // @ts-ignore
             threadId: { value: threadId },
+            // @ts-ignore
+            resourceId: { value: resourceId },
           }),
         );
       }
