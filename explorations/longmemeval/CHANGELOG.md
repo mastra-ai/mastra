@@ -1,5 +1,13 @@
 # @mastra/longmemeval
 
+## 0.1.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [cda801d]
+  - @mastra/memory@0.11.6-alpha.1
+  - @mastra/core@0.12.0-alpha.1
+
 ## 0.1.4-alpha.0
 
 ### Patch Changes

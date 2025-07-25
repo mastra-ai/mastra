@@ -1,5 +1,13 @@
 # @mastra/dane
 
+## 0.0.39-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [cda801d]
+  - @mastra/memory@0.11.6-alpha.1
+  - @mastra/core@0.12.0-alpha.1
+
 ## 0.0.39-alpha.0
 
 ### Patch Changes
