@@ -46,6 +46,7 @@ export default defineConfig({
     'src/*/index.ts',
     'src/workflows/legacy/index.ts',
     'src/workflows/constants.ts',
+    'src/workflows/evented/index.ts',
     'src/network/index.ts',
     'src/network/vNext/index.ts',
     'src/storage/libsql/index.ts',

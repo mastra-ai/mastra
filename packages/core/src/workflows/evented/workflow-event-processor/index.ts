@@ -199,19 +199,13 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     await this.pubsub.publish('workflows', {
       type: 'workflow.end',
-      data: args,
+      data: { ...args, workflow: undefined },
     });
   }
 
-  protected async processWorkflowEnd({
-    workflowId,
-    resumeSteps,
-    prevResult,
-    resumeData,
-    parentWorkflow,
-    activeSteps,
-    runtimeContext,
-  }: ProcessorArgs) {
+  protected async processWorkflowEnd(args: ProcessorArgs) {
+    const { workflowId, resumeSteps, prevResult, resumeData, parentWorkflow, activeSteps, runtimeContext } = args;
+
     // handle nested workflow
     if (parentWorkflow) {
       console.log('ending nested', workflowId, parentWorkflow);
@@ -232,18 +226,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
       });
     }
+
+    await this.pubsub.publish('workflows-finish', { type: 'workflow.end', data: { ...args, workflow: undefined } });
   }
 
-  protected async processWorkflowSuspend({
-    workflowId,
-    resumeSteps,
-    prevResult,
-    resumeData,
-    parentWorkflow,
-    activeSteps,
-    runId,
-    runtimeContext,
-  }: ProcessorArgs) {
+  protected async processWorkflowSuspend(args: ProcessorArgs) {
+    const { workflowId, resumeSteps, prevResult, resumeData, parentWorkflow, activeSteps, runId, runtimeContext } =
+      args;
+
     // TODO: if there are still active paths don't end the workflow yet
     // handle nested workflow
     if (parentWorkflow) {
@@ -276,18 +266,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
       });
     }
+
+    await this.pubsub.publish('workflows-finish', { type: 'workflow.suspend', data: { ...args, workflow: undefined } });
   }
 
-  protected async processWorkflowFail({
-    workflowId,
-    runId,
-    resumeSteps,
-    prevResult,
-    resumeData,
-    parentWorkflow,
-    activeSteps,
-    runtimeContext,
-  }: ProcessorArgs) {
+  protected async processWorkflowFail(args: ProcessorArgs) {
+    const { workflowId, runId, resumeSteps, prevResult, resumeData, parentWorkflow, activeSteps, runtimeContext } =
+      args;
+
     await this.mastra.getStorage()?.updateWorkflowState({
       workflowName: workflowId,
       runId,
@@ -317,6 +303,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
       });
     }
+
+    await this.pubsub.publish('workflows-finish', { type: 'workflow.fail', data: { ...args, workflow: undefined } });
   }
 
   protected async processWorkflowStepRun({
@@ -1166,6 +1154,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   async process(event: Event, ack?: () => void) {
+    console.log('processing event', event);
     const { type, data } = event;
 
     const workflowData = data as Omit<ProcessorArgs, 'workflow'>;
@@ -1174,7 +1163,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       workflowId: workflowData.workflowId,
       runId: workflowData.runId,
     });
-    console.dir({ eventType: type, currentState }, { depth: null });
+    console.dir({ processing: { eventType: type, currentState } }, { depth: null });
 
     if (currentState?.status === 'canceled' && type !== 'workflow.end') {
       console.log('workflow canceled', type);
@@ -1278,6 +1267,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         break;
     }
 
+    console.log('processed event', type, ack);
     ack?.();
   }
 }

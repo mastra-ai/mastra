@@ -275,8 +275,8 @@ export function createWorkflow<
     any,
     EventedEngineType
   >[],
->(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
-  const pubsub = new EventEmitterPubSub();
+>(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>, pubsub?: PubSub) {
+  pubsub = pubsub ?? new EventEmitterPubSub();
   const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra!, pubsub });
   const executionEngine = new EventedExecutionEngine({ mastra: params.mastra!, eventProcessor, pubsub });
   return new EventedWorkflow<EventedEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput>(
@@ -345,6 +345,7 @@ export class EventedWorkflow<
           activePaths: [],
           serializedStepGraph: this.serializedStepGraph,
           suspendedPaths: {},
+          waitingPaths: {},
           result: undefined,
           error: undefined,
           // @ts-ignore
@@ -406,6 +407,7 @@ export class EventedRun<
         runtimeContext: Object.fromEntries(runtimeContext.entries()),
         activePaths: [],
         suspendedPaths: {},
+        waitingPaths: {},
         timestamp: Date.now(),
         status: 'running',
       },
@@ -574,8 +576,10 @@ export class EventedRun<
   }
 
   watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
-    const watchCb = (event: any) => {
+    const watchCb = (event: any, cleanup?: () => void) => {
+      console.log('watch cb', type, event);
       cb(event.data);
+      cleanup?.();
     };
 
     if (type === 'watch-v2') {
