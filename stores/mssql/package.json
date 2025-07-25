@@ -30,7 +30,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "mssql": "^10.0.0"
+    "mssql": "^10.0.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

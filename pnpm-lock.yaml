@@ -2846,7 +2846,7 @@ importers:
   stores/mssql:
     dependencies:
       mssql:
-        specifier: ^10.0.0
+        specifier: ^10.0.4
         version: 10.0.4
     devDependencies:
       '@internal/lint':
