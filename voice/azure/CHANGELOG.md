@@ -1,5 +1,23 @@
 # @mastra/voice-azure
 
+## 0.10.5-alpha.0
+
+### Patch Changes
+
+- d9e4449: dependencies updates:
+  - Updated dependency [`microsoft-cognitiveservices-speech-sdk@^1.45.0` ↗︎](https://www.npmjs.com/package/microsoft-cognitiveservices-speech-sdk/v/1.45.0) (from `^1.44.1`, in `dependencies`)
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
 ## 0.10.4
 
 ### Patch Changes
