@@ -23,7 +23,7 @@ const agent = mastra.getAgent("weatherAgent");
 
 // Define your runtimeContext's type structure
 type WeatherRuntimeContext = {
-  "temperature-scale": "celsius" | "fahrenheit"; // Fixed typo in "fahrenheit"
+  "temperature-scale": "celsius" | "fahrenheit";
 };
 
 const runtimeContext = new RuntimeContext<WeatherRuntimeContext>();

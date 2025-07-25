@@ -105,7 +105,7 @@
     "builtins": "^5.1.0",
     "detect-libc": "^2.0.4",
     "dotenv": "^16.6.1",
-    "esbuild": "^0.25.5",
+    "esbuild": "^0.25.8",
     "find-workspaces": "^0.3.1",
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
@@ -118,7 +118,7 @@
     "zod": "^3.25.67"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.14.4",
+    "@hono/node-server": "^1.17.1",
     "@hono/swagger-ui": "^0.5.2",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",

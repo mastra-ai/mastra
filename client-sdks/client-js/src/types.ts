@@ -475,7 +475,7 @@ export interface GetScoresByEntityIdParams {
 }
 
 export interface SaveScoreParams {
-  score: ScoreRowData;
+  score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>;
 }
 
 export interface GetScoresResponse {

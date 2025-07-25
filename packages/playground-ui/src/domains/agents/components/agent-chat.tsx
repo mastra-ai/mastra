@@ -27,7 +27,7 @@ export const AgentChat = ({
       settings={settings}
       runtimeContext={runtimeContext}
     >
-      <Thread agentName={agentName ?? ''} hasMemory={memory} onInputChange={onInputChange} />
+      <Thread agentName={agentName ?? ''} hasMemory={memory} onInputChange={onInputChange} agentId={agentId} />
     </MastraRuntimeProvider>
   );
 };
