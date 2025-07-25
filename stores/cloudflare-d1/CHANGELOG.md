@@ -1,5 +1,22 @@
 # @mastra/cloudflare-d1
 
+## 0.12.4-alpha.0
+
+### Patch Changes
+
+- 41c0698: fix executeRestQuery
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
 ## 0.12.3
 
 ### Patch Changes

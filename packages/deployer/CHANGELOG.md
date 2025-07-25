@@ -1,5 +1,28 @@
 # @mastra/deployer
 
+## 0.12.0-alpha.0
+
+### Patch Changes
+
+- 832691b: dependencies updates:
+  - Updated dependency [`@babel/core@^7.28.0` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.28.0) (from `^7.27.7`, in `dependencies`)
+- 557bb9d: dependencies updates:
+  - Updated dependency [`esbuild@^0.25.8` ↗︎](https://www.npmjs.com/package/esbuild/v/0.25.8) (from `^0.25.5`, in `dependencies`)
+- bc6b44a: Extract tools import from `createHonoServer`; the function now receives tools via a prop on the `options` parameter.
+- 09bca64: Log warning when telemetry is enabled but not loaded
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+  - @mastra/server@0.12.0-alpha.0
+
 ## 0.11.1
 
 ### Patch Changes
