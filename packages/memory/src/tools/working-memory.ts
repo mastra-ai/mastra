@@ -17,10 +17,14 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig): CoreTool =
       throw new Error('Thread ID and Memory instance are required for working memory updates');
     }
 
-    const thread = await memory.getThreadById({ threadId });
+    let thread = await memory.getThreadById({ threadId });
 
     if (!thread) {
-      throw new Error(`Thread ${threadId} not found`);
+      thread = await memory.createThread({
+        threadId,
+        resourceId: resourceId || thread.resourceId,
+        memoryConfig,
+      });
     }
 
     if (thread.resourceId && thread.resourceId !== resourceId) {
