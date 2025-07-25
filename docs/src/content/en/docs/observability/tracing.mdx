@@ -151,7 +151,7 @@ export const mastra = new Mastra({
 });
 ```
 
-2. Create an instrumentation file in your project (e.g., `instrumentation.ts`):
+2. Create an instrumentation file in your project (e.g., `instrumentation.mjs`):
 
 ```typescript
 import { NodeSDK } from '@opentelemetry/sdk-node';
@@ -176,7 +176,7 @@ OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <Your API Key>, x-bt-parent=pro
 4. Run the OpenTelemetry SDK before your application:
 
 ```bash
-bun run --hot --require ./instrumentation.ts src/index.ts
+node --require ./instrumentation.mjs src/index.js
 ```
 
 ### Next.js-specific Tracing steps
