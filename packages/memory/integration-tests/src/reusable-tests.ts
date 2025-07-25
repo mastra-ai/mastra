@@ -604,7 +604,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const messageToDelete = savedMessages[1];
 
         // Delete the middle message
-        await memory.deleteMessage({ messageId: messageToDelete.id });
+        await memory.deleteMessages(messageToDelete.id);
 
         // Verify message is deleted
         const remainingMessages = await memory.query({
@@ -617,10 +617,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(remainingMessages.messages.find(m => m.id === messageToDelete.id)).toBeUndefined();
       });
 
-      it('should throw error when deleting non-existent message', async () => {
+      it('should handle deleting non-existent message gracefully', async () => {
         const nonExistentId = randomUUID();
 
-        await expect(memory.deleteMessage({ messageId: nonExistentId })).rejects.toThrow();
+        // Should not throw when deleting non-existent message
+        await expect(memory.deleteMessages(nonExistentId)).resolves.not.toThrow();
       });
 
       it('should update thread updatedAt timestamp after deletion', async () => {
@@ -633,7 +634,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         // Wait a bit to ensure timestamp difference
         await new Promise(resolve => setTimeout(resolve, 10));
 
-        await memory.deleteMessage({ messageId: message.id });
+        await memory.deleteMessages(message.id);
 
         const threadAfter = await memory.getThreadById({ threadId: thread.id });
         const updatedAtAfter = threadAfter?.updatedAt;
@@ -657,7 +658,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const savedMessages = await memory.saveMessages({ messages: [textMessage, complexMessage] });
 
         // Delete the complex message
-        await memory.deleteMessage({ messageId: savedMessages[1].id });
+        await memory.deleteMessages(savedMessages[1].id);
 
         const remainingMessages = await memory.query({
           threadId: thread.id,
@@ -681,7 +682,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         await memory.saveMessages({ messages: [message1, message2] });
 
         // Delete message from first thread
-        await memory.deleteMessage({ messageId: message1.id });
+        await memory.deleteMessages(message1.id);
 
         // Verify first thread has no messages
         const thread1Messages = await memory.query({
@@ -700,7 +701,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       });
 
       it('should throw error when messageId is not provided', async () => {
-        await expect(memory.deleteMessage({ messageId: '' })).rejects.toThrow('Message ID is required');
+        await expect(memory.deleteMessages('')).rejects.toThrow('All message IDs must be non-empty strings');
       });
     });
 
