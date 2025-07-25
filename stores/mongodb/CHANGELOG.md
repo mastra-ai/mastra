@@ -1,5 +1,23 @@
 # @mastra/mongodb
 
+## 0.12.3-alpha.0
+
+### Patch Changes
+
+- 25f2987: fix: filter.\_id.\$in cannot be empty
+- b0f1e2f: fix: mongodb save scores as an object
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
 ## 0.12.2
 
 ### Patch Changes
