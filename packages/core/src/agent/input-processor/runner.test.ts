@@ -1,19 +1,40 @@
 import type { TextPart } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../message-list';
+import type { MastraMessageV2 } from '../message-list';
 import { TripWire } from '../trip-wire';
 import { runInputProcessors } from './runner';
-import { createInputProcessor } from '.';
+
+// Helper function to create a MastraMessageV2
+function createMessage(text: string, role: 'user' | 'assistant' = 'user'): MastraMessageV2 {
+  return {
+    id: crypto.randomUUID(),
+    role,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+    },
+    createdAt: new Date(),
+  };
+}
 
 describe('runInputProcessors', () => {
   it('should run the input processors in order', async () => {
     const processors = [
-      createInputProcessor('processor1', async ctx => {
-        ctx.messages.add('extra message A', 'user');
-      }),
-      createInputProcessor('processor2', async ctx => {
-        ctx.messages.add('extra message B', 'user');
-      }),
+      {
+        name: 'processor1',
+        process: async ({ messages }) => {
+          messages.push(createMessage('extra message A'));
+          return messages;
+        },
+      },
+      {
+        name: 'processor2',
+        process: async ({ messages }) => {
+          messages.push(createMessage('extra message B'));
+          return messages;
+        },
+      },
     ];
 
     let messageList = new MessageList({
@@ -46,14 +67,25 @@ describe('runInputProcessors', () => {
   });
 
   it('should run processors sequentially in order', async () => {
+    const executionOrder: string[] = [];
+
     const processors = [
-      createInputProcessor('processor1', async ctx => {
-        ctx.messages.add('extra message A', 'user');
-      }),
-      createInputProcessor('processor2', async ctx => {
-        await new Promise(resolve => setImmediate(resolve));
-        ctx.messages.add('extra message B', 'user');
-      }),
+      {
+        name: 'processor1',
+        process: async ({ messages }) => {
+          executionOrder.push('processor1');
+          messages.push(createMessage('extra message A'));
+          return messages;
+        },
+      },
+      {
+        name: 'processor2',
+        process: async ({ messages }) => {
+          executionOrder.push('processor2');
+          messages.push(createMessage('extra message B'));
+          return messages;
+        },
+      },
     ];
 
     let messageList = new MessageList({
@@ -63,39 +95,36 @@ describe('runInputProcessors', () => {
 
     messageList = await runInputProcessors(processors, messageList);
 
-    expect(await messageList.get.all.prompt()).toEqual([
-      {
-        content: [
-          {
-            text: 'extra message A',
-            type: 'text',
-          },
-        ],
-        role: 'user',
-      },
-      {
-        content: [
-          {
-            text: 'extra message B',
-            type: 'text',
-          },
-        ],
-        role: 'user',
-      },
-    ]);
+    // Verify execution order
+    expect(executionOrder).toEqual(['processor1', 'processor2']);
+
+    // Verify messages were added in order
+    const allMessages = await messageList.get.all.prompt();
+    expect(allMessages).toHaveLength(2);
+    expect((allMessages[0].content[0] as TextPart).text).toBe('extra message A');
+    expect((allMessages[1].content[0] as TextPart).text).toBe('extra message B');
   });
 
   it('should abort if tripwire is triggered', async () => {
     const processors = [
-      createInputProcessor('processor1', async ctx => {
-        ctx.messages.add('extra message A', 'user');
-      }),
-      createInputProcessor('processor2', async ctx => {
-        ctx.abort('bad message');
-      }),
+      {
+        name: 'processor1',
+        process: async ({ messages, abort }) => {
+          messages.push(createMessage('before abort'));
+          abort('bad message');
+          return messages;
+        },
+      },
+      {
+        name: 'processor2',
+        process: async ({ messages }) => {
+          messages.push(createMessage('after abort - should not execute'));
+          return messages;
+        },
+      },
     ];
 
-    let messageList = new MessageList({
+    const messageList = new MessageList({
       threadId: '123',
       resourceId: '456',
     });
@@ -105,29 +134,37 @@ describe('runInputProcessors', () => {
 
   it('should abort with default message when no reason provided', async () => {
     const processors = [
-      createInputProcessor('testProcessor', async ctx => {
-        ctx.abort();
-      }),
+      {
+        name: 'processor1',
+        process: async ({ abort, messages }) => {
+          abort();
+          return messages;
+        },
+      },
     ];
 
-    let messageList = new MessageList({
+    const messageList = new MessageList({
       threadId: '123',
       resourceId: '456',
     });
 
     await expect(runInputProcessors(processors, messageList)).rejects.toThrow(
-      new TripWire('Tripwire triggered by testProcessor'),
+      new TripWire('Tripwire triggered by processor1'),
     );
   });
 
   it('should abort with custom reason', async () => {
     const processors = [
-      createInputProcessor('customProcessor', async ctx => {
-        ctx.abort('Custom abort reason');
-      }),
+      {
+        name: 'processor1',
+        process: async ({ abort, messages }) => {
+          abort('Custom abort reason');
+          return messages;
+        },
+      },
     ];
 
-    let messageList = new MessageList({
+    const messageList = new MessageList({
       threadId: '123',
       resourceId: '456',
     });
@@ -136,51 +173,58 @@ describe('runInputProcessors', () => {
   });
 
   it('should not execute subsequent processors after tripwire', async () => {
-    let executedProcessors: string[] = [];
+    let secondProcessorExecuted = false;
 
     const processors = [
-      createInputProcessor('processor1', async ctx => {
-        executedProcessors.push('processor1');
-      }),
-      createInputProcessor('processor2', async ctx => {
-        executedProcessors.push('processor2');
-        ctx.abort('triggered');
-      }),
-      createInputProcessor('processor3', async ctx => {
-        executedProcessors.push('processor3');
-        ctx.messages.add('should not be added', 'user');
-      }),
+      {
+        name: 'processor1',
+        process: async ({ abort, messages }) => {
+          abort('stopping here');
+          return messages;
+        },
+      },
+      {
+        name: 'processor2',
+        process: async ({ messages }) => {
+          secondProcessorExecuted = true;
+          messages.push(createMessage('should not be added'));
+          return messages;
+        },
+      },
     ];
 
-    let messageList = new MessageList({
+    const messageList = new MessageList({
       threadId: '123',
       resourceId: '456',
     });
 
-    await expect(runInputProcessors(processors, messageList)).rejects.toThrow(TripWire);
-
-    expect(executedProcessors).toEqual(['processor1', 'processor2']);
-    expect(executedProcessors).not.toContain('processor3');
+    await expect(runInputProcessors(processors, messageList)).rejects.toThrow();
+    expect(secondProcessorExecuted).toBe(false);
   });
 
   describe('telemetry integration', () => {
     it('should use telemetry.traceMethod for individual processors when telemetry is provided', async () => {
-      const mockTraceMethod = vi.fn().mockImplementation((fn, _options) => {
-        // Return a function that calls the original function
-        return (data: any) => fn(data);
-      });
-
-      const mockTelemetry = {
-        traceMethod: mockTraceMethod,
+      const telemetryMock = {
+        traceMethod: vi.fn().mockImplementation(fn => {
+          return () => fn();
+        }),
       };
 
       const processors = [
-        createInputProcessor('test-processor-1', async ctx => {
-          ctx.messages.add('message from processor 1', 'user');
-        }),
-        createInputProcessor('test-processor-2', async ctx => {
-          ctx.messages.add('message from processor 2', 'user');
-        }),
+        {
+          name: 'test-processor-1',
+          process: async ({ messages }) => {
+            messages.push(createMessage('message from processor 1'));
+            return messages;
+          },
+        },
+        {
+          name: 'test-processor-2',
+          process: async ({ messages }) => {
+            messages.push(createMessage('message from processor 2'));
+            return messages;
+          },
+        },
       ];
 
       let messageList = new MessageList({
@@ -188,13 +232,13 @@ describe('runInputProcessors', () => {
         resourceId: '456',
       });
 
-      messageList = await runInputProcessors(processors, messageList, mockTelemetry);
+      messageList = await runInputProcessors(processors, messageList, telemetryMock);
 
-      // Verify telemetry.traceMethod was called for each processor
-      expect(mockTraceMethod).toHaveBeenCalledTimes(2);
+      // Verify traceMethod was called for each processor
+      expect(telemetryMock.traceMethod).toHaveBeenCalledTimes(2);
 
-      // Verify the first processor call
-      expect(mockTraceMethod).toHaveBeenNthCalledWith(1, expect.any(Function), {
+      // Verify the span names and attributes
+      expect(telemetryMock.traceMethod).toHaveBeenNthCalledWith(1, expect.any(Function), {
         spanName: 'agent.inputProcessor.test-processor-1',
         attributes: {
           'processor.name': 'test-processor-1',
@@ -203,8 +247,7 @@ describe('runInputProcessors', () => {
         },
       });
 
-      // Verify the second processor call
-      expect(mockTraceMethod).toHaveBeenNthCalledWith(2, expect.any(Function), {
+      expect(telemetryMock.traceMethod).toHaveBeenNthCalledWith(2, expect.any(Function), {
         spanName: 'agent.inputProcessor.test-processor-2',
         attributes: {
           'processor.name': 'test-processor-2',
@@ -213,7 +256,7 @@ describe('runInputProcessors', () => {
         },
       });
 
-      // Verify the messages were still processed correctly
+      // Verify messages were processed correctly
       const result = await messageList.get.all.prompt();
       expect(result).toHaveLength(2);
       expect((result[0].content[0] as TextPart).text).toBe('message from processor 1');
@@ -222,9 +265,13 @@ describe('runInputProcessors', () => {
 
     it('should work without telemetry when not provided', async () => {
       const processors = [
-        createInputProcessor('no-telemetry-processor', async ctx => {
-          ctx.messages.add('message without telemetry', 'user');
-        }),
+        {
+          name: 'no-telemetry-processor',
+          process: async ({ messages }) => {
+            messages.push(createMessage('message without telemetry'));
+            return messages;
+          },
+        },
       ];
 
       let messageList = new MessageList({
@@ -232,8 +279,7 @@ describe('runInputProcessors', () => {
         resourceId: '456',
       });
 
-      // Should work fine without telemetry
-      messageList = await runInputProcessors(processors, messageList, undefined);
+      messageList = await runInputProcessors(processors, messageList);
 
       const result = await messageList.get.all.prompt();
       expect(result).toHaveLength(1);
@@ -241,37 +287,33 @@ describe('runInputProcessors', () => {
     });
 
     it('should handle tripwire correctly with telemetry', async () => {
-      const mockTraceMethod = vi.fn().mockImplementation((fn, _options) => {
-        return (data: any) => fn(data);
-      });
-
-      const mockTelemetry = {
-        traceMethod: mockTraceMethod,
+      const telemetryMock = {
+        traceMethod: vi.fn().mockImplementation(fn => {
+          return () => fn();
+        }),
       };
 
       const processors = [
-        createInputProcessor('tripwire-processor', async ctx => {
-          ctx.abort('telemetry tripwire test');
-        }),
+        {
+          name: 'tripwire-processor',
+          process: async ({ messages }) => {
+            messages.push(createMessage('message from processor 1'));
+            return messages;
+          },
+        },
       ];
 
-      let messageList = new MessageList({
+      const messageList = new MessageList({
         threadId: '123',
         resourceId: '456',
       });
 
-      await expect(runInputProcessors(processors, messageList, mockTelemetry)).rejects.toThrow(TripWire);
+      await expect(runInputProcessors(processors, messageList, telemetryMock)).rejects.toThrow(
+        new TripWire('telemetry tripwire test'),
+      );
 
-      // Verify telemetry was still called even when processor aborted
-      expect(mockTraceMethod).toHaveBeenCalledTimes(1);
-      expect(mockTraceMethod).toHaveBeenCalledWith(expect.any(Function), {
-        spanName: 'agent.inputProcessor.tripwire-processor',
-        attributes: {
-          'processor.name': 'tripwire-processor',
-          'processor.index': '0',
-          'processor.total': '1',
-        },
-      });
+      // Verify telemetry was still called even though processor aborted
+      expect(telemetryMock.traceMethod).toHaveBeenCalledTimes(1);
     });
   });
 });

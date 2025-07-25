@@ -66,7 +66,7 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
       type: "InputProcessor[] | ({ runtimeContext: RuntimeContext }) => InputProcessor[] | Promise<InputProcessor[]>",
       isOptional: true,
       description:
-        "Input processors that run before messages are sent to the language model. These middleware components can intercept, modify, validate, or filter messages. Can be a static array or a function that returns processors based on runtime context.",
+        "Input processors that run sequentially before messages are sent to the language model. These middleware components can intercept, modify, validate, or filter messages. Each processor receives an array of MastraMessageV2 objects and an abort function for early termination. Can be a static array or a function that returns processors based on runtime context.",
     },
     {
       name: "defaultGenerateOptions",

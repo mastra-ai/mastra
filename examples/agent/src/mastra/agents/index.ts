@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { jsonSchema, tool } from 'ai';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
-import { Agent, createInputProcessor } from '@mastra/core/agent';
+import { Agent, InputProcessor } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 
@@ -83,6 +83,23 @@ export const dynamicAgent = new Agent({
   },
 });
 
+const vegetarianProcessor: InputProcessor = {
+  name: 'eat-more-tofu',
+  process: async ({ messages }) => {
+    messages.push({
+      id: crypto.randomUUID(),
+      createdAt: new Date(),
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Make the suggested recipe, but remove any meat and add tofu instead' }],
+      },
+    });
+
+    return messages;
+  },
+};
+
 export const chefAgentResponses = new Agent({
   name: 'Chef Agent Responses',
   instructions: `
@@ -98,24 +115,37 @@ export const chefAgentResponses = new Agent({
     myWorkflow,
   },
   inputProcessors: [
-    createInputProcessor('add-user-message', async (ctx, next) => {
-      ctx.messages.add('hello from the input processor', 'user');
-      await next();
-    }),
-    createInputProcessor('no-soup-for-you', async (ctx, next) => {
-      const hasSoup = (await ctx.messages.get.all.prompt()).some(msg => {
-        if (Array.isArray(msg.content)) {
-          return msg.content.some(part => part.type === 'text' && part.text.includes('soup'));
-        } else if (typeof msg.content === 'string' && msg.content.includes('soup')) {
-          return true;
-        }
-        return false;
-      });
+    vegetarianProcessor,
+    {
+      name: 'no-soup-for-you',
+      process: async ({ messages, abort }) => {
+        const hasSoup = messages.some(msg => {
+          if (msg.content.content?.includes('soup')) {
+            return true;
+          }
+          return false;
+        });
 
-      if (hasSoup) {
-        ctx.abort('No soup for you!');
-      }
-      await next();
-    }),
+        if (hasSoup) {
+          abort('No soup for you!');
+        }
+
+        return messages;
+      },
+    },
+    {
+      name: 'remove-spinach',
+      process: async ({ messages }) => {
+        for (const message of messages) {
+          for (const part of message.content.parts) {
+            if (part.type === 'text' && part.text.includes('spinach')) {
+              part.text = part.text.replaceAll('spinach', '');
+            }
+          }
+        }
+
+        return messages;
+      },
+    },
   ],
 });

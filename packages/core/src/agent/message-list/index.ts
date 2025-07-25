@@ -105,6 +105,18 @@ export class MessageList {
       response: this.response,
     };
   }
+  public get clear() {
+    return {
+      input: {
+        v2: () => {
+          const userMessages = this.messages.filter(m => this.newUserMessages.has(m));
+          this.messages = this.messages.filter(m => !this.newUserMessages.has(m));
+          this.newUserMessages.clear();
+          return userMessages;
+        },
+      },
+    };
+  }
   private all = {
     v2: () => this.messages,
     v1: () => convertToV1Messages(this.messages),
@@ -150,225 +162,6 @@ export class MessageList {
     return Math.min(...unsavedMessages.map(m => new Date(m.createdAt).getTime()));
   }
 
-  /**
-   * Remove a message by its ID
-   * @param messageId The ID of the message to remove
-   * @returns true if the message was found and removed, false otherwise
-   */
-  public removeById(messageId: string): boolean {
-    const index = this.messages.findIndex(m => m.id === messageId);
-    if (index === -1) return false;
-
-    const message = this.messages[index]!;
-
-    // Remove from messages array
-    this.messages.splice(index, 1);
-
-    // Remove from tracking sets
-    this.memoryMessages.delete(message);
-    this.newUserMessages.delete(message);
-    this.newResponseMessages.delete(message);
-    this.userContextMessages.delete(message);
-
-    return true;
-  }
-
-  /**
-   * Remove messages that match a predicate function
-   * @param predicate Function that returns true for messages to remove
-   * @returns Number of messages removed
-   */
-  public removeWhere(predicate: (message: MastraMessageV2) => boolean): number {
-    const messagesToRemove = this.messages.filter(predicate);
-
-    for (const message of messagesToRemove) {
-      this.removeById(message.id);
-    }
-
-    return messagesToRemove.length;
-  }
-
-  /**
-   * Remove all messages with a specific role
-   * @param role The role to filter by ('user' | 'assistant')
-   * @returns Number of messages removed
-   */
-  public removeByRole(role: 'user' | 'assistant'): number {
-    return this.removeWhere(message => message.role === role);
-  }
-
-  /**
-   * Remove all messages from a specific source
-   * @param source The message source ('memory' | 'response' | 'user' | 'context')
-   * @returns Number of messages removed
-   */
-  public removeBySource(source: MessageSource): number {
-    let removedCount = 0;
-    const messagesToRemove: MastraMessageV2[] = [];
-
-    switch (source) {
-      case 'memory':
-        messagesToRemove.push(...Array.from(this.memoryMessages));
-        break;
-      case 'response':
-        messagesToRemove.push(...Array.from(this.newResponseMessages));
-        break;
-      case 'user':
-        messagesToRemove.push(...Array.from(this.newUserMessages));
-        break;
-      case 'context':
-        messagesToRemove.push(...Array.from(this.userContextMessages));
-        break;
-    }
-
-    for (const message of messagesToRemove) {
-      if (this.removeById(message.id)) {
-        removedCount++;
-      }
-    }
-
-    return removedCount;
-  }
-
-  /**
-   * Modify a message by its ID
-   * @param messageId The ID of the message to modify
-   * @param updater Function that receives the current message and returns the updated message
-   * @returns true if the message was found and modified, false otherwise
-   */
-  public modifyById(messageId: string, updater: (message: MastraMessageV2) => MastraMessageV2): boolean {
-    const index = this.messages.findIndex(m => m.id === messageId);
-    if (index === -1) return false;
-
-    const currentMessage = this.messages[index]!;
-    const updatedMessage = updater({ ...currentMessage });
-
-    // Ensure the ID remains the same
-    updatedMessage.id = messageId;
-
-    this.messages[index] = updatedMessage;
-
-    // Update tracking sets - remove old message and add updated one
-    const isMemory = this.memoryMessages.has(currentMessage);
-    const isNewUser = this.newUserMessages.has(currentMessage);
-    const isNewResponse = this.newResponseMessages.has(currentMessage);
-    const isUserContext = this.userContextMessages.has(currentMessage);
-
-    // Remove from all sets
-    this.memoryMessages.delete(currentMessage);
-    this.newUserMessages.delete(currentMessage);
-    this.newResponseMessages.delete(currentMessage);
-    this.userContextMessages.delete(currentMessage);
-
-    // Re-add to appropriate sets
-    if (isMemory) this.memoryMessages.add(updatedMessage);
-    if (isNewUser) this.newUserMessages.add(updatedMessage);
-    if (isNewResponse) this.newResponseMessages.add(updatedMessage);
-    if (isUserContext) this.userContextMessages.add(updatedMessage);
-
-    return true;
-  }
-
-  /**
-   * Modify all messages that match a predicate
-   * @param predicate Function that returns true for messages to modify
-   * @param updater Function that receives a message and returns the updated message
-   * @returns Number of messages modified
-   */
-  public modifyWhere(
-    predicate: (message: MastraMessageV2) => boolean,
-    updater: (message: MastraMessageV2) => MastraMessageV2,
-  ): number {
-    const messagesToModify = this.messages.filter(predicate);
-
-    let modifiedCount = 0;
-    for (const message of messagesToModify) {
-      if (this.modifyById(message.id, updater)) {
-        modifiedCount++;
-      }
-    }
-
-    return modifiedCount;
-  }
-
-  /**
-   * Clear all messages
-   * @returns Number of messages cleared
-   */
-  public clear(): number {
-    const count = this.messages.length;
-
-    this.messages = [];
-    this.memoryMessages.clear();
-    this.newUserMessages.clear();
-    this.newResponseMessages.clear();
-    this.userContextMessages.clear();
-
-    return count;
-  }
-
-  /**
-   * Get the count of messages by source
-   * @returns Object with counts for each message source
-   */
-  public getMessageCounts(): {
-    total: number;
-    memory: number;
-    user: number;
-    response: number;
-    context: number;
-  } {
-    return {
-      total: this.messages.length,
-      memory: this.memoryMessages.size,
-      user: this.newUserMessages.size,
-      response: this.newResponseMessages.size,
-      context: this.userContextMessages.size,
-    };
-  }
-
-  /**
-   * Filter messages and return a new MessageList with only matching messages
-   * @param predicate Function that returns true for messages to keep
-   * @returns A new MessageList containing only the filtered messages
-   */
-  public filter(predicate: (message: MastraMessageV2) => boolean): MessageList {
-    const filteredMessageList = new MessageList({
-      threadId: this.memoryInfo?.threadId,
-      resourceId: this.memoryInfo?.resourceId,
-      generateMessageId: this.generateMessageId,
-      // @ts-ignore Flag for agent network messages
-      _agentNetworkAppend: this._agentNetworkAppend,
-    });
-
-    // Copy system messages
-    filteredMessageList.systemMessages = [...this.systemMessages];
-    filteredMessageList.taggedSystemMessages = { ...this.taggedSystemMessages };
-
-    // Filter and add messages while preserving their source tracking
-    for (const message of this.messages) {
-      if (predicate(message)) {
-        filteredMessageList.messages.push(message);
-
-        // Preserve source tracking
-        if (this.memoryMessages.has(message)) {
-          filteredMessageList.memoryMessages.add(message);
-        }
-        if (this.newUserMessages.has(message)) {
-          filteredMessageList.newUserMessages.add(message);
-        }
-        if (this.newResponseMessages.has(message)) {
-          filteredMessageList.newResponseMessages.add(message);
-        }
-        if (this.userContextMessages.has(message)) {
-          filteredMessageList.userContextMessages.add(message);
-        }
-      }
-    }
-
-    return filteredMessageList;
-  }
-
   public getSystemMessages(tag?: string): CoreMessage[] {
     if (tag) {
       return this.taggedSystemMessages[tag] || [];
@@ -382,7 +175,6 @@ export class MessageList {
     }
     return this;
   }
-
   private convertToCoreMessages(messages: UIMessage[]): CoreMessage[] {
     return convertToCoreMessages(this.sanitizeUIMessages(messages));
   }

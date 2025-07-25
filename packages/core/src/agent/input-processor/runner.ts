@@ -1,6 +1,5 @@
-import { MessageList } from '../message-list';
+import type { MastraMessageV2, MessageList } from '../message-list';
 import { TripWire } from '../trip-wire';
-import { ProcessorMessages } from './processor-messages';
 import type { InputProcessor } from './index';
 
 export async function runInputProcessors(
@@ -8,18 +7,17 @@ export async function runInputProcessors(
   messageList: MessageList,
   telemetry?: any,
 ): Promise<MessageList> {
-  // Use the same v2 format for both MessageList and ProcessorMessages
-  const v2Messages = messageList.get.all.v2();
-  const processorMessages = new ProcessorMessages(v2Messages);
+  const userMessages = messageList.clear.input.v2();
 
-  const ctx: { messages: ProcessorMessages; abort: () => never } = {
-    messages: processorMessages,
+  let processableMessages: MastraMessageV2[] = [...userMessages];
+
+  const ctx: { messages: MastraMessageV2[]; abort: () => never } = {
+    messages: processableMessages,
     abort: () => {
       throw new TripWire('Tripwire triggered');
     },
   };
 
-  // Run all processors sequentially
   for (let index = 0; index < processors.length; index++) {
     const processor = processors[index];
     if (!processor) {
@@ -32,13 +30,13 @@ export async function runInputProcessors(
 
     ctx.abort = abort;
 
-    // Wrap processor execution in telemetry span
     if (!telemetry) {
-      await processor.process(ctx);
+      processableMessages = await processor.process({ messages: userMessages, abort: ctx.abort });
     } else {
       await telemetry.traceMethod(
         async () => {
-          return processor.process(ctx);
+          processableMessages = await processor.process({ messages: userMessages, abort: ctx.abort });
+          return processableMessages;
         },
         {
           spanName: `agent.inputProcessor.${processor.name}`,
@@ -52,9 +50,9 @@ export async function runInputProcessors(
     }
   }
 
-  // Convert back to MessageList - use the processed v2 messages directly
-  const processedV2Messages = ctx.messages.getAll();
-  const newMessageList = new MessageList();
-  messageList.add(processedV2Messages, 'user');
-  return newMessageList;
+  if (processableMessages.length > 0) {
+    messageList.add(processableMessages, 'user');
+  }
+
+  return messageList;
 }

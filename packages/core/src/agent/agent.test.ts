@@ -18,7 +18,7 @@ import { createTool } from '../tools';
 import { CompositeVoice, MastraVoice } from '../voice';
 import { MessageList } from './message-list/index';
 import type { MastraMessageV2 } from './types';
-import { Agent, createInputProcessor } from './index';
+import { Agent } from './index';
 
 config();
 
@@ -3209,6 +3209,17 @@ describe('dynamic memory configuration', () => {
 describe('Input Processors', () => {
   let mockModel: MockLanguageModelV1;
 
+  // Helper function to create a MastraMessageV2
+  const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraMessageV2 => ({
+    id: crypto.randomUUID(),
+    role,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+    },
+    createdAt: new Date(),
+  });
+
   beforeEach(() => {
     mockModel = new MockLanguageModelV1({
       doGenerate: async ({ prompt }) => {
@@ -3274,9 +3285,13 @@ describe('Input Processors', () => {
 
   describe('basic functionality', () => {
     it('should run input processors before generation', async () => {
-      const processor = createInputProcessor('test-processor', async ctx => {
-        ctx.messages.add('Processor was here!', 'user');
-      });
+      const processor = {
+        name: 'test-processor',
+        process: async ({ messages }) => {
+          messages.push(createMessage('Processor was here!'));
+          return messages;
+        },
+      };
 
       const agentWithProcessor = new Agent({
         name: 'test-agent',
@@ -3293,13 +3308,21 @@ describe('Input Processors', () => {
     });
 
     it('should run multiple processors in order', async () => {
-      const processor1 = createInputProcessor('processor-1', async ctx => {
-        ctx.messages.add('First processor', 'user');
-      });
+      const processor1 = {
+        name: 'processor-1',
+        process: async ({ messages }) => {
+          messages.push(createMessage('First processor'));
+          return messages;
+        },
+      };
 
-      const processor2 = createInputProcessor('processor-2', async ctx => {
-        ctx.messages.add('Second processor', 'user');
-      });
+      const processor2 = {
+        name: 'processor-2',
+        process: async ({ messages }) => {
+          messages.push(createMessage('Second processor'));
+          return messages;
+        },
+      };
 
       const agentWithProcessors = new Agent({
         name: 'test-agent',
@@ -3315,14 +3338,22 @@ describe('Input Processors', () => {
     });
 
     it('should support async processors running in sequence', async () => {
-      const processor1 = createInputProcessor('async-processor-1', async ctx => {
-        ctx.messages.add('First processor', 'user');
-      });
+      const processor1 = {
+        name: 'async-processor-1',
+        process: async ({ messages }) => {
+          messages.push(createMessage('First processor'));
+          return messages;
+        },
+      };
 
-      const processor2 = createInputProcessor('async-processor-2', async ctx => {
-        await new Promise(resolve => setTimeout(resolve, 10));
-        ctx.messages.add('Second processor', 'user');
-      });
+      const processor2 = {
+        name: 'async-processor-2',
+        process: async ({ messages }) => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          messages.push(createMessage('Second processor'));
+          return messages;
+        },
+      };
 
       const agentWithAsyncProcessors = new Agent({
         name: 'test-agent',
@@ -3341,9 +3372,13 @@ describe('Input Processors', () => {
 
   describe('tripwire functionality', () => {
     it('should handle processor abort with default message', async () => {
-      const abortProcessor = createInputProcessor('abort-processor', async ctx => {
-        ctx.abort();
-      });
+      const abortProcessor = {
+        name: 'abort-processor',
+        process: async ({ abort, messages }) => {
+          abort();
+          return messages;
+        },
+      };
 
       const agentWithAbortProcessor = new Agent({
         name: 'test-agent',
@@ -3361,9 +3396,13 @@ describe('Input Processors', () => {
     });
 
     it('should handle processor abort with custom message', async () => {
-      const customAbortProcessor = createInputProcessor('custom-abort', async ctx => {
-        ctx.abort('Custom abort reason');
-      });
+      const customAbortProcessor = {
+        name: 'custom-abort',
+        process: async ({ abort, messages }) => {
+          abort('Custom abort reason');
+          return messages;
+        },
+      };
 
       const agentWithCustomAbort = new Agent({
         name: 'test-agent',
@@ -3382,14 +3421,22 @@ describe('Input Processors', () => {
     it('should not execute subsequent processors after abort', async () => {
       let secondProcessorExecuted = false;
 
-      const abortProcessor = createInputProcessor('abort-first', async ctx => {
-        ctx.abort('Stop here');
-      });
+      const abortProcessor = {
+        name: 'abort-first',
+        process: async ({ abort, messages }) => {
+          abort('Stop here');
+          return messages;
+        },
+      };
 
-      const shouldNotRunProcessor = createInputProcessor('should-not-run', async ctx => {
-        secondProcessorExecuted = true;
-        ctx.messages.add('This should not be added', 'user');
-      });
+      const shouldNotRunProcessor = {
+        name: 'should-not-run',
+        process: async ({ messages }) => {
+          secondProcessorExecuted = true;
+          messages.push(createMessage('This should not be added'));
+          return messages;
+        },
+      };
 
       const agentWithAbortSequence = new Agent({
         name: 'test-agent',
@@ -3407,9 +3454,13 @@ describe('Input Processors', () => {
 
   describe('streaming with input processors', () => {
     it('should handle input processors with streaming', async () => {
-      const streamProcessor = createInputProcessor('stream-processor', async ctx => {
-        ctx.messages.add('Stream processor active', 'user');
-      });
+      const streamProcessor = {
+        name: 'stream-processor',
+        process: async ({ messages }) => {
+          messages.push(createMessage('Stream processor active'));
+          return messages;
+        },
+      };
 
       const agentWithStreamProcessor = new Agent({
         name: 'test-agent',
@@ -3429,9 +3480,13 @@ describe('Input Processors', () => {
     });
 
     it('should handle abort in streaming with tripwire response', async () => {
-      const streamAbortProcessor = createInputProcessor('stream-abort', async ctx => {
-        ctx.abort('Stream aborted');
-      });
+      const streamAbortProcessor = {
+        name: 'stream-abort',
+        process: async ({ abort, messages }) => {
+          abort('Stream aborted');
+          return messages;
+        },
+      };
 
       const agentWithStreamAbort = new Agent({
         name: 'test-agent',
@@ -3454,9 +3509,13 @@ describe('Input Processors', () => {
     });
 
     it('should include deployer methods when tripwire is triggered in streaming', async () => {
-      const deployerAbortProcessor = createInputProcessor('deployer-abort', async ctx => {
-        ctx.abort('Deployer test abort');
-      });
+      const deployerAbortProcessor = {
+        name: 'deployer-abort',
+        process: async ({ abort, messages }) => {
+          abort('Deployer test abort');
+          return messages;
+        },
+      };
 
       const agentWithDeployerAbort = new Agent({
         name: 'test-agent',
@@ -3502,9 +3561,13 @@ describe('Input Processors', () => {
         inputProcessors: ({ runtimeContext }) => {
           const message: string = runtimeContext.get('processorMessage') || 'Default message';
           return [
-            createInputProcessor('dynamic-processor', async ctx => {
-              ctx.messages.add(message, 'user');
-            }),
+            {
+              name: 'dynamic-processor',
+              process: async ({ messages }) => {
+                messages.push(createMessage(message));
+                return messages;
+              },
+            },
           ];
         },
       });
@@ -3533,16 +3596,19 @@ describe('Input Processors', () => {
 
   describe('message manipulation', () => {
     it('should allow processors to modify message content', async () => {
-      const messageModifierProcessor = createInputProcessor('message-modifier', async ctx => {
-        // Access existing messages and modify them
-        const messages = ctx.messages.getAll();
-        const lastMessage = messages[messages.length - 1];
+      const messageModifierProcessor = {
+        name: 'message-modifier',
+        process: async ({ messages }) => {
+          // Access existing messages and modify them
+          const lastMessage = messages[messages.length - 1];
 
-        if (lastMessage && lastMessage.content.parts.length > 0) {
-          // Add a prefix to user messages
-          ctx.messages.add('MODIFIED: Original message was received', 'user');
-        }
-      });
+          if (lastMessage && lastMessage.content.parts.length > 0) {
+            // Add a prefix to user messages
+            messages.push(createMessage('MODIFIED: Original message was received'));
+          }
+          return messages;
+        },
+      };
 
       const agentWithModifier = new Agent({
         name: 'test-agent',
@@ -3558,16 +3624,29 @@ describe('Input Processors', () => {
     });
 
     it('should allow processors to filter or validate messages', async () => {
-      const validationProcessor = createInputProcessor('validator', async ctx => {
-        const textContent = ctx.messages.getTextContent();
-        const hasInappropriateContent = textContent.includes('inappropriate');
+      const validationProcessor = {
+        name: 'validator',
+        process: async ({ messages, abort }) => {
+          // Extract text content from all messages
+          const textContent = messages
+            .map(msg =>
+              msg.content.parts
+                .filter(part => part.type === 'text')
+                .map(part => part.text)
+                .join(' '),
+            )
+            .join(' ');
 
-        if (hasInappropriateContent) {
-          ctx.abort('Content validation failed');
-        } else {
-          ctx.messages.add('Content validated', 'user');
-        }
-      });
+          const hasInappropriateContent = textContent.includes('inappropriate');
+
+          if (hasInappropriateContent) {
+            abort('Content validation failed');
+          } else {
+            messages.push(createMessage('Content validated'));
+          }
+          return messages;
+        },
+      };
 
       const agentWithValidator = new Agent({
         name: 'test-agent',

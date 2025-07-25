@@ -1,15 +1,6 @@
-import type { ProcessorMessages } from './processor-messages';
+import type { MastraMessageV2 } from '../message-list';
 
 export interface InputProcessor {
   readonly name: string;
-  process(args: { messages: ProcessorMessages; abort: (reason?: string) => never }): Promise<void>;
+  process(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): Promise<MastraMessageV2[]>;
 }
-
-export function createInputProcessor(name: string, handler: InputProcessor['process']): InputProcessor {
-  return {
-    name,
-    process: handler,
-  };
-}
-
-export { ProcessorMessages } from './processor-messages';
