@@ -2718,7 +2718,7 @@ describe('MessageList', () => {
     it('should preserve metadata when messages are saved and retrieved from memory', async () => {
       // Create a message list with thread/resource info (simulating memory context)
       const messageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
-      
+
       // Add messages with metadata
       const messagesWithMetadata: UIMessageWithMetadata[] = [
         {
@@ -2744,13 +2744,13 @@ describe('MessageList', () => {
           },
         },
       ];
-      
+
       messageList.add(messagesWithMetadata[0], 'user');
       messageList.add(messagesWithMetadata[1], 'response');
-      
+
       // Get messages in v2 format (what would be saved to memory)
       const v2Messages = messageList.get.all.v2();
-      
+
       // Verify metadata is preserved in v2 format
       expect(v2Messages.length).toBe(2);
       expect(v2Messages[0].content.metadata).toEqual({
@@ -2763,14 +2763,14 @@ describe('MessageList', () => {
         processingTime: 250,
         tokens: 50,
       });
-      
+
       // Simulate loading from memory by creating a new MessageList with v2 messages
       const newMessageList = new MessageList();
       newMessageList.add(v2Messages, 'memory');
-      
+
       // Get back as UI messages
       const uiMessages = newMessageList.get.all.ui();
-      
+
       // Verify metadata is still preserved after round trip
       expect(uiMessages[0].metadata).toEqual({
         source: 'web-ui',

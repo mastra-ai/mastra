@@ -3268,19 +3268,24 @@ describe('UIMessageWithMetadata support', () => {
     });
 
     // Verify messages were saved with metadata
-    const savedMessages = await mockMemory.getMessages({ 
+    const savedMessages = await mockMemory.getMessages({
       threadConfig: { id: 'support-thread', resourceId: 'customer-12345' },
       limit: 10,
     });
 
     expect(savedMessages.length).toBeGreaterThan(0);
-    
+
     // Find the user message
     const userMessage = savedMessages.find(m => m.role === 'user');
     expect(userMessage).toBeDefined();
-    
+
     // Check that metadata was preserved in v2 format
-    if (userMessage && 'content' in userMessage && typeof userMessage.content === 'object' && 'metadata' in userMessage.content) {
+    if (
+      userMessage &&
+      'content' in userMessage &&
+      typeof userMessage.content === 'object' &&
+      'metadata' in userMessage.content
+    ) {
       expect(userMessage.content.metadata).toEqual({
         source: 'web-ui',
         customerId: '12345',
@@ -3328,19 +3333,24 @@ describe('UIMessageWithMetadata support', () => {
     expect(finalText).toBe('Response acknowledging metadata');
 
     // Verify messages were saved with metadata
-    const savedMessages = await mockMemory.getMessages({ 
+    const savedMessages = await mockMemory.getMessages({
       threadConfig: { id: 'mobile-thread', resourceId: 'user-mobile' },
       limit: 10,
     });
 
     expect(savedMessages.length).toBeGreaterThan(0);
-    
+
     // Find the user message
     const userMessage = savedMessages.find(m => m.role === 'user');
     expect(userMessage).toBeDefined();
-    
+
     // Check that metadata was preserved
-    if (userMessage && 'content' in userMessage && typeof userMessage.content === 'object' && 'metadata' in userMessage.content) {
+    if (
+      userMessage &&
+      'content' in userMessage &&
+      typeof userMessage.content === 'object' &&
+      'metadata' in userMessage.content
+    ) {
       expect(userMessage.content.metadata).toEqual({
         source: 'mobile-app',
         sessionId: 'session-123',
@@ -3390,24 +3400,30 @@ describe('UIMessageWithMetadata support', () => {
     });
 
     // Verify messages were saved correctly
-    const savedMessages = await mockMemory.getMessages({ 
+    const savedMessages = await mockMemory.getMessages({
       threadConfig: { id: 'mixed-thread', resourceId: 'mixed-user' },
       limit: 10,
     });
 
     expect(savedMessages.length).toBeGreaterThan(0);
-    
+
     // Find messages and check metadata
     const messagesAsV2 = savedMessages as MastraMessageV2[];
-    const firstUserMessage = messagesAsV2.find(m => m.role === 'user' && m.content.parts?.[0]?.type === 'text' && m.content.parts[0].text.includes('First message'));
-    const secondUserMessage = messagesAsV2.find(m => m.role === 'user' && m.content.parts?.[0]?.type === 'text' && m.content.parts[0].text.includes('Second user'));
-    
+    const firstUserMessage = messagesAsV2.find(
+      m =>
+        m.role === 'user' && m.content.parts?.[0]?.type === 'text' && m.content.parts[0].text.includes('First message'),
+    );
+    const secondUserMessage = messagesAsV2.find(
+      m =>
+        m.role === 'user' && m.content.parts?.[0]?.type === 'text' && m.content.parts[0].text.includes('Second user'),
+    );
+
     // First message should have metadata
     expect(firstUserMessage?.content.metadata).toEqual({
       messageType: 'initial',
       priority: 'high',
     });
-    
+
     // Second message should not have metadata
     expect(secondUserMessage?.content.metadata).toBeUndefined();
   });
