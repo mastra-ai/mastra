@@ -36,7 +36,7 @@
     "date-fns": "^4.1.0",
     "execa": "^9.6.0",
     "fs-extra": "^11.3.0",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
