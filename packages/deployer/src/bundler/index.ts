@@ -388,6 +388,72 @@ export abstract class Bundler extends MastraBundler {
         toolsPaths,
       );
 
+      debugger;
+      // try {
+      //   const transpileBundler = await rollup({
+      //     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
+      //     input: Array.from(virtualDependencies.entries()).reduce(
+      //       (acc, [dep, virtualDep]) => {
+      //         if (dep === '@test/service') {
+      //           acc[virtualDep.name] = `#virtual-${dep}`;
+      //         }
+      //         return acc;
+      //       },
+      //       {} as Record<string, string>,
+      //     ),
+      //     // this dependency breaks the build, so we need to exclude it
+      //     // TODO actually fix this so we don't need to exclude it
+      //     external: allExternals,
+      //     treeshake: 'smallest',
+      //     plugins: [
+      //       virtual(
+      //         Array.from(virtualDependencies.entries()).reduce(
+      //           (acc, [dep, virtualDep]) => {
+      //             if (dep === '@test/service') {
+      //               acc[`#virtual-${dep}`] = virtualDep.virtual;
+      //             }
+      //             return acc;
+      //           },
+      //           {} as Record<string, string>,
+      //         ),
+      //       ),
+      //       esbuild({
+      //         target: 'node20',
+      //         platform: 'node',
+      //         minify: false,
+      //       }),
+      //       commonjs({
+      //         strictRequires: 'strict',
+      //         transformMixedEsModules: true,
+      //         ignoreTryCatch: false,
+      //         extensions: ['.ts', '.tsx'],
+      //       }),
+      //       nodeResolve({
+      //         preferBuiltins: true,
+      //         exportConditions: ['node', 'import', 'require'],
+      //         mainFields: ['module', 'main'],
+      //         extensions: ['.ts', '.tsx'],
+      //       }),
+      //       // hono is imported from deployer, so we need to resolve from here instead of the project root
+      //       aliasHono(),
+      //       json(),
+      //     ].filter(Boolean),
+      //   });
+
+      //   const { output: transpileOutput } = await transpileBundler.write({
+      //     format: 'esm',
+      //     dir: outputDir,
+      //     entryFileNames: '[name].mjs',
+      //     chunkFileNames: '[name].mjs',
+      //     hoistTransitiveImports: false,
+      //   });
+
+      //   const x = transpileOutput;
+      // } catch (err) {
+      //   debugger;
+      //   console.error(err);
+      // }
+
       const bundler = await this.createBundler(
         {
           ...inputOptions,
@@ -423,6 +489,7 @@ export abstract class Bundler extends MastraBundler {
           toolsExports.push(toolExport);
         });
 
+      debugger;
       await writeFile(
         join(bundleLocation, 'tools.mjs'),
         `${toolImports.join('\n')}

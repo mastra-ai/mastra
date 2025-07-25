@@ -15,6 +15,7 @@ import { validate } from '../validator/validate';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { writeFile } from 'node:fs/promises';
 import { getBundlerOptions } from './bundlerOptions';
+import { transform } from 'esbuild';
 
 // TODO: Make thie extendable or find a rollup plugin that can do this
 const globalExternals = [
@@ -186,7 +187,14 @@ async function bundleExternals(
   depsToOptimize: Map<string, string[]>,
   outputDir: string,
   logger: IMastraLogger,
-  customExternals?: string[],
+  options:
+    | {
+        externals?: string[];
+        sourcemap?: boolean;
+        transpilePackages?: string[];
+      }
+    | null
+    | undefined,
 ) {
   logger.info('Optimizing dependencies...');
   logger.debug(
@@ -195,6 +203,7 @@ async function bundleExternals(
       .join('\n')}`,
   );
 
+  const { externals: customExternals, transpilePackages } = options || {};
   const allExternals = [...globalExternals, ...(customExternals || [])];
   const reverseVirtualReferenceMap = new Map<string, string>();
   const virtualDependencies = new Map();
@@ -228,7 +237,9 @@ async function bundleExternals(
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: Array.from(virtualDependencies.entries()).reduce(
       (acc, [dep, virtualDep]) => {
-        acc[virtualDep.name] = `#virtual-${dep}`;
+        if (dep !== '@test/service' && dep !== '#tools') {
+          acc[virtualDep.name] = `#virtual-${dep}`;
+        }
         return acc;
       },
       {} as Record<string, string>,
@@ -241,7 +252,9 @@ async function bundleExternals(
       virtual(
         Array.from(virtualDependencies.entries()).reduce(
           (acc, [dep, virtualDep]) => {
-            acc[`#virtual-${dep}`] = virtualDep.virtual;
+            if (dep !== '@test/service') {
+              acc[`#virtual-${dep}`] = virtualDep.virtual;
+            }
             return acc;
           },
           {} as Record<string, string>,
@@ -411,13 +424,13 @@ export async function analyzeBundle(
       }
     }
   }
-  const customExternals = (await getBundlerOptions(mastraEntry, outputDir))?.externals;
+  const bundlerOptions = await getBundlerOptions(mastraEntry, outputDir);
 
   const { output, reverseVirtualReferenceMap, usedExternals } = await bundleExternals(
     depsToOptimize,
     outputDir,
     logger,
-    customExternals,
+    bundlerOptions,
   );
   const result = await validateOutput({ output, reverseVirtualReferenceMap, usedExternals, outputDir }, logger);
 
