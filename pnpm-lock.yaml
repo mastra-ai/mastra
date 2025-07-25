@@ -3133,8 +3133,8 @@ importers:
   voice/azure:
     dependencies:
       microsoft-cognitiveservices-speech-sdk:
-        specifier: ^1.44.1
-        version: 1.44.1(bufferutil@4.0.9)(utf-8-validate@6.0.3)
+        specifier: ^1.45.0
+        version: 1.45.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -13437,8 +13437,8 @@ packages:
     resolution: {integrity: sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==}
     engines: {node: '>=8.6'}
 
-  microsoft-cognitiveservices-speech-sdk@1.44.1:
-    resolution: {integrity: sha512-D4U7G1iQ6za9RQoXYc9ed5KrnWe3q4XIcWQ4DMqAl60CvOSXxSEJqTmTcVjeWVLY2XM9bp+2KKKyWceByAec8A==}
+  microsoft-cognitiveservices-speech-sdk@1.45.0:
+    resolution: {integrity: sha512-etTSMGxDELxBQtNL8cgq2bwMrE6CjgfC8oIqKH9I9ghFs4/ITyLXy9HZuo0wQItN1zfDH3FhBeR72TmApe6pCQ==}
 
   mime-db@1.52.0:
     resolution: {integrity: sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==}
@@ -16457,18 +16457,6 @@ packages:
   write-file-atomic@4.0.2:
     resolution: {integrity: sha512-7KxauUdBmSdWnmpaGFg+ppNjKF8uNLry8LyzjauQDOVONfFLNKrKvQOxZ/VuTIcS/gge/YNahf5RIIQWTSarlg==}
     engines: {node: ^12.13.0 || ^14.15.0 || >=16.0.0}
-
-  ws@7.5.10:
-    resolution: {integrity: sha512-+dbF1tHwZpXcbOJdVOkzLDxZP1ailvSxM6ZweXTegylPny803bFhA+vqBYw4s31NSAk4S2Qz+AKXK9a4wkdjcQ==}
-    engines: {node: '>=8.3.0'}
-    peerDependencies:
-      bufferutil: ^4.0.1
-      utf-8-validate: ^5.0.2
-    peerDependenciesMeta:
-      bufferutil:
-        optional: true
-      utf-8-validate:
-        optional: true
 
   ws@8.18.0:
     resolution: {integrity: sha512-8VbfWfHLbbwu3+N6OKsOMpBdT4kXPDDB9cJk2bJ6mh9ucxdlnNvH1e+roYkKmN9Nxw2yjz7VzeO9oOz2zJ04Pw==}
@@ -29110,14 +29098,14 @@ snapshots:
       braces: 3.0.3
       picomatch: 2.3.1
 
-  microsoft-cognitiveservices-speech-sdk@1.44.1(bufferutil@4.0.9)(utf-8-validate@6.0.3):
+  microsoft-cognitiveservices-speech-sdk@1.45.0(bufferutil@4.0.9)(utf-8-validate@6.0.3):
     dependencies:
       '@types/webrtc': 0.0.37
       agent-base: 6.0.2
       bent: 7.3.12
       https-proxy-agent: 4.0.0
       uuid: 9.0.1
-      ws: 7.5.10(bufferutil@4.0.9)(utf-8-validate@6.0.3)
+      ws: 8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -32487,11 +32475,6 @@ snapshots:
     dependencies:
       imurmurhash: 0.1.4
       signal-exit: 3.0.7
-
-  ws@7.5.10(bufferutil@4.0.9)(utf-8-validate@6.0.3):
-    optionalDependencies:
-      bufferutil: 4.0.9
-      utf-8-validate: 6.0.3
 
   ws@8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.3):
     optionalDependencies:
