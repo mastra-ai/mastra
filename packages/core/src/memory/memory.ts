@@ -444,4 +444,11 @@ export abstract class MastraMemory extends MastraBase {
     searchString?: string;
     memoryConfig?: MemoryConfig;
   }): Promise<{ success: boolean; reason: string }>;
+
+  /**
+   * Deletes a specific message by its ID
+   * @param messageId - The unique identifier of the message to delete
+   * @returns Promise that resolves when the message is deleted
+   */
+  abstract deleteMessage({ messageId }: { messageId: string }): Promise<void>;
 }
