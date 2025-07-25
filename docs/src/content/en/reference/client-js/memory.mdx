@@ -26,7 +26,7 @@ Create a new memory thread:
 const thread = await mastraClient.createMemoryThread({
   title: "New Conversation",
   metadata: { category: "support" },
-  resourceid: "resource-1",
+  resourceId: "resource-1",
   agentId: "agent-1",
 });
 ```
@@ -68,8 +68,6 @@ Delete a thread and its messages:
 ```typescript
 await thread.delete();
 ```
-
-
 
 ## Message Operations
 
