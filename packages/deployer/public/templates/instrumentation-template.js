@@ -1,3 +1,4 @@
+globalThis.___MASTRA_TELEMETRY___ = true;
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { ExportResultCode } from '@opentelemetry/core';
 import { OTLPTraceExporter as OTLPGrpcExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
