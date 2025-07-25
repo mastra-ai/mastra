@@ -113,17 +113,15 @@ const messageModifier: InputProcessor = {
 
 ### Filtering Messages
 
-Use a loop with `Array.prototype.splice()` to remove messages from the array.
-
 ```typescript
 const messageFilter: InputProcessor = {
   name: 'filter',
   process: async ({ messages }) => {
     // Remove all offensive content
-    for (let i = messages.length - 1; i >= 0; i--) {
-      for (const part of messages.content.parts) {
+    for (const [index, message] of messages.entries())
+      for (const part of message.content.parts) {
         if (part.type === 'text' && isOffensive(part.text)) {
-          messages.splice(i, 1);
+          delete messages[index]
         }
       }
     }
@@ -169,12 +167,10 @@ const agent = new Agent({
   instructions: 'You are a helpful assistant',
   model: myLanguageModel,
   inputProcessors: ({ runtimeContext }) => {
-    const userRole = runtimeContext.get('userRole');
-    const processors: InputProcessor[] = [];
-    
+    const userRole = runtimeContext.get('userRole');    
     // Add a role-based processor
     if (userRole === 'admin') {
-      processors.push({
+      return [{
         name: 'admin-processor',
         process: async ({ messages }) => {
           const adminMessage: MastraMessageV2 = {
@@ -189,10 +185,10 @@ const agent = new Agent({
           messages.push(adminMessage);
           return messages;
         },
-      });
+      }];
     }
     
-    return processors;
+    return []
   }
 });
 
@@ -207,10 +203,10 @@ await agent.generate('Hello', { runtimeContext });
 
 Processors execute in a functional pipeline:
 
-1.  **Sequential Execution**: Processors run in the order they're defined in the `inputProcessors` array.
-2.  **Input/Output Chain**: The `messages` array returned by one processor becomes the input for the next.
-3.  **Async Support**: Each processor can perform async operations before returning the messages.
-4.  **Early Termination**: Any processor can call `abort()` to stop the entire pipeline.
+1. Processors run in the order they're defined in the `inputProcessors` array
+2. The `messages` array returned by one processor becomes the input for the next
+3. Each processor can perform async operations before returning the messages
+4. Any processor can call `abort()` to stop the entire pipeline.
 
 ```typescript
 const processors: InputProcessor[] = [
@@ -386,7 +382,7 @@ const createContextInjector = (userId: string): InputProcessor => {
     name: 'context-injector',
     process: async ({ messages }) => {
       const latestMessage = messages[messages.length - 1]
-      const userText = getTextContent(latestUser)
+      const userText = getTextContent(latestMessage)
           
       if (userText && needsContext(userText)) {
         const context = await fetchRelevantContext(userText, userId);

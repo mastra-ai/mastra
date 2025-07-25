@@ -109,7 +109,7 @@ export class MessageList {
     return {
       input: {
         v2: () => {
-          const userMessages = this.messages.filter(m => this.newUserMessages.has(m));
+          const userMessages = Array.from(this.newUserMessages);
           this.messages = this.messages.filter(m => !this.newUserMessages.has(m));
           this.newUserMessages.clear();
           return userMessages;
@@ -175,6 +175,7 @@ export class MessageList {
     }
     return this;
   }
+
   private convertToCoreMessages(messages: UIMessage[]): CoreMessage[] {
     return convertToCoreMessages(this.sanitizeUIMessages(messages));
   }

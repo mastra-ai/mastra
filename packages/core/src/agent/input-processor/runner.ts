@@ -18,12 +18,7 @@ export async function runInputProcessors(
     },
   };
 
-  for (let index = 0; index < processors.length; index++) {
-    const processor = processors[index];
-    if (!processor) {
-      continue;
-    }
-
+  for (const processor of processors) {
     const abort = (reason?: string): never => {
       throw new TripWire(reason || `Tripwire triggered by ${processor.name}`);
     };
@@ -42,7 +37,6 @@ export async function runInputProcessors(
           spanName: `agent.inputProcessor.${processor.name}`,
           attributes: {
             'processor.name': processor.name,
-            'processor.index': index.toString(),
             'processor.total': processors.length.toString(),
           },
         },

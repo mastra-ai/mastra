@@ -120,8 +120,10 @@ export const chefAgentResponses = new Agent({
       name: 'no-soup-for-you',
       process: async ({ messages, abort }) => {
         const hasSoup = messages.some(msg => {
-          if (msg.content.content?.includes('soup')) {
-            return true;
+          for (const part of msg.content.parts) {
+            if (part.type === 'text' && part.text.includes('soup')) {
+              return true;
+            }
           }
           return false;
         });

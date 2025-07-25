@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { ReadableStream, WritableStream } from 'stream/web';
-import type { CoreMessage, TextPart, Tool, UIMessage } from 'ai';
+import type { CoreMessage, StreamObjectResult, StreamTextResult, TextPart, Tool, UIMessage } from 'ai';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, z } from 'zod';
@@ -15,17 +15,15 @@ import type {
   GenerateObjectWithMessagesArgs,
   GenerateTextWithMessagesArgs,
   GenerateReturn,
+  GenerateObjectResult,
+  GenerateTextResult,
   StreamTextWithMessagesArgs,
   StreamObjectWithMessagesArgs,
   StreamReturn,
   ToolSet,
   OriginalStreamTextOnFinishEventArg,
   OriginalStreamObjectOnFinishEventArg,
-  GenerateTextResultWithTripwire,
-  GenerateObjectResultWithTripwire,
-  StreamTextResultWithTripwire,
-  StreamObjectResultWithTripwire,
-  BeforeResultWithTripwire,
+  TripwireProperties,
 } from '../llm/model/base.types';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
@@ -993,7 +991,15 @@ export class Agent<
           tripwireTriggered = true;
           tripwireReason = error.message;
         } else {
-          throw error;
+          throw new MastraError(
+            {
+              id: 'AGENT_INPUT_PROCESSOR_ERROR',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              text: `[Agent:${this.name}] - Input processor error`,
+            },
+            error,
+          );
         }
       }
     }
@@ -1438,7 +1444,7 @@ export class Agent<
           writableStream,
         });
 
-        let messageList = new MessageList({
+        const messageList = new MessageList({
           threadId,
           resourceId,
           generateMessageId,
@@ -1453,19 +1459,15 @@ export class Agent<
 
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
-          const {
-            messageList: messageListWithInputProcessors,
-            tripwireTriggered,
-            tripwireReason,
-          } = await this.__runInputProcessors({
+          const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
             runtimeContext,
             messageList,
           });
           return {
-            messageObjects: messageListWithInputProcessors.get.all.prompt(),
+            messageObjects: messageList.get.all.prompt(),
             convertedTools,
-            messageList: messageListWithInputProcessors,
-            thread: undefined,
+            messageList,
+            thread: thread as StorageThreadType | null | undefined,
             ...(tripwireTriggered && {
               tripwire: true,
               tripwireReason,
@@ -1592,16 +1594,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           // add new user messages to the list AFTER remembered messages to make ordering more reliable
           .add(messages, 'user');
 
-        const {
-          messageList: messageListWithInputProcessors,
-          tripwireTriggered,
-          tripwireReason,
-        } = await this.__runInputProcessors({
+        const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
           runtimeContext,
           messageList,
         });
-
-        messageList = messageListWithInputProcessors;
 
         const systemMessage =
           [...messageList.getSystemMessages(), ...messageList.getSystemMessages('memory')]
@@ -1874,17 +1870,15 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     options: AgentGenerateOptions<Output, ExperimentalOutput>,
   ): Promise<{
     before: () => Promise<
-      BeforeResultWithTripwire<
-        Omit<
-          Output extends undefined
-            ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
-            : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-                output?: Output;
-                experimental_output?: never;
-              },
-          'runId'
-        > & { runId: string }
-      >
+      Omit<
+        Output extends undefined
+          ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
+          : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+              output?: Output;
+              experimental_output?: never;
+            },
+        'runId'
+      > & { runId: string } & TripwireProperties
     >;
     after: (args: {
       result: GenerateReturn<any, Output, ExperimentalOutput>;
@@ -1902,17 +1896,15 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     options: AgentStreamOptions<Output, ExperimentalOutput>,
   ): Promise<{
     before: () => Promise<
-      BeforeResultWithTripwire<
-        Omit<
-          Output extends undefined
-            ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
-            : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-                output?: Output;
-                experimental_output?: never;
-              },
-          'runId'
-        > & { runId: string }
-      >
+      Omit<
+        Output extends undefined
+          ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
+          : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+              output?: Output;
+              experimental_output?: never;
+            },
+        'runId'
+      > & { runId: string } & TripwireProperties
     >;
     after: (args: {
       result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
@@ -1933,30 +1925,26 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   ): Promise<{
     before:
       | (() => Promise<
-          BeforeResultWithTripwire<
-            Omit<
-              Output extends undefined
-                ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
-                : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-                    output?: Output;
-                    experimental_output?: never;
-                  },
-              'runId'
-            > & { runId: string }
-          >
+          Omit<
+            Output extends undefined
+              ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
+              : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+                  output?: Output;
+                  experimental_output?: never;
+                },
+            'runId'
+          > & { runId: string } & TripwireProperties
         >)
       | (() => Promise<
-          BeforeResultWithTripwire<
-            Omit<
-              Output extends undefined
-                ? GenerateTextWithMessagesArgs<Tools, ExperimentalOutput>
-                : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
-                    output?: Output;
-                    experimental_output?: never;
-                  },
-              'runId'
-            > & { runId: string }
-          >
+          Omit<
+            Output extends undefined
+              ? StreamTextWithMessagesArgs<Tools, ExperimentalOutput>
+              : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput'> & {
+                  output?: Output;
+                  experimental_output?: never;
+                },
+            'runId'
+          > & { runId: string } & TripwireProperties
         >);
     after:
       | ((args: { result: GenerateReturn<any, Output, ExperimentalOutput>; outputText: string }) => Promise<void>)
@@ -2105,29 +2093,25 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   async generate(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateTextResultWithTripwire<any, undefined>>;
+  ): Promise<GenerateTextResult<any, undefined>>;
   async generate<OUTPUT extends ZodSchema | JSONSchema7>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
-  ): Promise<GenerateObjectResultWithTripwire<OUTPUT>>;
+  ): Promise<GenerateObjectResult<OUTPUT>>;
   async generate<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
       output?: never;
       experimental_output?: EXPERIMENTAL_OUTPUT;
     },
-  ): Promise<GenerateTextResultWithTripwire<any, EXPERIMENTAL_OUTPUT>>;
+  ): Promise<GenerateTextResult<any, EXPERIMENTAL_OUTPUT>>;
   async generate<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
-  ): Promise<
-    OUTPUT extends undefined
-      ? GenerateTextResultWithTripwire<any, EXPERIMENTAL_OUTPUT>
-      : GenerateObjectResultWithTripwire<OUTPUT>
-  > {
+  ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     const defaultGenerateOptions = await this.getDefaultGenerateOptions({
       runtimeContext: generateOptions.runtimeContext,
     });
@@ -2167,8 +2151,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       };
 
       return tripwireResult as unknown as OUTPUT extends undefined
-        ? GenerateTextResultWithTripwire<any, EXPERIMENTAL_OUTPUT>
-        : GenerateObjectResultWithTripwire<OUTPUT>;
+        ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
+        : GenerateObjectResult<OUTPUT>;
     }
 
     const { experimental_output, output, ...llmOptions } = beforeResult;
@@ -2187,8 +2171,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       });
 
       return result as unknown as OUTPUT extends undefined
-        ? GenerateTextResultWithTripwire<any, EXPERIMENTAL_OUTPUT>
-        : GenerateObjectResultWithTripwire<OUTPUT>;
+        ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
+        : GenerateObjectResult<OUTPUT>;
     }
 
     const result = await llm.__textObject<NonNullable<OUTPUT>>({
@@ -2207,8 +2191,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     });
 
     return result as unknown as OUTPUT extends undefined
-      ? GenerateTextResultWithTripwire<any, EXPERIMENTAL_OUTPUT>
-      : GenerateObjectResultWithTripwire<OUTPUT>;
+      ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
+      : GenerateObjectResult<OUTPUT>;
   }
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -2216,14 +2200,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
-  ): Promise<StreamTextResultWithTripwire<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
+  ): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
-  ): Promise<StreamObjectResultWithTripwire<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
+  ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>>;
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -2234,8 +2218,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       experimental_output?: EXPERIMENTAL_OUTPUT;
     },
   ): Promise<
-    StreamTextResultWithTripwire<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown> & {
-      partialObjectStream: StreamTextResultWithTripwire<
+    StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown> & {
+      partialObjectStream: StreamTextResult<
         any,
         OUTPUT extends ZodSchema
           ? z.infer<OUTPUT>
@@ -2252,8 +2236,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
-    | StreamTextResultWithTripwire<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-    | StreamObjectResultWithTripwire<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+    | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+    | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
   > {
     const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions.runtimeContext });
 
@@ -2321,8 +2305,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       };
 
       return emptyResult as unknown as
-        | StreamTextResultWithTripwire<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-        | StreamObjectResultWithTripwire<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
+        | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+        | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>;
     }
 
     const { onFinish, runId, output, experimental_output, ...llmOptions } = beforeResult;
@@ -2354,8 +2338,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       });
 
       return streamResult as
-        | StreamTextResultWithTripwire<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-        | StreamObjectResultWithTripwire<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
+        | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+        | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>;
     }
 
     this.logger.debug(`Starting agent ${this.name} llm streamObject call`, {

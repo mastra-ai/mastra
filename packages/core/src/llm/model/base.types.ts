@@ -30,6 +30,12 @@ export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = und
 
 export type { ToolSet } from 'ai';
 
+// Tripwire result extensions
+export type TripwireProperties = {
+  tripwire?: boolean;
+  tripwireReason?: string;
+};
+
 type MastraCustomLLMOptions = {
   tools?: Record<string, Tool>;
   telemetry?: TelemetrySettings;
@@ -87,7 +93,7 @@ export type GenerateTextResult<
   Output extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = Omit<OriginalGenerateTextResult<Tools, inferOutput<Output>>, 'experimental_output'> & {
   object?: Output extends undefined ? never : inferOutput<Output>;
-};
+} & TripwireProperties;
 
 export type OriginalGenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
   | Parameters<typeof generateObject<inferOutput<Output>>>[0]
@@ -110,7 +116,7 @@ export type GenerateObjectWithMessagesArgs<Output extends ZodSchema | JSONSchema
 export type GenerateObjectResult<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
   OriginalGenerateObjectResult<inferOutput<Output>> & {
     readonly reasoning?: never;
-  };
+  } & TripwireProperties;
 
 export type GenerateReturn<
   Tools extends ToolSet,
@@ -147,7 +153,7 @@ export type StreamTextResult<
   Output extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = Omit<OriginalStreamTextResult<Tools, DeepPartial<inferOutput<Output>>>, 'experimental_output'> & {
   object?: inferOutput<Output>;
-};
+} & TripwireProperties;
 
 export type OriginalStreamObjectOptions<Output extends ZodSchema | JSONSchema7> =
   | Parameters<typeof streamObject<inferOutput<Output>>>[0]
@@ -173,48 +179,12 @@ export type StreamObjectResult<Output extends ZodSchema | JSONSchema7> = Origina
   DeepPartial<inferOutput<Output>>,
   inferOutput<Output>,
   any
->;
+> &
+  TripwireProperties;
 
 export type StreamReturn<
   Tools extends ToolSet,
   Output extends ZodSchema | JSONSchema7 | undefined = undefined,
   StructuredOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = StreamTextResult<Tools, StructuredOutput> | StreamObjectResult<NonNullable<Output>>;
-
-// Tripwire result extensions
-export type TripwireProperties = {
-  tripwire?: boolean;
-  tripwireReason?: string;
-};
-
-// Helper type for before function results with tripwire
-export type BeforeResultWithTripwire<T> = T & TripwireProperties;
-
-export type GenerateTextResultWithTripwire<
-  Tools extends ToolSet,
-  Output extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = GenerateTextResult<Tools, Output> & TripwireProperties;
-
-export type GenerateObjectResultWithTripwire<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
-  GenerateObjectResult<Output> & TripwireProperties;
-
-export type StreamTextResultWithTripwire<
-  Tools extends ToolSet,
-  Output extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = StreamTextResult<Tools, Output> & TripwireProperties;
-
-export type StreamObjectResultWithTripwire<Output extends ZodSchema | JSONSchema7> = StreamObjectResult<Output> &
-  TripwireProperties;
-
-export type GenerateReturnWithTripwire<
-  Tools extends ToolSet,
-  Output extends ZodSchema | JSONSchema7 | undefined = undefined,
-  StructuredOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = GenerateTextResultWithTripwire<Tools, StructuredOutput> | GenerateObjectResultWithTripwire<Output>;
-
-export type StreamReturnWithTripwire<
-  Tools extends ToolSet,
-  Output extends ZodSchema | JSONSchema7 | undefined = undefined,
-  StructuredOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
-> = StreamTextResultWithTripwire<Tools, StructuredOutput> | StreamObjectResultWithTripwire<NonNullable<Output>>;
 // #endregion
