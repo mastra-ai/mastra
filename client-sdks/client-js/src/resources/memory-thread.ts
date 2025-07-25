@@ -78,4 +78,18 @@ export class MemoryThread extends BaseResource {
     });
     return this.request(`/api/memory/threads/${this.threadId}/messages/paginated?${query.toString()}`);
   }
+
+  /**
+   * Deletes a specific message from the thread
+   * @param messageId - The ID of the message to delete
+   * @returns Promise containing deletion result
+   */
+  deleteMessage(messageId: string): Promise<{ success: boolean; message: string }> {
+    const query = new URLSearchParams({
+      agentId: this.agentId,
+    });
+    return this.request(`/api/memory/messages/${messageId}?${query.toString()}`, {
+      method: 'DELETE',
+    });
+  }
 }

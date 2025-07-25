@@ -60,4 +60,18 @@ export class NetworkMemoryThread extends BaseResource {
     });
     return this.request(`/api/memory/network/threads/${this.threadId}/messages?${query.toString()}`);
   }
+
+  /**
+   * Deletes a specific message from the thread
+   * @param messageId - The ID of the message to delete
+   * @returns Promise containing deletion result
+   */
+  deleteMessage(messageId: string): Promise<{ success: boolean; message: string }> {
+    const query = new URLSearchParams({
+      networkId: this.networkId,
+    });
+    return this.request(`/api/memory/network/messages/${messageId}?${query.toString()}`, {
+      method: 'DELETE',
+    });
+  }
 }
