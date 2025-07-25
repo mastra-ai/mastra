@@ -29,7 +29,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@apidevtools/json-schema-ref-parser": "^14.1.0",
+    "@apidevtools/json-schema-ref-parser": "^14.1.1",
     "@modelcontextprotocol/sdk": "^1.13.0",
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
