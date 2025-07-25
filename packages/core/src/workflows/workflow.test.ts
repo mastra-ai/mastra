@@ -5660,8 +5660,10 @@ describe('Workflow', () => {
         step: ['simple-resume-workflow', 'increment'],
       });
 
+      // After resume with increment of 2, value becomes 4
+      // Since 4 < 10, the loop continues and the nested workflow suspends again
       expect(resumeResult.steps['simple-resume-workflow']).toMatchObject({
-        status: 'success',
+        status: 'suspended',
       });
     });
 
