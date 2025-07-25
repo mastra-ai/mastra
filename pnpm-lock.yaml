@@ -3405,8 +3405,8 @@ importers:
   voice/openai-realtime-api:
     dependencies:
       openai-realtime-api:
-        specifier: ^1.0.7
-        version: 1.0.7(bufferutil@4.0.9)(utf-8-validate@6.0.3)
+        specifier: ^1.0.8
+        version: 1.0.8(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       ws:
         specifier: ^8.18.3
         version: 8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)
@@ -14008,8 +14008,8 @@ packages:
     resolution: {integrity: sha512-7x81NCL719oNbsq/3mh+hVrAWmFuEYUqrq/Iw3kUzH8ReypT9QQ0BLoJS7/G9k6N81XjW4qHWtjWwe/9eLy1EQ==}
     engines: {node: '>=12'}
 
-  openai-realtime-api@1.0.7:
-    resolution: {integrity: sha512-mA5Ha0Ut1A2QB/2rNO0jedTeC/PJ6EJndXEv5N8I8SQKgpRAqhT0z2sshYAZMNMXN0gOJrVdykdVa+p1pXsAag==}
+  openai-realtime-api@1.0.8:
+    resolution: {integrity: sha512-/PC/RY8/9E03IB8w61D0Grwg9fh7fcehH63BDA3Mv2hQUjPtGvx5+9CFQ9s105oSk6ag1hAzDlUBAS4uwrCu1A==}
     engines: {node: '>=18'}
 
   openai@4.104.0:
@@ -29686,7 +29686,7 @@ snapshots:
       is-docker: 2.2.1
       is-wsl: 2.2.0
 
-  openai-realtime-api@1.0.7(bufferutil@4.0.9)(utf-8-validate@6.0.3):
+  openai-realtime-api@1.0.8(bufferutil@4.0.9)(utf-8-validate@6.0.3):
     dependencies:
       nanoid: 5.1.5
       ws: 8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)

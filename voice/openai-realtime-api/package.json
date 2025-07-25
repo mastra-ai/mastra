@@ -26,7 +26,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "openai-realtime-api": "^1.0.7",
+    "openai-realtime-api": "^1.0.8",
     "ws": "^8.18.3",
     "zod-to-json-schema": "^3.24.5"
   },
