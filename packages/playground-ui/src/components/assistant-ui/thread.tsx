@@ -23,7 +23,7 @@ import { ComposerAttachments } from './attachments/attachment';
 export interface ThreadProps {
   ToolFallback?: ToolCallContentPartComponent;
   agentName?: string;
-  agentId: string;
+  agentId?: string;
   hasMemory?: boolean;
   onInputChange?: (value: string) => void;
 }
@@ -100,7 +100,7 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 interface ComposerProps {
   hasMemory?: boolean;
   onInputChange?: (value: string) => void;
-  agentId: string;
+  agentId?: string;
 }
 
 const Composer = ({ hasMemory, onInputChange, agentId }: ComposerProps) => {
@@ -141,7 +141,7 @@ const Composer = ({ hasMemory, onInputChange, agentId }: ComposerProps) => {
   );
 };
 
-const SpeechInput = ({ agentId }: { agentId: string }) => {
+const SpeechInput = ({ agentId }: { agentId?: string }) => {
   const composerRuntime = useComposerRuntime();
   const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId });
 
