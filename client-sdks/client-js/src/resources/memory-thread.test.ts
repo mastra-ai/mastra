@@ -175,7 +175,7 @@ describe('MemoryThread', () => {
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'Content-Type': 'application/json',
+            'content-type': 'application/json',
             Authorization: 'Bearer test-key',
           }),
           body: JSON.stringify({ messageIds: messageId }),
@@ -197,7 +197,7 @@ describe('MemoryThread', () => {
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'Content-Type': 'application/json',
+            'content-type': 'application/json',
             Authorization: 'Bearer test-key',
           }),
           body: JSON.stringify({ messageIds }),
@@ -219,7 +219,7 @@ describe('MemoryThread', () => {
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'Content-Type': 'application/json',
+            'content-type': 'application/json',
             Authorization: 'Bearer test-key',
           }),
           body: JSON.stringify({ messageIds: messageObj }),
@@ -241,7 +241,7 @@ describe('MemoryThread', () => {
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'Content-Type': 'application/json',
+            'content-type': 'application/json',
             Authorization: 'Bearer test-key',
           }),
           body: JSON.stringify({ messageIds: messageObjs }),
