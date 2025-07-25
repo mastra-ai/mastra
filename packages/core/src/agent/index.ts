@@ -32,6 +32,7 @@ import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
+import { createAgentGenerationWorkflow } from './generation-workflow';
 import { MessageList } from './message-list';
 import type { MessageInput } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -49,6 +50,7 @@ import type {
 
 export { MessageList };
 export * from './types';
+export { createAgentGenerationWorkflow } from './generation-workflow';
 type IDGenerator = () => string;
 
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
