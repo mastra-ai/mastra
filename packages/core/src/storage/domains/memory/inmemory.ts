@@ -339,7 +339,7 @@ export class InMemoryMemory extends MemoryStorage {
     return updatedMessages;
   }
 
-  async deleteMessage({ messageId }: { messageId: string }): Promise<void> {
+  async deleteMessage(messageId: string): Promise<void> {
     this.logger.debug(`MockStore: deleteMessage called for ${messageId}`);
 
     const message = this.collection.messages.get(messageId);

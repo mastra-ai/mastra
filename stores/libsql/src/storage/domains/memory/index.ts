@@ -439,7 +439,7 @@ export class MemoryLibSQL extends MemoryStorage {
     return updatedResult.rows.map(row => this.parseRow(row));
   }
 
-  async deleteMessage({ messageId }: { messageId: string }): Promise<void> {
+  async deleteMessage(messageId: string): Promise<void> {
     try {
       // Check if message exists first
       const result = await this.client.execute({

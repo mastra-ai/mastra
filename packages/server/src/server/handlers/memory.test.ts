@@ -534,7 +534,7 @@ describe('Memory Handlers', () => {
       });
 
       expect(result).toEqual({ success: true, message: 'Message deleted successfully' });
-      expect(mockMemory.deleteMessage).toHaveBeenCalledWith({ messageId: 'test-message-id' });
+      expect(mockMemory.deleteMessage).toHaveBeenCalledWith('test-message-id');
     });
 
     it('should handle errors from memory.deleteMessage', async () => {
@@ -573,7 +573,7 @@ describe('Memory Handlers', () => {
         agentId: 'test-agent',
       });
 
-      expect(mockMemory.deleteMessage).toHaveBeenCalledWith({ messageId: 'test-message-id' });
+      expect(mockMemory.deleteMessage).toHaveBeenCalledWith('test-message-id');
     });
   });
 });

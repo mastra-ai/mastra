@@ -801,7 +801,7 @@ export class MemoryPG extends MemoryStorage {
     });
   }
 
-  async deleteMessage({ messageId }: { messageId: string }): Promise<void> {
+  async deleteMessage(messageId: string): Promise<void> {
     try {
       // Check if message exists and get thread ID
       const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });

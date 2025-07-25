@@ -474,7 +474,7 @@ export async function deleteMessageHandler({
     }
 
     // Delete the message
-    await memory.deleteMessage({ messageId });
+    await memory.deleteMessage(messageId);
 
     return { success: true, message: 'Message deleted successfully' };
   } catch (error) {

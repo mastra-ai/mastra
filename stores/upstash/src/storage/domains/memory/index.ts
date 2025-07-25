@@ -900,7 +900,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  async deleteMessage({ messageId }: { messageId: string }): Promise<void> {
+  async deleteMessage(messageId: string): Promise<void> {
     try {
       // Find the message key by scanning
       const pattern = getMessageKey('*', messageId);
