@@ -5,165 +5,176 @@ description: Example of using the Context Relevancy metric to evaluate how relev
 
 import { GithubLink } from "@/components/github-link";
 
-# Context Relevancy
+# Context Relevancy Evaluation
 
-This example demonstrates how to use Mastra's Context Relevancy metric to evaluate how relevant context information is to a given query.
+Use `ContextRelevancyMetric` to evaluate how well the retrieved context aligns with the original query. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 
-## Overview
+## Installation
 
-The example shows how to:
-
-1. Configure the Context Relevancy metric
-2. Evaluate context relevancy
-3. Analyze relevancy scores
-4. Handle different relevancy levels
-
-## Setup
-
-### Environment Setup
-
-Make sure to set up your environment variables:
-
-```bash filename=".env"
-OPENAI_API_KEY=your_api_key_here
+```bash copy
+npm install @mastra/evals
 ```
 
-### Dependencies
+## High relevancy example
 
-Import the necessary dependencies:
+In this example, the response uses only context that is directly relevant to the query. Every context item supports the answer, resulting in a perfect relevancy score.
 
-```typescript copy showLineNumbers filename="src/index.ts"
+```typescript filename="src/example-high-context-relevancy.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { ContextRelevancyMetric } from "@mastra/evals/llm";
+
+const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Einstein won the Nobel Prize for his discovery of the photoelectric effect.",
+    "He published his theory of relativity in 1905.",
+    "His work revolutionized modern physics."
+  ]
+});
+
+const query = "What were some of Einstein's achievements?";
+const response = "Einstein won the Nobel Prize for discovering the photoelectric effect and published his groundbreaking theory of relativity.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
 ```
 
-## Example Usage
+### High relevancy output
 
-### High Relevancy Example
+The output receives a perfect score because all context statements directly contribute to answering the query without including any unrelated information.
 
-Evaluate a response where all context is relevant:
-
-```typescript copy showLineNumbers{5} filename="src/index.ts"
-const context1 = [
-  "Einstein won the Nobel Prize for his discovery of the photoelectric effect.",
-  "He published his theory of relativity in 1905.",
-  "His work revolutionized modern physics.",
-];
-
-const metric1 = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
-  context: context1,
-});
-
-const query1 = "What were some of Einstein's achievements?";
-const response1 =
-  "Einstein won the Nobel Prize for discovering the photoelectric effect and published his groundbreaking theory of relativity.";
-
-console.log("Example 1 - High Relevancy:");
-console.log("Context:", context1);
-console.log("Query:", query1);
-console.log("Response:", response1);
-
-const result1 = await metric1.measure(query1, response1);
-console.log("Metric Result:", {
-  score: result1.score,
-  reason: result1.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 1, reason: 'The context uses all relevant information and does not include any irrelevant information.' }
+```typescript
+{
+  score: 1,
+  info: {
+    reason: "The score is 1 because the retrieval context directly addresses the input by highlighting Einstein's significant achievements, making it entirely relevant."
+  }
+}
 ```
 
-### Mixed Relevancy Example
+## Mixed relevancy example
 
-Evaluate a response where some context is irrelevant:
+In this example, the response uses one or more relevant context items but also includes unrelated or less useful information. This lowers the overall relevancy score.
 
-```typescript copy showLineNumbers{31} filename="src/index.ts"
-const context2 = [
-  "Solar eclipses occur when the Moon blocks the Sun.",
-  "The Moon moves between the Earth and Sun during eclipses.",
-  "The Moon is visible at night.",
-  "The Moon has no atmosphere.",
-];
+```typescript filename="src/example-mixed-context-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextRelevancyMetric } from "@mastra/evals/llm";
 
-const metric2 = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
-  context: context2,
+const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Solar eclipses occur when the Moon blocks the Sun.",
+    "The Moon moves between the Earth and Sun during eclipses.",
+    "The Moon is visible at night.",
+    "The Moon has no atmosphere."
+  ]
 });
 
-const query2 = "What causes solar eclipses?";
-const response2 =
+const query = "What causes solar eclipses?";
+const response =
   "Solar eclipses happen when the Moon moves between Earth and the Sun, blocking sunlight.";
 
-console.log("Example 2 - Mixed Relevancy:");
-console.log("Context:", context2);
-console.log("Query:", query2);
-console.log("Response:", response2);
+const result = await metric.measure(query, response);
 
-const result2 = await metric2.measure(query2, response2);
-console.log("Metric Result:", {
-  score: result2.score,
-  reason: result2.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0.5, reason: 'The context uses some relevant information and includes some irrelevant information.' }
+console.log(result);
 ```
 
-### Low Relevancy Example
+### Mixed relevancy output
 
-Evaluate a response where most context is irrelevant:
+The output receives a mid-range score because it includes relevant context about the eclipse mechanism, but also includes unrelated facts that dilute the overall relevancy.
 
-```typescript copy showLineNumbers{57} filename="src/index.ts"
-const context3 = [
-  "The Great Barrier Reef is in Australia.",
-  "Coral reefs need warm water to survive.",
-  "Marine life depends on coral reefs.",
-  "The capital of Australia is Canberra.",
-];
-
-const metric3 = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
-  context: context3,
-});
-
-const query3 = "What is the capital of Australia?";
-const response3 = "The capital of Australia is Canberra.";
-
-console.log("Example 3 - Low Relevancy:");
-console.log("Context:", context3);
-console.log("Query:", query3);
-console.log("Response:", response3);
-
-const result3 = await metric3.measure(query3, response3);
-console.log("Metric Result:", {
-  score: result3.score,
-  reason: result3.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0.12, reason: 'The context only has one relevant piece, while most of the context is irrelevant.' }
-```
-
-## Understanding the Results
-
-The metric provides:
-
-1. A relevancy score between 0 and 1:
-
-   - 1.0: Perfect relevancy - all context directly relevant to query
-   - 0.7-0.9: High relevancy - most context relevant to query
-   - 0.4-0.6: Mixed relevancy - some context relevant to query
-   - 0.1-0.3: Low relevancy - little context relevant to query
-   - 0.0: No relevancy - no context relevant to query
-
-2. Detailed reason for the score, including analysis of:
-   - Relevance to input query
-   - Statement extraction from context
-   - Usefulness for response
-   - Overall context quality
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-relevancy"
+```typescript
+{
+  score: 0.5,
+  info: {
+    reason: "The score is 0.5 because the retrieval context contains statements that are irrelevant to the input, such as 'The Moon is visible at night' and 'The Moon has no atmosphere', which do not explain the causes of solar eclipses. This lack of relevant information significantly lowers the contextual relevancy score."
   }
+}
+```
+
+## Low relevancy example
+
+In this example, most of the context is unrelated to the query. Only one item is relevant, which results in a low relevancy score.
+
+```typescript filename="src/example-low-context-relevancy.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextRelevancyMetric } from "@mastra/evals/llm";
+
+const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+  context: [
+    "The Great Barrier Reef is in Australia.",
+    "Coral reefs need warm water to survive.",
+    "Marine life depends on coral reefs.",
+    "The capital of Australia is Canberra."
+  ]
+});
+
+const query = "What is the capital of Australia?";
+const response = "The capital of Australia is Canberra.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Low relevancy output
+
+The output receives a low score because only one context item is relevant to the query. The remaining items introduce unrelated information that does not support the response.
+
+```typescript
+{
+  score: 0.25,
+  info: {
+    reason: "The score is 0.25 because the retrieval context contains statements that are completely irrelevant to the input question about the capital of Australia. For instance, 'The Great Barrier Reef is in Australia' and 'Coral reefs need warm water to survive' do not provide any geographical or political information related to the capital, thus failing to address the inquiry."
+  }
+}
+```
+
+## Metric configuration
+
+You can create a `ContextRelevancyMetric` instance by providing a `context` array representing background information relevant to a query. You can also configure optional parameters such as `scale` to define the scoring range.
+
+```typescript showLineNumbers copy
+const metric = new ContextRelevancyMetric(openai("gpt-4o-mini"), {
+  context: [""],
+  scale: 1
+});
+```
+
+> See [ContextRelevancyMetric](/reference/evals/context-relevancy.mdx) for a full list of configuration options.
+
+## Understanding the results
+
+`ContextRelevancyMetric` returns a result in the following shape:
+
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
+  }
+}
+```
+
+### Relevancy score
+
+A relevancy score between 0 and 1:
+
+- **1.0**: Perfect relevancy – all context directly relevant to query.
+- **0.7–0.9**: High relevancy – most context relevant to query.
+- **0.4–0.6**: Mixed relevancy – some context relevant to query.
+- **0.1–0.3**: Low relevancy – little context relevant to query.
+- **0.0**: No relevancy – no context relevant to query.
+
+### Relevancy info
+
+An explanation for the score, with details including:
+
+- Relevance to input query.
+- Statement extraction from context.
+- Usefulness for response.
+- Overall context quality.
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-relevancy"
 />

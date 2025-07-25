@@ -2,6 +2,7 @@ import type { Mastra, SerializedStepFlowEntry } from '..';
 import { MastraBase } from '../base';
 import type { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
+import type { ChunkType } from '../stream/MastraWorkflowStream';
 import type { Emitter, StepResult } from './types';
 import type { StepFlowEntry } from '.';
 
@@ -53,5 +54,6 @@ export abstract class ExecutionEngine extends MastraBase {
       delay?: number;
     };
     abortController: AbortController;
+    writableStream?: WritableStream<ChunkType>;
   }): Promise<TOutput>;
 }

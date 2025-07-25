@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.11.4-alpha.0",
+  "version": "0.11.5",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -41,7 +41,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@upstash/redis": "^1.35.0",
+    "@upstash/redis": "^1.35.1",
     "ai": "^4.3.16",
     "js-tiktoken": "^1.0.20",
     "json-schema": "^0.4.0",
@@ -65,10 +65,10 @@
     "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.34.0",
+    "typescript-eslint": "^8.38.0",
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.9-0 <0.11.0-0"
+    "@mastra/core": ">=0.10.9-0 <0.12.0-0"
   }
 }

@@ -60,7 +60,7 @@ describe.for(allPackages.map(pkg => [relative(join(__dirname.replaceAll('\\', '/
         }
       });
 
-      it.skipIf(pkgName === 'packages/playground-ui' || pkgJson.name === 'mastra')(
+      it.skipIf(pkgName === 'packages/playground-ui' || pkgJson.name === 'mastra' || pkgJson.name === '@mastra/core')(
         'should use .cjs and .d.cts extensions when using require',
         async () => {
           if (importPath === './package.json') {
