@@ -805,10 +805,9 @@ export class MemoryPG extends MemoryStorage {
     try {
       // Check if message exists and get thread ID
       const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
-      const message = await this.client.oneOrNone(
-        `SELECT id, thread_id FROM ${messageTableName} WHERE id = $1`,
-        [messageId],
-      );
+      const message = await this.client.oneOrNone(`SELECT id, thread_id FROM ${messageTableName} WHERE id = $1`, [
+        messageId,
+      ]);
 
       if (!message) {
         throw new MastraError({
@@ -825,18 +824,14 @@ export class MemoryPG extends MemoryStorage {
       // Use transaction to delete message and update thread
       await this.client.tx(async t => {
         // Delete the message
-        await t.none(
-          `DELETE FROM ${messageTableName} WHERE id = $1`,
-          [messageId],
-        );
+        await t.none(`DELETE FROM ${messageTableName} WHERE id = $1`, [messageId]);
 
         // Update thread's updatedAt timestamp
         if (threadId) {
           const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
-          await t.none(
-            `UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $1`,
-            [threadId],
-          );
+          await t.none(`UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $1`, [
+            threadId,
+          ]);
         }
       });
 
