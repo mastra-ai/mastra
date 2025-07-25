@@ -1,5 +1,24 @@
 # @mastra/libsql
 
+## 0.11.3-alpha.0
+
+### Patch Changes
+
+- 24ac5ff: dependencies updates:
+  - Updated dependency [`@libsql/client@^0.15.10` ↗︎](https://www.npmjs.com/package/@libsql/client/v/0.15.10) (from `^0.15.9`, in `dependencies`)
+- a3ca14c: `LibSQLVector.doUpsert`: check if transaction is open before attempting rollback
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
 ## 0.11.2
 
 ### Patch Changes
