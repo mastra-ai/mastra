@@ -11,42 +11,7 @@ The `createToneScorer()` function evaluates the text's emotional tone and sentim
 
 The `createToneScorer()` function does not take any options.
 
-## .run() Input
-
-<PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      required: false,
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "input",
-      type: "Record<string, any>[]",
-      required: true,
-      description: "An array of records. This should contain user messages or the text to analyze for tone.",
-    },
-    {
-      name: "output",
-      type: "Record<string, any>",
-      required: true,
-      description: "A record. This should contain the reference text for tone comparison (empty string for stability analysis).",
-    },
-    {
-      name: "additionalContext",
-      type: "Record<string, any>",
-      required: false,
-      description: "Additional context for the run (optional).",
-    },
-    {
-      name: "runtimeContext",
-      type: "Record<string, any>",
-      required: false,
-      description: "Runtime context for the run (optional).",
-    },
-  ]}
-/>
+This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
 ## .run() Returns
 

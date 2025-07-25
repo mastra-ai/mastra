@@ -29,42 +29,7 @@ The `createHallucinationScorer()` function accepts a single options object with 
   ]}
 />
 
-## .run() Input
-
-<PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      required: false,
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "input",
-      type: "Record<string, any>[]",
-      required: false,
-      description: "An array of records. If the scorer is added to an agent, this will contain user messages.",
-    },
-    {
-      name: "output",
-      type: "Record<string, any>",
-      required: false,
-      description: "A record. If the scorer is added to an agent, this will contain the assistant message.",
-    },
-    {
-      name: "additionalContext",
-      type: "Record<string, any>",
-      required: false,
-      description: "Additional context for the run (optional).",
-    },
-    {
-      name: "runtimeContext",
-      type: "Record<string, any>",
-      required: false,
-      description: "Runtime context for the run (optional).",
-    },
-  ]}
-/>
+This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
 
 ## .run() Returns
 
