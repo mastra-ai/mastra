@@ -899,4 +899,74 @@ export class StoreMemoryUpstash extends MemoryStorage {
       );
     }
   }
+
+  async deleteMessage({ messageId }: { messageId: string }): Promise<void> {
+    try {
+      // Find the message key by scanning
+      const pattern = getMessageKey('*', messageId);
+      const keys = await this.operations.scanKeys(pattern);
+      
+      let messageKey: string | null = null;
+      let message: MastraMessageV2 | MastraMessageV1 | null = null;
+      
+      for (const key of keys) {
+        const foundMessage = await this.client.get<MastraMessageV2 | MastraMessageV1>(key);
+        if (foundMessage && foundMessage.id === messageId) {
+          messageKey = key;
+          message = foundMessage;
+          break;
+        }
+      }
+      
+      if (!messageKey || !message) {
+        throw new MastraError({
+          id: 'STORAGE_UPSTASH_MESSAGE_NOT_FOUND',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Message with id ${messageId} not found`,
+          details: { messageId },
+        });
+      }
+      
+      const threadId = message.threadId;
+      
+      // Use pipeline for atomic operations
+      const pipeline = this.client.pipeline();
+      
+      // Delete the message
+      pipeline.del(messageKey);
+      
+      // Remove from thread's sorted set
+      if (threadId) {
+        const threadMessagesKey = getThreadMessagesKey(threadId);
+        pipeline.zrem(threadMessagesKey, messageId);
+        
+        // Update thread's updatedAt timestamp
+        const threadKey = getKey(TABLE_THREADS, { id: threadId });
+        const existingThread = await this.client.get<StorageThreadType>(threadKey);
+        if (existingThread) {
+          const updatedThread = {
+            ...existingThread,
+            updatedAt: new Date(),
+          };
+          pipeline.set(threadKey, processRecord(TABLE_THREADS, updatedThread).processedRecord);
+        }
+      }
+      
+      // Execute all operations
+      await pipeline.exec();
+      
+      // TODO: Delete from vector store if semantic recall is enabled
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_DELETE_MESSAGE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageId },
+        },
+        error,
+      );
+    }
+  }
 }

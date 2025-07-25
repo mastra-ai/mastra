@@ -801,6 +801,59 @@ export class MemoryPG extends MemoryStorage {
     });
   }
 
+  async deleteMessage({ messageId }: { messageId: string }): Promise<void> {
+    try {
+      // Check if message exists and get thread ID
+      const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+      const message = await this.client.oneOrNone(
+        `SELECT id, thread_id FROM ${messageTableName} WHERE id = $1`,
+        [messageId],
+      );
+
+      if (!message) {
+        throw new MastraError({
+          id: 'PG_STORE_MESSAGE_NOT_FOUND',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Message with id ${messageId} not found`,
+          details: { messageId },
+        });
+      }
+
+      const threadId = message.thread_id;
+
+      // Use transaction to delete message and update thread
+      await this.client.tx(async t => {
+        // Delete the message
+        await t.none(
+          `DELETE FROM ${messageTableName} WHERE id = $1`,
+          [messageId],
+        );
+
+        // Update thread's updatedAt timestamp
+        if (threadId) {
+          const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+          await t.none(
+            `UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $1`,
+            [threadId],
+          );
+        }
+      });
+
+      // TODO: Delete from vector store if semantic recall is enabled
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'PG_STORE_DELETE_MESSAGE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageId },
+        },
+        error,
+      );
+    }
+  }
+
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.schema) });
     const result = await this.client.oneOrNone<StorageResourceType & { createdAtZ: Date; updatedAtZ: Date }>(

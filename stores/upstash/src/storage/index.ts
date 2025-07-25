@@ -281,6 +281,10 @@ export class UpstashStore extends MastraStorage {
     return this.stores.memory.updateMessages(args);
   }
 
+  async deleteMessage({ messageId }: { messageId: string }): Promise<void> {
+    return this.stores.memory.deleteMessage({ messageId });
+  }
+
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     return this.stores.memory.getResourceById({ resourceId });
   }
