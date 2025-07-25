@@ -1,5 +1,106 @@
 # @mastra/memory
 
+## 0.11.5
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+  - @mastra/core@0.11.1
+
+## 0.11.4
+
+### Patch Changes
+
+- 138f4a2: dependencies updates:
+  - Updated dependency [`redis@^5.6.0` ↗︎](https://www.npmjs.com/package/redis/v/5.6.0) (from `^4.7.1`, in `dependencies`)
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [7827943]
+- Updated dependencies [5889a31]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [cbddd18]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0
+
+## 0.11.4-alpha.0
+
+### Patch Changes
+
+- 138f4a2: dependencies updates:
+  - Updated dependency [`redis@^5.6.0` ↗︎](https://www.npmjs.com/package/redis/v/5.6.0) (from `^4.7.1`, in `dependencies`)
+- Updated dependencies [7827943]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [cbddd18]
+  - @mastra/core@0.11.0-alpha.0
+
+## 0.11.3
+
+### Patch Changes
+
+- 4b20131: Fixed an issue where per-resource semantic recall wouldn't always be enabled properly in agent tool calls
+- 2ba5b76: Allow passing jsonSchema into workingMemory schema
+- c3a30de: added new experimental vnext working memory
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- Updated dependencies [0b56518]
+- Updated dependencies [db5cc15]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [5237998]
+- Updated dependencies [c3a30de]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [cf3a184]
+- Updated dependencies [d6bfd60]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/core@0.10.15
+
+## 0.11.3-alpha.1
+
+### Patch Changes
+
+- 2ba5b76: Allow passing jsonSchema into workingMemory schema
+- c3a30de: added new experimental vnext working memory
+- Updated dependencies [0b56518]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [c3a30de]
+- Updated dependencies [cf3a184]
+- Updated dependencies [d6bfd60]
+  - @mastra/core@0.10.15-alpha.1
+
+## 0.11.3-alpha.0
+
+### Patch Changes
+
+- 4b20131: Fixed an issue where per-resource semantic recall wouldn't always be enabled properly in agent tool calls
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- Updated dependencies [db5cc15]
+- Updated dependencies [5237998]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/core@0.10.15-alpha.0
+
 ## 0.11.2
 
 ### Patch Changes

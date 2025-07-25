@@ -19,6 +19,9 @@ export const mastra = new Mastra({
     myMcpServerTwo,
   },
   workflows: { myWorkflow },
+  bundler: {
+    sourcemap: true,
+  },
   serverMiddleware: [
     {
       handler: (c, next) => {
@@ -27,4 +30,7 @@ export const mastra = new Mastra({
       },
     },
   ],
+  // telemetry: {
+  //   enabled: false,
+  // }
 });

@@ -12,6 +12,7 @@ import type { InputOptions, OutputOptions } from 'rollup';
 
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
+import { getBundlerOptions } from '../build/bundlerOptions';
 import { writeCustomInstrumentation } from '../build/customInstrumentation';
 import { writeTelemetryConfig } from '../build/telemetry';
 import { DepsService } from '../services/deps';
@@ -142,6 +143,24 @@ export abstract class Bundler extends MastraBundler {
     await copy(publicDir, join(outputDirectory, this.outputDir));
   }
 
+  protected async copyDOTNPMRC({
+    rootDir = process.cwd(),
+    outputDirectory,
+  }: {
+    rootDir?: string;
+    outputDirectory: string;
+  }) {
+    const sourceDotNpmRcPath = join(rootDir, '.npmrc');
+    const targetDotNpmRcPath = join(outputDirectory, this.outputDir, '.npmrc');
+
+    try {
+      await stat(sourceDotNpmRcPath);
+      await copy(sourceDotNpmRcPath, targetDotNpmRcPath);
+    } catch {
+      return;
+    }
+  }
+
   protected async getBundlerOptions(
     serverFile: string,
     mastraEntryFile: string,
@@ -211,6 +230,15 @@ export abstract class Bundler extends MastraBundler {
   ): Promise<void> {
     this.logger.info('Start bundling Mastra');
 
+    let sourcemap = false;
+
+    try {
+      const bundlerOptions = await getBundlerOptions(mastraEntryFile, outputDirectory);
+      sourcemap = !!bundlerOptions?.sourcemap;
+    } catch (error) {
+      this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
+    }
+
     let analyzedBundleInfo;
     try {
       const resolvedToolsPaths = await this.getToolsInputOptions(toolsPaths);
@@ -236,7 +264,14 @@ export abstract class Bundler extends MastraBundler {
 
     let externalDependencies: string[];
     try {
-      const result = await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));
+      const result = await writeTelemetryConfig({
+        entryFile: mastraEntryFile,
+        outputDir: join(outputDirectory, this.outputDir),
+        options: {
+          sourcemap,
+        },
+        logger: this.logger,
+      });
       externalDependencies = result.externalDependencies;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -262,7 +297,9 @@ export abstract class Bundler extends MastraBundler {
 
     try {
       if (customInstrumentation) {
-        const result = await writeCustomInstrumentation(customInstrumentation, join(outputDirectory, this.outputDir));
+        const result = await writeCustomInstrumentation(customInstrumentation, join(outputDirectory, this.outputDir), {
+          sourcemap,
+        });
         externalDependencies = [...externalDependencies, ...result.externalDependencies];
         await this.writeInstrumentationFile(join(outputDirectory, this.outputDir), customInstrumentation);
       } else {
@@ -371,6 +408,7 @@ export abstract class Bundler extends MastraBundler {
           manualChunks: {
             mastra: ['#mastra'],
           },
+          sourcemap,
         },
       );
 
@@ -396,6 +434,11 @@ export const tools = [${toolsExports.join(', ')}]`,
       this.logger.info('Copying public files');
       await this.copyPublic(dirname(mastraEntryFile), outputDirectory);
       this.logger.info('Done copying public files');
+
+      this.logger.info('Copying .npmrc file');
+      await this.copyDOTNPMRC({ outputDirectory });
+
+      this.logger.info('Done copying .npmrc file');
 
       this.logger.info('Installing dependencies');
       await this.installDependencies(outputDirectory);

@@ -4258,6 +4258,124 @@ describe('MastraInngestWorkflow', () => {
 
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
     });
+
+    it('should handle consecutive nested workflows with suspend/resume', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
+        if (!resumeData?.suspect) {
+          return await suspend({ message: 'What is the suspect?' });
+        }
+        return { suspect: resumeData.suspect };
+      });
+      const step1Definition = createStep({
+        id: 'step-1',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ suspect: z.string() }),
+        execute: step1,
+      });
+
+      const step2 = vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
+        if (!resumeData?.suspect) {
+          return await suspend({ message: 'What is the second suspect?' });
+        }
+        return { suspect: resumeData.suspect };
+      });
+      const step2Definition = createStep({
+        id: 'step-2',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ suspect: z.string() }),
+        execute: step2,
+      });
+
+      const subWorkflow1 = createWorkflow({
+        id: 'sub-workflow-1',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+      })
+        .then(step1Definition)
+        .commit();
+
+      const subWorkflow2 = createWorkflow({
+        id: 'sub-workflow-2',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+      })
+        .then(step2Definition)
+        .commit();
+
+      const mainWorkflow = createWorkflow({
+        id: 'main-workflow',
+        inputSchema: z.object({ suspect: z.string() }),
+        outputSchema: z.object({ suspect: z.string() }),
+      })
+        .then(subWorkflow1)
+        .then(subWorkflow2)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: { mainWorkflow },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await mainWorkflow.createRunAsync();
+
+      const initialResult = await run.start({ inputData: { suspect: 'initial-suspect' } });
+      expect(initialResult.status).toBe('suspended');
+
+      const firstResumeResult = await run.resume({
+        step: ['sub-workflow-1', 'step-1'],
+        resumeData: { suspect: 'first-suspect' },
+      });
+      expect(firstResumeResult.status).toBe('suspended');
+
+      const secondResumeResult = await run.resume({
+        step: ['sub-workflow-2', 'step-2'],
+        resumeData: { suspect: 'second-suspect' },
+      });
+
+      expect(step1).toHaveBeenCalledTimes(2);
+      expect(step2).toHaveBeenCalledTimes(2);
+      expect(secondResumeResult.status).toBe('success');
+      expect(secondResumeResult.steps['sub-workflow-1']).toMatchObject({
+        status: 'success',
+      });
+      expect(secondResumeResult.steps['sub-workflow-2']).toMatchObject({
+        status: 'success',
+      });
+
+      srv.close();
+    });
   });
 
   describe('Accessing Mastra', () => {
@@ -6218,6 +6336,176 @@ describe('MastraInngestWorkflow', () => {
 
       // @ts-ignore
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
+    });
+
+    it('should have access to runtimeContext from before suspension during workflow resume', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const testValue = 'test-dependency';
+      const resumeStep = createStep({
+        id: 'resume',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        resumeSchema: z.object({ value: z.number() }),
+        suspendSchema: z.object({ message: z.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          const finalValue = (resumeData?.value ?? 0) + inputData.value;
+
+          if (!resumeData?.value || finalValue < 10) {
+            return await suspend({
+              message: `Please provide additional information. now value is ${inputData.value}`,
+            });
+          }
+
+          return { value: finalValue };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData, runtimeContext }) => {
+          runtimeContext.set('testKey', testValue);
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(incrementStep)
+        .then(resumeStep)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData, runtimeContext }) => {
+              const testKey = runtimeContext.get('testKey');
+              expect(testKey).toBe(testValue);
+              return { value: inputData.value };
+            },
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRunAsync();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('suspended');
+
+      const resumeResult = await run.resume({
+        resumeData: { value: 21 },
+        step: ['resume'],
+      });
+
+      expect(resumeResult.status).toBe('success');
+    });
+
+    it('should not show removed runtimeContext values in subsequent steps', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+      const testValue = 'test-dependency';
+      const resumeStep = createStep({
+        id: 'resume',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        resumeSchema: z.object({ value: z.number() }),
+        suspendSchema: z.object({ message: z.string() }),
+        execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
+          const finalValue = (resumeData?.value ?? 0) + inputData.value;
+
+          if (!resumeData?.value || finalValue < 10) {
+            return await suspend({
+              message: `Please provide additional information. now value is ${inputData.value}`,
+            });
+          }
+
+          const testKey = runtimeContext.get('testKey');
+          expect(testKey).toBe(testValue);
+
+          runtimeContext.delete('testKey');
+
+          return { value: finalValue };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData, runtimeContext }) => {
+          runtimeContext.set('testKey', testValue);
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const incrementWorkflow = createWorkflow({
+        id: 'increment-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(incrementStep)
+        .then(resumeStep)
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData, runtimeContext }) => {
+              const testKey = runtimeContext.get('testKey');
+              expect(testKey).toBeUndefined();
+              return { value: inputData.value };
+            },
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { incrementWorkflow },
+      });
+
+      const run = await incrementWorkflow.createRunAsync();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.status).toBe('suspended');
+
+      const resumeResult = await run.resume({
+        resumeData: { value: 21 },
+        step: ['resume'],
+      });
+
+      expect(resumeResult.status).toBe('success');
     });
   });
 

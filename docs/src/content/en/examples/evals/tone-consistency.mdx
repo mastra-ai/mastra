@@ -7,160 +7,154 @@ import { GithubLink } from "@/components/github-link";
 
 # Tone Consistency Evaluation
 
-This example demonstrates how to use Mastra's Tone Consistency metric to evaluate emotional tone patterns and sentiment consistency in text.
+Use `ToneConsistencyMetric` to evaluate emotional tone patterns and sentiment consistency in text. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing sentiment scores and their difference.
 
-## Overview
+## Installation
 
-The example shows how to:
-
-1. Configure the Tone Consistency metric
-2. Compare sentiment between texts
-3. Analyze tone stability within text
-4. Handle different tone scenarios
-
-## Setup
-
-### Dependencies
-
-Import the necessary dependencies:
-
-```typescript copy showLineNumbers filename="src/index.ts"
-import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+```bash copy
+npm install @mastra/evals
 ```
 
-## Metric Configuration
+## Positive tone example
 
-Set up the Tone Consistency metric:
+In this example, the texts exhibit a similar positive sentiment. The metric measures the consistency between the tones, resulting in a high score.
 
-```typescript copy showLineNumbers{4} filename="src/index.ts"
+```typescript filename="src/example-positive-tone.ts" showLineNumbers copy
+import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+
+const metric = new ToneConsistencyMetric();
+
+const query = "This product is fantastic and amazing!";
+const response = "The product is excellent and wonderful!";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Positive tone output
+
+The metric returns a high score reflecting strong sentiment alignment. The `info` field provides sentiment values and the difference between them.
+
+```typescript
+{
+  score: 0.8333333333333335,
+  info: {
+    responseSentiment: 1.3333333333333333,
+    referenceSentiment: 1.1666666666666667,
+    difference: 0.16666666666666652
+  }
+}
+```
+
+## Stable tone example
+
+In this example, the text’s internal tone consistency is analyzed by passing an empty response. This signals the metric to evaluate sentiment stability within the single input text, resulting in a score reflecting how uniform the tone is throughout.
+
+```typescript filename="src/example-stable-tone.ts" showLineNumbers copy
+import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+
+const metric = new ToneConsistencyMetric();
+
+const query = "Great service! Friendly staff. Perfect atmosphere.";
+const response = "";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Stable tone output
+
+The metric returns a high score indicating consistent sentiment throughout the input text. The `info` field includes the average sentiment and sentiment variance, reflecting tone stability.
+
+```typescript
+{
+  score: 0.9444444444444444,
+  info: {
+    avgSentiment: 1.3333333333333333,
+    sentimentVariance: 0.05555555555555556
+  }
+}
+```
+
+## Mixed tone example
+
+In this example, the input and response have different emotional tones. The metric picks up on these variations and gives a lower consistency score.
+
+```typescript filename="src/example-mixed-tone.ts" showLineNumbers copy
+import { ToneConsistencyMetric } from "@mastra/evals/nlp";
+
+const metric = new ToneConsistencyMetric();
+
+const query = "The interface is frustrating and confusing, though it has potential.";
+const response = "The design shows promise but needs significant improvements to be usable.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Mixed tone output
+
+The metric returns a low score due to the noticeable differences in emotional tone. The `info` field highlights the sentiment values and the degree of variation between them.
+
+```typescript
+{
+  score: 0.4181818181818182,
+  info: {
+    responseSentiment: -0.4,
+    referenceSentiment: 0.18181818181818182,
+    difference: 0.5818181818181818
+  }
+}
+```
+
+## Metric configuration
+
+You can create a `ToneConsistencyMetric` instance with default settings. No additional configuration is required.
+
+```typescript
 const metric = new ToneConsistencyMetric();
 ```
 
-## Example Usage
+> See [ToneConsistencyMetric](/reference/evals/tone-consistency.mdx) for a full list of configuration options.
 
-### Consistent Positive Tone Example
 
-Evaluate texts with similar positive sentiment:
+## Understanding the results
 
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const input1 = "This product is fantastic and amazing!";
-const output1 = "The product is excellent and wonderful!";
+`ToneConsistencyMetric` returns a result in the following shape:
 
-console.log("Example 1 - Consistent Positive Tone:");
-console.log("Input:", input1);
-console.log("Output:", output1);
-
-const result1 = await metric.measure(input1, output1);
-console.log("Metric Result:", {
-  score: result1.score,
-  info: result1.info,
-});
-// Example Output:
-// Metric Result: {
-//   score: 0.8333333333333335,
-//   info: {
-//     responseSentiment: 1.3333333333333333,
-//     referenceSentiment: 1.1666666666666667,
-//     difference: 0.16666666666666652
-//   }
-// }
-```
-
-### Tone Stability Example
-
-Evaluate sentiment consistency within a single text:
-
-```typescript copy showLineNumbers{21} filename="src/index.ts"
-const input2 = "Great service! Friendly staff. Perfect atmosphere.";
-const output2 = ""; // Empty string for stability analysis
-
-console.log("Example 2 - Tone Stability:");
-console.log("Input:", input2);
-console.log("Output:", output2);
-
-const result2 = await metric.measure(input2, output2);
-console.log("Metric Result:", {
-  score: result2.score,
-  info: result2.info,
-});
-// Example Output:
-// Metric Result: {
-//   score: 0.9444444444444444,
-//   info: {
-//     avgSentiment: 1.3333333333333333,
-//     sentimentVariance: 0.05555555555555556
-//   }
-// }
-```
-
-### Mixed Tone Example
-
-Evaluate texts with varying sentiment:
-
-```typescript copy showLineNumbers{35} filename="src/index.ts"
-const input3 =
-  "The interface is frustrating and confusing, though it has potential.";
-const output3 =
-  "The design shows promise but needs significant improvements to be usable.";
-
-console.log("Example 3 - Mixed Tone:");
-console.log("Input:", input3);
-console.log("Output:", output3);
-
-const result3 = await metric.measure(input3, output3);
-console.log("Metric Result:", {
-  score: result3.score,
-  info: result3.info,
-});
-// Example Output:
-// Metric Result: {
-//   score: 0.4181818181818182,
-//   info: {
-//     responseSentiment: -0.4,
-//     referenceSentiment: 0.18181818181818182,
-//     difference: 0.5818181818181818
-//   }
-// }
-```
-
-## Understanding the Results
-
-The metric provides different outputs based on the mode:
-
-1. Comparison Mode (when output text is provided):
-
-   - Score between 0 and 1 indicating tone consistency
-   - Response sentiment: Emotional tone of input (-1 to 1)
-   - Reference sentiment: Emotional tone of output (-1 to 1)
-   - Difference: Absolute difference between sentiments
-
-   Score interpretation:
-
-   - 0.8-1.0: Very consistent tone
-   - 0.6-0.7: Generally consistent
-   - 0.4-0.5: Mixed tone
-   - 0.0-0.3: Conflicting tone
-
-2. Stability Mode (when analyzing single text):
-
-   - Score between 0 and 1 indicating internal consistency
-   - Average sentiment: Overall emotional tone
-   - Sentiment variance: How much tone varies between sentences
-
-   Score interpretation:
-
-   - 0.9-1.0: Very stable tone
-   - 0.7-0.8: Mostly stable
-   - 0.4-0.6: Variable tone
-   - 0.0-0.3: Highly inconsistent
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/tone-consistency"
+```typescript
+{
+  score: number,
+  info: {
+    responseSentiment?: number,
+    referenceSentiment?: number,
+    difference?: number,
+    avgSentiment?: number,
+    sentimentVariance?: number
   }
+}
+```
+### Tone consistency score
+
+A tone consistency score between 0 and 1:
+
+- **0.8–1.0**: Very consistent tone.
+- **0.6–0.7**: Generally consistent tone.
+- **0.4–0.5**: Mixed tone.
+- **0.0–0.3**: Conflicting tone.
+
+### Tone consistency info
+
+An explanation for the score, with details including:
+
+- Sentiment alignment between input and response.
+- Tone stability within a single text.
+- Degree of sentiment difference or variance.
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/tone-consistency"
 />

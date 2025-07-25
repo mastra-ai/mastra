@@ -19,7 +19,7 @@ For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/d
 
 Before you begin, ensure you have:
 
-- **Node.js** installed (version 18 or higher is recommended)
+- Node.js `v20.0` or higher
 - If using a platform-specific deployer:
   - An account with your chosen platform
   - Required API keys or credentials
@@ -30,23 +30,23 @@ Before you begin, ensure you have:
 
 Specifically, ensure you've removed it from both `src/mastra/index.ts` and `src/mastra/agents/weather-agent.ts`:
 
-```diff filename="src/mastra/index.ts" showLineNumbers
+```typescript filename="src/mastra/index.ts" showLineNumbers
 export const mastra = new Mastra({
   // ...
--  storage: new LibSQLStore({
--    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
--    url: ":memory:",
--  })
+  storage: new LibSQLStore({ // [!code --]
+    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db // [!code --]
+    url: ":memory:", // [!code --]
+  })//[!code --]
 });
 ```
 
-``` diff filename="src/mastra/agents/weather-agent.ts" showLineNumbers
+```typescript filename="src/mastra/agents/weather-agent.ts" showLineNumbers
 export const weatherAgent = new Agent({
-  // ..
--  memory: new Memory({
--    storage: new LibSQLStore({
--      url: "file:../mastra.db" // path is relative to the .mastra/output directory
--    })
--  })
+ // ..
+ memory: new Memory({  // [!code --]
+   storage: new LibSQLStore({ // [!code --]
+      url: "file:../mastra.db" // path is relative to the .mastra/output directory // [!code --]
+   }) // [!code --]
+ })//  [!code --]
 });
 ```

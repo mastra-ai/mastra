@@ -3,6 +3,8 @@ import type { z } from 'zod';
 import type { ExecuteFunction, Step } from './step';
 import type { SerializedStepFlowEntry } from './workflow';
 
+export type { ChunkType, MastraWorkflowStream } from '../stream/MastraWorkflowStream';
+
 export type Emitter = {
   emit: (event: string, data: any) => Promise<void>;
   on: (event: string, callback: (data: any) => void) => void;
@@ -122,6 +124,11 @@ export type StreamEvent =
       type: 'step-waiting';
       payload: any;
       id: string;
+    }
+  | {
+      type: 'step-result';
+      payload: any;
+      id: string;
     };
 
 export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
@@ -181,6 +188,7 @@ export interface WorkflowRunState {
   status: WorkflowRunStatus;
   result?: Record<string, any>;
   error?: string | Error;
+  runtimeContext?: Record<string, any>;
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];

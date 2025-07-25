@@ -1,9 +1,10 @@
 import { ActionBarPrimitive, MessagePrimitive, ToolCallContentPartComponent, useMessage } from '@assistant-ui/react';
-import { CheckIcon, CopyIcon } from 'lucide-react';
+import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 
 import { MarkdownText } from './markdown-text';
 import { TooltipIconButton } from '../tooltip-icon-button';
 import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
+import { Reasoning } from './reasoning';
 
 export interface AssistantMessageProps {
   ToolFallback?: ToolCallContentPartComponent;
@@ -11,20 +12,27 @@ export interface AssistantMessageProps {
 
 export const AssistantMessage = ({ ToolFallback: ToolFallbackCustom }: AssistantMessageProps) => {
   const data = useMessage();
-  const isSolelyToolCall = data.content.length === 1 && data.content[0].type === 'tool-call';
+  const messageId = data.id;
+
+  const isToolCallAndOrReasoning = data.content.every(({ type }) => type === 'tool-call' || type === 'reasoning');
 
   return (
-    <MessagePrimitive.Root className="max-w-full">
+    <MessagePrimitive.Root className="max-w-full" data-message-id={messageId}>
       <div className="text-icon6 text-ui-lg leading-ui-lg">
         <MessagePrimitive.Content
           components={{
             Text: MarkdownText,
             tools: { Fallback: ToolFallbackCustom || ToolFallback },
+            Reasoning: Reasoning,
           }}
         />
       </div>
 
-      <div className="h-6 pt-1">{!isSolelyToolCall && <AssistantActionBar />}</div>
+      {!isToolCallAndOrReasoning && (
+        <div className="h-6 pt-1">
+          <AssistantActionBar />
+        </div>
+      )}
     </MessagePrimitive.Root>
   );
 };
@@ -37,7 +45,7 @@ const AssistantActionBar = () => {
       autohideFloat="single-branch"
       className="flex gap-1 items-center transition-all relative"
     >
-      {/* <MessagePrimitive.If speaking={false}>
+      <MessagePrimitive.If speaking={false}>
         <ActionBarPrimitive.Speak asChild>
           <TooltipIconButton tooltip="Read aloud">
             <AudioLinesIcon />
@@ -50,7 +58,7 @@ const AssistantActionBar = () => {
             <StopCircleIcon />
           </TooltipIconButton>
         </ActionBarPrimitive.StopSpeaking>
-      </MessagePrimitive.If> */}
+      </MessagePrimitive.If>
       <ActionBarPrimitive.Copy asChild>
         <TooltipIconButton tooltip="Copy" className="bg-transparent text-icon3 hover:text-icon6">
           <MessagePrimitive.If copied>

@@ -1,5 +1,224 @@
 # @mastra/deployer-cloudflare
 
+## 0.11.1
+
+### Patch Changes
+
+- 1a45f3a: Fix peerdeps
+
+## 0.11.0
+
+### Minor Changes
+
+- d83392d: Remove scope, auth, and cloudflare client from CloudflareDeployer
+
+  BREAKING CHANGES:
+  - Remove `scope` property and constructor parameter
+  - Remove `auth` parameter from constructor
+  - Remove private `cloudflare` client property and initialization
+  - Update `tagWorker` method to throw error directing users to Cloudflare dashboard
+  - Remove unused Cloudflare import
+
+  This simplifies the CloudflareDeployer API by removing external dependencies and authentication requirements. Users should now use the Cloudflare dashboard or API directly for operations that previously required the cloudflare client.
+
+### Patch Changes
+
+- 7983e53: Revert cloudflare omit install deps step
+- Updated dependencies [f248d53]
+- Updated dependencies [82c6860]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [0938991]
+- Updated dependencies [18344d7]
+- Updated dependencies [7ba91fa]
+- Updated dependencies [a512ede]
+- Updated dependencies [35b1155]
+- Updated dependencies [9d372c2]
+- Updated dependencies [45469c5]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [6f50efd]
+- Updated dependencies [24eb25c]
+- Updated dependencies [bf6903e]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [7827943]
+- Updated dependencies [4c06f06]
+- Updated dependencies [5889a31]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [65e3395]
+- Updated dependencies [9de6f58]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [7983e53]
+- Updated dependencies [dcd4802]
+- Updated dependencies [cbddd18]
+- Updated dependencies [7ba91fa]
+- Updated dependencies [15ce274]
+  - @mastra/core@0.11.0
+  - @mastra/deployer@0.11.0
+
+## 0.11.0-alpha.2
+
+### Minor Changes
+
+- d83392d: Remove scope, auth, and cloudflare client from CloudflareDeployer
+
+  BREAKING CHANGES:
+  - Remove `scope` property and constructor parameter
+  - Remove `auth` parameter from constructor
+  - Remove private `cloudflare` client property and initialization
+  - Update `tagWorker` method to throw error directing users to Cloudflare dashboard
+  - Remove unused Cloudflare import
+
+  This simplifies the CloudflareDeployer API by removing external dependencies and authentication requirements. Users should now use the Cloudflare dashboard or API directly for operations that previously required the cloudflare client.
+
+### Patch Changes
+
+- Updated dependencies [f248d53]
+- Updated dependencies [82c6860]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [7ba91fa]
+- Updated dependencies [a512ede]
+- Updated dependencies [35b1155]
+- Updated dependencies [9d372c2]
+- Updated dependencies [45469c5]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [24eb25c]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [4c06f06]
+- Updated dependencies [5889a31]
+- Updated dependencies [65e3395]
+- Updated dependencies [9de6f58]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [7ba91fa]
+- Updated dependencies [15ce274]
+  - @mastra/core@0.11.0-alpha.2
+  - @mastra/deployer@0.11.0-alpha.2
+
+## 0.10.16-alpha.1
+
+### Patch Changes
+
+- 7983e53: Revert cloudflare omit install deps step
+- Updated dependencies [7983e53]
+  - @mastra/deployer@0.11.0-alpha.1
+  - @mastra/core@0.11.0-alpha.1
+
+## 0.10.16-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [0938991]
+- Updated dependencies [6f50efd]
+- Updated dependencies [bf6903e]
+- Updated dependencies [7827943]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [cbddd18]
+  - @mastra/deployer@0.11.0-alpha.0
+  - @mastra/core@0.11.0-alpha.0
+
+## 0.10.15
+
+### Patch Changes
+
+- 7776324: dependencies updates:
+  - Updated dependency [`rollup@^4.45.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.45.0) (from `^4.44.2`, in `dependencies`)
+- fe4bbd4: Turn off installDependencies for cloudflare deployer build
+- Updated dependencies [7776324]
+- Updated dependencies [0b56518]
+- Updated dependencies [db5cc15]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [7b57e2c]
+- Updated dependencies [5237998]
+- Updated dependencies [c3a30de]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [cf3a184]
+- Updated dependencies [fe4bbd4]
+- Updated dependencies [d6bfd60]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/deployer@0.10.15
+  - @mastra/core@0.10.15
+
+## 0.10.15-alpha.1
+
+### Patch Changes
+
+- fe4bbd4: Turn off installDependencies for cloudflare deployer build
+- Updated dependencies [0b56518]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [c3a30de]
+- Updated dependencies [cf3a184]
+- Updated dependencies [fe4bbd4]
+- Updated dependencies [d6bfd60]
+  - @mastra/core@0.10.15-alpha.1
+  - @mastra/deployer@0.10.15-alpha.1
+
+## 0.10.15-alpha.0
+
+### Patch Changes
+
+- 7776324: dependencies updates:
+  - Updated dependency [`rollup@^4.45.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.45.0) (from `^4.44.2`, in `dependencies`)
+- Updated dependencies [7776324]
+- Updated dependencies [db5cc15]
+- Updated dependencies [7b57e2c]
+- Updated dependencies [5237998]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/deployer@0.10.15-alpha.0
+  - @mastra/core@0.10.15-alpha.0
+
+## 0.10.14
+
+### Patch Changes
+
+- 71907f3: Pin rollup to fix breaking change
+- Updated dependencies [400dbf0]
+  - @mastra/deployer@0.10.14
+  - @mastra/core@0.10.14
+
+## 0.10.12
+
+### Patch Changes
+
+- Updated dependencies [b4a9811]
+- Updated dependencies [4d5583d]
+- Updated dependencies [53e3f58]
+  - @mastra/core@0.10.12
+  - @mastra/deployer@0.10.12
+
+## 0.10.12-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [b4a9811]
+- Updated dependencies [53e3f58]
+  - @mastra/core@0.10.12-alpha.0
+  - @mastra/deployer@0.10.12-alpha.0
+
 ## 0.10.11
 
 ### Patch Changes

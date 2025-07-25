@@ -1,5 +1,12 @@
 # @mastra/couchbase
 
+## 0.11.1
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+  - @mastra/core@0.11.1
+
 ## 0.11.0
 
 ### Minor Changes

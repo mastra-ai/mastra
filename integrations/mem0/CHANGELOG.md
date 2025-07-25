@@ -1,5 +1,12 @@
 # @mastra/mem0
 
+## 0.1.5
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+  - @mastra/core@0.11.1
+
 ## 0.1.4
 
 ### Patch Changes
