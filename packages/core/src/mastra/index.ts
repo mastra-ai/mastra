@@ -203,6 +203,19 @@ export class Mastra<
 
     this.#telemetry = Telemetry.init(config?.telemetry);
 
+    // Warn if telemetry is enabled but the instrumentation global is not set
+    if (
+      config?.telemetry?.enabled !== false &&
+      typeof globalThis !== 'undefined' &&
+      (globalThis as any).___MASTRA_TELEMETRY___ !== true
+    ) {
+      this.#logger?.warn(
+        `Mastra telemetry is enabled, but the required instrumentation file was not loaded. ` +
+          `If you are using Mastra outside of the mastra server environment, see: https://mastra.ai/en/docs/observability/tracing#tracing-outside-mastra-server-environment`,
+        `If you are using a custom instrumentation file or want to disable this warning, set the globalThis.___MASTRA_TELEMETRY___ variable to true in your instrumentation file.`,
+      );
+    }
+
     /*
       Storage
     */

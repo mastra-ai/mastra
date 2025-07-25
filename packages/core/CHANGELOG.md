@@ -1,5 +1,25 @@
 # @mastra/core
 
+## 0.12.0-alpha.0
+
+### Minor Changes
+
+- 2ecf658: Added the option to provide a custom ID generator when creating an instance of Mastra. If the generator is not provided, a fallback of using UUID is used to generate IDs instead.
+
+### Patch Changes
+
+- 510e2c8: dependencies updates:
+  - Updated dependency [`radash@^12.1.1` ↗︎](https://www.npmjs.com/package/radash/v/12.1.1) (from `^12.1.0`, in `dependencies`)
+- 2f72fb2: dependencies updates:
+  - Updated dependency [`xstate@^5.20.1` ↗︎](https://www.npmjs.com/package/xstate/v/5.20.1) (from `^5.19.4`, in `dependencies`)
+- 3f89307: improve registerApiRoute validation
+- 9eda7d4: Move createMockModel to test scope. This prevents test dependencies from leaking into production code.
+- 9d49408: Fix conditional branch execution after nested workflow resume. Now conditional branches properly re-evaluate their conditions during resume, ensuring only the correct branches execute.
+- 7a7754f: Fast follow scorers fixing input types, improve llm scorer reliability, fix ui to display scores that are 0
+- fc92d80: fix: GenerateReturn type
+- 23a6a7c: improve error message for missing memory ids
+- 09bca64: Log warning when telemetry is enabled but not loaded
+
 ## 0.11.1
 
 ### Patch Changes
