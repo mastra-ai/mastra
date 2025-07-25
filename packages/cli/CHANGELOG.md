@@ -1,5 +1,240 @@
 # mastra
 
+## 0.10.15
+
+### Patch Changes
+
+- 1a45f3a: Fix peerdeps
+
+## 0.10.14
+
+### Patch Changes
+
+- dd2a4c9: change the way we start the dev process of playground
+- af1f902: share thread list between agent, network and cloud
+- 8f89bcd: fix traces pagination + sharing trace view with cloud
+- 0bf0bc8: fix link in shared components + add e2e tests
+- 2affc57: Fix output type of network loop
+- 51192f8: Spread the loaded env into the main process
+- f6c4d75: fix date picker on change
+- 59f0dcd: Add light background color for step statuses
+- 698518b: Allow external templates from github
+- cf8d497: factorize tabs component between cloud and core
+- 7827943: Handle streaming large data
+- 808b493: wrap runtime context with tooltip provider for usage in cloud
+- 8364fac: Fix displaying scorer input
+- 09464dd: Share AgentMetadata component with cloud
+- 80692d5: refactor: sharing only the UI and not data fetching for traces
+- 80c2b06: Fix agent chat stop button to cancel stream/generate reqs in the playground
+- Updated dependencies [f248d53]
+- Updated dependencies [82c6860]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [0938991]
+- Updated dependencies [18344d7]
+- Updated dependencies [7ba91fa]
+- Updated dependencies [a512ede]
+- Updated dependencies [35b1155]
+- Updated dependencies [9d372c2]
+- Updated dependencies [45469c5]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [6f50efd]
+- Updated dependencies [24eb25c]
+- Updated dependencies [bf6903e]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [7827943]
+- Updated dependencies [4c06f06]
+- Updated dependencies [5889a31]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [65e3395]
+- Updated dependencies [9de6f58]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [7983e53]
+- Updated dependencies [dcd4802]
+- Updated dependencies [cbddd18]
+- Updated dependencies [7ba91fa]
+- Updated dependencies [15ce274]
+  - @mastra/core@0.11.0
+  - @mastra/deployer@0.11.0
+
+## 0.10.14-alpha.3
+
+### Patch Changes
+
+- 8364fac: Fix displaying scorer input
+
+## 0.10.14-alpha.2
+
+### Patch Changes
+
+- dd2a4c9: change the way we start the dev process of playground
+- af1f902: share thread list between agent, network and cloud
+- 2affc57: Fix output type of network loop
+- 51192f8: Spread the loaded env into the main process
+- f6c4d75: fix date picker on change
+- 698518b: Allow external templates from github
+- 09464dd: Share AgentMetadata component with cloud
+- 80c2b06: Fix agent chat stop button to cancel stream/generate reqs in the playground
+- Updated dependencies [f248d53]
+- Updated dependencies [82c6860]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [7ba91fa]
+- Updated dependencies [a512ede]
+- Updated dependencies [35b1155]
+- Updated dependencies [9d372c2]
+- Updated dependencies [45469c5]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [24eb25c]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [4c06f06]
+- Updated dependencies [5889a31]
+- Updated dependencies [65e3395]
+- Updated dependencies [9de6f58]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [7ba91fa]
+- Updated dependencies [15ce274]
+  - @mastra/core@0.11.0-alpha.2
+  - @mastra/deployer@0.11.0-alpha.2
+
+## 0.10.14-alpha.1
+
+### Patch Changes
+
+- 8f89bcd: fix traces pagination + sharing trace view with cloud
+- 59f0dcd: Add light background color for step statuses
+- cf8d497: factorize tabs component between cloud and core
+- 80692d5: refactor: sharing only the UI and not data fetching for traces
+- Updated dependencies [7983e53]
+  - @mastra/deployer@0.11.0-alpha.1
+  - @mastra/core@0.11.0-alpha.1
+
+## 0.10.14-alpha.0
+
+### Patch Changes
+
+- 0bf0bc8: fix link in shared components + add e2e tests
+- 7827943: Handle streaming large data
+- 808b493: wrap runtime context with tooltip provider for usage in cloud
+- Updated dependencies [0938991]
+- Updated dependencies [6f50efd]
+- Updated dependencies [bf6903e]
+- Updated dependencies [7827943]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [cbddd18]
+  - @mastra/deployer@0.11.0-alpha.0
+  - @mastra/core@0.11.0-alpha.0
+
+## 0.10.13
+
+### Patch Changes
+
+- 593631d: allow to pass ref to the link abstraction
+- 5237998: Fix foreach output
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- d49334d: export tool list for usage in cloud
+- 9cdfcb5: fix infinite rerenders on agents table + share runtime context for cloud
+- 794d9f3: Fix thread creation in playground
+- 5130bcb: dependencies updates:
+  - Updated dependency [`swr@^2.3.4` ↗︎](https://www.npmjs.com/package/swr/v/2.3.4) (from `^2.3.3`, in `dependencies`)
+- 984887a: dependencies updates:
+  - Updated dependency [`prettier@^3.6.2` ↗︎](https://www.npmjs.com/package/prettier/v/3.6.2) (from `^3.5.3`, in `dependencies`)
+- aa9528a: Display reasoning in playground
+- 45174f3: share network list between core and cloud
+- 48f5532: export workflow list for usage in cloud
+- 3e484be: Added CLI template option
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- e1d0080: abstract Link component between cloud and core
+- f9b1508: add the same agent table as in cloud and export it from the playground
+- dfbeec6: Fix navigation to vnext AgentNetwork agents
+- Updated dependencies [7776324]
+- Updated dependencies [0b56518]
+- Updated dependencies [db5cc15]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [7b57e2c]
+- Updated dependencies [5237998]
+- Updated dependencies [c3a30de]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [cf3a184]
+- Updated dependencies [fe4bbd4]
+- Updated dependencies [d6bfd60]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/deployer@0.10.15
+  - @mastra/core@0.10.15
+
+## 0.10.13-alpha.2
+
+### Patch Changes
+
+- 794d9f3: Fix thread creation in playground
+- dfbeec6: Fix navigation to vnext AgentNetwork agents
+
+## 0.10.13-alpha.1
+
+### Patch Changes
+
+- d49334d: export tool list for usage in cloud
+- 9cdfcb5: fix infinite rerenders on agents table + share runtime context for cloud
+- 45174f3: share network list between core and cloud
+- 48f5532: export workflow list for usage in cloud
+- 3e484be: Added CLI template option
+- Updated dependencies [0b56518]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [c3a30de]
+- Updated dependencies [cf3a184]
+- Updated dependencies [fe4bbd4]
+- Updated dependencies [d6bfd60]
+  - @mastra/core@0.10.15-alpha.1
+  - @mastra/deployer@0.10.15-alpha.1
+
+## 0.10.13-alpha.0
+
+### Patch Changes
+
+- 593631d: allow to pass ref to the link abstraction
+- 5237998: Fix foreach output
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- 5130bcb: dependencies updates:
+  - Updated dependency [`swr@^2.3.4` ↗︎](https://www.npmjs.com/package/swr/v/2.3.4) (from `^2.3.3`, in `dependencies`)
+- 984887a: dependencies updates:
+  - Updated dependency [`prettier@^3.6.2` ↗︎](https://www.npmjs.com/package/prettier/v/3.6.2) (from `^3.5.3`, in `dependencies`)
+- aa9528a: Display reasoning in playground
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- e1d0080: abstract Link component between cloud and core
+- f9b1508: add the same agent table as in cloud and export it from the playground
+- Updated dependencies [7776324]
+- Updated dependencies [db5cc15]
+- Updated dependencies [7b57e2c]
+- Updated dependencies [5237998]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/deployer@0.10.15-alpha.0
+  - @mastra/core@0.10.15-alpha.0
+
 ## 0.10.12
 
 ### Patch Changes

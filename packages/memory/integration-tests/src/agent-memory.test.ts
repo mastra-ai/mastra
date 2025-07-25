@@ -36,8 +36,108 @@ describe('Agent Memory Tests', () => {
         url: dbFile,
       }),
     });
-    await expect(mastra.getAgent('agent').getMemory()!.query({ threadId: '1' })).resolves.not.toThrow();
-    await expect(agent.getMemory()!.query({ threadId: '1' })).resolves.not.toThrow();
+    const agentMemory = (await mastra.getAgent('agent').getMemory())!;
+    await expect(agentMemory.query({ threadId: '1' })).resolves.not.toThrow();
+    const agentMemory2 = (await agent.getMemory())!;
+    await expect(agentMemory2.query({ threadId: '1' })).resolves.not.toThrow();
+  });
+
+  it('should inherit storage from Mastra instance when workingMemory is enabled', async () => {
+    const mastra = new Mastra({
+      storage: new LibSQLStore({
+        url: dbFile,
+      }),
+      agents: {
+        testAgent: new Agent({
+          name: 'Test Agent',
+          instructions: 'You are a test agent',
+          model: openai('gpt-4o-mini'),
+          memory: new Memory({
+            options: {
+              workingMemory: {
+                enabled: true,
+              },
+            },
+          }),
+        }),
+      },
+    });
+
+    const agent = mastra.getAgent('testAgent');
+    const memory = await agent.getMemory();
+    expect(memory).toBeDefined();
+
+    // Should be able to create a thread and use working memory
+    const thread = await memory!.createThread({
+      resourceId: 'test-resource',
+      title: 'Test Thread',
+    });
+
+    expect(thread).toBeDefined();
+    expect(thread.id).toBeDefined();
+
+    // Should be able to update working memory without error
+    await memory!.updateWorkingMemory({
+      threadId: thread.id,
+      resourceId: 'test-resource',
+      workingMemory: '# Test Working Memory\n- Name: Test User',
+    });
+
+    // Should be able to retrieve working memory
+    const workingMemoryData = await memory!.getWorkingMemory({
+      threadId: thread.id,
+      resourceId: 'test-resource',
+    });
+
+    expect(workingMemoryData).toBe('# Test Working Memory\n- Name: Test User');
+  });
+
+  it('should work with resource-scoped working memory when storage supports it', async () => {
+    const mastra = new Mastra({
+      storage: new LibSQLStore({
+        url: dbFile,
+      }),
+      agents: {
+        testAgent: new Agent({
+          name: 'Test Agent',
+          instructions: 'You are a test agent',
+          model: openai('gpt-4o-mini'),
+          memory: new Memory({
+            options: {
+              workingMemory: {
+                enabled: true,
+                scope: 'resource',
+              },
+            },
+          }),
+        }),
+      },
+    });
+
+    const agent = mastra.getAgent('testAgent');
+    const memory = await agent.getMemory();
+
+    expect(memory).toBeDefined();
+
+    // Create a thread
+    const thread = await memory!.createThread({
+      resourceId: 'test-resource',
+      title: 'Test Thread',
+    });
+
+    // Update resource-scoped working memory
+    await memory!.updateWorkingMemory({
+      threadId: thread.id,
+      resourceId: 'test-resource',
+      workingMemory: '# Resource Memory\n- Shared across threads',
+    });
+
+    const workingMemoryData = await memory!.getWorkingMemory({
+      threadId: thread.id,
+      resourceId: 'test-resource',
+    });
+
+    expect(workingMemoryData).toBe('# Resource Memory\n- Shared across threads');
   });
 
   describe('Agent memory message persistence', () => {
@@ -80,7 +180,8 @@ describe('Agent Memory Tests', () => {
       );
 
       // Fetch messages from memory
-      const { messages, uiMessages } = await agent.getMemory()!.query({ threadId });
+      const agentMemory = (await agent.getMemory())!;
+      const { messages, uiMessages } = await agentMemory.query({ threadId });
       const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
       const userUiMessages = uiMessages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
 
@@ -107,7 +208,8 @@ describe('Agent Memory Tests', () => {
       });
 
       // Fetch messages from memory
-      const { messages, uiMessages } = await agent.getMemory()!.query({ threadId });
+      const agentMemory = (await agent.getMemory())!;
+      const { messages, uiMessages } = await agentMemory.query({ threadId });
       const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
       const userUiMessages = uiMessages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
       const assistantMessages = messages.filter((m: any) => m.role === 'assistant').map((m: any) => m.content);
@@ -148,7 +250,8 @@ describe('Agent Memory Tests', () => {
       });
 
       // Fetch messages from memory
-      const { messages } = await agent.getMemory()!.query({ threadId });
+      const agentMemory = (await agent.getMemory())!;
+      const { messages } = await agentMemory.query({ threadId });
 
       // Assert that the context messages are NOT saved
       const savedContextMessages = messages.filter(
@@ -298,8 +401,8 @@ describe('Agent with message processors', () => {
     expect(firstResponse.text).toContain('65');
 
     // Check that tool calls were saved to memory
-    const memory = memoryProcessorAgent.getMemory();
-    const { messages: messagesFromMemory } = await memory!.query({ threadId });
+    const agentMemory = (await memoryProcessorAgent.getMemory())!;
+    const { messages: messagesFromMemory } = await agentMemory.query({ threadId });
     const toolMessages = messagesFromMemory.filter(
       m => m.role === 'tool' || (m.role === 'assistant' && typeof m.content !== 'string'),
     );

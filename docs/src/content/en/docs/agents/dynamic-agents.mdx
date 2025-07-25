@@ -1,13 +1,13 @@
 ---
 title: "Dynamic Agents"
-description: Dynamically configure your agent's instruction, model and tools using runtime context.
+description: Dynamically configure your agent's instruction, model, tools, and memory using runtime context.
 ---
 
 # Dynamic Agents
 
 Dynamic agents use [runtime context](./runtime-variables), like user IDs and other important parameters, to adjust their settings in real-time.
 
-This means they can change the model they use, update their instructions, and select different tools as needed.
+This means they can change the model they use, update their instructions, select different tools, and configure memory as needed.
 
 By using this context, agents can better respond to each user's needs. They can also call any API to gather more information, which helps improve what the agents can do.
 
@@ -55,6 +55,37 @@ const supportAgent = new Agent({
 
     return baseTools;
   },
+
+  memory: ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier");
+    
+    if (userTier === "enterprise") {
+      return new Memory({
+        storage: new LibSQLStore({ url: "file:enterprise.db" }),
+        options: {
+          semanticRecall: { topK: 15, messageRange: 8 },
+          workingMemory: { enabled: true },
+        },
+      });
+    } else if (userTier === "pro") {
+      return new Memory({
+        storage: new LibSQLStore({ url: "file:pro.db" }),
+        options: {
+          semanticRecall: { topK: 8, messageRange: 4 },
+          workingMemory: { enabled: true },
+        },
+      });
+    }
+    
+    // Basic memory for free tier
+    return new Memory({
+      storage: new LibSQLStore({ url: "file:free.db" }),
+      options: {
+        semanticRecall: { topK: 3, messageRange: 2 },
+        workingMemory: { enabled: false },
+      },
+    });
+  },
 });
 ```
 
@@ -63,6 +94,7 @@ In this example, the agent:
 - Adjusts its instructions based on the user's subscription tier (free, pro, or enterprise)
 - Uses a more powerful model (GPT-4) for enterprise users
 - Provides different sets of tools based on the user's tier
+- Configures memory with different capabilities based on the user's tier
 - Responds in the user's preferred language
 
 This demonstrates how a single agent can handle different types of users and scenarios by leveraging runtime context, making it more flexible and maintainable than creating separate agents for each use case.

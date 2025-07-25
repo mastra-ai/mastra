@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloud",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Official Mastra Cloud integration package for telemetry",
   "type": "module",
   "files": [
@@ -38,11 +38,11 @@
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
-    "eslint": "^9.29.0",
+    "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.10.0-alpha.0"
+    "@mastra/core": ">=0.10.7-0 <0.12.0-0"
   }
 }

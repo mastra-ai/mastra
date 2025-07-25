@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -31,13 +31,13 @@
     "@paralleldrive/cuid2": "^2.2.2",
     "big.js": "^7.0.1",
     "js-tiktoken": "^1.0.20",
-    "node-html-better-parser": "^1.4.11",
+    "node-html-better-parser": "^1.5.1",
     "pathe": "^2.0.3",
     "zeroentropy": "0.1.0-alpha.6",
     "zod": "^3.25.67"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.10.0-alpha.0",
+    "@mastra/core": ">=0.10.0-0 <0.12.0-0",
     "ai": "^4.0.0"
   },
   "devDependencies": {
@@ -50,7 +50,7 @@
     "@types/node": "^20.19.0",
     "ai": "^4.3.16",
     "dotenv": "^17.0.0",
-    "eslint": "^9.29.0",
+    "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"

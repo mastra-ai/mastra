@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "0.10.12",
+  "version": "0.11.1",
   "description": "",
   "type": "module",
   "files": [
@@ -41,11 +41,11 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@babel/core": "^7.27.7",
+    "@babel/core": "^7.28.0",
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
     "cloudflare": "^4.4.1",
-    "rollup": "^4.44.2",
+    "rollup": "~4.44.2",
     "zod": "^3.25.67"
   },
   "devDependencies": {
@@ -53,12 +53,12 @@
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
-    "eslint": "^9.29.0",
+    "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.10.1-alpha.0"
+    "@mastra/core": ">=0.10.1-0 <0.12.0-0"
   }
 }
