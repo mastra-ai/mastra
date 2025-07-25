@@ -1395,7 +1395,7 @@ export class Agent<
               threadId: threadId || '',
               resourceId: resourceId || '',
             },
-            text: `A resourceId must be provided when passing a threadId and using Memory. Saw threadId ${threadId} but resourceId is ${resourceId}`,
+            text: `A resourceId and a threadId must be provided when using Memory. Saw threadId "${threadId}" and resourceId "${resourceId}"`,
           });
           this.logger.trackException(mastraError);
           this.logger.error(mastraError.toString());
