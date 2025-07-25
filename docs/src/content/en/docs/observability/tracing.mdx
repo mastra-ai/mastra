@@ -176,7 +176,7 @@ OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <Your API Key>, x-bt-parent=pro
 4. Run the OpenTelemetry SDK before your application:
 
 ```bash
-node --require ./instrumentation.mjs src/index.js
+node --import=./instrumentation.mjs --import=@opentelemetry/instrumentation/hook.mjs src/index.js
 ```
 
 ### Next.js-specific Tracing steps
