@@ -74,10 +74,14 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
       throw new Error('Thread ID and Memory instance are required for working memory updates');
     }
 
-    const thread = await memory.getThreadById({ threadId });
+    let thread = await memory.getThreadById({ threadId });
 
     if (!thread) {
-      throw new Error(`Thread ${threadId} not found`);
+      thread = await memory.createThread({
+        threadId,
+        resourceId: resourceId || thread.resourceId,
+        config,
+      });
     }
 
     if (thread.resourceId && thread.resourceId !== resourceId) {
