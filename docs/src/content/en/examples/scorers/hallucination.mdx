@@ -83,7 +83,7 @@ console.log(result);
 
 ### Mixed hallucination output
 
-The metric assigns a mid-range score because parts of the response conflict with the context. While some facts are correct, others are inaccurate or fabricated, reducing overall reliability.
+The Scorer assigns a mid-range score because parts of the response conflict with the context. While some facts are correct, others are inaccurate or fabricated, reducing overall reliability.
 
 ```typescript
 {
@@ -122,7 +122,7 @@ console.log(result);
 
 ### Complete hallucination output
 
-The metric assigns a score of 1 because every statement in the response conflicts with the context. The details are fabricated or inaccurate across the board.
+The Scorer assigns a score of 1 because every statement in the response conflicts with the context. The details are fabricated or inaccurate across the board.
 
 ```typescript
 {
@@ -131,7 +131,7 @@ The metric assigns a score of 1 because every statement in the response conflict
 }
 ```
 
-## Metric configuration
+## Configuration
 
 You can adjust how the `HallucinationScorer` scores responses by configuring optional parameters. For example, `scale` sets the maximum possible score returned by the scorer.
 
@@ -146,17 +146,24 @@ const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options
 
 ## Understanding the results
 
-`HallucinationMetric` returns a result in the following shape:
+`.run()` returns a result in the following shape:
 
 ```typescript
 {
+  runId: string,
+  extractStepResult: { claims: string[] },
+  extractPrompt: string,
+  analyzeStepResult: {
+    verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }>
+  },
+  analyzePrompt: string,
   score: number,
-  reason: string
+  reason: string,
+  reasonPrompt: string
 }
 ```
 
-### Hallucination score
-
+### score
 A hallucination score between 0 and 1:
 
 - **0.0**: No hallucination — all claims match the context.
@@ -165,14 +172,28 @@ A hallucination score between 0 and 1:
 - **0.7–0.8**: High hallucination — many contradictions.
 - **0.9–1.0**: Complete hallucination — most or all claims contradict the context.
 
-### Hallucination info
+### runId
+The unique identifier for this scorer run.
 
-An explanation for the score, with details including:
+### extractStepResult
+Object with extracted claims from the output:
+- **claims**: Array of factual statements to be checked against the context.
 
-- Which statements align or conflict with the context
-- Severity and frequency of contradictions
-- Degree of factual deviation
-- Overall accuracy and trustworthiness of the response
+### extractPrompt
+The prompt sent to the LLM for the extract step.
+
+### analyzeStepResult
+Object with verdicts for each claim:
+- **verdicts**: Array of objects with `statement`, `verdict` ('yes' or 'no'), and a `reason` for each claim.
+
+### analyzePrompt
+The prompt sent to the LLM for the analyze step.
+
+### reasonPrompt
+The prompt sent to the LLM for the reason step.
+
+### reason
+Detailed explanation of the score and identified contradictions.
 
 <GithubLink
   marginTop='mt-16'

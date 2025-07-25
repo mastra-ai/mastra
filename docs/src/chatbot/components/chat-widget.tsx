@@ -3,10 +3,10 @@ import { CopilotKit, useCopilotChat } from "@copilotkit/react-core";
 import { Markdown } from "@copilotkit/react-ui";
 import { Role, TextMessage } from "@copilotkit/runtime-client-gql";
 import { usePostHog } from "posthog-js/react";
+import { StickToBottom } from "use-stick-to-bottom";
 
 import { ArrowLeftIcon } from "@/components/svgs/Icons";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import Spinner from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import "@copilotkit/react-ui/styles.css";
@@ -54,7 +54,6 @@ export function CustomChatInterface({
   const posthog = usePostHog();
 
   const [inputValue, setInputValue] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const processedQueryRef = useRef(""); // Track processed queries
   const conversationIdRef = useRef<string>(); // Track conversation ID
   const pendingQuestionRef = useRef<{ id: string; question: string } | null>(
@@ -142,11 +141,6 @@ export function CustomChatInterface({
     previouslyLoadingRef.current = isLoading;
   }, [isLoading, visibleMessages, posthog]);
 
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [visibleMessages]);
-
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputValue.trim() === "") return;
@@ -179,42 +173,45 @@ export function CustomChatInterface({
       </div>
 
       {/* Messages container */}
-      <ScrollArea className="relative flex-1 p-4 w-full h-full">
-        {visibleMessages.map((message) => {
-          // Check if 'role' exists on message and if it equals Role.User
-          const isUser = "role" in message && message.role === Role.User;
-          const isAssistant =
-            "role" in message && message.role === Role.Assistant;
+      <StickToBottom
+        className="flex-1 overflow-auto [&>div]:scrollbar-thin"
+        resize="smooth"
+      >
+        <StickToBottom.Content className="p-4">
+          {visibleMessages.map((message) => {
+            // Check if 'role' exists on message and if it equals Role.User
+            const isUser = "role" in message && message.role === Role.User;
+            const isAssistant =
+              "role" in message && message.role === Role.Assistant;
 
-          // Check if 'content' exists on message, if so use it, otherwise use empty string
-          const messageContent: string =
-            "content" in message ? String(message.content) : "";
+            // Check if 'content' exists on message, if so use it, otherwise use empty string
+            const messageContent: string =
+              "content" in message ? String(message.content) : "";
 
-          if (!isAssistant && !isUser) {
-            return null;
-          }
+            if (!isAssistant && !isUser) {
+              return null;
+            }
 
-          return (
-            <div
-              key={message.id}
-              className={`mb-4 w-full flex ${isUser ? "justify-end" : "justify-start"}`}
-            >
-              {isUser && (
-                <div className="px-4 text-[13px] py-2 rounded-lg max-w-[80%] dark:bg-surface-3 bg-[var(--light-color-surface-4)] dark:text-icons-6 text-[var(--light-color-text-4)]  rounded-br-none">
-                  {messageContent}
-                </div>
-              )}
-              {isAssistant && (
-                <div className="px-4 text-[13px] py-2 bg-transparent relative w-full dark:text-icons-6 text-[var(--light-color-text-4)]">
-                  <Markdown content={messageContent} />
-                </div>
-              )}
-            </div>
-          );
-        })}
-        {/* {isLoading && <ActivityIcon />} */}
-        <div ref={messagesEndRef} />
-      </ScrollArea>
+            return (
+              <div
+                key={message.id}
+                className={`mb-4 w-full flex ${isUser ? "justify-end" : "justify-start"}`}
+              >
+                {isUser && (
+                  <div className="px-4 text-[13px] py-2 rounded-lg max-w-[80%] dark:bg-surface-3 bg-[var(--light-color-surface-4)] dark:text-icons-6 text-[var(--light-color-text-4)]  rounded-br-none">
+                    {messageContent}
+                  </div>
+                )}
+                {isAssistant && (
+                  <div className="px-4 text-[13px] py-2 bg-transparent relative w-full dark:text-icons-6 text-[var(--light-color-text-4)]">
+                    <Markdown content={messageContent} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </StickToBottom.Content>
+      </StickToBottom>
 
       {/* Input area */}
       <div className="p-4">
@@ -230,16 +227,16 @@ export function CustomChatInterface({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  if (inputValue.trim() !== "") {
-                    // Track the question
-                    trackQuestion(inputValue);
+                  if (inputValue.trim() === "" || isLoading) return;
+                  // Track the question
 
-                    // Submit the form on Enter
-                    appendMessage(
-                      new TextMessage({ content: inputValue, role: Role.User }),
-                    );
-                    setInputValue("");
-                  }
+                  trackQuestion(inputValue);
+
+                  // Submit the form on Enter
+                  appendMessage(
+                    new TextMessage({ content: inputValue, role: Role.User }),
+                  );
+                  setInputValue("");
                 }
               }}
               placeholder="Enter your message..."

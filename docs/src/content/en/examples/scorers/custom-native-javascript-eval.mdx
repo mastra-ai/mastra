@@ -19,57 +19,51 @@ npm install @mastra/evals
 
 A custom scorer in Mastra can use native JavaScript methods to evaluate conditions.
 
-```typescript filename="src/mastra/evals/example-word-inclusion.ts" showLineNumbers copy
+> See [createScorer](/reference/scorers/custom-code-scorer.mdx) for the full API and configuration options.
+
+```typescript filename="src/mastra/evals/word-inclusion.ts" showLineNumbers copy
 import { createScorer } from "@mastra/core/scores";
 
 const wordInclusionScorer = createScorer({
   name: 'Word Inclusion',
   description: 'Check if the output contains any of the words in the input',
-  analyze: ({ input, output }) => {
+  analyze: async ({ input, output }) => {
     const tokenize = (text: string) => text.toLowerCase().match(/\b\w+\b/g) || [];
-
     const inputText = input[0].query.toLowerCase();
-
     const referenceWords = [...new Set(tokenize(inputText))];
     const outputText = output.text.toLowerCase();
-
-    const matchedWords = referenceWords.filter((word) => outputText.includes(word));
-
+    const matchedWords = referenceWords.filter(word => outputText.includes(word));
     const totalWords = referenceWords.length;
     const score = totalWords > 0 ? matchedWords.length / totalWords : 0;
-
     return {
       score,
       result: {
         totalWords,
-        matchedWords: matchedWords.length
-      }
-    }
-  }
-})
+        matchedWords: matchedWords.length,
+      },
+    };
+  },
+});
 ```
+
+> **Note:** The `analyze` function should return `{ score, result: { ... } }`. When you call `.run()`, the returned object will have an `analyzeStepResult` field containing your `result` object.
 
 ## High custom example
 
-In this example, the response contains all the words listed in the input query. The metric returns a high score indicating complete word inclusion.
+In this example, the response contains all the words listed in the input query. The scorer returns a high score indicating complete word inclusion.
 
 ```typescript filename="src/example-high-word-inclusion.ts" showLineNumbers copy
-import { wordInclusionScorer } from "./mastra/scorers/example-word-inclusion";
-
-const query = "apple, banana, orange";
-const response = "My favorite fruits are: apple, banana, and orange.";
-
+const query = 'apple, banana, orange';
+const response = 'My favorite fruits are: apple, banana, and orange.';
 const result = await wordInclusionScorer.run({
-  input: [{ query: query }],
+  input: [{ query }],
   output: { text: response },
 });
-
-console.log(result);
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
 ```
 
 ### High custom output
-
-The output receives a high score because all the unique words from the input are present in the response, demonstrating full coverage.
 
 ```typescript
 {
@@ -83,31 +77,26 @@ The output receives a high score because all the unique words from the input are
 
 ## Partial custom example
 
-In this example, the response includes some but not all of the words from the input query. The metric returns a partial score reflecting this incomplete word coverage.
+In this example, the response includes some but not all of the words from the input query. The scorer returns a partial score reflecting this incomplete word coverage.
 
 ```typescript filename="src/example-partial-word-inclusion.ts" showLineNumbers copy
-import { wordInclusionScorer } from "./mastra/scorers/example-word-inclusion";
-
-const query = "cats, dogs, rabbits";
-const response = "I like dogs and rabbits";
-
+const query = 'programming, python, javascript, java';
+const response = 'I love programming with python for data science projects.';
 const result = await wordInclusionScorer.run({
-  input: [{ query: query }],
+  input: [{ query }],
   output: { text: response },
 });
-
-console.log(result);
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
 ```
 
 ### Partial custom output
 
-The score reflects partial success because the response contains only a subset of the unique words from the input, indicating incomplete word inclusion.
-
 ```typescript
 {
-  score: 0.6666666666666666,
+  score: 0.5,
   analyzeStepResult: {
-    totalWords: 3,
+    totalWords: 4,
     matchedWords: 2
   }
 }
@@ -115,25 +104,20 @@ The score reflects partial success because the response contains only a subset o
 
 ## Low custom example
 
-In this example, the response does not contain any of the words from the input query. The metric returns a low score indicating no word inclusion.
+In this example, the response does not contain any of the words from the input query. The scorer returns a low score indicating no word inclusion.
 
 ```typescript filename="src/example-low-word-inclusion.ts" showLineNumbers copy
-import { wordInclusionScorer } from "./mastra/scorers/example-word-inclusion";
-
-const query = "Colombia, Brazil, Panama";
-const response = "Let's go to Mexico";
-
+const query = 'soccer, basketball, tennis';
+const response = 'I enjoy reading books and watching movies in my free time.';
 const result = await wordInclusionScorer.run({
-  input: [{ query: query }],
+  input: [{ query }],
   output: { text: response },
 });
-
-console.log(result);
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
 ```
 
 ### Low custom output
-
-The score is 0 because none of the unique words from the input appear in the response, indicating no overlap between the texts.
 
 ```typescript
 {
@@ -147,34 +131,32 @@ The score is 0 because none of the unique words from the input appear in the res
 
 ## Understanding the results
 
-`WordInclusionScorer` returns a result in the following shape:
+`.run()` returns a result in the following shape:
 
 ```typescript
 {
-  score: number,
+  runId: string,
   analyzeStepResult: {
     totalWords: number,
     matchedWords: number
   },
+  score: number
 }
 ```
 
-### Custom score
-
+### score
 A score between 0 and 1:
-
 - **1.0**: The response includes all words from the input.
 - **0.5–0.9**: The response includes some but not all words.
 - **0.0**: None of the input words appear in the response.
 
-### Custom analyzeStepResult
+### runId
+The unique identifier for this scorer run.
 
-An explanation for the score, with details including:
-
-- `totalWords` is the number of unique words found in the input.
-- `matchedWords` is the count of those words that also appear in the response.
-- The score is calculated as `matchedWords / totalWords`.
-- If no valid words are found in the input, the score defaults to `0`.
+### analyzeStepResult
+Object with word inclusion statistics:
+- **totalWords**: The number of unique words found in the input.
+- **matchedWords**: The count of those words that also appear in the response.
 
 <GithubLink
   marginTop='mt-16'

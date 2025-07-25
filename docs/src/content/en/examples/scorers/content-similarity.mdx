@@ -114,30 +114,33 @@ The output receives a low score because the response does not align with the con
 }
 ```
 
-## Metric configuration
+## Scorer configuration
 
-You can create a `ContentSimilarityScorer` instance with default settings. No additional configuration is required.
+`ContentSimilarityScorer` does not accept any options. It is always created with default settings:
 
 ```typescript showLineNumbers copy
 const scorer = createContentSimilarityScorer();
 ```
-> See [ContentSimilarityScorer](/reference/scorers/content-similarity.mdx) for a full list of configuration options.
 
 ## Understanding the results
 
-`ContentSimilarityScorer` returns a result in the following shape:
+`.run()` returns a result in the following shape:
 
 ```typescript
 {
-  score: number,
+  runId: string,
+  extractStepResult: {
+    processedInput: string,
+    processedOutput: string
+  },
   analyzeStepResult: {
     similarity: number
   },
+  score: number
 }
 ```
 
-### Similarity score
-
+### score
 A similarity score between 0 and 1:
 
 - **1.0**: Perfect match – content is nearly identical.
@@ -146,13 +149,17 @@ A similarity score between 0 and 1:
 - **0.1–0.3**: Low similarity – few common elements or shared meaning.
 - **0.0**: No similarity – completely different content.
 
-### Similarity info
+### runId
+The unique identifier for this scorer run.
 
-An explanation for the score, with details including:
+### extractStepResult
+Object with processed input and output strings after normalization:
+- **processedInput**: The normalized input string.
+- **processedOutput**: The normalized output string.
 
-- Degree of overlap between query and response.
-- Matching phrases or keywords.
-- Semantic closeness based on text similarity.
+### analyzeStepResult
+Object with the similarity score:
+- **similarity**: The computed similarity value between 0 and 1.
 
 <GithubLink
   marginTop='mt-16'

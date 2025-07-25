@@ -17,27 +17,28 @@ npm install @mastra/evals
 
 ## Positive tone example
 
-In this example, the texts exhibit a similar positive sentiment. The metric measures the consistency between the tones, resulting in a high score.
+In this example, the texts exhibit a similar positive sentiment. The scorer measures the consistency between the tones, resulting in a high score.
 
 ```typescript filename="src/example-positive-tone.ts" showLineNumbers copy
-import { createToneConsistencyScorer } from "@mastra/evals/scorers/code";
+import { createToneScorer } from "@mastra/evals/scorers/code";
 
-const scorer = createToneConsistencyScorer()
+const scorer = createToneScorer();
 
-const query = "This product is fantastic and amazing!";
-const response = "The product is excellent and wonderful!";
+const input = 'This product is fantastic and amazing!';
+const output = 'The product is excellent and wonderful!';
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: query }],
-  output: { text: response },
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
 });
 
-console.log(result);
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
 ```
 
 ### Positive tone output
 
-The metric returns a high score reflecting strong sentiment alignment. The `analyzeStepResult` field provides sentiment values and the difference between them.
+The scorer returns a high score reflecting strong sentiment alignment. The `analyzeStepResult` field provides sentiment values and the difference between them.
 
 ```typescript
 {
@@ -52,24 +53,28 @@ The metric returns a high score reflecting strong sentiment alignment. The `anal
 
 ## Stable tone example
 
-In this example, the text’s internal tone consistency is analyzed by passing an empty response. This signals the metric to evaluate sentiment stability within the single input text, resulting in a score reflecting how uniform the tone is throughout.
+In this example, the text’s internal tone consistency is analyzed by passing an empty response. This signals the scorer to evaluate sentiment stability within the single input text, resulting in a score reflecting how uniform the tone is throughout.
 
 ```typescript filename="src/example-stable-tone.ts" showLineNumbers copy
-import { createToneConsistencyScorer } from "@mastra/evals/scorers/code";
+import { createToneScorer } from "@mastra/evals/scorers/code";
 
-const scorer = createToneConsistencyScorer()
+const scorer = createToneScorer();
 
-const query = "Great service! Friendly staff. Perfect atmosphere.";
-const response = "";
+const input = 'Great service! Friendly staff. Perfect atmosphere.';
+const output = '';
 
-const result = await metric.measure(query, response);
+const result = await scorer.run({
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
+});
 
-console.log(result);
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
 ```
 
 ### Stable tone output
 
-The metric returns a high score indicating consistent sentiment throughout the input text. The `analyzeStepResult` field includes the average sentiment and sentiment variance, reflecting tone stability.
+The scorer returns a high score indicating consistent sentiment throughout the input text. The `analyzeStepResult` field includes the average sentiment and sentiment variance, reflecting tone stability.
 
 ```typescript
 {
@@ -83,27 +88,28 @@ The metric returns a high score indicating consistent sentiment throughout the i
 
 ## Mixed tone example
 
-In this example, the input and response have different emotional tones. The metric picks up on these variations and gives a lower consistency score.
+In this example, the input and response have different emotional tones. The scorer picks up on these variations and gives a lower consistency score.
 
 ```typescript filename="src/example-mixed-tone.ts" showLineNumbers copy
-import { createToneConsistencyScorer } from "@mastra/evals/scorers/code";
+import { createToneScorer } from "@mastra/evals/scorers/code";
 
-const scorer = createToneConsistencyScorer()
+const scorer = createToneScorer();
 
-const query = "The interface is frustrating and confusing, though it has potential.";
-const response = "The design shows promise but needs significant improvements to be usable.";
+const input = 'The interface is frustrating and confusing, though it has potential.';
+const output = 'The design shows promise but needs significant improvements to be usable.';
 
 const result = await scorer.run({
-  input: [{ role: 'user', content: query }],
-  output: { text: response },
+  input: [{ role: 'user', content: input }],
+  output: { role: 'assistant', text: output },
 });
 
-console.log(result);
+console.log('Score:', result.score);
+console.log('AnalyzeStepResult:', result.analyzeStepResult);
 ```
 
 ### Mixed tone output
 
-The metric returns a low score due to the noticeable differences in emotional tone. The `analyzeStepResult` field highlights the sentiment values and the degree of variation between them.
+The scorer returns a low score due to the noticeable differences in emotional tone. The `analyzeStepResult` field highlights the sentiment values and the degree of variation between them.
 
 ```typescript
 {
@@ -116,24 +122,23 @@ The metric returns a low score due to the noticeable differences in emotional to
 }
 ```
 
-## Metric configuration
+## Scorer configuration
 
 You can create a `ToneConsistencyScorer` instance with default settings. No additional configuration is required.
 
 ```typescript
-const scorer = createToneConsistencyScorer()
+const scorer = createToneScorer();
 ```
 
 > See [ToneConsistencyScorer](/reference/scorers/tone-consistency.mdx) for a full list of configuration options.
 
-
 ## Understanding the results
 
-`ToneConsistencyMetric` returns a result in the following shape:
+`.run()` returns a result in the following shape:
 
 ```typescript
 {
-  score: number,
+  runId: string,
   analyzeStepResult: {
     responseSentiment?: number,
     referenceSentiment?: number,
@@ -141,10 +146,11 @@ const scorer = createToneConsistencyScorer()
     avgSentiment?: number,
     sentimentVariance?: number,
   },
+  score: number
 }
 ```
-### Tone consistency score
 
+### score
 A tone consistency score between 0 and 1:
 
 - **0.8–1.0**: Very consistent tone.
@@ -152,13 +158,16 @@ A tone consistency score between 0 and 1:
 - **0.4–0.5**: Mixed tone.
 - **0.0–0.3**: Conflicting tone.
 
-### Tone consistency info
+### runId
+The unique identifier for this scorer run.
 
-An explanation for the score, with details including:
-
-- Sentiment alignment between input and response.
-- Tone stability within a single text.
-- Degree of sentiment difference or variance.
+### analyzeStepResult
+Object with tone metrics:
+- **responseSentiment**: Sentiment score for the response (comparison mode).
+- **referenceSentiment**: Sentiment score for the input/reference (comparison mode).
+- **difference**: Absolute difference between sentiment scores (comparison mode).
+- **avgSentiment**: Average sentiment across sentences (stability mode).
+- **sentimentVariance**: Variance of sentiment across sentences (stability mode).
 
 <GithubLink
   marginTop='mt-16'

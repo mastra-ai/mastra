@@ -111,27 +111,33 @@ The output receives a score of 0 because it fails to answer the query or provide
 }
 ```
 
-## Metric configuration
+## Scorer configuration
 
-You can customize how the `AnswerRelevancyMetric` calculates scores by adjusting optional parameters. For example, `uncertaintyWeight` controls how much weight to give to uncertain responses, and `scale` sets the maximum possible score.
+You can customize how the Answer Relevancy Scorer calculates scores by adjusting optional parameters. For example, `uncertaintyWeight` controls how much weight to give to uncertain responses, and `scale` sets the maximum possible score.
 
 ```typescript showLineNumbers copy
 const scorer = createAnswerRelevancyScorer({ model: openai("gpt-4o-mini"), options: { uncertaintyWeight: 0.3, scale: 1 } });
 ```
-> See [AnswerRelevancyScorer](/reference/scorers/answer-relevancy.mdx) for a full list of configuration options.
+> See [createAnswerRelevancyScorer](/reference/scorers/answer-relevancy.mdx) for a full list of configuration options.
 
 ## Understanding the results
 
-`AnswerRelevancyScorer` returns a result in the following shape:
+`.run()` returns a result in the following shape:
 
 ```typescript
 {
+  runId: string,
   score: number,
+  extractPrompt: string,
+  extractStepResult: { statements: string[] },
+  analyzePrompt: string,
+  analyzeStepResult: { results: Array<{ result: 'yes' | 'unsure' | 'no', reason: string }> },
+  reasonPrompt: string,
   reason: string
 }
 ```
 
-### Relevancy score
+### score
 
 A relevancy score between 0 and 1:
 
@@ -141,13 +147,26 @@ A relevancy score between 0 and 1:
 - **0.1–0.3**: The response includes minimal relevant content and largely misses the intent of the query.
 - **0.0**: The response is entirely unrelated and does not answer the query.
 
-### Relevancy info
+### runId
+The unique identifier for this scorer run.
 
-An explanation for the score, with details including:
+### extractPrompt
+The prompt sent to the LLM for the extract step.
 
-- Alignment between the query and response.
-- Focus and relevance of the content.
-- Suggestions for improving the response.
+### extractStepResult
+The extracted statements from the output, e.g. `{ statements: string[] }`.
+
+### analyzePrompt
+The prompt sent to the LLM for the analyze step.
+
+### analyzeStepResult
+The analysis results, e.g. `{ results: Array<{ result: 'yes' | 'unsure' | 'no', reason: string }> }`.
+
+### reasonPrompt
+The prompt sent to the LLM for the reason step.
+
+### reason
+The explanation for the score, including alignment, focus, and suggestions for improvement.
 
 <GithubLink
   marginTop='mt-16'

@@ -6,7 +6,6 @@ const meta = {
   faithfulness: "Faithfulness",
   hallucination: "Hallucination",
   "keyword-coverage": "Keyword Coverage",
-  summarization: "Summarization",
   "textual-difference": "Textual Difference",
   "tone-consistency": "Tone Consistency",
   toxicity: "Toxicity",

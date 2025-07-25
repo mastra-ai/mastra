@@ -42,6 +42,104 @@ describe('Agent Memory Tests', () => {
     await expect(agentMemory2.query({ threadId: '1' })).resolves.not.toThrow();
   });
 
+  it('should inherit storage from Mastra instance when workingMemory is enabled', async () => {
+    const mastra = new Mastra({
+      storage: new LibSQLStore({
+        url: dbFile,
+      }),
+      agents: {
+        testAgent: new Agent({
+          name: 'Test Agent',
+          instructions: 'You are a test agent',
+          model: openai('gpt-4o-mini'),
+          memory: new Memory({
+            options: {
+              workingMemory: {
+                enabled: true,
+              },
+            },
+          }),
+        }),
+      },
+    });
+
+    const agent = mastra.getAgent('testAgent');
+    const memory = await agent.getMemory();
+    expect(memory).toBeDefined();
+
+    // Should be able to create a thread and use working memory
+    const thread = await memory!.createThread({
+      resourceId: 'test-resource',
+      title: 'Test Thread',
+    });
+
+    expect(thread).toBeDefined();
+    expect(thread.id).toBeDefined();
+
+    // Should be able to update working memory without error
+    await memory!.updateWorkingMemory({
+      threadId: thread.id,
+      resourceId: 'test-resource',
+      workingMemory: '# Test Working Memory\n- Name: Test User',
+    });
+
+    // Should be able to retrieve working memory
+    const workingMemoryData = await memory!.getWorkingMemory({
+      threadId: thread.id,
+      resourceId: 'test-resource',
+    });
+
+    expect(workingMemoryData).toBe('# Test Working Memory\n- Name: Test User');
+  });
+
+  it('should work with resource-scoped working memory when storage supports it', async () => {
+    const mastra = new Mastra({
+      storage: new LibSQLStore({
+        url: dbFile,
+      }),
+      agents: {
+        testAgent: new Agent({
+          name: 'Test Agent',
+          instructions: 'You are a test agent',
+          model: openai('gpt-4o-mini'),
+          memory: new Memory({
+            options: {
+              workingMemory: {
+                enabled: true,
+                scope: 'resource',
+              },
+            },
+          }),
+        }),
+      },
+    });
+
+    const agent = mastra.getAgent('testAgent');
+    const memory = await agent.getMemory();
+
+    expect(memory).toBeDefined();
+
+    // Create a thread
+    const thread = await memory!.createThread({
+      resourceId: 'test-resource',
+      title: 'Test Thread',
+    });
+
+    // Update resource-scoped working memory
+    await memory!.updateWorkingMemory({
+      threadId: thread.id,
+      resourceId: 'test-resource',
+      workingMemory: '# Resource Memory\n- Shared across threads',
+    });
+
+    const workingMemoryData = await memory!.getWorkingMemory({
+      threadId: thread.id,
+      resourceId: 'test-resource',
+    });
+
+    expect(workingMemoryData).toBe('# Resource Memory\n- Shared across threads');
+  });
+
   describe('Agent memory message persistence', () => {
     // making a separate memory for agent to avoid conflicts with other tests
     const memory = new Memory({

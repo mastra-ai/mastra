@@ -1,6 +1,6 @@
 'use client';
 
-import { Network, Globe, ArrowLeftFromLine, Book, Earth, GaugeIcon } from 'lucide-react';
+import { Network, Globe, ArrowLeftFromLine, Book, Earth, GaugeIcon, Cloudy } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 
 import {
@@ -21,7 +21,7 @@ import { AgentIcon, GithubIcon, Icon, McpServerIcon, ToolsIcon, WorkflowIcon } f
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 import clsx from 'clsx';
 
-export const LogoWithoutText = (props: { className: string }) => (
+export const LogoWithoutText = (props: { className?: string }) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 21 21" fill="none">
     <rect x="0.605469" y="0.5" width="20" height="20" rx="2.18625" fill="black" />
     <circle cx="10.6059" cy="10.5004" r="6.0121" stroke="url(#paint0_linear_18520_30330)" strokeWidth="0.766389" />
@@ -223,6 +223,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
       <SidebarFooter className="px-1">
         <SidebarGroup>
           <SidebarGroupContent>
@@ -266,6 +267,23 @@ export function AppSidebar() {
                       <GithubIcon />
                     </Icon>
                     <span className="text-[0.8rem] font-normal">Github</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Deploy to Mastra Cloud" asChild>
+                  <a
+                    className={`group/icon bg-accent1 text-black hover:bg-accent1/80 hover:text-black active:bg-accent1/90 active:text-black`}
+                    href="https://mastra.ai/cloud"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    <Icon>
+                      <Cloudy />
+                    </Icon>
+
+                    <span className="text-[0.8rem] font-normal">Deploy to Mastra Cloud</span>
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>

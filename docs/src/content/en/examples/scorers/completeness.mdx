@@ -114,7 +114,7 @@ The output receives a low score because it only briefly mentions cost and enviro
 }
 ```
 
-## Metric configuration
+## Scorer configuration
 
 You can adjust how the `CompletenessScorer` scores responses by configuring optional parameters. For example, `scale` sets the maximum possible score returned by the scorer.
 
@@ -127,16 +127,22 @@ const scorer = createCompletenessScorer({ model: openai("gpt-4o-mini"), options:
 
 ## Understanding the results
 
-`CompletenessScorer` returns a result in the following shape:
+`.run()` returns a result in the following shape:
 
 ```typescript
 {
-  score: number,
-  reason: string
+  runId: string,
+  extractStepResult: {
+    inputElements: string[],
+    outputElements: string[],
+    missingElements: string[],
+    elementCounts: { input: number, output: number }
+  },
+  score: number
 }
 ```
 
-### Completeness score
+### score
 
 A completeness score between 0 and 1:
 
@@ -146,14 +152,15 @@ A completeness score between 0 and 1:
 - **0.1–0.3**: Only partially addresses the query with significant gaps.
 - **0.0**: Fails to address the query or provides irrelevant information.
 
-### Completeness info
+### runId
+The unique identifier for this scorer run.
 
-An explanation for the score, with details including:
-
-- Which aspects of the query were addressed.
-- Missing or incomplete elements.
-- Depth and quality of coverage.
-- Suggestions for improving completeness.
+### extractStepResult
+Object with extracted elements and coverage details:
+- **inputElements**: Key elements found in the input (e.g., nouns, verbs, topics, terms).
+- **outputElements**: Key elements found in the output.
+- **missingElements**: Input elements not found in the output.
+- **elementCounts**: The number of elements in the input and output.
 
 <GithubLink
   marginTop='mt-16'

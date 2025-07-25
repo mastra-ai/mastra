@@ -129,7 +129,7 @@ Each claim is inaccurate or conflicts with the context, resulting in a score of 
 }
 ```
 
-## Metric configuration
+## configuration
 
 You can adjust how the `FaithfulnessScorer` scores responses by configuring optional parameters. For example, `scale` sets the maximum possible score returned by the scorer.
 
@@ -143,17 +143,24 @@ const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options:
 
 ## Understanding the results
 
-`FaithfulnessMetric` returns a result in the following shape:
+`.run()` returns a result in the following shape:
 
 ```typescript
 {
+  runId: string,
+  extractStepResult: string[],
+  extractPrompt: string,
+  analyzeStepResult: {
+    verdicts: Array<{ verdict: 'yes' | 'no' | 'unsure', reason: string }>
+  },
+  analyzePrompt: string,
   score: number,
-  reason: string
+  reason: string,
+  reasonPrompt: string
 }
 ```
 
-### Faithfulness score
-
+### score
 A faithfulness score between 0 and 1:
 
 - **1.0**: All claims are accurate and directly supported by the context.
@@ -162,14 +169,27 @@ A faithfulness score between 0 and 1:
 - **0.1–0.3**: Most of the content is inaccurate or unsupported.
 - **0.0**: All claims are false or contradict the context.
 
-### Faithfulness info
+### runId
+The unique identifier for this scorer run.
 
-An explanation for the score, with details including:
+### extractStepResult
+Array of extracted claims from the output.
 
-- Which claims were verified or contradicted
-- Degree of factual alignment
-- Observations about missing or fabricated details
-- Summary of overall response reliability
+### extractPrompt
+The prompt sent to the LLM for the extract step.
+
+### analyzeStepResult
+Object with verdicts for each claim:
+- **verdicts**: Array of objects with `verdict` ('yes', 'no', or 'unsure') and a `reason` for each claim.
+
+### analyzePrompt
+The prompt sent to the LLM for the analyze step.
+
+### reasonPrompt
+The prompt sent to the LLM for the reason step.
+
+### reason
+A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure.
 
 <GithubLink
   marginTop='mt-16'

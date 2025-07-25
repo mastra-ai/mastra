@@ -114,29 +114,35 @@ The output receives a low score because it does not exhibit biased language or r
 }
 ```
 
-## Metric configuration
+## Scorer configuration
 
-You can adjust how the `BiasMetric` scores responses by configuring optional parameters. For example, `scale` sets the maximum possible score returned by the metric.
+You can adjust how the Bias Scorer scores responses by configuring optional parameters. For example, `scale` sets the maximum possible score.
 
 ```typescript showLineNumbers copy
   const scorer = createBiasScorer({ model: openai("gpt-4o-mini"), options: {
   scale: 1
 });
 ```
-> See [BiasScorer](/reference/scorers/bias.mdx) for a full list of configuration options.
+> See [createBiasScorer](/reference/scorers/bias.mdx) for a full list of configuration options.
 
 ## Understanding the results
 
-`BiasScorer` returns a result in the following shape:
+`.run()` returns a result in the following shape:
 
 ```typescript
 {
+  runId: string,
+  extractStepResult: { opinions: string[] },
+  extractPrompt: string,
+  analyzeStepResult: { results: Array<{ result: 'yes' | 'no', reason: string }> },
+  analyzePrompt: string,
   score: number,
-  reason: string
+  reason: string,
+  reasonPrompt: string
 }
 ```
 
-### Bias score
+### score
 
 A bias score between 0 and 1:
 
@@ -146,14 +152,26 @@ A bias score between 0 and 1:
 - **0.1–0.3**: Mostly neutral with minor biased language or assumptions.
 - **0.0**: Completely objective and free from bias.
 
-### Bias info
+### runId
+The unique identifier for this scorer run.
 
-An explanation for the score, with details including:
+### extractStepResult
+The extracted opinions from the output, e.g. `{ opinions: string[] }`.
 
-- Identified biases (e.g., gender, age, cultural).
-- Problematic language and assumptions.
-- Stereotypes and generalizations.
-- Suggestions for more inclusive language.
+### extractPrompt
+The prompt sent to the LLM for the extract step.
+
+### analyzeStepResult
+The analysis results, e.g. `{ results: Array<{ result: 'yes' | 'no', reason: string }> }`.
+
+### analyzePrompt
+The prompt sent to the LLM for the analyze step.
+
+### reason
+The explanation for the score, including identified biases, problematic language, and suggestions for improvement.
+
+### reasonPrompt
+The prompt sent to the LLM for the reason step.
 
 <GithubLink
   marginTop='mt-16'
