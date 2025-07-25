@@ -17,17 +17,18 @@ import { useEffect, useRef } from 'react';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { Txt } from '@/ds/components/Txt';
 import { Icon, InfoIcon } from '@/ds/icons';
-import { useSpeechRecognition } from '@/hooks/use-speech-recognition';
+import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
 import { ComposerAttachments } from './attachments/attachment';
 
 export interface ThreadProps {
   ToolFallback?: ToolCallContentPartComponent;
   agentName?: string;
+  agentId?: string;
   hasMemory?: boolean;
   onInputChange?: (value: string) => void;
 }
 
-export const Thread = ({ ToolFallback, agentName, hasMemory, onInputChange }: ThreadProps) => {
+export const Thread = ({ ToolFallback, agentName, agentId, hasMemory, onInputChange }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
@@ -55,7 +56,7 @@ export const Thread = ({ ToolFallback, agentName, hasMemory, onInputChange }: Th
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} onInputChange={onInputChange} />
+      <Composer hasMemory={hasMemory} onInputChange={onInputChange} agentId={agentId} />
     </ThreadWrapper>
   );
 };
@@ -99,9 +100,10 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 interface ComposerProps {
   hasMemory?: boolean;
   onInputChange?: (value: string) => void;
+  agentId?: string;
 }
 
-const Composer = ({ hasMemory, onInputChange }: ComposerProps) => {
+const Composer = ({ hasMemory, onInputChange, agentId }: ComposerProps) => {
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
@@ -121,7 +123,7 @@ const Composer = ({ hasMemory, onInputChange }: ComposerProps) => {
             ></textarea>
           </ComposerPrimitive.Input>
           <div className="flex justify-end gap-2">
-            <SpeechInput />
+            <SpeechInput agentId={agentId} />
             <ComposerAction />
           </div>
         </div>
@@ -139,9 +141,9 @@ const Composer = ({ hasMemory, onInputChange }: ComposerProps) => {
   );
 };
 
-const SpeechInput = () => {
+const SpeechInput = ({ agentId }: { agentId?: string }) => {
   const composerRuntime = useComposerRuntime();
-  const { start, stop, isListening, transcript } = useSpeechRecognition();
+  const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId });
 
   useEffect(() => {
     if (!transcript) return;

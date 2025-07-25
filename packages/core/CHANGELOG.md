@@ -2,8 +2,6 @@
 
 ## 0.11.1
 
-## 0.11.0
-
 ### Patch Changes
 
 - f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
@@ -34,8 +32,6 @@
 - dcd4802: scores mastra server
 - cbddd18: Remove erroneous reassignment of `Mastra.prototype.#vectors`
 - 7ba91fa: Add scorer abstract methods for base storage
-
-## 0.11.0-alpha.3
 
 ## 0.11.0-alpha.2
 

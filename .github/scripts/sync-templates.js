@@ -147,7 +147,7 @@ async function pushToRepo(repoName) {
   console.log(`Pushing to new repo: ${repoName}`);
   const templatePath = path.join(TEMPLATES_DIR, repoName);
   const tempRoot = path.join(process.cwd(), '.temp');
-  const tempDir = path.join(process.cwd(), '.temp', repoName);
+  const tempDir = path.join(tempRoot, repoName);
 
   try {
     // Create temp directory
@@ -191,6 +191,23 @@ async function pushToRepo(repoName) {
         { stdio: 'inherit', cwd: tempDir },
       );
     }
+
+    // remove everything in the temp directory except .git
+    console.log(`Removing everything (except .git) in the temp directory: ${tempDir}`);
+
+    // get all files and directories in the temp directory
+    const filesAndDirs = fs.readdirSync(tempDir);
+    console.log(`Found ${filesAndDirs.length} files and directories in the temp directory: ${tempDir}`);
+    // remove all files and directories in the temp directory except .git
+    for (const fileOrDir of filesAndDirs) {
+      if (fileOrDir !== '.git') {
+        console.log(`Removing ${fileOrDir} in the temp directory: ${tempDir}`);
+        fsExtra.removeSync(path.join(tempDir, fileOrDir));
+      }
+    }
+
+    const filesAndDirsPostDelete = fs.readdirSync(tempDir);
+    console.log(`Files and directories left after delete: ${filesAndDirsPostDelete.join(', ')}`);
 
     // Copy template content to temp directory
     console.log(`Copying template content to temp directory: ${tempDir}`);
@@ -245,6 +262,32 @@ async function pushToRepo(repoName) {
           cwd: tempDir,
         });
       }
+      // remove everything in the temp directory except .git
+      console.log(`Removing everything in the temp directory: ${tempDir} for ${provider} branch`);
+      // get all files and directories in the temp directory
+      const filesAndDirs = fs.readdirSync(tempDir);
+      console.log(
+        `Found ${filesAndDirs.length} files and directories in the temp directory: ${tempDir} for ${provider} branch`,
+      );
+      // remove all files and directories in the temp directory except .git
+      for (const fileOrDir of filesAndDirs) {
+        if (fileOrDir !== '.git') {
+          console.log(`Removing ${fileOrDir} in the temp directory: ${tempDir}`);
+          fsExtra.removeSync(path.join(tempDir, fileOrDir));
+        }
+      }
+
+      const filesAndDirsPostDelete = fs.readdirSync(tempDir);
+      console.log(
+        `Files and directories left after delete: ${filesAndDirsPostDelete.join(', ')} for ${provider} branch`,
+      );
+
+      //commit deletion
+      execSync(`git add . && git commit -m "Delete everything in the temp directory for ${provider} branch"`, {
+        stdio: 'inherit',
+        cwd: tempDir,
+      });
+
       // Copy template content to temp directory
       console.log(`Copying template content to temp directory: ${tempDir} for ${provider} branch`);
       fsExtra.copySync(templatePath, tempDir);
