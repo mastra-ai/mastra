@@ -54,9 +54,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
     };
     abortController: AbortController;
   }): Promise<TOutput> {
-    const tempCb = async (event: Event, cb?: () => void) => {
+    const activePromises: Promise<void>[] = [];
+    const tempCb = (event: Event, cb?: () => Promise<void>) => {
       console.log('processing event', event);
-      this.eventProcessor
+      const promise = this.eventProcessor
         .process(event, cb)
         .then(() => {
           console.log('event processed', event);
@@ -64,6 +65,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
         .catch(e => {
           console.error('Error processing event', e);
         });
+      activePromises.push(promise);
     };
     await this.pubsub.subscribe('workflows', tempCb);
 
@@ -107,22 +109,27 @@ export class EventedExecutionEngine extends ExecutionEngine {
     }
 
     const resultData: any = await new Promise(resolve => {
-      const finishCb = async (event: Event) => {
+      const finishCb = async (event: Event, ack: () => Promise<void>) => {
         console.log('finishCb', event);
         if (event.type === 'workflow.end' && event.data.runId === params.runId) {
-          console.log('ehh', event.data);
+          console.log('ehh', event?.data);
           resolve(event.data);
         } else if (event.type === 'workflow.fail' && event.data.runId === params.runId) {
           resolve(event.data);
         } else if (event.type === 'workflow.suspend' && event.data.runId === params.runId) {
           resolve(event.data);
         }
+
+        await ack();
       };
 
       this.pubsub.subscribe('workflows-finish', finishCb).catch(() => {});
     });
     console.log('resultData', resultData);
 
+    console.log('waiting for active promises', activePromises.length);
+    await Promise.all(activePromises);
+    console.log('active promises resolved');
     await this.pubsub.unsubscribe('workflows-finish', tempCb);
 
     console.log('resultData', resultData);

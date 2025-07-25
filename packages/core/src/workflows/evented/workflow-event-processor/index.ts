@@ -1153,7 +1153,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     return snapshot;
   }
 
-  async process(event: Event, ack?: () => void) {
+  async process(event: Event, ack?: () => Promise<void>) {
     console.log('processing event', event);
     const { type, data } = event;
 
@@ -1268,6 +1268,12 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     console.log('processed event', type, ack);
-    ack?.();
+    try {
+      await ack?.();
+    } catch (e) {
+      console.error('Error acking event', e);
+    }
+
+    console.log('event acked', type);
   }
 }

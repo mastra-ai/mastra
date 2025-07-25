@@ -21,7 +21,7 @@ export class GoogleCloudPubSub extends PubSub {
     try {
       const sub = await this.pubsub.topic(topicName).createSubscription(topicName, {
         enableMessageOrdering: true,
-        enableExactlyOnceDelivery: true,
+        enableExactlyOnceDelivery: topicName === 'workflows' ? true : false,
       });
       console.log('subscription created', sub);
     } catch (error) {
@@ -50,14 +50,20 @@ export class GoogleCloudPubSub extends PubSub {
     }
   }
 
-  async subscribe(topic: string, cb: (event: Event, ack: () => void) => void): Promise<void> {
+  async subscribe(topic: string, cb: (event: Event, ack: () => Promise<void>) => void): Promise<void> {
     let subscription = this.pubsub.subscription(topic);
     subscription.on('message', message => {
       const event = JSON.parse(message.data.toString()) as Event;
       console.log('message received', event, cb);
       try {
-        cb(event, () => {
-          message.ack();
+        cb(event, async () => {
+          console.log('acking message');
+          try {
+            const ackResponse = await message.ackWithResponse();
+            console.log('message acked', ackResponse);
+          } catch (e) {
+            console.error('Error acking message', e);
+          }
         });
       } catch (error) {
         console.error('Error processing event', error);
@@ -81,7 +87,7 @@ export class GoogleCloudPubSub extends PubSub {
     });
   }
 
-  async unsubscribe(topic: string, cb: (event: Event, ack: () => void) => void): Promise<void> {
+  async unsubscribe(topic: string, cb: (event: Event, ack: () => Promise<void>) => void): Promise<void> {
     const subscription = this.pubsub.subscription(topic);
     subscription.removeListener('message', cb);
   }

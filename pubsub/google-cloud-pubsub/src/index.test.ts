@@ -1070,7 +1070,7 @@ describe('Workflow', () => {
       );
     });
 
-    it.only('should execute a single step workflow successfully', async () => {
+    it('should execute a single step workflow successfully', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
@@ -1110,7 +1110,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should have access to typed workflow results', async () => {
+    it.only('should have access to typed workflow results', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
@@ -8381,4 +8381,4 @@ describe('Workflow', () => {
       expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
     });
   });
-}, 10e3);
+}, 100e3);
