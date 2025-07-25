@@ -63,7 +63,7 @@ export const mastraClient = new MastraClient({
   content={[
     {
       name: "getAgents()",
-      type: "Record<string, Agent>",
+      type: "Promise<Record<string, GetAgentResponse>>",
       description: "Returns all available agent instances.",
     },
     {
@@ -73,8 +73,8 @@ export const mastraClient = new MastraClient({
     },
     {
       name: "getMemoryThreads(params)",
-      type: "Promise<MemoryThread[]>",
-      description: "Retrieves memory threads matching the query parameters.",
+      type: "Promise<StorageThreadType[]>",
+      description: "Retrieves memory threads for the specified resource and agent. Requires a `resourceId` and an `agentId`.",
     },
     {
       name: "createMemoryThread(params)",
