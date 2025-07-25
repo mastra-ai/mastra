@@ -132,7 +132,7 @@ async function rebundleAndRestart(
   dotMastraPath: string,
   port: number,
   bundler: DevBundler,
-  startOptions: { inspect?: boolean; inspectBrk?: boolean } = {},
+  startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[] } = {},
 ) {
   if (isRestarting) {
     return;
