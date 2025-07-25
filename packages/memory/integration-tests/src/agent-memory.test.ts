@@ -276,6 +276,7 @@ describe('Agent Memory Tests', () => {
           id: 'msg1',
           role: 'user',
           content: 'Hello with metadata',
+          parts: [{ type: 'text', text: 'Hello with metadata' }],
           metadata: {
             source: 'web-ui',
             timestamp: Date.now(),
@@ -286,6 +287,7 @@ describe('Agent Memory Tests', () => {
           id: 'msg2',
           role: 'user',
           content: 'Another message with different metadata',
+          parts: [{ type: 'text', text: 'Another message with different metadata' }],
           metadata: {
             source: 'mobile-app',
             version: '1.0.0',
@@ -302,25 +304,25 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages, uiMessages } = await agentMemory.query({ threadId });
+      const { uiMessages } = await agentMemory.query({ threadId });
 
       // Check that all user messages were saved
-      const savedUserMessages = messages.filter((m: any) => m.role === 'user');
+      const savedUserMessages = uiMessages.filter((m: any) => m.role === 'user');
       expect(savedUserMessages.length).toBe(2);
 
       // Check that metadata was persisted in the stored messages
-      const firstMessage = messages.find((m: any) => m.content === 'Hello with metadata');
-      const secondMessage = messages.find((m: any) => m.content === 'Another message with different metadata');
+      const firstMessage = uiMessages.find((m: any) => m.content === 'Hello with metadata');
+      const secondMessage = uiMessages.find((m: any) => m.content === 'Another message with different metadata');
 
       expect(firstMessage).toBeDefined();
-      expect(firstMessage.metadata).toEqual({
+      expect(firstMessage!.metadata).toEqual({
         source: 'web-ui',
         timestamp: expect.any(Number),
         customField: 'custom-value',
       });
 
       expect(secondMessage).toBeDefined();
-      expect(secondMessage.metadata).toEqual({
+      expect(secondMessage!.metadata).toEqual({
         source: 'mobile-app',
         version: '1.0.0',
         userId: 'user-123',
