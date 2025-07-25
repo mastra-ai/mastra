@@ -339,25 +339,33 @@ export class InMemoryMemory extends MemoryStorage {
     return updatedMessages;
   }
 
-  async deleteMessage(messageId: string): Promise<void> {
-    this.logger.debug(`MockStore: deleteMessage called for ${messageId}`);
-
-    const message = this.collection.messages.get(messageId);
-    if (!message) {
-      throw new Error(`Message with id ${messageId} not found`);
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
     }
 
-    // Update thread's updatedAt timestamp
-    const threadId = message.thread_id;
-    if (threadId) {
+    this.logger.debug(`MockStore: deleteMessages called for ${messageIds.length} messages`);
+
+    // Collect thread IDs to update
+    const threadIds = new Set<string>();
+
+    for (const messageId of messageIds) {
+      const message = this.collection.messages.get(messageId);
+      if (message && message.thread_id) {
+        threadIds.add(message.thread_id);
+      }
+      // Delete the message
+      this.collection.messages.delete(messageId);
+    }
+
+    // Update thread timestamps
+    const now = new Date();
+    for (const threadId of threadIds) {
       const thread = this.collection.threads.get(threadId);
       if (thread) {
-        thread.updatedAt = new Date();
+        thread.updatedAt = now;
       }
     }
-
-    // Delete the message
-    this.collection.messages.delete(messageId);
   }
 
   async getThreadsByResourceIdPaginated(args: {

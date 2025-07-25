@@ -287,8 +287,8 @@ export class PostgresStore extends MastraStorage {
     return this.stores.memory.updateMessages({ messages });
   }
 
-  async deleteMessage({ messageId }: { messageId: string }): Promise<void> {
-    return this.stores.memory.deleteMessage({ messageId });
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

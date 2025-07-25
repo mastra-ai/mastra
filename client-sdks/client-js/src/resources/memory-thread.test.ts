@@ -52,7 +52,7 @@ describe('MemoryThread', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer test-key',
           }),
-        })
+        }),
       );
       expect(result).toEqual(mockThread);
     });
@@ -85,7 +85,7 @@ describe('MemoryThread', () => {
             Authorization: 'Bearer test-key',
           }),
           body: JSON.stringify(updateParams),
-        })
+        }),
       );
       expect(result).toEqual(mockUpdatedThread);
     });
@@ -105,7 +105,7 @@ describe('MemoryThread', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer test-key',
           }),
-        })
+        }),
       );
       expect(result).toEqual(mockResponse);
     });
@@ -134,7 +134,7 @@ describe('MemoryThread', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer test-key',
           }),
-        })
+        }),
       );
       expect(result).toEqual(mockMessages);
     });
@@ -155,47 +155,131 @@ describe('MemoryThread', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer test-key',
           }),
-        })
+        }),
       );
       expect(result).toEqual(mockMessages);
     });
   });
 
-  describe('deleteMessage', () => {
-    it('should delete a specific message', async () => {
+  describe('deleteMessages', () => {
+    it('should delete a single message by string ID', async () => {
       const messageId = 'test-message-id';
-      const mockResponse = { success: true, message: 'Message deleted successfully' };
-      
+      const mockResponse = { success: true, message: '1 message deleted successfully' };
+
       mockFetchResponse(mockResponse);
 
-      const result = await thread.deleteMessage(messageId);
+      const result = await thread.deleteMessages(messageId);
 
       expect(global.fetch).toHaveBeenCalledWith(
-        `http://localhost:4111/api/memory/messages/${messageId}?agentId=${agentId}`,
+        `http://localhost:4111/api/memory/messages/delete?agentId=${agentId}`,
         expect.objectContaining({
-          method: 'DELETE',
+          method: 'POST',
           headers: expect.objectContaining({
+            'Content-Type': 'application/json',
             Authorization: 'Bearer test-key',
           }),
-        })
+          body: JSON.stringify({ messageIds: messageId }),
+        }),
       );
       expect(result).toEqual(mockResponse);
     });
 
-    it('should handle delete message errors', async () => {
-      const messageId = 'non-existent-id';
-      
+    it('should delete multiple messages by array of string IDs', async () => {
+      const messageIds = ['msg-1', 'msg-2', 'msg-3'];
+      const mockResponse = { success: true, message: '3 messages deleted successfully' };
+
+      mockFetchResponse(mockResponse);
+
+      const result = await thread.deleteMessages(messageIds);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://localhost:4111/api/memory/messages/delete?agentId=${agentId}`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer test-key',
+          }),
+          body: JSON.stringify({ messageIds }),
+        }),
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should delete a message by object with id property', async () => {
+      const messageObj = { id: 'test-message-id' };
+      const mockResponse = { success: true, message: '1 message deleted successfully' };
+
+      mockFetchResponse(mockResponse);
+
+      const result = await thread.deleteMessages(messageObj);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://localhost:4111/api/memory/messages/delete?agentId=${agentId}`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer test-key',
+          }),
+          body: JSON.stringify({ messageIds: messageObj }),
+        }),
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should delete messages by array of objects', async () => {
+      const messageObjs = [{ id: 'msg-1' }, { id: 'msg-2' }];
+      const mockResponse = { success: true, message: '2 messages deleted successfully' };
+
+      mockFetchResponse(mockResponse);
+
+      const result = await thread.deleteMessages(messageObjs);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://localhost:4111/api/memory/messages/delete?agentId=${agentId}`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer test-key',
+          }),
+          body: JSON.stringify({ messageIds: messageObjs }),
+        }),
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should handle empty array', async () => {
+      const messageIds: string[] = [];
+
       (global.fetch as any).mockResolvedValueOnce({
         ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        json: async () => ({ error: 'Message not found' }),
+        status: 400,
+        statusText: 'Bad Request',
+        json: async () => ({ error: 'messageIds array cannot be empty' }),
         headers: new Headers({
           'content-type': 'application/json',
         }),
       });
 
-      await expect(thread.deleteMessage(messageId)).rejects.toThrow();
+      await expect(thread.deleteMessages(messageIds)).rejects.toThrow();
+    });
+
+    it('should handle bulk delete errors', async () => {
+      const messageIds = ['msg-1', 'msg-2'];
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: async () => ({ error: 'Database error' }),
+        headers: new Headers({
+          'content-type': 'application/json',
+        }),
+      });
+
+      await expect(thread.deleteMessages(messageIds)).rejects.toThrow();
     });
   });
 });

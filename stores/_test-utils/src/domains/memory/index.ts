@@ -8,7 +8,7 @@ import {
 import { createMessagesPaginatedTest } from './messages-paginated';
 import { createThreadsTest } from './threads';
 import { createMessagesUpdateTest } from './messages-update';
-import { createMessagesDeleteTest } from './messages-delete';
+import { createMessagesBulkDeleteTest } from './messages-bulk-delete';
 // import { createResourcesTest } from './resources';
 import { beforeAll } from 'vitest';
 
@@ -32,7 +32,7 @@ export function createMemoryTest({ storage }: { storage: MastraStorage }) {
 
   createMessagesUpdateTest({ storage });
 
-  createMessagesDeleteTest({ storage });
+  createMessagesBulkDeleteTest({ storage });
 
   // createResourcesTest({ storage });
 }

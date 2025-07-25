@@ -439,50 +439,46 @@ export class MemoryLibSQL extends MemoryStorage {
     return updatedResult.rows.map(row => this.parseRow(row));
   }
 
-  async deleteMessage(messageId: string): Promise<void> {
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
     try {
-      // Check if message exists first
+      // Get thread IDs for all messages
+      const placeholders = messageIds.map(() => '?').join(',');
       const result = await this.client.execute({
-        sql: `SELECT id, thread_id FROM ${TABLE_MESSAGES} WHERE id = ?`,
-        args: [messageId],
+        sql: `SELECT DISTINCT thread_id FROM ${TABLE_MESSAGES} WHERE id IN (${placeholders})`,
+        args: messageIds,
       });
 
-      if (!result.rows || result.rows.length === 0) {
-        throw new MastraError({
-          id: 'LIBSQL_STORE_MESSAGE_NOT_FOUND',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          text: `Message with id ${messageId} not found`,
-          details: { messageId },
-        });
-      }
+      const threadIds = (result.rows?.map(row => row.thread_id).filter(Boolean) || []) as string[];
 
-      const threadId = result.rows[0]?.thread_id;
-
-      // Delete the message
+      // Delete all messages
       await this.client.execute({
-        sql: `DELETE FROM ${TABLE_MESSAGES} WHERE id = ?`,
-        args: [messageId],
+        sql: `DELETE FROM ${TABLE_MESSAGES} WHERE id IN (${placeholders})`,
+        args: messageIds,
       });
 
-      // Update thread's updatedAt timestamp
-      if (threadId) {
-        await this.client.execute({
-          sql: `UPDATE ${TABLE_THREADS} SET updatedAt = ? WHERE id = ?`,
-          args: [new Date().toISOString(), threadId],
-        });
+      // Update thread timestamps
+      if (threadIds.length > 0) {
+        const now = new Date().toISOString();
+        for (const threadId of threadIds) {
+          await this.client.execute({
+            sql: `UPDATE ${TABLE_THREADS} SET updatedAt = ? WHERE id = ?`,
+            args: [now, threadId],
+          });
+        }
       }
 
       // TODO: Delete from vector store if semantic recall is enabled
-      // This would require checking if vector store is configured and
-      // removing embeddings associated with this message_id
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_DELETE_MESSAGE_FAILED',
+          id: 'LIBSQL_STORE_DELETE_MESSAGES_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { messageId },
+          details: { messageIds: messageIds.join(', ') },
         },
         error,
       );

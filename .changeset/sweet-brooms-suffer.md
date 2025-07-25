@@ -9,11 +9,15 @@
 "@mastra/client-js": patch
 ---
 
-feat: add deleteMessage method to memory API
+feat: add flexible deleteMessages method to memory API
 
-- Added `memory.deleteMessage(messageId)` method to delete individual messages
-- Implemented deleteMessage in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
-- Added REST API endpoint: `DELETE /api/memory/messages/:messageId`
-- Added client SDK support: `thread.deleteMessage(messageId)`
+- Added `memory.deleteMessages(input)` method that accepts multiple input types:
+  - Single message ID as string: `deleteMessages('msg-123')`
+  - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+  - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+  - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+- Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+- Added REST API endpoint: `POST /api/memory/messages/delete`
+- Updated client SDK: `thread.deleteMessages()` accepts all input types
 - Updates thread timestamps when messages are deleted
 - Added comprehensive test coverage and documentation

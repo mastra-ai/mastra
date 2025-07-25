@@ -1,0 +1,105 @@
+---
+section: Memory
+title: deleteMessages
+slug: reference/memory/deleteMessages
+categorySlug: reference
+layout: guide
+---
+
+# `deleteMessages`
+
+Deletes one or more messages from the memory storage. This method provides flexible input options to delete messages in a single operation.
+
+## Syntax
+
+```typescript
+memory.deleteMessages(input: MessageDeleteInput): Promise<void>
+
+type MessageDeleteInput = 
+  | string                    // Single message ID
+  | string[]                  // Array of message IDs
+  | { id: string }           // Message object with id property
+  | { id: string }[]         // Array of message objects
+```
+
+## Parameters
+
+- `input` (required): The message(s) to delete. Can be:
+  - A single message ID as a string
+  - An array of message IDs
+  - A message object with an `id` property
+  - An array of message objects with `id` properties
+
+## Returns
+
+A Promise that resolves when all messages have been successfully deleted.
+
+## Examples
+
+### Delete a single message
+
+```typescript
+// Using a string ID
+await memory.deleteMessages('msg-123');
+
+// Using a message object
+await memory.deleteMessages({ id: 'msg-123' });
+```
+
+### Delete multiple messages
+
+```typescript
+// Using an array of string IDs
+await memory.deleteMessages(['msg-1', 'msg-2', 'msg-3']);
+
+// Using an array of message objects
+await memory.deleteMessages([
+  { id: 'msg-1' },
+  { id: 'msg-2' },
+  { id: 'msg-3' }
+]);
+```
+
+### Using with client SDK
+
+```typescript
+// Get a thread instance
+const thread = client.getAgent('my-agent').getThread('thread-123');
+
+// Delete a single message
+await thread.deleteMessages('msg-123');
+
+// Delete multiple messages
+await thread.deleteMessages(['msg-1', 'msg-2', 'msg-3']);
+
+// Delete using message objects (useful when you have message data)
+const messagesToDelete = messages.map(msg => ({ id: msg.id }));
+await thread.deleteMessages(messagesToDelete);
+```
+
+### Error handling
+
+```typescript
+try {
+  await memory.deleteMessages(['msg-1', 'msg-2', 'msg-3']);
+  console.log('Messages deleted successfully');
+} catch (error) {
+  console.error('Failed to delete messages:', error);
+}
+```
+
+## Notes
+
+- This method will delete all specified messages in a single operation
+- Thread timestamps are automatically updated when messages are deleted
+- The method automatically normalizes different input types to message IDs
+- All message IDs must be non-empty strings
+- An empty array will result in no operation (no error thrown)
+- Messages from different threads can be deleted in the same operation
+- When using message objects, only the `id` property is required
+
+## Related
+
+- [`saveMessages`](/reference/memory/saveMessages) - Save multiple messages
+- [`updateMessages`](/reference/memory/updateMessages) - Update multiple messages
+- [`query`](/reference/memory/query) - Query messages from memory

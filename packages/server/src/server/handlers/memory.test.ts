@@ -15,7 +15,7 @@ import {
   createThreadHandler,
   getMessagesHandler,
   getMessagesPaginatedHandler,
-  deleteMessageHandler,
+  deleteMessagesHandler,
 } from './memory';
 
 vi.mock('@mastra/core/memory');
@@ -26,7 +26,6 @@ type MockedAbstractFn = {
   query: Mock<MastraMemory['query']>;
   saveMessages: Mock<MastraMemory['saveMessages']>;
   createThread: Mock<MastraMemory['createThread']>;
-  deleteMessage: Mock<MastraMemory['deleteMessage']>;
 };
 
 type Thread = NonNullable<Awaited<ReturnType<MastraMemory['getThreadById']>>>;
@@ -55,7 +54,6 @@ describe('Memory Handlers', () => {
     mockMemory.query = vi.fn();
     mockMemory.saveMessages = vi.fn();
     mockMemory.createThread = vi.fn();
-    mockMemory.deleteMessage = vi.fn();
 
     mockAgent = new Agent({
       name: 'test-agent',
@@ -492,8 +490,8 @@ describe('Memory Handlers', () => {
     });
   });
 
-  describe('deleteMessageHandler', () => {
-    it('should throw error when messageId is not provided', async () => {
+  describe('deleteMessagesHandler', () => {
+    it('should throw error when messageIds is not provided', async () => {
       const mastra = new Mastra({
         logger: false,
         agents: {
@@ -502,8 +500,8 @@ describe('Memory Handlers', () => {
       });
 
       await expect(
-        deleteMessageHandler({ mastra, messageId: undefined as any, agentId: 'test-agent' }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "messageId" is required' }));
+        deleteMessagesHandler({ mastra, messageIds: undefined as any, agentId: 'test-agent' }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'messageIds is required' }));
     });
 
     it('should throw error when memory is not initialized', async () => {
@@ -512,12 +510,12 @@ describe('Memory Handlers', () => {
         storage,
       });
 
-      await expect(deleteMessageHandler({ mastra, messageId: 'test-message-id' })).rejects.toThrow(
+      await expect(deleteMessagesHandler({ mastra, messageIds: ['test-message-id'] })).rejects.toThrow(
         new HTTPException(400, { message: 'Memory is not initialized' }),
       );
     });
 
-    it('should successfully delete a message', async () => {
+    it('should successfully delete a single message', async () => {
       const mastra = new Mastra({
         logger: false,
         agents: {
@@ -525,19 +523,19 @@ describe('Memory Handlers', () => {
         },
       });
 
-      mockMemory.deleteMessage.mockResolvedValue(undefined);
+      mockMemory.deleteMessages = vi.fn().mockResolvedValue(undefined);
 
-      const result = await deleteMessageHandler({
+      const result = await deleteMessagesHandler({
         mastra,
-        messageId: 'test-message-id',
+        messageIds: 'test-message-id',
         agentId: 'test-agent',
       });
 
-      expect(result).toEqual({ success: true, message: 'Message deleted successfully' });
-      expect(mockMemory.deleteMessage).toHaveBeenCalledWith('test-message-id');
+      expect(result).toEqual({ success: true, message: '1 message deleted successfully' });
+      expect(mockMemory.deleteMessages).toHaveBeenCalledWith('test-message-id');
     });
 
-    it('should handle errors from memory.deleteMessage', async () => {
+    it('should delete multiple messages successfully', async () => {
       const mastra = new Mastra({
         logger: false,
         agents: {
@@ -545,13 +543,73 @@ describe('Memory Handlers', () => {
         },
       });
 
-      const errorMessage = 'Message not found';
-      mockMemory.deleteMessage.mockRejectedValue(new Error(errorMessage));
+      mockMemory.deleteMessages = vi.fn().mockResolvedValue(undefined);
+
+      const result = await deleteMessagesHandler({
+        mastra,
+        messageIds: ['msg-1', 'msg-2', 'msg-3'],
+        agentId: 'test-agent',
+      });
+
+      expect(result).toEqual({ success: true, message: '3 messages deleted successfully' });
+      expect(mockMemory.deleteMessages).toHaveBeenCalledWith(['msg-1', 'msg-2', 'msg-3']);
+    });
+
+    it('should accept message object with id property', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+      });
+
+      mockMemory.deleteMessages = vi.fn().mockResolvedValue(undefined);
+
+      const result = await deleteMessagesHandler({
+        mastra,
+        messageIds: { id: 'test-message-id' },
+        agentId: 'test-agent',
+      });
+
+      expect(result).toEqual({ success: true, message: '1 message deleted successfully' });
+      expect(mockMemory.deleteMessages).toHaveBeenCalledWith({ id: 'test-message-id' });
+    });
+
+    it('should accept array of message objects', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+      });
+
+      mockMemory.deleteMessages = vi.fn().mockResolvedValue(undefined);
+
+      const result = await deleteMessagesHandler({
+        mastra,
+        messageIds: [{ id: 'msg-1' }, { id: 'msg-2' }],
+        agentId: 'test-agent',
+      });
+
+      expect(result).toEqual({ success: true, message: '2 messages deleted successfully' });
+      expect(mockMemory.deleteMessages).toHaveBeenCalledWith([{ id: 'msg-1' }, { id: 'msg-2' }]);
+    });
+
+    it('should handle errors from memory.deleteMessages', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+      });
+
+      const errorMessage = 'Database error';
+      mockMemory.deleteMessages = vi.fn().mockRejectedValue(new Error(errorMessage));
 
       await expect(
-        deleteMessageHandler({
+        deleteMessagesHandler({
           mastra,
-          messageId: 'non-existent-id',
+          messageIds: ['msg-1', 'msg-2'],
           agentId: 'test-agent',
         }),
       ).rejects.toThrow(errorMessage);
@@ -565,15 +623,15 @@ describe('Memory Handlers', () => {
         },
       });
 
-      mockMemory.deleteMessage.mockResolvedValue(undefined);
+      mockMemory.deleteMessages = vi.fn().mockResolvedValue(undefined);
 
-      await deleteMessageHandler({
+      await deleteMessagesHandler({
         mastra,
-        messageId: 'test-message-id',
+        messageIds: ['msg-1', 'msg-2', 'msg-3'],
         agentId: 'test-agent',
       });
 
-      expect(mockMemory.deleteMessage).toHaveBeenCalledWith('test-message-id');
+      expect(mockMemory.deleteMessages).toHaveBeenCalledWith(['msg-1', 'msg-2', 'msg-3']);
     });
   });
 });

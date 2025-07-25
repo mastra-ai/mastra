@@ -801,37 +801,34 @@ export class MemoryPG extends MemoryStorage {
     });
   }
 
-  async deleteMessage(messageId: string): Promise<void> {
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
     try {
-      // Check if message exists and get thread ID
       const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
-      const message = await this.client.oneOrNone(`SELECT id, thread_id FROM ${messageTableName} WHERE id = $1`, [
-        messageId,
-      ]);
+      const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
 
-      if (!message) {
-        throw new MastraError({
-          id: 'PG_STORE_MESSAGE_NOT_FOUND',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          text: `Message with id ${messageId} not found`,
-          details: { messageId },
-        });
-      }
-
-      const threadId = message.thread_id;
-
-      // Use transaction to delete message and update thread
       await this.client.tx(async t => {
-        // Delete the message
-        await t.none(`DELETE FROM ${messageTableName} WHERE id = $1`, [messageId]);
+        // Get thread IDs for all messages
+        const placeholders = messageIds.map((_, idx) => `$${idx + 1}`).join(',');
+        const messages = await t.manyOrNone(
+          `SELECT DISTINCT thread_id FROM ${messageTableName} WHERE id IN (${placeholders})`,
+          messageIds,
+        );
 
-        // Update thread's updatedAt timestamp
-        if (threadId) {
-          const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
-          await t.none(`UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $1`, [
-            threadId,
-          ]);
+        const threadIds = messages?.map(msg => msg.thread_id).filter(Boolean) || [];
+
+        // Delete all messages
+        await t.none(`DELETE FROM ${messageTableName} WHERE id IN (${placeholders})`, messageIds);
+
+        // Update thread timestamps
+        if (threadIds.length > 0) {
+          const updatePromises = threadIds.map(threadId =>
+            t.none(`UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $1`, [threadId]),
+          );
+          await Promise.all(updatePromises);
         }
       });
 
@@ -839,10 +836,10 @@ export class MemoryPG extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_DELETE_MESSAGE_FAILED',
+          id: 'PG_STORE_DELETE_MESSAGES_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { messageId },
+          details: { messageIds: messageIds.join(', ') },
         },
         error,
       );

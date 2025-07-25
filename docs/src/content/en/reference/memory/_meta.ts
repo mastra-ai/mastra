@@ -4,7 +4,7 @@ const meta = {
   query: ".query()",
   getThreadById: ".getThreadById()",
   getThreadsByResourceId: ".getThreadsByResourceId()",
-  deleteMessage: ".deleteMessage()",
+  deleteMessages: ".deleteMessages()",
 };
 
 export default meta;

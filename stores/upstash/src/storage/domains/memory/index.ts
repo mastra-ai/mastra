@@ -900,56 +900,50 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  async deleteMessage(messageId: string): Promise<void> {
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
     try {
-      // Find the message key by scanning
-      const pattern = getMessageKey('*', messageId);
-      const keys = await this.operations.scanKeys(pattern);
+      const pipeline = this.client.pipeline();
+      const threadIds = new Set<string>();
+      const messageKeys: string[] = [];
 
-      let messageKey: string | null = null;
-      let message: MastraMessageV2 | MastraMessageV1 | null = null;
+      // Find all message keys and collect thread IDs
+      for (const messageId of messageIds) {
+        const pattern = getMessageKey('*', messageId);
+        const keys = await this.operations.scanKeys(pattern);
 
-      for (const key of keys) {
-        const foundMessage = await this.client.get<MastraMessageV2 | MastraMessageV1>(key);
-        if (foundMessage && foundMessage.id === messageId) {
-          messageKey = key;
-          message = foundMessage;
-          break;
+        for (const key of keys) {
+          const message = await this.client.get<MastraMessageV2 | MastraMessageV1>(key);
+          if (message && message.id === messageId) {
+            messageKeys.push(key);
+            if (message.threadId) {
+              threadIds.add(message.threadId);
+            }
+            break;
+          }
         }
       }
 
-      if (!messageKey || !message) {
-        throw new MastraError({
-          id: 'STORAGE_UPSTASH_MESSAGE_NOT_FOUND',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          text: `Message with id ${messageId} not found`,
-          details: { messageId },
-        });
+      // Delete all messages
+      for (const key of messageKeys) {
+        pipeline.del(key);
       }
 
-      const threadId = message.threadId;
-
-      // Use pipeline for atomic operations
-      const pipeline = this.client.pipeline();
-
-      // Delete the message
-      pipeline.del(messageKey);
-
-      // Remove from thread's sorted set
-      if (threadId) {
-        const threadMessagesKey = getThreadMessagesKey(threadId);
-        pipeline.zrem(threadMessagesKey, messageId);
-
-        // Update thread's updatedAt timestamp
-        const threadKey = getKey(TABLE_THREADS, { id: threadId });
-        const existingThread = await this.client.get<StorageThreadType>(threadKey);
-        if (existingThread) {
-          const updatedThread = {
-            ...existingThread,
-            updatedAt: new Date(),
-          };
-          pipeline.set(threadKey, processRecord(TABLE_THREADS, updatedThread).processedRecord);
+      // Update thread timestamps
+      if (threadIds.size > 0) {
+        for (const threadId of threadIds) {
+          const threadKey = getKey(TABLE_THREADS, { id: threadId });
+          const thread = await this.client.get<StorageThreadType>(threadKey);
+          if (thread) {
+            const updatedThread = {
+              ...thread,
+              updatedAt: new Date(),
+            };
+            pipeline.set(threadKey, processRecord(TABLE_THREADS, updatedThread).processedRecord);
+          }
         }
       }
 
@@ -960,10 +954,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_DELETE_MESSAGE_FAILED',
+          id: 'STORAGE_UPSTASH_DELETE_MESSAGES_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { messageId },
+          details: { messageIds: messageIds.join(', ') },
         },
         error,
       );

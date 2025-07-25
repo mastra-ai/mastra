@@ -62,16 +62,20 @@ export class NetworkMemoryThread extends BaseResource {
   }
 
   /**
-   * Deletes a specific message from the thread
-   * @param messageId - The ID of the message to delete
+   * Deletes one or more messages from the thread
+   * @param messageIds - Can be a single message ID (string), array of message IDs,
+   *                     message object with id property, or array of message objects
    * @returns Promise containing deletion result
    */
-  deleteMessage(messageId: string): Promise<{ success: boolean; message: string }> {
+  deleteMessages(
+    messageIds: string | string[] | { id: string } | { id: string }[],
+  ): Promise<{ success: boolean; message: string }> {
     const query = new URLSearchParams({
       networkId: this.networkId,
     });
-    return this.request(`/api/memory/network/messages/${messageId}?${query.toString()}`, {
-      method: 'DELETE',
+    return this.request(`/api/memory/network/messages/delete?${query.toString()}`, {
+      method: 'POST',
+      body: { messageIds },
     });
   }
 }

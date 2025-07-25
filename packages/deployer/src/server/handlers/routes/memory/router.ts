@@ -16,7 +16,7 @@ import {
   searchMemoryHandler,
   updateThreadHandler,
   updateWorkingMemoryHandler,
-  deleteMessageHandler,
+  deleteMessagesHandler,
 } from './handlers';
 
 export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
@@ -288,18 +288,13 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
     saveMessagesHandler,
   );
 
-  router.delete(
-    '/network/messages/:messageId',
+  router.post(
+    '/network/messages/delete',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Delete a message',
+      description: 'Delete one or more messages',
       tags: ['networkMemory'],
       parameters: [
-        {
-          name: 'messageId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
         {
           name: 'networkId',
           in: 'query',
@@ -307,9 +302,44 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           schema: { type: 'string' },
         },
       ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messageIds: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
+                    {
+                      type: 'object',
+                      properties: { id: { type: 'string' } },
+                      required: ['id'],
+                    },
+                    {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: { id: { type: 'string' } },
+                        required: ['id'],
+                      },
+                    },
+                  ],
+                },
+              },
+              required: ['messageIds'],
+            },
+          },
+        },
+      },
       responses: {
         200: {
-          description: 'Message deleted successfully',
+          description: 'Messages deleted successfully',
           content: {
             'application/json': {
               schema: {
@@ -324,7 +354,7 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    deleteMessageHandler,
+    deleteMessagesHandler,
   );
 
   // Memory routes
@@ -912,18 +942,13 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
     saveMessagesHandler,
   );
 
-  router.delete(
-    '/messages/:messageId',
+  router.post(
+    '/messages/delete',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Delete a message',
+      description: 'Delete one or more messages',
       tags: ['memory'],
       parameters: [
-        {
-          name: 'messageId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
         {
           name: 'agentId',
           in: 'query',
@@ -931,9 +956,44 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           schema: { type: 'string' },
         },
       ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messageIds: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
+                    {
+                      type: 'object',
+                      properties: { id: { type: 'string' } },
+                      required: ['id'],
+                    },
+                    {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: { id: { type: 'string' } },
+                        required: ['id'],
+                      },
+                    },
+                  ],
+                },
+              },
+              required: ['messageIds'],
+            },
+          },
+        },
+      },
       responses: {
         200: {
-          description: 'Message deleted successfully',
+          description: 'Messages deleted successfully',
           content: {
             'application/json': {
               schema: {
@@ -948,7 +1008,7 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    deleteMessageHandler,
+    deleteMessagesHandler,
   );
 
   return router;

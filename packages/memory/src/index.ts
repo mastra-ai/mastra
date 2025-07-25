@@ -16,6 +16,9 @@ import type { ZodTypeAny } from 'zod';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
 
+// Type for flexible message deletion input
+export type MessageDeleteInput = string | string[] | { id: string } | { id: string }[];
+
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
 
@@ -948,20 +951,50 @@ ${
   }
 
   /**
-   * Deletes a message by ID
-   * @param messageId - The ID of the message to delete
-   * @returns Promise that resolves when the message is deleted
+   * Deletes one or more messages
+   * @param input - Can be:
+   *   - A single message ID string
+   *   - An array of message ID strings
+   *   - A message object with an 'id' property
+   *   - An array of message objects with 'id' properties
+   * @returns Promise that resolves when all messages are deleted
    */
-  public async deleteMessage(messageId: string): Promise<void> {
-    if (!messageId) {
-      throw new Error('Message ID is required');
+  public async deleteMessages(input: MessageDeleteInput): Promise<void> {
+    // Normalize input to array of IDs
+    let messageIds: string[];
+
+    if (typeof input === 'string') {
+      messageIds = [input];
+    } else if (Array.isArray(input)) {
+      if (input.length === 0) {
+        return; // No-op for empty array
+      }
+      messageIds = input.map(item => {
+        if (typeof item === 'string') {
+          return item;
+        } else if (item && typeof item === 'object' && 'id' in item) {
+          return item.id;
+        } else {
+          throw new Error('Invalid input: array items must be strings or objects with an id property');
+        }
+      });
+    } else if (input && typeof input === 'object' && 'id' in input) {
+      messageIds = [input.id];
+    } else {
+      throw new Error('Invalid input: must be a string, array of strings, message object, or array of message objects');
+    }
+
+    // Validate all IDs are non-empty strings
+    const invalidIds = messageIds.filter(id => !id || typeof id !== 'string');
+    if (invalidIds.length > 0) {
+      throw new Error('All message IDs must be non-empty strings');
     }
 
     // Delete from storage
-    await this.storage.deleteMessage(messageId);
+    await this.storage.deleteMessages(messageIds);
 
     // TODO: Delete from vector store if semantic recall is enabled
-    // This would require getting the message first to know its threadId/resourceId
+    // This would require getting the messages first to know their threadId/resourceId
     // and then querying the vector store to delete associated embeddings
   }
 }

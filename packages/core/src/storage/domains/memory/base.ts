@@ -52,10 +52,10 @@ export abstract class MemoryStorage extends MastraBase {
       }[];
   }): Promise<MastraMessageV2[]>;
 
-  async deleteMessage(_messageId: string): Promise<void> {
+  async deleteMessages(_messageIds: string[]): Promise<void> {
     throw new Error(
       `Message deletion is not supported by this storage adapter (${this.constructor.name}). ` +
-        `The deleteMessage method needs to be implemented in the storage adapter.`,
+        `The deleteMessages method needs to be implemented in the storage adapter.`,
     );
   }
 
