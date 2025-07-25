@@ -143,7 +143,7 @@ const Composer: FC<{ hasMemory?: boolean }> = ({ hasMemory }) => {
 
 const SpeechInput = () => {
   const composerRuntime = useComposerRuntime();
-  const { start, stop, isListening, transcript } = useSpeechRecognition();
+  const { start, stop, isListening, transcript } = useSpeechRecognition({});
 
   useEffect(() => {
     if (!transcript) return;

@@ -11,7 +11,7 @@ export interface SpeechRecognitionState {
 
 export interface UseSpeechRecognitionArgs {
   language?: string;
-  agentId: string;
+  agentId?: string;
 }
 
 type BrowserSpeechRecognition = {
@@ -29,6 +29,8 @@ export const useSpeechRecognition = ({
   const [agent, setAgent] = useState<Agent | null>(null);
 
   useEffect(() => {
+    if (!agentId) return;
+
     const agent = client.getAgent(agentId);
 
     const check = async () => {
