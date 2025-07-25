@@ -372,6 +372,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        idGenerator: randomUUID,
       });
 
       const agentStep1 = createStep(agent);
