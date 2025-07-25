@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { appendClientMessage, appendResponseMessages } from 'ai';
 import type { UIMessage, CoreMessage, Message } from 'ai';
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { MastraMessageV1 } from '../../memory';
 import type { MastraMessageV2 } from '../message-list';
 import { MessageList } from './index';

@@ -205,9 +205,7 @@ describe('runInputProcessors', () => {
   describe('telemetry integration', () => {
     it('should use telemetry.traceMethod for individual processors when telemetry is provided', async () => {
       const telemetryMock = {
-        traceMethod: vi.fn().mockImplementation(fn => {
-          return () => fn();
-        }),
+        traceMethod: vi.fn((fn, _options) => fn),
       };
 
       const processors = [
@@ -288,16 +286,14 @@ describe('runInputProcessors', () => {
 
     it('should handle tripwire correctly with telemetry', async () => {
       const telemetryMock = {
-        traceMethod: vi.fn().mockImplementation(fn => {
-          return () => fn();
-        }),
+        traceMethod: vi.fn((fn, _options) => fn),
       };
 
       const processors = [
         {
           name: 'tripwire-processor',
-          process: async ({ messages }) => {
-            messages.push(createMessage('message from processor 1'));
+          process: async ({ abort, messages }) => {
+            abort('telemetry tripwire test');
             return messages;
           },
         },
