@@ -1,5 +1,28 @@
 # @mastra/playground-ui
 
+## 5.1.16-alpha.0
+
+### Patch Changes
+
+- f873f3a: dependencies updates:
+  - Updated dependency [`zustand@^5.0.6` ↗︎](https://www.npmjs.com/package/zustand/v/5.0.6) (from `^5.0.5`, in `dependencies`)
+- f442224: speech to text using voice config
+- 89d2f4e: add TTS to the playground
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [6bd354c]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+- Updated dependencies [b641ba3]
+  - @mastra/core@0.12.0-alpha.0
+  - @mastra/client-js@0.10.17-alpha.0
+
 ## 5.1.15
 
 ### Patch Changes

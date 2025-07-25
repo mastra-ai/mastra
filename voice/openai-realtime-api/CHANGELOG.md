@@ -1,5 +1,25 @@
 # @mastra/voice-openai-realtime
 
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- 047ffee: dependencies updates:
+  - Updated dependency [`ws@^8.18.3` ↗︎](https://www.npmjs.com/package/ws/v/8.18.3) (from `^8.18.2`, in `dependencies`)
+- 3fd871d: dependencies updates:
+  - Updated dependency [`openai-realtime-api@^1.0.8` ↗︎](https://www.npmjs.com/package/openai-realtime-api/v/1.0.8) (from `^1.0.7`, in `dependencies`)
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
 ## 0.10.5
 
 ### Patch Changes

@@ -1,5 +1,23 @@
 # @mastra/voice-openai
 
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- 063cd46: dependencies updates:
+  - Updated dependency [`openai@^5.10.1` ↗︎](https://www.npmjs.com/package/openai/v/5.10.1) (from `^4.104.0`, in `dependencies`)
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
 ## 0.10.5
 
 ### Patch Changes
