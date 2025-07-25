@@ -214,10 +214,10 @@ importers:
         specifier: 7.8.1
         version: 7.8.1
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@babel/preset-env':
@@ -266,7 +266,7 @@ importers:
         specifier: ~4.44.2
         version: 4.44.2
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -312,7 +312,7 @@ importers:
         specifier: ^11.3.0
         version: 11.3.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -458,7 +458,7 @@ importers:
         specifier: ^5.8.3
         version: 5.8.3
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@types/node':
@@ -559,7 +559,7 @@ importers:
         specifier: ^3.15.0
         version: 3.15.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -611,7 +611,7 @@ importers:
         specifier: ^3.15.0
         version: 3.15.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -691,7 +691,7 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
 
   integrations/ragie:
@@ -703,7 +703,7 @@ importers:
         specifier: ^3.15.0
         version: 3.15.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@jest/globals':
@@ -817,7 +817,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.60.1
-        version: 0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+        version: 0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -900,10 +900,10 @@ importers:
         specifier: ^0.2.3
         version: 0.2.3
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@internal/lint':
@@ -1198,7 +1198,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.59.0
-        version: 0.59.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+        version: 0.59.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1272,7 +1272,7 @@ importers:
         specifier: ^5.20.1
         version: 5.20.1
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@ai-sdk/openai':
@@ -1330,7 +1330,7 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
 
   packages/create-mastra:
@@ -1472,7 +1472,7 @@ importers:
         specifier: ^1.5.1
         version: 1.5.1(typescript@5.8.3)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@hono/node-server':
@@ -1554,7 +1554,7 @@ importers:
         specifier: ^4.0.4
         version: 4.0.4
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@ai-sdk/openai':
@@ -1732,10 +1732,10 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
 
   packages/mcp-docs-server:
@@ -1765,10 +1765,10 @@ importers:
         specifier: ^11.1.0
         version: 11.1.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@hono/node-server':
@@ -1820,10 +1820,10 @@ importers:
         specifier: ^11.1.0
         version: 11.1.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@hono/node-server':
@@ -1884,7 +1884,7 @@ importers:
         specifier: ^16.6.1
         version: 16.6.1
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@mastra/core':
@@ -1942,10 +1942,10 @@ importers:
         specifier: ^1.1.0
         version: 1.1.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@ai-sdk/openai':
@@ -2247,7 +2247,7 @@ importers:
         specifier: ^10.0.5
         version: 10.0.5(react@19.1.0)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zustand:
         specifier: ^5.0.6
@@ -2323,7 +2323,7 @@ importers:
         specifier: 0.1.0-alpha.6
         version: 0.1.0-alpha.6(encoding@0.1.13)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@ai-sdk/cohere':
@@ -2375,7 +2375,7 @@ importers:
         specifier: ^0.0.5
         version: 0.0.5
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@internal/lint':
@@ -2403,7 +2403,7 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
 
   packages/server:
@@ -2442,10 +2442,10 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
 
   stores/_test-utils:
@@ -3167,7 +3167,7 @@ importers:
         specifier: ^4.4.1
         version: 4.4.1(encoding@0.1.13)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@cloudflare/workers-types':
@@ -3204,7 +3204,7 @@ importers:
         specifier: ^3.13.0
         version: 3.13.0(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3238,7 +3238,7 @@ importers:
         specifier: ^1.59.0
         version: 1.59.0(encoding@0.1.13)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3269,7 +3269,7 @@ importers:
   voice/gladia:
     dependencies:
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3309,7 +3309,7 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3340,7 +3340,7 @@ importers:
         specifier: ^1.8.1
         version: 1.8.1
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3374,7 +3374,7 @@ importers:
         specifier: ^5.10.1
         version: 5.10.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3411,7 +3411,7 @@ importers:
         specifier: ^8.18.3
         version: 8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@internal/lint':
@@ -3442,13 +3442,13 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
 
   voice/playai:
     dependencies:
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3479,7 +3479,7 @@ importers:
   voice/sarvam:
     dependencies:
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3513,7 +3513,7 @@ importers:
         specifier: ^2.5.4
         version: 2.5.4
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3553,7 +3553,7 @@ importers:
         specifier: ^3.40.0
         version: 3.40.0(encoding@0.1.13)(express@5.1.0)(hono@4.8.4)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@ai-sdk/openai':
@@ -20635,7 +20635,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.59.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
+  '@opentelemetry/auto-instrumentations-node@0.59.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -20685,14 +20685,14 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.8.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.2(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.35.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
+      '@opentelemetry/resource-detector-gcp': 0.35.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.201.1(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
+  '@opentelemetry/auto-instrumentations-node@0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -20742,7 +20742,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.9.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.2(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.36.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
+      '@opentelemetry/resource-detector-gcp': 0.36.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.202.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -22322,7 +22322,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.35.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
+  '@opentelemetry/resource-detector-gcp@0.35.0(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -22333,7 +22333,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.36.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
+  '@opentelemetry/resource-detector-gcp@0.36.0(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)

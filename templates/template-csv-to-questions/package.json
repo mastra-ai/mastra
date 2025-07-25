@@ -24,7 +24,7 @@
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "ai": "^4.0.56",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.0.4",
