@@ -1,8 +1,24 @@
-type RecordToTuple<T> = {
-  [K in keyof T]: [K, T[K]];
-}[keyof T][];
+// type RecordToTuple<T> = {
+//   [K in keyof T]: [K, T[K]];
+// }[keyof T][];
 
-export interface RuntimeContextInterface extends Record<string, any> {}
+export interface RuntimeContextInterface {}
+
+// type InferredKey<
+// K extends string = string,
+// V extends unknown = unknown,
+// Values extends RuntimeContextInterface = RuntimeContextInterface
+// > = K extends keyof Values
+//   ? V extends Values[K]
+//     ? K
+//     : never
+//   : K
+
+// type InferredValue<
+// K extends string = string,
+// V extends unknown = unknown,
+// Values extends RuntimeContextInterface = RuntimeContextInterface
+// > = K extends keyof Values ? Values[K] : V;
 
 export class RuntimeContext<Values extends RuntimeContextInterface = RuntimeContextInterface> {
   private registry: Map<string, any>;
@@ -14,7 +30,7 @@ export class RuntimeContext<Values extends RuntimeContextInterface = RuntimeCont
   /**
    * set a value with strict typing if `Values` is a Record and the key exists in it.
    */
-  public set<K extends keyof Values>(key: K, value: Values[K]): void {
+  public set<K extends string, V>(key: K, value: V): void {
     // The type assertion `key as string` is safe because K always extends string ultimately.
     this.registry.set(key as string, value);
   }
@@ -22,8 +38,8 @@ export class RuntimeContext<Values extends RuntimeContextInterface = RuntimeCont
   /**
    * Get a value with its type
    */
-  public get<K extends keyof Values>(key: K): Values[K] {
-    return this.registry.get(key as string) as Values[K];
+  public get<K extends keyof Values>(key: K | string): Values[K] {
+    return this.registry.get(key as string);
   }
 
   /**
