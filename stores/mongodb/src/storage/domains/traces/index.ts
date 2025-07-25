@@ -51,7 +51,7 @@ export class TracesStorageMongoDB extends TracesStorage {
 
     if (attributes) {
       query['$and'] = Object.entries(attributes).map(([key, value]) => ({
-        attributes: new RegExp(`\"${key}\":\"${value}\"`),
+        [`attributes.${key}`]: value,
       }));
     }
 
