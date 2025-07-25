@@ -23,8 +23,6 @@ import type { Run } from '../run/types';
 import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
 
-export { createMockModel } from './model/mock';
-
 export type LanguageModel = MastraLanguageModel;
 
 export type CoreMessage = AiCoreMessage;

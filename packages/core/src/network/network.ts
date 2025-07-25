@@ -395,7 +395,7 @@ export class AgentNetwork extends MastraBase {
     this.logger.debug(`AgentNetwork: Routing with max steps: ${ops.maxSteps}`);
 
     // Generate a response using the routing agent
-    const result: GenerateReturn<any, OUTPUT, EXPERIMENTAL_OUTPUT> = await this.#routingAgent.generate(
+    const result = await this.#routingAgent.generate(
       messages,
       ops as AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
     );
@@ -403,7 +403,7 @@ export class AgentNetwork extends MastraBase {
     // Log completion
     this.logger.debug(`AgentNetwork: Generation complete with ${result.steps?.length || 0} steps`);
 
-    return result;
+    return result as unknown as GenerateReturn<any, OUTPUT, EXPERIMENTAL_OUTPUT>;
   }
 
   async stream<

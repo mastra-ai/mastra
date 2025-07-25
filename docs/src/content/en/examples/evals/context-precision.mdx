@@ -5,166 +5,175 @@ description: Example of using the Context Precision metric to evaluate how preci
 
 import { GithubLink } from "@/components/github-link";
 
-# Context Precision
+# Context Precision Evaluation
 
-This example demonstrates how to use Mastra's Context Precision metric to evaluate how precisely responses use provided context information.
+Use `ContextPrecisionMetric` to evaluate whether the response relies on the most relevant parts of the provided context. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 
-## Overview
+## Installation
 
-The example shows how to:
-
-1. Configure the Context Precision metric
-2. Evaluate context precision
-3. Analyze precision scores
-4. Handle different precision levels
-
-## Setup
-
-### Environment Setup
-
-Make sure to set up your environment variables:
-
-```bash filename=".env"
-OPENAI_API_KEY=your_api_key_here
+```bash copy
+npm install @mastra/evals
 ```
 
-### Dependencies
+## High precision example
 
-Import the necessary dependencies:
+In this example, the response draws only from context that is directly relevant to the query. Every piece of context supports the answer, resulting in a high precision score.
 
-```typescript copy showLineNumbers filename="src/index.ts"
+```typescript filename="src/example-high-precision.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { ContextPrecisionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Photosynthesis converts sunlight into energy.",
+    "Plants use chlorophyll for photosynthesis.",
+    "Photosynthesis produces oxygen as a byproduct.",
+    "The process requires sunlight and chlorophyll."
+  ]
+});
+
+const query = "What is photosynthesis and how does it work?";
+const response = "Photosynthesis is a process where plants convert sunlight into energy using chlorophyll, producing oxygen as a byproduct.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
 ```
 
-## Example Usage
+### High precision output
 
-### High Precision Example
+The output receives a perfect score because all context statements directly contribute to answering the query, without including unrelated information.
 
-Evaluate a response where all context is relevant:
-
-```typescript copy showLineNumbers{5} filename="src/index.ts"
-const context1 = [
-  "Photosynthesis converts sunlight into energy.",
-  "Plants use chlorophyll for photosynthesis.",
-  "Photosynthesis produces oxygen as a byproduct.",
-  "The process requires sunlight and chlorophyll.",
-];
-
-const metric1 = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
-  context: context1,
-});
-
-const query1 = "What is photosynthesis and how does it work?";
-const response1 =
-  "Photosynthesis is a process where plants convert sunlight into energy using chlorophyll, producing oxygen as a byproduct.";
-
-console.log("Example 1 - High Precision:");
-console.log("Context:", context1);
-console.log("Query:", query1);
-console.log("Response:", response1);
-
-const result1 = await metric1.measure(query1, response1);
-console.log("Metric Result:", {
-  score: result1.score,
-  reason: result1.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 1, reason: 'The context uses all relevant information and does not include any irrelevant information.' }
-```
-
-### Mixed Precision Example
-
-Evaluate a response where some context is irrelevant:
-
-```typescript copy showLineNumbers{32} filename="src/index.ts"
-const context2 = [
-  "Volcanoes are openings in the Earth's crust.",
-  "Volcanoes can be active, dormant, or extinct.",
-  "Hawaii has many active volcanoes.",
-  "The Pacific Ring of Fire has many volcanoes.",
-];
-
-const metric2 = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
-  context: context2,
-});
-
-const query2 = "What are the different types of volcanoes?";
-const response2 =
-  "Volcanoes can be classified as active, dormant, or extinct based on their activity status.";
-
-console.log("Example 2 - Mixed Precision:");
-console.log("Context:", context2);
-console.log("Query:", query2);
-console.log("Response:", response2);
-
-const result2 = await metric2.measure(query2, response2);
-console.log("Metric Result:", {
-  score: result2.score,
-  reason: result2.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0.5, reason: 'The context uses some relevant information and includes some irrelevant information.' }
-```
-
-### Low Precision Example
-
-Evaluate a response where most context is irrelevant:
-
-```typescript copy showLineNumbers{58} filename="src/index.ts"
-const context3 = [
-  "The Nile River is in Africa.",
-  "The Nile is the longest river.",
-  "Ancient Egyptians used the Nile.",
-  "The Nile flows north.",
-];
-
-const metric3 = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
-  context: context3,
-});
-
-const query3 = "Which direction does the Nile River flow?";
-const response3 = "The Nile River flows northward.";
-
-console.log("Example 3 - Low Precision:");
-console.log("Context:", context3);
-console.log("Query:", query3);
-console.log("Response:", response3);
-
-const result3 = await metric3.measure(query3, response3);
-console.log("Metric Result:", {
-  score: result3.score,
-  reason: result3.info.reason,
-});
-// Example Output:
-// Metric Result: { score: 0.2, reason: 'The context only has one relevant piece, which is at the end.' }
-```
-
-## Understanding the Results
-
-The metric provides:
-
-1. A precision score between 0 and 1:
-
-   - 1.0: Perfect precision - all context pieces are relevant and used
-   - 0.7-0.9: High precision - most context pieces are relevant
-   - 0.4-0.6: Mixed precision - some context pieces are relevant
-   - 0.1-0.3: Low precision - few context pieces are relevant
-   - 0.0: No precision - no context pieces are relevant
-
-2. Detailed reason for the score, including analysis of:
-   - Relevance of each context piece
-   - Usage in the response
-   - Contribution to answering the query
-   - Overall context usefulness
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-precision"
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'The score is 1 because all context nodes are relevant and provide direct definitions, explanations, and essential components of photosynthesis, with the first node defining the process, followed by supporting details about chlorophyll and oxygen production, all in optimal ranking order.'
   }
+}
+```
+## Mixed precision example
+
+In this example, the response uses one or more relevant context items, but also includes unrelated or distracting information. This reduces the overall precision score.
+
+```typescript filename="src/example-mixed-precision.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextPrecisionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "Volcanoes are openings in the Earth's crust.",
+    "Volcanoes can be active, dormant, or extinct.",
+    "Hawaii has many active volcanoes.",
+    "The Pacific Ring of Fire has many volcanoes."
+  ]
+});
+
+const query = "What are the different types of volcanoes?";
+const response = "Volcanoes can be classified as active, dormant, or extinct based on their activity status.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Mixed precision output
+
+The output receives a mid-range score because the response uses relevant context but is surrounded by unrelated or unnecessary information that lowers the overall precision.
+
+```typescript
+{
+  score: 0.58,
+  info: {
+    reason: 'The score is 0.58 because while the second and third nodes provided direct definitions and examples of volcano types, the first and fourth nodes were irrelevant, leading to a lower precision score. The relevant nodes were not optimally ordered, as the most useful context was not the first, which affected the overall effectiveness.'
+  }
+}
+```
+
+## Low precision example
+
+In this example, the response uses only a small portion of the provided context. Most of the context is unrelated to the query, resulting in a low precision score.
+
+```typescript filename="src/example-low-precision.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { ContextPrecisionMetric } from "@mastra/evals/llm";
+
+const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+  context: [
+    "The Nile River is in Africa.",
+    "The Nile is the longest river.",
+    "Ancient Egyptians used the Nile.",
+    "The Nile flows north."
+  ]
+});
+
+const query = "Which direction does the Nile River flow?";
+const response = "The Nile River flows northward.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Low precision output
+
+The output receives a low score because only one piece of context is relevant to the query. The rest of the context is unrelated and does not contribute to the response.
+
+```typescript
+{
+  score: 0.25,
+  info: {
+    reason: "The score is 0.25 because only the fourth context node directly answers the question about the direction of the Nile River's flow, while the first three nodes are irrelevant, providing no useful information. This highlights a significant limitation in the overall relevance of the retrieved contexts, as the majority did not contribute to the expected output."
+  }
+}
+```
+
+## Metric configuration
+
+You can create a `ContextPrecisionMetric` instance by providing a `context` array that represents the relevant background information. You can also configure optional parameters such as `scale` to set the maximum possible score.
+
+```typescript showLineNumbers copy
+const metric = new ContextPrecisionMetric(openai("gpt-4o-mini"), {
+  context: [""],
+  scale: 1
+});
+```
+
+> See [ContextPrecisionMetric](/reference/evals/context-precision.mdx) for a full list of configuration options.
+
+## Understanding the results
+
+`ContextPrecisionMetric` returns a result in the following shape:
+
+```typescript
+{
+  score: number,
+  info: {
+    reason: string
+  }
+}
+```
+
+### Precision score
+
+A precision score between 0 and 1:
+
+- **1.0**: Perfect precision – all context items are relevant and used.
+- **0.7–0.9**: High precision – most context items are relevant.
+- **0.4–0.6**: Mixed precision – some context items are relevant.
+- **0.1–0.3**: Low precision – few context items are relevant.
+- **0.0**: No precision – no context items are relevant.
+
+### Precision info
+
+An explanation for the score, with details including:
+
+- Relevance of each context item to the query and response.
+- Whether relevant items were included in the response.
+- Whether irrelevant context was mistakenly included.
+- Overall usefulness and focus of the response relative to the provided context.
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/context-precision"
 />
