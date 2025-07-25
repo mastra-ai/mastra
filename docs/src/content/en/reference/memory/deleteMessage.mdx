@@ -1,0 +1,104 @@
+---
+title: .deleteMessage()
+description: Delete a specific message from a thread
+---
+
+The `.deleteMessage()` method removes a specific message from memory storage.
+
+## Syntax
+
+```typescript
+memory.deleteMessage(messageId: string): Promise<void>
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `messageId` | `string` | The unique identifier of the message to delete |
+
+## Returns
+
+Returns a `Promise` that resolves to `void` when the message is successfully deleted.
+
+## Description
+
+The `deleteMessage` method permanently removes a message from the storage backend. When a message is deleted:
+
+- The message is removed from the storage backend (LibSQL, PostgreSQL, Upstash, etc.)
+- The thread's `updatedAt` timestamp is automatically updated
+- The message will no longer appear in query results
+- Vector embeddings associated with the message are marked for future cleanup
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory({
+  storage: libsqlStorage,
+});
+
+// Delete a specific message
+await memory.deleteMessage("msg_123456");
+```
+
+### With Error Handling
+
+```typescript
+try {
+  await memory.deleteMessage("msg_123456");
+  console.log("Message deleted successfully");
+} catch (error) {
+  if (error.message.includes("not found")) {
+    console.error("Message does not exist");
+  } else {
+    console.error("Failed to delete message:", error);
+  }
+}
+```
+
+### Using with Client SDK
+
+```typescript
+import { MastraClient } from "@mastra/client-js";
+
+const client = new MastraClient({
+  baseUrl: "https://your-api-endpoint.com",
+  apiKey: "your-api-key",
+});
+
+// Get a thread instance
+const thread = client.getMemoryThread("thread_123", "agent_123");
+
+// Delete a message through the thread
+await thread.deleteMessage("msg_123456");
+```
+
+## Error Handling
+
+The method will throw an error in the following cases:
+
+- **Message not found**: When the specified `messageId` doesn't exist
+- **Missing messageId**: When `messageId` is empty or not provided
+- **Storage errors**: When the underlying storage backend encounters an error
+
+## Storage Support
+
+The `deleteMessage` method is supported by all storage backends:
+
+- ✅ LibSQL
+- ✅ PostgreSQL  
+- ✅ Upstash Redis
+- ✅ In-Memory
+
+Each storage backend implements transactional deletion to ensure data consistency.
+
+## Related
+
+- [`.saveMessages()`](/reference/memory/saveMessages) - Save messages to a thread
+- [`.updateMessages()`](/reference/memory/updateMessages) - Update existing messages
+- [`.query()`](/reference/memory/query) - Query messages from a thread
+- [`Memory`](/reference/memory/Memory) - Main memory class reference
