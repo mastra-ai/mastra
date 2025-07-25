@@ -1,4 +1,3 @@
-globalThis.___MASTRA_TELEMETRY___ = true;
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { ExportResultCode } from '@opentelemetry/core';
 import { OTLPTraceExporter as OTLPGrpcExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
@@ -13,6 +12,8 @@ import {
 } from '@opentelemetry/sdk-trace-base';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { telemetry } from './telemetry-config.mjs';
+
+globalThis.___MASTRA_TELEMETRY___ = true;
 
 class CompositeExporter {
   constructor(exporters) {
