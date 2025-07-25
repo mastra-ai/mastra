@@ -111,8 +111,9 @@ export class TitleExtractor extends BaseExtractor {
       const titleCandidates = await this.getTitlesCandidates(nodes);
       const combinedTitles = titleCandidates.join(', ');
       const completion = await this.llm.doGenerate({
-        inputFormat: 'messages',
-        mode: { type: 'regular' },
+        // TODO: these don't exist anymore. What do we need to do?
+        // inputFormat: 'messages',
+        // mode: { type: 'regular' },
         prompt: [
           {
             role: 'user',
@@ -129,10 +130,10 @@ export class TitleExtractor extends BaseExtractor {
       });
 
       let title = '';
-      if (typeof completion.text === 'string') {
-        title = completion.text.trim();
-      } else {
-        console.warn('Title extraction LLM output was not a string:', completion.text);
+      for (const part of completion.content) {
+        if (part.type === `text`) {
+          title += part.text.trim();
+        }
       }
       titlesByDocument[key] = title;
     }
@@ -143,8 +144,9 @@ export class TitleExtractor extends BaseExtractor {
   private async getTitlesCandidates(nodes: BaseNode[]): Promise<string[]> {
     const titleJobs = nodes.map(async node => {
       const completion = await this.llm.doGenerate({
-        inputFormat: 'messages',
-        mode: { type: 'regular' },
+        // TODO: these don't exist anymore. What do we need to do?
+        // inputFormat: 'messages',
+        // mode: { type: 'regular' },
         prompt: [
           {
             role: 'user',
@@ -160,12 +162,13 @@ export class TitleExtractor extends BaseExtractor {
         ],
       });
 
-      if (typeof completion.text === 'string') {
-        return completion.text.trim();
-      } else {
-        console.warn('Title candidate extraction LLM output was not a string:', completion.text);
-        return '';
+      let text = '';
+      for (const part of completion.content) {
+        if (part.type === `text`) {
+          text += part.text.trim();
+        }
       }
+      return text;
     });
 
     return await Promise.all(titleJobs);

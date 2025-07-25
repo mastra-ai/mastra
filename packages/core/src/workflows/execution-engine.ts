@@ -1,3 +1,4 @@
+import type { WritableStream } from 'stream/web';
 import type { Mastra, SerializedStepFlowEntry } from '..';
 import { MastraBase } from '../base';
 import type { RuntimeContext } from '../di';

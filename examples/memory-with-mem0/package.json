@@ -13,7 +13,7 @@
   "description": "",
   "type": "module",
   "dependencies": {
-    "@ai-sdk/openai": "latest",
+    "@ai-sdk/openai": "2.0.0-beta.11",
     "@mastra/core": "latest",
     "@mastra/mem0": "latest",
     "zod": "^3.25.67"

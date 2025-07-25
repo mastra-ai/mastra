@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { logger } from '../logger';
 import { fromPackageRoot, getMatchingPaths } from '../utils';
@@ -63,27 +64,27 @@ export const examplesInputSchema = z.object({
 
 export type ExamplesInput = z.infer<typeof examplesInputSchema>;
 
-export const examplesTool = {
-  name: 'mastraExamples',
+export const examplesTool = createTool({
+  id: 'mastraExamples',
   description: `Get code examples from the Mastra.ai examples directory. 
     Without a specific example name, lists all available examples. 
     With an example name, returns the full source code of that example.
     You can also use keywords from the user query to find relevant examples, but prioritize example names.`,
-  parameters: examplesInputSchema,
-  execute: async (args: ExamplesInput) => {
-    void logger.debug('Executing mastraExamples tool', { example: args.example });
+  inputSchema: examplesInputSchema,
+  execute: async ({ context }: { context: ExamplesInput }) => {
+    void logger.debug('Executing mastraExamples tool', { example: context.example });
     try {
-      if (!args.example) {
+      if (!context.example) {
         const examples = await listCodeExamples();
         return ['Available code examples:', '', ...examples.map(ex => `- ${ex.name}`)].join('\n');
       }
 
-      const filename = args.example.endsWith('.md') ? args.example : `${args.example}.md`;
-      const result = await readCodeExample(filename, args.queryKeywords || []);
+      const filename = context.example.endsWith('.md') ? context.example : `${context.example}.md`;
+      const result = await readCodeExample(filename, context.queryKeywords || []);
       return result;
     } catch (error) {
       void logger.error('Failed to execute mastraExamples tool', error);
       throw error;
     }
   },
-};
+});

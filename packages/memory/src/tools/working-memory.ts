@@ -4,13 +4,14 @@ import { z } from 'zod';
 export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig): CoreTool => ({
   description:
     'Update the working memory with new information. Always pass data as string to the memory field. Never pass an object.',
-  parameters: z.object({
+  inputSchema: z.object({
     memory: z
       .string()
       .describe(
         `The ${!!memoryConfig?.workingMemory?.schema ? 'JSON' : 'Markdown'} formatted working memory content to store. This MUST be a string. Never pass an object.`,
       ),
   }),
+  __isMastraTool: true,
   execute: async (params: any) => {
     const { context, threadId, memory, resourceId } = params;
     if (!threadId || !memory) {
@@ -43,7 +44,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig): CoreTool =
 
 export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig): CoreTool => ({
   description: 'Update the working memory with new information.',
-  parameters: z.object({
+  inputSchema: z.object({
     newMemory: z
       .string()
       .optional()
@@ -64,6 +65,7 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
         "The reason you're updating working memory. Passing any value other than 'append-new-memory' requires a searchString to be provided. Defaults to append-new-memory",
       ),
   }),
+  __isMastraTool: true,
   execute: async (params: any) => {
     const { context, threadId, memory, resourceId } = params;
     if (!threadId || !memory) {

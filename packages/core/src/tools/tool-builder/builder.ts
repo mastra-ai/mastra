@@ -5,20 +5,24 @@ import {
   AnthropicSchemaCompatLayer,
   DeepSeekSchemaCompatLayer,
   MetaSchemaCompatLayer,
-  applyCompatLayer,
   convertZodSchemaToAISDKSchema,
+  applyCompatLayer,
 } from '@mastra/schema-compat';
-import type { ToolExecutionOptions } from 'ai';
+import type { ToolCallOptions, Tool } from 'ai';
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
+import { isVercelV5Tool, isCoreToolWithVercelV5 } from '../ai-sdk-v5-compat';
 import { ToolStream } from '../stream';
-import type { CoreTool, ToolAction, VercelTool } from '../types';
+import type { CoreTool, ToolAction } from '../types';
 
-export type ToolToConvert = VercelTool | ToolAction<any, any, any>;
+export type ToolToConvert =
+  | ToolAction<any, any, any> // Mastra ToolAction
+  | Tool<any, any> // Vercel AI SDK v5 Tool
+  | CoreTool<any>; // Our unified CoreTool
 export type LogType = 'tool' | 'toolset' | 'client-tool';
 
 interface LogOptions {
@@ -46,11 +50,20 @@ export class CoreToolBuilder extends MastraBase {
 
   // Helper to get parameters based on tool type
   private getParameters = () => {
-    if (isVercelTool(this.originalTool)) {
-      return this.originalTool.parameters ?? z.object({});
+    const tool = this.originalTool as any;
+
+    // Check if this is a CoreTool with Vercel v5 wrapper
+    if (isCoreToolWithVercelV5(this.originalTool)) {
+      return tool.tool.inputSchema || z.object({});
     }
 
-    return this.originalTool.inputSchema ?? z.object({});
+    // Check if this is a direct Vercel v5 tool
+    if (isVercelV5Tool(this.originalTool)) {
+      return tool.inputSchema || z.object({});
+    }
+
+    // Default to inputSchema or empty object (Mastra tools)
+    return tool.inputSchema ?? z.object({});
   };
 
   private getOutputSchema = () => {
@@ -59,7 +72,7 @@ export class CoreToolBuilder extends MastraBase {
   };
 
   // For provider-defined tools, we need to include all required properties
-  private buildProviderTool(tool: ToolToConvert): (CoreTool & { id: `${string}.${string}` }) | undefined {
+  private buildProviderTool<T>(tool: ToolToConvert): (CoreTool<T> & { id: `${string}.${string}` }) | undefined {
     if (
       'type' in tool &&
       tool.type === 'provider-defined' &&
@@ -74,7 +87,7 @@ export class CoreToolBuilder extends MastraBase {
         id: tool.id,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters: convertZodSchemaToAISDKSchema(parameters),
+        inputSchema: convertZodSchemaToAISDKSchema(parameters) as T,
         ...(outputSchema ? { outputSchema: convertZodSchemaToAISDKSchema(outputSchema) } : {}),
         execute: this.originalTool.execute
           ? this.createExecute(
@@ -117,13 +130,27 @@ export class CoreToolBuilder extends MastraBase {
       type: logType,
     });
 
-    const execFunction = async (args: any, execOptions: ToolExecutionOptions) => {
-      if (isVercelTool(tool)) {
-        return tool?.execute?.(args, execOptions) ?? undefined;
+    const execFunction = async (args: any, execOptions: ToolCallOptions) => {
+      const toolAny = tool as any;
+
+      // Check if it's a CoreTool with Vercel v5 wrapper
+      if (isCoreToolWithVercelV5(tool)) {
+        return toolAny.tool?.execute?.(args, execOptions) ?? undefined;
       }
 
+      // Check if it's a direct Vercel v5 tool
+      if (isVercelV5Tool(tool)) {
+        return toolAny?.execute?.(args, execOptions) ?? undefined;
+      }
+
+      // Check legacy Vercel tool
+      if (isVercelTool(tool)) {
+        return toolAny?.execute?.(args, execOptions) ?? undefined;
+      }
+
+      // Handle Mastra tool (ToolAction or CoreTool)
       return (
-        tool?.execute?.(
+        toolAny?.execute?.(
           {
             context: args,
             threadId: options.threadId,
@@ -184,16 +211,52 @@ export class CoreToolBuilder extends MastraBase {
     };
   }
 
-  build(): CoreTool {
-    const providerTool = this.buildProviderTool(this.originalTool);
+  build<T>(): CoreTool<T> {
+    const providerTool = this.buildProviderTool<T>(this.originalTool);
     if (providerTool) {
       return providerTool;
     }
 
+    const toolAny = this.originalTool as any;
+
+    // If it's a CoreTool with Vercel v5 wrapper, wrap it properly
+    if (isCoreToolWithVercelV5(this.originalTool)) {
+      const wrappedTool = toolAny.tool;
+      return {
+        type: 'vercel-v5-tool',
+        tool: wrappedTool,
+        description: wrappedTool.description,
+        inputSchema: this.getParameters() as T,
+        execute: wrappedTool.execute
+          ? this.createExecute(wrappedTool, { ...this.options, description: wrappedTool.description }, this.logType)
+          : undefined,
+      } as CoreTool<T>;
+    }
+
+    // If it's a direct Vercel v5 tool, wrap it in our CoreTool format
+    if (isVercelV5Tool(this.originalTool)) {
+      const vercelTool = this.originalTool as Tool<any, any>;
+      return {
+        type: 'vercel-v5-tool',
+        tool: vercelTool,
+        description: vercelTool.description,
+        inputSchema: this.getParameters() as T,
+        execute: vercelTool.execute
+          ? this.createExecute(
+              this.originalTool,
+              { ...this.options, description: vercelTool.description },
+              this.logType,
+            )
+          : undefined,
+      } as CoreTool<T>;
+    }
+
+    // Build traditional Mastra tool
     const definition = {
       type: 'function' as const,
+      inputSchema: this.getParameters(),
+      __isMastraTool: true as const,
       description: this.originalTool.description,
-      parameters: this.getParameters(),
       outputSchema: this.getOutputSchema(),
       execute: this.originalTool.execute
         ? this.createExecute(
@@ -237,8 +300,8 @@ export class CoreToolBuilder extends MastraBase {
 
     return {
       ...definition,
-      parameters: processedSchema,
+      inputSchema: processedSchema,
       outputSchema: processedOutputSchema,
-    };
+    } as CoreTool<T>;
   }
 }

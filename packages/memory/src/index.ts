@@ -1,14 +1,27 @@
-import { generateEmptyFromSchema } from '@mastra/core';
-import type { CoreTool, MastraMessageV1 } from '@mastra/core';
-import { MessageList } from '@mastra/core/agent';
+import type { AllMastraMessageTypesList, CoreTool, MastraMessageV1, MastraMessageV3 } from '@mastra/core';
+import { getToolName, MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
-import { embedMany } from 'ai';
+import { generateEmptyFromSchema } from '@mastra/core/utils';
+import { embedMany, isToolUIPart } from 'ai';
 import type { CoreMessage, TextPart, UIMessage } from 'ai';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
+
+// AI SDK v4 UIMessage type definition (extracted to avoid import issues)
+interface AIV4UIMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system' | 'data';
+  content: string;
+  createdAt?: Date;
+  parts: Array<any>;
+  toolInvocations?: Array<any>;
+  experimental_attachments?: Array<any>;
+  reasoning?: string;
+  annotations?: Array<any>;
+}
 
 import xxhash from 'xxhash-wasm';
 import { ZodObject } from 'zod';
@@ -85,7 +98,12 @@ export class Memory extends MastraMemory {
     threadConfig,
   }: StorageGetMessagesArg & {
     threadConfig?: MemoryConfig;
-  }): Promise<{ messages: CoreMessage[]; uiMessages: UIMessage[]; messagesV2: MastraMessageV2[] }> {
+  }): Promise<{
+    messages: CoreMessage[];
+    uiMessages: UIMessage[];
+    uiMessagesV4: AIV4UIMessage[];
+    messagesV2: MastraMessageV2[];
+  }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
     const vectorResults: {
@@ -197,7 +215,10 @@ export class Memory extends MastraMemory {
         return v1Messages as CoreMessage[];
       },
       get uiMessages() {
-        return list.get.all.ui();
+        return list.get.all.aiV5.ui();
+      },
+      get uiMessagesV4() {
+        return list.get.all.aiV4.ui();
       },
       get messagesV2() {
         return list.get.all.v2();
@@ -510,35 +531,45 @@ export class Memory extends MastraMemory {
   }
 
   async saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    messages: AllMastraMessageTypesList;
     memoryConfig?: MemoryConfig | undefined;
     format?: 'v1';
   }): Promise<MastraMessageV1[]>;
   async saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    messages: AllMastraMessageTypesList;
     memoryConfig?: MemoryConfig | undefined;
     format: 'v2';
   }): Promise<MastraMessageV2[]>;
+  async saveMessages(args: {
+    messages: AllMastraMessageTypesList;
+    memoryConfig?: MemoryConfig | undefined;
+    format: 'v3';
+  }): Promise<MastraMessageV3[]>;
   async saveMessages({
     messages,
     memoryConfig,
     format = `v1`,
   }: {
-    messages: (MastraMessageV1 | MastraMessageV2)[];
+    messages: AllMastraMessageTypesList;
     memoryConfig?: MemoryConfig | undefined;
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    format?: 'v1' | 'v2' | 'v3';
+  }): Promise<MastraMessageV2[] | MastraMessageV1[] | MastraMessageV3[]> {
     // Then strip working memory tags from all messages
     const updatedMessages = messages
       .map(m => {
         if (MessageList.isMastraMessageV1(m)) {
           return this.updateMessageToHideWorkingMemory(m);
         }
-        // add this to prevent "error saving undefined in the db" if a project is on an earlier storage version but new memory/storage
-        if (!m.type) m.type = `v2`;
-        return this.updateMessageToHideWorkingMemoryV2(m);
+        if (MessageList.isMastraMessageV2(m)) {
+          // add this to prevent "error saving undefined in the db" if a project is on an earlier storage version but new memory/storage
+          if (!m.type) m.type = `v2`;
+          return this.updateMessageToHideWorkingMemoryV2(m);
+        }
+
+        if (!m.type) m.type = `v3`;
+        return this.updateMessageToHideWorkingMemoryV3(m);
       })
-      .filter((m): m is MastraMessageV1 | MastraMessageV2 => Boolean(m));
+      .filter((m): m is MastraMessageV1 | MastraMessageV2 | MastraMessageV3 => Boolean(m));
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
@@ -616,32 +647,72 @@ export class Memory extends MastraMemory {
   protected updateMessageToHideWorkingMemory(message: MastraMessageV1): MastraMessageV1 | null {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
 
-    if (typeof message?.content === `string`) {
+    if (message.role === 'system') {
       return {
         ...message,
         content: message.content.replace(workingMemoryRegex, ``).trim(),
       };
-    } else if (Array.isArray(message?.content)) {
-      // Filter out updateWorkingMemory tool-call/result content items
-      const filteredContent = message.content.filter(
-        content =>
-          (content.type !== 'tool-call' && content.type !== 'tool-result') ||
-          content.toolName !== 'updateWorkingMemory',
-      );
-      const newContent = filteredContent.map(content => {
-        if (content.type === 'text') {
-          return {
-            ...content,
-            text: content.text.replace(workingMemoryRegex, '').trim(),
-          };
-        }
-        return { ...content };
-      }) as MastraMessageV1['content'];
-      if (!newContent.length) return null;
-      return { ...message, content: newContent };
-    } else {
-      return { ...message };
+    } else if (message.role === 'user') {
+      if (typeof message.content === 'string') {
+        return {
+          ...message,
+          content: message.content.replace(workingMemoryRegex, ``).trim(),
+        };
+      } else if (Array.isArray(message.content)) {
+        // For user messages, we only need to handle text parts
+        const newContent = message.content.map(content => {
+          if (content.type === 'text') {
+            return {
+              ...content,
+              text: content.text.replace(workingMemoryRegex, '').trim(),
+            };
+          }
+          return { ...content };
+        });
+        return { ...message, content: newContent };
+      }
+    } else if (message.role === 'assistant') {
+      if (typeof message.content === 'string') {
+        return {
+          ...message,
+          content: message.content.replace(workingMemoryRegex, ``).trim(),
+        };
+      } else if (Array.isArray(message.content)) {
+        // Filter out updateWorkingMemory tool-call content items
+        const filteredContent = message.content.filter(content => {
+          if (content.type === 'tool-call') {
+            return content.toolName !== 'updateWorkingMemory';
+          }
+          return true;
+        });
+        const newContent = filteredContent.map(content => {
+          if (content.type === 'text') {
+            return {
+              ...content,
+              text: content.text.replace(workingMemoryRegex, '').trim(),
+            };
+          }
+          return { ...content };
+        });
+        if (!newContent.length) return null;
+        return { ...message, content: newContent };
+      }
+    } else if (message.role === 'tool') {
+      if (Array.isArray(message.content)) {
+        // Filter out updateWorkingMemory tool-result content items
+        const filteredContent = message.content.filter(content => {
+          if (content.type === 'tool-result') {
+            return content.toolName !== 'updateWorkingMemory';
+          }
+          return true;
+        });
+        const newContent = filteredContent as Extract<MastraMessageV1, { role: 'tool' }>['content'];
+        if (!newContent.length) return null;
+        return { ...message, content: newContent };
+      }
     }
+
+    return { ...message };
   }
   protected updateMessageToHideWorkingMemoryV2(message: MastraMessageV2): MastraMessageV2 | null {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
@@ -657,6 +728,38 @@ export class Memory extends MastraMemory {
         .filter(part => {
           if (part.type === 'tool-invocation') {
             return part.toolInvocation.toolName !== 'updateWorkingMemory';
+          }
+          return true;
+        })
+        .map(part => {
+          if (part.type === 'text') {
+            return {
+              ...part,
+              text: part.text.replace(workingMemoryRegex, '').trim(),
+            };
+          }
+          return part;
+        });
+
+      // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls) we need to skip the whole message, it was only working memory tool calls/results
+      if (newMessage.content.parts.length === 0) {
+        return null;
+      }
+    }
+
+    return newMessage;
+  }
+
+  protected updateMessageToHideWorkingMemoryV3(message: MastraMessageV3): MastraMessageV3 | null {
+    const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
+
+    const newMessage = { ...message, content: { ...message.content } }; // Deep copy message and content
+
+    if (newMessage.content.parts) {
+      newMessage.content.parts = newMessage.content.parts
+        .filter(part => {
+          if (isToolUIPart(part)) {
+            return getToolName(part) !== 'updateWorkingMemory';
           }
           return true;
         })

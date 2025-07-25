@@ -186,6 +186,9 @@ export async function getMessagesHandler(c: Context) {
     const networkId = c.req.query('networkId');
     const threadId = c.req.param('threadId');
     const limit = parseLimit(c.req.query('limit'));
+    const format = c.req.query('format') as 'aiv4' | 'aiv5' | undefined;
+
+    const clientSdkCompat = c.req.header('x-ai-sdk-compat');
 
     const result = await getOriginalGetMessagesHandler({
       mastra,
@@ -193,6 +196,8 @@ export async function getMessagesHandler(c: Context) {
       threadId,
       networkId,
       limit,
+      format,
+      clientSdkCompat,
     });
 
     return c.json(result);

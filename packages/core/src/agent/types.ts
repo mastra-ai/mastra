@@ -1,4 +1,5 @@
-import type { GenerateTextOnStepFinishCallback, LanguageModelV1, TelemetrySettings } from 'ai';
+import type { LanguageModelV2 } from '@ai-sdk/provider';
+import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { Metric } from '../eval';
@@ -26,14 +27,20 @@ import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { AgentVNextStreamOptions } from './agent.types';
 
-export type { MastraMessageV2, MastraMessageContentV2, MessageList } from './message-list/index.ts';
-export type { Message as AiMessageType } from 'ai';
+export type {
+  MastraMessageV2,
+  MastraMessageContentV2,
+  MastraMessageV3,
+  MastraMessageContentV3,
+  MessageList,
+} from './message-list/index.ts';
+export type { UIMessage as AiMessageType } from 'ai';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
-export type MastraLanguageModel = LanguageModelV1;
+export type MastraLanguageModel = LanguageModelV2;
 
 export interface AgentConfig<
   TAgentId extends string = string,

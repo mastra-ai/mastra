@@ -16,7 +16,7 @@ import type {
   GetPromptResult,
   Prompt,
 } from '@modelcontextprotocol/sdk/types.js';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2 } from 'ai/test';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -42,7 +42,7 @@ const mockToolExecute = vi.fn(async (args: any) => ({ result: 'tool executed', a
 const mockTools: ToolsInput = {
   testTool: {
     description: 'A test tool',
-    parameters: z.object({ input: z.string().optional() }),
+    inputSchema: z.object({ input: z.string().optional() }),
     execute: mockToolExecute,
   },
 };
@@ -50,7 +50,7 @@ const mockTools: ToolsInput = {
 const minimalTestTool: ToolsInput = {
   minTool: {
     description: 'A minimal tool',
-    parameters: z.object({}),
+    inputSchema: z.object({}),
     execute: async () => ({ result: 'ok' }),
   },
 };
@@ -60,7 +60,7 @@ const mockAgentGenerate = vi.fn(async (query: string) => {
     rawCall: { rawPrompt: null, rawSettings: {} },
     finishReason: 'stop',
     usage: { promptTokens: 10, completionTokens: 20 },
-    text: `{"content":"Agent response to: "${JSON.stringify(query)}"}`,
+    content: [{ type: 'text', text: `Agent response to: ${query}` }],
   };
 });
 
@@ -71,8 +71,7 @@ const createMockAgent = (name: string, generateFn: any, instructionsFn?: any, de
     name: name,
     instructions: instructionsFn,
     description: description || '',
-    model: new MockLanguageModelV1({
-      defaultObjectGenerationMode: 'json',
+    model: new MockLanguageModelV2({
       doGenerate: async options => {
         return generateFn((options.prompt.at(-1)?.content[0] as { text: string }).text);
       },
@@ -947,7 +946,7 @@ describe('MCPServer', () => {
           weatherTool,
           testAuthTool: {
             description: 'Test tool to validate auth information from extra params',
-            parameters: z.object({
+            inputSchema: z.object({
               message: z.string().describe('Message to show to user'),
             }),
             execute: async (context, options) => {
@@ -1195,7 +1194,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     expect(tools[agentToolName].description).toContain("Ask agent 'MyTestAgent' a question.");
     expect(tools[agentToolName].description).toContain('Agent description: Simple mock description.');
 
-    const schema = tools[agentToolName].parameters.jsonSchema;
+    const schema = tools[agentToolName].inputSchema.jsonSchema;
     expect(schema.type).toBe('object');
     if (schema.properties) {
       expect(schema.properties.message).toBeDefined();
@@ -1230,7 +1229,8 @@ describe('MCPServer - Agent to Tool Conversion', () => {
 
       expect(mockAgentGenerate).toHaveBeenCalledTimes(1);
       expect(mockAgentGenerate).toHaveBeenCalledWith(queryInput.message);
-      expect(result.text).toBe(`{"content":"Agent response to: ""Hello Agent""}`);
+      expect(result.text).toBe('Agent response to: Hello Agent');
+      expect(result.content).toEqual([{ type: 'text', text: 'Agent response to: Hello Agent' }]);
     } else {
       throw new Error('Agent tool or its execute function is undefined');
     }
@@ -1252,7 +1252,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
       tools: {
         [explicitToolName]: {
           description: 'An explicit tool that collides.',
-          parameters: z.object({ query: z.string() }),
+          inputSchema: z.object({ query: z.string() }),
           execute: explicitToolExecute,
         },
       },
@@ -1318,8 +1318,8 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
     expect(tools[workflowToolName].description).toBe(
       "Run workflow 'testWorkflowKey'. Workflow description: A test workflow.",
     );
-    expect(tools[workflowToolName].parameters.jsonSchema).toBeDefined();
-    expect(tools[workflowToolName].parameters.jsonSchema.type).toBe('object');
+    expect(tools[workflowToolName].inputSchema.jsonSchema).toBeDefined();
+    expect(tools[workflowToolName].inputSchema.jsonSchema.type).toBe('object');
   });
 
   it('should throw an error if workflow.description is undefined or empty', () => {
@@ -1401,7 +1401,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
       tools: {
         [explicitToolName]: {
           description: 'An explicit tool that collides with a workflow.',
-          parameters: z.object({ query: z.string() }),
+          inputSchema: z.object({ query: z.string() }),
           execute: explicitToolExecute,
         },
       },
@@ -1438,15 +1438,17 @@ describe('MCPServer - Elicitation', () => {
       tools: {
         testElicitationTool: {
           description: 'A tool that uses elicitation to collect user input',
-          parameters: z.object({
+          inputSchema: z.object({
             message: z.string().describe('Message to show to user'),
           }),
-          execute: async (context, options) => {
+          execute: async (args, options) => {
             // Use the session-aware elicitation functionality
             try {
               const elicitation = options.elicitation;
+              // Handle both wrapped and unwrapped cases
+              const message = args.context?.message || args.message;
               const result = await elicitation.sendRequest({
-                message: context.message,
+                message: message,
                 requestedSchema: {
                   type: 'object',
                   properties: {
@@ -1551,6 +1553,7 @@ describe('MCPServer - Elicitation', () => {
       },
     });
 
+    console.log('Tool execution result:', result);
     expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
     expect(JSON.parse(result.content[0].text)).toEqual({
       action: 'accept',
@@ -1561,10 +1564,10 @@ describe('MCPServer - Elicitation', () => {
     });
   });
 
-  it('should handle elicitation request with reject response', async () => {
+  it('should handle elicitation request with decline response', async () => {
     const mockElicitationHandler = vi.fn(async request => {
       expect(request.message).toBe('Please provide sensitive data');
-      return { action: 'reject' as const };
+      return { action: 'decline' as const };
     });
 
     elicitationClient = new InternalMastraMCPClient({
@@ -1586,7 +1589,7 @@ describe('MCPServer - Elicitation', () => {
     });
 
     expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(result.content[0].text)).toEqual({ action: 'reject' });
+    expect(JSON.parse(result.content[0].text)).toEqual({ action: 'decline' });
   });
 
   it('should handle elicitation request with cancel response', async () => {
@@ -1783,7 +1786,7 @@ describe('MCPServer with Tool Output Schema', () => {
   const structuredTool: ToolsInput = {
     structuredTool: {
       description: 'A test tool with structured output',
-      parameters: z.object({ input: z.string() }),
+      inputSchema: z.object({ input: z.string() }),
       outputSchema: z.object({
         processedInput: z.string(),
         timestamp: z.string(),

@@ -17,6 +17,7 @@ import type {
   StreamTextOnFinishCallback as OriginalStreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
   GenerateTextOnStepFinishCallback as OriginalGenerateTextOnStepFinishCallback,
+  StopCondition,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, z } from 'zod';
@@ -43,13 +44,14 @@ type MastraCustomLLMOptionsKeys = keyof MastraCustomLLMOptions;
 export type OriginalStreamTextOnFinishEventArg<Tools extends ToolSet> = Parameters<
   OriginalStreamTextOnFinishCallback<Tools>
 >[0];
-export type OriginalStreamObjectOnFinishEventArg<RESULT> = Parameters<OriginalStreamObjectOnFinishCallback<RESULT>>[0];
+export type OriginalStreamObjectOnFinishEventArg<Output> = Parameters<OriginalStreamObjectOnFinishCallback<Output>>[0];
 
 export type StreamTextOnFinishCallback<Tools extends ToolSet> = (
   event: OriginalStreamTextOnFinishEventArg<Tools> & { runId: string },
 ) => Promise<void> | void;
-export type StreamObjectOnFinishCallback<RESULT> = (
-  event: OriginalStreamObjectOnFinishEventArg<RESULT> & { runId: string },
+
+export type StreamObjectOnFinishCallback<Output> = (
+  event: OriginalStreamObjectOnFinishEventArg<Output> & { runId: string },
 ) => Promise<void> | void;
 
 export type GenerateTextOnStepFinishCallback<Tools extends ToolSet> = (
@@ -70,8 +72,9 @@ type GenerateTextOptions<Tools extends ToolSet, Output extends ZodSchema | JSONS
   MastraCustomLLMOptionsKeys | 'model' | 'onStepFinish'
 > &
   MastraCustomLLMOptions & {
-    onStepFinish?: GenerateTextOnStepFinishCallback<inferOutput<Output>>;
+    onStepFinish?: GenerateTextOnStepFinishCallback<Tools>;
     experimental_output?: Output;
+    maxSteps?: number;
   };
 
 export type GenerateTextWithMessagesArgs<
@@ -92,7 +95,7 @@ export type GenerateTextResult<
 export type OriginalGenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
   | Parameters<typeof generateObject<inferOutput<Output>>>[0]
   | (Parameters<typeof generateObject<inferOutput<Output>>>[0] & { output: 'array' })
-  | (Parameters<typeof generateObject<string>>[0] & { output: 'enum' })
+  | (Parameters<typeof generateObject>[0] & { output: 'enum' })
   | (Parameters<typeof generateObject>[0] & { output: 'no-schema' });
 
 type GenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Omit<
@@ -105,7 +108,11 @@ export type GenerateObjectWithMessagesArgs<Output extends ZodSchema | JSONSchema
   messages: UIMessage[] | CoreMessage[];
   structuredOutput: Output;
   output?: never;
-} & GenerateObjectOptions<Output>;
+} & GenerateObjectOptions<Output> & {
+    onStepFinish?: GenerateTextOnStepFinishCallback<ToolSet>;
+    experimental_output?: Output;
+    maxSteps?: number;
+  };
 
 export type GenerateObjectResult<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
   OriginalGenerateObjectResult<inferOutput<Output>> & {
@@ -129,8 +136,8 @@ type StreamTextOptions<Tools extends ToolSet, Output extends ZodSchema | JSONSch
   MastraCustomLLMOptionsKeys | 'model' | 'onStepFinish' | 'onFinish'
 > &
   MastraCustomLLMOptions & {
-    onStepFinish?: StreamTextOnStepFinishCallback<inferOutput<Output>>;
-    onFinish?: StreamTextOnFinishCallback<inferOutput<Output>>;
+    onStepFinish?: StreamTextOnStepFinishCallback<Tools>;
+    onFinish?: StreamTextOnFinishCallback<Tools>;
     experimental_output?: Output;
   };
 
@@ -140,7 +147,9 @@ export type StreamTextWithMessagesArgs<
 > = {
   messages: UIMessage[] | CoreMessage[];
   output?: never;
-} & StreamTextOptions<Tools, Output>;
+} & StreamTextOptions<Tools, Output> & {
+    maxSteps?: number;
+  };
 
 export type StreamTextResult<
   Tools extends ToolSet,
@@ -152,7 +161,7 @@ export type StreamTextResult<
 export type OriginalStreamObjectOptions<Output extends ZodSchema | JSONSchema7> =
   | Parameters<typeof streamObject<inferOutput<Output>>>[0]
   | (Parameters<typeof streamObject<inferOutput<Output>>>[0] & { output: 'array' })
-  | (Parameters<typeof streamObject<string>>[0] & { output: 'enum' })
+  | (Parameters<typeof streamObject>[0] & { output: 'enum' })
   | (Parameters<typeof streamObject>[0] & { output: 'no-schema' });
 
 type StreamObjectOptions<Output extends ZodSchema | JSONSchema7> = Omit<
@@ -181,3 +190,9 @@ export type StreamReturn<
   StructuredOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = StreamTextResult<Tools, StructuredOutput> | StreamObjectResult<NonNullable<Output>>;
 // #endregion
+
+// Add stop condition types
+export type StopConditionArgs = {
+  maxSteps?: number;
+  stopWhen?: StopCondition<any> | StopCondition<any>[];
+};

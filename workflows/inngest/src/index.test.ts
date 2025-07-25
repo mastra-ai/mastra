@@ -9,7 +9,7 @@ import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
-import { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
+import { MockLanguageModelV2, simulateReadableStream } from 'ai/test';
 import { $ } from 'execa';
 import { Inngest } from 'inngest';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7531,7 +7531,7 @@ describe('MastraInngestWorkflow', () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions"',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [
@@ -7552,7 +7552,7 @@ describe('MastraInngestWorkflow', () => {
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: new MockLanguageModelV1({
+        model: new MockLanguageModelV2({
           doStream: async () => ({
             stream: simulateReadableStream({
               chunks: [

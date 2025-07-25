@@ -1,4 +1,4 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2 } from 'ai/test';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../agent';
 import type { MastraMessageV2 } from '../agent/types';
@@ -161,12 +161,12 @@ function createMastraWithMemory(idGenerator?: () => string) {
   const agent = new Agent({
     name: 'testAgent',
     instructions: 'You are a test agent',
-    model: new MockLanguageModelV1({
+    model: new MockLanguageModelV2({
       doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
+        content: [{ type: 'text', text: 'Test response' }],
         usage: { promptTokens: 10, completionTokens: 20 },
-        text: 'Test response',
+        finishReason: 'stop',
+        warnings: [],
       }),
     }),
     memory,

@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { logger } from '../logger';
 import { fromPackageRoot, getMatchingPaths } from '../utils';
@@ -171,8 +172,8 @@ export const docsInputSchema = z.object({
 
 export type DocsInput = z.infer<typeof docsInputSchema>;
 
-export const docsTool = {
-  name: 'mastraDocs',
+export const docsTool = createTool({
+  id: 'mastraDocs',
   description: `Get Mastra.ai documentation. 
     Request paths to explore the docs. References contain API docs. 
     Other paths contain guides. The user doesn\'t know about files and directories. 
@@ -188,13 +189,13 @@ export const docsTool = {
     Ex. if you see \`import { X } from "@mastra/$PACKAGE_NAME"\` in an example, show an install command. 
     Always install latest tag, not alpha unless requested. If you scaffold a new project it may be in a subdir.
     When displaying results, always mention which file path contains the information (e.g., 'Found in "path/to/file.mdx"') so users know where this documentation lives.`,
-  parameters: docsInputSchema,
-  execute: async (args: DocsInput) => {
-    void logger.debug('Executing mastraDocs tool', { args });
+  inputSchema: docsInputSchema,
+  execute: async ({ context }: { context: DocsInput }) => {
+    void logger.debug('Executing mastraDocs tool', { args: context });
     try {
-      const queryKeywords = args.queryKeywords ?? [];
+      const queryKeywords = context.queryKeywords ?? [];
       const results = await Promise.all(
-        args.paths.map(async (path: string) => {
+        context.paths.map(async (path: string) => {
           try {
             const result = await readMdxContent(path, queryKeywords);
             if (result.found) {
@@ -238,4 +239,4 @@ export const docsTool = {
       throw error;
     }
   },
-};
+});

@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import type { WritableStream } from 'stream/web';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import type { RuntimeContext } from '../di';

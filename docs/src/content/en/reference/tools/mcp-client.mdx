@@ -342,7 +342,7 @@ The handler function receives a request object with:
 - `requestedSchema`: A JSON schema defining the structure of the expected response
 
 The handler must return an `ElicitResult` with:
-- `action`: One of `'accept'`, `'reject'`, or `'cancel'`
+- `action`: One of `'accept'`, `'decline'`, or `'cancel'`
 - `content`: The user's data (only when action is `'accept'`)
 
 **Example:**
@@ -363,8 +363,8 @@ mcpClient.elicitation.onRequest('serverName', async (request) => {
     };
   }
   
-  // Simulate user rejecting the request
-  return { action: 'reject' };
+  // Simulate user declining the request
+  return { action: 'decline' };
 });
 ```
 
@@ -423,7 +423,7 @@ await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
     // Validate required fields
     if (answer === '' && isRequired) {
       console.log(`❌ ${fieldName} is required`);
-      return { action: 'reject' };
+      return { action: 'decline' };
     }
     
     if (answer !== '') {
@@ -442,7 +442,7 @@ await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
   } else if (confirm.toLowerCase() === 'cancel') {
     return { action: 'cancel' };
   } else {
-    return { action: 'reject' };
+    return { action: 'decline' };
   }
 });
 ```
@@ -521,7 +521,7 @@ Elicitation is a feature that allows MCP servers to request structured informati
 1. **Server Request**: An MCP server tool calls `server.elicitation.sendRequest()` with a message and schema
 2. **Client Handler**: Your elicitation handler function is called with the request
 3. **User Interaction**: Your handler collects user input (via UI, CLI, etc.)
-4. **Response**: Your handler returns the user's response (accept/reject/cancel)
+4. **Response**: Your handler returns the user's response (accept/decline/cancel)
 5. **Tool Continuation**: The server tool receives the response and continues execution
 
 ### Setting Up Elicitation
@@ -566,9 +566,9 @@ Your elicitation handler must return one of three response types:
   };
   ```
 
-- **Reject**: User explicitly declined to provide the information
+- **Decline**: User explicitly declined to provide the information
   ```typescript
-  return { action: 'reject' };
+  return { action: 'decline' };
   ```
 
 - **Cancel**: User dismissed or cancelled the request
@@ -613,7 +613,7 @@ await mcpClient.elicitation.onRequest('interactiveServer', async (request) => {
 
 - **Always handle elicitation**: Set up your handler before calling tools that might use elicitation
 - **Validate input**: Check that required fields are provided
-- **Respect user choice**: Handle reject and cancel responses gracefully
+- **Respect user choice**: Handle decline and cancel responses gracefully
 - **Clear UI**: Make it obvious what information is being requested and why
 - **Security**: Never auto-accept requests for sensitive information
 

@@ -1,9 +1,10 @@
-import type { CoreMessage } from 'ai';
+import type { ModelMessage } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { RuntimeContext } from '../../runtime-context';
 import { MockProvider } from '../../test-utils/llm-mock';
+import type { ConvertedCoreTool } from '../../tools';
 import { createTool } from '../../tools';
 import { makeCoreTool } from '../../utils';
 
@@ -18,7 +19,7 @@ describe('MastraLLM', () => {
 
   const runtimeContext = new RuntimeContext();
 
-  const mockTools = {
+  const mockTools: Record<string, ConvertedCoreTool> = {
     testTool: makeCoreTool(
       createTool({
         id: 'test',
@@ -78,7 +79,7 @@ describe('MastraLLM', () => {
 
   describe('generate', () => {
     it('should generate text output by default', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
 
       const result = await aisdkText.generate(messages, {
         tools: mockTools,
@@ -92,7 +93,7 @@ describe('MastraLLM', () => {
     });
 
     it('should generate structured output when output is provided', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
 
       const schema = z.object({
         content: z.string(),
@@ -134,7 +135,7 @@ describe('MastraLLM', () => {
     });
 
     it('should pass through tool conversion', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
 
       await aisdkText.generate(messages, {
         tools: mockTools,
@@ -147,7 +148,7 @@ describe('MastraLLM', () => {
     });
 
     it('should handle onStepFinish callback', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const onStepFinish = vi.fn();
 
       await aisdkText.generate(messages, {
@@ -164,20 +165,26 @@ describe('MastraLLM', () => {
 
   describe('stream', () => {
     it('should stream text by default', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
 
-      await aisdkText.stream(messages, {
+      const result = aisdkText.stream(messages, {
+        // Store the result
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
         runtimeContext,
       });
 
+      // Consume the stream to ensure the spy is called
+      for await (const _part of result.fullStream) {
+        // Do nothing, just iterate to consume
+      }
+
       expect(streamSpy).toHaveBeenCalled();
     });
 
     it('should handle string messages', async () => {
-      await aisdkText.stream('test message', {
+      aisdkText.stream('test message', {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
@@ -188,7 +195,7 @@ describe('MastraLLM', () => {
     });
 
     it('should handle array of string messages', async () => {
-      await aisdkText.stream(['test message 1', 'test message 2'], {
+      aisdkText.stream(['test message 1', 'test message 2'], {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
@@ -199,12 +206,12 @@ describe('MastraLLM', () => {
     });
 
     it('should stream structured output with Zod schema', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const schema = z.object({
         content: z.string(),
       });
 
-      await aisdkObject.stream(messages, {
+      aisdkObject.stream(messages, {
         tools: mockTools,
         output: schema,
         temperature: 0.7,
@@ -216,7 +223,7 @@ describe('MastraLLM', () => {
     });
 
     it('should stream structured output with JSON schema', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const jsonSchema = {
         type: 'object',
         properties: {
@@ -225,7 +232,7 @@ describe('MastraLLM', () => {
         required: ['content'],
       } as JSONSchema7;
 
-      await aisdkObject.stream(messages, {
+      aisdkObject.stream(messages, {
         tools: mockTools,
         output: jsonSchema,
         temperature: 0.7,
@@ -237,11 +244,11 @@ describe('MastraLLM', () => {
     });
 
     it('should handle callbacks for text streaming', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const onStepFinish = vi.fn();
       const onFinish = vi.fn();
 
-      await aisdkText.stream(messages, {
+      aisdkText.stream(messages, {
         tools: mockTools,
         onStepFinish,
         onFinish,
@@ -254,14 +261,14 @@ describe('MastraLLM', () => {
     });
 
     it('should handle callbacks for structured output streaming', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const schema = z.object({
         content: z.string(),
       });
       const onStepFinish = vi.fn();
       const onFinish = vi.fn();
 
-      await aisdkObject.stream(messages, {
+      aisdkObject.stream(messages, {
         tools: mockTools,
         output: schema,
         onStepFinish,
@@ -277,7 +284,7 @@ describe('MastraLLM', () => {
 
   describe('__text', () => {
     it('should generate text with correct parameters', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
 
       const result = await aisdkText.__text({
         messages,
@@ -293,7 +300,7 @@ describe('MastraLLM', () => {
     });
 
     it('should handle tool conversion', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
 
       await aisdkText.__text({
         messages,
@@ -307,7 +314,7 @@ describe('MastraLLM', () => {
     });
 
     it('should handle pre-converted tools', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
 
       await aisdkText.__text({
         messages,
@@ -321,7 +328,7 @@ describe('MastraLLM', () => {
     });
 
     it('should handle onStepFinish callback', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const onStepFinish = vi.fn();
 
       await aisdkText.__text({
@@ -336,7 +343,7 @@ describe('MastraLLM', () => {
     });
 
     it('should handle rate limiting', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const onStepFinish = vi.fn();
       // const mockResponse = {
       //   response: {
@@ -358,7 +365,7 @@ describe('MastraLLM', () => {
     });
 
     it('should log debug messages', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const runId = 'test-run';
 
       await aisdkText.__text({
@@ -373,7 +380,7 @@ describe('MastraLLM', () => {
     });
 
     it('should handle step change logging', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const runId = 'test-run';
       // const mockStepData = {
       //   text: 'Custom text response',
@@ -397,7 +404,7 @@ describe('MastraLLM', () => {
 
   describe('__stream', () => {
     it('should stream text with correct parameters', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
 
       await aisdkText.__stream({
         messages,
@@ -411,7 +418,7 @@ describe('MastraLLM', () => {
     });
 
     it('should handle tool conversion', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
 
       await aisdkText.__stream({
         messages,
@@ -425,7 +432,7 @@ describe('MastraLLM', () => {
     });
 
     it('should handle pre-converted tools', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
 
       await aisdkText.__stream({
         messages,
@@ -439,7 +446,7 @@ describe('MastraLLM', () => {
     });
 
     it('should handle callbacks', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const onStepFinish = vi.fn();
       const onFinish = vi.fn();
 
@@ -456,7 +463,7 @@ describe('MastraLLM', () => {
     });
 
     it('should log debug messages', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const runId = 'test-run';
 
       await aisdkText.__stream({
@@ -480,7 +487,7 @@ describe('MastraLLM', () => {
     });
 
     it('should handle step change logging', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const runId = 'test-run';
       // const mockStepData = {
       //   text: 'Custom text response',
@@ -504,7 +511,7 @@ describe('MastraLLM', () => {
 
   describe('__textObject', () => {
     it('should generate structured output with Zod schema', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
 
       const schema = z.object({
         content: z.string(),
@@ -521,7 +528,7 @@ describe('MastraLLM', () => {
     });
 
     it('should handle array type schemas', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
 
       const arraySchema = z.object({ content: z.array(z.string()) }) as z.ZodType<any>;
 
@@ -536,7 +543,7 @@ describe('MastraLLM', () => {
     });
 
     it('should handle JSON schema input', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
 
       const jsonSchema = {
         type: 'object',
@@ -557,7 +564,7 @@ describe('MastraLLM', () => {
     });
 
     it('should integrate tools correctly', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
 
       const schema = z.object({
         content: z.string(),
@@ -575,12 +582,12 @@ describe('MastraLLM', () => {
 
   describe('__streamObject', () => {
     it('should stream object with Zod schema', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const schema = z.object({
         content: z.string(),
       }) as z.ZodType<any>;
 
-      await aisdkObject.__streamObject({
+      aisdkObject.__streamObject({
         messages,
         tools: mockTools,
         structuredOutput: schema,
@@ -593,10 +600,10 @@ describe('MastraLLM', () => {
     });
 
     it('should handle array type schemas', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const arraySchema = z.object({ content: z.array(z.string()) }) as z.ZodType<any>;
 
-      await aisdkObject.__streamObject({
+      aisdkObject.__streamObject({
         messages,
         structuredOutput: arraySchema,
         temperature: 0.7,
@@ -608,7 +615,7 @@ describe('MastraLLM', () => {
     });
 
     it('should handle JSON schema input', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const jsonSchema = {
         type: 'object',
         properties: {
@@ -617,7 +624,7 @@ describe('MastraLLM', () => {
         required: ['content'],
       } as JSONSchema7;
 
-      await aisdkObject.__streamObject({
+      aisdkObject.__streamObject({
         messages,
         structuredOutput: jsonSchema,
         temperature: 0.7,
@@ -629,14 +636,14 @@ describe('MastraLLM', () => {
     });
 
     it('should handle callbacks', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const schema = z.object({
         content: z.string(),
       }) as z.ZodType<any>;
       const onStepFinish = vi.fn();
       const onFinish = vi.fn();
 
-      await aisdkObject.__streamObject({
+      aisdkObject.__streamObject({
         messages,
         structuredOutput: schema,
         onStepFinish,
@@ -650,13 +657,13 @@ describe('MastraLLM', () => {
     });
 
     it('should log debug messages', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const schema = z.object({
         content: z.string(),
       }) as z.ZodType<any>;
       const runId = 'test-run';
 
-      await aisdkObject.__streamObject({
+      aisdkObject.__streamObject({
         messages,
         structuredOutput: schema,
         runId,
@@ -669,12 +676,12 @@ describe('MastraLLM', () => {
     });
 
     it('should handle pre-converted tools', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const schema = z.object({
         content: z.string(),
       }) as z.ZodType<any>;
 
-      await aisdkObject.__streamObject({
+      aisdkObject.__streamObject({
         messages,
         structuredOutput: schema,
         tools: mockTools,
@@ -687,14 +694,14 @@ describe('MastraLLM', () => {
     });
 
     it('should handle rate limiting', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+      const messages: ModelMessage[] = [{ role: 'user', content: 'test message' }];
       const schema = z.object({
         content: z.string(),
       }) as z.ZodType<any>;
 
       const runId = 'test-run';
 
-      await aisdkObject.__streamObject({
+      aisdkObject.__streamObject({
         messages,
         structuredOutput: schema,
         runId,

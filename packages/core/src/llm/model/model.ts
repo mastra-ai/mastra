@@ -7,17 +7,18 @@ import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
-import type { CoreMessage, LanguageModel, Schema, StreamObjectOnFinishCallback, StreamTextOnFinishCallback } from 'ai';
-import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
+import type { ModelMessage, Schema, StopCondition } from 'ai';
+import { generateObject, generateText, jsonSchema, stepCountIs, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
-
+import type { CoreMessage, StopConditionArgs } from '..';
 import type { MastraPrimitives } from '../../action';
+import type { MastraLanguageModel } from '../../agent/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
+import { createCompatibleToolSet } from '../../tools/ai-sdk-v5-compat';
 import { delay } from '../../utils';
-
 import { MastraLLMBase } from './base';
 import type {
   GenerateObjectWithMessagesArgs,
@@ -36,13 +37,17 @@ import type {
   OriginalStreamObjectOptions,
   StreamObjectResult,
   StreamReturn,
+  StreamTextOnFinishCallback,
+  StreamObjectOnFinishCallback,
 } from './base.types';
 
+type MessageInput = string | string[] | ModelMessage | ModelMessage[];
+
 export class MastraLLM extends MastraLLMBase {
-  #model: LanguageModel;
+  #model: MastraLanguageModel;
   #mastra?: Mastra;
 
-  constructor({ model, mastra }: { model: LanguageModel; mastra?: Mastra }) {
+  constructor({ model, mastra }: { model: MastraLanguageModel; mastra?: Mastra }) {
     super({ name: 'aisdk' });
 
     this.#model = model;
@@ -81,6 +86,16 @@ export class MastraLLM extends MastraLLMBase {
     return this.#model;
   }
 
+  // AI SDK v5 removed maxSteps and replaced with stopWhen: stepCountIs(number)
+  // This method allows us to keep using maxSteps for now.
+  private getStopWhen(args: StopConditionArgs): StopCondition<any> | StopCondition<any>[] | undefined {
+    if (args.stopWhen) return args.stopWhen;
+    if (args.maxSteps) {
+      return stepCountIs(args.maxSteps);
+    }
+    return stepCountIs(5); // our previous default maxSteps
+  }
+
   private _applySchemaCompat(schema: ZodSchema | JSONSchema7): Schema {
     const model = this.#model;
 
@@ -104,10 +119,19 @@ export class MastraLLM extends MastraLLMBase {
     });
   }
 
+  private inputMessagesToModelMessages(messages: MessageInput): ModelMessage[] {
+    const arrayMessages = Array.isArray(messages) ? messages : [messages];
+    return arrayMessages.map(m => {
+      if (typeof m === `string`) return { role: 'user' as const, content: m };
+      return m;
+    });
+  }
+
   async __text<Tools extends ToolSet, Z extends ZodSchema | JSONSchema7 | undefined>({
     runId,
     messages,
-    maxSteps = 5,
+    maxSteps,
+    stopWhen,
     tools = {},
     temperature,
     toolChoice = 'auto',
@@ -117,6 +141,8 @@ export class MastraLLM extends MastraLLMBase {
     threadId,
     resourceId,
     runtimeContext,
+    experimental_activeTools,
+    activeTools,
     ...rest
   }: GenerateTextWithMessagesArgs<Tools, Z>): Promise<GenerateTextResult<Tools, Z>> {
     const model = this.#model;
@@ -148,14 +174,12 @@ export class MastraLLM extends MastraLLMBase {
 
     const argsForExecute: OriginalGenerateTextOptions<Tools, Z> = {
       ...rest,
-      messages,
       model,
+      messages: this.inputMessagesToModelMessages(messages),
+      stopWhen: this.getStopWhen({ maxSteps, stopWhen }),
       temperature,
-      tools: {
-        ...(tools as Tools),
-      },
+      tools: createCompatibleToolSet(tools) as Tools,
       toolChoice,
-      maxSteps,
       onStepFinish: async props => {
         try {
           await onStepFinish?.({ ...props, runId: runId! });
@@ -246,6 +270,8 @@ export class MastraLLM extends MastraLLMBase {
     threadId,
     resourceId,
     runtimeContext,
+    onStepFinish,
+    experimental_output,
     ...rest
   }: GenerateObjectWithMessagesArgs<Z>): Promise<GenerateObjectResult<Z>> {
     const model = this.#model;
@@ -265,7 +291,6 @@ export class MastraLLM extends MastraLLMBase {
         ...rest,
         messages,
         model,
-        // @ts-expect-error - output in our implementation can only be object or array
         output,
         schema: processedSchema as Schema<Z>,
         experimental_telemetry: {
@@ -323,7 +348,8 @@ export class MastraLLM extends MastraLLMBase {
     messages,
     onStepFinish,
     onFinish,
-    maxSteps = 5,
+    maxSteps,
+    stopWhen,
     tools = {},
     runId,
     temperature,
@@ -336,6 +362,7 @@ export class MastraLLM extends MastraLLMBase {
     ...rest
   }: StreamTextWithMessagesArgs<Tools, Z>): StreamTextResult<Tools, Z> {
     const model = this.#model;
+
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
       threadId,
@@ -363,10 +390,13 @@ export class MastraLLM extends MastraLLMBase {
     const argsForExecute: OriginalStreamTextOptions<Tools, Z> = {
       model,
       temperature,
-      tools: {
-        ...(tools as Tools),
-      },
-      maxSteps,
+      tools: createCompatibleToolSet(tools) as Tools,
+      stopWhen: this.getStopWhen({ maxSteps, stopWhen }),
+
+      // TODO: without removing these here there's a type error
+      experimental_activeTools: undefined,
+      activeTools: undefined,
+
       toolChoice,
       onStepFinish: async props => {
         try {
@@ -451,7 +481,7 @@ export class MastraLLM extends MastraLLMBase {
         });
       },
       ...rest,
-      messages,
+      messages: this.inputMessagesToModelMessages(messages),
       experimental_telemetry: {
         ...this.experimental_telemetry,
         ...telemetry,
@@ -514,9 +544,8 @@ export class MastraLLM extends MastraLLMBase {
       const argsForExecute: OriginalStreamObjectOptions<T> = {
         ...rest,
         model,
-        onFinish: async props => {
+        onFinish: async (props: any) => {
           try {
-            // @ts-expect-error - onFinish is not infered correctly
             await onFinish?.({ ...props, runId: runId! });
           } catch (e: unknown) {
             const mastraError = new MastraError(
@@ -550,7 +579,6 @@ export class MastraLLM extends MastraLLMBase {
           });
         },
         messages,
-        // @ts-expect-error - output in our implementation can only be object or array
         output,
         experimental_telemetry: {
           ...this.experimental_telemetry,
@@ -560,7 +588,7 @@ export class MastraLLM extends MastraLLMBase {
       };
 
       try {
-        return streamObject(argsForExecute as any);
+        return streamObject(argsForExecute as any) as StreamObjectResult<T>;
       } catch (e: unknown) {
         const mastraError = new MastraError(
           {
@@ -638,7 +666,7 @@ export class MastraLLM extends MastraLLMBase {
       messages: msgs,
       structuredOutput: output as NonNullable<Output>,
       ...rest,
-    })) as unknown as GenerateReturn<Tools, Output, StructuredOutput>;
+    } as any)) as unknown as GenerateReturn<Tools, Output, StructuredOutput>;
   }
 
   stream<
@@ -675,6 +703,6 @@ export class MastraLLM extends MastraLLMBase {
       structuredOutput: output as NonNullable<Output>,
       onFinish: onFinish as StreamObjectOnFinishCallback<inferOutput<Output>> | undefined,
       ...rest,
-    }) as unknown as StreamReturn<Tools, Output, StructuredOutput>;
+    } as any) as unknown as StreamReturn<Tools, Output, StructuredOutput>;
   }
 }
