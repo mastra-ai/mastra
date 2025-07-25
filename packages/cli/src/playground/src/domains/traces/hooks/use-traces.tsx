@@ -3,15 +3,7 @@ import { refineTraces } from '../utils/refine-traces';
 import { useInView, useInfiniteQuery } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 
-const fetchFn = async ({
-  componentName,
-  page,
-  perPage,
-}: {
-  componentName: string;
-  page: number;
-  perPage: number;
-}) => {
+const fetchFn = async ({ componentName, page, perPage }: { componentName: string; page: number; perPage: number }) => {
   try {
     const res = await client.getTelemetry({
       attribute: {
@@ -23,7 +15,7 @@ const fetchFn = async ({
     if (!res.traces) {
       throw new Error('Error fetching traces');
     }
-    return res.traces
+    return res.traces;
   } catch (error) {
     throw error;
   }
