@@ -39,7 +39,7 @@ export function createFaithfulnessScorer({
     },
     analyze: {
       description: 'Score the relevance of the statements to the input',
-      outputSchema: z.array(z.object({ verdict: z.string(), reason: z.string() })),
+      outputSchema: z.object({ verdicts: z.array(z.object({ verdict: z.string(), reason: z.string() })) }),
       createPrompt: ({ run }) => {
         const prompt = createFaithfulnessAnalyzePrompt({
           claims: run.extractStepResult || [],
@@ -49,8 +49,8 @@ export function createFaithfulnessScorer({
       },
     },
     calculateScore: ({ run }) => {
-      const totalClaims = run.analyzeStepResult.length;
-      const supportedClaims = run.analyzeStepResult.filter(v => v.verdict === 'yes').length;
+      const totalClaims = run.analyzeStepResult.verdicts.length;
+      const supportedClaims = run.analyzeStepResult.verdicts.filter(v => v.verdict === 'yes').length;
 
       if (totalClaims === 0) {
         return 0;
@@ -69,7 +69,7 @@ export function createFaithfulnessScorer({
           context: options?.context || [],
           score: run.score,
           scale: options?.scale || 1,
-          verdicts: run.analyzeStepResult || [],
+          verdicts: run.analyzeStepResult?.verdicts || [],
         });
         return prompt;
       },

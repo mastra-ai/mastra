@@ -163,9 +163,17 @@ export async function saveMessagesHandler({
       throw new HTTPException(400, { message: 'Messages should be an array' });
     }
 
+    // Validate that all messages have threadId and resourceId
+    const invalidMessages = body.messages.filter(message => !message.threadId || !message.resourceId);
+    if (invalidMessages.length > 0) {
+      throw new HTTPException(400, {
+        message: `All messages must have threadId and resourceId fields. Found ${invalidMessages.length} invalid message(s).`,
+      });
+    }
+
     const processedMessages = body.messages.map(message => ({
       ...message,
-      id: memory.generateId(),
+      id: message.id || memory.generateId(),
       createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),
     }));
 

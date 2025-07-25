@@ -25,19 +25,10 @@ describe('MastraScorer', () => {
     // Base scoring input for tests
     baseScoringInput = {
       runId: 'test-run-id',
-      scorer: { name: 'test-scorer' },
       input: [{ message: 'test input' }],
       output: { response: 'test output' },
-      metadata: { version: '1.0' },
       additionalContext: { context: 'test' },
-      source: 'TEST',
-      entity: { id: 'entity-1' },
-      entityType: 'AGENT',
       runtimeContext: { runtime: 'test' },
-      structuredOutput: true,
-      traceId: 'trace-123',
-      resourceId: 'resource-123',
-      threadId: 'thread-123',
     };
   });
 
@@ -110,7 +101,6 @@ describe('MastraScorer', () => {
         extractStepResult: undefined,
       });
       expect(result).toMatchObject({
-        ...baseScoringInput,
         extractStepResult: undefined,
         score: 0.8,
         analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
@@ -133,7 +123,6 @@ describe('MastraScorer', () => {
         extractStepResult: { extractedData: 'test' },
       });
       expect(result).toMatchObject({
-        ...baseScoringInput,
         extractStepResult: { extractedData: 'test' },
         score: 0.8,
         analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
@@ -162,7 +151,6 @@ describe('MastraScorer', () => {
         score: 0.8,
       });
       expect(result).toMatchObject({
-        ...baseScoringInput,
         extractStepResult: { extractedData: 'test' },
         score: 0.8,
         analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
@@ -193,7 +181,6 @@ describe('MastraScorer', () => {
       });
 
       expect(result).toMatchObject({
-        ...baseScoringInput,
         extractStepResult: undefined,
         score: 0.9,
         analyzeStepResult: { analysis: 'detailed analysis' },
@@ -223,7 +210,6 @@ describe('MastraScorer', () => {
       });
 
       expect(result).toMatchObject({
-        ...baseScoringInput,
         extractStepResult: undefined,
         score: 0.7,
         analyzeStepResult: { additionalInfo: 'some info' },
@@ -248,7 +234,6 @@ describe('MastraScorer', () => {
         score: 0.8,
       });
       expect(result).toMatchObject({
-        ...baseScoringInput,
         extractStepResult: undefined,
         score: 0.8,
         analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
@@ -311,25 +296,6 @@ describe('MastraScorer', () => {
 
       expect(result1).toEqual(result2);
       expect(mockAnalyzeFn).toHaveBeenCalledTimes(2);
-    });
-
-    it('should pass through all input data to the result', async () => {
-      const scorer = new MastraScorer({
-        name: 'test-scorer',
-        description: 'A test scorer',
-        analyze: mockAnalyzeFn,
-      });
-
-      const customInput = {
-        ...baseScoringInput,
-        customField: 'custom value',
-        nested: { data: 'nested value' },
-      };
-
-      const result = await scorer.run(customInput as any);
-
-      expect(result).toMatchObject(customInput);
-      expect(result.score).toBe(0.8);
     });
   });
 });

@@ -1,5 +1,12 @@
 # @mastra/ragie
 
+## 1.2.5
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+  - @mastra/core@0.11.1
+
 ## 1.2.4
 
 ### Patch Changes
