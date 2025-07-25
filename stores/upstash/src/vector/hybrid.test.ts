@@ -31,6 +31,16 @@ function waitUntilVectorsIndexed(vector: UpstashVector, indexName: string, expec
 }
 
 /**
+ * Helper function to create sparse vectors for hybrid index compatibility
+ */
+function _createSparseVector() {
+  return {
+    indices: [0, 1, 2, 10, 50],
+    values: [0.1, 0.2, 0.3, 0.4, 0.5],
+  };
+}
+
+/**
  * These tests require a real Upstash Vector instance since there is no local Docker alternative.
  * The tests will be skipped in local development where Upstash credentials are not available.
  * In CI/CD environments, these tests will run using the provided Upstash Vector credentials.
@@ -89,7 +99,12 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       const testMetadata = [{ label: 'first-dimension' }, { label: 'second-dimension' }, { label: 'third-dimension' }];
 
       // Upsert vectors
-      vectorIds = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors, metadata: testMetadata });
+      vectorIds = await vectorStore.upsert({
+        indexName: testIndexName,
+        vectors: testVectors,
+        metadata: testMetadata,
+        sparseVectors: testVectors.map(() => _createSparseVector()),
+      });
 
       expect(vectorIds).toHaveLength(3);
       await waitUntilVectorsIndexed(vectorStore, testIndexName, 3);
@@ -126,7 +141,11 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should update the vector by id', async () => {
-        const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors });
+        const ids = await vectorStore.upsert({
+          indexName: testIndexName,
+          vectors: testVectors,
+          sparseVectors: testVectors.map(() => _createSparseVector()),
+        });
         expect(ids).toHaveLength(3);
 
         const idToBeUpdated = ids[0];
@@ -137,6 +156,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
         const update = {
           vector: newVector,
+          sparseVector: _createSparseVector(),
           metadata: newMetaData,
         };
 
@@ -156,7 +176,11 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       }, 500000);
 
       it('should only update the metadata by id', async () => {
-        const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors });
+        const ids = await vectorStore.upsert({
+          indexName: testIndexName,
+          vectors: testVectors,
+          sparseVectors: testVectors.map(() => _createSparseVector()),
+        });
         expect(ids).toHaveLength(3);
 
         const newMetaData = {
@@ -173,7 +197,11 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should only update vector embeddings by id', async () => {
-        const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors });
+        const ids = await vectorStore.upsert({
+          indexName: testIndexName,
+          vectors: testVectors,
+          sparseVectors: testVectors.map(() => _createSparseVector()),
+        });
         expect(ids).toHaveLength(3);
 
         const idToBeUpdated = ids[0];
@@ -181,6 +209,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
         const update = {
           vector: newVector,
+          sparseVector: _createSparseVector(),
         };
 
         await vectorStore.updateVector({ indexName: testIndexName, id: idToBeUpdated, update });
@@ -212,7 +241,11 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       });
 
       it('should delete the vector by id', async () => {
-        const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: testVectors });
+        const ids = await vectorStore.upsert({
+          indexName: testIndexName,
+          vectors: testVectors,
+          sparseVectors: testVectors.map(() => _createSparseVector()),
+        });
         expect(ids).toHaveLength(3);
         const idToBeDeleted = ids[0];
 
@@ -241,7 +274,11 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       // since, we do not have to create index explictly in case of upstash. Upserts are enough
       // for testing the listIndexes() function
       // await vectorStore.createIndex({ indexName: testIndexName, dimension: 3, metric: 'cosine' });
-      const ids = await vectorStore.upsert({ indexName: testIndexName, vectors: [createVector(0, 1.0)] });
+      const ids = await vectorStore.upsert({
+        indexName: testIndexName,
+        vectors: [createVector(0, 1.0)],
+        sparseVectors: [_createSparseVector()],
+      });
       expect(ids).toHaveLength(1);
       const indexes = await vectorStore.listIndexes();
       expect(indexes).toEqual([testIndexName]);
@@ -366,6 +403,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         vectors: testData.map(d => d.vector),
         metadata: testData.map(d => d.metadata),
         ids: testData.map(d => d.id),
+        sparseVectors: testData.map(() => _createSparseVector()),
       });
       // Wait for indexing
       await waitUntilVectorsIndexed(vectorStore, filterIndexName, testData.length);
@@ -1200,6 +1238,218 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         });
         expect(results.length).toBeGreaterThan(0);
       });
+    });
+
+    describe('Hybrid Vector Operations (Sparse + Dense)', () => {
+      const hybridIndexName = `mastra-hybrid-${Date.now()}-${Math.random().toString(36).substring(2)}`;
+
+      // Helper function to create a normalized vector
+      const createVector = (primaryDimension: number, value: number = 1.0): number[] => {
+        const vector = new Array(VECTOR_DIMENSION).fill(0);
+        vector[primaryDimension] = value;
+        // Normalize the vector for cosine similarity
+        const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
+        return vector.map(val => val / magnitude);
+      };
+
+      afterEach(async () => {
+        try {
+          await vectorStore.deleteIndex({ indexName: hybridIndexName });
+        } catch {
+          // Index might not exist
+        }
+      });
+
+      it('should upsert vectors with sparse vectors', async () => {
+        const vectors = [createVector(0, 1.0), createVector(1, 1.0)];
+        const sparseVectors = [
+          { indices: [1, 5, 10], values: [0.8, 0.6, 0.4] },
+          { indices: [2, 6, 11], values: [0.7, 0.5, 0.3] },
+        ];
+        const metadata = [{ type: 'sparse-test-1' }, { type: 'sparse-test-2' }];
+
+        const ids = await vectorStore.upsert({
+          indexName: hybridIndexName,
+          vectors,
+          sparseVectors,
+          metadata,
+        });
+
+        expect(ids).toHaveLength(2);
+        expect(ids[0]).toBeDefined();
+        expect(ids[1]).toBeDefined();
+
+        await waitUntilVectorsIndexed(vectorStore, hybridIndexName, 2);
+      }, 30000);
+
+      it('should query with sparse vector for hybrid search', async () => {
+        const vectors = [createVector(0, 1.0), createVector(1, 1.0)];
+        const sparseVectors = [
+          { indices: [1, 5, 10], values: [0.8, 0.6, 0.4] },
+          { indices: [2, 6, 11], values: [0.7, 0.5, 0.3] },
+        ];
+        const metadata = [{ type: 'hybrid-query-test-1' }, { type: 'hybrid-query-test-2' }];
+
+        await vectorStore.upsert({
+          indexName: hybridIndexName,
+          vectors,
+          sparseVectors,
+          metadata,
+        });
+
+        await waitUntilVectorsIndexed(vectorStore, hybridIndexName, 2);
+
+        const results = await vectorStore.query({
+          indexName: hybridIndexName,
+          queryVector: createVector(0, 0.9),
+          sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
+          topK: 2,
+        });
+
+        expect(results).toHaveLength(2);
+        expect(results[0]?.metadata).toBeDefined();
+        expect(results[0]?.score).toBeGreaterThan(0);
+      }, 30000);
+
+      it('should query with fusion algorithm', async () => {
+        const vectors = [createVector(0, 1.0), createVector(1, 1.0)];
+        const sparseVectors = [
+          { indices: [1, 5, 10], values: [0.8, 0.6, 0.4] },
+          { indices: [2, 6, 11], values: [0.7, 0.5, 0.3] },
+        ];
+
+        await vectorStore.upsert({
+          indexName: hybridIndexName,
+          vectors,
+          sparseVectors,
+        });
+
+        await waitUntilVectorsIndexed(vectorStore, hybridIndexName, 2);
+
+        const { FusionAlgorithm } = await import('@upstash/vector');
+
+        const results = await vectorStore.query({
+          indexName: hybridIndexName,
+          queryVector: createVector(0, 0.9),
+          sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
+          fusionAlgorithm: FusionAlgorithm.RRF,
+          topK: 2,
+        });
+
+        expect(results).toHaveLength(2);
+        expect(results[0]?.score).toBeGreaterThan(0);
+      }, 30000);
+
+      it('should work with dense-only queries (backward compatibility)', async () => {
+        const vectors = [createVector(0, 1.0), createVector(1, 1.0)];
+        const sparseVectors = [
+          { indices: [1, 5, 10], values: [0.8, 0.6, 0.4] },
+          { indices: [2, 6, 11], values: [0.7, 0.5, 0.3] },
+        ];
+
+        await vectorStore.upsert({
+          indexName: hybridIndexName,
+          vectors,
+          sparseVectors,
+        });
+
+        await waitUntilVectorsIndexed(vectorStore, hybridIndexName, 2);
+
+        const results = await vectorStore.query({
+          indexName: hybridIndexName,
+          queryVector: createVector(0, 0.9),
+          topK: 2,
+        });
+
+        expect(results).toHaveLength(2);
+        expect(results[0]?.score).toBeGreaterThan(0);
+      }, 30000);
+
+      it('should support QueryMode for dense-only queries', async () => {
+        const vectors = [createVector(0, 1.0), createVector(1, 1.0)];
+        const sparseVectors = [
+          { indices: [1, 5, 10], values: [0.8, 0.6, 0.4] },
+          { indices: [2, 6, 11], values: [0.7, 0.5, 0.3] },
+        ];
+
+        await vectorStore.upsert({
+          indexName: hybridIndexName,
+          vectors,
+          sparseVectors,
+        });
+
+        await waitUntilVectorsIndexed(vectorStore, hybridIndexName, 2);
+
+        const { QueryMode } = await import('@upstash/vector');
+
+        const results = await vectorStore.query({
+          indexName: hybridIndexName,
+          queryVector: createVector(0, 0.9),
+          queryMode: QueryMode.DENSE,
+          topK: 2,
+        });
+
+        expect(results).toHaveLength(2);
+        expect(results[0]?.score).toBeGreaterThan(0);
+      }, 30000);
+
+      it('should support QueryMode for sparse-only queries', async () => {
+        const vectors = [createVector(0, 1.0), createVector(1, 1.0)];
+        const sparseVectors = [
+          { indices: [1, 5, 10], values: [0.8, 0.6, 0.4] },
+          { indices: [2, 6, 11], values: [0.7, 0.5, 0.3] },
+        ];
+
+        await vectorStore.upsert({
+          indexName: hybridIndexName,
+          vectors,
+          sparseVectors,
+        });
+
+        await waitUntilVectorsIndexed(vectorStore, hybridIndexName, 2);
+
+        const { QueryMode } = await import('@upstash/vector');
+
+        const results = await vectorStore.query({
+          indexName: hybridIndexName,
+          queryVector: createVector(0, 0.9),
+          sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
+          queryMode: QueryMode.SPARSE,
+          topK: 2,
+        });
+
+        expect(results).toHaveLength(2);
+        expect(results[0]?.score).toBeGreaterThan(0);
+      }, 30000);
+
+      it('should support QueryMode for hybrid queries', async () => {
+        const vectors = [createVector(0, 1.0), createVector(1, 1.0)];
+        const sparseVectors = [
+          { indices: [1, 5, 10], values: [0.8, 0.6, 0.4] },
+          { indices: [2, 6, 11], values: [0.7, 0.5, 0.3] },
+        ];
+
+        await vectorStore.upsert({
+          indexName: hybridIndexName,
+          vectors,
+          sparseVectors,
+        });
+
+        await waitUntilVectorsIndexed(vectorStore, hybridIndexName, 2);
+
+        const { QueryMode } = await import('@upstash/vector');
+
+        const results = await vectorStore.query({
+          indexName: hybridIndexName,
+          queryVector: createVector(0, 0.9),
+          sparseVector: { indices: [1, 5], values: [0.9, 0.7] },
+          queryMode: QueryMode.HYBRID,
+          topK: 2,
+        });
+
+        expect(results).toHaveLength(2);
+        expect(results[0]?.score).toBeGreaterThan(0);
+      }, 30000);
     });
   });
 });
