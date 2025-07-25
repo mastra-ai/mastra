@@ -4,6 +4,7 @@ import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import type { CoreMessage } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import type { UIMessageWithMetadata } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
@@ -263,6 +264,83 @@ describe('Agent Memory Tests', () => {
       const savedUserMessages = messages.filter((m: any) => m.role === 'user');
       expect(savedUserMessages.length).toBe(1);
       expect(savedUserMessages[0].content).toBe(userMessageContent);
+    });
+
+    it('should persist UIMessageWithMetadata through agent generate and memory', async () => {
+      const threadId = randomUUID();
+      const resourceId = 'ui-message-metadata';
+
+      // Create messages with metadata
+      const messagesWithMetadata: UIMessageWithMetadata[] = [
+        {
+          id: 'msg1',
+          role: 'user',
+          content: 'Hello with metadata',
+          metadata: {
+            source: 'web-ui',
+            timestamp: Date.now(),
+            customField: 'custom-value',
+          },
+        },
+        {
+          id: 'msg2',
+          role: 'user',
+          content: 'Another message with different metadata',
+          metadata: {
+            source: 'mobile-app',
+            version: '1.0.0',
+            userId: 'user-123',
+          },
+        },
+      ];
+
+      // Send messages with metadata
+      await agent.generate(messagesWithMetadata, {
+        threadId,
+        resourceId,
+      });
+
+      // Fetch messages from memory
+      const agentMemory = (await agent.getMemory())!;
+      const { messages, uiMessages } = await agentMemory.query({ threadId });
+
+      // Check that all user messages were saved
+      const savedUserMessages = messages.filter((m: any) => m.role === 'user');
+      expect(savedUserMessages.length).toBe(2);
+
+      // Check that metadata was persisted in the stored messages
+      const firstMessage = messages.find((m: any) => m.content === 'Hello with metadata');
+      const secondMessage = messages.find((m: any) => m.content === 'Another message with different metadata');
+
+      expect(firstMessage).toBeDefined();
+      expect(firstMessage.metadata).toEqual({
+        source: 'web-ui',
+        timestamp: expect.any(Number),
+        customField: 'custom-value',
+      });
+
+      expect(secondMessage).toBeDefined();
+      expect(secondMessage.metadata).toEqual({
+        source: 'mobile-app',
+        version: '1.0.0',
+        userId: 'user-123',
+      });
+
+      // Check UI messages also preserve metadata
+      const firstUIMessage = uiMessages.find((m: any) => m.content === 'Hello with metadata');
+      const secondUIMessage = uiMessages.find((m: any) => m.content === 'Another message with different metadata');
+
+      expect(firstUIMessage?.metadata).toEqual({
+        source: 'web-ui',
+        timestamp: expect.any(Number),
+        customField: 'custom-value',
+      });
+
+      expect(secondUIMessage?.metadata).toEqual({
+        source: 'mobile-app',
+        version: '1.0.0',
+        userId: 'user-123',
+      });
     });
   });
 
