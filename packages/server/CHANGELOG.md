@@ -1,5 +1,12 @@
 # @mastra/deployer
 
+## 0.12.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [cda801d]
+  - @mastra/core@0.12.0-alpha.1
+
 ## 0.12.0-alpha.0
 
 ### Patch Changes

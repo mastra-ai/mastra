@@ -1,5 +1,13 @@
 # @mastra/memory
 
+## 0.11.6-alpha.1
+
+### Patch Changes
+
+- cda801d: Added the ability to pass in metadata for UIMessage and MastraMessageV2 in client-js and agent.stream/generate
+- Updated dependencies [cda801d]
+  - @mastra/core@0.12.0-alpha.1
+
 ## 0.11.6-alpha.0
 
 ### Patch Changes
