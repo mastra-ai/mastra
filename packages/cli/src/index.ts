@@ -185,7 +185,7 @@ program
   .option('-b, --inspect-brk', 'Start the dev server in inspect mode and break at the beginning of the script')
   .option(
     '-c, --custom-args <args>',
-    'Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-strip-types',
+    'Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-transform-types',
   )
   .action(args => {
     analytics.trackCommand({
