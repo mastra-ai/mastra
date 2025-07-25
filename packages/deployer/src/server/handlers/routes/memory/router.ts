@@ -62,6 +62,28 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'orderBy',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'string',
+            enum: ['createdAt', 'updatedAt'],
+            default: 'createdAt',
+          },
+          description: 'Field to sort by',
+        },
+        {
+          name: 'sortDirection',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'string',
+            enum: ['ASC', 'DESC'],
+            default: 'DESC',
+          },
+          description: 'Sort direction',
+        },
       ],
       responses: {
         200: {
@@ -406,6 +428,28 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           in: 'query',
           required: true,
           schema: { type: 'string' },
+        },
+        {
+          name: 'orderBy',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'string',
+            enum: ['createdAt', 'updatedAt'],
+            default: 'createdAt',
+          },
+          description: 'Field to sort by',
+        },
+        {
+          name: 'sortDirection',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'string',
+            enum: ['ASC', 'DESC'],
+            default: 'DESC',
+          },
+          description: 'Sort direction',
         },
       ],
       responses: {

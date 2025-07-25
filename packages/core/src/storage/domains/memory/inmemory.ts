@@ -1,6 +1,14 @@
 import { MessageList } from '../../../agent/message-list';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../../../memory/types';
-import type { PaginationInfo, StorageGetMessagesArg, StorageMessageType, StorageResourceType } from '../../types';
+import type {
+  PaginationInfo,
+  StorageGetMessagesArg,
+  StorageMessageType,
+  StorageResourceType,
+  ThreadOrderBy,
+  ThreadSortDirection,
+  ThreadSortOptions,
+} from '../../types';
 import type { StoreOperations } from '../operations';
 import { MemoryStorage } from './base';
 
@@ -37,11 +45,20 @@ export class InMemoryMemory extends MemoryStorage {
     return thread ? { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata } : null;
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
+  async getThreadsByResourceId({
+    resourceId,
+    orderBy,
+    sortDirection,
+  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
     this.logger.debug(`MockStore: getThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
-    return threads.map(thread => ({
+    const sortedThreads = this.sortThreads(
+      threads,
+      this.castThreadOrderBy(orderBy),
+      this.castThreadSortDirection(sortDirection),
+    );
+    return sortedThreads.map(thread => ({
       ...thread,
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
     })) as StorageThreadType[];
@@ -339,24 +356,32 @@ export class InMemoryMemory extends MemoryStorage {
     return updatedMessages;
   }
 
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    this.logger.debug(`MockStore: getThreadsByResourceIdPaginated called for ${args.resourceId}`);
+  async getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    const { resourceId, page, perPage, orderBy, sortDirection } = args;
+    this.logger.debug(`MockStore: getThreadsByResourceIdPaginated called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
-    const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === args.resourceId);
-    const clonedThreads = threads.map(thread => ({
+    const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
+    const sortedThreads = this.sortThreads(
+      threads,
+      this.castThreadOrderBy(orderBy),
+      this.castThreadSortDirection(sortDirection),
+    );
+    const clonedThreads = sortedThreads.map(thread => ({
       ...thread,
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
     })) as StorageThreadType[];
     return {
-      threads: clonedThreads.slice(args.page * args.perPage, (args.page + 1) * args.perPage),
+      threads: clonedThreads.slice(page * perPage, (page + 1) * perPage),
       total: clonedThreads.length,
-      page: args.page,
-      perPage: args.perPage,
-      hasMore: clonedThreads.length > (args.page + 1) * args.perPage,
+      page: page,
+      perPage: perPage,
+      hasMore: clonedThreads.length > (page + 1) * perPage,
     };
   }
 
@@ -568,5 +593,18 @@ export class InMemoryMemory extends MemoryStorage {
 
     this.collection.resources.set(resourceId, resource);
     return resource;
+  }
+
+  private sortThreads(threads: any[], orderBy: ThreadOrderBy, sortDirection: ThreadSortDirection): any[] {
+    return threads.sort((a, b) => {
+      const aValue = new Date(a[orderBy]).getTime();
+      const bValue = new Date(b[orderBy]).getTime();
+
+      if (sortDirection === 'ASC') {
+        return aValue - bValue;
+      } else {
+        return bValue - aValue;
+      }
+    });
   }
 }

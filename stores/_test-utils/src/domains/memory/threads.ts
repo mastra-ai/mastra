@@ -343,4 +343,384 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
   //     });
   //   });
   // });
+
+  const describeSorting = isStorageSupportsSort(storage) ? describe : describe.skip;
+
+  describeSorting('Thread Sorting', () => {
+    let resourceId: string;
+    let threads: StorageThreadType[];
+
+    // Helper function to get date value handling both Date and string types
+    function getDateValue(dateField: Date | string): number {
+      return dateField instanceof Date ? dateField.getTime() : new Date(dateField).getTime();
+    }
+
+    // Helper function to verify sort order
+    function expectThreadsSortedBy(
+      threads: StorageThreadType[],
+      field: 'createdAt' | 'updatedAt',
+      direction: 'ASC' | 'DESC',
+    ): void {
+      for (let i = 0; i < threads.length - 1; i++) {
+        const currentDate = getDateValue(threads[i]![field]);
+        const nextDate = getDateValue(threads[i + 1]![field]);
+
+        if (direction === 'ASC') {
+          expect(currentDate).toBeLessThanOrEqual(nextDate);
+        } else {
+          expect(currentDate).toBeGreaterThanOrEqual(nextDate);
+        }
+      }
+    }
+
+    beforeEach(async () => {
+      // Create unique resourceId for each test
+      resourceId = `sort-test-resource-${randomUUID()}`;
+
+      // Create test threads with specific dates for predictable sorting
+      const baseTime = new Date('2024-01-01T00:00:00Z');
+      const threadData = [
+        {
+          id: `thread-${randomUUID()}`,
+          resourceId,
+          title: 'Thread 1',
+          createdAt: new Date(baseTime.getTime()), // oldest createdAt
+          updatedAt: new Date(baseTime.getTime() + 5000), // newest updatedAt
+          metadata: { index: 1 },
+        },
+        {
+          id: `thread-${randomUUID()}`,
+          resourceId,
+          title: 'Thread 2',
+          createdAt: new Date(baseTime.getTime() + 1000),
+          updatedAt: new Date(baseTime.getTime() + 1000), // oldest updatedAt
+          metadata: { index: 2 },
+        },
+        {
+          id: `thread-${randomUUID()}`,
+          resourceId,
+          title: 'Thread 3',
+          createdAt: new Date(baseTime.getTime() + 2000),
+          updatedAt: new Date(baseTime.getTime() + 4000),
+          metadata: { index: 3 },
+        },
+        {
+          id: `thread-${randomUUID()}`,
+          resourceId,
+          title: 'Thread 4',
+          createdAt: new Date(baseTime.getTime() + 3000),
+          updatedAt: new Date(baseTime.getTime() + 2000),
+          metadata: { index: 4 },
+        },
+        {
+          id: `thread-${randomUUID()}`,
+          resourceId,
+          title: 'Thread 5',
+          createdAt: new Date(baseTime.getTime() + 4000), // newest createdAt
+          updatedAt: new Date(baseTime.getTime() + 3000),
+          metadata: { index: 5 },
+        },
+      ];
+
+      // Save all threads
+      threads = [];
+      for (const threadInfo of threadData) {
+        const savedThread = await storage.saveThread({ thread: threadInfo });
+        threads.push(savedThread);
+      }
+    });
+
+    describe('getThreadsByResourceId sorting', () => {
+      it('should sort threads by createdAt DESC by default (no parameters)', async () => {
+        const result = await storage.getThreadsByResourceId({ resourceId });
+
+        expect(result).toHaveLength(5);
+        expectThreadsSortedBy(result, 'createdAt', 'DESC');
+      });
+
+      it('should sort threads by createdAt ASC', async () => {
+        const result = await storage.getThreadsByResourceId({
+          resourceId,
+          orderBy: 'createdAt',
+          sortDirection: 'ASC',
+        });
+
+        expect(result).toHaveLength(5);
+        expectThreadsSortedBy(result, 'createdAt', 'ASC');
+      });
+
+      it('should sort threads by createdAt DESC', async () => {
+        const result = await storage.getThreadsByResourceId({
+          resourceId,
+          orderBy: 'createdAt',
+          sortDirection: 'DESC',
+        });
+
+        expect(result).toHaveLength(5);
+        expectThreadsSortedBy(result, 'createdAt', 'DESC');
+      });
+
+      it('should sort threads by updatedAt ASC', async () => {
+        const result = await storage.getThreadsByResourceId({
+          resourceId,
+          orderBy: 'updatedAt',
+          sortDirection: 'ASC',
+        });
+
+        expect(result).toHaveLength(5);
+        expectThreadsSortedBy(result, 'updatedAt', 'ASC');
+      });
+
+      it('should sort threads by updatedAt DESC', async () => {
+        const result = await storage.getThreadsByResourceId({
+          resourceId,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        expect(result).toHaveLength(5);
+        expectThreadsSortedBy(result, 'updatedAt', 'DESC');
+      });
+
+      it('should sort by createdAt DESC when only orderBy is specified (sortDirection defaults to DESC)', async () => {
+        const result = await storage.getThreadsByResourceId({
+          resourceId,
+          orderBy: 'createdAt',
+        });
+
+        expect(result).toHaveLength(5);
+        expectThreadsSortedBy(result, 'createdAt', 'DESC');
+      });
+
+      it('should sort by updatedAt DESC when only orderBy is specified (sortDirection defaults to DESC)', async () => {
+        const result = await storage.getThreadsByResourceId({
+          resourceId,
+          orderBy: 'updatedAt',
+        });
+
+        expect(result).toHaveLength(5);
+        expectThreadsSortedBy(result, 'updatedAt', 'DESC');
+      });
+
+      it('should sort by createdAt ASC when only sortDirection ASC is specified (orderBy defaults to createdAt)', async () => {
+        const result = await storage.getThreadsByResourceId({
+          resourceId,
+          sortDirection: 'ASC',
+        });
+
+        expect(result).toHaveLength(5);
+        expectThreadsSortedBy(result, 'createdAt', 'ASC');
+      });
+
+      it('should sort by createdAt DESC when only sortDirection DESC is specified (orderBy defaults to createdAt)', async () => {
+        const result = await storage.getThreadsByResourceId({
+          resourceId,
+          sortDirection: 'DESC',
+        });
+
+        expect(result).toHaveLength(5);
+        expectThreadsSortedBy(result, 'createdAt', 'DESC');
+      });
+    });
+
+    describe('getThreadsByResourceIdPaginated sorting', () => {
+      it('should sort paginated threads by createdAt DESC by default', async () => {
+        const result = await storage.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 0,
+          perPage: 3,
+        });
+
+        expect(result.threads).toHaveLength(3);
+        expect(result.total).toBe(5);
+        expectThreadsSortedBy(result.threads, 'createdAt', 'DESC');
+      });
+
+      it('should sort paginated threads by createdAt ASC', async () => {
+        const result = await storage.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 0,
+          perPage: 3,
+          orderBy: 'createdAt',
+          sortDirection: 'ASC',
+        });
+
+        expect(result.threads).toHaveLength(3);
+        expect(result.total).toBe(5);
+        expectThreadsSortedBy(result.threads, 'createdAt', 'ASC');
+      });
+
+      it('should sort paginated threads by updatedAt DESC', async () => {
+        const result = await storage.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 0,
+          perPage: 3,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        expect(result.threads).toHaveLength(3);
+        expect(result.total).toBe(5);
+        expectThreadsSortedBy(result.threads, 'updatedAt', 'DESC');
+      });
+
+      it('should sort paginated threads by updatedAt ASC', async () => {
+        const result = await storage.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 0,
+          perPage: 3,
+          orderBy: 'updatedAt',
+          sortDirection: 'ASC',
+        });
+
+        expect(result.threads).toHaveLength(3);
+        expect(result.total).toBe(5);
+        expectThreadsSortedBy(result.threads, 'updatedAt', 'ASC');
+      });
+
+      it('should maintain sort order consistency across pages', async () => {
+        // Get all threads sorted by updatedAt DESC for comparison
+        const allThreads = await storage.getThreadsByResourceId({
+          resourceId,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        // Get paginated results
+        const page1 = await storage.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 0,
+          perPage: 2,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        const page2 = await storage.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 1,
+          perPage: 2,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        const page3 = await storage.getThreadsByResourceIdPaginated({
+          resourceId,
+          page: 2,
+          perPage: 2,
+          orderBy: 'updatedAt',
+          sortDirection: 'DESC',
+        });
+
+        // Combine paginated results
+        const combinedThreads = [...page1.threads, ...page2.threads, ...page3.threads];
+
+        // Should have same order as non-paginated version
+        expect(combinedThreads).toHaveLength(5);
+        expect(combinedThreads.map(t => t.id)).toEqual(allThreads.map(t => t.id));
+      });
+
+      it('should handle empty results with sorting parameters', async () => {
+        const emptyResourceId = `empty-resource-${randomUUID()}`;
+
+        const result = await storage.getThreadsByResourceIdPaginated({
+          resourceId: emptyResourceId,
+          page: 0,
+          perPage: 10,
+          orderBy: 'createdAt',
+          sortDirection: 'ASC',
+        });
+
+        expect(result.threads).toHaveLength(0);
+        expect(result.total).toBe(0);
+        expect(result.page).toBe(0);
+        expect(result.perPage).toBe(10);
+        expect(result.hasMore).toBe(false);
+      });
+
+      it('should handle single thread with sorting parameters', async () => {
+        const singleResourceId = `single-resource-${randomUUID()}`;
+        const singleThread = await storage.saveThread({
+          thread: { ...createSampleThread(), resourceId: singleResourceId },
+        });
+
+        const result = await storage.getThreadsByResourceIdPaginated({
+          resourceId: singleResourceId,
+          page: 0,
+          perPage: 10,
+          orderBy: 'updatedAt',
+          sortDirection: 'ASC',
+        });
+
+        expect(result.threads).toHaveLength(1);
+        expect(result.threads[0]!.id).toBe(singleThread.id);
+        expect(result.total).toBe(1);
+        expect(result.hasMore).toBe(false);
+      });
+    });
+
+    describe('Thread sorting edge cases', () => {
+      it('should handle threads with identical timestamps', async () => {
+        const identicalResourceId = `identical-resource-${randomUUID()}`;
+        const sameDate = new Date('2024-01-01T12:00:00Z');
+
+        const identicalThreads = await Promise.all([
+          storage.saveThread({
+            thread: {
+              id: `identical-1-${randomUUID()}`,
+              resourceId: identicalResourceId,
+              title: 'Identical Thread 1',
+              createdAt: sameDate,
+              updatedAt: sameDate,
+              metadata: { index: 1 },
+            },
+          }),
+          storage.saveThread({
+            thread: {
+              id: `identical-2-${randomUUID()}`,
+              resourceId: identicalResourceId,
+              title: 'Identical Thread 2',
+              createdAt: sameDate,
+              updatedAt: sameDate,
+              metadata: { index: 2 },
+            },
+          }),
+          storage.saveThread({
+            thread: {
+              id: `identical-3-${randomUUID()}`,
+              resourceId: identicalResourceId,
+              title: 'Identical Thread 3',
+              createdAt: sameDate,
+              updatedAt: sameDate,
+              metadata: { index: 3 },
+            },
+          }),
+        ]);
+
+        const result = await storage.getThreadsByResourceId({
+          resourceId: identicalResourceId,
+          orderBy: 'createdAt',
+          sortDirection: 'ASC',
+        });
+
+        expect(result).toHaveLength(3);
+
+        // All should have the same timestamp
+        result.forEach(thread => {
+          const threadDate =
+            thread.createdAt instanceof Date ? thread.createdAt.getTime() : new Date(thread.createdAt).getTime();
+          expect(threadDate).toBe(sameDate.getTime());
+        });
+
+        // Should contain all threads
+        const resultIds = result.map(t => t.id);
+        const expectedIds = identicalThreads.map(t => t.id);
+        expect(resultIds).toEqual(expect.arrayContaining(expectedIds));
+      });
+    });
+  });
+}
+
+function isStorageSupportsSort(storage: MastraStorage): boolean {
+  const storageType = storage.constructor.name;
+  return ['LibSQLStore', 'PostgresStore'].includes(storageType);
 }

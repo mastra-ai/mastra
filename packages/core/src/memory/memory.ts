@@ -4,7 +4,7 @@ import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
-import type { MastraStorage, StorageGetMessagesArg } from '../storage';
+import type { MastraStorage, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
@@ -256,7 +256,21 @@ export abstract class MastraMemory extends MastraBase {
    */
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
-  abstract getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]>;
+  /**
+   * Retrieves all threads that belong to the specified resource.
+   * @param resourceId - The unique identifier of the resource
+   * @param orderBy - Which timestamp field to sort by (`'createdAt'` or `'updatedAt'`);
+   *                  defaults to `'createdAt'`
+   * @param sortDirection - Sort order for the results (`'ASC'` or `'DESC'`);
+   *                        defaults to `'DESC'`
+   * @returns Promise resolving to an array of matching threads; resolves to an empty array
+   *          if the resource has no threads
+   */
+  abstract getThreadsByResourceId({
+    resourceId,
+    orderBy,
+    sortDirection,
+  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]>;
 
   /**
    * Saves or updates a thread

@@ -4,7 +4,12 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
-import type { PaginationInfo, StorageGetMessagesArg, StorageResourceType } from '@mastra/core/storage';
+import type {
+  PaginationInfo,
+  StorageGetMessagesArg,
+  StorageResourceType,
+  ThreadSortOptions,
+} from '@mastra/core/storage';
 import {
   MemoryStorage,
   resolveMessageLimit,
@@ -569,8 +574,10 @@ export class MemoryLibSQL extends MemoryStorage {
   /**
    * @deprecated use getThreadsByResourceIdPaginated instead for paginated results.
    */
-  public async getThreadsByResourceId(args: { resourceId: string }): Promise<StorageThreadType[]> {
-    const { resourceId } = args;
+  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
+    const resourceId = args.resourceId;
+    const orderBy = this.castThreadOrderBy(args.orderBy);
+    const sortDirection = this.castThreadSortDirection(args.sortDirection);
 
     try {
       const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
@@ -587,7 +594,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       // Non-paginated path
       const result = await this.client.execute({
-        sql: `SELECT * ${baseQuery} ORDER BY createdAt DESC`,
+        sql: `SELECT * ${baseQuery} ORDER BY ${orderBy} ${sortDirection}`,
         args: queryParams,
       });
 
@@ -611,12 +618,16 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  public async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  public async getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     const { resourceId, page = 0, perPage = 100 } = args;
+    const orderBy = this.castThreadOrderBy(args.orderBy);
+    const sortDirection = this.castThreadSortDirection(args.sortDirection);
 
     try {
       const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
@@ -650,7 +661,7 @@ export class MemoryLibSQL extends MemoryStorage {
       }
 
       const dataResult = await this.client.execute({
-        sql: `SELECT * ${baseQuery} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        sql: `SELECT * ${baseQuery} ORDER BY ${orderBy} ${sortDirection} LIMIT ? OFFSET ?`,
         args: [...queryParams, perPage, currentOffset],
       });
 

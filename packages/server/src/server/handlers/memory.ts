@@ -2,6 +2,7 @@ import { generateEmptyFromSchema } from '@mastra/core';
 import type { StorageGetMessagesArg } from '@mastra/core';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
+import type { ThreadSortOptions } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
@@ -94,7 +95,9 @@ export async function getThreadsHandler({
   resourceId,
   networkId,
   runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'networkId' | 'runtimeContext'>) {
+  orderBy,
+  sortDirection,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'networkId' | 'runtimeContext'> & ThreadSortOptions) {
   try {
     const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
 
@@ -104,7 +107,11 @@ export async function getThreadsHandler({
 
     validateBody({ resourceId });
 
-    const threads = await memory.getThreadsByResourceId({ resourceId: resourceId! });
+    const threads = await memory.getThreadsByResourceId({
+      resourceId: resourceId!,
+      orderBy,
+      sortDirection,
+    });
     return threads;
   } catch (error) {
     return handleError(error, 'Error getting threads');

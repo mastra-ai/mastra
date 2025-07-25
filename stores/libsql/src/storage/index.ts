@@ -17,6 +17,7 @@ import type {
   WorkflowRuns,
   StorageGetTracesArg,
   StorageDomains,
+  ThreadSortOptions,
 } from '@mastra/core/storage';
 
 import type { Trace } from '@mastra/core/telemetry';
@@ -175,15 +176,17 @@ export class LibSQLStore extends MastraStorage {
   /**
    * @deprecated use getThreadsByResourceIdPaginated instead for paginated results.
    */
-  public async getThreadsByResourceId(args: { resourceId: string }): Promise<StorageThreadType[]> {
+  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
     return this.stores.memory.getThreadsByResourceId(args);
   }
 
-  public async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  public async getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     return this.stores.memory.getThreadsByResourceIdPaginated(args);
   }
 

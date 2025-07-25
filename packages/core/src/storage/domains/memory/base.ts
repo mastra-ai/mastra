@@ -1,7 +1,14 @@
 import type { MastraMessageContentV2 } from '../../../agent';
 import { MastraBase } from '../../../base';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../../../memory/types';
-import type { StorageGetMessagesArg, PaginationInfo, StorageResourceType } from '../../types';
+import type {
+  StorageGetMessagesArg,
+  PaginationInfo,
+  StorageResourceType,
+  ThreadOrderBy,
+  ThreadSortDirection,
+  ThreadSortOptions,
+} from '../../types';
 
 export abstract class MemoryStorage extends MastraBase {
   constructor() {
@@ -13,7 +20,9 @@ export abstract class MemoryStorage extends MastraBase {
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
-  abstract getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]>;
+  abstract getThreadsByResourceId({
+    resourceId,
+  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]>;
 
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
@@ -52,11 +61,13 @@ export abstract class MemoryStorage extends MastraBase {
       }[];
   }): Promise<MastraMessageV2[]>;
 
-  abstract getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
+  abstract getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
 
   abstract getMessagesPaginated(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
@@ -89,4 +100,22 @@ export abstract class MemoryStorage extends MastraBase {
         `To use per-resource working memory, switch to one of these supported storage adapters.`,
     );
   }
+
+  protected castThreadOrderBy(v: unknown): ThreadOrderBy {
+    return (v as string) in THREAD_ORDER_BY_SET ? (v as ThreadOrderBy) : 'createdAt';
+  }
+
+  protected castThreadSortDirection(v: unknown): ThreadSortDirection {
+    return (v as string) in THREAD_THREAD_SORT_DIRECTION_SET ? (v as ThreadSortDirection) : 'DESC';
+  }
 }
+
+const THREAD_ORDER_BY_SET: Record<ThreadOrderBy, true> = {
+  createdAt: true,
+  updatedAt: true,
+};
+
+const THREAD_THREAD_SORT_DIRECTION_SET: Record<ThreadSortDirection, true> = {
+  ASC: true,
+  DESC: true,
+};
