@@ -1,9 +1,9 @@
 ---
-title: "Reference: Custom Code Scorer | Scorers | Mastra Docs"
+title: "Reference: Create Custom Scorer | Scorers | Mastra Docs"
 description: Documentation for creating custom code scorers in Mastra, allowing users to define their own evaluation logic.
 ---
 
-# Custom Code Scorer
+# createScorer
 
 Mastra allows you to define your own custom code scorers for evaluating input/output pairs using any logic you choose. Custom scorers integrate seamlessly with the Mastra scoring framework and can be used anywhere built-in scorers are used.
 
@@ -53,6 +53,8 @@ Use the `createScorer` factory to define your scorer. You must provide at least 
     },
   ]}
 />
+
+This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
 ## Step Function Signatures
 
@@ -149,73 +151,3 @@ Returns: `{ reason: string }`
 The method must return an object with a `reason` property, which should be a string explaining the score.
 
 All step functions can be async.
-
-## .run() Input
-
-<PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      required: false,
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "input",
-      type: "Record<string, any>[]",
-      required: true,
-      description: "An array of records. This should contain user messages or the data to be evaluated.",
-    },
-    {
-      name: "output",
-      type: "Record<string, any>",
-      required: true,
-      description: "A record. This should contain the output to be evaluated.",
-    },
-    {
-      name: "additionalContext",
-      type: "Record<string, any>",
-      required: false,
-      description: "Additional context for the run (optional).",
-    },
-    {
-      name: "runtimeContext",
-      type: "Record<string, any>",
-      required: false,
-      description: "Runtime context for the run (optional).",
-    },
-  ]}
-/>
-
-## .run() Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "extractStepResult",
-      type: "object",
-      description: "Result of the extract step, if defined (optional).",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description: "Result of the analyze step (custom structure defined by your scorer).",
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Score computed by your analyze function.",
-    },
-    {
-      name: "reason",
-      type: "string",
-      description: "Reason/explanation for the score, if defined (optional).",
-    },
-  ]}
-/>
-  
