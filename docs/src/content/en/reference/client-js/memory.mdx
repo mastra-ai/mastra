@@ -103,6 +103,24 @@ const { messages } = await thread.getMessages();
 const { messages } = await thread.getMessages({ limit: 10 });
 ```
 
+### Delete a Message
+
+Delete a specific message from a thread:
+
+```typescript
+const result = await thread.deleteMessage("message-id");
+// Returns: { success: true, message: "Message deleted successfully" }
+```
+
+### Delete Multiple Messages
+
+Delete multiple messages from a thread in a single operation:
+
+```typescript
+const result = await thread.deleteMessages(["message-1", "message-2", "message-3"]);
+// Returns: { success: true, message: "3 messages deleted successfully" }
+```
+
 ### Get Memory Status
 
 Check the status of the memory system:

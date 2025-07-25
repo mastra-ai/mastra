@@ -439,6 +439,52 @@ export class MemoryLibSQL extends MemoryStorage {
     return updatedResult.rows.map(row => this.parseRow(row));
   }
 
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
+    try {
+      // Get thread IDs for all messages
+      const placeholders = messageIds.map(() => '?').join(',');
+      const result = await this.client.execute({
+        sql: `SELECT DISTINCT thread_id FROM ${TABLE_MESSAGES} WHERE id IN (${placeholders})`,
+        args: messageIds,
+      });
+
+      const threadIds = (result.rows?.map(row => row.thread_id).filter(Boolean) || []) as string[];
+
+      // Delete all messages
+      await this.client.execute({
+        sql: `DELETE FROM ${TABLE_MESSAGES} WHERE id IN (${placeholders})`,
+        args: messageIds,
+      });
+
+      // Update thread timestamps
+      if (threadIds.length > 0) {
+        const now = new Date().toISOString();
+        for (const threadId of threadIds) {
+          await this.client.execute({
+            sql: `UPDATE ${TABLE_THREADS} SET updatedAt = ? WHERE id = ?`,
+            args: [now, threadId],
+          });
+        }
+      }
+
+      // TODO: Delete from vector store if semantic recall is enabled
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_DELETE_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: messageIds.join(', ') },
+        },
+        error,
+      );
+    }
+  }
+
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     const result = await this.operations.load<StorageResourceType>({
       tableName: TABLE_RESOURCES,

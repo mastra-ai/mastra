@@ -273,6 +273,13 @@ export abstract class MastraStorage extends MastraBase {
       }[];
   }): Promise<MastraMessageV2[]>;
 
+  async deleteMessages(_messageIds: string[]): Promise<void> {
+    throw new Error(
+      `Message deletion is not supported by this storage adapter (${this.constructor.name}). ` +
+        `The deleteMessages method needs to be implemented in the storage adapter.`,
+    );
+  }
+
   abstract getTraces(args: StorageGetTracesArg): Promise<Trace[]>;
 
   abstract getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }>;
