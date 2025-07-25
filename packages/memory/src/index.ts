@@ -42,8 +42,6 @@ export class Memory extends MastraMemory {
       },
     });
     this.threadConfig = mergedConfig;
-
-    this.checkStorageFeatureSupport(mergedConfig);
   }
 
   protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string) {
@@ -294,6 +292,8 @@ export class Memory extends MastraMemory {
       throw new Error('Working memory is not enabled for this memory instance');
     }
 
+    this.checkStorageFeatureSupport(config);
+
     const scope = config.workingMemory.scope || 'thread';
 
     if (scope === 'resource' && resourceId) {
@@ -342,6 +342,8 @@ export class Memory extends MastraMemory {
     if (!config.workingMemory?.enabled) {
       throw new Error('Working memory is not enabled for this memory instance');
     }
+
+    this.checkStorageFeatureSupport(config);
 
     // If the agent calls the update working memory tool multiple times simultaneously
     // each call could overwrite the other call
@@ -704,6 +706,8 @@ export class Memory extends MastraMemory {
     if (!config.workingMemory?.enabled) {
       return null;
     }
+
+    this.checkStorageFeatureSupport(config);
 
     const scope = config.workingMemory.scope || 'thread';
     let workingMemoryData: string | null = null;

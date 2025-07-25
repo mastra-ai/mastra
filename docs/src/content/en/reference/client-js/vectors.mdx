@@ -7,20 +7,12 @@ description: Learn how to work with vector embeddings for semantic search and si
 
 The Vectors API provides methods to work with vector embeddings for semantic search and similarity matching in Mastra.
 
-## Initialize Mastra Client
-
-```typescript
-import { MastraClient } from "@mastra/client-js";
-
-const client = new MastraClient();
-```
-
 ## Working with Vectors
 
 Get an instance of a vector store:
 
 ```typescript
-const vector = client.getVector("vector-name");
+const vector = mastraClient.getVector("vector-name");
 ```
 
 ## Vector Methods
