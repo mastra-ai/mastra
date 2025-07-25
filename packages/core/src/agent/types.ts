@@ -25,6 +25,7 @@ import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { AgentVNextStreamOptions } from './agent.types';
+import type { InputProcessor } from './input-processor';
 
 export type { MastraMessageV2, MastraMessageContentV2, MessageList } from './message-list/index.ts';
 export type { Message as AiMessageType } from 'ai';
@@ -55,6 +56,7 @@ export interface AgentConfig<
   evals?: TMetrics;
   memory?: DynamicArgument<MastraMemory>;
   voice?: CompositeVoice;
+  inputProcessors?: DynamicArgument<InputProcessor[]>;
 }
 
 export type AgentMemoryOption = {

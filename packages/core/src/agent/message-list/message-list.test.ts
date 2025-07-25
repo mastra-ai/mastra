@@ -2315,8 +2315,8 @@ describe('MessageList', () => {
 
       // toolInvocations array should also only have the result
       expect(uiMessage.toolInvocations).toHaveLength(1);
-      expect(uiMessage.toolInvocations[0].state).toBe('result');
-      expect(uiMessage.toolInvocations[0].toolCallId).toBe('call-4');
+      expect(uiMessage.toolInvocations![0].state).toBe('result');
+      expect(uiMessage.toolInvocations![0].toolCallId).toBe('call-4');
     });
 
     it('should handle clientTool scenario - filter call states when querying from memory', () => {
@@ -2440,8 +2440,8 @@ describe('MessageList', () => {
 
       // toolInvocations array should have the result
       expect(uiMessageWithResult.toolInvocations).toHaveLength(1);
-      expect(uiMessageWithResult.toolInvocations[0].state).toBe('result');
-      expect(uiMessageWithResult.toolInvocations[0].result).toBe(42);
+      expect(uiMessageWithResult.toolInvocations![0].state).toBe('result');
+      expect(uiMessageWithResult.toolInvocations![0].result).toBe(42);
     });
   });
 });

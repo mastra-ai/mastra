@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { jsonSchema, tool } from 'ai';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
+import { Agent, InputProcessor } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 
@@ -83,6 +83,23 @@ export const dynamicAgent = new Agent({
   },
 });
 
+const vegetarianProcessor: InputProcessor = {
+  name: 'eat-more-tofu',
+  process: async ({ messages }) => {
+    messages.push({
+      id: crypto.randomUUID(),
+      createdAt: new Date(),
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Make the suggested recipe, but remove any meat and add tofu instead' }],
+      },
+    });
+
+    return messages;
+  },
+};
+
 export const chefAgentResponses = new Agent({
   name: 'Chef Agent Responses',
   instructions: `
@@ -97,4 +114,40 @@ export const chefAgentResponses = new Agent({
   workflows: {
     myWorkflow,
   },
+  inputProcessors: [
+    vegetarianProcessor,
+    {
+      name: 'no-soup-for-you',
+      process: async ({ messages, abort }) => {
+        const hasSoup = messages.some(msg => {
+          for (const part of msg.content.parts) {
+            if (part.type === 'text' && part.text.includes('soup')) {
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (hasSoup) {
+          abort('No soup for you!');
+        }
+
+        return messages;
+      },
+    },
+    {
+      name: 'remove-spinach',
+      process: async ({ messages }) => {
+        for (const message of messages) {
+          for (const part of message.content.parts) {
+            if (part.type === 'text' && part.text.includes('spinach')) {
+              part.text = part.text.replaceAll('spinach', '');
+            }
+          }
+        }
+
+        return messages;
+      },
+    },
+  ],
 });

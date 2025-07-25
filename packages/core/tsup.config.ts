@@ -52,8 +52,6 @@ export default defineConfig({
     'src/workflows/constants.ts',
     'src/network/index.ts',
     'src/network/vNext/index.ts',
-    'src/storage/libsql/index.ts',
-    'src/vector/libsql/index.ts',
     'src/vector/filter/index.ts',
     'src/telemetry/otel-vendor.ts',
     'src/test-utils/llm-mock.ts',
