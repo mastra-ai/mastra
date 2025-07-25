@@ -88,6 +88,12 @@ The constructor accepts an optional `Config` object to customize its behavior an
       defaultValue: "Console logger with INFO level",
     },
     {
+      name: "idGenerator",
+      type: "() => string",
+      description: "Custom ID generator function. Used by agents, workflows, memory, and other components to generate unique identifiers.",
+      isOptional: true,
+    },
+    {
       name: "workflows",
       type: "Record<string, Workflow>",
       description:

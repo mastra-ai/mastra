@@ -1,5 +1,5 @@
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
-import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { ScoreRowData } from '@mastra/core/scores';
 import type {
@@ -7,15 +7,15 @@ import type {
   PaginationArgs,
   PaginationInfo,
   StorageColumn,
+  StorageDomains,
   StorageGetMessagesArg,
   StorageGetTracesArg,
+  StorageGetTracesPaginatedArg,
+  StoragePagination,
+  StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
-  StorageResourceType,
-  StorageDomains,
-  StoragePagination,
-  StorageGetTracesPaginatedArg,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
@@ -28,6 +28,42 @@ import { ScoresStorageMongoDB } from './domains/scores';
 import { TracesStorageMongoDB } from './domains/traces';
 import { WorkflowsStorageMongoDB } from './domains/workflows';
 import type { MongoDBConfig } from './types';
+
+const loadConnector = (config: MongoDBConfig): MongoDBConnector => {
+  try {
+    if ('connectorHandler' in config) {
+      return MongoDBConnector.fromConnectionHandler(config.connectorHandler);
+    }
+  } catch (error) {
+    throw new MastraError(
+      {
+        id: 'STORAGE_MONGODB_STORE_CONSTRUCTOR_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { connectionHandler: true },
+      },
+      error,
+    );
+  }
+
+  try {
+    return MongoDBConnector.fromDatabaseConfig({
+      options: config.options,
+      url: config.url,
+      dbName: config.dbName,
+    });
+  } catch (error) {
+    throw new MastraError(
+      {
+        id: 'STORAGE_MONGODB_STORE_CONSTRUCTOR_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { url: config?.url, dbName: config?.dbName },
+      },
+      error,
+    );
+  }
+};
 
 export class MongoDBStore extends MastraStorage {
   #connector: MongoDBConnector;
@@ -53,40 +89,7 @@ export class MongoDBStore extends MastraStorage {
 
     this.stores = {} as StorageDomains;
 
-    try {
-      if ('connectorHandler' in config) {
-        this.#connector = MongoDBConnector.fromConnectionHandler(config.connectorHandler);
-        return;
-      }
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'STORAGE_MONGODB_STORE_CONSTRUCTOR_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { connectionHandler: true },
-        },
-        error,
-      );
-    }
-
-    try {
-      this.#connector = MongoDBConnector.fromDatabaseConfig({
-        options: config.options,
-        url: config.url,
-        dbName: config.dbName,
-      });
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'STORAGE_MONGODB_STORE_CONSTRUCTOR_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { url: config?.url, dbName: config?.dbName },
-        },
-        error,
-      );
-    }
+    this.#connector = loadConnector(config);
 
     const operations = new StoreOperationsMongoDB({
       connector: this.#connector,
