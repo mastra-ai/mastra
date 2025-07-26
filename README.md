@@ -1,130 +1,377 @@
-# Mastra
+# Vercel AI SDK v5 Data Format Converter
 
-[![npm version](https://badge.fury.io/js/@mastra%2Fcore.svg)](https://www.npmjs.com/package/@mastra/core)
-[![CodeQl](https://github.com/mastra-ai/mastra/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/mastra-ai/mastra/actions/workflows/github-code-scanning/codeql)
-[![GitHub Repo stars](https://img.shields.io/github/stars/mastra-ai/mastra)](https://github.com/mastra-ai/mastra/stargazers)
-[![Discord](https://img.shields.io/discord/1309558646228779139?logo=discord&label=Discord&labelColor=white&color=7289DA)](https://discord.gg/BTYqqHKUrf)
-[![Twitter Follow](https://img.shields.io/twitter/follow/mastra_ai?style=social)](https://x.com/mastra_ai)
-[![NPM Downloads](https://img.shields.io/npm/dm/%40mastra%252Fcore)](https://www.npmjs.com/package/@mastra/core)
-[![Static Badge](https://img.shields.io/badge/Y%20Combinator-W25-orange)](https://www.ycombinator.com/companies?batch=W25)
+A comprehensive TypeScript library for converting various data formats to Vercel AI SDK v5 format, supporting both UIMessage (for frontend display) and ModelMessage (for AI models).
 
-Mastra is an opinionated TypeScript framework that helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations and evals. You can run Mastra on your local machine, or deploy to a serverless cloud.
+## Overview
 
-The main Mastra features are:
+Vercel AI SDK v5 introduces significant changes to the message format, moving from a simple `content` string to a more structured `parts` array. This converter helps you migrate from v4 and other formats to v5 seamlessly.
 
-| Features                                               | Description                                                                                                                                                                                                                                                                                            |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| LLM Models                                             | Mastra uses the [Vercel AI SDK](https://sdk.vercel.ai/docs/introduction) for model routing, providing a unified interface to interact with any LLM provider including OpenAI, Anthropic, and Google Gemini. You can choose the specific model and provider, and decide whether to stream the response. |
-| [Agents](https://mastra.ai/docs/agents/overview)       | Agents are systems where the language model chooses a sequence of actions. In Mastra, agents provide LLM models with tools, workflows, and synced data. Agents can call your own functions or APIs of third-party integrations and access knowledge bases you build.                                   |
-| [Tools](https://mastra.ai/docs/agents/adding-tools)    | Tools are typed functions that can be executed by agents or workflows, with built-in integration access and parameter validation. Each tool has a schema that defines its inputs, an executor function that implements its logic, and access to configured integrations.                               |
-| [Workflows](https://mastra.ai/docs/workflows/overview) | Workflows are durable graph-based state machines. They have loops, branching, wait for human input, embed other workflows, do error handling, retries, parsing and so on. They can be built in code or with a visual editor. Each step in a workflow has built-in OpenTelemetry tracing.               |
-| [RAG](https://mastra.ai/docs/rag/overview)             | Retrieval-augmented generation (RAG) lets you construct a knowledge base for agents. RAG is an ETL pipeline with specific querying techniques, including chunking, embedding, and vector search.                                                                                                       |
-| [Integrations](https://mastra.ai/docs/integrations)    | In Mastra, integrations are auto-generated, type-safe API clients for third-party services that can be used as tools for agents or steps in workflows.                                                                                                                                                 |
-| [Evals](https://mastra.ai/docs/08-running-evals)       | Evals are automated tests that evaluate LLM outputs using model-graded, rule-based, and statistical methods. Each eval returns a normalized score between 0-1 that can be logged and compared. Evals can be customized with your own prompts and scoring functions.                                    |
+## Key Changes in v5
+
+- **Parts-based Architecture**: Messages now use a `parts` array instead of a `content` string
+- **UIMessage vs ModelMessage**: Separate types for frontend display and AI model consumption
+- **Type-safe Tool Calls**: Tool parts use specific naming: `tool-${toolName}`
+- **Media Type Updates**: `mimeType` renamed to `mediaType`
+- **Reasoning Support**: Dedicated reasoning part type for reasoning models
+- **Enhanced Streaming**: Support for custom data parts and sources
+
+## Installation
+
+```bash
+npm install ai@beta  # Vercel AI SDK v5
+```
+
+Then copy the converter files to your project:
+- `ai-sdk-v5-converter.ts`
+- `examples.ts` (optional)
 
 ## Quick Start
 
-### Prerequisites
+### Basic Conversion
 
-- Node.js (v20.0+)
+```typescript
+import { convertToUIMessage, convertToModelMessage } from './ai-sdk-v5-converter';
 
-## Get an LLM provider API key
+// Convert legacy v4 message
+const legacyMessage = {
+  id: 'msg-1',
+  role: 'user',
+  content: 'Hello AI!',
+  experimental_attachments: [{
+    name: 'image.jpg',
+    contentType: 'image/jpeg',
+    url: 'data:image/jpeg;base64,/9j/4AAQ...'
+  }]
+};
 
-If you don't have an API key for an LLM provider, you can get one from the following services:
+// For frontend display
+const uiMessage = convertToUIMessage(legacyMessage);
 
-- [OpenAI](https://platform.openai.com/)
-- [Anthropic](https://console.anthropic.com/settings/keys)
-- [Google Gemini](https://ai.google.dev/gemini-api/docs)
-- [Groq](https://console.groq.com/docs/overview)
-- [Cerebras](https://inference-docs.cerebras.ai/introduction)
-
-If you don't have an account with these providers, you can sign up and get an API key. Anthropic require a credit card to get an API key. Some OpenAI models and Gemini do not and have a generous free tier for its API.
-
-## Create a new project
-
-The easiest way to get started with Mastra is by using `create-mastra`. This CLI tool enables you to quickly start building a new Mastra application, with everything set up for you.
-
-```bash
-npx create-mastra@latest
+// For AI model processing
+const modelMessage = convertToModelMessage(legacyMessage);
 ```
 
-### Run the script
+### OpenAI Format Conversion
 
-Finally, run `mastra dev` to open the Mastra playground.
+```typescript
+const openaiMessage = {
+  role: 'user',
+  content: [
+    { type: 'text', text: 'What do you see in this image?' },
+    { type: 'image_url', image_url: { url: 'https://example.com/image.jpg' } }
+  ]
+};
 
-```bash copy
-npm run dev
+const converted = convertToUIMessage(openaiMessage);
 ```
 
-If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Gemini, set the `GOOGLE_GENERATIVE_AI_API_KEY`.
+## Advanced Usage
 
-# MCP Server ([@mastra/mcp-docs-server](https://www.npmjs.com/package/@mastra/mcp-docs-server))
+### Using the Converter Class
 
-Use our MCP server [@mastra/mcp-docs-server](https://www.npmjs.com/package/@mastra/mcp-docs-server) to teach your LLM how to use Mastra.
+```typescript
+import { VercelAISDKv5Converter } from './ai-sdk-v5-converter';
 
-This is a Model Context Protocol (MCP) server that provides AI assistants with direct access to Mastra.ai's complete knowledge base.
+const converter = new VercelAISDKv5Converter({
+  generateId: () => `custom-${Date.now()}`,
+  includeTimestamp: true,
+  preserveOriginalId: false,
+  defaultMediaType: 'application/json'
+});
 
-## In Cursor
-
-Create or update .cursor/mcp.json in your project root:
-
-### MacOS/Linux
-
+const converted = converter.toUIMessage(inputMessage);
 ```
-{
-  "mcpServers": {
-    "mastra": {
-      "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server"]
-    }
-  }
+
+### Creating Custom Parts
+
+```typescript
+// Data parts for streaming UI updates
+const dataPart = converter.createDataPart('progress', {
+  step: 2,
+  message: 'Processing...'
+});
+
+// Source parts for citations
+const sourcePart = converter.createSourcePart('url', {
+  url: 'https://example.com',
+  title: 'Example Source',
+  description: 'Reference material'
+});
+
+// Reasoning parts for reasoning models
+const reasoningPart = converter.createReasoningPart(
+  'Let me think about this step by step...'
+);
+```
+
+## Message Types
+
+### UIMessage (Frontend Display)
+
+UIMessages are designed for frontend display and include:
+- Full conversation history
+- Metadata and timestamps
+- UI-specific parts (data, progress indicators)
+- Type-safe tool parts
+
+```typescript
+interface UIMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  parts: UIMessagePart[];
+  metadata?: any;
+  createdAt?: Date;
 }
 ```
 
-### Windows
+### ModelMessage (AI Processing)
 
-```
-{
-  "mcpServers": {
-    "mastra": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"]
-    }
-  }
+ModelMessages are optimized for AI model consumption:
+- Token-efficient format
+- Simplified structure
+- No UI-specific metadata
+
+```typescript
+interface ModelMessage {
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  content: string | Array<TextPart | ImagePart | FilePart | ToolCallPart | ToolResultPart>;
 }
 ```
 
-This will make all Mastra documentation tools available in your Cursor workspace. Note that the MCP server wont be enabled by default. You'll need to go to Cursor settings -> MCP settings and click "enable" on the Mastra MCP server.
+## Part Types
 
-## In Windsurf
-
-Create or update ~/.codeium/windsurf/mcp_config.json:
-
-### MacOS/Linux
-
+### Text Parts
+```typescript
+{ type: 'text', text: 'Hello world' }
 ```
+
+### Image Parts
+```typescript
 {
-  "mcpServers": {
-    "mastra": {
-      "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server"]
-    }
-  }
+  type: 'image',
+  image: 'https://example.com/image.jpg',
+  mediaType: 'image/jpeg'
 }
 ```
 
-For more installation options visit [https://www.npmjs.com/package/@mastra/mcp-docs-server](https://www.npmjs.com/package/@mastra/mcp-docs-server)
+### File Parts
+```typescript
+{
+  type: 'file',
+  data: 'base64data...',
+  mediaType: 'application/pdf'
+}
+```
+
+### Tool Parts (Type-safe)
+```typescript
+{
+  type: 'tool-getWeather',
+  state: 'output-available',
+  toolCallId: 'call_123',
+  toolName: 'getWeather',
+  input: { city: 'SF' },
+  output: { temperature: 72 }
+}
+```
+
+### Reasoning Parts
+```typescript
+{
+  type: 'reasoning',
+  text: 'Let me analyze this step by step...'
+}
+```
+
+### Source Parts
+```typescript
+{
+  type: 'source',
+  sourceType: 'url',
+  id: 'source-1',
+  url: 'https://example.com',
+  title: 'Example Source'
+}
+```
+
+### Data Parts (Custom Streaming)
+```typescript
+{
+  type: 'data-progress',
+  id: 'progress-1',
+  data: { step: 2, message: 'Processing...' }
+}
+```
+
+## Migration Guide
+
+### From v4 to v5
+
+1. **Message Structure**: Replace `content` with `parts` array
+2. **Attachments**: Convert `experimental_attachments` to file parts
+3. **Tool Invocations**: Update to type-safe tool parts
+4. **Media Types**: Change `mimeType` to `mediaType`
+5. **Reasoning**: Move reasoning to separate part
+
+### Tool State Mapping
+
+| v4 State | v5 State |
+|----------|----------|
+| `partial-call` | `input-streaming` |
+| `call` | `input-available` |
+| `result` | `output-available` |
+| Error | `output-error` |
+
+## Real-world Examples
+
+### API Route Integration
+
+```typescript
+// app/api/chat/route.ts
+import { convertToModelMessages, convertToUIMessage } from './converter';
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  
+  // Convert for AI model
+  const modelMessages = convertToModelMessages(messages);
+  
+  const result = streamText({
+    model: openai('gpt-4'),
+    messages: modelMessages,
+  });
+  
+  return result.toUIMessageStreamResponse();
+}
+```
+
+### Frontend Component
+
+```typescript
+// components/Chat.tsx
+import { useChat } from '@ai-sdk/react';
+import { UIMessage } from './converter';
+
+export function Chat() {
+  const { messages } = useChat();
+  
+  return (
+    <div>
+      {messages.map((message: UIMessage) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            switch (part.type) {
+              case 'text':
+                return <p key={index}>{part.text}</p>;
+              case 'image':
+                return <img key={index} src={part.image} />;
+              case 'tool-getWeather':
+                return <WeatherWidget key={index} data={part.output} />;
+              case 'reasoning':
+                return <ReasoningBox key={index} text={part.text} />;
+              default:
+                return null;
+            }
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### Error Handling
+
+```typescript
+try {
+  const converted = convertToUIMessage(unknownInput);
+} catch (error) {
+  console.error('Conversion failed:', error);
+  // Fallback logic
+}
+```
+
+## Configuration Options
+
+```typescript
+interface ConversionOptions {
+  generateId?: () => string;        // Custom ID generator
+  includeTimestamp?: boolean;       // Add createdAt timestamp
+  preserveOriginalId?: boolean;     // Keep original message ID
+  defaultMediaType?: string;        // Default for unknown file types
+}
+```
+
+## Type Safety
+
+The converter provides full TypeScript support with:
+- Generic metadata types
+- Tool-specific part types
+- Strict type checking
+- IntelliSense support
+
+```typescript
+interface CustomMetadata {
+  model: string;
+  duration: number;
+  tokenUsage: { total: number };
+}
+
+const message = convertToUIMessage<CustomMetadata>(input, {}, metadata);
+```
+
+## Best Practices
+
+1. **Always convert to ModelMessage for AI processing**
+2. **Use UIMessage for frontend display and storage**
+3. **Preserve original IDs when migrating**
+4. **Handle errors gracefully with try-catch**
+5. **Use type-safe tool parts for better UX**
+6. **Include metadata for debugging and analytics**
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Missing generateId**: Install `ai` package for `generateId` function
+2. **Type errors**: Ensure TypeScript types are properly imported
+3. **Tool conversion**: Check tool state mapping for v4 to v5 migration
+4. **Media types**: Update `mimeType` to `mediaType` in file parts
+
+### Debug Mode
+
+```typescript
+const converter = new VercelAISDKv5Converter({
+  generateId: () => {
+    const id = generateId();
+    console.log('Generated ID:', id);
+    return id;
+  }
+});
+```
 
 ## Contributing
 
-Looking to contribute? All types of help are appreciated, from coding to testing and feature specification.
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure TypeScript types are correct
+5. Submit a pull request
 
-If you are a developer and would like to contribute with code, please open an issue to discuss before opening a Pull Request.
+## License
 
-Information about the project setup can be found in the [development documentation](./DEVELOPMENT.md)
+MIT License - see LICENSE file for details.
+
+## Resources
+
+- [Vercel AI SDK v5 Documentation](https://sdk.vercel.ai/docs)
+- [Migration Guide](https://sdk.vercel.ai/docs/migration-guides/migrate-ai-sdk-4-0-to-5-0-beta)
+- [Examples Repository](./examples.ts)
 
 ## Support
 
-We have an [open community Discord](https://discord.gg/BTYqqHKUrf). Come and say hello and let us know if you have any questions or need any help getting things running.
-
-It's also super helpful if you leave the project a star here at the [top of the page](https://github.com/mastra-ai/mastra)
+For issues and questions:
+1. Check the examples file
+2. Review the migration guide
+3. Open an issue on GitHub
+4. Join the Vercel Discord community
