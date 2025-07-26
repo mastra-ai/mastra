@@ -38,6 +38,7 @@ const step2 = createStep({
     result: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
+    throw new Error('test');
     const agent = mastra.getAgent('chefAgentResponses');
     const response = await agent.generate(inputData.result);
     return {
