@@ -14,7 +14,7 @@ export function createContentSimilarityScorer(
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
     extract: async run => {
-      let processedInput = run.input.map(i => i.content).join(', ');
+      let processedInput = run.input?.map(i => i.content).join(', ') || '';
       let processedOutput = run.output.text;
 
       if (ignoreCase) {
