@@ -576,10 +576,10 @@ export class EventedRun<
   }
 
   watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
-    const watchCb = (event: any, cleanup?: () => void) => {
+    const watchCb = async (event: any, ack?: () => Promise<void>) => {
       console.log('watch cb', type, event);
       cb(event.data);
-      cleanup?.();
+      await ack?.();
     };
 
     if (type === 'watch-v2') {

@@ -29,7 +29,21 @@ export class GoogleCloudPubSub extends PubSub {
     }
   }
 
+  async destroy(topicName: string) {
+    await this.pubsub.subscription(topicName).delete();
+    await this.pubsub.topic(topicName).delete();
+  }
+
   async publish(topicName: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+    if (topicName.startsWith('workflow.events.')) {
+      const parts = topicName.split('.');
+      if (parts[parts.length - 2] === 'v2') {
+        topicName = 'workflow.events.v2';
+      } else {
+        topicName = 'workflow.events.v1';
+      }
+    }
+
     let topic = this.pubsub.topic(topicName);
 
     console.log('publishing message', topicName, event);
@@ -51,12 +65,30 @@ export class GoogleCloudPubSub extends PubSub {
   }
 
   async subscribe(topic: string, cb: (event: Event, ack: () => Promise<void>) => void): Promise<void> {
+    let runId: string | undefined = undefined;
+    if (topic.startsWith('workflow.events.')) {
+      const parts = topic.split('.');
+      if (parts[parts.length - 2] === 'v2') {
+        topic = 'workflow.events.v2';
+      } else {
+        topic = 'workflow.events.v1';
+      }
+
+      runId = parts[parts.length - 1];
+    }
+
     let subscription = this.pubsub.subscription(topic);
     subscription.on('message', message => {
       const event = JSON.parse(message.data.toString()) as Event;
       console.log('message received', event, cb);
       try {
         cb(event, async () => {
+          if (runId) {
+            if (runId !== event.data.runId) {
+              return;
+            }
+          }
+
           console.log('acking message');
           try {
             const ackResponse = await message.ackWithResponse();
@@ -77,6 +109,7 @@ export class GoogleCloudPubSub extends PubSub {
         await this.init(topic);
         console.log('subscription created, resubscribing');
         await this.subscribe(topic, cb);
+        console.log('subscription resubscribed');
       } else {
         // TODO: determine if other errors require re-subscription
         // console.error('subscription error, retrying in 5 seconds', error);
@@ -90,5 +123,6 @@ export class GoogleCloudPubSub extends PubSub {
   async unsubscribe(topic: string, cb: (event: Event, ack: () => Promise<void>) => void): Promise<void> {
     const subscription = this.pubsub.subscription(topic);
     subscription.removeListener('message', cb);
+    await subscription.close();
   }
 }
