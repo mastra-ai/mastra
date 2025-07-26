@@ -13,7 +13,7 @@ export type ScoringPrompts = {
 
 export type ScoringInput = {
   runId?: string;
-  input: Record<string, any>[];
+  input?: Record<string, any>[];
   output: Record<string, any>;
   additionalContext?: Record<string, any>;
   runtimeContext?: Record<string, any>;

@@ -7,7 +7,7 @@ export function createTextualDifferenceScorer() {
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
     analyze: async run => {
-      const input = run.input.map(i => i.content).join(', ');
+      const input = run.input?.map(i => i.content).join(', ') || '';
       const output = run.output.text;
       const matcher = new SequenceMatcher(null, input, output);
       const ratio = matcher.ratio();

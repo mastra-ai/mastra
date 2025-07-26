@@ -19,7 +19,10 @@ const meta = {
     title: "Memory",
   },
   evals: {
-    title: "Evals",
+    title: "Evals (Legacy)",
+  },
+  scorers: {
+    title: "Scorers",
   },
   voice: {
     title: "Voice",
