@@ -1440,7 +1440,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runtimeContext,
         writableStream,
       });
-    } else if (resume?.resumePath?.length && (entry.type === 'parallel' || entry.type === 'conditional')) {
+    } else if (resume?.resumePath?.length && entry.type === 'parallel') {
       const idx = resume.resumePath.shift();
       return this.executeEntry({
         workflowId,

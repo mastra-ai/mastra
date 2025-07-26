@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-azure",
-  "version": "0.10.4",
+  "version": "0.10.5-alpha.0",
   "description": "Mastra Azure speech integration",
   "type": "module",
   "main": "dist/index.js",
@@ -26,7 +26,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "microsoft-cognitiveservices-speech-sdk": "^1.44.1"
+    "microsoft-cognitiveservices-speech-sdk": "^1.45.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

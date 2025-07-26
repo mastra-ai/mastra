@@ -1,5 +1,34 @@
 # @mastra/dane
 
+## 0.0.39-alpha.0
+
+### Patch Changes
+
+- 23247c4: dependencies updates:
+  - Updated dependency [`typescript@^5.8.3` ↗︎](https://www.npmjs.com/package/typescript/v/5.8.3) (from `^5.8.2`, in `dependencies`)
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [24ac5ff]
+- Updated dependencies [674a348]
+- Updated dependencies [fc437d9]
+- Updated dependencies [674a348]
+- Updated dependencies [3f89307]
+- Updated dependencies [b5a6da2]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+- Updated dependencies [a3ca14c]
+- Updated dependencies [ad8a1d8]
+  - @mastra/core@0.12.0-alpha.0
+  - @mastra/libsql@0.11.3-alpha.0
+  - @mastra/memory@0.11.6-alpha.0
+  - @mastra/rag@1.0.5-alpha.0
+  - @mastra/upstash@0.12.4-alpha.0
+
 ## 0.0.38
 
 ### Patch Changes
