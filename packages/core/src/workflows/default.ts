@@ -1060,6 +1060,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const { step, condition } = entry;
     let isTrue = true;
     let result = { status: 'success', output: prevOutput } as unknown as StepResult<any, any, any, any>;
+    let currentResume = resume;
 
     do {
       result = await this.executeStep({
@@ -1068,13 +1069,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         step,
         stepResults,
         executionContext,
-        resume,
+        resume: currentResume,
         prevOutput: (result as { output: any }).output,
         emitter,
         abortController,
         runtimeContext,
         writableStream,
       });
+
+      // Clear resume for next iteration only if the step has completed resuming
+      // This prevents the same resume data from being used multiple times
+      if (currentResume && result.status !== 'suspended') {
+        currentResume = undefined;
+      }
 
       if (result.status !== 'success') {
         return result;
