@@ -20,93 +20,6 @@ Scorers in Mastra can evaluate various aspects of AI outputs:
 - **Safety**: Does the response avoid harmful or inappropriate content?
 - **Custom criteria**: Any domain-specific evaluation logic you define
 
-## Creating scorers
-
-Mastra provides two primary approaches for creating scorers:
-
-### Code-based scorers
-
-Use `createScorer` to build scorers with programmatic logic and algorithms. They're ideal for:
-- Deterministic evaluations
-- Performance-critical scenarios
-- Cases where you have clear algorithmic criteria
-- Integration with existing libraries or tools
-
-```typescript filename="src/mastra/scorers/tone-scorer.ts" showLineNumbers copy
-import { createScorer } from "@mastra/core/scores";
-import Sentiment from "sentiment";
-
-export const toneScorer = createScorer({
-  name: "Tone Consistency",
-  description: "Evaluates sentiment consistency between input and output",
-  analyze: async (run) => {
-    const sentiment = new Sentiment();
-    const inputText = run.input?.map(i => i.content).join(", ") || "";
-    const outputText = run.output.text;
-    
-    // Analyze sentiment of both input and output
-    const inputSentiment = sentiment.analyze(inputText);
-    const outputSentiment = sentiment.analyze(outputText);
-    
-    // Calculate how well the output matches input tone
-    const sentimentDiff = Math.abs(
-      inputSentiment.comparative - outputSentiment.comparative
-    );
-    const score = Math.max(0, 1 - sentimentDiff);
-    
-    return {
-      score,
-      result: {
-        inputSentiment: inputSentiment.comparative,
-        outputSentiment: outputSentiment.comparative,
-        difference: sentimentDiff,
-      },
-    };
-  },
-});
-```
-
-### LLM-based scorers
-
-Use `createLLMScorer` to build scorers that use language models as judges. They're perfect for:
-- Subjective evaluations that require understanding context
-- Complex criteria that are difficult to code algorithmically
-- Natural language understanding tasks
-- Cases where human-like judgment is needed
-
-```typescript filename="src/mastra/scorers/helpfulness-scorer.ts" showLineNumbers copy
-import { createLLMScorer } from "@mastra/core/scores";
-import { openai } from "@ai-sdk/openai";
-import { z } from "zod";
-
-export const helpfulnessScorer = createLLMScorer({
-  name: "Helpfulness",
-  description: "Evaluates how helpful a response is to the user",
-  judge: {
-    model: openai("gpt-4o-mini"),
-    instructions: "You are an expert evaluator of AI assistant responses.",
-  },
-  analyze: {
-    description: "Analyze the helpfulness of the response",
-    outputSchema: z.object({
-      helpfulness_rating: z.number().min(1).max(5),
-      reasoning: z.string(),
-    }),
-    createPrompt: ({ run }) => `
-      Evaluate how helpful this response is to the user's question.
-      
-      User Question: ${run.input?.map(i => i.content).join(" ")}
-      AI Response: ${run.output.text}
-      
-      Rate the helpfulness from 1-5 and provide reasoning.
-    `,
-  },
-  calculateScore: ({ run }) => {
-    return run.analyzeStepResult.helpfulness_rating / 5;
-  },
-});
-```
-
 ## Scorer architecture
 
 ### Three-step evaluation process
@@ -344,18 +257,18 @@ export const customerServiceAgent = new Agent({
         rate: 1, // Score every response
       }
     },
-    hallucination: {
-      scorer: createHallucinationScorer({ model: openai("gpt-4o-mini") }),
-      sampling: {
-        type: "ratio", 
-        rate: 0.1, // Score 10% of responses
-      }
-    },
     bias: {
       scorer: createBiasScorer({ model: openai("gpt-4o-mini") }),
       sampling: {
         type: "ratio",
         rate: 0.5, // Score 50% of responses
+      }
+    },
+    hallucination: {
+      scorer: createHallucinationScorer({ model: openai("gpt-4o-mini") }),
+      sampling: {
+        type: "ratio", 
+        rate: 0.1, // Score 10% of responses
       }
     },
   },
@@ -417,40 +330,6 @@ export const contentWorkflow = createWorkflow({
 - `0.0`: Disable scoring
 
 **Automatic storage**: All scoring results are automatically stored in the `mastra_scorers` table in your configured database, allowing you to analyze performance trends over time.
-
-### Benefits of live evaluations
-
-**Continuous monitoring**: Track quality metrics in real-time without manual intervention
-
-**Performance optimization**: Use sampling to balance evaluation coverage with system performance
-
-**Early detection**: Catch quality issues as they happen rather than discovering them later
-
-**Production insights**: Understand how your AI systems perform with real user interactions
-
-**A/B testing**: Compare scorer results across different agent configurations or prompts
-
-### Best practices for live evaluations
-
-**Choose appropriate sampling rates**: Use higher rates (0.8-1.0) for critical scorers like safety checks, and lower rates (0.1-0.3) for expensive or less critical evaluations.
-
-**Monitor multiple dimensions**: Combine different types of scorers (accuracy, safety, bias) to get comprehensive quality coverage.
-
-**Use lighter models for high-frequency scoring**: Consider using faster models like `gpt-4o-mini` for scorers that run frequently.
-
-**Start with low sampling in production**: Begin with conservative sampling rates and increase based on performance impact and monitoring needs.
-
-## Integration with Mastra
-
-Beyond live evaluations, scorers integrate with other parts of the Mastra ecosystem for comprehensive evaluation workflows.
-
-## Benefits of using scorers
-
-1. **Objective measurement**: Replace subjective "feels good" assessments with quantifiable metrics
-2. **Continuous monitoring**: Track performance over time and catch regressions early
-3. **A/B testing**: Compare different prompts, models, or configurations systematically
-4. **Quality assurance**: Ensure outputs meet your standards before reaching users
-5. **Debugging**: Identify specific failure modes and improvement opportunities
 
 ## When to use scorers
 

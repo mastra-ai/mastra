@@ -1,0 +1,85 @@
+---
+title: "Built-in Scorers | Scorers | Mastra"
+description: Overview of Mastra's comprehensive library of ready-to-use scorers for evaluating AI outputs across quality, safety, and performance dimensions.
+---
+
+# Built-in Scorers
+
+Mastra provides a comprehensive library of ready-to-use scorers that cover the most common evaluation scenarios for AI applications. These scorers are battle-tested, optimized for performance, and designed to work seamlessly with your agents and workflows.
+
+## Installation
+
+All built-in scorers are available through the `@mastra/evals` package:
+
+```bash copy
+npm install @mastra/evals
+```
+
+## Types of scorers
+
+Mastra offers two types of built-in scorers, each optimized for different evaluation needs:
+
+### LLM Scorers
+
+LLM scorers use language models as judges to evaluate complex, subjective criteria that require understanding context and nuance. They're perfect for evaluating content quality, safety, and semantic understanding.
+
+**Trade-offs:** More accurate for complex evaluations, but slower and more expensive than code scorers
+
+### Code Scorers  
+
+Code scorers use algorithmic approaches and deterministic logic for fast, consistent evaluations. They're ideal for objective measurements and performance-critical scenarios.
+
+**Trade-offs:** Fast and cost-effective, but limited to quantifiable criteria
+
+## LLM Scorers
+
+### Content Quality & Accuracy
+
+**[Answer Relevancy](/reference/scorers/answer-relevancy)**  
+Evaluates how well responses address the input query through statement-by-statement analysis.
+- *Score range:* 0-1 (1 = perfectly relevant)
+
+**[Faithfulness](/reference/scorers/faithfulness)**  
+Measures how accurately responses represent provided context without adding unsupported information.
+- *Score range:* 0-1 (1 = completely faithful)
+
+**[Hallucination](/reference/scorers/hallucination)**  
+Detects factual contradictions and unsupported claims by comparing outputs against provided context.
+- *Score range:* 0-1 (0 = no hallucinations, 1 = complete hallucination)
+
+**[Completeness](/reference/scorers/completeness)**  
+Evaluates whether responses include all necessary information to fully address the input.
+- *Score range:* 0-1 (1 = completely comprehensive)
+
+### Safety & Ethics
+
+**[Toxicity](/reference/scorers/toxicity)**  
+Detects harmful content including personal attacks, hate speech, and inappropriate language.
+- *Score range:* 0-1 (0 = non-toxic, 1 = highly toxic)
+
+**[Bias](/reference/scorers/bias)**  
+Identifies discriminatory language, stereotypes, and unfair generalizations across multiple dimensions.
+- *Score range:* 0-1 (0 = unbiased, 1 = highly biased)
+
+## Code Scorers
+
+### Text Analysis & Similarity
+
+**[Content Similarity](/reference/scorers/content-similarity)**  
+Measures textual similarity using character-level matching with configurable normalization.
+- *Score range:* 0-1 (1 = identical content)
+
+**[Textual Difference](/reference/scorers/textual-difference)**  
+Uses sequence matching to measure differences and calculate similarity ratios between texts.
+- *Score range:* 0-1 (1 = identical, 0 = completely different)
+
+**[Keyword Coverage](/reference/scorers/keyword-coverage)**  
+Evaluates how well outputs cover important keywords from the input, filtering common words.
+- *Score range:* 0-1 (1 = perfect keyword coverage)
+
+## Next steps
+
+- Learn how to create custom [Code Scorers](/docs/scorers/code-scorers)
+- Learn how to create custom [LLM Scorers](/docs/scorers/llm-scorers)  
+- Explore [Live Evaluations](/docs/scorers/live-evaluations) for production monitoring
+- See [Scorer Examples](/examples/scorers) for real-world use cases

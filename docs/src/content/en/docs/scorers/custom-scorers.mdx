@@ -1,0 +1,86 @@
+## Creating scorers
+
+Mastra provides two primary approaches for creating scorers:
+
+### Code-based scorers
+
+Use `createScorer` to build scorers with programmatic logic and algorithms. They're ideal for:
+- Deterministic evaluations
+- Performance-critical scenarios
+- Cases where you have clear algorithmic criteria
+- Integration with existing libraries or tools
+
+```typescript filename="src/mastra/scorers/tone-scorer.ts" showLineNumbers copy
+import { createScorer } from "@mastra/core/scores";
+import Sentiment from "sentiment";
+
+export const toneScorer = createScorer({
+  name: "Tone Consistency",
+  description: "Evaluates sentiment consistency between input and output",
+  analyze: async (run) => {
+    const sentiment = new Sentiment();
+    const inputText = run.input?.map(i => i.content).join(", ") || "";
+    const outputText = run.output.text;
+    
+    // Analyze sentiment of both input and output
+    const inputSentiment = sentiment.analyze(inputText);
+    const outputSentiment = sentiment.analyze(outputText);
+    
+    // Calculate how well the output matches input tone
+    const sentimentDiff = Math.abs(
+      inputSentiment.comparative - outputSentiment.comparative
+    );
+    const score = Math.max(0, 1 - sentimentDiff);
+    
+    return {
+      score,
+      result: {
+        inputSentiment: inputSentiment.comparative,
+        outputSentiment: outputSentiment.comparative,
+        difference: sentimentDiff,
+      },
+    };
+  },
+});
+```
+
+### LLM-based scorers
+
+Use `createLLMScorer` to build scorers that use language models as judges. They're perfect for:
+- Subjective evaluations that require understanding context
+- Complex criteria that are difficult to code algorithmically
+- Natural language understanding tasks
+- Cases where human-like judgment is needed
+
+```typescript filename="src/mastra/scorers/helpfulness-scorer.ts" showLineNumbers copy
+import { createLLMScorer } from "@mastra/core/scores";
+import { openai } from "@ai-sdk/openai";
+import { z } from "zod";
+
+export const helpfulnessScorer = createLLMScorer({
+  name: "Helpfulness",
+  description: "Evaluates how helpful a response is to the user",
+  judge: {
+    model: openai("gpt-4o-mini"),
+    instructions: "You are an expert evaluator of AI assistant responses.",
+  },
+  analyze: {
+    description: "Analyze the helpfulness of the response",
+    outputSchema: z.object({
+      helpfulness_rating: z.number().min(1).max(5),
+      reasoning: z.string(),
+    }),
+    createPrompt: ({ run }) => `
+      Evaluate how helpful this response is to the user's question.
+      
+      User Question: ${run.input?.map(i => i.content).join(" ")}
+      AI Response: ${run.output.text}
+      
+      Rate the helpfulness from 1-5 and provide reasoning.
+    `,
+  },
+  calculateScore: ({ run }) => {
+    return run.analyzeStepResult.helpfulness_rating / 5;
+  },
+});
+```
