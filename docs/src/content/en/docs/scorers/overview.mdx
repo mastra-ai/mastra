@@ -1,0 +1,475 @@
+---
+title: "Overview"
+description: Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
+---
+
+# Scorers overview
+
+**Scorers** are evaluation tools that measure the quality, accuracy, or performance of AI-generated outputs. Scorers provide an automated way to assess whether your agents, workflows, or language models are producing the desired results by analyzing their responses against specific criteria.
+
+**Scores** are numerical values (typically between 0 and 1, where 1 represents perfect performance) that quantify how well an output meets your evaluation criteria. These scores enable you to objectively track performance, compare different approaches, and identify areas for improvement in your AI systems.
+
+## What scorers evaluate
+
+Scorers in Mastra can evaluate various aspects of AI outputs:
+
+- **Accuracy**: How factually correct is the response?
+- **Tone consistency**: Does the response maintain the appropriate tone?
+- **Completeness**: Does the response address all parts of the input?
+- **Relevance**: How well does the output relate to the input?
+- **Safety**: Does the response avoid harmful or inappropriate content?
+- **Custom criteria**: Any domain-specific evaluation logic you define
+
+## Creating scorers
+
+Mastra provides two primary approaches for creating scorers:
+
+### Code-based scorers
+
+Use `createScorer` to build scorers with programmatic logic and algorithms. They're ideal for:
+- Deterministic evaluations
+- Performance-critical scenarios
+- Cases where you have clear algorithmic criteria
+- Integration with existing libraries or tools
+
+```typescript filename="src/mastra/scorers/tone-scorer.ts" showLineNumbers copy
+import { createScorer } from "@mastra/core/scores";
+import Sentiment from "sentiment";
+
+export const toneScorer = createScorer({
+  name: "Tone Consistency",
+  description: "Evaluates sentiment consistency between input and output",
+  analyze: async (run) => {
+    const sentiment = new Sentiment();
+    const inputText = run.input?.map(i => i.content).join(", ") || "";
+    const outputText = run.output.text;
+    
+    // Analyze sentiment of both input and output
+    const inputSentiment = sentiment.analyze(inputText);
+    const outputSentiment = sentiment.analyze(outputText);
+    
+    // Calculate how well the output matches input tone
+    const sentimentDiff = Math.abs(
+      inputSentiment.comparative - outputSentiment.comparative
+    );
+    const score = Math.max(0, 1 - sentimentDiff);
+    
+    return {
+      score,
+      result: {
+        inputSentiment: inputSentiment.comparative,
+        outputSentiment: outputSentiment.comparative,
+        difference: sentimentDiff,
+      },
+    };
+  },
+});
+```
+
+### LLM-based scorers
+
+Use `createLLMScorer` to build scorers that use language models as judges. They're perfect for:
+- Subjective evaluations that require understanding context
+- Complex criteria that are difficult to code algorithmically
+- Natural language understanding tasks
+- Cases where human-like judgment is needed
+
+```typescript filename="src/mastra/scorers/helpfulness-scorer.ts" showLineNumbers copy
+import { createLLMScorer } from "@mastra/core/scores";
+import { openai } from "@ai-sdk/openai";
+import { z } from "zod";
+
+export const helpfulnessScorer = createLLMScorer({
+  name: "Helpfulness",
+  description: "Evaluates how helpful a response is to the user",
+  judge: {
+    model: openai("gpt-4o-mini"),
+    instructions: "You are an expert evaluator of AI assistant responses.",
+  },
+  analyze: {
+    description: "Analyze the helpfulness of the response",
+    outputSchema: z.object({
+      helpfulness_rating: z.number().min(1).max(5),
+      reasoning: z.string(),
+    }),
+    createPrompt: ({ run }) => `
+      Evaluate how helpful this response is to the user's question.
+      
+      User Question: ${run.input?.map(i => i.content).join(" ")}
+      AI Response: ${run.output.text}
+      
+      Rate the helpfulness from 1-5 and provide reasoning.
+    `,
+  },
+  calculateScore: ({ run }) => {
+    return run.analyzeStepResult.helpfulness_rating / 5;
+  },
+});
+```
+
+## Scorer architecture
+
+### Three-step evaluation process
+
+Mastra scorers follow an optional three-step pipeline that allows for sophisticated evaluation workflows:
+
+1. **Extract** (Optional): Extract relevant information from the input/output for analysis
+2. **Analyze** (Required): Perform the core evaluation and generate a score
+3. **Reason** (Optional): Provide explanations or justifications for the score
+
+This structure enables both simple single-step evaluations and complex multi-stage analysis workflows.
+
+### How data flows between steps
+
+The pipeline passes data between steps using a structured approach:
+
+```typescript
+Extract Step → { results: extractedData }
+                      ↓
+Analyze Step → { score: number, results: analysisData }
+                      ↓  
+Reason Step → { reason: string }
+```
+
+Each step receives the original `input` and `output`, plus results from previous steps:
+
+- **Extract** receives: `{ input, output }`
+- **Analyze** receives: `{ input, output, extractStepResult }`
+- **Reason** receives: `{ input, output, score, analyzeStepResult, extractStepResult }`
+
+### Step purposes and responsibilities
+
+#### Extract Step: Data Preparation
+
+The extract step preprocesses the input/output to identify relevant content for evaluation. This is especially useful when you need to:
+
+- Parse complex outputs into analyzable components
+- Identify specific statements, claims, or opinions
+- Filter out irrelevant content
+- Normalize data for consistent analysis
+
+**Example from Bias Scorer:**
+```typescript
+extract: {
+  description: "Extract relevant statements from the LLM output",
+  outputSchema: z.object({
+    opinions: z.array(z.string()),
+  }),
+  createPrompt: ({ run }) => createBiasExtractPrompt({ 
+    output: run.output.text 
+  }),
+}
+```
+
+The extract step identifies opinion statements from the output text, filtering out facts and focusing on subjective claims that could contain bias.
+
+#### Analyze Step: Core Evaluation
+
+The analyze step performs the primary evaluation logic and must return a numerical score. This step:
+
+- Evaluates each extracted element or the raw input/output
+- Applies scoring criteria and rubrics
+- Generates structured analysis results
+- Calculates the final numerical score
+
+**Example from Bias Scorer:**
+```typescript
+analyze: {
+  description: "Score the relevance of the statements to the input",
+  outputSchema: z.object({ 
+    results: z.array(z.object({ 
+      result: z.string(), 
+      reason: z.string() 
+    })) 
+  }),
+  createPrompt: ({ run }) => {
+    return createBiasAnalyzePrompt({
+      output: run.output.text,
+      opinions: run.extractStepResult?.opinions || [],
+    });
+  },
+},
+calculateScore: ({ run }) => {
+  const biasedVerdicts = run.analyzeStepResult.results.filter(
+    v => v.result.toLowerCase() === 'yes'
+  );
+  return biasedVerdicts.length / run.analyzeStepResult.results.length;
+}
+```
+
+The analyze step evaluates each extracted opinion for bias, returning "yes/no" verdicts with explanations, then calculates a score based on the proportion of biased opinions.
+
+#### Reason Step: Explanation Generation
+
+The reason step synthesizes all previous results into a human-readable explanation. This step:
+
+- Takes the final score and analysis results
+- Provides context for why the score was assigned
+- Offers specific examples from the content
+- Suggests improvements or corrections when applicable
+
+**Example from Bias Scorer:**
+```typescript
+reason: {
+  description: "Reason about the results",
+  createPrompt: ({ run }) => {
+    return createBiasReasonPrompt({
+      score: run.score,
+      biases: run.analyzeStepResult?.results.map(v => v.reason) || [],
+    });
+  },
+}
+```
+
+The reason step creates a comprehensive explanation citing specific biased language and explaining how it contributed to the final score.
+
+### Complete pipeline example: Bias detection
+
+Here's how the three steps work together in a bias detection scorer:
+
+**Input:** "Men naturally make better leaders due to their assertiveness. Women tend to be too emotional for leadership roles."
+
+**Extract Step Output:**
+```json
+{
+  "opinions": [
+    "Men naturally make better leaders due to their assertiveness",
+    "Women tend to be too emotional for leadership roles"
+  ]
+}
+```
+
+**Analyze Step Output:**
+```json
+{
+  "results": [
+    {
+      "result": "yes",
+      "reason": "Assumes leadership abilities are inherently gender-based"
+    },
+    {
+      "result": "yes", 
+      "reason": "Stereotypes women as overly emotional and unsuitable for leadership"
+    }
+  ]
+}
+```
+
+**Calculated Score:** `2/2 = 1.0` (100% of opinions were biased)
+
+**Reason Step Output:**
+```json
+{
+  "reason": "The score is 1.0 because both opinions express gender bias, such as 'Men naturally make better leaders' and 'Women tend to be too emotional,' which reinforce harmful stereotypes about gender and leadership capabilities."
+}
+```
+
+### When to use each step
+
+**Use Extract when:**
+- Your output contains multiple distinct elements to evaluate
+- You need to filter or preprocess content
+- Complex parsing is required before analysis
+- You want to focus evaluation on specific parts of the output
+
+**Use Analyze only when:**
+- You have straightforward evaluation criteria
+- The input/output can be directly scored
+- No preprocessing or complex explanations are needed
+
+**Use Reason when:**
+- You need to explain scores to users
+- Debugging and transparency are important  
+- You want to provide actionable feedback
+- Compliance or auditing requires explanations
+
+### Input and output structure
+
+Every Mastra scorer operates on a consistent input/output pattern:
+
+**Input:**
+- `input`: An array of records (typically user messages like `[{ role: 'user', content: 'hello world' }]`)
+- `output`: A record containing the AI system's response (e.g., `{ text: 'Hello! How can I help you?' }`)
+- Optional context: Additional metadata or runtime information
+
+**Output:**
+- `score`: A numerical value representing the evaluation result
+- `reason`: (Optional) A human-readable explanation of why the score was assigned
+- `extractStepResult`: (Optional) Results from the extract step
+- `analyzeStepResult`: (Optional) Detailed analysis results
+- Additional metadata: Custom results from your evaluation logic
+
+### Running a scorer
+
+Use the `.run()` method to evaluate an input/output pair:
+
+```typescript filename="src/test-scorer.ts" showLineNumbers copy
+import { toneScorer } from "./mastra/scorers/tone-scorer";
+
+const result = await toneScorer.run({
+  input: [{ role: "user", content: "I'm really frustrated with this service!" }],
+  output: { text: "I understand your frustration. Let me help you resolve this issue." }
+});
+
+console.log("Score:", result.score);
+console.log("Analysis:", result.analyzeStepResult);
+```
+
+## Live evaluations
+
+**Live evaluations** allow you to automatically score AI outputs in real-time as your agents and workflows operate. Instead of running evaluations manually or in batches, scorers run asynchronously alongside your AI systems, providing continuous quality monitoring.
+
+### Adding scorers to agents
+
+You can add multiple scorers to any agent with configurable sampling rates:
+
+```typescript filename="src/mastra/agents/customer-service.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { 
+  createAnswerRelevancyScorer,
+  createHallucinationScorer,
+  createBiasScorer 
+} from "@mastra/evals/scorers/llm";
+
+export const customerServiceAgent = new Agent({
+  name: "Customer Service Agent",
+  instructions: "You are a helpful customer service representative.",
+  model: openai("gpt-4o"),
+  scorers: {
+    answerRel: {
+      scorer: createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") }),
+      sampling: {
+        type: "ratio",
+        rate: 1, // Score every response
+      }
+    },
+    hallucination: {
+      scorer: createHallucinationScorer({ model: openai("gpt-4o-mini") }),
+      sampling: {
+        type: "ratio", 
+        rate: 0.1, // Score 10% of responses
+      }
+    },
+    bias: {
+      scorer: createBiasScorer({ model: openai("gpt-4o-mini") }),
+      sampling: {
+        type: "ratio",
+        rate: 0.5, // Score 50% of responses
+      }
+    },
+  },
+});
+```
+
+### Adding scorers to workflow steps
+
+You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process:
+
+```typescript filename="src/mastra/workflows/content-generation.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+import { customStepScorer } from "../scorers/custom-step-scorer";
+
+const contentStep = createStep({
+  id: "content-generation-step",
+  description: "Generate content based on input",
+  inputSchema: z.object({
+    topic: z.string(),
+  }),
+  outputSchema: z.object({
+    content: z.string(),
+  }),
+  scorers: {
+    customStepScorer: {
+      scorer: customStepScorer(),
+      sampling: {
+        type: "ratio",
+        rate: 1, // Score every step execution
+      }
+    }
+  },
+  execute: async ({ inputData }) => {
+    // Your step logic here
+    return {
+      content: `Generated content about ${inputData.topic}`,
+    };
+  },
+});
+
+export const contentWorkflow = createWorkflow({
+  id: "content-generation",
+  inputSchema: z.object({ topic: z.string() }),
+  outputSchema: z.object({ content: z.string() }),
+})
+  .then(contentStep)
+  .commit();
+```
+
+### How live evaluations work
+
+**Asynchronous execution**: Live evaluations run in the background without blocking your agent responses or workflow execution. This ensures your AI systems maintain their performance while still being monitored.
+
+**Sampling control**: The `sampling.rate` parameter (0-1) controls what percentage of outputs get scored:
+- `1.0`: Score every single response (100%)
+- `0.5`: Score half of all responses (50%) 
+- `0.1`: Score 10% of responses
+- `0.0`: Disable scoring
+
+**Automatic storage**: All scoring results are automatically stored in the `mastra_scorers` table in your configured database, allowing you to analyze performance trends over time.
+
+### Benefits of live evaluations
+
+**Continuous monitoring**: Track quality metrics in real-time without manual intervention
+
+**Performance optimization**: Use sampling to balance evaluation coverage with system performance
+
+**Early detection**: Catch quality issues as they happen rather than discovering them later
+
+**Production insights**: Understand how your AI systems perform with real user interactions
+
+**A/B testing**: Compare scorer results across different agent configurations or prompts
+
+### Best practices for live evaluations
+
+**Choose appropriate sampling rates**: Use higher rates (0.8-1.0) for critical scorers like safety checks, and lower rates (0.1-0.3) for expensive or less critical evaluations.
+
+**Monitor multiple dimensions**: Combine different types of scorers (accuracy, safety, bias) to get comprehensive quality coverage.
+
+**Use lighter models for high-frequency scoring**: Consider using faster models like `gpt-4o-mini` for scorers that run frequently.
+
+**Start with low sampling in production**: Begin with conservative sampling rates and increase based on performance impact and monitoring needs.
+
+## Integration with Mastra
+
+Beyond live evaluations, scorers integrate with other parts of the Mastra ecosystem for comprehensive evaluation workflows.
+
+## Benefits of using scorers
+
+1. **Objective measurement**: Replace subjective "feels good" assessments with quantifiable metrics
+2. **Continuous monitoring**: Track performance over time and catch regressions early
+3. **A/B testing**: Compare different prompts, models, or configurations systematically
+4. **Quality assurance**: Ensure outputs meet your standards before reaching users
+5. **Debugging**: Identify specific failure modes and improvement opportunities
+
+## When to use scorers
+
+Scorers are valuable whenever you need to:
+- Validate that your AI system produces acceptable outputs
+- Compare the performance of different approaches
+- Monitor quality in production environments
+- Automate evaluation processes that would otherwise require manual review
+- Provide feedback for model fine-tuning or prompt optimization
+
+## Testing scorers locally
+
+Mastra provides a CLI command `mastra dev` to test your scorers. The playground includes a scorers section where you can run individual scorers against test inputs and view detailed results.
+
+For more details, see the [Local Dev Playground](/docs/server-db/local-dev-playground) docs.
+
+## Next steps
+
+- Learn about creating code-based scorers in the [Writing Code Scorers](/docs/scorers/code-scorers) guide
+- Learn about creating LLM-based scorers in the [Writing LLM Scorers](/docs/scorers/llm-scorers) guide  
+- Explore the Extract-Analyze-Reason process in the [Scorer Process](/docs/scorers/process) guide
+- See example scorers in the [Scorer Examples](/examples/scorers) section
