@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { InMemoryStore } from './mock';
 import type { StorageThreadType } from '../memory/types';
+import { InMemoryStore } from './mock';
 
 describe('InMemoryStore - Thread Sorting', () => {
   let store: InMemoryStore;
