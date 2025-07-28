@@ -1466,8 +1466,8 @@ export class Agent<
           return {
             messageObjects: messageList.get.all.prompt(),
             convertedTools,
+            thread: undefined,
             messageList,
-            thread: thread as StorageThreadType | null | undefined,
             ...(tripwireTriggered && {
               tripwire: true,
               tripwireReason,
