@@ -186,6 +186,12 @@ An optional object that can include configuration for output structure, memory m
       description:
         "Tools that are executed on the 'client' side of the request. These tools do not have execute functions in the definition.",
     },
+    {
+      name: "savePerStep",
+      type: "boolean",
+      isOptional: true,
+      description: "Save messages incrementally after each stream step completes (default: false).",
+    }
   ]}
 />
 

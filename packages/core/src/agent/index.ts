@@ -217,7 +217,7 @@ export class Agent<
     if (typeof this.#memory !== 'function') {
       resolvedMemory = this.#memory;
     } else {
-      const result = this.#memory({ runtimeContext });
+      const result = this.#memory({ runtimeContext, mastra: this.#mastra });
       resolvedMemory = await Promise.resolve(result);
 
       if (!resolvedMemory) {
@@ -270,7 +270,7 @@ export class Agent<
   }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow>> {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
-      workflowRecord = await Promise.resolve(this.#workflows({ runtimeContext }));
+      workflowRecord = await Promise.resolve(this.#workflows({ runtimeContext, mastra: this.#mastra }));
     } else {
       workflowRecord = this.#workflows ?? {};
     }
@@ -291,7 +291,7 @@ export class Agent<
       return this.#scorers;
     }
 
-    const result = this.#scorers({ runtimeContext });
+    const result = this.#scorers({ runtimeContext, mastra: this.#mastra });
     return resolveMaybePromise(result, scorers => {
       if (!scorers) {
         const mastraError = new MastraError({
@@ -351,7 +351,7 @@ export class Agent<
       return this.#instructions;
     }
 
-    const result = this.#instructions({ runtimeContext });
+    const result = this.#instructions({ runtimeContext, mastra: this.#mastra });
     return resolveMaybePromise(result, instructions => {
       if (!instructions) {
         const mastraError = new MastraError({
@@ -383,7 +383,7 @@ export class Agent<
       return this.#defaultGenerateOptions;
     }
 
-    const result = this.#defaultGenerateOptions({ runtimeContext });
+    const result = this.#defaultGenerateOptions({ runtimeContext, mastra: this.#mastra });
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
@@ -411,7 +411,7 @@ export class Agent<
       return this.#defaultStreamOptions;
     }
 
-    const result = this.#defaultStreamOptions({ runtimeContext });
+    const result = this.#defaultStreamOptions({ runtimeContext, mastra: this.#mastra });
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
@@ -442,7 +442,7 @@ export class Agent<
       return this.#defaultVNextStreamOptions as AgentVNextStreamOptions<Output, StructuredOutput>;
     }
 
-    const result = this.#defaultVNextStreamOptions({ runtimeContext }) as
+    const result = this.#defaultVNextStreamOptions({ runtimeContext, mastra: this.#mastra }) as
       | AgentVNextStreamOptions<Output, StructuredOutput>
       | Promise<AgentVNextStreamOptions<Output, StructuredOutput>>;
     return resolveMaybePromise(result, options => {
@@ -493,7 +493,7 @@ export class Agent<
       return ensureToolProperties(this.#tools) as TTools;
     }
 
-    const result = this.#tools({ runtimeContext });
+    const result = this.#tools({ runtimeContext, mastra: this.#mastra });
 
     return resolveMaybePromise(result, tools => {
       if (!tools) {
@@ -551,7 +551,7 @@ export class Agent<
     // If model is provided, resolve it; otherwise use the agent's model
     const modelToUse = model
       ? typeof model === 'function'
-        ? model({ runtimeContext })
+        ? model({ runtimeContext, mastra: this.#mastra })
         : model
       : this.getModel({ runtimeContext });
 
@@ -598,7 +598,7 @@ export class Agent<
       return this.model;
     }
 
-    const result = this.model({ runtimeContext });
+    const result = this.model({ runtimeContext, mastra: this.#mastra });
     return resolveMaybePromise(result, model => {
       if (!model) {
         const mastraError = new MastraError({
@@ -1434,22 +1434,22 @@ export class Agent<
             title: thread.title,
             memoryConfig,
             resourceId,
+            saveThread: false,
           });
         }
 
-        let [memoryMessages, memorySystemMessage] =
-          thread.id && memory
-            ? await Promise.all([
-                this.getMemoryMessages({
-                  resourceId,
-                  threadId: threadObject.id,
-                  vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
-                  memoryConfig,
-                  runtimeContext,
-                }),
-                memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
-              ])
-            : [[], null];
+        let [memoryMessages, memorySystemMessage] = existingThread
+          ? await Promise.all([
+              this.getMemoryMessages({
+                resourceId,
+                threadId: threadObject.id,
+                vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
+                memoryConfig,
+                runtimeContext,
+              }),
+              memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
+            ])
+          : [[], null];
 
         this.logger.debug('Fetched messages from memory', {
           threadId: threadObject.id,
@@ -1541,6 +1541,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           messageList,
           // add old processed messages + new input messages
           messageObjects: processedList,
+          threadExists: !!existingThread,
         };
       },
       after: async ({
@@ -1551,6 +1552,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText,
         runId,
         messageList,
+        threadExists,
         toolCallsCollection,
         structuredOutput = false,
       }: {
@@ -1561,6 +1563,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
         messageList: MessageList;
+        threadExists: boolean;
         toolCallsCollection: Map<string, any>;
         structuredOutput?: boolean;
       }) => {
@@ -1625,6 +1628,16 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             }
             if (responseMessages) {
               messageList.add(responseMessages, 'response');
+            }
+
+            if (!threadExists) {
+              await memory.createThread({
+                threadId: thread.id,
+                metadata: thread.metadata,
+                title: thread.title,
+                memoryConfig,
+                resourceId: thread.resourceId,
+              });
             }
 
             // Parallelize title generation and message saving
@@ -1937,6 +1950,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     let messageList: MessageList;
     let thread: StorageThreadType | null | undefined;
+    let threadExists: boolean;
 
     const toolCallsCollection = new Map();
     return {
@@ -1944,6 +1958,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       before: async () => {
         const beforeResult = await before();
         const { messageObjects, convertedTools } = beforeResult;
+        threadExists = beforeResult.threadExists || false;
         messageList = beforeResult.messageList;
         thread = beforeResult.thread;
 
@@ -1962,6 +1977,17 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           runtimeContext,
           onStepFinish: async (props: any) => {
             if (savePerStep) {
+              if (!threadExists && memory && thread) {
+                await memory.createThread({
+                  threadId,
+                  title: thread.title,
+                  metadata: thread.metadata,
+                  resourceId: thread.resourceId,
+                  memoryConfig,
+                });
+                threadExists = true;
+              }
+
               await this.saveStepMessages({
                 saveQueueManager,
                 result: props,
@@ -2006,6 +2032,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           messageList,
           toolCallsCollection,
           structuredOutput,
+          threadExists,
         });
       },
     };
@@ -2516,7 +2543,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     if (typeof instructions === 'string') {
       return instructions;
     } else {
-      const result = instructions({ runtimeContext });
+      const result = instructions({ runtimeContext, mastra: this.#mastra });
       return resolveMaybePromise(result, resolvedInstructions => {
         return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
       });

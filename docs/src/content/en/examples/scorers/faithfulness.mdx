@@ -1,0 +1,199 @@
+---
+title: "Example: Faithfulness | Scorers | Mastra Docs"
+description: Example of using the Faithfulness scorer to evaluate how factually accurate responses are compared to context.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Faithfulness Scorer
+
+Use `createFaithfulnessScorer` to evaluate whether the response makes claims that are supported by the provided context. The scorer accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
+
+## Installation
+
+```bash copy
+npm install @mastra/evals
+```
+
+> For complete API documentation and configuration options, see [`createFaithfulnessScorer`](/reference/scorers/faithfulness).
+
+## High faithfulness example
+
+In this example, the response closely aligns with the context. Each statement in the output is verifiable and supported by the provided context entries, resulting in a high score.
+
+```typescript filename="src/example-high-faithfulness.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [
+    "The Tesla Model 3 was launched in 2017.",
+    "It has a range of up to 358 miles.",
+    "The base model accelerates 0-60 mph in 5.8 seconds."
+  ]
+});
+
+const query = "Tell me about the Tesla Model 3.";
+const response = "The Tesla Model 3 was introduced in 2017. It can travel up to 358 miles on a single charge and the base version goes from 0 to 60 mph in 5.8 seconds.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### High faithfulness output
+
+The output receives a score of 1 because all the information it provides can be directly traced to the context. There are no missing or contradictory facts.
+
+```typescript
+{
+  score: 1,
+  reason: 'The score is 1 because all claims made in the output are supported by the provided context.'
+}
+```
+
+## Mixed faithfulness example
+
+In this example, there are a mix of supported and unsupported claims. Some parts of the response are backed by the context, while others introduce new information not found in the source material.
+
+```typescript filename="src/example-mixed-faithfulness.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [
+    "Python was created by Guido van Rossum.",
+    "The first version was released in 1991.",
+    "Python emphasizes code readability."
+  ]
+});
+
+const query = "What can you tell me about Python?";
+const response = "Python was created by Guido van Rossum and released in 1991. It is the most popular programming language today and is used by millions of developers worldwide.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### Mixed faithfulness output
+
+The score is lower because only a portion of the response is verifiable. While some claims match the context, others are unconfirmed or out of scope, reducing the overall faithfulness.
+
+```typescript
+{
+  score: 0.5,
+  reason: "The score is 0.5 because while two claims are supported by the context (Python was created by Guido van Rossum and Python was released in 1991), the other two claims regarding Python's popularity and usage cannot be verified as they are not mentioned in the context."
+}
+```
+
+## Low faithfulness example
+
+In this example, the response directly contradicts the context. None of the claims are supported, and several conflict with the facts provided.
+
+```typescript filename="src/example-low-faithfulness.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [
+    "Mars is the fourth planet from the Sun.",
+    "It has a thin atmosphere of mostly carbon dioxide.",
+    "Two small moons orbit Mars: Phobos and Deimos."
+  ]
+});
+
+const query = "What do we know about Mars?";
+const response = "Mars is the third planet from the Sun. It has a thick atmosphere rich in oxygen and nitrogen, and is orbited by three large moons.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### Low faithfulness output
+
+Each claim is inaccurate or conflicts with the context, resulting in a score of 0.
+
+```typescript
+{
+  score: 0,
+  reason: "The score is 0 because all claims made in the output contradict the provided context. The output states that Mars is the third planet from the Sun, while the context clearly states it is the fourth. Additionally, it claims that Mars has a thick atmosphere rich in oxygen and nitrogen, contradicting the context's description of a thin atmosphere mostly composed of carbon dioxide. Finally, the output mentions that Mars is orbited by three large moons, while the context specifies that it has only two small moons, Phobos and Deimos. Therefore, there are no supported claims, leading to a score of 0."
+}
+```
+
+## configuration
+
+You can adjust how the `FaithfulnessScorer` scores responses by configuring optional parameters. For example, `scale` sets the maximum possible score returned by the scorer.
+
+```typescript showLineNumbers copy
+const scorer = createFaithfulnessScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [""],
+  scale: 1
+});
+```
+> See [FaithfulnessScorer](/reference/scorers/faithfulness.mdx) for a full list of configuration options.
+
+## Understanding the results
+
+`.run()` returns a result in the following shape:
+
+```typescript
+{
+  runId: string,
+  extractStepResult: string[],
+  extractPrompt: string,
+  analyzeStepResult: {
+    verdicts: Array<{ verdict: 'yes' | 'no' | 'unsure', reason: string }>
+  },
+  analyzePrompt: string,
+  score: number,
+  reason: string,
+  reasonPrompt: string
+}
+```
+
+### score
+A faithfulness score between 0 and 1:
+
+- **1.0**: All claims are accurate and directly supported by the context.
+- **0.7–0.9**: Most claims are correct, with minor additions or omissions.
+- **0.4–0.6**: Some claims are supported, but others are unverifiable.
+- **0.1–0.3**: Most of the content is inaccurate or unsupported.
+- **0.0**: All claims are false or contradict the context.
+
+### runId
+The unique identifier for this scorer run.
+
+### extractStepResult
+Array of extracted claims from the output.
+
+### extractPrompt
+The prompt sent to the LLM for the extract step.
+
+### analyzeStepResult
+Object with verdicts for each claim:
+- **verdicts**: Array of objects with `verdict` ('yes', 'no', or 'unsure') and a `reason` for each claim.
+
+### analyzePrompt
+The prompt sent to the LLM for the analyze step.
+
+### reasonPrompt
+The prompt sent to the LLM for the reason step.
+
+### reason
+A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure.
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/faithfulness"
+/>
