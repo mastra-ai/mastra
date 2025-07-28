@@ -13,7 +13,8 @@ export const ReferenceCards = () => {
         "Memory",
         "Storage",
         "RAG",
-        "Evals",
+        "Evals (Legacy)",
+        "Scorers",
         "Voice",
         "Observability",
         "Client SDK",
@@ -358,7 +359,7 @@ export const ReferenceCards = () => {
             href: "/reference/rag/lance",
           },
         ],
-        Evals: [
+        "Evals (Legacy)": [
           {
             title: "AnswerRelevancy",
             href: "/reference/evals/answer-relevancy",
@@ -422,6 +423,60 @@ export const ReferenceCards = () => {
           {
             title: "Toxicity",
             href: "/reference/evals/toxicity",
+          },
+        ],
+        Scorers: [
+          {
+            title: "MastraScorer",
+            href: "/reference/scorers/mastra-scorer",
+          },
+          {
+            title: "createScorer",
+            href: "/reference/scorers/custom-code-scorer",
+          },
+          {
+            title: "createLLMScorer",
+            href: "/reference/scorers/llm-scorer",
+          },
+          {
+            title: "Answer Relevancy",
+            href: "/reference/scorers/answer-relevancy",
+          },
+          {
+            title: "Bias",
+            href: "/reference/scorers/bias",
+          },
+          {
+            title: "Completeness",
+            href: "/reference/scorers/completeness",
+          },
+          {
+            title: "Content Similarity",
+            href: "/reference/scorers/content-similarity",
+          },
+          {
+            title: "Faithfulness",
+            href: "/reference/scorers/faithfulness",
+          },
+          {
+            title: "Hallucination",
+            href: "/reference/scorers/hallucination",
+          },
+          {
+            title: "Keyword Coverage",
+            href: "/reference/scorers/keyword-coverage",
+          },
+          {
+            title: "Textual Difference",
+            href: "/reference/scorers/textual-difference",
+          },
+          {
+            title: "Tone Consistency",
+            href: "/reference/scorers/tone-consistency",
+          },
+          {
+            title: "Toxicity",
+            href: "/reference/scorers/toxicity",
           },
         ],
         Voice: [

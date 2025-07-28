@@ -85,7 +85,7 @@ export function createCompletenessScorer() {
         throw new Error('Inputs cannot be null or undefined');
       }
 
-      const input = run.input.map(i => i.content).join(', ');
+      const input = run.input?.map(i => i.content).join(', ') || '';
       const output = run.output.text;
 
       const inputToProcess = input;
