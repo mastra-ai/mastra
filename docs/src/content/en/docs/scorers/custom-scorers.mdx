@@ -1,6 +1,10 @@
 ## Creating scorers
 
-Mastra provides two primary approaches for creating scorers:
+Mastra provides two approaches for creating custom scorers:
+
+**Code scorers** use programmatic logic and algorithms. They're ideal for deterministic evaluations, performance-critical scenarios, and cases where you have clear algorithmic criteria.
+
+**LLM scorers** use language models as judges. They're perfect for subjective evaluations, complex criteria that are difficult to code algorithmically, and cases where human-like judgment is needed.
 
 ### Code-based scorers
 
@@ -10,36 +14,114 @@ Use `createScorer` to build scorers with programmatic logic and algorithms. They
 - Cases where you have clear algorithmic criteria
 - Integration with existing libraries or tools
 
-```typescript filename="src/mastra/scorers/tone-scorer.ts" showLineNumbers copy
-import { createScorer } from "@mastra/core/scores";
-import Sentiment from "sentiment";
+For the complete API reference, see [`createScorer`](/reference/scorers/custom-code-scorer).
 
-export const toneScorer = createScorer({
-  name: "Tone Consistency",
-  description: "Evaluates sentiment consistency between input and output",
-  analyze: async (run) => {
-    const sentiment = new Sentiment();
-    const inputText = run.input?.map(i => i.content).join(", ") || "";
-    const outputText = run.output.text;
-    
-    // Analyze sentiment of both input and output
-    const inputSentiment = sentiment.analyze(inputText);
-    const outputSentiment = sentiment.analyze(outputText);
-    
-    // Calculate how well the output matches input tone
-    const sentimentDiff = Math.abs(
-      inputSentiment.comparative - outputSentiment.comparative
-    );
-    const score = Math.max(0, 1 - sentimentDiff);
+#### The evaluation pipeline
+
+Code scorers follow Mastra's evaluation pipeline with optional extract and reason steps. For a detailed explanation of how the pipeline works, see the [Three-step evaluation process](/docs/scorers/overview#three-step-evaluation-process) in the overview.
+
+#### Step requirements and usage guide
+
+**Extract step (optional):**
+- **Receives:** `{ input, output }`
+- **Must return:** `{ results: any }`
+- **Data flow:** The `results` value is passed to the analyze step as `extractStepResult`
+- **Use when:** You need to preprocess complex input/output data, evaluate multiple distinct elements, filter content, or focus analysis on specific parts of the data
+
+**Analyze step (required):**
+- **Receives:** `{ input, output, extractStepResult? }`
+- **Must return:** `{ score: number, results?: any }`
+- **Data flow:** The `score` and optional `results` are passed to the reason step
+- **Use when:** This step is always required for core evaluation and score generation
+
+**Reason step (optional):**
+- **Receives:** `{ input, output, score, analyzeStepResult, extractStepResult? }`
+- **Must return:** `{ reason: string }`
+- **Use when:** You need explanations for scores, debugging/transparency, actionable feedback, or compliance documentation
+
+#### Example: Multi-step scorer with extract, analyze, and reason
+
+Here's a complete example showing all three steps of the evaluation pipeline:
+
+```typescript filename="src/mastra/scorers/keyword-coverage-scorer.ts" showLineNumbers copy
+import { createScorer } from "@mastra/core/scores";
+import keywordExtractor from "keyword-extractor";
+
+export const keywordCoverageScorer = createScorer({
+  name: "Keyword Coverage",
+  description: "Evaluates how well the output covers keywords from the input",
+  
+  // Step 1: Extract keywords from input and output
+  extract: async ({ input, output }) => {
+    const inputText = input?.map(i => i.content).join(", ") || "";
+    const outputText = output.text;
+
+    const extractKeywords = (text: string) => {
+      return keywordExtractor.extract(text, {
+        language: "english",
+        remove_digits: true,
+        return_changed_case: true,
+        remove_duplicates: true,
+      });
+    };
+
+    const inputKeywords = new Set(extractKeywords(inputText));
+    const outputKeywords = new Set(extractKeywords(outputText));
     
     return {
-      score,
-      result: {
-        inputSentiment: inputSentiment.comparative,
-        outputSentiment: outputSentiment.comparative,
-        difference: sentimentDiff,
+      results: {
+        inputKeywords,
+        outputKeywords,
       },
     };
+  },
+
+  // Step 2: Analyze keyword coverage and calculate score
+  analyze: async ({ input, output, extractStepResult }) => {
+    const { inputKeywords, outputKeywords } = extractStepResult.results;
+    
+    if (inputKeywords.size === 0) {
+      return { score: 1, results: { coverage: 1, matched: 0, total: 0 } };
+    }
+
+    const matchedKeywords = [...inputKeywords].filter(keyword =>
+      outputKeywords.has(keyword)
+    );
+    
+    const coverage = matchedKeywords.length / inputKeywords.size;
+
+    return {
+      score: coverage,
+      results: {
+        coverage,
+        matched: matchedKeywords.length,
+        total: inputKeywords.size,
+        matchedKeywords,
+      },
+    };
+  },
+
+  // Step 3: Generate explanation for the score
+  reason: async ({ score, analyzeStepResult, extractStepResult }) => {
+    const { matched, total, matchedKeywords } = analyzeStepResult.results;
+    const { inputKeywords } = extractStepResult.results;
+    
+    const percentage = Math.round(score * 100);
+    const missedKeywords = [...inputKeywords].filter(
+      keyword => !matchedKeywords.includes(keyword)
+    );
+
+    let reason = `The output achieved ${percentage}% keyword coverage (${matched}/${total} keywords).`;
+    
+    if (matchedKeywords.length > 0) {
+      reason += ` Covered keywords: ${matchedKeywords.join(", ")}.`;
+    }
+    
+    if (missedKeywords.length > 0) {
+      reason += ` Missing keywords: ${missedKeywords.join(", ")}.`;
+    }
+
+    return { reason };
   },
 });
 ```
@@ -52,35 +134,119 @@ Use `createLLMScorer` to build scorers that use language models as judges. They'
 - Natural language understanding tasks
 - Cases where human-like judgment is needed
 
-```typescript filename="src/mastra/scorers/helpfulness-scorer.ts" showLineNumbers copy
-import { createLLMScorer } from "@mastra/core/scores";
+For the complete API reference, see [`createLLMScorer`](/reference/scorers/llm-scorer).
+
+#### The evaluation pipeline
+
+LLM scorers follow the same evaluation pipeline as code scorers with optional extract and reason steps, plus an additional `calculateScore` function. For a detailed explanation of how the pipeline works, see the [Three-step evaluation process](/docs/scorers/overview#three-step-evaluation-process) in the overview.
+
+**LLM-specific pipeline:**
+1. **Extract** (Optional): LLM processes input/output and returns structured data
+2. **Analyze** (Required): LLM performs evaluation and returns structured analysis
+3. **Calculate Score** (Required): Function converts LLM analysis into numerical score
+4. **Reason** (Optional): LLM generates human-readable explanation
+
+The `calculateScore` function leverages the best of both approaches: LLMs excel at qualitative analysis and understanding, while deterministic functions ensure precise and consistent numerical scoring.
+
+#### Step requirements and usage guide
+
+**Extract step (optional):**
+- **Configuration:** `{ description, outputSchema, createPrompt }`
+- **Data flow:** The structured output (defined by outputSchema) is passed to the analyze step as `extractStepResult`
+- **Use when:** You need to preprocess complex input/output data, evaluate multiple distinct elements, filter content, or focus analysis on specific parts of the data
+
+**Analyze step (required):**
+- **Configuration:** `{ description, outputSchema, createPrompt }`
+- **Data flow:** The structured output is passed to the calculateScore function and then to the reason step
+- **Use when:** This step is always required for core evaluation. The LLM performs the qualitative analysis that will be converted to a numerical score.
+
+**Calculate Score step (required):**
+- **Configuration:** `calculateScore` function that receives `{ run }` and returns a number
+- **Data flow:** Converts the analyze step's structured output into a numerical score (0-1 range)
+- **Use when:** Always required for LLM scorers. Provides deterministic scoring logic since LLMs aren't reliable for consistent numerical outputs.
+
+**Reason step (optional):**
+- **Configuration:** `{ description, createPrompt }` (no outputSchema needed)
+- **Data flow:** Receives all previous step results and score, returns a string explanation
+- **Use when:** You need explanations for scores, debugging/transparency, actionable feedback, or compliance documentation
+
+**Judge configuration:**
+All steps use a shared `judge` object containing:
+- **model:** The LLM model instance for evaluation
+- **instructions:** System prompt that guides the LLM's behavior
+
+#### Example: Multi-step LLM scorer with extract, analyze, and reason
+
+Here's a complete example showing all three steps of the evaluation pipeline using an LLM judge:
+
+```typescript filename="src/mastra/scorers/gluten-checker-scorer.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
+import { createLLMScorer } from "@mastra/core/scores";
 import { z } from "zod";
 
-export const helpfulnessScorer = createLLMScorer({
-  name: "Helpfulness",
-  description: "Evaluates how helpful a response is to the user",
+const GLUTEN_INSTRUCTIONS = `You are a Chef that identifies if recipes contain gluten.`;
+
+const generateGlutenPrompt = ({ output }: { output: string }) => `
+You are a chef who checks if a recipe contains gluten. List all ingredients in the recipe that contain gluten and return them in a JSON object.
+
+Gluten is commonly found in:
+- Wheat (including wheat flour, whole wheat, semolina, durum, spelt, farro, etc.)
+- Barley (including malt, malt extract, malt vinegar)
+- Rye
+- Triticale
+- Products made from these grains (e.g., bread, pasta, cake, cookies, seitan, beer, soy sauce unless labeled gluten-free)
+
+**Instructions:**
+- Carefully read the recipe and list every ingredient that contains gluten.
+- If an ingredient is ambiguous (e.g., "flour" without specifying type), assume it contains gluten unless otherwise stated.
+- If you are unsure, include the ingredient and note it in a comment in the JSON (see example).
+- If there are no gluten-containing ingredients, return an empty array.
+
+**Return ONLY the following JSON object, with no extra text:**
+{
+  "glutenSources": ["list of gluten-containing ingredients"]
+}
+
+=== Recipe to analyze ===
+${output}
+=== End of recipe to analyze ===
+JSON:
+`;
+
+const generateReasonPrompt = ({ isGlutenFree, glutenSources }: { isGlutenFree: boolean; glutenSources: string[] }) => `
+Explain why this recipe is${isGlutenFree ? '' : ' not'} gluten-free.
+${glutenSources.length > 0 ? `Sources of gluten: ${glutenSources.join(', ')}` : 'No gluten-containing ingredients found'}
+Return your response in this format:
+{
+  "reason": "This recipe is [gluten-free/contains gluten] because [explanation]"
+}`;
+
+export const glutenCheckerScorer = createLLMScorer({
+  name: 'Gluten Checker',
+  description: 'Check if the output contains any gluten',
+  
+  // Shared judge configuration
   judge: {
-    model: openai("gpt-4o-mini"),
-    instructions: "You are an expert evaluator of AI assistant responses.",
+    model: openai('gpt-4o'),
+    instructions: GLUTEN_INSTRUCTIONS,
   },
+  
+  // Step 1: Analyze the recipe for gluten content
   analyze: {
-    description: "Analyze the helpfulness of the response",
-    outputSchema: z.object({
-      helpfulness_rating: z.number().min(1).max(5),
-      reasoning: z.string(),
-    }),
-    createPrompt: ({ run }) => `
-      Evaluate how helpful this response is to the user's question.
-      
-      User Question: ${run.input?.map(i => i.content).join(" ")}
-      AI Response: ${run.output.text}
-      
-      Rate the helpfulness from 1-5 and provide reasoning.
-    `,
+    description: 'Analyze the output for gluten',
+    outputSchema: z.object({ glutenSources: z.array(z.string()) }),
+    createPrompt: ({ run }) => generateGlutenPrompt({ output: run.output.text }),
   },
-  calculateScore: ({ run }) => {
-    return run.analyzeStepResult.helpfulness_rating / 5;
+  
+  // Calculate score from LLM output
+  calculateScore: ({ run }) => run.analyzeStepResult.glutenSources.length > 0 ? 0 : 1,
+  
+  // Step 2: Generate explanation for the score
+  reason: {
+    createPrompt: ({ run }) => generateReasonPrompt({
+      glutenSources: run.analyzeStepResult.glutenSources,
+      isGlutenFree: run.analyzeStepResult.glutenSources.length === 0,
+    }),
   },
 });
 ```
