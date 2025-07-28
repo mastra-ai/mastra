@@ -42,34 +42,71 @@ export type ExtractParams = {
   keywords?: KeywordExtractArgs | boolean;
 };
 
-export type ChunkOptions = {
-  headers?: [string, string][];
-  returnEachLine?: boolean;
-  sections?: [string, string][];
-  separator?: string;
-  separators?: string[];
-  isSeparatorRegex?: boolean;
+export type BaseChunkOptions = {
   size?: number;
-  maxSize?: number;
-  minSize?: number;
   overlap?: number;
   lengthFunction?: (text: string) => number;
   keepSeparator?: boolean | 'start' | 'end';
   addStartIndex?: boolean;
   stripWhitespace?: boolean;
+};
+
+export type CharacterChunkOptions = BaseChunkOptions & {
+  separator?: string;
+  isSeparatorRegex?: boolean;
+};
+
+export type RecursiveChunkOptions = BaseChunkOptions & {
+  separators?: string[];
+  isSeparatorRegex?: boolean;
   language?: Language;
-  ensureAscii?: boolean;
-  convertLists?: boolean;
+};
+
+export type TokenChunkOptions = BaseChunkOptions & {
   encodingName?: TiktokenEncoding;
   modelName?: TiktokenModel;
   allowedSpecial?: Set<string> | 'all';
   disallowedSpecial?: Set<string> | 'all';
+};
+
+export type MarkdownChunkOptions = BaseChunkOptions & {
+  headers?: [string, string][];
+  returnEachLine?: boolean;
   stripHeaders?: boolean;
 };
 
-export type ChunkStrategy = 'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex';
+export type HTMLChunkOptions = BaseChunkOptions & {
+  headers?: [string, string][];
+  sections?: [string, string][];
+  returnEachLine?: boolean;
+};
 
-export interface ChunkParams extends ChunkOptions {
-  strategy?: ChunkStrategy;
-  extract?: ExtractParams;
-}
+export type JsonChunkOptions = BaseChunkOptions & {
+  maxSize: number;
+  minSize?: number;
+  ensureAscii?: boolean;
+  convertLists?: boolean;
+};
+
+export type LatexChunkOptions = BaseChunkOptions & {};
+
+export type SentenceChunkOptions = BaseChunkOptions & {
+  minSize?: number;
+  maxSize: number;
+  targetSize?: number;
+  sentenceEnders?: string[];
+  preserveWhitespace?: boolean;
+  fallbackToWords?: boolean;
+};
+
+export type ChunkStrategy = 'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex' | 'sentence';
+
+export type ChunkParams =
+  | ({ strategy?: 'character' } & CharacterChunkOptions & { extract?: ExtractParams })
+  | ({ strategy: 'recursive' } & RecursiveChunkOptions & { extract?: ExtractParams })
+  | ({ strategy: 'token' } & TokenChunkOptions & { extract?: ExtractParams })
+  | ({ strategy: 'markdown' } & MarkdownChunkOptions & { extract?: ExtractParams })
+  | ({ strategy: 'html' } & HTMLChunkOptions & { extract?: ExtractParams })
+  | ({ strategy: 'json' } & JsonChunkOptions & { extract?: ExtractParams })
+  | ({ strategy: 'latex' } & LatexChunkOptions & { extract?: ExtractParams })
+  | ({ strategy: 'sentence' } & SentenceChunkOptions & { extract?: ExtractParams });

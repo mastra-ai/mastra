@@ -1,5 +1,6 @@
 import { parse } from 'node-html-better-parser';
 import { Document } from '../schema';
+import type { HTMLChunkOptions } from '../types';
 
 import { RecursiveCharacterTransformer } from './character';
 
@@ -14,9 +15,10 @@ export class HTMLHeaderTransformer {
   private headersToSplitOn: [string, string][];
   private returnEachElement: boolean;
 
-  constructor(headersToSplitOn: [string, string][], returnEachElement: boolean = false) {
-    this.returnEachElement = returnEachElement;
-    this.headersToSplitOn = [...headersToSplitOn].sort();
+  constructor({ headers, returnEachLine = false, ...baseOptions }: HTMLChunkOptions & { headers: [string, string][] }) {
+    this.returnEachElement = returnEachLine;
+    this.headersToSplitOn = [...headers].sort();
+    Object.assign(this, baseOptions);
   }
 
   splitText({ text }: { text: string }): Document[] {
@@ -197,9 +199,13 @@ export class HTMLSectionTransformer {
   private headersToSplitOn: Record<string, string>;
   private options: Record<string, any>;
 
-  constructor(headersToSplitOn: [string, string][], options: Record<string, any> = {}) {
-    this.headersToSplitOn = Object.fromEntries(headersToSplitOn.map(([tag, name]) => [tag.toLowerCase(), name]));
-    this.options = options;
+  constructor({
+    sections,
+    returnEachLine = false,
+    ...baseOptions
+  }: HTMLChunkOptions & { sections: [string, string][] }) {
+    this.headersToSplitOn = Object.fromEntries(sections.map(([tag, name]) => [tag.toLowerCase(), name]));
+    this.options = { returnEachLine, ...baseOptions };
   }
 
   splitText(text: string): Document[] {
@@ -296,7 +302,7 @@ export class HTMLSectionTransformer {
       metadatas.push(doc.metadata);
     }
     const results = await this.createDocuments(texts, metadatas);
-    const textSplitter = new RecursiveCharacterTransformer({ options: this.options });
+    const textSplitter = new RecursiveCharacterTransformer(this.options || {});
 
     return textSplitter.splitDocuments(results);
   }

@@ -1,5 +1,6 @@
 import type { TiktokenModel, TiktokenEncoding, Tiktoken } from 'js-tiktoken';
 import { encodingForModel, getEncoding } from 'js-tiktoken';
+import type { TokenChunkOptions } from '../types';
 
 import { TextTransformer } from './text';
 
@@ -42,18 +43,11 @@ export class TokenTransformer extends TextTransformer {
     disallowedSpecial = 'all',
     options = {},
   }: {
-    encodingName: TiktokenEncoding;
+    encodingName?: TiktokenEncoding;
     modelName?: TiktokenModel;
     allowedSpecial?: Set<string> | 'all';
     disallowedSpecial?: Set<string> | 'all';
-    options: {
-      size?: number;
-      overlap?: number;
-      lengthFunction?: (text: string) => number;
-      keepSeparator?: boolean | 'start' | 'end';
-      addStartIndex?: boolean;
-      stripWhitespace?: boolean;
-    };
+    options: TokenChunkOptions;
   }) {
     super(options);
 
@@ -100,12 +94,7 @@ export class TokenTransformer extends TextTransformer {
   }: {
     encodingName?: TiktokenEncoding;
     modelName?: TiktokenModel;
-    options?: {
-      size?: number;
-      overlap?: number;
-      allowedSpecial?: Set<string> | 'all';
-      disallowedSpecial?: Set<string> | 'all';
-    };
+    options?: TokenChunkOptions;
   }): TokenTransformer {
     let tokenizer: Tiktoken;
 

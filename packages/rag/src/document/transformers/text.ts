@@ -1,6 +1,6 @@
 import { Document } from '../schema';
 
-import type { ChunkOptions } from '../types';
+import type { BaseChunkOptions } from '../types';
 
 import type { Transformer } from './transformer';
 
@@ -19,7 +19,7 @@ export abstract class TextTransformer implements Transformer {
     keepSeparator = false,
     addStartIndex = false,
     stripWhitespace = true,
-  }: ChunkOptions) {
+  }: BaseChunkOptions) {
     if (overlap > size) {
       throw new Error(`Got a larger chunk overlap (${overlap}) than chunk size ` + `(${size}), should be smaller.`);
     }

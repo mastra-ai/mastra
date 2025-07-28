@@ -388,7 +388,7 @@ describe('MDocument', () => {
         strategy: 'recursive',
         size,
         overlap: overlapSize,
-        separator: '\n\n', // Split on double newlines
+        separators: ['\n\n'], // Split on double newlines
       });
 
       const docs = doc.getDocs();
@@ -2055,6 +2055,179 @@ describe('MDocument', () => {
       expect(titleB).toBeDefined();
       expect(titleA1).toBe(titleA2);
       expect(titleA1).not.toBe(titleB);
+    });
+  });
+
+  describe('chunkSentence', () => {
+    it('should preserve sentence structure and avoid mid-sentence breaks', async () => {
+      const text =
+        'A dynamic concert scene captures an energetic, vibrant atmosphere, with a densely packed crowd silhouetted against bright stage lights. The image features beams of white light radiating from multiple projectors, creating dramatic patterns across a darkened room. The audience, comprised of numerous people with raised hands, exudes excitement and engagement, enhancing the lively mood. The setting suggests a large indoor venue, possibly a music or worship event, with text visible on a screen in the background, adding to an immersive experience. The overall composition emphasizes a sense of community and shared enthusiasm, ideal for promoting entertainment events, live concerts, or communal gatherings. The high-contrast lighting and slight haze effect imbue the scene with a modern, electrifying quality.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        minSize: 50,
+        maxSize: 450,
+        overlap: 0,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      chunks.forEach(chunk => {
+        expect(chunk.text.length).toBeGreaterThanOrEqual(50);
+        expect(chunk.text.length).toBeLessThanOrEqual(450);
+
+        expect(chunk.text.startsWith('.')).toBe(false);
+        expect(chunk.text.startsWith(' .')).toBe(false);
+
+        expect(chunk.text.endsWith('.')).toBe(true);
+      });
+    });
+
+    it('should require maxSize parameter', async () => {
+      const doc = MDocument.fromText('Short text.');
+
+      await expect(
+        doc.chunk({
+          strategy: 'sentence',
+          minSize: 50,
+        } as any),
+      ).rejects.toThrow('Sentence chunking requires maxSize to be specified');
+    });
+
+    it('should handle custom sentence enders', async () => {
+      const text =
+        'First sentence with more content to make it longer. Second sentence with additional content! Third sentence with even more text? Fourth sentence with final content.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 100,
+        sentenceEnders: ['.', '!', '?'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      chunks.forEach(chunk => {
+        const endsWithValidSeparator = chunk.text.endsWith('.') || chunk.text.endsWith('!') || chunk.text.endsWith('?');
+        expect(endsWithValidSeparator).toBe(true);
+      });
+    });
+
+    it('should handle overlap with complete sentences', async () => {
+      const text =
+        'First sentence with some content that makes it quite long. Second sentence with different content that also makes it lengthy. Third sentence with more content to ensure multiple chunks. Fourth sentence with final content to complete the test.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 120,
+        overlap: 50,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      // Check that overlapping chunks share some content
+      if (chunks.length > 1) {
+        for (let i = 1; i < chunks.length; i++) {
+          const currentChunk = chunks[i].text;
+
+          // With overlap, current chunk should start with some content from previous chunk
+          // Just verify that overlap is being applied (chunk 2 starts with overlap from chunk 1)
+          expect(currentChunk.length).toBeGreaterThan(50); // Should include overlap content
+        }
+      }
+    });
+
+    it('should fallback to word splitting for oversized sentences', async () => {
+      const longSentence =
+        'This is an extremely long sentence that ' +
+        'word '.repeat(50) +
+        'and should be split into smaller chunks when it exceeds the maximum size limit.';
+
+      const doc = MDocument.fromText(longSentence);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 100,
+        fallbackToWords: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      chunks.forEach(chunk => {
+        expect(chunk.text.length).toBeLessThanOrEqual(100);
+      });
+    });
+
+    it('should handle short text appropriately', async () => {
+      const text = 'Short sentence.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        minSize: 5,
+        maxSize: 100,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBe(1);
+      expect(chunks[0].text).toBe(text);
+    });
+
+    it('should group multiple sentences when they fit within target size', async () => {
+      const text = 'Short one. Another short. Third short. Fourth sentence. Fifth one.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        minSize: 10,
+        maxSize: 100,
+        targetSize: 40,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      // Should group multiple short sentences together
+      expect(chunks.length).toBeLessThan(5); // Less than the number of sentences
+
+      chunks.forEach(chunk => {
+        // Each chunk should contain multiple sentences when possible
+        expect(chunk.text.length).toBeLessThanOrEqual(100);
+      });
+    });
+
+    it('should preserve metadata across chunks', async () => {
+      const text =
+        'First sentence with enough content to make it longer than fifty characters. Second sentence with additional content to ensure multiple chunks. Third sentence with final content.';
+      const metadata = { source: 'test', author: 'jest' };
+
+      const doc = MDocument.fromText(text, metadata);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 100,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      chunks.forEach(chunk => {
+        expect(chunk.metadata.source).toBe('test');
+        expect(chunk.metadata.author).toBe('jest');
+      });
     });
   });
 });
