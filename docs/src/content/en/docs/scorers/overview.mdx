@@ -11,7 +11,7 @@ description: Overview of scorers in Mastra, detailing their capabilities for eva
 
 ## Evaluation pipeline
 
-Mastra scorers follow an optional three-step pipeline that allows for sophisticated evaluation workflows:
+Mastra scorers follow an optional three-step pipeline that allows for evaluation workflows:
 
 1. **Extract** (Optional): Identify and isolate relevant content for focused evaluation
 2. **Analyze** (Required): Perform the core evaluation and generate a score
@@ -40,12 +40,6 @@ This modular structure enables both simple single-step evaluations and complex m
 
 For implementation details and technical specifications, see [Creating Custom Scorers](/docs/scorers/custom-scorers).
 
-### Running scorers
-
-Scorers evaluate AI outputs by analyzing input/output pairs and returning numerical scores (typically 0-1) along with optional explanations. You can run scorers manually for testing or integrate them into your agents and workflows for continuous evaluation.
-
-For technical details on the `.run()` method and input/output structures, see the [Custom Scorers documentation](/docs/scorers/custom-scorers).
-
 ## Live evaluations
 
 **Live evaluations** allow you to automatically score AI outputs in real-time as your agents and workflows operate. Instead of running evaluations manually or in batches, scorers run asynchronously alongside your AI systems, providing continuous quality monitoring.
@@ -63,9 +57,7 @@ import {
 } from "@mastra/evals/scorers/llm";
 
 export const evaluatedAgent = new Agent({
-  name: "Evaluated Agent",
-  instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o"),
+  // ...
   scorers: {
     relevancy: {
       scorer: createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") }),
@@ -89,14 +81,7 @@ import { z } from "zod";
 import { customStepScorer } from "../scorers/custom-step-scorer";
 
 const contentStep = createStep({
-  id: "content-generation-step",
-  description: "Generate content based on input",
-  inputSchema: z.object({
-    topic: z.string(),
-  }),
-  outputSchema: z.object({
-    content: z.string(),
-  }),
+  // ...
   scorers: {
     customStepScorer: {
       scorer: customStepScorer(),
@@ -106,24 +91,12 @@ const contentStep = createStep({
       }
     }
   },
-  execute: async ({ inputData }) => {
-    // Your step logic here
-    return {
-      content: `Generated content about ${inputData.topic}`,
-    };
-  },
 });
 
-export const contentWorkflow = createWorkflow({
-  id: "content-generation",
-  inputSchema: z.object({ topic: z.string() }),
-  outputSchema: z.object({ content: z.string() }),
-})
+export const contentWorkflow = createWorkflow({ ... })
   .then(contentStep)
   .commit();
 ```
-
-You can use custom scorers in both your agents and workflow steps, as shown above. [Learn how to create your own custom scorers.](/docs/scorers/custom-scorers)
 
 ### How live evaluations work
 
