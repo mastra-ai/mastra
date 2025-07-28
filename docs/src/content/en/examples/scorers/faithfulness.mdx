@@ -5,7 +5,7 @@ description: Example of using the Faithfulness scorer to evaluate how factually 
 
 import { GithubLink } from "@/components/github-link";
 
-# Faithfulness Evaluation
+# Faithfulness Scorer
 
 Use `createFaithfulnessScorer` to evaluate whether the response makes claims that are supported by the provided context. The scorer accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 
@@ -14,6 +14,8 @@ Use `createFaithfulnessScorer` to evaluate whether the response makes claims tha
 ```bash copy
 npm install @mastra/evals
 ```
+
+> For complete API documentation and configuration options, see [`createFaithfulnessScorer`](/reference/scorers/faithfulness).
 
 ## High faithfulness example
 

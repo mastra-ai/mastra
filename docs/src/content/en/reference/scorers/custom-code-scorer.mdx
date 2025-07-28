@@ -7,6 +7,8 @@ description: Documentation for creating custom code scorers in Mastra, allowing 
 
 Mastra allows you to define your own custom code scorers for evaluating input/output pairs using any logic you choose. Custom scorers integrate seamlessly with the Mastra scoring framework and can be used anywhere built-in scorers are used.
 
+For a usage example, see the [Custom Code Scorer Examples](/examples/scorers/custom-native-javascript-eval).
+
 ## How to Create a Custom Scorer
 
 Use the `createScorer` factory to define your scorer. You must provide at least a `name`, `description`, and an `analyze` function. Optionally, you can provide `extract` and `reason` functions for multi-step or more advanced logic.
