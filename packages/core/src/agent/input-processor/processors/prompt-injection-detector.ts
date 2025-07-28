@@ -203,6 +203,7 @@ export class PromptInjectionDetector implements InputProcessor {
           reason: z.string().optional(),
           rewritten_content: z.string().optional(),
         }),
+        temperature: 0,
       });
 
       const result = response.object as PromptInjectionResult;

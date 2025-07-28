@@ -247,6 +247,7 @@ export class LanguageDetector implements InputProcessor {
             .optional(),
           reason: z.string().optional(),
         }),
+        temperature: 0,
       });
 
       return response.object;

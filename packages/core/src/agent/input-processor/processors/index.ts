@@ -1,5 +1,4 @@
 export { UnicodeNormalizer, type UnicodeNormalizerOptions } from './unicode-normalizer';
-export { TokenLimiterInputProcessor, type TokenLimiterOptions } from './token-limiter';
 export {
   ModerationInputProcessor,
   type ModerationOptions,

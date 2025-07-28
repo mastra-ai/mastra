@@ -5,434 +5,264 @@ description: "Learn how to use input processors to intercept and modify agent me
 
 # Input Processors
 
-Input processors are powerful middleware components to add guardrails to prompts. They allow you to intercept, modify, validate, or filter messages before they are sent to the language model. They provide a flexible way to implement pre-processing logic, content filtering, message transformation, and early termination of agent requests.
+Input Processors allow you to intercept, modify, validate, or filter messages _before_ they are sent to the language model. This is useful for implementing guardrails, content moderation, message transformation, and security controls.
 
-## Overview
+Processors operate on the messages in your conversation thread. They can modify, filter, or validate content, and even abort the request entirely if certain conditions are met.
 
-Input processors run sequentially before the agent sends messages to the language model. Each processor receives a context object and must return an array of `MastraMessageV2` objects. The returned array is then passed as input to the next processor in the chain.
+## Built-in Processors
 
-The context object contains:
-- **`messages`**: An array of `MastraMessageV2` objects representing the current messages in the pipeline. You can mutate this array directly and return it.
-- **`abort(reason?)`**: A function to terminate processing early with an optional reason.
+Mastra provides several built-in processors for common use cases:
 
-This design allows you to build sophisticated and predictable message processing pipelines with validation, transformation, and conditional logic.
+### `UnicodeNormalizer`
 
-## Basic Usage
+This processor normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters.
 
-### Creating an Input Processor
+```typescript copy showLineNumbers {9-11}
+import { Agent } from "@mastra/core/agent";
+import { UnicodeNormalizer } from "@mastra/core/agent/input-processor/processors";
+import { openai } from "@ai-sdk/openai";
 
-To create an input processor, define an object that conforms to the `InputProcessor` interface.
+const agent = new Agent({
+  name: 'normalized-agent',
+  instructions: 'You are a helpful assistant',
+  model: openai("gpt-4o"),
+  inputProcessors: [
+    new UnicodeNormalizer({
+      stripControlChars: true,
+      collapseWhitespace: true,
+    }),
+  ],
+});
+```
 
-```typescript
-import { Agent, type InputProcessor, type MastraMessageV2 } from "@mastra/core/agent";
+Available options:
+- `stripControlChars`: Remove control characters (default: false)
+- `preserveEmojis`: Keep emojis intact (default: true) 
+- `collapseWhitespace`: Collapse multiple spaces/newlines (default: true)
+- `trim`: Remove leading/trailing whitespace (default: true)
 
-const contentFilter: InputProcessor = {
-  name: 'content-filter',
-  process: async ({ messages, abort }) => {
-    // Check for inappropriate content in the messages array
-    const hasInappropriate = messages.some(msg => {
-      // A helper to extract text content is useful
-      const textContent = msg.content.parts
+### `ModerationInputProcessor`
+
+This processor provides content moderation using an LLM to detect inappropriate content across multiple categories.
+
+```typescript copy showLineNumbers {5-13}
+import { ModerationInputProcessor } from "@mastra/core/agent/input-processor/processors";
+
+const agent = new Agent({
+  inputProcessors: [
+    new ModerationInputProcessor({
+      model: openai("gpt-4.1-nano"), // Use a fast, cost-effective model
+      threshold: 0.7, // Confidence threshold for flagging
+      strategy: 'block', // Block flagged content
+      categories: ['hate', 'harassment', 'violence'], // Custom categories
+    }),
+  ],
+});
+```
+
+Available options:
+- `model`: Language model for moderation analysis (required)
+- `categories`: Array of categories to check (default: ['hate','hate/threatening','harassment','harassment/threatening','self-harm','self-harm/intent','self-harm/instructions','sexual','sexual/minors','violence','violence/graphic'])
+- `threshold`: Confidence threshold for flagging (0-1, default: 0.5)
+- `strategy`: Action when content is flagged (default: 'block')
+- `customInstructions`: Custom instructions for the moderation agent
+
+Strategies available:
+- `block`: Reject the request with an error (default)
+- `warn`: Log warning but allow content through
+- `filter`: Remove flagged messages but continue processing
+
+### `PromptInjectionDetector`
+
+This processor detects and prevents prompt injection attacks, jailbreaks, and system manipulation attempts.
+
+```typescript copy showLineNumbers {5-12}
+import { PromptInjectionDetector } from "@mastra/core/agent/input-processor/processors";
+
+const agent = new Agent({
+  inputProcessors: [
+    new PromptInjectionDetector({
+      model: openai("gpt-4.1-nano"),
+      threshold: 0.8, // Higher threshold for fewer false positives
+      strategy: 'rewrite', // Attempt to neutralize while preserving intent
+      detectionTypes: ['injection', 'jailbreak', 'system-override'],
+    }),
+  ],
+});
+```
+
+Available options:
+- `model`: Language model for injection detection (required)
+- `detectionTypes`: Array of injection types to detect (default: ['injection', 'jailbreak', 'system-override'])
+- `threshold`: Confidence threshold for flagging (0-1, default: 0.7)
+- `strategy`: Action when injection is detected (default: 'block')
+- `instructions`: Custom detection instructions for the agent
+- `includeScores`: Whether to include confidence scores in logs (default: false)
+
+Strategies available:
+- `block`: Reject the request (default)
+- `warn`: Log warning but allow through
+- `filter`: Remove flagged messages
+- `rewrite`: Attempt to neutralize the injection while preserving legitimate intent
+
+### `PIIDetector`
+
+This processor detects and optionally redacts personally identifiable information (PII) from messages.
+
+```typescript copy showLineNumbers {5-14}
+import { PIIDetector } from "@mastra/core/agent/input-processor/processors";
+
+const agent = new Agent({
+  inputProcessors: [
+    new PIIDetector({
+      model: openai("gpt-4.1-nano"),
+      threshold: 0.6,
+      strategy: 'redact', // Automatically redact detected PII
+      detectionTypes: ['email', 'phone', 'credit-card', 'ssn', 'api-key', 'crypto-wallet', 'iban'],
+      redactionMethod: 'mask', // Preserve format while masking
+      preserveFormat: true, // Keep original structure in redacted values
+      includeDetections: true, // Log details for compliance auditing
+    }),
+  ],
+});
+```
+
+Available options:
+- `model`: Language model for PII detection (required)
+- `detectionTypes`: Array of PII types to detect (default: ['email', 'phone', 'credit-card', 'ssn', 'api-key', 'ip-address', 'name', 'address', 'date-of-birth', 'url', 'uuid', 'crypto-wallet', 'iban'])
+- `threshold`: Confidence threshold for flagging (0-1, default: 0.6)
+- `strategy`: Action when PII is detected (default: 'block')
+- `redactionMethod`: How to redact PII ('mask', 'hash', 'remove', 'placeholder', default: 'mask')
+- `preserveFormat`: Maintain PII structure during redaction (default: true)
+- `includeDetections`: Include detection details in logs for compliance (default: false)
+- `instructions`: Custom detection instructions for the agent
+
+Strategies available:
+- `block`: Reject requests containing PII (default)
+- `warn`: Log warning but allow through
+- `filter`: Remove messages containing PII
+- `redact`: Replace PII with placeholder values
+
+### `LanguageDetector`
+
+This processor detects the language of incoming messages and can automatically translate them to a target language.
+
+```typescript copy showLineNumbers {5-12}
+import { LanguageDetector } from "@mastra/core/agent/input-processor/processors";
+
+const agent = new Agent({
+  inputProcessors: [
+    new LanguageDetector({
+      model: openai("gpt-4o"),
+      targetLanguages: ['English', 'en'], // Accept English content
+      strategy: 'translate', // Auto-translate non-English content
+      threshold: 0.8, // High confidence threshold
+    }),
+  ],
+});
+```
+
+Available options:
+- `model`: Language model for detection and translation (required)
+- `targetLanguages`: Array of target languages (language names or ISO codes)
+- `threshold`: Confidence threshold for language detection (0-1, default: 0.7)
+- `strategy`: Action when non-target language is detected (default: 'detect')
+- `preserveOriginal`: Keep original content in metadata (default: true)
+- `instructions`: Custom detection instructions for the agent
+
+Strategies available:
+- `detect`: Only detect language, don't translate (default)
+- `translate`: Automatically translate to target language
+- `block`: Reject content not in target language
+- `warn`: Log warning but allow content through
+
+## Applying Multiple Processors
+
+You can chain multiple processors. They execute sequentially in the order they appear in the `inputProcessors` array. The output of one processor becomes the input for the next.
+
+**Order matters!** Generally, it's best practice to place text normalization first, security checks next, and content modification last.
+
+```typescript copy showLineNumbers {9-18}
+import { Agent } from "@mastra/core/agent";
+import { 
+  UnicodeNormalizer, 
+  ModerationInputProcessor, 
+  PromptInjectionDetector,
+  PIIDetector 
+} from "@mastra/core/agent/input-processor/processors";
+
+const secureAgent = new Agent({
+  inputProcessors: [
+    // 1. Normalize text first
+    new UnicodeNormalizer({ stripControlChars: true }),
+    // 2. Check for security threats
+    new PromptInjectionDetector({ model: openai("gpt-4.1-nano") }),
+    // 3. Moderate content
+    new ModerationInputProcessor({ model: openai("gpt-4.1-nano") }),
+    // 4. Handle PII last
+    new PIIDetector({ model: openai("gpt-4.1-nano"), strategy: 'redact' }),
+  ],
+});
+```
+
+## Creating Custom Processors
+
+You can create custom processors by implementing the `InputProcessor` interface.
+
+```typescript copy showLineNumbers {4-19,23-26}
+import type { InputProcessor, MastraMessageV2 } from "@mastra/core/agent";
+
+class MessageLengthLimiter implements InputProcessor {
+  readonly name = 'message-length-limiter';
+  
+  constructor(private maxLength: number = 1000) {}
+
+  process({ messages, abort }: { 
+    messages: MastraMessageV2[]; 
+    abort: (reason?: string) => never 
+  }): MastraMessageV2[] {
+    // Check total message length
+    const totalLength = messages.reduce((sum, msg) => {
+      return sum + msg.content.parts
         .filter(part => part.type === 'text')
-        .map(part => (part as { text: string }).text)
-        .join(' ');
-      
-      return textContent.includes('inappropriate');
-    });
+        .reduce((partSum, part) => partSum + (part as any).text.length, 0);
+    }, 0);
     
-    if (hasInappropriate) {
-      abort('Content validation failed');
+    if (totalLength > this.maxLength) {
+      abort(`Message too long: ${totalLength} characters (max: ${this.maxLength})`);
     }
     
     return messages;
-  },
-};
-```
+  }
+}
 
-### Adding Processors to an Agent
-
-Add processors to your agent's configuration. They will be executed in the order they appear in the array.
-
-```typescript
+// Use the custom processor
 const agent = new Agent({
-  name: 'content-aware-agent',
-  instructions: 'You are a helpful assistant',
-  model: myLanguageModel,
-  inputProcessors: [contentFilter]
+  inputProcessors: [
+    new MessageLengthLimiter(2000), // Limit to 2000 characters
+  ],
 });
 ```
 
-## Message Manipulation
+When creating custom processors:
+- Always return the `messages` array (potentially modified)
+- Use `abort(reason)` to terminate processing early
+- Avoid mutating the input messages directly; create new objects if needed
+- Keep processors focused on a single responsibility
 
-You can directly mutate the `messages` array. After performing modifications, return the same array.
+## Integration with Agent Methods
 
-### Adding Messages
+Input processors work with both `generate()` and `stream()` methods. The entire processor pipeline completes before the agent begins generating or streaming a response.
 
-```typescript
-const messageEnhancer: InputProcessor = {
-  name: 'enhancer',
-  process: async ({ messages }) => {
-    const newMessage: MastraMessageV2 = {
-      id: crypto.randomUUID(),
-      role: 'assistant',
-      content: {
-        format: 2,
-        parts: [{ type: 'text', text: 'Please be concise in your response.' }]
-      },
-      createdAt: new Date()
-    };
-    
-    messages.push(newMessage);
-    
-    return messages;
-  },
-};
-```
-
-### Modifying Existing Messages
-
-Use a `for...of` loop to iterate through messages and update their content in place.
-
-```typescript
-const messageModifier: InputProcessor = {
-  name: 'modifier',
-  process: async ({ messages }) => {
-    for (const message of messages) {
-      if (message.role === 'user') {
-        for (const part of message.content.parts) {
-          if (part.type === 'text') {
-            part.text = `[PROCESSED] ${part.text}`;
-          }
-        }
-      }
-    }
-    return messages;
-  },
-};
-```
-
-### Filtering Messages
-
-```typescript
-const messageFilter: InputProcessor = {
-  name: 'filter',
-  process: async ({ messages }) => {
-    // Remove all offensive content
-    for (const [index, message] of messages.entries())
-      for (const part of message.content.parts) {
-        if (part.type === 'text' && isOffensive(part.text)) {
-          delete messages[index]
-        }
-      }
-    }
-    return messages;
-  },
-};
-```
-
-## TripWire (Early Termination)
-
-Use the `abort()` function to terminate processing early and prevent the request from reaching the language model.
-
-```typescript
-const tripwireProcessor: InputProcessor = {
-  name: 'tripwire',
-  process: async ({ messages, abort }) => {
-    const latestMessage = messages.pop();
-    const userText = getTextContent(latestUser)
-    
-    // Block requests containing sensitive information
-    if (userText.includes('password') || userText.includes('credit card')) {
-      abort('Request contains sensitive information');
-    }
-    
-    // Return original messages if not aborted
-    return messages;
-  }
-};
-```
-
-When a tripwire is triggered:
-- The pipeline stops immediately.
-- Subsequent processors are not executed.
-- The agent returns an empty response with a `tripwire: true` flag and the provided reason with a `tripwireReason: <reason>` property.
-
-## Dynamic Processors
-
-Create processors dynamically based on runtime context to handle user-specific logic.
-
-```typescript
-const agent = new Agent({
-  name: 'dynamic-agent',
-  instructions: 'You are a helpful assistant',
-  model: myLanguageModel,
-  inputProcessors: ({ runtimeContext }) => {
-    const userRole = runtimeContext.get('userRole');    
-    // Add a role-based processor
-    if (userRole === 'admin') {
-      return [{
-        name: 'admin-processor',
-        process: async ({ messages }) => {
-          const adminMessage: MastraMessageV2 = {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: {
-              format: 2,
-              parts: [{ type: 'text', text: 'Admin mode activated' }]
-            },
-            createdAt: new Date()
-          };
-          messages.push(adminMessage);
-          return messages;
-        },
-      }];
-    }
-    
-    return []
-  }
-});
-
-// Usage:
-const runtimeContext = new RuntimeContext();
-runtimeContext.set('userRole', 'admin');
-
-await agent.generate('Hello', { runtimeContext });
-```
-
-## Processor Execution Flow
-
-Processors execute in a functional pipeline:
-
-1. Processors run in the order they're defined in the `inputProcessors` array
-2. The `messages` array returned by one processor becomes the input for the next
-3. Each processor can perform async operations before returning the messages
-4. Any processor can call `abort()` to stop the entire pipeline.
-
-```typescript
-const processors: InputProcessor[] = [
-  {
-    name: 'first',
-    process: async ({ messages }) => {
-      console.log('First processor running');
-      const firstMessage: MastraMessageV2 = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: {
-          format: 2,
-          parts: [{ type: 'text', text: 'First processor was here' }]
-        },
-        createdAt: new Date()
-      };
-      messages.push(firstMessage);
-      // The returned array is passed to the second processor
-      return messages;
-    },
-  },
-  {
-    name: 'second',
-    process: async ({ messages, abort }) => {
-      console.log('Second processor running');
-      if (messages.length > 5) {
-        abort('Too many messages'); // Stops here
-      }
-      
-      // Remove messages containing "spam"
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (getTextContent(messages[i]).includes('spam')) {
-            messages.splice(i, 1);
-        }
-      }
-      // This returned array is passed to the third processor
-      return messages;
-    },
-  },
-  {
-    name: 'third',
-    process: async ({ messages }) => {
-      console.log('Third processor running');
-      const finalMessage: MastraMessageV2 = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: {
-          format: 2,
-          parts: [{ type: 'text', text: 'All processors completed' }]
-        },
-        createdAt: new Date()
-      };
-      messages.push(finalMessage);
-      // This final array is sent to the language model
-      return messages;
-    }
-  }
-];
-```
-
-## Best Practices
-
-### 1. Keep Processors Simple and Focused
-
-Each processor should have a single, clear responsibility.
-
-```typescript
-// ✅ Good - focused on validation
-const lengthValidator: InputProcessor = {
-  name: 'length-validator',
-  process: async ({ messages, abort }) => {
-    const totalLength = messages.reduce((sum, msg) => sum + getTextContent(msg).length, 0);
-    if (totalLength > 10000) {
-      abort('Message too long');
-    }
-    return messages;
-  }
-};
-
-// ✅ Good - focused on filtering
-const profanityFilter: InputProcessor = {
-  name: 'profanity-filter',
-  process: async ({ messages }) => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-        if (isProfane(getTextContent(messages[i]))) {
-            messages.splice(i, 1);
-        }
-    }
-    return messages;
-  }
-};
-```
-
-### 2. Handle Errors Gracefully
-
-```typescript
-const robustProcessor: InputProcessor = {
-  name: 'robust-validator',
-  process: async ({ messages, abort }) => {
-    try {
-      await performComplexValidation(messages);
-      return messages;
-    } catch (error) {
-      console.error('Processor error:', error);
-      abort('Processing failed due to a validation error');
-    }
-  }
-};
-```
-
-### 3. Use Descriptive Names
-
-```typescript
-// ✅ Good - clear purpose
-const profanityFilter: InputProcessor = { name: 'profanity-filter', process: async () => { /* ... */ } };
-const messageLengthLimiter: InputProcessor = { name: 'message-length-limiter', process: async () => { /* ... */ } };
-const contextInjector: InputProcessor = { name: 'context-injector', process: async () => { /* ... */ } };
-
-// ❌ Bad - unclear purpose
-const processor1: InputProcessor = { name: 'processor1', process: async () => { /* ... */ } };
-const helper: InputProcessor = { name: 'helper', process: async () => { /* ... */ } };
-```
-
-## Common Use Cases
-
-### Content Moderation
-
-```typescript
-const moderationProcessor: InputProcessor = {
-  name: 'moderation',
-  process: async ({ messages, abort }) => {
-    for (const message of messages) {
-      if (await isInappropriate(getTextContent(message))) {
-        abort('Content violates community guidelines');
-      }
-    }
-    return messages;
-  }
-};
-```
-
-### Rate Limiting
-
-```typescript
-// Create a processor factory to capture user context
-const createRateLimiter = (userId: string): InputProcessor => {
-  return {
-    name: 'rate-limiter',
-    process: async ({ messages, abort }) => {
-      if (await isRateLimited(userId)) {
-        abort('Rate limit exceeded. Please try again later.');
-      }
-      return messages;
-    }
-  };
-};
-
-// Usage with dynamic processors:
-const agent = new Agent({
-  /* ... */
-  inputProcessors: ({ runtimeContext }) => {
-    const userId = runtimeContext.get('userId') || 'anonymous';
-    return [createRateLimiter(userId)];
-  }
-});
-```
-
-### Context Injection
-
-```typescript
-const createContextInjector = (userId: string): InputProcessor => {
-  return {
-    name: 'context-injector',
-    process: async ({ messages }) => {
-      const latestMessage = messages[messages.length - 1]
-      const userText = getTextContent(latestMessage)
-          
-      if (userText && needsContext(userText)) {
-        const context = await fetchRelevantContext(userText, userId);
-        const contextMessage: MastraMessageV2 = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: {
-            format: 2,
-            parts: [{ type: 'text', text: `Relevant context: ${context}` }]
-          },
-          createdAt: new Date()
-        };
-        messages.push(contextMessage);
-      }
-      return messages;
-    }
-  };
-};
-```
-
-### Message Transformation
-
-```typescript
-const urlExpander: InputProcessor = {
-  name: 'url-expander',
-  process: async ({ messages }) => {
-    for (const msg of messages) {
-      for (const part of msg.content.parts) {
-          if (part.type === 'text') {
-              part.text = await expandUrls(part.text);
-          }
-      }
-    }
-    return messages;
-  }
-};
-```
-
-## Integration with Streaming
-
-Input processors work seamlessly with both `generate()` and `stream()` methods. The entire processor pipeline completes before the agent begins generating or streaming a response.
-
-// The processor runs before generate()
+```typescript copy showLineNumbers
+// Processors run before generate()
 const result = await agent.generate('Hello');
 
-// The processor also runs before stream()
+// Processors also run before stream()
 const stream = await agent.stream('Hello');
 for await (const chunk of stream.textStream) {
   console.log(chunk);
 }
 ```
 
-Input processors provide a powerful, functional way to implement sophisticated message processing logic while maintaining clean separation of concerns in your agent architecture. 
+If any processor calls `abort()`, the request terminates immediately and subsequent processors are not executed. The agent returns an error response with details about why the request was blocked. 

@@ -19,6 +19,9 @@ export interface PIICategories {
   address?: boolean;
   'date-of-birth'?: boolean;
   url?: boolean;
+  uuid?: boolean;
+  'crypto-wallet'?: boolean;
+  iban?: boolean;
   [customType: string]: boolean | undefined;
 }
 
@@ -36,6 +39,9 @@ export interface PIICategoryScores {
   address?: number;
   'date-of-birth'?: number;
   url?: number;
+  uuid?: number;
+  'crypto-wallet'?: number;
+  iban?: number;
   [customType: string]: number | undefined;
 }
 
@@ -137,18 +143,21 @@ export class PIIDetector implements InputProcessor {
   private includeDetections: boolean;
   private preserveFormat: boolean;
 
-  // Default PII types based on common privacy regulations
+  // Default PII types based on common privacy regulations and comprehensive PII detection
   private static readonly DEFAULT_DETECTION_TYPES = [
     'email', // Email addresses
     'phone', // Phone numbers
     'credit-card', // Credit card numbers
     'ssn', // Social Security Numbers
     'api-key', // API keys and tokens
-    'ip-address', // IP addresses
+    'ip-address', // IP addresses (IPv4 and IPv6)
     'name', // Person names
     'address', // Physical addresses
     'date-of-birth', // Dates of birth
     'url', // URLs that might contain PII
+    'uuid', // Universally Unique Identifiers
+    'crypto-wallet', // Cryptocurrency wallet addresses
+    'iban', // International Bank Account Numbers
   ];
 
   constructor(options: PIIDetectorOptions) {
@@ -257,6 +266,7 @@ export class PIIDetector implements InputProcessor {
           redacted_content: z.string().optional(),
           reason: z.string().optional(),
         }),
+        temperature: 0,
       });
 
       const result = response.object as PIIDetectionResult;
@@ -431,6 +441,24 @@ export class PIIDetector implements InputProcessor {
           return index >= value.length - 4 ? match : '*';
         });
 
+      case 'uuid':
+        // Mask UUID: ********-****-****-****-************
+        return value.replace(/[a-f0-9]/gi, '*');
+
+      case 'crypto-wallet':
+        // Show first 4 and last 4 characters: 1Lbc...X71
+        if (value.length > 8) {
+          return value.slice(0, 4) + '*'.repeat(value.length - 8) + value.slice(-4);
+        }
+        return '*'.repeat(value.length);
+
+      case 'iban':
+        // Show country code and last 4 digits: DE**************3000
+        if (value.length > 6) {
+          return value.slice(0, 2) + '*'.repeat(value.length - 6) + value.slice(-4);
+        }
+        return '*'.repeat(value.length);
+
       default:
         // Generic masking - show first and last character if long enough
         if (value.length <= 3) {
@@ -481,18 +509,59 @@ export class PIIDetector implements InputProcessor {
 Detect and analyze the following PII types:
 ${this.detectionTypes.map(type => `- ${type}`).join('\n')}
 
-Detection Guidelines:
+Detection Guidelines and Examples:
 
-**Email**: Standard email format (user@domain.com), including business and personal emails
-**Phone**: Phone numbers in various formats (123-456-7890, (123) 456-7890, +1-123-456-7890)
-**Credit Card**: Credit card numbers (16 digits, may have spaces/dashes: 4532-1234-5678-9012)
-**SSN**: Social Security Numbers (XXX-XX-XXXX format: 123-45-6789)
-**API Key**: API keys, tokens, secrets (long alphanumeric strings, often with prefixes like "sk_", "pk_")
-**IP Address**: IPv4 and IPv6 addresses (192.168.1.1, 2001:db8::1)
-**Name**: Person names (first, last, full names - use context clues)
-**Address**: Physical addresses (street, city, state, zip)
-**Date of Birth**: Birth dates in various formats (MM/DD/YYYY, Month DD, YYYY)
-**URL**: URLs that might contain PII or sensitive paths
+**Email**: Standard email formats, including obfuscated variants
+- Examples: john.doe@protectai.com, user@example.org, john.doe[AT]protectai[DOT]com, john.doe[AT]protectai.com, john.doe@protectai[DOT]com
+- Pattern: Standard email format and common obfuscation patterns with [AT] and [DOT]
+
+**Phone**: Phone numbers in various international and domestic formats
+- Examples: 5555551234, (555) 555-1234, +1-555-555-1234, 555.555.1234, 1 555 555 1234
+- Pattern: 10+ digits with optional country codes, formatting characters
+
+**Credit Card**: Major credit card formats
+- Examples: 4111111111111111 (Visa), 378282246310005 (American Express), 30569309025904 (Diners Club), 5555555555554444 (Mastercard)
+- Pattern: 13-19 digits, may include spaces/dashes, must follow card validation patterns
+
+**SSN**: US Social Security Numbers
+- Examples: 111-22-3333, 111223333, 111 22 3333
+- Pattern: XXX-XX-XXXX format or 9 consecutive digits
+
+**API Key**: API keys, tokens, and secrets
+- Examples: sk_test_123abc..., pk_live_456def..., ghp_xxxxxxxxxxxxxxxxxxxx, AKIA..., xoxb-...
+- Pattern: Long alphanumeric strings, often with recognizable prefixes (sk_, pk_, ghp_, AKIA, xoxb)
+
+**IP Address**: IPv4 and IPv6 addresses
+- Examples: 192.168.1.1 (IPv4), 2001:db8:3333:4444:5555:6666:7777:8888 (IPv6), ::1, 10.0.0.1
+- Pattern: IPv4 (XXX.XXX.XXX.XXX) or IPv6 (hexadecimal with colons)
+
+**Name**: Person names (require context clues)
+- Examples: John Doe, Mary Jane Smith, Dr. Sarah Wilson, Mr. Robert Johnson
+- Pattern: First/last names, titles, full names - must have context suggesting it's a person
+
+**Address**: Physical addresses
+- Examples: 123 Main St, New York, NY 10001; 456 Oak Avenue, Suite 789, Los Angeles, CA 90210
+- Pattern: Street numbers, street names, city, state, postal codes
+
+**Date of Birth**: Birth dates in various formats
+- Examples: 01/15/1985, January 15, 1985, 1985-01-15, Jan 15 1985, DOB: 1/15/85
+- Pattern: Date formats that could indicate birth dates, especially with DOB context
+
+**URL**: URLs that might contain PII or sensitive information
+- Examples: https://protectai.com/, http://example.com/user/john-doe, ftp://files.company.com
+- Pattern: Standard URL format with http/https/ftp protocols
+
+**UUID**: Universally Unique Identifiers
+- Examples: 550e8400-e29b-41d4-a716-446655440000, 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+- Pattern: 32 hexadecimal characters in 8-4-4-4-12 format with hyphens
+
+**Crypto Wallet**: Cryptocurrency wallet addresses
+- Examples: 1Lbcfr7sAHTD9CgdQo3HTMTkV8LK4ZnX71 (Bitcoin), 0x742d35Cc6634C0532925a3b8D0C7fa5a26d6d6C8 (Ethereum)
+- Pattern: Base58 (Bitcoin) or hexadecimal (Ethereum) addresses, specific lengths
+
+**IBAN**: International Bank Account Numbers
+- Examples: DE89370400440532013000, GB82WEST12345698765432, FR1420041010050500013M02606
+- Pattern: 2-letter country code + 2 check digits + up to 30 alphanumeric characters
 
 For each detection, provide:
 1. type: The PII category
@@ -509,13 +578,15 @@ Also provide:
 - redacted_content: Full text with PII redacted (optional)
 - reason: Brief explanation if PII is found
 
-Guidelines:
+Critical Guidelines:
 - Be thorough but avoid false positives on common words/numbers
-- Consider context - "John" alone isn't necessarily a name without context
-- Phone numbers need proper formatting/length to be valid
-- Credit cards must pass basic validation (proper length, format)
-- Be conservative with names - require additional context clues
-- API keys should be long and have characteristic patterns
+- Consider context - isolated common names need supporting context
+- Validate formats strictly (credit cards must pass Luhn algorithm concepts)
+- Phone numbers need proper length and formatting
+- UUIDs must match exact format (8-4-4-4-12 with hyphens)
+- Crypto addresses must match correct format and length for their type
+- IBAN must start with valid country code and have proper structure
+- API keys should be long and have characteristic patterns or prefixes
 
 Return your analysis in the required JSON format with precise character positions.`;
   }

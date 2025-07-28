@@ -209,6 +209,7 @@ export class ModerationInputProcessor implements InputProcessor {
           ),
           reason: z.string().optional(),
         }),
+        temperature: 0,
       });
 
       const result = response.object as ModerationResult;

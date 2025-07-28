@@ -34,6 +34,9 @@ function createMockPIIResult(
     'address',
     'date-of-birth',
     'url',
+    'uuid',
+    'crypto-wallet',
+    'iban',
   ];
 
   const categoryFlags = allTypes.reduce(
