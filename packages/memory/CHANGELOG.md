@@ -1,5 +1,24 @@
 # @mastra/memory
 
+## 0.11.6-alpha.0
+
+### Patch Changes
+
+- 674a348: dependencies updates:
+  - Updated dependency [`@upstash/redis@^1.35.1` ↗︎](https://www.npmjs.com/package/@upstash/redis/v/1.35.1) (from `^1.35.0`, in `dependencies`)
+- ad8a1d8: Fix inheriting storage from Mastra instance in Memory
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
 ## 0.11.5
 
 ### Patch Changes

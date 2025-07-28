@@ -1,12 +1,12 @@
 import { generateEmptyFromSchema } from '@mastra/core';
 import type { CoreTool, MastraMessageV1 } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
-import type { CoreMessage, TextPart, UIMessage } from 'ai';
+import type { CoreMessage, TextPart } from 'ai';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 
@@ -42,8 +42,6 @@ export class Memory extends MastraMemory {
       },
     });
     this.threadConfig = mergedConfig;
-
-    this.checkStorageFeatureSupport(mergedConfig);
   }
 
   protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string) {
@@ -87,7 +85,7 @@ export class Memory extends MastraMemory {
     threadConfig,
   }: StorageGetMessagesArg & {
     threadConfig?: MemoryConfig;
-  }): Promise<{ messages: CoreMessage[]; uiMessages: UIMessage[]; messagesV2: MastraMessageV2[] }> {
+  }): Promise<{ messages: CoreMessage[]; uiMessages: UIMessageWithMetadata[]; messagesV2: MastraMessageV2[] }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
     const vectorResults: {
@@ -294,6 +292,8 @@ export class Memory extends MastraMemory {
       throw new Error('Working memory is not enabled for this memory instance');
     }
 
+    this.checkStorageFeatureSupport(config);
+
     const scope = config.workingMemory.scope || 'thread';
 
     if (scope === 'resource' && resourceId) {
@@ -342,6 +342,8 @@ export class Memory extends MastraMemory {
     if (!config.workingMemory?.enabled) {
       throw new Error('Working memory is not enabled for this memory instance');
     }
+
+    this.checkStorageFeatureSupport(config);
 
     // If the agent calls the update working memory tool multiple times simultaneously
     // each call could overwrite the other call
@@ -704,6 +706,8 @@ export class Memory extends MastraMemory {
     if (!config.workingMemory?.enabled) {
       return null;
     }
+
+    this.checkStorageFeatureSupport(config);
 
     const scope = config.workingMemory.scope || 'thread';
     let workingMemoryData: string | null = null;
