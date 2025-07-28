@@ -58,15 +58,12 @@ export interface PIIDetection {
 }
 
 /**
- * Result structure for PII detection
+ * Result structure for PII detection (simplified for minimal tokens)
  */
 export interface PIIDetectionResult {
-  flagged: boolean;
-  categories: PIICategories;
-  category_scores: PIICategoryScores;
-  detections: PIIDetection[];
+  category_scores?: PIICategoryScores;
+  detections?: PIIDetection[];
   redacted_content?: string;
-  reason?: string;
 }
 
 /**
@@ -197,7 +194,7 @@ export class PIIDetector implements InputProcessor {
 
         const detectionResult = await this.detectPII(textContent);
 
-        if (detectionResult.flagged) {
+        if (this.isPIIFlagged(detectionResult)) {
           const processedMessage = this.handleDetectedPII(message, detectionResult, this.strategy, abort);
 
           // If we reach here, strategy is 'warn', 'filter', or 'redact'
@@ -262,14 +259,8 @@ export class PIIDetector implements InputProcessor {
 
       const result = response.object as PIIDetectionResult;
 
-      // Validate and apply threshold
-      const maxScore = Math.max(
-        ...(Object.values(result.category_scores).filter(score => typeof score === 'number') as number[]),
-      );
-      result.flagged = result.flagged || maxScore >= this.threshold;
-
-      // Apply redaction method if not already provided
-      if (result.flagged && (!result.redacted_content || !result.detections.some(d => d.redacted_value))) {
+      // Apply redaction method if not already provided and we have detections
+      if (!result.redacted_content && result.detections && result.detections.length > 0) {
         result.redacted_content = this.applyRedactionMethod(content, result.detections);
         result.detections = result.detections.map(detection => ({
           ...detection,
@@ -280,21 +271,29 @@ export class PIIDetector implements InputProcessor {
       return result;
     } catch (error) {
       console.warn('[PIIDetector] Detection agent failed, allowing content:', error);
-      // Fail open - return non-flagged result if detection agent fails
-      return {
-        flagged: false,
-        categories: this.detectionTypes.reduce((cats, type) => {
-          cats[type] = false;
-          return cats;
-        }, {} as PIICategories),
-        category_scores: this.detectionTypes.reduce((scores, type) => {
-          scores[type] = 0;
-          return scores;
-        }, {} as PIICategoryScores),
-        detections: [],
-        reason: 'Detection agent failed, content allowed by default',
-      };
+      // Fail open - return empty result if detection agent fails (no PII detected)
+      return {};
     }
+  }
+
+  /**
+   * Determine if PII is flagged based on detections or category scores above threshold
+   */
+  private isPIIFlagged(result: PIIDetectionResult): boolean {
+    // Check if we have any detections
+    if (result.detections && result.detections.length > 0) {
+      return true;
+    }
+
+    // Check if any category scores exceed the threshold
+    if (result.category_scores) {
+      const maxScore = Math.max(
+        ...(Object.values(result.category_scores).filter(score => typeof score === 'number') as number[]),
+      );
+      return maxScore >= this.threshold;
+    }
+
+    return false;
   }
 
   /**
@@ -311,8 +310,8 @@ export class PIIDetector implements InputProcessor {
       .map(([type]) => type);
 
     const alertMessage = `PII detected. Types: ${detectedTypes.join(', ')}${
-      result.reason ? `. Reason: ${result.reason}` : ''
-    }${this.includeDetections ? `. Detections: ${result.detections.length} items` : ''}`;
+      this.includeDetections && result.detections ? `. Detections: ${result.detections.length} items` : ''
+    }`;
 
     switch (strategy) {
       case 'block':
