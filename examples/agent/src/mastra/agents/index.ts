@@ -1,10 +1,12 @@
 import { openai } from '@ai-sdk/openai';
+import { google } from '@ai-sdk/google';
 import { jsonSchema, tool } from 'ai';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
 import { Agent, InputProcessor } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
+import { PIIDetector, LanguageDetector, PromptInjectionDetector } from '@mastra/core/agent/input-processor/processors';
 
 const memory = new Memory();
 
@@ -100,6 +102,24 @@ const vegetarianProcessor: InputProcessor = {
   },
 };
 
+const piiDetector = new PIIDetector({
+  model: google('gemini-2.0-flash-001'),
+  redactionMethod: 'mask',
+  preserveFormat: true,
+  includeDetections: true,
+});
+
+const languageDetector = new LanguageDetector({
+  model: google('gemini-2.0-flash-001'),
+  targetLanguages: ['en'],
+  strategy: 'translate',
+});
+
+const promptInjectionDetector = new PromptInjectionDetector({
+  model: google('gemini-2.0-flash-001'),
+  strategy: 'block',
+});
+
 export const chefAgentResponses = new Agent({
   name: 'Chef Agent Responses',
   instructions: `
@@ -115,7 +135,10 @@ export const chefAgentResponses = new Agent({
     myWorkflow,
   },
   inputProcessors: [
+    piiDetector,
     vegetarianProcessor,
+    languageDetector,
+    promptInjectionDetector,
     {
       name: 'no-soup-for-you',
       process: async ({ messages, abort }) => {

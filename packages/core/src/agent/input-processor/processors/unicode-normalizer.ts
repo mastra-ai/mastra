@@ -55,7 +55,6 @@ export class UnicodeNormalizer implements InputProcessor {
             }
             return part;
           }),
-          // Also normalize the content field if it exists
           content:
             typeof message.content.content === 'string'
               ? this.normalizeText(message.content.content)

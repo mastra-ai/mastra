@@ -286,6 +286,7 @@ export class PromptInjectionDetector implements InputProcessor {
       content: {
         ...originalMessage.content,
         parts: [{ type: 'text', text: rewrittenContent }],
+        content: rewrittenContent,
       },
     };
   }
@@ -296,13 +297,16 @@ export class PromptInjectionDetector implements InputProcessor {
   private extractTextContent(message: MastraMessageV2): string {
     let text = '';
 
-    // Extract from parts
     if (message.content.parts) {
       for (const part of message.content.parts) {
         if (part.type === 'text' && 'text' in part && typeof part.text === 'string') {
           text += part.text + ' ';
         }
       }
+    }
+
+    if (!text.trim() && typeof message.content.content === 'string') {
+      text = message.content.content;
     }
 
     return text.trim();
