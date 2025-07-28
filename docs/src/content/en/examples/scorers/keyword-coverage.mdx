@@ -5,7 +5,7 @@ description: Example of using the Keyword Coverage scorer to evaluate how well r
 
 import { GithubLink } from "@/components/github-link";
 
-# Keyword Coverage Evaluation
+# Keyword Coverage Scorer
 
 Use `createKeywordCoverageScorer` to evaluate how accurately a response includes required keywords or phrases from the context. The scorer accepts a `query` and a `response`, and returns a score and an `info` object containing keyword match statistics.
 
@@ -14,6 +14,8 @@ Use `createKeywordCoverageScorer` to evaluate how accurately a response includes
 ```bash copy
 npm install @mastra/evals
 ```
+
+> For complete API documentation and configuration options, see [`createKeywordCoverageScorer`](/reference/scorers/keyword-coverage).
 
 ## Full coverage example
 
