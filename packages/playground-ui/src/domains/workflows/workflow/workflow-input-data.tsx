@@ -57,18 +57,6 @@ export const WorkflowInputData = ({
         className={cn({
           'opacity-50 pointer-events-none': isSubmitLoading,
         })}
-        onKeyDown={e => {
-          if (isSubmitLoading) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-        }}
-        onClick={e => {
-          if (isSubmitLoading) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-        }}
       >
         {type === 'form' ? (
           <DynamicForm
