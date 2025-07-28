@@ -8,7 +8,7 @@ layout: guide
 
 # `deleteMessages`
 
-Deletes one or more messages from the memory storage. This method provides flexible input options to delete messages in a single operation.
+Deletes one or more messages from the memory storage. This method accepts arrays to delete multiple messages in a single operation.
 
 ## Syntax
 
@@ -16,18 +16,14 @@ Deletes one or more messages from the memory storage. This method provides flexi
 memory.deleteMessages(input: MessageDeleteInput): Promise<void>
 
 type MessageDeleteInput = 
-  | string                    // Single message ID
   | string[]                  // Array of message IDs
-  | { id: string }           // Message object with id property
   | { id: string }[]         // Array of message objects
 ```
 
 ## Parameters
 
-- `input` (required): The message(s) to delete. Can be:
-  - A single message ID as a string
-  - An array of message IDs
-  - A message object with an `id` property
+- `input` (required): An array of messages to delete. Must be either:
+  - An array of message IDs (strings)
   - An array of message objects with `id` properties
 
 ## Returns
@@ -39,11 +35,11 @@ A Promise that resolves when all messages have been successfully deleted.
 ### Delete a single message
 
 ```typescript
-// Using a string ID
-await memory.deleteMessages('msg-123');
+// Using an array with a single string ID
+await memory.deleteMessages(['msg-123']);
 
-// Using a message object
-await memory.deleteMessages({ id: 'msg-123' });
+// Using an array with a single message object
+await memory.deleteMessages([{ id: 'msg-123' }]);
 ```
 
 ### Delete multiple messages
@@ -67,7 +63,7 @@ await memory.deleteMessages([
 const thread = client.getAgent('my-agent').getThread('thread-123');
 
 // Delete a single message
-await thread.deleteMessages('msg-123');
+await thread.deleteMessages(['msg-123']);
 
 // Delete multiple messages
 await thread.deleteMessages(['msg-1', 'msg-2', 'msg-3']);
@@ -90,9 +86,9 @@ try {
 
 ## Notes
 
-- This method will delete all specified messages in a single operation
+- This method requires an array as input, even when deleting a single message
 - Thread timestamps are automatically updated when messages are deleted
-- The method automatically normalizes different input types to message IDs
+- The method automatically extracts message IDs from message objects
 - All message IDs must be non-empty strings
 - An empty array will result in no operation (no error thrown)
 - Messages from different threads can be deleted in the same operation

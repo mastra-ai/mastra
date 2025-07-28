@@ -17,7 +17,7 @@ import zodToJsonSchema from 'zod-to-json-schema';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
 
 // Type for flexible message deletion input
-export type MessageDeleteInput = string | string[] | { id: string } | { id: string }[];
+export type MessageDeleteInput = string[] | { id: string }[];
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -956,37 +956,32 @@ ${
 
   /**
    * Deletes one or more messages
-   * @param input - Can be:
-   *   - A single message ID string
-   *   - An array of message ID strings
-   *   - A message object with an 'id' property
-   *   - An array of message objects with 'id' properties
+   * @param input - Must be an array containing either:
+   *   - Message ID strings
+   *   - Message objects with 'id' properties
    * @returns Promise that resolves when all messages are deleted
    */
   public async deleteMessages(input: MessageDeleteInput): Promise<void> {
     // Normalize input to array of IDs
     let messageIds: string[];
 
-    if (typeof input === 'string') {
-      messageIds = [input];
-    } else if (Array.isArray(input)) {
-      if (input.length === 0) {
-        return; // No-op for empty array
-      }
-      messageIds = input.map(item => {
-        if (typeof item === 'string') {
-          return item;
-        } else if (item && typeof item === 'object' && 'id' in item) {
-          return item.id;
-        } else {
-          throw new Error('Invalid input: array items must be strings or objects with an id property');
-        }
-      });
-    } else if (input && typeof input === 'object' && 'id' in input) {
-      messageIds = [input.id];
-    } else {
-      throw new Error('Invalid input: must be a string, array of strings, message object, or array of message objects');
+    if (!Array.isArray(input)) {
+      throw new Error('Invalid input: must be an array of message IDs or message objects');
     }
+
+    if (input.length === 0) {
+      return; // No-op for empty array
+    }
+
+    messageIds = input.map(item => {
+      if (typeof item === 'string') {
+        return item;
+      } else if (item && typeof item === 'object' && 'id' in item) {
+        return item.id;
+      } else {
+        throw new Error('Invalid input: array items must be strings or objects with an id property');
+      }
+    });
 
     // Validate all IDs are non-empty strings
     const invalidIds = messageIds.filter(id => !id || typeof id !== 'string');
