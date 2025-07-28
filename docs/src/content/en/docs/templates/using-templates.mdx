@@ -1,0 +1,124 @@
+---
+title: Using Templates
+description: "How to discover, install, and customize Mastra templates for your projects"
+---
+
+import { FileTree, Tabs } from 'nextra/components'
+
+# Using Templates
+
+Mastra templates provide a quick way to start building Mastra applications with pre-configured examples. This guide shows you how to discover, install, and customize templates for your projects.
+
+## Installing Templates
+
+### Prerequisites
+
+Before using templates, ensure you have:
+
+- Node.js (version 18 or higher)
+- npm, yarn, or pnpm package manager
+
+### Finding Available Templates
+
+Browse available templates in the [Mastra templates directory](https://github.com/mastra-ai/mastra/tree/main/templates) on GitHub. Each template includes:
+
+- A descriptive name indicating its use case
+- A README with setup instructions
+- Example code demonstrating specific patterns
+
+### Installing a Template
+
+To install a template, use the create-mastra command with the template flag:
+
+```bash copy
+npx create-mastra@latest --template template-name
+```
+
+For example, to install the `text-to-sql` template:
+
+```bash copy
+npx create-mastra@latest --template text-to-sql
+```
+
+This command:
+
+1. Launches an interactive wizard
+2. Prompts you to name your project
+3. Creates the project directory with the template code
+4. Automatically installs all dependencies
+
+## Setting Up Your Template
+
+After installation, follow these steps to get your template running:
+
+### 1. Navigate to Your Project
+
+```bash copy
+cd your-project-name
+```
+
+### 2. Configure Environment Variables
+
+Copy the example environment file and add your API keys:
+
+```bash copy
+cp .env.example .env
+```
+
+Edit the `.env` file to include your required API keys and configuration values. Each template's README specifies which environment variables are needed.
+
+### 3. Run the Template
+
+Start the development server:
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm run dev
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn dev
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm dev
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Troubleshooting
+
+### Common Issues
+
+**Missing API Keys**
+
+- Ensure all required environment variables are set in your `.env` file
+- Check the template's README for specific API key requirements
+
+**Template Not Found**
+
+- Verify the template name matches exactly
+- Check that you're using the latest version of create-mastra
+
+### Getting Help
+
+If you encounter issues:
+
+- Check the template's README for specific setup instructions
+- Review the template's code for configuration requirements
+- Join the [Mastra Discord community](https://discord.gg/BTYqqHKUrf) for support
+
+## Next Steps
+
+After setting up your template:
+
+1. **Explore the code** - Understand how the template implements its functionality
+2. **Customize for your use case** - Modify agents, tools, and workflows as needed
+3. **Add your own features** - Extend the template with additional capabilities
+4. **Deploy your application** - Use Mastra's deployment options to go live
+
+Templates provide a solid foundation for building Mastra applications. Use them as learning resources and starting points for your own innovative projects.
+
