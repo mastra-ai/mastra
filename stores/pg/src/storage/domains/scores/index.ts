@@ -99,12 +99,16 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
     try {
+      // Generate ID like other storage implementations
+      const scoreId = `score-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
       const { input, ...rest } = score;
       await this.operations.insert({
         tableName: TABLE_SCORERS,
         record: {
+          id: scoreId,
           ...rest,
           input: JSON.stringify(input),
           createdAt: new Date().toISOString(),
@@ -112,7 +116,7 @@ export class ScoresPG extends ScoresStorage {
         },
       });
 
-      const scoreFromDb = await this.getScoreById({ id: score.id });
+      const scoreFromDb = await this.getScoreById({ id: scoreId });
       return { score: scoreFromDb! };
     } catch (error) {
       throw new MastraError(
