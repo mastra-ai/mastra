@@ -4,4 +4,4 @@
 'create-mastra': patch
 ---
 
-Fix dynamic workflow overflow
+Fix workflow input form overflow
