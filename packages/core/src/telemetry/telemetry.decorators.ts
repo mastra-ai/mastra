@@ -34,23 +34,21 @@ function isStreamingResult(result: unknown, methodName: string): boolean {
 
   if (result && typeof result === 'object' && result !== null) {
     const obj = result as Record<string, unknown>;
-    return (
-      'textStream' in obj || 'objectStream' in obj || 'usagePromise' in obj || 'finishReasonPromise' in obj
-    );
+    return 'textStream' in obj || 'objectStream' in obj || 'usagePromise' in obj || 'finishReasonPromise' in obj;
   }
 
   return false;
 }
 
 function enhanceStreamingArgumentsWithTelemetry(
-  args: unknown[], 
-  span: EnhancedSpan, 
-  spanName: string, 
-  methodName: string
+  args: unknown[],
+  span: EnhancedSpan,
+  spanName: string,
+  methodName: string,
 ): unknown[] {
   if (methodName === 'stream' || methodName === 'streamVNext') {
     const enhancedArgs = [...args];
-    const streamOptions = (enhancedArgs.length > 1 && enhancedArgs[1] as StreamOptions) || {} as StreamOptions;
+    const streamOptions = (enhancedArgs.length > 1 && (enhancedArgs[1] as StreamOptions)) || ({} as StreamOptions);
     const enhancedStreamOptions: StreamOptions = { ...streamOptions };
     const originalOnFinish = enhancedStreamOptions.onFinish;
 
@@ -69,7 +67,6 @@ function enhanceStreamingArgumentsWithTelemetry(
         span.setAttribute(`${spanName}.result`, JSON.stringify(telemetryData));
         span.setStatus({ code: SpanStatusCode.OK });
         span.end();
-
       } catch (error) {
         console.warn('Telemetry capture failed:', error);
         span.setAttribute(`${spanName}.result`, '[Telemetry Capture Error]');
