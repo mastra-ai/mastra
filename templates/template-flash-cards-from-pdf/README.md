@@ -4,7 +4,7 @@ A Mastra template that generates educational flash cards with optional images fr
 
 ## Features
 
-- **PDF Processing**: Extract educational content from PDF documents with intelligent parsing
+- **PDF Processing**: Extract educational content from PDF documents with intelligent parsing and automatic summarization for large files
 - **Flexible Input**: Support both PDF URLs and file attachments from the playground
 - **Content Analysis**: Identify key concepts, definitions, and facts suitable for flash cards
 - **Flash Card Generation**: Create diverse question-answer pairs using multiple formats and difficulty levels
@@ -151,9 +151,10 @@ const pdfContent = await mastra.getTool('pdf-content-extractor').execute({
 ### Agents
 
 1. **Flash Cards Agent** - Main orchestrator that coordinates the entire flash card generation process
-2. **Content Analyzer Agent** - Analyzes educational content to identify key learning elements
-3. **Flash Cards Generator Agent** - Creates effective question-answer pairs using learning science principles
-4. **PDF Content Agent** - Specialized PDF processing for educational content extraction
+2. **PDF Summarization Agent** - Specialized agent for creating educational summaries from large PDF content
+3. **Content Analyzer Agent** - Analyzes educational content to identify key learning elements
+4. **Flash Cards Generator Agent** - Creates effective question-answer pairs using learning science principles
+5. **PDF Content Agent** - Specialized PDF processing for educational content extraction
 
 ### Tools
 
@@ -294,6 +295,31 @@ S3_PUBLIC_URL_BASE=https://mastra-flashcard-images.s3.amazonaws.com
 
 **Note**: Configure your S3 bucket for public read access so generated images are accessible via public URLs.
 
+## PDF Content Management
+
+The template includes intelligent content management for PDFs of any size:
+
+### Automatic Summarization
+
+- **Educational Focus**: Uses a specialized PDF summarization agent trained for educational content
+- **Large Context Window**: Leverages GPT-4's large context window to handle extensive documents
+- **Content Preservation**: Maintains all educational concepts, definitions, and facts while reducing verbosity
+- **Flash Card Optimization**: Structures summaries specifically for effective flash card generation
+
+### Processing Strategy
+
+1. **Text Extraction**: Extract complete text content from PDF documents
+2. **Educational Summarization**: Specialized agent creates comprehensive educational summary
+3. **Content Analysis**: Analyze summarized content for flash card suitable elements
+4. **Flash Card Generation**: Create diverse questions from analyzed educational content
+
+### Benefits
+
+- **Scalable Processing**: Handle PDFs of any size using advanced AI summarization
+- **Educational Quality**: Preserves all learning-relevant content while improving manageability
+- **Simplified Architecture**: Clean, maintainable approach without complex chunking logic
+- **Optimized Output**: Summaries structured specifically for educational flash card creation
+
 ## Development
 
 To modify or extend this template:
@@ -316,9 +342,11 @@ To modify or extend this template:
 ### For PDF Processing
 
 1. **Quality PDFs**: Use text-based PDFs rather than scanned images
-2. **Subject Context**: Provide subject area for better content analysis
-3. **Focus Areas**: Specify key topics to emphasize important content
-4. **Appropriate Length**: Optimal PDFs are 10-50 pages for best results
+2. **Subject Context**: Provide subject area for better content analysis and summarization
+3. **Focus Areas**: Specify key topics to emphasize important content during summarization
+4. **Large File Handling**: The template automatically summarizes large PDFs using advanced AI
+5. **Content Preservation**: Educational summarization preserves all learning-relevant information
+6. **Optimized Processing**: Leverages large context windows for efficient, high-quality processing
 
 ## Dependencies
 

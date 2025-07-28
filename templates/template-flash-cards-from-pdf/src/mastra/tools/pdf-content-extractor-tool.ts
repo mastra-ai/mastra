@@ -84,15 +84,36 @@ export const pdfContentExtractorTool = createTool({
         `✅ Extracted ${extractionResult.extractedText.length} characters from ${extractionResult.pagesCount} pages`,
       );
 
-      // Step 3: Create educational analysis
+      // Step 3: Summarize content for analysis
+      console.log('📄 Summarizing PDF content for educational analysis...');
+      const pdfSummarizationAgent = mastra?.getAgent('pdfSummarizationAgent');
+      if (!pdfSummarizationAgent) {
+        throw new Error('PDF summarization agent not found');
+      }
+
+      const subjectAreaText = subjectArea ? `Subject area: ${subjectArea}` : '';
+      const focusAreasText = focusAreas.length > 0 ? `Focus particularly on: ${focusAreas.join(', ')}` : '';
+
+      const summaryResult = await pdfSummarizationAgent.generate([
+        {
+          role: 'user',
+          content: `Please create an educational summary of this PDF content for flash card generation. ${subjectAreaText} ${focusAreasText}
+
+This summary will be used to generate educational flash cards, so please preserve all important concepts, definitions, facts, and relationships while making the content more manageable.
+
+Content to summarize:
+${extractionResult.extractedText}`,
+        },
+      ]);
+
+      const summarizedContent = summaryResult.text || extractionResult.extractedText;
+
+      // Step 4: Create educational analysis from summarized content
       console.log('🎓 Creating educational analysis for flash card generation...');
       const contentAnalyzerAgent = mastra?.getAgent('contentAnalyzerAgent');
       if (!contentAnalyzerAgent) {
         throw new Error('Content analyzer agent not found');
       }
-
-      const subjectAreaText = subjectArea ? `Subject area: ${subjectArea}` : '';
-      const focusAreasText = focusAreas.length > 0 ? `Focus particularly on: ${focusAreas.join(', ')}` : '';
       
       const analysisResult = await contentAnalyzerAgent.generate([
         {
@@ -108,7 +129,7 @@ Extract and organize:
 6. Subject area identification
 
 Content to analyze:
-${extractionResult.extractedText}
+${summarizedContent}
 
 Format your response as JSON with the following structure:
 {
