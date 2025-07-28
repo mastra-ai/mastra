@@ -67,7 +67,7 @@ export function createHallucinationScorer({
       description: 'Reason about the results',
       createPrompt: ({ run }) => {
         const prompt = createHallucinationReasonPrompt({
-          input: run.input.map(input => input.content).join(', '),
+          input: run.input?.map(input => input.content).join(', ') || '',
           output: run.output.text,
           context: run?.additionalContext?.context || [],
           score: run.score,

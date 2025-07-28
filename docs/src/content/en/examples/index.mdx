@@ -11,7 +11,7 @@ import { Tabs } from "nextra/components";
 The Examples section is a short list of example projects demonstrating basic AI engineering with Mastra, including text generation, structured output, streaming responses, retrieval‐augmented generation (RAG), and voice.
 
 <CardItems
-  titles={["Agent", "Workflow", "legacyWorkflow", "Memory", "RAG", "Evals", "Voice"]}
+  titles={["Agent", "Workflow", "legacyWorkflow", "Memory", "RAG", "Evals (Legacy)", "Scorers", "Voice"]}
   items={{
     Agent: [
       { title: "Giving a System Prompt", href: "/examples/agents/system-prompt" },
@@ -76,7 +76,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
       { title: "Structured Reasoning with Workflows", href: "/examples/rag/usage/cot-workflow-rag" },
       { title: "Graph RAG", href: "/examples/rag/usage/graph-rag" }
     ],
-    Evals: [
+    "Evals (Legacy)": [
       { title: "Answer Relevancy", href: "/examples/evals/answer-relevancy" },
       { title: "Bias", href: "/examples/evals/bias" },
       { title: "Completeness", href: "/examples/evals/completeness" },
@@ -95,6 +95,20 @@ The Examples section is a short list of example projects demonstrating basic AI 
       { title: "Toxicity", href: "/examples/evals/toxicity" },
       { title: "LLM as a Judge", href: "/examples/evals/custom-llm-judge-eval" },
       { title: "Native JavaScript", href: "/examples/evals/custom-native-javascript-eval" }
+    ],
+    Scorers: [
+      { title: "Answer Relevancy", href: "/examples/scorers/answer-relevancy" },
+      { title: "Bias", href: "/examples/scorers/bias" },
+      { title: "Completeness", href: "/examples/scorers/completeness" },
+      { title: "Content Similarity", href: "/examples/scorers/content-similarity" },
+      { title: "Faithfulness", href: "/examples/scorers/faithfulness" },
+      { title: "Hallucination", href: "/examples/scorers/hallucination" },
+      { title: "Keyword Coverage", href: "/examples/scorers/keyword-coverage" },
+      { title: "Textual Difference", href: "/examples/scorers/textual-difference" },
+      { title: "Tone Consistency", href: "/examples/scorers/tone-consistency" },
+      { title: "Toxicity", href: "/examples/scorers/toxicity" },
+      { title: "LLM as a Judge", href: "/examples/scorers/custom-llm-judge-eval" },
+      { title: "Native JavaScript", href: "/examples/scorers/custom-native-javascript-eval" }
     ],
     Voice: [
       { title: "Text to Speech", href: "/examples/voice/text-to-speech" },
