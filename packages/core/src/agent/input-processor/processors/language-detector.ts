@@ -380,7 +380,6 @@ export class LanguageDetector implements InputProcessor {
   private extractTextContent(message: MastraMessageV2): string {
     let text = '';
 
-    // Extract from parts (preferred)
     if (message.content.parts) {
       for (const part of message.content.parts) {
         if (part.type === 'text' && 'text' in part && typeof part.text === 'string') {
@@ -389,7 +388,6 @@ export class LanguageDetector implements InputProcessor {
       }
     }
 
-    // Only use legacy content field if no text parts found
     if (!text.trim() && typeof message.content.content === 'string') {
       text = message.content.content;
     }
