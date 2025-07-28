@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.14-alpha.1
+
+### Patch Changes
+
+- 6336993: Fix workflow input form overflow
+
 ## 0.10.14-alpha.0
 
 ### Patch Changes
