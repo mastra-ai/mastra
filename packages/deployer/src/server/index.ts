@@ -259,7 +259,7 @@ export async function createHonoServer(
               properties: {
                 method: {
                   type: 'string',
-                  enum: ['tasks/send', 'tasks/sendSubscribe', 'tasks/get', 'tasks/cancel'],
+                  enum: ['message/send', 'message/stream', 'tasks/get', 'tasks/cancel'],
                   description: 'The A2A protocol method to execute',
                 },
                 params: {

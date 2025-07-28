@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import type { Message, Task, TaskSendParams } from '@mastra/core/a2a';
-import { A2AError } from '@mastra/core/a2a';
+import { MastraA2AError } from '@mastra/core/a2a';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
@@ -572,7 +572,7 @@ describe('A2A Handler', () => {
           agentId,
           taskId: nonExistentTaskId,
         }),
-      ).rejects.toThrow(A2AError.taskNotFound(nonExistentTaskId));
+      ).rejects.toThrow(MastraA2AError.taskNotFound(nonExistentTaskId));
     });
   });
 
@@ -713,7 +713,7 @@ describe('A2A Handler', () => {
           agentId,
           taskId: nonExistentTaskId,
         }),
-      ).rejects.toThrow(A2AError.taskNotFound(nonExistentTaskId));
+      ).rejects.toThrow(MastraA2AError.taskNotFound(nonExistentTaskId));
     });
   });
 });

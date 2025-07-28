@@ -1,23 +1,32 @@
-import { A2AError } from '@mastra/core/a2a';
-import type { TaskSendParams, TaskQueryParams, TaskIdParams, AgentCard, TaskStatus, TaskState } from '@mastra/core/a2a';
+import { MastraA2AError } from '@mastra/core/a2a';
+import type {
+  MessageSendParams,
+  TaskQueryParams,
+  TaskIdParams,
+  AgentCard,
+  TaskStatus,
+  TaskState,
+} from '@mastra/core/a2a';
 import type { Agent } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { z } from 'zod';
 import { convertToCoreMessage, normalizeError, createSuccessResponse, createErrorResponse } from '../a2a/protocol';
 import { InMemoryTaskStore } from '../a2a/store';
-import { applyUpdateToTaskAndHistory, createTaskContext, loadOrCreateTaskAndHistory } from '../a2a/tasks';
+import { applyUpdateToTask, createTaskContext, loadOrCreateTask } from '../a2a/tasks';
 import type { Context } from '../types';
 
-const taskSendParamsSchema = z.object({
-  id: z.string().min(1, 'Invalid or missing task ID (params.id).'),
+const messageSendParamsSchema = z.object({
+  // id: z.string().min(1, 'Invalid or missing task ID (params.id).'),
   message: z.object({
     parts: z.array(
       z.object({
-        type: z.enum(['text']),
+        kind: z.enum(['text']),
         text: z.string(),
       }),
     ),
+    kind: z.literal('message'),
+    messageId: z.string(),
   }),
 });
 
@@ -79,12 +88,12 @@ export async function getAgentCardByIdHandler({
   return agentCard;
 }
 
-function validateTaskSendParams(params: TaskSendParams) {
+function validateMessageSendParams(params: MessageSendParams) {
   try {
-    taskSendParamsSchema.parse(params);
+    messageSendParamsSchema.parse(params);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      throw A2AError.invalidParams((error as z.ZodError).errors[0]!.message);
+      throw MastraA2AError.invalidParams((error as z.ZodError).errors[0]!.message);
     }
 
     throw error;
@@ -101,32 +110,33 @@ export async function handleTaskSend({
   runtimeContext,
 }: {
   requestId: string;
-  params: TaskSendParams;
+  params: MessageSendParams;
   taskStore: InMemoryTaskStore;
   agent: Agent;
   agentId: string;
   logger?: IMastraLogger;
   runtimeContext: RuntimeContext;
 }) {
-  validateTaskSendParams(params);
+  validateMessageSendParams(params);
 
-  const { id: taskId, message, sessionId, metadata } = params;
+  const { message, metadata } = params;
+  const { taskId, contextId } = message;
 
-  // Load or create task AND history
-  let currentData = await loadOrCreateTaskAndHistory({
-    taskId,
+  // Load or create task
+  let currentData = await loadOrCreateTask({
+    taskId: taskId ? taskId : crypto.randomUUID(),
     taskStore,
     agentId,
     message,
-    sessionId,
+    contextId,
     metadata,
   });
 
   // Use the new TaskContext definition, passing history
   const context = createTaskContext({
-    task: currentData.task,
+    task: currentData,
     userMessage: message,
-    history: currentData.history,
+    history: currentData.history || [],
     activeCancellations: taskStore.activeCancellations,
   });
 
@@ -136,49 +146,53 @@ export async function handleTaskSend({
       runtimeContext,
     });
 
-    currentData = applyUpdateToTaskAndHistory(currentData, {
+    currentData = applyUpdateToTask(currentData, {
       state: 'completed',
       message: {
+        messageId: crypto.randomUUID(),
         role: 'agent',
         parts: [
           {
-            type: 'text',
+            kind: 'text',
             text: text,
           },
         ],
+        kind: 'message',
       },
     });
 
     await taskStore.save({ agentId, data: currentData });
-    context.task = currentData.task;
+    context.task = currentData;
   } catch (handlerError) {
     // If handler throws, apply 'failed' status, save, and rethrow
     const failureStatusUpdate: Omit<TaskStatus, 'timestamp'> = {
       state: 'failed',
       message: {
+        messageId: crypto.randomUUID(),
         role: 'agent',
         parts: [
           {
-            type: 'text',
+            kind: 'text',
             text: `Handler failed: ${handlerError instanceof Error ? handlerError.message : String(handlerError)}`,
           },
         ],
+        kind: 'message',
       },
     };
-    currentData = applyUpdateToTaskAndHistory(currentData, failureStatusUpdate);
+    currentData = applyUpdateToTask(currentData, failureStatusUpdate);
 
     try {
       await taskStore.save({ agentId, data: currentData });
     } catch (saveError) {
       // @ts-expect-error saveError is an unknown error
-      logger?.error(`Failed to save task ${taskId} after handler error:`, saveError?.message);
+      logger?.error(`Failed to save task ${currentData.id} after handler error:`, saveError?.message);
     }
 
-    return normalizeError(handlerError, requestId, taskId, logger); // Rethrow original error
+    return normalizeError(handlerError, requestId, currentData.id, logger); // Rethrow original error
   }
 
   // The loop finished, send the final task state
-  return createSuccessResponse(requestId, currentData.task);
+  return createSuccessResponse(requestId, currentData);
 }
 
 export async function handleTaskGet({
@@ -195,7 +209,7 @@ export async function handleTaskGet({
   const task = await taskStore.load({ agentId, taskId });
 
   if (!task) {
-    throw A2AError.taskNotFound(taskId);
+    throw MastraA2AError.taskNotFound(taskId);
   }
 
   return createSuccessResponse(requestId, task);
@@ -211,7 +225,7 @@ export async function* handleTaskSendSubscribe({
   runtimeContext,
 }: {
   requestId: string;
-  params: TaskSendParams;
+  params: MessageSendParams;
   taskStore: InMemoryTaskStore;
   agent: Agent;
   agentId: string;
@@ -238,7 +252,7 @@ export async function* handleTaskSendSubscribe({
       logger,
     });
   } catch (err) {
-    if (!(err instanceof A2AError)) {
+    if (!(err instanceof MastraA2AError)) {
       throw err;
     }
 
@@ -268,15 +282,15 @@ export async function handleTaskCancel({
   });
 
   if (!data) {
-    throw A2AError.taskNotFound(taskId);
+    throw MastraA2AError.taskNotFound(taskId);
   }
 
   // Check if cancelable (not already in a final state)
   const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
 
-  if (finalStates.includes(data.task.status.state)) {
-    logger?.info(`Task ${taskId} already in final state ${data.task.status.state}, cannot cancel.`);
-    return createSuccessResponse(requestId, data.task);
+  if (finalStates.includes(data.status.state)) {
+    logger?.info(`Task ${taskId} already in final state ${data.status.state}, cannot cancel.`);
+    return createSuccessResponse(requestId, data);
   }
 
   // Signal cancellation
@@ -287,11 +301,13 @@ export async function handleTaskCancel({
     state: 'canceled',
     message: {
       role: 'agent',
-      parts: [{ type: 'text', text: 'Task cancelled by request.' }],
+      parts: [{ kind: 'text', text: 'Task cancelled by request.' }],
+      kind: 'message',
+      messageId: crypto.randomUUID(),
     },
   };
 
-  data = applyUpdateToTaskAndHistory(data, cancelUpdate);
+  data = applyUpdateToTask(data, cancelUpdate);
 
   // Save the updated state
   await taskStore.save({ agentId, data });
@@ -300,7 +316,7 @@ export async function handleTaskCancel({
   taskStore.activeCancellations.delete(taskId);
 
   // Return the updated task object
-  return createSuccessResponse(requestId, data.task);
+  return createSuccessResponse(requestId, data);
 }
 
 export async function getAgentExecutionHandler({
@@ -316,8 +332,8 @@ export async function getAgentExecutionHandler({
   requestId: string;
   runtimeContext: RuntimeContext;
   agentId: string;
-  method: 'tasks/send' | 'tasks/sendSubscribe' | 'tasks/get' | 'tasks/cancel';
-  params: TaskSendParams | TaskQueryParams | TaskIdParams;
+  method: 'message/send' | 'message/stream' | 'tasks/get' | 'tasks/cancel';
+  params: MessageSendParams | TaskQueryParams | TaskIdParams;
   taskStore?: InMemoryTaskStore;
   logger?: IMastraLogger;
 }): Promise<any> {
@@ -328,14 +344,14 @@ export async function getAgentExecutionHandler({
   try {
     // Attempt to get task ID early for error context. Cast params to any to access id.
     // Proper validation happens within specific handlers.
-    taskId = params.id;
+    taskId = 'id' in params ? params.id : params.message.taskId || 'No task ID provided';
 
     // 2. Route based on method
     switch (method) {
-      case 'tasks/send': {
+      case 'message/send': {
         const result = await handleTaskSend({
           requestId,
-          params: params as TaskSendParams,
+          params: params as MessageSendParams,
           taskStore,
           agent,
           agentId,
@@ -343,11 +359,11 @@ export async function getAgentExecutionHandler({
         });
         return result;
       }
-      case 'tasks/sendSubscribe':
+      case 'message/stream':
         const result = await handleTaskSendSubscribe({
           requestId,
           taskStore,
-          params: params as TaskSendParams,
+          params: params as MessageSendParams,
           agent,
           agentId,
           runtimeContext,
@@ -375,10 +391,10 @@ export async function getAgentExecutionHandler({
         return result;
       }
       default:
-        throw A2AError.methodNotFound(method);
+        throw MastraA2AError.methodNotFound(method);
     }
   } catch (error) {
-    if (error instanceof A2AError && taskId && !error.taskId) {
+    if (error instanceof MastraA2AError && taskId && !error.taskId) {
       error.taskId = taskId; // Add task ID context if missing
     }
 

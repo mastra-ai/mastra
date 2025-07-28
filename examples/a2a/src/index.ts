@@ -20,7 +20,7 @@ async function main() {
 
     // Step 1: Get the agent card to see its capabilities
     console.log('📋 Fetching agent card...');
-    const agentCard = await a2aClient.getCard();
+    const agentCard = await a2aClient.getAgentCard();
 
     console.log(`\nAgent Name: ${agentCard.name}`);
     console.log(`Description: ${agentCard.description}`);
