@@ -247,7 +247,7 @@ const agent = new Agent({
 When creating custom processors:
 - Always return the `messages` array (potentially modified)
 - Use `abort(reason)` to terminate processing early
-- Avoid mutating the input messages directly; create new objects if needed
+- Mutate the input messages directly
 - Keep processors focused on a single responsibility
 
 ## Integration with Agent Methods
