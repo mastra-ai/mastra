@@ -1433,22 +1433,22 @@ export class Agent<
             title: thread.title,
             memoryConfig,
             resourceId,
+            saveThread: false,
           });
         }
 
-        let [memoryMessages, memorySystemMessage] =
-          thread.id && memory
-            ? await Promise.all([
-                this.getMemoryMessages({
-                  resourceId,
-                  threadId: threadObject.id,
-                  vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
-                  memoryConfig,
-                  runtimeContext,
-                }),
-                memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
-              ])
-            : [[], null];
+        let [memoryMessages, memorySystemMessage] = existingThread
+          ? await Promise.all([
+              this.getMemoryMessages({
+                resourceId,
+                threadId: threadObject.id,
+                vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
+                memoryConfig,
+                runtimeContext,
+              }),
+              memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
+            ])
+          : [[], null];
 
         this.logger.debug('Fetched messages from memory', {
           threadId: threadObject.id,
@@ -1540,6 +1540,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           messageList,
           // add old processed messages + new input messages
           messageObjects: processedList,
+          threadExists: !!existingThread,
         };
       },
       after: async ({
@@ -1550,6 +1551,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText,
         runId,
         messageList,
+        threadExists,
         toolCallsCollection,
         structuredOutput = false,
       }: {
@@ -1560,6 +1562,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
         messageList: MessageList;
+        threadExists: boolean;
         toolCallsCollection: Map<string, any>;
         structuredOutput?: boolean;
       }) => {
@@ -1624,6 +1627,16 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             }
             if (responseMessages) {
               messageList.add(responseMessages, 'response');
+            }
+
+            if (!threadExists) {
+              await memory.createThread({
+                threadId: thread.id,
+                metadata: thread.metadata,
+                title: thread.title,
+                memoryConfig,
+                resourceId: thread.resourceId,
+              });
             }
 
             // Parallelize title generation and message saving
@@ -1914,6 +1927,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     let messageList: MessageList;
     let thread: StorageThreadType | null | undefined;
+    let threadExists: boolean;
 
     const toolCallsCollection = new Map();
     return {
@@ -1921,6 +1935,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       before: async () => {
         const beforeResult = await before();
         const { messageObjects, convertedTools } = beforeResult;
+        threadExists = beforeResult.threadExists || false;
         messageList = beforeResult.messageList;
         thread = beforeResult.thread;
 
@@ -1939,6 +1954,17 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           runtimeContext,
           onStepFinish: async (props: any) => {
             if (savePerStep) {
+              if (!threadExists && memory && thread) {
+                await memory.createThread({
+                  threadId,
+                  title: thread.title,
+                  metadata: thread.metadata,
+                  resourceId: thread.resourceId,
+                  memoryConfig,
+                });
+                threadExists = true;
+              }
+
               await this.saveStepMessages({
                 saveQueueManager,
                 result: props,
@@ -1983,6 +2009,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           messageList,
           toolCallsCollection,
           structuredOutput,
+          threadExists,
         });
       },
     };
