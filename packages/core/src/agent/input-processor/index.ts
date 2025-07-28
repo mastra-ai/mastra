@@ -7,3 +7,5 @@ export interface InputProcessor {
     abort: (reason?: string) => never;
   }): Promise<MastraMessageV2[]> | MastraMessageV2[];
 }
+
+export * from './processors';

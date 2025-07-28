@@ -60,7 +60,7 @@ import type {
   AgentMemoryOption,
 } from './types';
 export type { ChunkType, MastraAgentStream } from '../stream/MastraAgentStream';
-export type { InputProcessor } from './input-processor';
+export * from './input-processor';
 
 export { MessageList };
 export * from './types';
