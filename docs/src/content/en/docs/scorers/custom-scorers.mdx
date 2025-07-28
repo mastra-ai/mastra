@@ -17,14 +17,16 @@ Code scorers follow Mastra's three-step evaluation pipeline:
 
 For the complete API reference, see [`createScorer`](/reference/scorers/custom-code-scorer), and for a detailed explanation of the pipeline, see [evaluation process](/docs/scorers/overview#evaluation-pipeline).
 
-#### Extract Step (optional):
+#### Extract Step
+
+This optional step preprocesses input/output data when you need to evaluate multiple distinct elements, filter content, or focus analysis on specific parts of complex data.
+
 - **Receives:**
   - `input`: User messages (when used with agents) or workflow step input (when used with workflow steps)
   - `output`: Agent's response (when used with agents) or workflow step output (when used with workflow steps)
   - `runtimeContext`: Runtime context from the agent or workflow step being evaluated
 - **Must return:** `{ results: any }`
 - **Data flow:** The `results` value is passed to the analyze step as `extractStepResult`
-- **Use when:** You need to preprocess complex input/output data, evaluate multiple distinct elements, filter content, or focus analysis on specific parts of the data
 
 ```typescript filename="src/mastra/scorers/keyword-coverage-scorer.ts" showLineNumbers copy
 import { createScorer } from "@mastra/core/scores";
@@ -53,26 +55,24 @@ export const keywordCoverageScorer = createScorer({
       },
     };
   },
-  analyze: async ({ input, output, extractStepResult }) => { ... }
-  reason: async ({ score, analyzeStepResult, extractStepResult }) => { ... },
+
+  // ... analyze and reason steps
 });
 ```
 
-#### Analyze Step (required):
+#### Analyze Step
+
+This required step performs the core evaluation and generates the numerical score for all scorers.
+
 - **Receives:** Everything from extract step, plus:
   - `extractStepResult`: Results from the extract step (if extract step was defined)
 - **Must return:** `{ score: number, results?: any }`
 - **Data flow:** The `score` and optional `results` are passed to the reason step
-- **Use when:** This step is always required for core evaluation and score generation
 
 ```typescript filename="src/mastra/scorers/keyword-coverage-scorer.ts" showLineNumbers copy
-import { createScorer } from "@mastra/core/scores";
-import keywordExtractor from "keyword-extractor";
-
 export const keywordCoverageScorer = createScorer({
-  name: "Keyword Coverage",
-  description: "Evaluates how well the output covers keywords from the input",
-  extract: async ({ input, output }) => { ... },
+  // ... name, description, extract step
+
   // Step 2: Analyze keyword coverage and calculate score
   analyze: async ({ input, output, extractStepResult }) => {
     const { inputKeywords, outputKeywords } = extractStepResult.results;
@@ -97,27 +97,24 @@ export const keywordCoverageScorer = createScorer({
       },
     };
   },
-  reason: async ({ score, analyzeStepResult, extractStepResult }) => { ... },
+
+  // ... reason step
 });
 ```
 
-#### Reason Step (optional):
+#### Reason Step
+
+This optional step generates human-readable explanations for scores, useful for actionable feedback, debugging transparency, or compliance documentation.
+
 - **Receives:** Everything from analyze step, plus:
   - `score`: The numerical score (0-1) calculated by the analyze step
   - `analyzeStepResult`: Results from the analyze step (contains the score and any additional results)
-  - `extractStepResult`: Results from the extract step (if extract step was defined)
 - **Must return:** `{ reason: string }`
-- **Use when:** You need explanations for scores, actionable feedback, or compliance documentation
 
 ```typescript filename="src/mastra/scorers/keyword-coverage-scorer.ts" showLineNumbers copy
-import { createScorer } from "@mastra/core/scores";
-import keywordExtractor from "keyword-extractor";
-
 export const keywordCoverageScorer = createScorer({
-  name: "Keyword Coverage",
-  description: "Evaluates how well the output covers keywords from the input",
-  extract: async ({ input, output }) => { ... },
-  analyze: async ({ input, output, extractStepResult }) => { ... },
+  // ... name, description, extract and analyze steps
+
   // Step 3: Generate explanation for the score
   reason: async ({ score, analyzeStepResult, extractStepResult }) => {
     const { matched, total, matchedKeywords } = analyzeStepResult.results;
@@ -163,7 +160,7 @@ For the complete API reference, see [`createLLMScorer`](/reference/scorers/llm-s
 
 #### Judge Configuration
 
-All LLM scorer steps share a judge configuration that defines the model and system instructions.
+All LLM scorer steps share this required configuration that defines the model and system instructions.
 
 - **Configuration:** `judge` object containing:
   - **model:** The LLM model instance for evaluation
@@ -187,13 +184,12 @@ export const toneScorer = createLLMScorer({
 });
 ```
 
-#### Extract Step (Optional)
+#### Extract Step
 
-The extract step preprocesses input/output data using an LLM.
+This optional step uses an LLM to preprocess input/output data when you need to evaluate multiple distinct elements, filter content, or focus analysis on specific parts of complex data.
 
 - **Configuration:** `{ description, outputSchema, createPrompt }`
 - **Data flow:** The structured output (defined by outputSchema) is passed to the analyze step as `extractStepResult`
-- **Use when:** You need to preprocess complex input/output data, evaluate multiple distinct elements, filter content, or focus analysis on specific parts of the data
 
 ```typescript filename="src/mastra/scorers/content-scorer.ts" showLineNumbers copy
 export const contentScorer = createLLMScorer({
@@ -222,13 +218,12 @@ export const contentScorer = createLLMScorer({
 });
 ```
 
-#### Analyze Step (Required)
+#### Analyze Step
 
-The analyze step performs the core evaluation using the LLM.
+This required step uses an LLM to perform the core evaluation and return structured analysis that will be converted to a numerical score.
 
 - **Configuration:** `{ description, outputSchema, createPrompt }`
 - **Data flow:** The structured output is passed to the calculateScore function and then to the reason step
-- **Use when:** This step is always required for core evaluation. The LLM performs the qualitative analysis that will be converted to a numerical score.
 
 ```typescript filename="src/mastra/scorers/quality-scorer.ts" showLineNumbers copy
 export const qualityScorer = createLLMScorer({
@@ -260,13 +255,12 @@ export const qualityScorer = createLLMScorer({
 });
 ```
 
-#### Calculate Score Step (Required)
+#### Calculate Score Step
 
-The calculateScore function converts LLM analysis into a numerical score.
+This required function converts the LLM's structured analysis into a numerical score, providing deterministic scoring logic since LLMs aren't reliable for consistent numerical outputs.
 
 - **Configuration:** `calculateScore` function that receives `{ run }` and returns a number
 - **Data flow:** Converts the analyze step's structured output into a numerical score (0-1 range)
-- **Use when:** Always required for LLM scorers. Provides deterministic scoring logic since LLMs aren't reliable for consistent numerical outputs.
 
 ```typescript filename="src/mastra/scorers/quality-scorer.ts" showLineNumbers copy
 export const qualityScorer = createLLMScorer({
@@ -290,13 +284,12 @@ export const qualityScorer = createLLMScorer({
 });
 ```
 
-#### Reason Step (Optional)
+#### Reason Step
 
-The reason step generates human-readable explanations for the score.
+This optional step uses an LLM to generate human-readable explanations for scores, useful for actionable feedback, debugging transparency, or compliance documentation.
 
 - **Configuration:** `{ description, createPrompt }`
 - **Data flow:** Receives all previous step results and score, returns a string explanation
-- **Use when:** You need explanations for scores, debugging/transparency, actionable feedback, or compliance documentation
 
 ```typescript filename="src/mastra/scorers/quality-scorer.ts" showLineNumbers copy
 export const qualityScorer = createLLMScorer({
