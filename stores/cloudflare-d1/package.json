@@ -28,7 +28,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "cloudflare": "^4.4.1"
+    "cloudflare": "^4.5.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250725.0",
@@ -39,7 +39,7 @@
     "@types/node": "^20.19.0",
     "dotenv": "^17.0.0",
     "eslint": "^9.30.1",
-    "miniflare": "^4.20250617.5",
+    "miniflare": "^4.20250712.2",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
