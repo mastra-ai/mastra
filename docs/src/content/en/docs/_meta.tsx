@@ -3,7 +3,6 @@ import { Tag } from "@/components/tag";
 const meta = {
   index: "Introduction",
   "getting-started": { title: "Getting Started" },
-  templates: { title: "Templates" },
   agents: { title: "Agents" },
   "tools-mcp": { title: "Tools & MCP", theme: { collapsed: true } },
   memory: { title: "Memory", theme: { collapsed: true } },
