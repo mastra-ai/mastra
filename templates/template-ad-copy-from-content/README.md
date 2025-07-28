@@ -28,6 +28,14 @@ A Mastra template that generates compelling ad copy and promotional images from 
    # For web content extraction (optional - only needed for URL input type)
    BROWSERBASE_API_KEY=your_browserbase_api_key
    BROWSERBASE_PROJECT_ID=your_browserbase_project_id
+
+   # For cloud storage (required for image generation)
+   S3_REGION=auto
+   S3_ENDPOINT=https://your-cloudflare-r2-endpoint.com
+   S3_ACCESS_KEY_ID=your_access_key_id
+   S3_SECRET_ACCESS_KEY=your_secret_access_key
+   S3_BUCKET_NAME=mastra-generated-images
+   S3_PUBLIC_URL_BASE=https://your-public-domain.com
    ```
 
 3. **Run the application**:
@@ -195,15 +203,48 @@ To modify or extend this template:
 
 ## Environment Variables
 
+### Required
 - `OPENAI_API_KEY`: Required for AI generation (OpenAI GPT-4)
+
+### Optional (based on features used)
 - `BROWSERBASE_API_KEY`: Required for web content extraction (BrowserBase)
 - `BROWSERBASE_PROJECT_ID`: Required for web content extraction (BrowserBase)
-- Additional API keys may be needed for external integrations
+
+### Cloud Storage (required for image generation)
+- `S3_REGION`: AWS region or 'auto' for Cloudflare R2 (default: 'auto')
+- `S3_ENDPOINT`: S3-compatible endpoint URL (e.g., Cloudflare R2 endpoint)
+- `S3_ACCESS_KEY_ID`: Access key for S3-compatible service
+- `S3_SECRET_ACCESS_KEY`: Secret key for S3-compatible service
+- `S3_BUCKET_NAME`: Bucket name for storing generated images (default: 'mastra-generated-images')
+- `S3_PUBLIC_URL_BASE`: Public URL base for accessing uploaded images
+
+### Cloud Storage Setup Examples
+
+#### Cloudflare R2
+```env
+S3_REGION=auto
+S3_ENDPOINT=https://your-account-id.r2.cloudflarestorage.com
+S3_ACCESS_KEY_ID=your_r2_access_key_id
+S3_SECRET_ACCESS_KEY=your_r2_secret_access_key
+S3_BUCKET_NAME=mastra-images
+S3_PUBLIC_URL_BASE=https://your-custom-domain.com
+```
+
+#### AWS S3
+```env
+S3_REGION=us-east-1
+S3_ENDPOINT=https://s3.amazonaws.com
+S3_ACCESS_KEY_ID=your_aws_access_key_id
+S3_SECRET_ACCESS_KEY=your_aws_secret_access_key
+S3_BUCKET_NAME=mastra-generated-images
+S3_PUBLIC_URL_BASE=https://mastra-generated-images.s3.amazonaws.com
+```
 
 ## Dependencies
 
 - `@mastra/core`: Core Mastra framework
 - `@ai-sdk/openai`: OpenAI integration
+- `@aws-sdk/client-s3`: S3-compatible cloud storage (for image uploads)
 - `@browserbasehq/stagehand`: Web browsing and content extraction
 - `pdf2json`: PDF text extraction
 - `ai`: AI SDK for image generation

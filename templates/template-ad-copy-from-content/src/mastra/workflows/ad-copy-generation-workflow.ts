@@ -98,7 +98,7 @@ const outputSchema = z.object({
       }),
     )
     .optional()
-    .describe('Generated promotional images with direct DALL-E URLs'),
+    .describe('Generated promotional images with public cloud storage URLs'),
   campaignSummary: z
     .object({
       platform: z.string(),
