@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 5.1.16-alpha.1
+
+### Patch Changes
+
+- 6336993: Fix workflow input form overflow
+- Updated dependencies [e0f73c6]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+  - @mastra/core@0.12.0-alpha.1
+  - @mastra/client-js@0.10.17-alpha.1
+
 ## 5.1.16-alpha.0
 
 ### Patch Changes
