@@ -327,7 +327,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           .map(doc => doc._id)
           .toArray();
 
-        vectorSearch.filter = { _id: { $in: candidateIds } };
+        if (candidateIds.length > 0) {
+          vectorSearch.filter = { _id: { $in: candidateIds } };
+        }
       }
 
       // Build the aggregation pipeline

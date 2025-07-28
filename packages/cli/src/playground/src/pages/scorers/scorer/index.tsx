@@ -376,7 +376,7 @@ function ScoreItem({
   const timeStr = format(new Date(score.createdAt), 'h:mm:ss bb');
   const inputPrev = score?.input?.[0]?.content || score?.input?.[0]?.ingredient || '';
   const outputPrev = score?.output?.text || score?.output?.object?.result || '';
-  const scorePrev = score?.score ? Math.round(score?.score * 100) / 100 : 'n/a';
+  const scorePrev = score?.score ? Math.round(score?.score * 100) / 100 : '0';
   const entityIcon = score?.entityType === 'WORKFLOW' ? <WorkflowIcon /> : <AgentIcon />; // score?.score?.toFixed(2) || `N/A`;
 
   return (
@@ -488,7 +488,7 @@ function ScoreDetails({
               <em>
                 Score <ArrowRightIcon />
               </em>
-              <b>{score?.score || 'n/a'}</b>
+              <b>{score?.score ?? 'n/a'}</b>
               <em>
                 Reason <ArrowRightIcon />
               </em>
