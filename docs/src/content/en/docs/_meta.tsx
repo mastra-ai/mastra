@@ -1,3 +1,5 @@
+import { Tag } from "@/components/tag";
+
 const meta = {
   index: "Introduction",
   "getting-started": { title: "Getting Started" },
@@ -18,6 +20,7 @@ const meta = {
   },
   deployment: { title: "Deployment" },
   "mastra-cloud": { title: "Mastra Cloud" },
+  auth: <Tag text="experimental">Auth</Tag>,
   observability: { title: "Observability" },
   evals: { title: "Evals" },
   frameworks: { title: "Frameworks" },

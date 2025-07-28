@@ -642,7 +642,7 @@ export class Workflow<
    * @returns The workflow instance for chaining
    */
   sleep(duration: number | ExecuteFunction<z.infer<TPrevSchema>, number, any, any, TEngineType>) {
-    const id = `sleep_${randomUUID()}`;
+    const id = `sleep_${this.#mastra?.generateId() || randomUUID()}`;
 
     const opts: StepFlowEntry<TEngineType> =
       typeof duration === 'function'
@@ -672,7 +672,7 @@ export class Workflow<
    * @returns The workflow instance for chaining
    */
   sleepUntil(date: Date | ExecuteFunction<z.infer<TPrevSchema>, Date, any, any, TEngineType>) {
-    const id = `sleep_${randomUUID()}`;
+    const id = `sleep_${this.#mastra?.generateId() || randomUUID()}`;
     const opts: StepFlowEntry<TEngineType> =
       typeof date === 'function'
         ? { type: 'sleepUntil', id, fn: date }
@@ -743,7 +743,7 @@ export class Workflow<
     if (typeof mappingConfig === 'function') {
       // @ts-ignore
       const mappingStep: any = createStep({
-        id: `mapping_${randomUUID()}`,
+        id: `mapping_${this.#mastra?.generateId() || randomUUID()}`,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         execute: mappingConfig as any,
@@ -784,7 +784,7 @@ export class Workflow<
     );
 
     const mappingStep: any = createStep({
-      id: `mapping_${randomUUID()}`,
+      id: `mapping_${this.#mastra?.generateId() || randomUUID()}`,
       inputSchema: z.object({}),
       outputSchema: z.object({}),
       execute: async ctx => {
@@ -1062,7 +1062,7 @@ export class Workflow<
     if (!this.executionGraph.steps) {
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
-    const runIdToUse = options?.runId || randomUUID();
+    const runIdToUse = options?.runId || this.#mastra?.generateId() || randomUUID();
 
     // Return a new Run instance with object parameters
     const run =
@@ -1099,7 +1099,7 @@ export class Workflow<
     if (!this.executionGraph.steps) {
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
-    const runIdToUse = options?.runId || randomUUID();
+    const runIdToUse = options?.runId || this.#mastra?.generateId() || randomUUID();
 
     // Return a new Run instance with object parameters
     const run =

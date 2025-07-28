@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mem0",
-  "version": "0.1.5",
+  "version": "0.1.6-alpha.0",
   "description": "Mem0 is a memory-based AI platform that allows you to store, search your memories based on the user's query.",
   "type": "module",
   "keywords": [],
@@ -40,7 +40,7 @@
     "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.34.0",
+    "typescript-eslint": "^8.38.0",
     "vitest": "^3.2.4",
     "zod": "^3.25.67"
   },
