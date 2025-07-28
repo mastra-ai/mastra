@@ -43,7 +43,8 @@ async function uploadImageToStorage(imageBuffer: Buffer, mimeType: string): Prom
 
 export const imageGeneratorTool = createTool({
   id: 'image-generator',
-  description: 'Generates promotional images using DALL-E 3 and uploads them to cloud storage, returning the public URL',
+  description:
+    'Generates promotional images using DALL-E 3 and uploads them to cloud storage, returning the public URL',
   inputSchema: z.object({
     prompt: z.string().describe('Description of the image to generate'),
     style: z
