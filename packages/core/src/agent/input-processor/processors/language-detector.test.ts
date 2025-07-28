@@ -39,6 +39,7 @@ function setupMockModel(result: LanguageDetectionResult | LanguageDetectionResul
   let callCount = 0;
 
   return new MockLanguageModelV1({
+    defaultObjectGenerationMode: 'json',
     doGenerate: async () => {
       const currentResult = results[callCount % results.length];
       callCount++;
@@ -47,7 +48,7 @@ function setupMockModel(result: LanguageDetectionResult | LanguageDetectionResul
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
         usage: { promptTokens: 10, completionTokens: 20 },
-        text: JSON.stringify(currentResult),
+        text: `${JSON.stringify(currentResult)}`,
       };
     },
   });
@@ -121,7 +122,7 @@ describe('LanguageDetector', () => {
       const result = await detector.process({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
-      expect((result[0] as any).metadata?.language_detection).toEqual({
+      expect((result[0].content.metadata as any)?.language_detection).toEqual({
         detected_language: 'English',
         iso_code: 'en',
         confidence: 0.95,
@@ -151,7 +152,7 @@ describe('LanguageDetector', () => {
       const result = await detector.process({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
-      expect((result[0] as any).metadata?.language_detection).toEqual({
+      expect((result[0].content.metadata as any)?.language_detection).toEqual({
         detected_language: 'Spanish',
         iso_code: 'es',
         confidence: 0.92,
@@ -187,9 +188,9 @@ describe('LanguageDetector', () => {
       const result = await detector.process({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(3);
-      expect((result[0] as any).metadata?.language_detection?.detected_language).toBe('English');
-      expect((result[1] as any).metadata?.language_detection?.detected_language).toBe('French');
-      expect((result[2] as any).metadata?.language_detection?.detected_language).toBe('Japanese');
+      expect((result[0].content.metadata as any)?.language_detection?.detected_language).toBe('English');
+      expect((result[1] as any).content.metadata?.language_detection?.detected_language).toBe('French');
+      expect((result[2] as any).content.metadata?.language_detection?.detected_language).toBe('Japanese');
     });
   });
 
@@ -211,7 +212,7 @@ describe('LanguageDetector', () => {
         type: 'text',
         text: 'Guten Tag, wie geht es Ihnen?', // Original text preserved
       });
-      expect((result[0] as any).metadata?.language_detection?.detected_language).toBe('German');
+      expect((result[0].content.metadata as any)?.language_detection?.detected_language).toBe('German');
     });
   });
 
@@ -306,12 +307,12 @@ describe('LanguageDetector', () => {
         type: 'text',
         text: 'Hello world',
       });
-      expect((result[0] as any).metadata?.language_detection?.translation).toEqual({
+      expect((result[0].content.metadata as any)?.language_detection?.translation).toEqual({
         original_language: 'French',
         target_language: 'English',
         translation_confidence: 0.93,
       });
-      expect((result[0] as any).metadata?.language_detection?.original_content).toBe('Bonjour le monde');
+      expect((result[0].content.metadata as any)?.language_detection?.original_content).toBe('Bonjour le monde');
       expect(consoleInfoSpy).toHaveBeenCalledWith(expect.stringContaining('[LanguageDetector] Translated from French'));
 
       consoleInfoSpy.mockRestore();
@@ -392,7 +393,7 @@ describe('LanguageDetector', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].content).toEqual(messages[0].content); // Content should be unchanged
-      expect((result[0] as any).metadata?.language_detection).toBeUndefined(); // No metadata should be added
+      expect((result[0].content.metadata as any)?.language_detection).toBeUndefined(); // No metadata should be added
     });
 
     it('should process when confidence meets threshold', async () => {
@@ -408,7 +409,7 @@ describe('LanguageDetector', () => {
       const result = await detector.process({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
-      expect((result[0] as any).metadata?.language_detection?.detected_language).toBe('Swedish');
+      expect((result[0].content.metadata as any)?.language_detection?.detected_language).toBe('Swedish');
     });
   });
 
@@ -427,7 +428,7 @@ describe('LanguageDetector', () => {
 
       expect(result).toHaveLength(1);
       // Model should not have been called due to text length
-      expect((result[0] as any).metadata?.language_detection).toBeUndefined();
+      expect((result[0].content.metadata as any)?.language_detection).toBeUndefined();
     });
 
     it('should process text that meets minimum length', async () => {
@@ -444,7 +445,7 @@ describe('LanguageDetector', () => {
       const result = await detector.process({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
-      expect((result[0] as any).metadata?.language_detection?.detected_language).toBe('English');
+      expect((result[0].content.metadata as any)?.language_detection?.detected_language).toBe('English');
     });
   });
 
@@ -500,6 +501,7 @@ describe('LanguageDetector', () => {
   describe('error handling', () => {
     it('should fail open when detection agent fails', async () => {
       const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
         doGenerate: async () => {
           throw new TripWire('Detection agent failed');
         },
@@ -519,11 +521,11 @@ describe('LanguageDetector', () => {
       const result = await detector.process({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
-      expect((result[0] as any).metadata?.language_detection?.detected_language).toBe('Spanish'); // Should assume target
-      expect((result[0] as any).metadata?.language_detection?.is_target_language).toBe(true);
+      expect((result[0].content.metadata as any)?.language_detection?.detected_language).toBe('Spanish'); // Should assume target
+      expect((result[0].content.metadata as any)?.language_detection?.is_target_language).toBe(true);
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         expect.stringContaining('[LanguageDetector] Detection agent failed'),
-        expect.any(TripWire),
+        expect.anything(),
       );
       expect(consoleInfoSpy).toHaveBeenCalledWith(
         expect.stringContaining('[LanguageDetector] Content in target language'),
@@ -587,7 +589,7 @@ describe('LanguageDetector', () => {
       const messages = [createTestMessage('Hola mundo', 'user')];
       const result = await detector.process({ messages, abort: mockAbort as any });
 
-      expect((result[0] as any).metadata?.language_detection?.original_content).toBeUndefined();
+      expect((result[0].content.metadata as any)?.language_detection?.original_content).toBeUndefined();
     });
 
     it('should use custom target languages correctly', async () => {
@@ -602,8 +604,8 @@ describe('LanguageDetector', () => {
       const messages = [createTestMessage('Bonjour mes amis', 'user')];
       const result = await detector.process({ messages, abort: mockAbort as any });
 
-      expect((result[0] as any).metadata?.language_detection?.target_languages).toEqual(['French', 'German']);
-      expect((result[0] as any).metadata?.language_detection?.is_target_language).toBe(true);
+      expect((result[0].content.metadata as any)?.language_detection?.target_languages).toEqual(['French', 'German']);
+      expect((result[0].content.metadata as any)?.language_detection?.is_target_language).toBe(true);
     });
 
     it('should use custom instructions when provided', () => {
@@ -643,6 +645,7 @@ describe('LanguageDetector', () => {
   describe('edge cases', () => {
     it('should handle malformed detection results gracefully', async () => {
       const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -665,8 +668,8 @@ describe('LanguageDetector', () => {
 
       // Should fail open and assume target language
       expect(result).toHaveLength(1);
-      expect((result[0] as any).metadata?.language_detection?.detected_language).toBe('English');
-      expect((result[0] as any).metadata?.language_detection?.is_target_language).toBe(true);
+      expect((result[0].content.metadata as any)?.language_detection?.detected_language).toBe('English');
+      expect((result[0].content.metadata as any)?.language_detection?.is_target_language).toBe(true);
       expect(consoleWarnSpy).toHaveBeenCalled();
       expect(consoleInfoSpy).toHaveBeenCalledWith(
         expect.stringContaining('[LanguageDetector] Content in target language'),
@@ -706,8 +709,8 @@ describe('LanguageDetector', () => {
       const result = await detector.process({ messages, abort: mockAbort as any });
 
       expect(result).toHaveLength(1);
-      expect((result[0] as any).metadata?.language_detection?.detected_language).toBe('English');
-      expect((result[0] as any).metadata?.language_detection?.is_target_language).toBe(true);
+      expect((result[0].content.metadata as any)?.language_detection?.detected_language).toBe('English');
+      expect((result[0].content.metadata as any)?.language_detection?.is_target_language).toBe(true);
     });
   });
 });

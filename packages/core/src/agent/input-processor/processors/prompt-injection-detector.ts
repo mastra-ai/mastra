@@ -205,7 +205,7 @@ export class PromptInjectionDetector implements InputProcessor {
         }),
       });
 
-      const result = response as unknown as PromptInjectionResult;
+      const result = response.object as PromptInjectionResult;
 
       // Validate and apply threshold
       const maxScore = Math.max(

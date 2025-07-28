@@ -249,7 +249,7 @@ export class LanguageDetector implements InputProcessor {
         }),
       });
 
-      return response as unknown as LanguageDetectionResult;
+      return response.object;
     } catch (error) {
       console.warn('[LanguageDetector] Detection agent failed, assuming target language:', error);
       // Fail open - assume target language if detection fails

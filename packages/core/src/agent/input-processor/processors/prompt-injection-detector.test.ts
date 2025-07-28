@@ -61,6 +61,7 @@ function setupMockModel(result: PromptInjectionResult | PromptInjectionResult[])
   let callCount = 0;
 
   return new MockLanguageModelV1({
+    defaultObjectGenerationMode: 'json',
     doGenerate: async () => {
       const currentResult = results[callCount % results.length];
       callCount++;
@@ -69,7 +70,7 @@ function setupMockModel(result: PromptInjectionResult | PromptInjectionResult[])
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
         usage: { promptTokens: 10, completionTokens: 20 },
-        text: JSON.stringify(currentResult),
+        text: `${JSON.stringify(currentResult)}`,
       };
     },
   });
@@ -395,12 +396,10 @@ describe('PromptInjectionDetector', () => {
 
   describe('threshold handling', () => {
     it('should flag content when any score exceeds threshold', async () => {
-      const mockResult = {
-        flagged: false,
-        categories: { injection: false },
-        category_scores: { injection: 0.75 }, // Above threshold
-        reason: 'High injection score',
-      };
+      const mockResult = createMockDetectionResult(false, []);
+      // Override with high injection score to exceed threshold
+      mockResult.category_scores.injection = 0.75; // Above threshold (0.6)
+      mockResult.reason = 'High injection score';
       const model = setupMockModel(mockResult);
       const detector = new PromptInjectionDetector({
         model,
@@ -420,11 +419,9 @@ describe('PromptInjectionDetector', () => {
     });
 
     it('should not flag content when scores are below threshold', async () => {
-      const mockResult = {
-        flagged: false,
-        categories: { injection: false },
-        category_scores: { injection: 0.8 }, // Below threshold
-      };
+      const mockResult = createMockDetectionResult(false, []);
+      // Set injection score below threshold
+      mockResult.category_scores.injection = 0.8; // Below threshold (0.9)
       const model = setupMockModel(mockResult);
       const detector = new PromptInjectionDetector({
         model,

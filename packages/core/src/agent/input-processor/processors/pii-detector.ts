@@ -259,7 +259,7 @@ export class PIIDetector implements InputProcessor {
         }),
       });
 
-      const result = response as unknown as PIIDetectionResult;
+      const result = response.object as PIIDetectionResult;
 
       // Validate and apply threshold
       const maxScore = Math.max(
