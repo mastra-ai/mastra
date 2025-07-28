@@ -3206,6 +3206,87 @@ describe('dynamic memory configuration', () => {
   });
 });
 
+describe('Dynamic instructions with mastra instance', () => {
+  let dummyModel: MockLanguageModelV1;
+  let mastra: Mastra;
+
+  beforeEach(() => {
+    dummyModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: `Logger test response`,
+      }),
+    });
+
+    mastra = new Mastra({
+      logger: noopLogger,
+    });
+  });
+
+  it('should expose mastra instance in dynamic instructions', async () => {
+    let capturedMastra: Mastra | undefined;
+    let capturedRuntimeContext: RuntimeContext | undefined;
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: ({ runtimeContext, mastra }) => {
+        capturedRuntimeContext = runtimeContext;
+        capturedMastra = mastra;
+
+        const logger = mastra?.getLogger();
+        logger?.debug('Running with context', { info: runtimeContext.get('info') });
+
+        return 'You are a helpful assistant.';
+      },
+      model: dummyModel,
+      mastra,
+    });
+
+    const runtimeContext = new RuntimeContext();
+    runtimeContext.set('info', 'test-info');
+
+    const response = await agent.generate('hello', { runtimeContext });
+
+    expect(response.text).toBe('Logger test response');
+    expect(capturedMastra).toBe(mastra);
+    expect(capturedRuntimeContext).toBe(runtimeContext);
+    expect(capturedRuntimeContext?.get('info')).toBe('test-info');
+  });
+
+  it('should work with static instructions (backward compatibility)', async () => {
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant.',
+      model: dummyModel,
+      mastra,
+    });
+
+    const response = await agent.generate('hello');
+    expect(response.text).toBe('Logger test response');
+  });
+
+  it('should handle dynamic instructions when mastra is undefined', async () => {
+    let capturedMastra: Mastra | undefined;
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: ({ mastra }) => {
+        capturedMastra = mastra;
+        return 'You are a helpful assistant.';
+      },
+      model: dummyModel,
+      // No mastra provided
+    });
+
+    const response = await agent.generate('hello');
+
+    expect(response.text).toBe('Logger test response');
+    expect(capturedMastra).toBeUndefined();
+  });
+});
+
 describe('UIMessageWithMetadata support', () => {
   let dummyModel: MockLanguageModelV1;
   let mockMemory: MockMemory;
