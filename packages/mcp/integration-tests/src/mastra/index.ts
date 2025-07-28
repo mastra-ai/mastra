@@ -9,4 +9,7 @@ export const mastra = new Mastra({
   mcpServers: {
     myMcpServer,
   },
+  server: {
+    port: 4114,
+  },
 });
