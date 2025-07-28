@@ -218,10 +218,7 @@ export class PIIDetector implements InputProcessor {
 
       return processedMessages;
     } catch (error) {
-      if (error instanceof Error && error.message.includes('Tripwire')) {
-        throw error; // Re-throw tripwire errors
-      }
-      args.abort(`PII detection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`PII detection failed: ${error instanceof Error ? error.stack : 'Unknown error'}`);
     }
   }
 
@@ -234,37 +231,31 @@ export class PIIDetector implements InputProcessor {
     try {
       const response = await this.detectionAgent.generate(prompt, {
         output: z.object({
-          flagged: z.boolean(),
-          categories: z.object(
-            this.detectionTypes.reduce(
-              (props, type) => {
-                props[type] = z.boolean();
-                return props;
-              },
-              {} as Record<string, z.ZodType<boolean>>,
-            ),
-          ),
-          category_scores: z.object(
-            this.detectionTypes.reduce(
-              (props, type) => {
-                props[type] = z.number().min(0).max(1);
-                return props;
-              },
-              {} as Record<string, z.ZodType<number>>,
-            ),
-          ),
-          detections: z.array(
-            z.object({
-              type: z.string(),
-              value: z.string(),
-              confidence: z.number().min(0).max(1),
-              start: z.number(),
-              end: z.number(),
-              redacted_value: z.string().optional(),
-            }),
-          ),
+          category_scores: z
+            .object(
+              this.detectionTypes.reduce(
+                (props, type) => {
+                  // @ts-ignore
+                  props[type] = z.number().min(0).max(1).optional();
+                  return props;
+                },
+                {} as Record<string, z.ZodType<number>>,
+              ),
+            )
+            .optional(),
+          detections: z
+            .array(
+              z.object({
+                type: z.string(),
+                value: z.string(),
+                confidence: z.number().min(0).max(1),
+                start: z.number(),
+                end: z.number(),
+                redacted_value: z.string().optional(),
+              }),
+            )
+            .optional(),
           redacted_content: z.string().optional(),
-          reason: z.string().optional(),
         }),
         temperature: 0,
       });
@@ -315,7 +306,7 @@ export class PIIDetector implements InputProcessor {
     strategy: 'block' | 'warn' | 'filter' | 'redact',
     abort: (reason?: string) => never,
   ): MastraMessageV2 | null {
-    const detectedTypes = Object.entries(result.categories)
+    const detectedTypes = Object.entries(result.category_scores || {})
       .filter(([_, detected]) => detected)
       .map(([type]) => type);
 
@@ -326,7 +317,6 @@ export class PIIDetector implements InputProcessor {
     switch (strategy) {
       case 'block':
         abort(alertMessage);
-        return null; // Never reached
 
       case 'warn':
         console.warn(`[PIIDetector] ${alertMessage}`);
@@ -508,86 +498,7 @@ export class PIIDetector implements InputProcessor {
 Detect and analyze the following PII types:
 ${this.detectionTypes.map(type => `- ${type}`).join('\n')}
 
-Detection Guidelines and Examples:
-
-**Email**: Standard email formats, including obfuscated variants
-- Examples: john.doe@protectai.com, user@example.org, john.doe[AT]protectai[DOT]com, john.doe[AT]protectai.com, john.doe@protectai[DOT]com
-- Pattern: Standard email format and common obfuscation patterns with [AT] and [DOT]
-
-**Phone**: Phone numbers in various international and domestic formats
-- Examples: 5555551234, (555) 555-1234, +1-555-555-1234, 555.555.1234, 1 555 555 1234
-- Pattern: 10+ digits with optional country codes, formatting characters
-
-**Credit Card**: Major credit card formats
-- Examples: 4111111111111111 (Visa), 378282246310005 (American Express), 30569309025904 (Diners Club), 5555555555554444 (Mastercard)
-- Pattern: 13-19 digits, may include spaces/dashes, must follow card validation patterns
-
-**SSN**: US Social Security Numbers
-- Examples: 111-22-3333, 111223333, 111 22 3333
-- Pattern: XXX-XX-XXXX format or 9 consecutive digits
-
-**API Key**: API keys, tokens, and secrets
-- Examples: sk_test_123abc..., pk_live_456def..., ghp_xxxxxxxxxxxxxxxxxxxx, AKIA..., xoxb-...
-- Pattern: Long alphanumeric strings, often with recognizable prefixes (sk_, pk_, ghp_, AKIA, xoxb)
-
-**IP Address**: IPv4 and IPv6 addresses
-- Examples: 192.168.1.1 (IPv4), 2001:db8:3333:4444:5555:6666:7777:8888 (IPv6), ::1, 10.0.0.1
-- Pattern: IPv4 (XXX.XXX.XXX.XXX) or IPv6 (hexadecimal with colons)
-
-**Name**: Person names (require context clues)
-- Examples: John Doe, Mary Jane Smith, Dr. Sarah Wilson, Mr. Robert Johnson
-- Pattern: First/last names, titles, full names - must have context suggesting it's a person
-
-**Address**: Physical addresses
-- Examples: 123 Main St, New York, NY 10001; 456 Oak Avenue, Suite 789, Los Angeles, CA 90210
-- Pattern: Street numbers, street names, city, state, postal codes
-
-**Date of Birth**: Birth dates in various formats
-- Examples: 01/15/1985, January 15, 1985, 1985-01-15, Jan 15 1985, DOB: 1/15/85
-- Pattern: Date formats that could indicate birth dates, especially with DOB context
-
-**URL**: URLs that might contain PII or sensitive information
-- Examples: https://protectai.com/, http://example.com/user/john-doe, ftp://files.company.com
-- Pattern: Standard URL format with http/https/ftp protocols
-
-**UUID**: Universally Unique Identifiers
-- Examples: 550e8400-e29b-41d4-a716-446655440000, 6ba7b810-9dad-11d1-80b4-00c04fd430c8
-- Pattern: 32 hexadecimal characters in 8-4-4-4-12 format with hyphens
-
-**Crypto Wallet**: Cryptocurrency wallet addresses
-- Examples: 1Lbcfr7sAHTD9CgdQo3HTMTkV8LK4ZnX71 (Bitcoin), 0x742d35Cc6634C0532925a3b8D0C7fa5a26d6d6C8 (Ethereum)
-- Pattern: Base58 (Bitcoin) or hexadecimal (Ethereum) addresses, specific lengths
-
-**IBAN**: International Bank Account Numbers
-- Examples: DE89370400440532013000, GB82WEST12345698765432, FR1420041010050500013M02606
-- Pattern: 2-letter country code + 2 check digits + up to 30 alphanumeric characters
-
-For each detection, provide:
-1. type: The PII category
-2. value: The actual detected text
-3. confidence: Score between 0-1 (1 = definitely PII)
-4. start: Character position where PII starts
-5. end: Character position where PII ends
-6. redacted_value: Suggested redacted version (optional)
-
-Also provide:
-- flagged: Boolean indicating if any PII was found
-- categories: Boolean flags for each PII type
-- category_scores: Confidence scores for each category
-- redacted_content: Full text with PII redacted (optional)
-- reason: Brief explanation if PII is found
-
-Critical Guidelines:
-- Be thorough but avoid false positives on common words/numbers
-- Consider context - isolated common names need supporting context
-- Validate formats strictly (credit cards must pass Luhn algorithm concepts)
-- Phone numbers need proper length and formatting
-- UUIDs must match exact format (8-4-4-4-12 with hyphens)
-- Crypto addresses must match correct format and length for their type
-- IBAN must start with valid country code and have proper structure
-- API keys should be long and have characteristic patterns or prefixes
-
-Return your analysis in the required JSON format with precise character positions.`;
+For any false or 0 values, you can omit them and they'll be counted as 0 or false. Do not include any zeros.`;
   }
 
   /**
@@ -595,16 +506,6 @@ Return your analysis in the required JSON format with precise character position
    */
   private createDetectionPrompt(content: string): string {
     return `Analyze the following content for PII (Personally Identifiable Information):
-
-Content: "${content}"
-
-Detect these PII types: ${this.detectionTypes.join(', ')}
-
-Provide detailed analysis with:
-- Boolean flags and confidence scores for each category
-- Precise character positions for each detection
-- Suggested redaction if PII is found
-
-Focus on accuracy and avoid false positives. Consider context and formatting.`;
+Content: "${content}"`;
   }
 }
