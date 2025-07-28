@@ -70,8 +70,8 @@ const greaterThanStep = createStep({...});
 
 export const testWorkflow = createWorkflow({...})
   .branch([
-    [async ({ inputData: { value } }) => (value < 9), lessThanStep],
-    [async ({ inputData: { value } }) => (value >= 9), greaterThanStep]
+    [async ({ inputData: { value } }) => value <= 10, lessThanStep],
+    [async ({ inputData: { value } }) => value > 10, greaterThanStep]
   ])
   .commit();
 ```
