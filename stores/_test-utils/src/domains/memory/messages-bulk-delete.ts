@@ -117,35 +117,45 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
     });
 
     it('should handle large batches of message deletions', async () => {
-      // Create a thread
-      const thread = createSampleThread();
+      // Create a thread with a unique ID for this test
+      const thread = createSampleThread({ id: `bulk-delete-test-thread-${Date.now()}` });
       await storage.saveThread({ thread });
 
-      // Save 100 messages
+      // Save 100 messages with alternating roles
       const messages = Array.from({ length: 100 }, (_, index) => {
         const msg = createSampleMessageV1({
           threadId: thread.id,
           content: `Message ${index}`,
         });
         msg.id = `large-batch-msg-${index}`;
+        // Alternate between user and assistant roles
+        msg.role = index % 2 === 0 ? 'user' : 'assistant';
         return msg;
       });
 
       await storage.saveMessages({ messages });
 
-      // Delete 50 messages (every other one)
-      const messagesToDelete = messages.filter((_, index) => index % 2 === 0).map(msg => msg.id);
+      // Verify all 100 messages were saved
+      const allMessages = await storage.getMessages({ threadId: thread.id, selectBy: { last: 100 } });
+
+      // Delete the most recent 50 messages (indices 50-99)
+      const messagesToDelete = messages.slice(50).map(msg => msg.id);
 
       await storage.deleteMessages(messagesToDelete);
 
-      // Verify 50 messages remain
-      const remainingMessages = await storage.getMessages({ threadId: thread.id });
+      // Verify 50 messages remain - need to specify limit to get all remaining messages
+      const remainingMessages = await storage.getMessages({ threadId: thread.id, selectBy: { last: 100 } });
       expect(remainingMessages).toHaveLength(50);
 
-      // Verify the correct messages remain
+      // Verify the correct messages remain (first 50 messages, indices 0-49)
       const remainingIds = remainingMessages.map(m => m.id);
-      for (let i = 1; i < 100; i += 2) {
+      for (let i = 0; i < 50; i++) {
         expect(remainingIds).toContain(`large-batch-msg-${i}`);
+      }
+
+      // Verify the deleted messages are not present (indices 50-99)
+      for (let i = 50; i < 100; i++) {
+        expect(remainingIds).not.toContain(`large-batch-msg-${i}`);
       }
     });
 
