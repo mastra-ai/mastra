@@ -517,3 +517,69 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(elicitationResultText).toContain('Elicitation response content does not match requested schema');
   });
 });
+
+describe('MastraMCPClient - AuthProvider Tests', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should accept authProvider field in HTTP server configuration', async () => {
+    const mockAuthProvider = { test: 'authProvider' } as any;
+    
+    client = new InternalMastraMCPClient({
+      name: 'auth-config-test',
+      server: {
+        url: testServer.baseUrl,
+        authProvider: mockAuthProvider,
+      },
+    });
+
+    const serverConfig = (client as any).serverConfig;
+    expect(serverConfig.authProvider).toBe(mockAuthProvider);
+    expect(client).toBeDefined();
+    expect(typeof client).toBe('object');
+  });
+
+  it('should handle undefined authProvider gracefully', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'auth-undefined-test',
+      server: {
+        url: testServer.baseUrl,
+        authProvider: undefined,
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    expect(tools).toHaveProperty('greet');
+  });
+
+  it('should work without authProvider for HTTP transport (backward compatibility)', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'no-auth-http-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    expect(tools).toHaveProperty('greet');
+  });
+
+});
