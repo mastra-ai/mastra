@@ -1,4 +1,5 @@
 import { Meta } from "nextra";
+import { Tag } from "@/components/tag";
 
 const meta: Meta = {
   index: {
@@ -14,6 +15,7 @@ const meta: Meta = {
     display: "hidden",
   },
   networks: "Networks",
+  auth: <Tag text="experimental">Auth</Tag>,
   memory: "Memory",
   storage: "Storage",
   rag: "RAG",
