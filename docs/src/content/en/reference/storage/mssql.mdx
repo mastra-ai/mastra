@@ -88,9 +88,13 @@ const store5 = new MSSQLStore({
 
 The storage implementation handles schema creation and updates automatically. It creates the following tables:
 
-- `threads`: Stores conversation threads
-- `messages`: Stores individual messages
-- `metadata`: Stores additional metadata for threads and messages
+- `mastra_workflow_snapshot`: Stores workflow state and execution data
+- `mastra_evals`: Stores evaluation results and metadata  
+- `mastra_threads`: Stores conversation threads
+- `mastra_messages`: Stores individual messages
+- `mastra_traces`: Stores telemetry and tracing data
+- `mastra_scorers`: Stores scoring and evaluation data
+- `mastra_resources`: Stores resource working memory data
 
 ### Direct Database and Pool Access
 
