@@ -142,26 +142,26 @@ export class ScoresStorageMongoDB extends ScoresStorage {
         scorerId: score.scorerId,
         traceId: score.traceId || '',
         runId: score.runId,
-        scorer: typeof score.scorer === 'string' ? score.scorer : JSON.stringify(score.scorer),
+        scorer: typeof score.scorer === 'string' ? safelyParseJSON(score.scorer) : score.scorer,
         extractStepResult:
           typeof score.extractStepResult === 'string'
-            ? score.extractStepResult
-            : JSON.stringify(score.extractStepResult),
+            ? safelyParseJSON(score.extractStepResult)
+            : score.extractStepResult,
         analyzeStepResult:
           typeof score.analyzeStepResult === 'string'
-            ? score.analyzeStepResult
-            : JSON.stringify(score.analyzeStepResult),
+            ? safelyParseJSON(score.analyzeStepResult)
+            : score.analyzeStepResult,
         score: score.score,
         reason: score.reason,
         extractPrompt: score.extractPrompt,
         analyzePrompt: score.analyzePrompt,
         reasonPrompt: score.reasonPrompt,
-        input: typeof score.input === 'string' ? score.input : JSON.stringify(score.input),
-        output: typeof score.output === 'string' ? score.output : JSON.stringify(score.output),
+        input: typeof score.input === 'string' ? safelyParseJSON(score.input) : score.input,
+        output: typeof score.output === 'string' ? safelyParseJSON(score.output) : score.output,
         additionalContext: score.additionalContext,
         runtimeContext:
-          typeof score.runtimeContext === 'string' ? score.runtimeContext : JSON.stringify(score.runtimeContext),
-        entity: typeof score.entity === 'string' ? score.entity : JSON.stringify(score.entity),
+          typeof score.runtimeContext === 'string' ? safelyParseJSON(score.runtimeContext) : score.runtimeContext,
+        entity: typeof score.entity === 'string' ? safelyParseJSON(score.entity) : score.entity,
         source: score.source,
         resourceId: score.resourceId || '',
         threadId: score.threadId || '',

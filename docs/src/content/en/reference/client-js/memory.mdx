@@ -7,22 +7,12 @@ description: Learn how to manage conversation threads and message history in Mas
 
 The Memory API provides methods to manage conversation threads and message history in Mastra.
 
-## Initialize Mastra Client
-
-```typescript
-import { MastraClient } from "@mastra/client-js";
-
-const client = new MastraClient();
-```
-
-## Memory Thread Operations
-
 ### Get All Threads
 
 Retrieve all memory threads for a specific resource:
 
 ```typescript
-const threads = await client.getMemoryThreads({
+const threads = await mastraClient.getMemoryThreads({
   resourceId: "resource-1",
   agentId: "agent-1",
 });
@@ -33,10 +23,10 @@ const threads = await client.getMemoryThreads({
 Create a new memory thread:
 
 ```typescript
-const thread = await client.createMemoryThread({
+const thread = await mastraClient.createMemoryThread({
   title: "New Conversation",
   metadata: { category: "support" },
-  resourceid: "resource-1",
+  resourceId: "resource-1",
   agentId: "agent-1",
 });
 ```
@@ -46,7 +36,7 @@ const thread = await client.createMemoryThread({
 Get an instance of a specific memory thread:
 
 ```typescript
-const thread = client.getMemoryThread("thread-id", "agent-id");
+const thread = mastraClient.getMemoryThread("thread-id", "agent-id");
 ```
 
 ## Thread Methods
@@ -79,8 +69,6 @@ Delete a thread and its messages:
 await thread.delete();
 ```
 
-
-
 ## Message Operations
 
 ### Save Messages
@@ -88,7 +76,7 @@ await thread.delete();
 Save messages to memory:
 
 ```typescript
-const savedMessages = await client.saveMessageToMemory({
+const savedMessages = await mastraClient.saveMessageToMemory({
   messages: [
     {
       role: "user",
@@ -120,5 +108,5 @@ const { messages } = await thread.getMessages({ limit: 10 });
 Check the status of the memory system:
 
 ```typescript
-const status = await client.getMemoryStatus("agent-id");
+const status = await mastraClient.getMemoryStatus("agent-id");
 ```

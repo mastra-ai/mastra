@@ -1,5 +1,23 @@
 # @mastra/mem0
 
+## 0.1.6-alpha.0
+
+### Patch Changes
+
+- 945df16: dependencies updates:
+  - Updated dependency [`mem0ai@^2.1.36` ↗︎](https://www.npmjs.com/package/mem0ai/v/2.1.36) (from `^2.1.31`, in `dependencies`)
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
 ## 0.1.5
 
 ### Patch Changes
