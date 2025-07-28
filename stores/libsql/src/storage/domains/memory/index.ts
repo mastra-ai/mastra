@@ -453,7 +453,7 @@ export class MemoryLibSQL extends MemoryStorage {
       // Get thread IDs for all messages
       const placeholders = messageIds.map(() => '?').join(',');
       const result = await this.client.execute({
-        sql: `SELECT DISTINCT thread_id FROM ${TABLE_MESSAGES} WHERE id IN (${placeholders})`,
+        sql: `SELECT DISTINCT thread_id FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
         args: messageIds,
       });
 
@@ -461,7 +461,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       // Delete all messages
       await this.client.execute({
-        sql: `DELETE FROM ${TABLE_MESSAGES} WHERE id IN (${placeholders})`,
+        sql: `DELETE FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
         args: messageIds,
       });
 
@@ -470,7 +470,7 @@ export class MemoryLibSQL extends MemoryStorage {
         const now = new Date().toISOString();
         for (const threadId of threadIds) {
           await this.client.execute({
-            sql: `UPDATE ${TABLE_THREADS} SET updatedAt = ? WHERE id = ?`,
+            sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ? WHERE id = ?`,
             args: [now, threadId],
           });
         }
