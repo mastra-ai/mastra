@@ -2561,7 +2561,7 @@ importers:
         version: 4.4.1(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20250722.0
+        specifier: ^4.20250725.0
         version: 4.20250725.0
       '@internal/lint':
         specifier: workspace:*
@@ -2604,7 +2604,7 @@ importers:
         version: 4.4.1(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20250722.0
+        specifier: ^4.20250725.0
         version: 4.20250725.0
       '@internal/lint':
         specifier: workspace:*
@@ -3171,7 +3171,7 @@ importers:
         version: 3.25.76
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20250722.0
+        specifier: ^4.20250725.0
         version: 4.20250725.0
       '@internal/lint':
         specifier: workspace:*
