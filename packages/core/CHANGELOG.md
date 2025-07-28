@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.12.0-alpha.1
+
+### Patch Changes
+
+- e0f73c6: Make input optional for scorer run
+- cda801d: Added the ability to pass in metadata for UIMessage and MastraMessageV2 in client-js and agent.stream/generate
+- a77c823: include PATCH method in default CORS configuration
+
 ## 0.12.0-alpha.0
 
 ### Minor Changes

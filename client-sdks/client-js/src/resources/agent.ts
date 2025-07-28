@@ -714,7 +714,9 @@ export class Agent extends BaseResource {
                     messages: [...messageArray, ...messages, lastMessage],
                   },
                   writable,
-                );
+                ).catch(error => {
+                  console.error('Error processing stream response:', error);
+                });
               }
             }
           } else {
@@ -724,6 +726,8 @@ export class Agent extends BaseResource {
           }
         },
         lastMessage: undefined,
+      }).catch(error => {
+        console.error('Error processing stream response:', error);
       });
     } catch (error) {
       console.error('Error processing stream response:', error);
