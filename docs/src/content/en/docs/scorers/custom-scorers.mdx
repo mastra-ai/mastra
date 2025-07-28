@@ -21,7 +21,7 @@ For the complete API reference, see [`createScorer`](/reference/scorers/custom-c
 Code scorers follow Mastra's evaluation pipeline with optional extract and reason steps. For a detailed explanation of how the pipeline works, see the [Three-step evaluation process](/docs/scorers/overview#three-step-evaluation-process) in the overview.
 
 #### Extract step (optional):
-- **Receives:** `{ input, output }`
+- **Receives:** `{ input, output, runtimeContext? }`
 - **Must return:** `{ results: any }`
 - **Data flow:** The `results` value is passed to the analyze step as `extractStepResult`
 - **Use when:** You need to preprocess complex input/output data, evaluate multiple distinct elements, filter content, or focus analysis on specific parts of the data
@@ -59,7 +59,7 @@ export const keywordCoverageScorer = createScorer({
 ```
 
 #### Analyze step (required):
-- **Receives:** `{ input, output, extractStepResult? }`
+- **Receives:** `{ input, output, runtimeContext?, extractStepResult? }`
 - **Must return:** `{ score: number, results?: any }`
 - **Data flow:** The `score` and optional `results` are passed to the reason step
 - **Use when:** This step is always required for core evaluation and score generation
@@ -101,7 +101,7 @@ export const keywordCoverageScorer = createScorer({
 ```
 
 #### Reason step (optional):
-- **Receives:** `{ input, output, score, analyzeStepResult, extractStepResult? }`
+- **Receives:** `{ input, output, score, runtimeContext?, analyzeStepResult?, extractStepResult? }`
 - **Must return:** `{ reason: string }`
 - **Use when:** You need explanations for scores, debugging/transparency, actionable feedback, or compliance documentation
 
