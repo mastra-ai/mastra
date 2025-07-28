@@ -7,7 +7,11 @@ import { flashCardsGeneratorTool } from '../tools/flash-cards-generator-tool';
 import { imageGeneratorTool } from '../tools/image-generator-tool';
 
 const inputSchema = z.object({
-  pdfUrl: z.string().describe('URL to the PDF file to process'),
+  // Support both PDF URL and file attachment
+  pdfUrl: z.string().optional().describe('URL to the PDF file to process'),
+  pdfData: z.string().optional().describe('Base64 encoded PDF data from file attachment'),
+  filename: z.string().optional().describe('Filename of the attached PDF (if using pdfData)'),
+  
   subjectArea: z.string().optional().describe('Subject area (e.g., biology, chemistry, history, mathematics)'),
   numberOfCards: z.number().min(1).max(50).optional().default(10).describe('Number of flash cards to generate'),
   difficultyLevel: z
@@ -30,7 +34,13 @@ const inputSchema = z.object({
     .array(z.string())
     .optional()
     .describe('Specific areas to focus on (e.g., "definitions", "concepts", "formulas")'),
-});
+}).refine(
+  (data) => data.pdfUrl || data.pdfData,
+  {
+    message: "Either pdfUrl or pdfData must be provided",
+    path: ["pdfUrl", "pdfData"],
+  }
+);
 
 const outputSchema = z.object({
   flashCards: z.array(z.object({
@@ -54,7 +64,9 @@ const outputSchema = z.object({
     cardsByType: z.record(z.number()),
     subjectArea: z.string(),
     sourceInfo: z.object({
-      pdfUrl: z.string(),
+      pdfUrl: z.string().optional(),
+      filename: z.string().optional(),
+      inputType: z.enum(['url', 'attachment']),
       fileSize: z.number(),
       pagesCount: z.number(),
       characterCount: z.number(),
@@ -84,17 +96,24 @@ const extractPdfContentStep = createStep({
     fileSize: z.number(),
     pagesCount: z.number(),
     characterCount: z.number(),
+    inputType: z.enum(['url', 'attachment']),
+    filename: z.string().optional(),
   }),
   execute: async ({ inputData, runtimeContext, mastra }) => {
-    const { pdfUrl, subjectArea, focusAreas } = inputData;
+    const { pdfUrl, pdfData, filename, subjectArea, focusAreas } = inputData;
 
-    console.log(`📄 Extracting educational content from PDF: ${pdfUrl}`);
+    const inputType = pdfData ? 'attachment' : 'url';
+    const source = pdfData ? filename || 'attached file' : pdfUrl;
+    
+    console.log(`📄 Extracting educational content from PDF ${inputType}: ${source}`);
 
     try {
       const extractionResult = await pdfContentExtractorTool.execute({
         mastra,
         context: {
           pdfUrl,
+          pdfData,
+          filename,
           subjectArea,
           focusAreas,
         },
@@ -103,7 +122,11 @@ const extractPdfContentStep = createStep({
 
       console.log(`✅ Extracted content: ${extractionResult.keyTopics.length} topics, ${extractionResult.definitions.length} definitions, ${extractionResult.concepts.length} concepts`);
 
-      return extractionResult;
+      return {
+        ...extractionResult,
+        inputType,
+        filename,
+      };
     } catch (error) {
       console.error('❌ PDF content extraction failed:', error);
       throw new Error(`Failed to extract content from PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -564,7 +587,9 @@ export const flashCardsGenerationWorkflow = createWorkflow({
         cardsByType: z.record(z.number()),
         subjectArea: z.string(),
         sourceInfo: z.object({
-          pdfUrl: z.string(),
+          pdfUrl: z.string().optional(),
+          filename: z.string().optional(),
+          inputType: z.enum(['url', 'attachment']),
           fileSize: z.number(),
           pagesCount: z.number(),
           characterCount: z.number(),
@@ -580,6 +605,8 @@ export const flashCardsGenerationWorkflow = createWorkflow({
           ...flashCardsData.metadata,
           sourceInfo: {
             pdfUrl: initData.pdfUrl,
+            filename: pdfData.filename,
+            inputType: pdfData.inputType,
             fileSize: pdfData.fileSize,
             pagesCount: pdfData.pagesCount,
             characterCount: pdfData.characterCount,

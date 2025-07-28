@@ -6,13 +6,21 @@ export const pdfContentExtractorTool = createTool({
   id: 'pdf-content-extractor',
   description: 'Downloads a PDF from a URL, extracts content, and creates an educational summary for flash card generation',
   inputSchema: z.object({
-    pdfUrl: z.string().describe('URL to the PDF file to download'),
+    pdfUrl: z.string().optional().describe('URL to the PDF file to download'),
+    pdfData: z.string().optional().describe('Base64 encoded PDF data from file attachment'),
+    filename: z.string().optional().describe('Filename of the attached PDF (if using pdfData)'),
     subjectArea: z.string().optional().describe('Subject area to focus on (e.g., "biology", "history", "mathematics")'),
     focusAreas: z
       .array(z.string())
       .optional()
       .describe('Specific areas to focus on (e.g., "definitions", "concepts", "formulas", "dates")'),
-  }),
+  }).refine(
+    (data) => data.pdfUrl || data.pdfData,
+    {
+      message: "Either pdfUrl or pdfData must be provided",
+      path: ["pdfUrl", "pdfData"],
+    }
+  ),
   outputSchema: z.object({
     educationalSummary: z.string().describe('Educational summary of the PDF content for flash card creation'),
     keyTopics: z.array(z.string()).describe('Key topics and concepts extracted for flash card generation'),
@@ -31,22 +39,38 @@ export const pdfContentExtractorTool = createTool({
     characterCount: z.number().describe('Number of characters extracted from the PDF'),
   }),
   execute: async ({ context, mastra }) => {
-    const { pdfUrl, subjectArea, focusAreas = [] } = context;
+    const { pdfUrl, pdfData, filename, subjectArea, focusAreas = [] } = context;
 
-    console.log('📥 Downloading PDF for educational content extraction:', pdfUrl);
+    let pdfBuffer: Buffer;
+    const source = pdfData ? filename || 'attached file' : pdfUrl;
+
+    console.log('📥 Processing PDF for educational content extraction:', source);
 
     try {
-      // Step 1: Download the PDF
-      const response = await fetch(pdfUrl);
+      // Step 1: Get the PDF buffer (either from URL or base64 data)
+      if (pdfData) {
+        // Handle base64 encoded PDF data from file attachment
+        // Remove the data:application/pdf;base64, prefix if it exists
+        const base64Data = pdfData.startsWith('data:application/pdf;base64,') 
+          ? pdfData.substring('data:application/pdf;base64,'.length)
+          : pdfData;
+        
+        pdfBuffer = Buffer.from(base64Data, 'base64');
+        console.log(`✅ Processed attached PDF: ${pdfBuffer.length} bytes`);
+      } else if (pdfUrl) {
+        // Handle PDF URL
+        const response = await fetch(pdfUrl);
 
-      if (!response.ok) {
-        throw new Error(`Failed to download PDF: ${response.status} ${response.statusText}`);
+        if (!response.ok) {
+          throw new Error(`Failed to download PDF: ${response.status} ${response.statusText}`);
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        pdfBuffer = Buffer.from(arrayBuffer);
+        console.log(`✅ Downloaded PDF: ${pdfBuffer.length} bytes`);
+      } else {
+        throw new Error('Neither pdfUrl nor pdfData provided');
       }
-
-      const arrayBuffer = await response.arrayBuffer();
-      const pdfBuffer = Buffer.from(arrayBuffer);
-
-      console.log(`✅ Downloaded PDF: ${pdfBuffer.length} bytes`);
 
       // Step 2: Extract text from PDF
       console.log('📄 Extracting text from PDF...');

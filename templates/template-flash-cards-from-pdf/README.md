@@ -5,6 +5,7 @@ A Mastra template that generates educational flash cards with optional images fr
 ## Features
 
 - **PDF Processing**: Extract educational content from PDF documents with intelligent parsing
+- **Flexible Input**: Support both PDF URLs and file attachments from the playground
 - **Content Analysis**: Identify key concepts, definitions, and facts suitable for flash cards
 - **Flash Card Generation**: Create diverse question-answer pairs using multiple formats and difficulty levels
 - **Image Generation**: Generate educational images using DALL-E 3 for visual concepts and memory aids
@@ -44,7 +45,7 @@ A Mastra template that generates educational flash cards with optional images fr
 ```typescript
 import { mastra } from './src/mastra';
 
-// Generate flash cards from a biology PDF
+// Generate flash cards from a PDF URL
 const result = await mastra.runWorkflow('flash-cards-generation-workflow', {
   pdfUrl: 'https://example.com/biology-textbook-chapter.pdf',
   subjectArea: 'biology',
@@ -63,6 +64,17 @@ result.flashCards.forEach((card, index) => {
   console.log(`A: ${card.answer}`);
   console.log(`Type: ${card.questionType} | Difficulty: ${card.difficulty}`);
   if (card.imageUrl) console.log(`Image: ${card.imageUrl}`);
+});
+
+// Generate flash cards from an attached PDF file (playground usage)
+const attachedResult = await mastra.runWorkflow('flash-cards-generation-workflow', {
+  pdfData: 'data:application/pdf;base64,JVBERi0xLjQKJcfsj6IKNSAwIG9iago8PAovTGVuZ3RoIDYgMCBSCi9GaWx0ZXIgL0ZsYXRlRGVjb2RlCj4+CnN0cmVhbQ...',
+  filename: 'chemistry-notes.pdf',
+  subjectArea: 'chemistry',
+  numberOfCards: 10,
+  difficultyLevel: 'intermediate',
+  generateImages: true,
+  imageStyle: 'scientific',
 });
 ```
 
@@ -91,6 +103,26 @@ const historyCards = await mastra.runWorkflow('flash-cards-generation-workflow',
   focusAreas: ['dates', 'key figures', 'major events'],
 });
 ```
+
+### Using in the Playground with File Attachments
+
+The template seamlessly integrates with the Mastra playground's file attachment feature. Users can:
+
+1. **Attach PDF files directly** in the playground interface
+2. **Ask natural language questions** about generating flash cards
+3. **Receive structured flash card output** with optional images
+
+**Example playground interaction:**
+
+```
+User: "Create flash cards from this PDF about biology, focusing on cell structure" 
+[attaches biology-textbook.pdf]
+
+Agent: "I'll create educational flash cards from your PDF focusing on cell structure..."
+[Processes the attached PDF and generates structured flash cards]
+```
+
+The agent automatically detects the file attachment and processes it using the workflow, extracting the base64 data and filename from the playground's message format.
 
 ### Using Individual Agents
 
@@ -196,7 +228,9 @@ The template adapts to different academic disciplines:
     },
     subjectArea: "biology",
     sourceInfo: {
-      pdfUrl: "https://example.com/biology.pdf",
+      pdfUrl: "https://example.com/biology.pdf", // or null if file attachment
+      filename: "biology-textbook.pdf", // or null if URL
+      inputType: "url", // or "attachment"
       fileSize: 2048576,
       pagesCount: 25,
       characterCount: 45000
@@ -210,7 +244,12 @@ The template adapts to different academic disciplines:
 
 ### Input Parameters
 
+#### PDF Input (choose one):
 - `pdfUrl`: URL to the PDF document to process
+- `pdfData`: Base64 encoded PDF data from file attachment
+- `filename`: Filename of the attached PDF (when using pdfData)
+
+#### Generation Options:
 - `subjectArea`: Subject context (biology, mathematics, history, etc.)  
 - `numberOfCards`: Number of flash cards to generate (1-50)
 - `difficultyLevel`: Target difficulty (beginner, intermediate, advanced)
