@@ -3,7 +3,7 @@ import { appendClientMessage, appendResponseMessages } from 'ai';
 import type { UIMessage, CoreMessage, Message } from 'ai';
 import { describe, expect, it } from 'vitest';
 import type { MastraMessageV1 } from '../../memory';
-import type { MastraMessageV2 } from '../message-list';
+import type { MastraMessageV2, UIMessageWithMetadata } from '../message-list';
 import { MessageList } from './index';
 
 type VercelUIMessage = Message;
@@ -2315,8 +2315,8 @@ describe('MessageList', () => {
 
       // toolInvocations array should also only have the result
       expect(uiMessage.toolInvocations).toHaveLength(1);
-      expect(uiMessage.toolInvocations[0].state).toBe('result');
-      expect(uiMessage.toolInvocations[0].toolCallId).toBe('call-4');
+      expect(uiMessage.toolInvocations![0].state).toBe('result');
+      expect(uiMessage.toolInvocations![0].toolCallId).toBe('call-4');
     });
 
     it('should handle clientTool scenario - filter call states when querying from memory', () => {
@@ -2436,12 +2436,353 @@ describe('MessageList', () => {
       const resultToolParts = uiMessageWithResult.parts.filter(p => p.type === 'tool-invocation');
       expect(resultToolParts.length).toBe(1);
       expect(resultToolParts[0].toolInvocation.state).toBe('result');
-      expect(resultToolParts[0].toolInvocation.result).toBe(42);
+      if (resultToolParts[0].toolInvocation.state === `result`) {
+        expect(resultToolParts[0].toolInvocation.result).toBe(42);
+      }
 
       // toolInvocations array should have the result
       expect(uiMessageWithResult.toolInvocations).toHaveLength(1);
-      expect(uiMessageWithResult.toolInvocations[0].state).toBe('result');
-      expect(uiMessageWithResult.toolInvocations[0].result).toBe(42);
+      expect(uiMessageWithResult.toolInvocations![0].state).toBe('result');
+      if (uiMessageWithResult.toolInvocations![0].state === `result`) {
+        expect(uiMessageWithResult.toolInvocations![0].result).toBe(42);
+      }
+    });
+  });
+
+  describe('MessageList metadata support', () => {
+    describe('existing v2 metadata support', () => {
+      it('should preserve metadata when adding MastraMessageV2', () => {
+        const metadata = {
+          customField: 'custom value',
+          context: [{ type: 'project', content: '', displayName: 'Project', path: './' }],
+          anotherField: { nested: 'data' },
+        };
+
+        const v2Message: MastraMessageV2 = {
+          id: 'v2-msg-metadata',
+          role: 'user',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Hello with metadata' }],
+            metadata,
+          },
+          createdAt: new Date('2023-10-26T12:00:00.000Z'),
+          threadId,
+          resourceId,
+        };
+
+        const list = new MessageList({ threadId, resourceId }).add(v2Message, 'user');
+        const messages = list.get.all.v2();
+
+        expect(messages.length).toBe(1);
+        expect(messages[0].content.metadata).toEqual(metadata);
+      });
+
+      it('should preserve metadata through message transformations', () => {
+        const metadata = { preserved: true, data: 'test' };
+
+        const v2Message: MastraMessageV2 = {
+          id: 'v2-msg-transform',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Message with metadata' }],
+            metadata,
+          },
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+        };
+
+        const list = new MessageList({ threadId, resourceId }).add(v2Message, 'response');
+
+        // Convert to UI and back to v2
+        const uiMessages = list.get.all.ui();
+        const newList = new MessageList({ threadId, resourceId }).add(uiMessages, 'response');
+        const v2Messages = newList.get.all.v2();
+
+        expect(v2Messages[0].content.metadata).toEqual(metadata);
+      });
+    });
+
+    describe('UIMessage metadata extraction', () => {
+      it('should preserve metadata field from UIMessage', () => {
+        const metadata = {
+          context: [{ type: 'project', content: '', displayName: 'Project', path: './' }],
+          customField: 'custom value',
+          anotherField: { nested: 'data' },
+        };
+
+        const uiMessage: UIMessageWithMetadata = {
+          id: 'ui-msg-metadata',
+          role: 'user' as const,
+          content: 'hi',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          createdAt: new Date(),
+          metadata,
+        };
+
+        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'user');
+        const v2Messages = list.get.all.v2();
+
+        expect(v2Messages.length).toBe(1);
+        expect(v2Messages[0].content.metadata).toEqual(metadata);
+      });
+
+      it('should ignore non-metadata custom fields on UIMessage', () => {
+        const uiMessage = {
+          id: 'ui-msg-custom',
+          role: 'user' as const,
+          content: 'hi',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          createdAt: new Date(),
+          // These should be ignored
+          context: 'ignored',
+          customField: 'ignored',
+          // This should be preserved
+          metadata: { preserved: true },
+        } as UIMessageWithMetadata & { context: string; customField: string };
+
+        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'user');
+        const v2Messages = list.get.all.v2();
+
+        expect(v2Messages.length).toBe(1);
+        expect(v2Messages[0].content.metadata).toEqual({ preserved: true });
+        // Verify custom fields were not copied to metadata
+        expect(v2Messages[0].content.metadata).not.toHaveProperty('context');
+        expect(v2Messages[0].content.metadata).not.toHaveProperty('customField');
+      });
+
+      it('should handle UIMessage with no metadata field', () => {
+        const uiMessage = {
+          id: 'ui-msg-no-metadata',
+          role: 'user' as const,
+          content: 'hi',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          createdAt: new Date(),
+        };
+
+        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'user');
+        const v2Messages = list.get.all.v2();
+
+        expect(v2Messages.length).toBe(1);
+        expect(v2Messages[0].content.metadata).toBeUndefined();
+      });
+
+      it('should handle UIMessage with empty metadata object', () => {
+        const uiMessage: UIMessageWithMetadata = {
+          id: 'ui-msg-empty-metadata',
+          role: 'user' as const,
+          content: 'hi',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          createdAt: new Date(),
+          metadata: {},
+        };
+
+        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'user');
+        const v2Messages = list.get.all.v2();
+
+        expect(v2Messages.length).toBe(1);
+        expect(v2Messages[0].content.metadata).toEqual({});
+      });
+
+      it('should handle UIMessage with null/undefined metadata', () => {
+        const uiMessageNull: UIMessageWithMetadata = {
+          id: 'ui-msg-null-metadata',
+          role: 'user' as const,
+          content: 'hi',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          createdAt: new Date(),
+          metadata: null as any, // null is technically not allowed by the type, but we're testing the edge case
+        };
+
+        const uiMessageUndefined: UIMessageWithMetadata = {
+          id: 'ui-msg-undefined-metadata',
+          role: 'user' as const,
+          content: 'hi',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          createdAt: new Date(),
+          metadata: undefined,
+        };
+
+        const list1 = new MessageList({ threadId, resourceId }).add(uiMessageNull, 'user');
+        const list2 = new MessageList({ threadId, resourceId }).add(uiMessageUndefined, 'user');
+
+        expect(list1.get.all.v2()[0].content.metadata).toBeUndefined();
+        expect(list2.get.all.v2()[0].content.metadata).toBeUndefined();
+      });
+
+      it('should preserve metadata for assistant UIMessage with tool invocations', () => {
+        const metadata = { assistantContext: 'processing', step: 1 };
+
+        const uiMessage: UIMessageWithMetadata = {
+          id: 'ui-assistant-metadata',
+          role: 'assistant' as const,
+          content: 'Processing your request',
+          createdAt: new Date(),
+          parts: [{ type: 'text' as const, text: 'Processing your request' }],
+          toolInvocations: [],
+          metadata,
+        };
+
+        const list = new MessageList({ threadId, resourceId }).add(uiMessage, 'response');
+        const v2Messages = list.get.all.v2();
+
+        expect(v2Messages.length).toBe(1);
+        expect(v2Messages[0].content.metadata).toEqual(metadata);
+      });
+    });
+
+    describe('end-to-end metadata flow', () => {
+      it('should preserve metadata through a complete message flow simulation', () => {
+        // Simulate what happens in agent.stream/generate
+        const userMetadata = {
+          context: [{ type: 'project', content: '', displayName: 'Project', path: './' }],
+          sessionId: '12345',
+          customData: { priority: 'high' },
+        };
+
+        // 1. User sends message with metadata
+        const userMessage: UIMessageWithMetadata = {
+          id: 'user-msg-flow',
+          role: 'user' as const,
+          content: 'hi',
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          createdAt: new Date(),
+          metadata: userMetadata,
+        };
+
+        const list = new MessageList({ threadId, resourceId });
+
+        // Add user message (like what happens in agent.__primitive)
+        list.add(userMessage, 'user');
+
+        // Simulate assistant response
+        const assistantResponse = {
+          role: 'assistant' as const,
+          content: 'Hello! How can I help you?',
+        } satisfies CoreMessage;
+
+        list.add(assistantResponse, 'response');
+
+        // Get final messages (what would be saved to memory)
+        const v2Messages = list.get.all.v2();
+
+        // Verify user message metadata is preserved
+        const savedUserMessage = v2Messages.find(m => m.id === 'user-msg-flow');
+        expect(savedUserMessage).toBeDefined();
+        expect(savedUserMessage?.content.metadata).toEqual(userMetadata);
+
+        // Convert back to UI messages (for client display)
+        const uiMessages = list.get.all.ui();
+        const uiUserMessage = uiMessages.find(m => m.id === 'user-msg-flow') as UIMessageWithMetadata | undefined;
+        expect(uiUserMessage).toBeDefined();
+        expect(uiUserMessage?.metadata).toEqual(userMetadata);
+      });
+
+      it('should handle metadata from onlook.dev use case', () => {
+        // This is what onlook.dev would send after migration
+        const onlookMessage: UIMessageWithMetadata = {
+          id: '586b71b9-1a84-421e-b931-3ff40a06728f',
+          role: 'user' as const,
+          content: 'hi',
+          createdAt: new Date('2025-07-25T16:46:38.580Z'),
+          parts: [{ type: 'text' as const, text: 'hi' }],
+          metadata: {
+            context: [
+              {
+                type: 'project',
+                content: '',
+                displayName: 'Project',
+                path: './',
+              },
+            ],
+            snapshots: [],
+          },
+        };
+
+        const list = new MessageList({ threadId: 'onlook-thread', resourceId: 'onlook-project' });
+        list.add(onlookMessage, 'user');
+
+        // Verify it's saved correctly as v2
+        const v2Messages = list.get.all.v2();
+        expect(v2Messages[0].content.metadata).toEqual(onlookMessage.metadata);
+
+        // Verify it roundtrips back to UI format
+        const uiMessages = list.get.all.ui();
+        expect((uiMessages[0] as UIMessageWithMetadata).metadata).toEqual(onlookMessage.metadata);
+      });
+    });
+  });
+
+  describe('Memory integration', () => {
+    it('should preserve metadata when messages are saved and retrieved from memory', async () => {
+      // Create a message list with thread/resource info (simulating memory context)
+      const messageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+
+      // Add messages with metadata
+      const messagesWithMetadata: UIMessageWithMetadata[] = [
+        {
+          id: 'msg1',
+          role: 'user',
+          content: 'Hello with metadata',
+          parts: [{ type: 'text', text: 'Hello with metadata' }],
+          metadata: {
+            source: 'web-ui',
+            timestamp: 1234567890,
+            customField: 'custom-value',
+          },
+        },
+        {
+          id: 'msg2',
+          role: 'assistant',
+          content: 'Response with metadata',
+          parts: [{ type: 'text', text: 'Response with metadata' }],
+          metadata: {
+            model: 'gpt-4',
+            processingTime: 250,
+            tokens: 50,
+          },
+        },
+      ];
+
+      messageList.add(messagesWithMetadata[0], 'user');
+      messageList.add(messagesWithMetadata[1], 'response');
+
+      // Get messages in v2 format (what would be saved to memory)
+      const v2Messages = messageList.get.all.v2();
+
+      // Verify metadata is preserved in v2 format
+      expect(v2Messages.length).toBe(2);
+      expect(v2Messages[0].content.metadata).toEqual({
+        source: 'web-ui',
+        timestamp: 1234567890,
+        customField: 'custom-value',
+      });
+      expect(v2Messages[1].content.metadata).toEqual({
+        model: 'gpt-4',
+        processingTime: 250,
+        tokens: 50,
+      });
+
+      // Simulate loading from memory by creating a new MessageList with v2 messages
+      const newMessageList = new MessageList();
+      newMessageList.add(v2Messages, 'memory');
+
+      // Get back as UI messages
+      const uiMessages = newMessageList.get.all.ui();
+
+      // Verify metadata is still preserved after round trip
+      expect(uiMessages[0].metadata).toEqual({
+        source: 'web-ui',
+        timestamp: 1234567890,
+        customField: 'custom-value',
+      });
+      expect(uiMessages[1].metadata).toEqual({
+        model: 'gpt-4',
+        processingTime: 250,
+        tokens: 50,
+      });
     });
   });
 });

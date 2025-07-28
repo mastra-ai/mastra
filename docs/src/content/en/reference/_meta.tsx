@@ -1,4 +1,5 @@
 import { Meta } from "nextra";
+import { Tag } from "@/components/tag";
 
 const meta: Meta = {
   index: {
@@ -6,6 +7,7 @@ const meta: Meta = {
   },
   core: "Core",
   cli: "CLI",
+  templates: "Templates",
   agents: "Agents",
   tools: "Tools",
   workflows: "Workflows",
@@ -14,10 +16,12 @@ const meta: Meta = {
     display: "hidden",
   },
   networks: "Networks",
+  auth: <Tag text="experimental">Auth</Tag>,
   memory: "Memory",
   storage: "Storage",
   rag: "RAG",
-  evals: "Evals",
+  evals: "Evals (Legacy)",
+  scorers: "Scorers",
   voice: "Voice",
   observability: "Observability",
   "client-js": "Client SDK",

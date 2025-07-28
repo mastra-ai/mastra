@@ -3,17 +3,7 @@ import { refineTraces } from '../utils/refine-traces';
 import { useInView, useInfiniteQuery } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 
-const fetchFn = async ({
-  componentName,
-  isWorkflow,
-  page,
-  perPage,
-}: {
-  componentName: string;
-  isWorkflow: boolean;
-  page: number;
-  perPage: number;
-}) => {
+const fetchFn = async ({ componentName, page, perPage }: { componentName: string; page: number; perPage: number }) => {
   try {
     const res = await client.getTelemetry({
       attribute: {
@@ -25,9 +15,7 @@ const fetchFn = async ({
     if (!res.traces) {
       throw new Error('Error fetching traces');
     }
-
-    const refinedTraces = refineTraces(res?.traces || [], isWorkflow);
-    return refinedTraces;
+    return res.traces;
   } catch (error) {
     throw error;
   }
@@ -38,7 +26,7 @@ export const useTraces = (componentName: string, isWorkflow: boolean = false) =>
 
   const query = useInfiniteQuery({
     queryKey: ['traces', componentName, isWorkflow],
-    queryFn: ({ pageParam }) => fetchFn({ componentName, isWorkflow, page: pageParam, perPage: 100 }),
+    queryFn: ({ pageParam }) => fetchFn({ componentName, page: pageParam, perPage: 100 }),
     initialPageParam: 0,
     getNextPageParam: (lastPage, _, lastPageParam) => {
       if (!lastPage?.length) {
@@ -46,7 +34,7 @@ export const useTraces = (componentName: string, isWorkflow: boolean = false) =>
       }
       return lastPageParam + 1;
     },
-    select: data => data.pages.flat(),
+    select: data => refineTraces(data.pages.flat() || [], isWorkflow),
     staleTime: 0,
     gcTime: 0,
   });
