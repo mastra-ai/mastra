@@ -3205,3 +3205,226 @@ describe('dynamic memory configuration', () => {
     expect(thread?.resourceId).toBe('user-1');
   });
 });
+
+describe('UIMessageWithMetadata support', () => {
+  let dummyModel: MockLanguageModelV1;
+  let mockMemory: MockMemory;
+
+  beforeEach(() => {
+    dummyModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        finishReason: 'stop',
+        usage: { completionTokens: 10, promptTokens: 3 },
+        text: 'Response acknowledging metadata',
+      }),
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [
+            { type: 'text-delta', textDelta: 'Response' },
+            { type: 'text-delta', textDelta: ' acknowledging' },
+            { type: 'text-delta', textDelta: ' metadata' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              logprobs: undefined,
+              usage: { completionTokens: 10, promptTokens: 3 },
+            },
+          ],
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+    mockMemory = new MockMemory();
+  });
+
+  it('should preserve metadata in generate method', async () => {
+    const agent = new Agent({
+      name: 'metadata-test-agent',
+      instructions: 'You are a helpful assistant',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    const messagesWithMetadata = [
+      {
+        role: 'user' as const,
+        content: 'Hello with metadata',
+        parts: [{ type: 'text' as const, text: 'Hello with metadata' }],
+        metadata: {
+          source: 'web-ui',
+          customerId: '12345',
+          context: { orderId: 'ORDER-789', status: 'pending' },
+        },
+      },
+    ];
+
+    await agent.generate(messagesWithMetadata, {
+      memory: {
+        resource: 'customer-12345',
+        thread: {
+          id: 'support-thread',
+        },
+      },
+    });
+
+    // Verify messages were saved with metadata
+    const savedMessages = await mockMemory.getMessages({
+      threadConfig: { id: 'support-thread', resourceId: 'customer-12345' },
+      limit: 10,
+    });
+
+    expect(savedMessages.length).toBeGreaterThan(0);
+
+    // Find the user message
+    const userMessage = savedMessages.find(m => m.role === 'user');
+    expect(userMessage).toBeDefined();
+
+    // Check that metadata was preserved in v2 format
+    if (
+      userMessage &&
+      'content' in userMessage &&
+      typeof userMessage.content === 'object' &&
+      'metadata' in userMessage.content
+    ) {
+      expect(userMessage.content.metadata).toEqual({
+        source: 'web-ui',
+        customerId: '12345',
+        context: { orderId: 'ORDER-789', status: 'pending' },
+      });
+    }
+  });
+
+  it('should preserve metadata in stream method', async () => {
+    const agent = new Agent({
+      name: 'metadata-stream-agent',
+      instructions: 'You are a helpful assistant',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    const messagesWithMetadata = [
+      {
+        role: 'user' as const,
+        content: 'Stream with metadata',
+        parts: [{ type: 'text' as const, text: 'Stream with metadata' }],
+        metadata: {
+          source: 'mobile-app',
+          sessionId: 'session-123',
+          deviceInfo: { platform: 'iOS', version: '17.0' },
+        },
+      },
+    ];
+
+    const stream = await agent.stream(messagesWithMetadata, {
+      memory: {
+        resource: 'user-mobile',
+        thread: {
+          id: 'mobile-thread',
+        },
+      },
+    });
+
+    // Consume the stream
+    let finalText = '';
+    for await (const textPart of stream.textStream) {
+      finalText += textPart;
+    }
+
+    expect(finalText).toBe('Response acknowledging metadata');
+
+    // Verify messages were saved with metadata
+    const savedMessages = await mockMemory.getMessages({
+      threadConfig: { id: 'mobile-thread', resourceId: 'user-mobile' },
+      limit: 10,
+    });
+
+    expect(savedMessages.length).toBeGreaterThan(0);
+
+    // Find the user message
+    const userMessage = savedMessages.find(m => m.role === 'user');
+    expect(userMessage).toBeDefined();
+
+    // Check that metadata was preserved
+    if (
+      userMessage &&
+      'content' in userMessage &&
+      typeof userMessage.content === 'object' &&
+      'metadata' in userMessage.content
+    ) {
+      expect(userMessage.content.metadata).toEqual({
+        source: 'mobile-app',
+        sessionId: 'session-123',
+        deviceInfo: { platform: 'iOS', version: '17.0' },
+      });
+    }
+  });
+
+  it('should handle mixed messages with and without metadata', async () => {
+    const agent = new Agent({
+      name: 'mixed-metadata-agent',
+      instructions: 'You are a helpful assistant',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    const mixedMessages = [
+      {
+        role: 'user' as const,
+        content: 'First message with metadata',
+        parts: [{ type: 'text' as const, text: 'First message with metadata' }],
+        metadata: {
+          messageType: 'initial',
+          priority: 'high',
+        },
+      },
+      {
+        role: 'assistant' as const,
+        content: 'Response without metadata',
+        parts: [{ type: 'text' as const, text: 'Response without metadata' }],
+      },
+      {
+        role: 'user' as const,
+        content: 'Second user message',
+        parts: [{ type: 'text' as const, text: 'Second user message' }],
+        // No metadata on this message
+      },
+    ];
+
+    await agent.generate(mixedMessages, {
+      memory: {
+        resource: 'mixed-user',
+        thread: {
+          id: 'mixed-thread',
+        },
+      },
+    });
+
+    // Verify messages were saved correctly
+    const savedMessages = await mockMemory.getMessages({
+      threadConfig: { id: 'mixed-thread', resourceId: 'mixed-user' },
+      limit: 10,
+    });
+
+    expect(savedMessages.length).toBeGreaterThan(0);
+
+    // Find messages and check metadata
+    const messagesAsV2 = savedMessages as MastraMessageV2[];
+    const firstUserMessage = messagesAsV2.find(
+      m =>
+        m.role === 'user' && m.content.parts?.[0]?.type === 'text' && m.content.parts[0].text.includes('First message'),
+    );
+    const secondUserMessage = messagesAsV2.find(
+      m =>
+        m.role === 'user' && m.content.parts?.[0]?.type === 'text' && m.content.parts[0].text.includes('Second user'),
+    );
+
+    // First message should have metadata
+    expect(firstUserMessage?.content.metadata).toEqual({
+      messageType: 'initial',
+      priority: 'high',
+    });
+
+    // Second message should not have metadata
+    expect(secondUserMessage?.content.metadata).toBeUndefined();
+  });
+});
