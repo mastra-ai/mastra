@@ -5,6 +5,13 @@ import { createSampleThread, createSampleMessageV1 } from './data';
 
 export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStorage }) {
   describe('Messages Bulk Delete', () => {
+    // Skip tests if the storage adapter doesn't support deleteMessages
+    if (!storage.supports.deleteMessages) {
+      it.skip('deleteMessages is not supported by this storage adapter', () => {
+        expect(true).toBe(true);
+      });
+      return;
+    }
     it('should delete multiple messages successfully', async () => {
       // Create a thread first
       const thread = createSampleThread();

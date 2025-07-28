@@ -118,6 +118,7 @@ export class LibSQLStore extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
+      deleteMessages: true,
     };
   }
 

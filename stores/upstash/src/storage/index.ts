@@ -65,6 +65,7 @@ export class UpstashStore extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: false,
       createTable: false,
+      deleteMessages: true,
     };
   }
 

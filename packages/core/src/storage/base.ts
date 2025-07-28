@@ -101,12 +101,14 @@ export abstract class MastraStorage extends MastraBase {
     resourceWorkingMemory: boolean;
     hasColumn: boolean;
     createTable: boolean;
+    deleteMessages: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
       resourceWorkingMemory: false,
       hasColumn: false,
       createTable: false,
+      deleteMessages: false,
     };
   }
 

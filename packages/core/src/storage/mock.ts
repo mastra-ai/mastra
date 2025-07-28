@@ -81,6 +81,16 @@ export class InMemoryStore extends MastraStorage {
     };
   }
 
+  public get supports() {
+    return {
+      selectByIncludeResourceScope: false,
+      resourceWorkingMemory: false,
+      hasColumn: false,
+      createTable: false,
+      deleteMessages: true,
+    };
+  }
+
   async persistWorkflowSnapshot({
     workflowName,
     runId,
