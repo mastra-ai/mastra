@@ -2,18 +2,31 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
-import { weatherWorkflow } from './workflows/weather-workflow';
-import { weatherAgent } from './agents/weather-agent';
+
+// Import agents
+import { flashCardsAgent } from './agents/flash-cards-agent';
+import { contentAnalyzerAgent } from './agents/content-analyzer-agent';
+import { flashCardsGeneratorAgent } from './agents/flash-cards-generator-agent';
+import { pdfContentAgent } from './agents/pdf-content-agent';
+
+// Import workflows
+import { flashCardsGenerationWorkflow } from './workflows/flash-cards-generation-workflow';
 
 export const mastra = new Mastra({
-  workflows: { weatherWorkflow },
-  agents: { weatherAgent },
+  workflows: {
+    flashCardsGenerationWorkflow,
+  },
+  agents: {
+    flashCardsAgent,
+    contentAnalyzerAgent,
+    flashCardsGeneratorAgent,
+    pdfContentAgent,
+  },
   storage: new LibSQLStore({
-    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
-    url: ":memory:",
+    url: 'file:../mastra.db',
   }),
   logger: new PinoLogger({
-    name: 'Mastra',
+    name: 'Mastra Flash Cards Template',
     level: 'info',
   }),
 });
