@@ -70,8 +70,8 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
       </EntityHeader>
 
       <div className="overflow-y-auto border-t-sm border-border1">
-        <PlaygroundTabs defaultTab="run">
-          <TabList>
+        <PlaygroundTabs defaultTab="run" className="h-[unset]">
+          <TabList className="sticky top-0 bg-surface3 z-10">
             <Tab value="run" onClick={() => navigate(`/workflows/${workflowId}/graph`)}>
               Run
             </Tab>

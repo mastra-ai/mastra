@@ -7,6 +7,7 @@ import { Agent, InputProcessor } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector } from '@mastra/core/agent/input-processor/processors';
+import { MCPClient } from '@mastra/mcp';
 
 const memory = new Memory();
 
@@ -120,6 +121,15 @@ const promptInjectionDetector = new PromptInjectionDetector({
   strategy: 'block',
 });
 
+const mcpInstance = new MCPClient({
+  id: 'myMcpServerTwo',
+  servers: {
+    myMcpServerTwo: {
+      url: new URL(`http://localhost:4111/api/mcp/myMcpServerTwo/mcp`),
+    },
+  },
+});
+
 export const chefAgentResponses = new Agent({
   name: 'Chef Agent Responses',
   instructions: `
@@ -128,8 +138,11 @@ export const chefAgentResponses = new Agent({
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
     `,
   model: openai.responses('gpt-4o'),
-  tools: {
-    web_search_preview: openai.tools.webSearchPreview(),
+  tools: async () => {
+    return {
+      ...(await mcpInstance.getTools()),
+      web_search_preview: openai.tools.webSearchPreview(),
+    };
   },
   workflows: {
     myWorkflow,

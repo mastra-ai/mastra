@@ -1,4 +1,4 @@
-import type { StorageColumn } from './types';
+import type { StorageColumn, ThreadOrderBy, ThreadSortDirection } from './types';
 
 export const TABLE_WORKFLOW_SNAPSHOT = 'mastra_workflow_snapshot';
 export const TABLE_EVALS = 'mastra_evals';

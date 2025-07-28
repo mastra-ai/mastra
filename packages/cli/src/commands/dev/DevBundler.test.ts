@@ -48,9 +48,14 @@ describe('DevBundler', () => {
       await devBundler.watch('test-entry.js', 'output-dir', []);
 
       // Assert
-      expect(getWatcherInputOptions).toHaveBeenCalledWith('test-entry.js', 'node', {
-        'process.env.NODE_ENV': JSON.stringify('test-env'),
-      });
+      expect(getWatcherInputOptions).toHaveBeenCalledWith(
+        'test-entry.js',
+        'node',
+        {
+          'process.env.NODE_ENV': JSON.stringify('test-env'),
+        },
+        { sourcemap: false },
+      );
     });
 
     it('should default to development when NODE_ENV is not set', async () => {
@@ -63,9 +68,14 @@ describe('DevBundler', () => {
       await devBundler.watch('test-entry.js', 'output-dir', []);
 
       // Assert
-      expect(getWatcherInputOptions).toHaveBeenCalledWith('test-entry.js', 'node', {
-        'process.env.NODE_ENV': JSON.stringify('development'),
-      });
+      expect(getWatcherInputOptions).toHaveBeenCalledWith(
+        'test-entry.js',
+        'node',
+        {
+          'process.env.NODE_ENV': JSON.stringify('development'),
+        },
+        { sourcemap: false },
+      );
     });
   });
 });
