@@ -8,20 +8,20 @@ Mastra provides two approaches for creating custom scorers:
 
 ### Code-based scorers
 
-Use `createScorer` to build scorers with programmatic logic and algorithms. They're ideal for:
-- Deterministic evaluations
-- Performance-critical scenarios
-- Cases where you have clear algorithmic criteria
-- Integration with existing libraries or tools
+Code scorers use `createScorer` to build evaluation logic with programmatic algorithms. They're ideal for deterministic evaluations, performance-critical scenarios, and cases where you have clear algorithmic criteria or need integration with existing libraries.
 
-For the complete API reference, see [`createScorer`](/reference/scorers/custom-code-scorer).
+Code scorers follow Mastra's three-step evaluation pipeline: 
+- an optional **extract** step for preprocessing complex data
+- a required **analyze** step for core evaluation and scoring
+- and an optional **reason** step for generating explanations.
 
-#### The evaluation pipeline
-
-Code scorers follow Mastra's evaluation pipeline with optional extract and reason steps. For a detailed explanation of how the pipeline works, see the [Three-step evaluation process](/docs/scorers/overview#three-step-evaluation-process) in the overview.
+For the complete API reference, see [`createScorer`](/reference/scorers/custom-code-scorer), and for a detailed explanation of the pipeline, see [evaluation process](/docs/scorers/overview#evaluation-pipeline).
 
 #### Extract step (optional):
-- **Receives:** `{ input, output, runtimeContext? }`
+- **Receives:**
+  - `input`: User messages (when used with agents) or workflow step input (when used with workflow steps)
+  - `output`: Agent's response (when used with agents) or workflow step output (when used with workflow steps)
+  - `runtimeContext`: Runtime context from the agent or workflow step being evaluated
 - **Must return:** `{ results: any }`
 - **Data flow:** The `results` value is passed to the analyze step as `extractStepResult`
 - **Use when:** You need to preprocess complex input/output data, evaluate multiple distinct elements, filter content, or focus analysis on specific parts of the data
@@ -59,7 +59,8 @@ export const keywordCoverageScorer = createScorer({
 ```
 
 #### Analyze step (required):
-- **Receives:** `{ input, output, runtimeContext?, extractStepResult? }`
+- **Receives:** Everything from extract step, plus:
+  - `extractStepResult`: Results from the extract step (if extract step was defined)
 - **Must return:** `{ score: number, results?: any }`
 - **Data flow:** The `score` and optional `results` are passed to the reason step
 - **Use when:** This step is always required for core evaluation and score generation
@@ -101,9 +102,12 @@ export const keywordCoverageScorer = createScorer({
 ```
 
 #### Reason step (optional):
-- **Receives:** `{ input, output, score, runtimeContext?, analyzeStepResult?, extractStepResult? }`
+- **Receives:** Everything from analyze step, plus:
+  - `score`: The numerical score (0-1) calculated by the analyze step
+  - `analyzeStepResult`: Results from the analyze step (contains the score and any additional results)
+  - `extractStepResult`: Results from the extract step (if extract step was defined)
 - **Must return:** `{ reason: string }`
-- **Use when:** You need explanations for scores, debugging/transparency, actionable feedback, or compliance documentation
+- **Use when:** You need explanations for scores, actionable feedback, or compliance documentation
 
 ```typescript filename="src/mastra/scorers/keyword-coverage-scorer.ts" showLineNumbers copy
 import { createScorer } from "@mastra/core/scores";
@@ -139,6 +143,10 @@ export const keywordCoverageScorer = createScorer({
 });
 ```
 
+**Examples and Resources:**
+- [Custom Native JavaScript Scorer Example](/examples/scorers/custom-native-javascript-eval) - Example walkthrough.
+- [Built-in Code Scorers](https://github.com/mastra-ai/mastra/tree/main/packages/evals/src/scorers/code) - Real implementations for reference
+  
 ### LLM-based scorers
 
 Use `createLLMScorer` to build scorers that use language models as judges. They're perfect for:
