@@ -91,9 +91,12 @@ const chunked = await doc.chunk({
 
 ### Backward Compatibility
 
-- All existing strategies remain unchanged
-- No breaking changes to current API
-- New strategy is opt-in
+- ✅ **User-facing API**: `doc.chunk()` interface remains unchanged for existing strategies
+- ✅ **Strategy names**: All existing strategy names and core parameters work identically
+- ❌ **BREAKING**: Stricter TypeScript validation may catch previously ignored invalid parameters
+- ❌ **BREAKING**: Direct transformer class instantiation requires new constructor signatures
+- ❌ **BREAKING**: Reworked legacy `ChunkOptions` and `ChunkParams` types
+- ✅ **New strategy**: `sentence` added strategy is opt-in
 
 ## Test Case (From Issue)
 
@@ -137,6 +140,6 @@ const chunked = await doc.chunk({
 - ✅ **Complete Test Coverage**: 8/8 sentence tests pass + comprehensive validation test file
 - ✅ **Clean Type System**: Legacy types fully removed, strategy-specific enforcement everywhere
 - ✅ **Full System Consistency**: All 8 transformers now use their specific chunk option types
-- ✅ **No Breaking Changes**: Existing user code continues to work seamlessly
+- ✅ **Controlled Breaking Changes**: User-facing API preserved, but internal consistency improved
 - ✅ **Build Success**: TypeScript compilation with strict type enforcement
 - ✅ **Runtime Validation**: Both character and sentence strategies verified working
