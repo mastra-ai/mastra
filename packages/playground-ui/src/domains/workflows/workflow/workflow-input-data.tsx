@@ -10,6 +10,7 @@ import { jsonLanguage } from '@codemirror/lang-json';
 import { CopyButton } from '@/components/ui/copy-button';
 import { ZodSchema } from 'zod';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { cn } from '@/lib/utils';
 
 export interface WorkflowInputDataProps {
   schema: ZodSchema;
@@ -30,7 +31,12 @@ export const WorkflowInputData = ({
 
   return (
     <div>
-      <RadioGroup value={type} onValueChange={value => setType(value as 'json' | 'form')} className="pb-4">
+      <RadioGroup
+        disabled={isSubmitLoading}
+        value={type}
+        onValueChange={value => setType(value as 'json' | 'form')}
+        className="pb-4"
+      >
         <div className="flex flex-row gap-4">
           <div className="flex items-center gap-3">
             <RadioGroupItem value="form" id="form" />
@@ -47,23 +53,29 @@ export const WorkflowInputData = ({
         </div>
       </RadioGroup>
 
-      {type === 'form' ? (
-        <DynamicForm
-          schema={schema}
-          defaultValues={defaultValues}
-          isSubmitLoading={isSubmitLoading}
-          submitButtonLabel={submitButtonLabel}
-          onSubmit={onSubmit}
-        />
-      ) : (
-        <JSONInput
-          schema={schema}
-          defaultValues={defaultValues}
-          isSubmitLoading={isSubmitLoading}
-          submitButtonLabel={submitButtonLabel}
-          onSubmit={onSubmit}
-        />
-      )}
+      <div
+        className={cn({
+          'opacity-50 pointer-events-none': isSubmitLoading,
+        })}
+      >
+        {type === 'form' ? (
+          <DynamicForm
+            schema={schema}
+            defaultValues={defaultValues}
+            isSubmitLoading={isSubmitLoading}
+            submitButtonLabel={submitButtonLabel}
+            onSubmit={onSubmit}
+          />
+        ) : (
+          <JSONInput
+            schema={schema}
+            defaultValues={defaultValues}
+            isSubmitLoading={isSubmitLoading}
+            submitButtonLabel={submitButtonLabel}
+            onSubmit={onSubmit}
+          />
+        )}
+      </div>
     </div>
   );
 };
