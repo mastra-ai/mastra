@@ -55,7 +55,7 @@ export function createAnswerRelevancyScorer({
       description: 'Reason about the results',
       createPrompt: ({ run }) => {
         return createReasonPrompt({
-          input: run.input.map(input => input.content).join(', '),
+          input: run.input?.map(input => input.content).join(', ') || '',
           output: run.output.text,
           score: run.score,
           results: run.analyzeStepResult.results,
