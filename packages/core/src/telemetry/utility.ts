@@ -1,4 +1,4 @@
-import { propagation, trace, context } from '@opentelemetry/api';
+import { propagation, trace } from '@opentelemetry/api';
 import type { Context } from '@opentelemetry/api';
 
 // Helper function to check if telemetry is active
