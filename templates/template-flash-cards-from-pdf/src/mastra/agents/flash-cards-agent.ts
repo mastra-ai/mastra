@@ -16,7 +16,8 @@ const memory = new Memory({
 
 export const flashCardsAgent = new Agent({
   name: 'Flash Cards Generation Agent',
-  description: 'An agent that generates educational flash cards with optional images from PDF documents for effective studying and learning',
+  description:
+    'An agent that generates educational flash cards with optional images from PDF documents for effective studying and learning',
   instructions: `
 You are an expert educational content creator and instructional designer specialized in generating effective flash cards from PDF documents.
 

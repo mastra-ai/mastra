@@ -12,7 +12,8 @@ const memory = new Memory({
 
 export const pdfContentAgent = new Agent({
   name: 'PDF Educational Content Agent',
-  description: 'An agent specialized in processing and extracting educational content from PDF documents for learning and flash card generation',
+  description:
+    'An agent specialized in processing and extracting educational content from PDF documents for learning and flash card generation',
   instructions: `
 You are an expert educational content specialist and document analyst. Your role is to process PDF documents and extract the most valuable educational content for learning and flash card creation.
 

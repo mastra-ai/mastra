@@ -12,7 +12,8 @@ const memory = new Memory({
 
 export const flashCardsGeneratorAgent = new Agent({
   name: 'Flash Cards Generator Agent',
-  description: 'An expert agent specialized in creating effective educational flash cards from analyzed content using proven learning techniques',
+  description:
+    'An expert agent specialized in creating effective educational flash cards from analyzed content using proven learning techniques',
   instructions: `
 You are an expert educational content creator and learning scientist specializing in designing effective flash cards that promote active recall and long-term retention.
 

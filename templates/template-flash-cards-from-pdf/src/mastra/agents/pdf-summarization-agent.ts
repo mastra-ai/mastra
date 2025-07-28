@@ -12,7 +12,8 @@ const memory = new Memory({
 
 export const pdfSummarizationAgent = new Agent({
   name: 'PDF Educational Summarization Agent',
-  description: 'An agent that summarizes extracted PDF text for educational flash card generation using a large context window model',
+  description:
+    'An agent that summarizes extracted PDF text for educational flash card generation using a large context window model',
   instructions: `
 You are a PDF summarization specialist focused on educational content extraction for flash card generation. Your role is to create comprehensive educational summaries that preserve all learning-relevant information while being more manageable than the full text.
 

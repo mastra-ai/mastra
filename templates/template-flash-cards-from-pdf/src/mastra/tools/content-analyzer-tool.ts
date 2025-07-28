@@ -3,7 +3,8 @@ import { z } from 'zod';
 
 export const contentAnalyzerTool = createTool({
   id: 'content-analyzer',
-  description: 'Analyzes educational content to identify key concepts, definitions, and facts suitable for flash card generation',
+  description:
+    'Analyzes educational content to identify key concepts, definitions, and facts suitable for flash card generation',
   inputSchema: z.object({
     content: z.string().describe('Educational content to analyze'),
     subjectArea: z.string().optional().describe('Subject area (e.g., biology, chemistry, history, mathematics)'),
@@ -14,27 +15,35 @@ export const contentAnalyzerTool = createTool({
       .describe('Specific areas to focus on (e.g., "definitions", "concepts", "formulas", "dates")'),
   }),
   outputSchema: z.object({
-    concepts: z.array(z.object({
-      concept: z.string().describe('The concept or topic'),
-      explanation: z.string().describe('Clear explanation of the concept'),
-      difficulty: z.enum(['beginner', 'intermediate', 'advanced']),
-      keywords: z.array(z.string()).describe('Related keywords and terms'),
-    })),
-    definitions: z.array(z.object({
-      term: z.string().describe('The term being defined'),
-      definition: z.string().describe('Clear, concise definition'),
-      context: z.string().optional().describe('Additional context or usage'),
-    })),
-    facts: z.array(z.object({
-      fact: z.string().describe('Important factual information'),
-      category: z.string().describe('Category of the fact (date, statistic, formula, etc.)'),
-      context: z.string().optional().describe('Additional context'),
-    })),
-    relationships: z.array(z.object({
-      concept1: z.string(),
-      concept2: z.string(),
-      relationship: z.string().describe('How the concepts are related'),
-    })),
+    concepts: z.array(
+      z.object({
+        concept: z.string().describe('The concept or topic'),
+        explanation: z.string().describe('Clear explanation of the concept'),
+        difficulty: z.enum(['beginner', 'intermediate', 'advanced']),
+        keywords: z.array(z.string()).describe('Related keywords and terms'),
+      }),
+    ),
+    definitions: z.array(
+      z.object({
+        term: z.string().describe('The term being defined'),
+        definition: z.string().describe('Clear, concise definition'),
+        context: z.string().optional().describe('Additional context or usage'),
+      }),
+    ),
+    facts: z.array(
+      z.object({
+        fact: z.string().describe('Important factual information'),
+        category: z.string().describe('Category of the fact (date, statistic, formula, etc.)'),
+        context: z.string().optional().describe('Additional context'),
+      }),
+    ),
+    relationships: z.array(
+      z.object({
+        concept1: z.string(),
+        concept2: z.string(),
+        relationship: z.string().describe('How the concepts are related'),
+      }),
+    ),
     suggestedQuestionTypes: z.array(z.string()).describe('Recommended question types for this content'),
     subjectArea: z.string().describe('Identified or confirmed subject area'),
     complexity: z.enum(['beginner', 'intermediate', 'advanced']).describe('Overall content complexity'),
@@ -139,7 +148,9 @@ Format your response as JSON with this exact structure:
         complexity: parsedAnalysis.complexity || difficultyLevel,
       };
 
-      console.log(`✅ Content analysis complete: ${analysis.concepts.length} concepts, ${analysis.definitions.length} definitions, ${analysis.facts.length} facts`);
+      console.log(
+        `✅ Content analysis complete: ${analysis.concepts.length} concepts, ${analysis.definitions.length} definitions, ${analysis.facts.length} facts`,
+      );
 
       return analysis;
     } catch (error) {

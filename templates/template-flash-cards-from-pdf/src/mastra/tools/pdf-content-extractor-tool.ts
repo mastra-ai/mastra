@@ -4,34 +4,45 @@ import { extractTextFromPDF } from '../lib/pdf-utils';
 
 export const pdfContentExtractorTool = createTool({
   id: 'pdf-content-extractor',
-  description: 'Downloads a PDF from a URL, extracts content, and creates an educational summary for flash card generation',
-  inputSchema: z.object({
-    pdfUrl: z.string().optional().describe('URL to the PDF file to download'),
-    pdfData: z.string().optional().describe('Base64 encoded PDF data from file attachment'),
-    filename: z.string().optional().describe('Filename of the attached PDF (if using pdfData)'),
-    subjectArea: z.string().optional().describe('Subject area to focus on (e.g., "biology", "history", "mathematics")'),
-    focusAreas: z
-      .array(z.string())
-      .optional()
-      .describe('Specific areas to focus on (e.g., "definitions", "concepts", "formulas", "dates")'),
-  }).refine(
-    (data) => data.pdfUrl || data.pdfData,
-    {
-      message: "Either pdfUrl or pdfData must be provided",
-      path: ["pdfUrl", "pdfData"],
-    }
-  ),
+  description:
+    'Downloads a PDF from a URL, extracts content, and creates an educational summary for flash card generation',
+  inputSchema: z
+    .object({
+      pdfUrl: z.string().optional().describe('URL to the PDF file to download'),
+      pdfData: z.string().optional().describe('Base64 encoded PDF data from file attachment'),
+      filename: z.string().optional().describe('Filename of the attached PDF (if using pdfData)'),
+      subjectArea: z
+        .string()
+        .optional()
+        .describe('Subject area to focus on (e.g., "biology", "history", "mathematics")'),
+      focusAreas: z
+        .array(z.string())
+        .optional()
+        .describe('Specific areas to focus on (e.g., "definitions", "concepts", "formulas", "dates")'),
+    })
+    .refine(data => data.pdfUrl || data.pdfData, {
+      message: 'Either pdfUrl or pdfData must be provided',
+      path: ['pdfUrl', 'pdfData'],
+    }),
   outputSchema: z.object({
     educationalSummary: z.string().describe('Educational summary of the PDF content for flash card creation'),
     keyTopics: z.array(z.string()).describe('Key topics and concepts extracted for flash card generation'),
-    definitions: z.array(z.object({
-      term: z.string(),
-      definition: z.string(),
-    })).describe('Important terms and their definitions'),
-    concepts: z.array(z.object({
-      concept: z.string(),
-      explanation: z.string(),
-    })).describe('Key concepts and their explanations'),
+    definitions: z
+      .array(
+        z.object({
+          term: z.string(),
+          definition: z.string(),
+        }),
+      )
+      .describe('Important terms and their definitions'),
+    concepts: z
+      .array(
+        z.object({
+          concept: z.string(),
+          explanation: z.string(),
+        }),
+      )
+      .describe('Key concepts and their explanations'),
     facts: z.array(z.string()).describe('Important facts and information'),
     subjectArea: z.string().optional().describe('Identified subject area from content'),
     fileSize: z.number().describe('Size of the downloaded file in bytes'),
@@ -51,10 +62,10 @@ export const pdfContentExtractorTool = createTool({
       if (pdfData) {
         // Handle base64 encoded PDF data from file attachment
         // Remove the data:application/pdf;base64, prefix if it exists
-        const base64Data = pdfData.startsWith('data:application/pdf;base64,') 
+        const base64Data = pdfData.startsWith('data:application/pdf;base64,')
           ? pdfData.substring('data:application/pdf;base64,'.length)
           : pdfData;
-        
+
         pdfBuffer = Buffer.from(base64Data, 'base64');
         console.log(`✅ Processed attached PDF: ${pdfBuffer.length} bytes`);
       } else if (pdfUrl) {
@@ -114,7 +125,7 @@ ${extractionResult.extractedText}`,
       if (!contentAnalyzerAgent) {
         throw new Error('Content analyzer agent not found');
       }
-      
+
       const analysisResult = await contentAnalyzerAgent.generate([
         {
           role: 'user',

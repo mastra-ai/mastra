@@ -16,12 +16,14 @@ A Mastra template that generates educational flash cards with optional images fr
 ## Quick Start
 
 1. **Install dependencies**:
+
    ```bash
    pnpm install
    ```
 
 2. **Set up environment variables**:
    Create a `.env` file with:
+
    ```
    OPENAI_API_KEY=your_openai_api_key
 
@@ -68,7 +70,8 @@ result.flashCards.forEach((card, index) => {
 
 // Generate flash cards from an attached PDF file (playground usage)
 const attachedResult = await mastra.runWorkflow('flash-cards-generation-workflow', {
-  pdfData: 'data:application/pdf;base64,JVBERi0xLjQKJcfsj6IKNSAwIG9iago8PAovTGVuZ3RoIDYgMCBSCi9GaWx0ZXIgL0ZsYXRlRGVjb2RlCj4+CnN0cmVhbQ...',
+  pdfData:
+    'data:application/pdf;base64,JVBERi0xLjQKJcfsj6IKNSAwIG9iago8PAovTGVuZ3RoIDYgMCBSCi9GaWx0ZXIgL0ZsYXRlRGVjb2RlCj4+CnN0cmVhbQ...',
   filename: 'chemistry-notes.pdf',
   subjectArea: 'chemistry',
   numberOfCards: 10,
@@ -115,7 +118,7 @@ The template seamlessly integrates with the Mastra playground's file attachment 
 **Example playground interaction:**
 
 ```
-User: "Create flash cards from this PDF about biology, focusing on cell structure" 
+User: "Create flash cards from this PDF about biology, focusing on cell structure"
 [attaches biology-textbook.pdf]
 
 Agent: "I'll create educational flash cards from your PDF focusing on cell structure..."
@@ -131,16 +134,17 @@ The agent automatically detects the file attachment and processes it using the w
 const flashCards = await mastra.getAgent('flashCardsAgent').generate([
   {
     role: 'user',
-    content: 'Create flash cards from this PDF about organic chemistry: https://example.com/organic-chem.pdf. Focus on reaction mechanisms and include visual diagrams.',
+    content:
+      'Create flash cards from this PDF about organic chemistry: https://example.com/organic-chem.pdf. Focus on reaction mechanisms and include visual diagrams.',
   },
 ]);
 
 // Extract content from PDF only
 const pdfContent = await mastra.getTool('pdf-content-extractor').execute({
-  context: { 
+  context: {
     pdfUrl: 'https://example.com/research-paper.pdf',
     subjectArea: 'computer science',
-    focusAreas: ['algorithms', 'data structures']
+    focusAreas: ['algorithms', 'data structures'],
   },
   mastra,
 });
@@ -159,7 +163,7 @@ const pdfContent = await mastra.getTool('pdf-content-extractor').execute({
 ### Tools
 
 1. **PDF Content Extractor** - Downloads and extracts structured educational content from PDFs
-2. **Content Analyzer** - Identifies concepts, definitions, facts, and relationships suitable for flash cards  
+2. **Content Analyzer** - Identifies concepts, definitions, facts, and relationships suitable for flash cards
 3. **Flash Cards Generator** - Creates diverse question-answer pairs with multiple formats and difficulty levels
 4. **Educational Image Generator** - Generates visual aids using DALL-E 3 for enhanced learning
 
@@ -207,7 +211,7 @@ The template adapts to different academic disciplines:
       question: "What is cellular respiration?",
       answer: "The metabolic process by which cells break down glucose to produce ATP energy",
       questionType: "definition",
-      difficulty: "intermediate", 
+      difficulty: "intermediate",
       category: "biology",
       tags: ["metabolism", "cellular-respiration", "ATP"],
       hint: "Think about how cells generate energy",
@@ -246,12 +250,14 @@ The template adapts to different academic disciplines:
 ### Input Parameters
 
 #### PDF Input (choose one):
+
 - `pdfUrl`: URL to the PDF document to process
 - `pdfData`: Base64 encoded PDF data from file attachment
 - `filename`: Filename of the attached PDF (when using pdfData)
 
 #### Generation Options:
-- `subjectArea`: Subject context (biology, mathematics, history, etc.)  
+
+- `subjectArea`: Subject context (biology, mathematics, history, etc.)
 - `numberOfCards`: Number of flash cards to generate (1-50)
 - `difficultyLevel`: Target difficulty (beginner, intermediate, advanced)
 - `questionTypes`: Array of preferred question types
@@ -264,7 +270,7 @@ The template adapts to different academic disciplines:
 When `generateImages` is enabled, the template generates educational visuals for:
 
 - Complex scientific processes and biological structures
-- Mathematical concepts, formulas, and geometric shapes  
+- Mathematical concepts, formulas, and geometric shapes
 - Historical events, geographical features, and cultural concepts
 - Abstract concepts that benefit from visual representation
 - Diagrams and memory aids for better retention
@@ -279,7 +285,7 @@ When `generateImages` is enabled, the template generates educational visuals for
 
 - `AWS_REGION`: AWS region (default: 'us-east-1')
 - `AWS_ACCESS_KEY_ID`: AWS access key ID
-- `AWS_SECRET_ACCESS_KEY`: AWS secret access key  
+- `AWS_SECRET_ACCESS_KEY`: AWS secret access key
 - `S3_BUCKET_NAME`: S3 bucket name for storing generated images
 - `S3_PUBLIC_URL_BASE`: Public URL base for accessing uploaded images
 

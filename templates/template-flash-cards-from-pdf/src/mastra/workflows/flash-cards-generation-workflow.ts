@@ -6,54 +6,55 @@ import { contentAnalyzerTool } from '../tools/content-analyzer-tool';
 import { flashCardsGeneratorTool } from '../tools/flash-cards-generator-tool';
 import { imageGeneratorTool } from '../tools/image-generator-tool';
 
-const inputSchema = z.object({
-  // Support both PDF URL and file attachment
-  pdfUrl: z.string().optional().describe('URL to the PDF file to process'),
-  pdfData: z.string().optional().describe('Base64 encoded PDF data from file attachment'),
-  filename: z.string().optional().describe('Filename of the attached PDF (if using pdfData)'),
-  
-  subjectArea: z.string().optional().describe('Subject area (e.g., biology, chemistry, history, mathematics)'),
-  numberOfCards: z.number().min(1).max(50).optional().default(10).describe('Number of flash cards to generate'),
-  difficultyLevel: z
-    .enum(['beginner', 'intermediate', 'advanced'])
-    .optional()
-    .default('intermediate')
-    .describe('Target difficulty level'),
-  questionTypes: z
-    .array(z.string())
-    .optional()
-    .default(['definition', 'concept', 'application'])
-    .describe('Types of questions to generate'),
-  generateImages: z.boolean().optional().default(false).describe('Whether to generate educational images'),
-  imageStyle: z
-    .enum(['educational', 'diagram', 'illustration', 'realistic', 'minimalist', 'scientific'])
-    .optional()
-    .default('educational')
-    .describe('Style for generated images'),
-  focusAreas: z
-    .array(z.string())
-    .optional()
-    .describe('Specific areas to focus on (e.g., "definitions", "concepts", "formulas")'),
-}).refine(
-  (data) => data.pdfUrl || data.pdfData,
-  {
-    message: "Either pdfUrl or pdfData must be provided",
-    path: ["pdfUrl", "pdfData"],
-  }
-);
+const inputSchema = z
+  .object({
+    // Support both PDF URL and file attachment
+    pdfUrl: z.string().optional().describe('URL to the PDF file to process'),
+    pdfData: z.string().optional().describe('Base64 encoded PDF data from file attachment'),
+    filename: z.string().optional().describe('Filename of the attached PDF (if using pdfData)'),
+
+    subjectArea: z.string().optional().describe('Subject area (e.g., biology, chemistry, history, mathematics)'),
+    numberOfCards: z.number().min(1).max(50).optional().default(10).describe('Number of flash cards to generate'),
+    difficultyLevel: z
+      .enum(['beginner', 'intermediate', 'advanced'])
+      .optional()
+      .default('intermediate')
+      .describe('Target difficulty level'),
+    questionTypes: z
+      .array(z.string())
+      .optional()
+      .default(['definition', 'concept', 'application'])
+      .describe('Types of questions to generate'),
+    generateImages: z.boolean().optional().default(false).describe('Whether to generate educational images'),
+    imageStyle: z
+      .enum(['educational', 'diagram', 'illustration', 'realistic', 'minimalist', 'scientific'])
+      .optional()
+      .default('educational')
+      .describe('Style for generated images'),
+    focusAreas: z
+      .array(z.string())
+      .optional()
+      .describe('Specific areas to focus on (e.g., "definitions", "concepts", "formulas")'),
+  })
+  .refine(data => data.pdfUrl || data.pdfData, {
+    message: 'Either pdfUrl or pdfData must be provided',
+    path: ['pdfUrl', 'pdfData'],
+  });
 
 const outputSchema = z.object({
-  flashCards: z.array(z.object({
-    question: z.string(),
-    answer: z.string(),
-    questionType: z.string(),
-    difficulty: z.string(),
-    category: z.string(),
-    tags: z.array(z.string()),
-    hint: z.string().optional(),
-    explanation: z.string().optional(),
-    imageUrl: z.string().optional(),
-  })),
+  flashCards: z.array(
+    z.object({
+      question: z.string(),
+      answer: z.string(),
+      questionType: z.string(),
+      difficulty: z.string(),
+      category: z.string(),
+      tags: z.array(z.string()),
+      hint: z.string().optional(),
+      explanation: z.string().optional(),
+      imageUrl: z.string().optional(),
+    }),
+  ),
   metadata: z.object({
     totalCards: z.number(),
     cardsByDifficulty: z.object({
@@ -83,14 +84,18 @@ const extractPdfContentStep = createStep({
   outputSchema: z.object({
     educationalSummary: z.string(),
     keyTopics: z.array(z.string()),
-    definitions: z.array(z.object({
-      term: z.string(),
-      definition: z.string(),
-    })),
-    concepts: z.array(z.object({
-      concept: z.string(),
-      explanation: z.string(),
-    })),
+    definitions: z.array(
+      z.object({
+        term: z.string(),
+        definition: z.string(),
+      }),
+    ),
+    concepts: z.array(
+      z.object({
+        concept: z.string(),
+        explanation: z.string(),
+      }),
+    ),
     facts: z.array(z.string()),
     subjectArea: z.string().optional(),
     fileSize: z.number(),
@@ -104,7 +109,7 @@ const extractPdfContentStep = createStep({
 
     const inputType = pdfData ? 'attachment' : 'url';
     const source = pdfData ? filename || 'attached file' : pdfUrl;
-    
+
     console.log(`📄 Extracting educational content from PDF ${inputType}: ${source}`);
 
     try {
@@ -120,7 +125,9 @@ const extractPdfContentStep = createStep({
         runtimeContext: runtimeContext || new RuntimeContext(),
       });
 
-      console.log(`✅ Extracted content: ${extractionResult.keyTopics.length} topics, ${extractionResult.definitions.length} definitions, ${extractionResult.concepts.length} concepts`);
+      console.log(
+        `✅ Extracted content: ${extractionResult.keyTopics.length} topics, ${extractionResult.definitions.length} definitions, ${extractionResult.concepts.length} concepts`,
+      );
 
       return {
         ...extractionResult,
@@ -129,7 +136,9 @@ const extractPdfContentStep = createStep({
       };
     } catch (error) {
       console.error('❌ PDF content extraction failed:', error);
-      throw new Error(`Failed to extract content from PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to extract content from PDF: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   },
 });
@@ -141,41 +150,52 @@ const analyzeContentStep = createStep({
   inputSchema: z.object({
     educationalSummary: z.string(),
     keyTopics: z.array(z.string()),
-    definitions: z.array(z.object({
-      term: z.string(),
-      definition: z.string(),
-    })),
-    concepts: z.array(z.object({
-      concept: z.string(),
-      explanation: z.string(),
-    })),
+    definitions: z.array(
+      z.object({
+        term: z.string(),
+        definition: z.string(),
+      }),
+    ),
+    concepts: z.array(
+      z.object({
+        concept: z.string(),
+        explanation: z.string(),
+      }),
+    ),
     facts: z.array(z.string()),
     subjectArea: z.string().optional(),
     difficultyLevel: z.enum(['beginner', 'intermediate', 'advanced']),
     focusAreas: z.array(z.string()).optional(),
   }),
   outputSchema: z.object({
-    analyzedConcepts: z.array(z.object({
-      concept: z.string(),
-      explanation: z.string(),
-      difficulty: z.enum(['beginner', 'intermediate', 'advanced']),
-      keywords: z.array(z.string()),
-    })),
-    analyzedDefinitions: z.array(z.object({
-      term: z.string(),
-      definition: z.string(),
-      context: z.string().optional(),
-    })),
-    analyzedFacts: z.array(z.object({
-      fact: z.string(),
-      category: z.string(),
-      context: z.string().optional(),
-    })),
+    analyzedConcepts: z.array(
+      z.object({
+        concept: z.string(),
+        explanation: z.string(),
+        difficulty: z.enum(['beginner', 'intermediate', 'advanced']),
+        keywords: z.array(z.string()),
+      }),
+    ),
+    analyzedDefinitions: z.array(
+      z.object({
+        term: z.string(),
+        definition: z.string(),
+        context: z.string().optional(),
+      }),
+    ),
+    analyzedFacts: z.array(
+      z.object({
+        fact: z.string(),
+        category: z.string(),
+        context: z.string().optional(),
+      }),
+    ),
     suggestedQuestionTypes: z.array(z.string()),
     finalSubjectArea: z.string(),
   }),
   execute: async ({ inputData, runtimeContext, mastra }) => {
-    const { educationalSummary, keyTopics, definitions, concepts, facts, subjectArea, difficultyLevel, focusAreas } = inputData;
+    const { educationalSummary, keyTopics, definitions, concepts, facts, subjectArea, difficultyLevel, focusAreas } =
+      inputData;
 
     console.log('🔍 Analyzing content for flash card generation...');
 
@@ -202,7 +222,7 @@ const analyzeContentStep = createStep({
       };
     } catch (error) {
       console.error('❌ Content analysis failed:', error);
-      
+
       // Fallback analysis using original extracted content
       return {
         analyzedConcepts: concepts.map(c => ({
@@ -229,22 +249,28 @@ const generateFlashCardsStep = createStep({
   id: 'generate-flash-cards',
   description: 'Generate educational flash cards from analyzed content',
   inputSchema: z.object({
-    analyzedConcepts: z.array(z.object({
-      concept: z.string(),
-      explanation: z.string(),
-      difficulty: z.enum(['beginner', 'intermediate', 'advanced']),
-      keywords: z.array(z.string()),
-    })),
-    analyzedDefinitions: z.array(z.object({
-      term: z.string(),
-      definition: z.string(),
-      context: z.string().optional(),
-    })),
-    analyzedFacts: z.array(z.object({
-      fact: z.string(),
-      category: z.string(),
-      context: z.string().optional(),
-    })),
+    analyzedConcepts: z.array(
+      z.object({
+        concept: z.string(),
+        explanation: z.string(),
+        difficulty: z.enum(['beginner', 'intermediate', 'advanced']),
+        keywords: z.array(z.string()),
+      }),
+    ),
+    analyzedDefinitions: z.array(
+      z.object({
+        term: z.string(),
+        definition: z.string(),
+        context: z.string().optional(),
+      }),
+    ),
+    analyzedFacts: z.array(
+      z.object({
+        fact: z.string(),
+        category: z.string(),
+        context: z.string().optional(),
+      }),
+    ),
     suggestedQuestionTypes: z.array(z.string()),
     finalSubjectArea: z.string(),
     numberOfCards: z.number(),
@@ -252,16 +278,18 @@ const generateFlashCardsStep = createStep({
     questionTypes: z.array(z.string()),
   }),
   outputSchema: z.object({
-    flashCards: z.array(z.object({
-      question: z.string(),
-      answer: z.string(),
-      questionType: z.string(),
-      difficulty: z.string(),
-      category: z.string(),
-      tags: z.array(z.string()),
-      hint: z.string().optional(),
-      explanation: z.string().optional(),
-    })),
+    flashCards: z.array(
+      z.object({
+        question: z.string(),
+        answer: z.string(),
+        questionType: z.string(),
+        difficulty: z.string(),
+        category: z.string(),
+        tags: z.array(z.string()),
+        hint: z.string().optional(),
+        explanation: z.string().optional(),
+      }),
+    ),
     metadata: z.object({
       totalCards: z.number(),
       cardsByDifficulty: z.object({
@@ -275,15 +303,15 @@ const generateFlashCardsStep = createStep({
     }),
   }),
   execute: async ({ inputData, runtimeContext, mastra }) => {
-    const { 
-      analyzedConcepts, 
-      analyzedDefinitions, 
-      analyzedFacts, 
+    const {
+      analyzedConcepts,
+      analyzedDefinitions,
+      analyzedFacts,
       suggestedQuestionTypes,
       finalSubjectArea,
-      numberOfCards, 
-      difficultyLevel, 
-      questionTypes 
+      numberOfCards,
+      difficultyLevel,
+      questionTypes,
     } = inputData;
 
     console.log(`🃏 Generating ${numberOfCards} flash cards...`);
@@ -318,32 +346,36 @@ const generateImagesStep = createStep({
   id: 'generate-images',
   description: 'Generate educational images for flash cards that would benefit from visual aids',
   inputSchema: z.object({
-    flashCards: z.array(z.object({
-      question: z.string(),
-      answer: z.string(),
-      questionType: z.string(),
-      difficulty: z.string(),
-      category: z.string(),
-      tags: z.array(z.string()),
-      hint: z.string().optional(),
-      explanation: z.string().optional(),
-    })),
+    flashCards: z.array(
+      z.object({
+        question: z.string(),
+        answer: z.string(),
+        questionType: z.string(),
+        difficulty: z.string(),
+        category: z.string(),
+        tags: z.array(z.string()),
+        hint: z.string().optional(),
+        explanation: z.string().optional(),
+      }),
+    ),
     generateImages: z.boolean(),
     imageStyle: z.enum(['educational', 'diagram', 'illustration', 'realistic', 'minimalist', 'scientific']),
     subjectArea: z.string(),
   }),
   outputSchema: z.object({
-    flashCardsWithImages: z.array(z.object({
-      question: z.string(),
-      answer: z.string(),
-      questionType: z.string(),
-      difficulty: z.string(),
-      category: z.string(),
-      tags: z.array(z.string()),
-      hint: z.string().optional(),
-      explanation: z.string().optional(),
-      imageUrl: z.string().optional(),
-    })),
+    flashCardsWithImages: z.array(
+      z.object({
+        question: z.string(),
+        answer: z.string(),
+        questionType: z.string(),
+        difficulty: z.string(),
+        category: z.string(),
+        tags: z.array(z.string()),
+        hint: z.string().optional(),
+        explanation: z.string().optional(),
+        imageUrl: z.string().optional(),
+      }),
+    ),
   }),
   execute: async ({ inputData, runtimeContext, mastra }) => {
     const { flashCards, generateImages, imageStyle, subjectArea } = inputData;
@@ -364,9 +396,11 @@ const generateImagesStep = createStep({
         let imageUrl;
 
         // Generate images for cards that would benefit from visual aids
-        const shouldGenerateImage = 
-          card.questionType === 'concept' || 
-          card.tags.some(tag => ['diagram', 'process', 'structure', 'anatomy', 'geography'].includes(tag.toLowerCase())) ||
+        const shouldGenerateImage =
+          card.questionType === 'concept' ||
+          card.tags.some(tag =>
+            ['diagram', 'process', 'structure', 'anatomy', 'geography'].includes(tag.toLowerCase()),
+          ) ||
           card.category.toLowerCase().includes('biology') ||
           card.category.toLowerCase().includes('chemistry') ||
           card.category.toLowerCase().includes('physics');
@@ -404,7 +438,7 @@ const generateImagesStep = createStep({
       return { flashCardsWithImages };
     } catch (error) {
       console.error('❌ Image generation failed:', error);
-      
+
       // Return cards without images if generation fails
       return {
         flashCardsWithImages: flashCards.map(card => ({ ...card, imageUrl: undefined })),
@@ -434,18 +468,22 @@ export const flashCardsGenerationWorkflow = createWorkflow({
     definitions: {
       step: extractPdfContentStep,
       path: 'definitions',
-      schema: z.array(z.object({
-        term: z.string(),
-        definition: z.string(),
-      })),
+      schema: z.array(
+        z.object({
+          term: z.string(),
+          definition: z.string(),
+        }),
+      ),
     },
     concepts: {
       step: extractPdfContentStep,
       path: 'concepts',
-      schema: z.array(z.object({
-        concept: z.string(),
-        explanation: z.string(),
-      })),
+      schema: z.array(
+        z.object({
+          concept: z.string(),
+          explanation: z.string(),
+        }),
+      ),
     },
     facts: {
       step: extractPdfContentStep,
@@ -477,30 +515,36 @@ export const flashCardsGenerationWorkflow = createWorkflow({
     analyzedConcepts: {
       step: analyzeContentStep,
       path: 'analyzedConcepts',
-      schema: z.array(z.object({
-        concept: z.string(),
-        explanation: z.string(),
-        difficulty: z.enum(['beginner', 'intermediate', 'advanced']),
-        keywords: z.array(z.string()),
-      })),
+      schema: z.array(
+        z.object({
+          concept: z.string(),
+          explanation: z.string(),
+          difficulty: z.enum(['beginner', 'intermediate', 'advanced']),
+          keywords: z.array(z.string()),
+        }),
+      ),
     },
     analyzedDefinitions: {
       step: analyzeContentStep,
       path: 'analyzedDefinitions',
-      schema: z.array(z.object({
-        term: z.string(),
-        definition: z.string(),
-        context: z.string().optional(),
-      })),
+      schema: z.array(
+        z.object({
+          term: z.string(),
+          definition: z.string(),
+          context: z.string().optional(),
+        }),
+      ),
     },
     analyzedFacts: {
       step: analyzeContentStep,
       path: 'analyzedFacts',
-      schema: z.array(z.object({
-        fact: z.string(),
-        category: z.string(),
-        context: z.string().optional(),
-      })),
+      schema: z.array(
+        z.object({
+          fact: z.string(),
+          category: z.string(),
+          context: z.string().optional(),
+        }),
+      ),
     },
     suggestedQuestionTypes: {
       step: analyzeContentStep,
@@ -539,16 +583,18 @@ export const flashCardsGenerationWorkflow = createWorkflow({
     flashCards: {
       step: generateFlashCardsStep,
       path: 'flashCards',
-      schema: z.array(z.object({
-        question: z.string(),
-        answer: z.string(),
-        questionType: z.string(),
-        difficulty: z.string(),
-        category: z.string(),
-        tags: z.array(z.string()),
-        hint: z.string().optional(),
-        explanation: z.string().optional(),
-      })),
+      schema: z.array(
+        z.object({
+          question: z.string(),
+          answer: z.string(),
+          questionType: z.string(),
+          difficulty: z.string(),
+          category: z.string(),
+          tags: z.array(z.string()),
+          hint: z.string().optional(),
+          explanation: z.string().optional(),
+        }),
+      ),
     },
     generateImages: {
       schema: z.boolean(),

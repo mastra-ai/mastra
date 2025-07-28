@@ -12,7 +12,8 @@ const memory = new Memory({
 
 export const contentAnalyzerAgent = new Agent({
   name: 'Educational Content Analyzer Agent',
-  description: 'An agent specialized in analyzing educational content to identify key concepts, definitions, and learning elements suitable for flash card generation',
+  description:
+    'An agent specialized in analyzing educational content to identify key concepts, definitions, and learning elements suitable for flash card generation',
   instructions: `
 You are an expert educational content analyst and learning specialist. Your role is to analyze educational materials and identify the most important elements for creating effective flash cards.
 
