@@ -16,15 +16,26 @@ The `messages` parameter can be:
 - A single string
 - An array of strings
 - An array of message objects with `role` and `content` properties
+- An array of `UIMessageWithMetadata` objects (for messages with metadata)
 
-The message object structure:
+The message object structures:
 
 ```typescript
 interface Message {
   role: "system" | "user" | "assistant";
   content: string;
 }
+
+// For messages with metadata
+interface UIMessageWithMetadata {
+  role: "user" | "assistant";
+  content: string;
+  parts: Array<{ type: string; text?: string; [key: string]: any }>;
+  metadata?: Record<string, unknown>; // Optional metadata field
+}
 ```
+
+When using `UIMessageWithMetadata`, the metadata will be preserved throughout the conversation and stored with the messages in memory.
 
 ### `options` (Optional)
 
@@ -181,6 +192,12 @@ An optional object that can include configuration for output structure, memory m
       description:
         "Tools that are executed on the 'client' side of the request. These tools do not have execute functions in the definition.",
     },
+    {
+      name: "savePerStep",
+      type: "boolean",
+      isOptional: true,
+      description: "Save messages incrementally after each generation step completes (default: false)",
+    }
   ]}
 />
 

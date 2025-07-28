@@ -78,21 +78,23 @@ export class StoreOperationsMongoDB extends StoreOperations {
     }
   }
 
+  private processJsonbFields(tableName: TABLE_NAMES, record: Record<string, any>): Record<string, any> {
+    const schema = TABLE_SCHEMAS[tableName];
+
+    return Object.fromEntries(
+      Object.entries(schema).map(([key, value]) => {
+        if (value.type === 'jsonb' && record[key] && typeof record[key] === 'string') {
+          return [key, safelyParseJSON(record[key])];
+        }
+        return [key, record[key]];
+      }),
+    );
+  }
+
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
       const collection = await this.getCollection(tableName);
-
-      const schema = TABLE_SCHEMAS[tableName];
-
-      const recordToInsert = Object.fromEntries(
-        Object.entries(schema).map(([key, value]) => {
-          if (value.type === 'jsonb' && record[key] && typeof record[key] === 'string') {
-            return [key, safelyParseJSON(record[key])];
-          }
-          return [key, record[key]];
-        }),
-      );
-
+      const recordToInsert = this.processJsonbFields(tableName, record);
       await collection.insertOne(recordToInsert);
     } catch (error) {
       if (error instanceof Error) {
@@ -118,7 +120,8 @@ export class StoreOperationsMongoDB extends StoreOperations {
 
     try {
       const collection = await this.getCollection(tableName);
-      await collection.insertMany(records);
+      const processedRecords = records.map(record => this.processJsonbFields(tableName, record));
+      await collection.insertMany(processedRecords);
     } catch (error) {
       throw new MastraError(
         {
