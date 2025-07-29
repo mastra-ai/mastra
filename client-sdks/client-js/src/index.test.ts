@@ -342,13 +342,13 @@ d:{"finishReason":"stop","usage":{"promptTokens":2,"completionTokens":2}}
           new Response(firstResponseBody, {
             status: 200,
             headers: new Headers({ 'Content-Type': 'text/event-stream' }),
-          })
+          }),
         )
         .mockResolvedValueOnce(
           new Response(secondResponseBody, {
             status: 200,
             headers: new Headers({ 'Content-Type': 'text/event-stream' }),
-          })
+          }),
         );
 
       const response = await agent.stream({
@@ -400,7 +400,7 @@ d:{"finishReason":"stop","usage":{"promptTokens":2,"completionTokens":2}}
       expect(secondRequestBody.messages[1].parts).toEqual([
         {
           type: 'text',
-          text: 'test response'
+          text: 'test response',
         },
         {
           type: 'tool-invocation',
@@ -410,11 +410,11 @@ d:{"finishReason":"stop","usage":{"promptTokens":2,"completionTokens":2}}
             toolCallId: 'tool1',
             toolName: 'testTool',
             args: {
-              arg1: 'value1'
+              arg1: 'value1',
             },
-            result: 'test result'
-          }
-        }
+            result: 'test result',
+          },
+        },
       ]);
     });
 
