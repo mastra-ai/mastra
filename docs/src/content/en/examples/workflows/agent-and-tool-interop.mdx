@@ -3,242 +3,135 @@ title: "Example: Using a Tool/Agent as a Step | Workflows | Mastra Docs"
 description: Example of using Mastra to integrate a tool or an agent as a step in a workflow.
 ---
 
-# Tool/Agent as a Workflow step
+# Agents and Tools as steps
 
-This example demonstrates how to create and integrate a tool or an agent as a workflow step.
-Mastra provides a `createStep` helper function which accepts either a step or agent and returns an object which satisfies the Step interface.
+Workflows can include both agents and tools as steps. These examples show how to define each and use them with `createStep()`.
 
-## Setup
+## Creating an agent
 
-```sh copy
-npm install @ai-sdk/openai @mastra/core
-```
+Create a simple agent that returns facts about a city.
 
-## Define Weather Reporter Agent
-
-Define a weather reporter agent that leverages an LLM to explain the weather report like a weather reporter.
-
-```ts showLineNumbers copy filename="agents/weather-reporter-agent.ts"
+```typescript filename="src/mastra/agents/example-city-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
-// Create an agent that explains weather reports in a conversational style
-export const weatherReporterAgent = new Agent({
-  name: "weatherExplainerAgent",
-  model: openai("gpt-4o"),
-  instructions: `
-  You are a weather explainer. You have access to input that will help you get weather-specific activities for any city.
-  The tool uses agents to plan the activities, you just need to provide the city. Explain the weather report like a weather reporter.
-  `,
+export const cityAgent = new Agent({
+  name: "city-agent",
+  description: "Create facts for a city",
+  instructions: `Return an interesting fact based on the city provided`,
+  model: openai("gpt-4o")
 });
 ```
 
-## Define Weather Tool
+### Agent input/output schema
 
-Define a weather tool that take a location name as input and outputs detailed weather information.
+Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output.
 
-```ts showLineNumbers copy filename="tools/weather-tool.ts"
+```typescript
+{
+  inputSchema: {
+    prompt: string
+  },
+  outputSchema: {
+    text: string
+  }
+}
+```
+
+## Agent as step
+
+To use an agent as a step, pass it directly to `createStep()`. Use the `.map()` method to transform the workflow input into the shape the agent expects.
+
+In this example, the workflow receives a `city` input, maps it to a `prompt`, then calls the agent. The agent returns a `text` string, which is passed directly to the workflow output. Although the output schema expects a `facts` field, no additional mapping is required.
+
+```typescript filename="src/mastra/workflows/example-agent-step.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+import { cityAgent } from "../agents/example-city-agent";
+
+const step1 = createStep(cityAgent);
+
+export const agentAsStep = createWorkflow({
+  id: "agent-step-workflow",
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    facts: z.string()
+  })
+})
+  .map(async ({ inputData }) => {
+    const { city } = inputData;
+    return {
+      prompt: `Create an interesting fact about ${city}`
+    };
+  })
+
+  .then(step1)
+  .commit();
+```
+
+## Creating a tool
+
+Create a simple tool that takes a string input and returns the reversed version.
+
+```typescript filename="src/mastra/tools/example-reverse-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
-interface GeocodingResponse {
-  results: {
-    latitude: number;
-    longitude: number;
-    name: string;
-  }[];
-}
-interface WeatherResponse {
-  current: {
-    time: string;
-    temperature_2m: number;
-    apparent_temperature: number;
-    relative_humidity_2m: number;
-    wind_speed_10m: number;
-    wind_gusts_10m: number;
-    weather_code: number;
-  };
-}
-
-// Create a tool to fetch weather data
-export const weatherTool = createTool({
-  id: "get-weather",
-  description: "Get current weather for a location",
+export const reverseTool = createTool({
+  id: "reverse-tool",
+  description: "Reverse the input string",
   inputSchema: z.object({
-    location: z.string().describe("City name"),
+    input: z.string()
   }),
   outputSchema: z.object({
-    temperature: z.number(),
-    feelsLike: z.number(),
-    humidity: z.number(),
-    windSpeed: z.number(),
-    windGust: z.number(),
-    conditions: z.string(),
-    location: z.string(),
+    output: z.string()
   }),
   execute: async ({ context }) => {
-    return await getWeather(context.location);
-  },
-});
+    const { input } = context;
+    const reversed = input.split("").reverse().join("");
 
-// Helper function to fetch weather data from external APIs
-const getWeather = async (location: string) => {
-  const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`;
-  const geocodingResponse = await fetch(geocodingUrl);
-  const geocodingData = (await geocodingResponse.json()) as GeocodingResponse;
-
-  if (!geocodingData.results?.[0]) {
-    throw new Error(`Location '${location}' not found`);
+    return {
+      output: reversed
+    };
   }
-
-  const { latitude, longitude, name } = geocodingData.results[0];
-
-  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code`;
-
-  const response = await fetch(weatherUrl);
-  const data = (await response.json()) as WeatherResponse;
-
-  return {
-    temperature: data.current.temperature_2m,
-    feelsLike: data.current.apparent_temperature,
-    humidity: data.current.relative_humidity_2m,
-    windSpeed: data.current.wind_speed_10m,
-    windGust: data.current.wind_gusts_10m,
-    conditions: getWeatherCondition(data.current.weather_code),
-    location: name,
-  };
-};
-
-// Helper function to convert numeric weather codes to human-readable descriptions
-function getWeatherCondition(code: number): string {
-  const conditions: Record<number, string> = {
-    0: "Clear sky",
-    1: "Mainly clear",
-    2: "Partly cloudy",
-    3: "Overcast",
-    45: "Foggy",
-    48: "Depositing rime fog",
-    51: "Light drizzle",
-    53: "Moderate drizzle",
-    55: "Dense drizzle",
-    56: "Light freezing drizzle",
-    57: "Dense freezing drizzle",
-    61: "Slight rain",
-    63: "Moderate rain",
-    65: "Heavy rain",
-    66: "Light freezing rain",
-    67: "Heavy freezing rain",
-    71: "Slight snow fall",
-    73: "Moderate snow fall",
-    75: "Heavy snow fall",
-    77: "Snow grains",
-    80: "Slight rain showers",
-    81: "Moderate rain showers",
-    82: "Violent rain showers",
-    85: "Slight snow showers",
-    86: "Heavy snow showers",
-    95: "Thunderstorm",
-    96: "Thunderstorm with slight hail",
-    99: "Thunderstorm with heavy hail",
-  };
-  return conditions[code] || "Unknown";
-}
+});
 ```
 
-## Define Interop Workflow
+## Tool as step
 
-Defines a workflow which takes an agent and tool as a step.
+Use a tool as a step by passing it directly to `createStep()`. Using `.map()` is optional because tools define their own input and output schemas, but can be helpful when the workflow `inputSchema` doesn't match the tool's `inputSchema`.
 
-```ts showLineNumbers copy filename="workflows/interop-workflow.ts"
+In this example, the workflow accepts a `word`, which is mapped to the tool's `input`. The tool returns an `output` string, which is passed directly to the workflow's `reversed` output without any extra transformation.
+
+```typescript filename="src/mastra/workflows/example-tool-step.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { weatherTool } from "../tools/weather-tool";
-import { weatherReporterAgent } from "../agents/weather-reporter-agent";
 import { z } from "zod";
 
-// Create workflow steps from existing tool and agent
-const fetchWeather = createStep(weatherTool);
-const reportWeather = createStep(weatherReporterAgent);
+import { reverseTool } from "../tools/example-reverse-tool";
 
-const weatherWorkflow = createWorkflow({
-  steps: [fetchWeather, reportWeather],
-  id: "weather-workflow-step1-single-day",
+const step1 = createStep(reverseTool);
+
+export const toolAsStep = createWorkflow({
+  id: "tool-step-workflow",
   inputSchema: z.object({
-    location: z.string().describe("The city to get the weather for"),
+    word: z.string()
   }),
   outputSchema: z.object({
-    text: z.string(),
-  }),
+    reversed: z.string()
+  })
 })
-  .then(fetchWeather)
-  .then(
-    createStep({
-      id: "report-weather",
-      inputSchema: fetchWeather.outputSchema,
-      outputSchema: z.object({
-        text: z.string(),
-      }),
-      execute: async ({ inputData, mastra }) => {
-        // Create a prompt with the weather data
-        const prompt = "Forecast data: " + JSON.stringify(inputData);
-        const agent = mastra.getAgent("weatherReporterAgent");
+  .map(async ({ inputData }) => {
+    const { word } = inputData;
 
-        // Generate a weather report using the agent
-        const result = await agent.generate([
-          {
-            role: "user",
-            content: prompt,
-          },
-        ]);
-        return { text: result.text };
-      },
-    }),
-  );
-
-weatherWorkflow.commit();
-
-export { weatherWorkflow };
-```
-
-## Register Workflow instance with Mastra class
-
-Register the workflow with the mastra instance.
-
-```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from "@mastra/core/mastra";
-import { PinoLogger } from "@mastra/loggers";
-import { weatherWorkflow } from "./workflows/interop-workflow";
-import { weatherReporterAgent } from "./agents/weather-reporter-agent";
-
-// Create a new Mastra instance with our components
-const mastra = new Mastra({
-  workflows: {
-    weatherWorkflow,
-  },
-  agents: {
-    weatherReporterAgent,
-  },
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
-  }),
-});
-
-export { mastra };
-```
-
-## Execute the workflow
-
-Here, we'll get the weather workflow from the mastra instance, then create a run and execute the created run with the required inputData.
-
-```ts showLineNumbers copy filename="exec.ts"
-import { mastra } from "./";
-
-const workflow = mastra.getWorkflow("weatherWorkflow");
-const run = await workflow.createRunAsync();
-
-// Start the workflow with Lagos as the location
-const result = await run.start({ inputData: { location: "Lagos" } });
-console.dir(result, { depth: null });
+    return {
+      input: word
+    };
+  })
+  .then(step1)
+  .commit();
 ```
 
 ## Workflows (Legacy)

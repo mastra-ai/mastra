@@ -62,6 +62,8 @@ export const branchSteps = createWorkflow({
   .commit();
 ```
 
+> Run this example with an input value of less than or greater than 10.
+
 ## Conditional logic using workflows
 
 In this example, the workflow uses `.branch()` to execute one of two nested workflows based on a condition. If the input `value` is less than or equal to 10, it runs `lessThanWorkflow`, which runs the `lessThanStep`. If the value is greater than 10, it runs `greaterThanWorkflow`, which runs the `greaterThanStep`.
@@ -140,6 +142,8 @@ export const branchWorkflows = createWorkflow({
   ])
   .commit();
 ```
+
+> Run this example with an input value of less than or greater than 10.
 
 ## Workflows (Legacy)
 
