@@ -142,7 +142,6 @@ export const chefAgentResponses = new Agent({
   model: openai.responses('gpt-4o'),
   tools: async () => {
     return {
-      // ...(await mcpInstance.getTools()),
       web_search_preview: openai.tools.webSearchPreview(),
     };
   },
