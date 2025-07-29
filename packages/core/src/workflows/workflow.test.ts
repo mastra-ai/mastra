@@ -929,7 +929,8 @@ describe('Workflow', () => {
     });
 
     it('should preserve input property from snapshot context after resume', async () => {
-      const step1Action = vi.fn()
+      const step1Action = vi
+        .fn()
         .mockImplementationOnce(async ({ suspend }) => {
           await suspend();
           return undefined;
@@ -959,7 +960,7 @@ describe('Workflow', () => {
 
       const run = await workflow.createRunAsync({ runId: 'test-run-id' });
       const originalInput = { originalInput: 'original-data' };
-      
+
       const { stream, getWorkflowState } = run.stream({ inputData: originalInput });
 
       for await (const data of stream) {
@@ -978,10 +979,10 @@ describe('Workflow', () => {
       // Verify that the input property is preserved from the original snapshot context
       // This is the key test: input should come from snapshot.context.input, not from resumeData
       expect(result.steps.input).toEqual(originalInput);
-      
+
       // Also verify that the step received the original input as payload, not the resume data
       expect(result.steps.step1.payload).toEqual(originalInput);
-      
+
       // Verify that resume data is separate from the input
       if (result.steps.step1.status === 'success') {
         expect(result.steps.step1).toMatchObject({
