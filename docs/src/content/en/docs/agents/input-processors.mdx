@@ -236,7 +236,7 @@ class MessageLengthLimiter implements InputProcessor {
       if (error instanceof TripWire) {
         throw error; // Re-throw tripwire errors
       }
-      throw new Error(`Moderation failed: ${error instanceof Error ? error.message : 'Unknown error'}`); // application level throw a standard error
+      throw new Error(`Length validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`); // application level throw a standard error
     }
     
     return messages;
