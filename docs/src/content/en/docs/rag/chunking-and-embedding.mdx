@@ -34,7 +34,7 @@ Here's an example of how to use the `recursive` strategy:
 ```ts showLineNumbers copy
 const chunks = await doc.chunk({
   strategy: "recursive",
-  size: 512,
+  maxSize: 512,
   overlap: 50,
   separators: ["\n"],
   extract: {
@@ -146,7 +146,7 @@ const doc = MDocument.fromText(`
 // Create chunks
 const chunks = await doc.chunk({
   strategy: "recursive",
-  size: 256,
+  maxSize: 256,
   overlap: 50,
 });
 

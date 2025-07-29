@@ -54,11 +54,11 @@ The following parameters are available for all chunking strategies:
         "The chunking strategy to use. If not specified, defaults based on document type. Depending on the chunking strategy, there are additional optionals. Defaults: .md files → 'markdown', .html/.htm → 'html', .json → 'json', .tex → 'latex', others → 'recursive'",
     },
     {
-      name: "size",
+      name: "maxSize",
       type: "number",
       isOptional: true,
-      defaultValue: "512",
-      description: "Maximum size of each chunk",
+      defaultValue: "4000",
+      description: "Maximum size of each chunk, applied universally across all strategies.",
     },
     {
       name: "overlap",
@@ -114,7 +114,7 @@ const chunks = await doc.chunk({
   strategy: "character",
   separator: ".",
   isSeparatorRegex: false, // Character-specific option
-  size: 300, // general option
+  maxSize: 300, // general option
 });
 
 // Recursive strategy example
@@ -122,7 +122,7 @@ const chunks = await doc.chunk({
   strategy: "recursive",
   separators: ["\n\n", "\n", " "], // Recursive-specific option
   language: "markdown", // Recursive-specific option
-  size: 500, // general option
+  maxSize: 500, // general option
 });
 
 // Sentence strategy example
@@ -143,7 +143,7 @@ const chunks = await doc.chunk({
     ["h2", "subtitle"],
   ], // HTML-specific option
   sections: [["div.content", "main"]], // HTML-specific option
-  size: 500, // general option
+  maxSize: 500, // general option
 });
 
 // Markdown strategy example
@@ -162,7 +162,7 @@ const chunks = await doc.chunk({
   strategy: "token",
   encodingName: "gpt2", // Token-specific option
   modelName: "gpt-3.5-turbo", // Token-specific option
-  size: 1000, // general option
+  maxSize: 1000, // general option
 });
 ```
 
