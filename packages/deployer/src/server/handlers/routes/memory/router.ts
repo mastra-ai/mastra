@@ -293,7 +293,51 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 messages: {
                   type: 'array',
-                  items: { type: 'object' },
+                  description: 'Array of messages in either v1 or v2 format',
+                  items: {
+                    oneOf: [
+                      {
+                        type: 'object',
+                        description: 'Mastra Message v1 format',
+                        properties: {
+                          id: { type: 'string' },
+                          content: { type: 'string' },
+                          role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
+                          type: { type: 'string', enum: ['text', 'tool-call', 'tool-result'] },
+                          createdAt: { type: 'string', format: 'date-time' },
+                          threadId: { type: 'string' },
+                          resourceId: { type: 'string' },
+                        },
+                        required: ['content', 'role', 'type', 'threadId', 'resourceId'],
+                      },
+                      {
+                        type: 'object',
+                        description: 'Mastra Message v2 format',
+                        properties: {
+                          id: { type: 'string' },
+                          role: { type: 'string', enum: ['user', 'assistant'] },
+                          createdAt: { type: 'string', format: 'date-time' },
+                          threadId: { type: 'string' },
+                          resourceId: { type: 'string' },
+                          content: {
+                            type: 'object',
+                            properties: {
+                              format: { type: 'number', const: 2 },
+                              parts: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                              content: { type: 'string' },
+                              toolInvocations: { type: 'array' },
+                              experimental_attachments: { type: 'array' },
+                            },
+                            required: ['format', 'parts'],
+                          },
+                        },
+                        required: ['role', 'content', 'threadId', 'resourceId'],
+                      },
+                    ],
+                  },
                 },
               },
               required: ['messages'],
@@ -969,7 +1013,51 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 messages: {
                   type: 'array',
-                  items: { type: 'object' },
+                  description: 'Array of messages in either v1 or v2 format',
+                  items: {
+                    oneOf: [
+                      {
+                        type: 'object',
+                        description: 'Mastra Message v1 format',
+                        properties: {
+                          id: { type: 'string' },
+                          content: { type: 'string' },
+                          role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
+                          type: { type: 'string', enum: ['text', 'tool-call', 'tool-result'] },
+                          createdAt: { type: 'string', format: 'date-time' },
+                          threadId: { type: 'string' },
+                          resourceId: { type: 'string' },
+                        },
+                        required: ['content', 'role', 'type', 'threadId', 'resourceId'],
+                      },
+                      {
+                        type: 'object',
+                        description: 'Mastra Message v2 format',
+                        properties: {
+                          id: { type: 'string' },
+                          role: { type: 'string', enum: ['user', 'assistant'] },
+                          createdAt: { type: 'string', format: 'date-time' },
+                          threadId: { type: 'string' },
+                          resourceId: { type: 'string' },
+                          content: {
+                            type: 'object',
+                            properties: {
+                              format: { type: 'number', const: 2 },
+                              parts: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                              content: { type: 'string' },
+                              toolInvocations: { type: 'array' },
+                              experimental_attachments: { type: 'array' },
+                            },
+                            required: ['format', 'parts'],
+                          },
+                        },
+                        required: ['role', 'content', 'threadId', 'resourceId'],
+                      },
+                    ],
+                  },
                 },
               },
               required: ['messages'],
