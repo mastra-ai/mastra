@@ -15,10 +15,9 @@ export class HTMLHeaderTransformer {
   private headersToSplitOn: [string, string][];
   private returnEachElement: boolean;
 
-  constructor({ headers, returnEachLine = false, ...baseOptions }: HTMLChunkOptions & { headers: [string, string][] }) {
-    this.returnEachElement = returnEachLine;
-    this.headersToSplitOn = [...headers].sort();
-    Object.assign(this, baseOptions);
+  constructor(options: HTMLChunkOptions & { headers: [string, string][] }) {
+    this.returnEachElement = options.returnEachLine ?? false;
+    this.headersToSplitOn = [...options.headers].sort();
   }
 
   splitText({ text }: { text: string }): Document[] {
@@ -197,15 +196,11 @@ export class HTMLHeaderTransformer {
 
 export class HTMLSectionTransformer {
   private headersToSplitOn: Record<string, string>;
-  private options: Record<string, any>;
+  private textSplitter: RecursiveCharacterTransformer;
 
-  constructor({
-    sections,
-    returnEachLine = false,
-    ...baseOptions
-  }: HTMLChunkOptions & { sections: [string, string][] }) {
-    this.headersToSplitOn = Object.fromEntries(sections.map(([tag, name]) => [tag.toLowerCase(), name]));
-    this.options = { returnEachLine, ...baseOptions };
+  constructor(options: HTMLChunkOptions & { sections: [string, string][] }) {
+    this.headersToSplitOn = Object.fromEntries(options.sections.map(([tag, name]) => [tag.toLowerCase(), name]));
+    this.textSplitter = new RecursiveCharacterTransformer(options);
   }
 
   splitText(text: string): Document[] {
@@ -302,9 +297,8 @@ export class HTMLSectionTransformer {
       metadatas.push(doc.metadata);
     }
     const results = await this.createDocuments(texts, metadatas);
-    const textSplitter = new RecursiveCharacterTransformer(this.options || {});
 
-    return textSplitter.splitDocuments(results);
+    return this.textSplitter.splitDocuments(results);
   }
 
   createDocuments(texts: string[], metadatas?: Record<string, any>[]): Document[] {

@@ -9,7 +9,7 @@ import { LatexTransformer } from './transformers/latex';
 import { MarkdownHeaderTransformer, MarkdownTransformer } from './transformers/markdown';
 import { SentenceTransformer } from './transformers/sentence';
 import { TokenTransformer } from './transformers/token';
-import type { BaseChunkOptions, ChunkParams, ChunkStrategy, ExtractParams } from './types';
+import type { BaseChunkOptions, ChunkParams, ChunkStrategy, ExtractParams, HTMLChunkOptions } from './types';
 import { validateChunkParams } from './validation';
 
 export class MDocument {
@@ -197,10 +197,7 @@ export class MDocument {
 
   async chunkHTML(options?: BaseChunkOptions & Record<string, any>): Promise<void> {
     if (options?.headers?.length) {
-      const rt = new HTMLHeaderTransformer({
-        headers: options.headers,
-        returnEachLine: options?.returnEachLine,
-      });
+      const rt = new HTMLHeaderTransformer(options as HTMLChunkOptions & { headers: [string, string][] });
 
       const textSplit = rt.transformDocuments(this.chunks);
       this.chunks = textSplit;
@@ -208,7 +205,7 @@ export class MDocument {
     }
 
     if (options?.sections?.length) {
-      const rt = new HTMLSectionTransformer({ sections: options.sections });
+      const rt = new HTMLSectionTransformer(options as HTMLChunkOptions & { sections: [string, string][] });
 
       const textSplit = rt.transformDocuments(this.chunks);
       this.chunks = textSplit;
