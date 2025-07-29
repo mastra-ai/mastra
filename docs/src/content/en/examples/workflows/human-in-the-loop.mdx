@@ -42,7 +42,8 @@ const step2 = createStep({
     confirm: z.boolean()
   }),
   outputSchema: z.object({
-    value: z.number()
+    value: z.number(),
+    confirmed: z.boolean().optional()
   }),
   execute: async ({ inputData, resumeData, suspend }) => {
     const { value } = inputData;
