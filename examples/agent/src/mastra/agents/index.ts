@@ -131,14 +131,6 @@ const moderationDetector = new ModerationInputProcessor({
   strategy: 'block',
 });
 
-// const mcpInstance = new MCPClient({
-//   id: 'myMcpServerTwo',
-//   servers: {
-//     myMcpServerTwo: {
-//       url: new URL(`http://localhost:4111/api/mcp/myMcpServerTwo/mcp`),
-//     },
-//   },
-// });
 
 export const chefAgentResponses = new Agent({
   name: 'Chef Agent Responses',
