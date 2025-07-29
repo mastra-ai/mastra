@@ -163,7 +163,7 @@
     "ai": "^4.3.16",
     "date-fns": "^3.6.0",
     "dotenv": "^16.6.1",
-    "hono": "^4.8.4",
+    "hono": "^4.8.9",
     "hono-openapi": "^0.4.8",
     "js-tiktoken": "^1.0.16",
     "json-schema": "^0.4.0",
