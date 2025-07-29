@@ -28,6 +28,8 @@
       "@mastra/client-js": "link:../../client-sdks/client-js",
       "@mastra/mcp": "link:../../packages/mcp",
       "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/server": "link:../../packages/server",
+      "@mastra/deployer": "link:../../stores/deployer",
       "mastra": "link:../../packages/cli"
     }
   },

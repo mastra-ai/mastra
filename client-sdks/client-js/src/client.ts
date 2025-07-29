@@ -47,7 +47,6 @@ import type {
   SaveScoreParams,
   SaveScoreResponse,
 } from './types';
-import { A2AClient } from '@a2a-js/sdk/client';
 
 export class MastraClient extends BaseResource {
   constructor(options: ClientOptions) {

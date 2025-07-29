@@ -6,7 +6,7 @@ import type {
   SendStreamingMessageResponse,
   Task,
   TaskQueryParams,
-} from '@a2a-js/sdk';
+} from '@mastra/core/a2a';
 import type { ClientOptions } from '../types';
 import { BaseResource } from './base';
 

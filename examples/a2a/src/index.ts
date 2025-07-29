@@ -20,7 +20,7 @@ async function main() {
 
     // Step 1: Get the agent card to see its capabilities
     console.log('📋 Fetching agent card...');
-    const agentCard = await a2aClient.getAgentCard();
+    const agentCard = await a2aClient.getCard();
 
     console.log(`\nAgent Name: ${agentCard.name}`);
     console.log(`Description: ${agentCard.description}`);
@@ -29,47 +29,60 @@ async function main() {
     console.log('\n-------------------\n');
 
     // Step 2: Send a message to the agent
-    const taskId = `task-${Date.now()}`;
-    console.log(`📤 Sending message to agent (Task ID: ${taskId})...`);
+    const messageId = `message-${Date.now()}`;
+    console.log(`📤 Sending message to agent (Message ID: ${messageId})...`);
 
     const query = 'What are the latest developments in AI agent networks?';
     console.log(`Query: ${query}`);
 
     const response = await a2aClient.sendMessage({
-      id: taskId,
       message: {
         role: 'user',
-        parts: [{ type: 'text', text: query }],
+        parts: [{ kind: 'text', text: query }],
+        kind: 'message',
+        messageId,
       },
     });
 
     console.log(response);
+    if ('error' in response) {
+      throw new Error(response.error.message);
+    } else if ('messageId' in response.result) {
+      // TODO: Handle message response
+      // console.log(`MESSAGE: ${response.result.message}`);
+      return;
+    }
 
-    console.log(`\nTask Status: ${response.task.status}`);
+    console.log(`\nTask Status: ${response.result.status.state}`);
     console.log('\n🤖 Agent Response:');
     console.log(
-      response.task.status.message?.parts[0]?.type === 'text'
-        ? response.task.status.message.parts[0].text
+      response.result.status.message?.parts[0].kind === 'text'
+        ? response.result.status.message?.parts[0].text
         : 'No response content',
     );
 
     console.log('\n-------------------\n');
 
-    // Step 3: Get task status
-    console.log(`📥 Checking task status (Task ID: ${taskId})...`);
+    // // Step 3: Get task status
+    // const taskId = response.result.id;
+    // console.log(`📥 Checking task status (Task ID: ${taskId})...`);
 
-    const taskStatus = await a2aClient.getTask({
-      id: taskId,
-    });
+    // const taskStatus = await a2aClient.getTask({
+    //   id: taskId,
+    // });
+    // if ('error' in taskStatus) {
+    //   console.log(taskStatus);
+    //   throw new Error(taskStatus.error.message);
+    // }
 
-    console.log(`Task Status: ${taskStatus.status}`);
-    console.log('\n-------------------\n');
+    // console.log(`Task Status: ${taskStatus.result.status.state}`);
+    // console.log('\n-------------------\n');
 
     // Step 4: Demonstrate agent-to-agent communication
     console.log('🔄 Demonstrating agent-to-agent communication...');
 
     // Get another agent for A2A communication
-    const secondAgentId = process.env.SECOND_AGENT_ID || 'contentCreatorAgent';
+    const secondAgentId = 'contentCreatorAgent';
     console.log(`Connecting to second agent: ${secondAgentId}`);
 
     const secondA2aClient = client.getA2A(secondAgentId);
@@ -80,16 +93,24 @@ async function main() {
 
     const researchQuery = 'Provide a brief summary of agent networks in AI';
     const researchResponse = await a2aClient.sendMessage({
-      id: researchTaskId,
       message: {
         role: 'user',
-        parts: [{ type: 'text', text: researchQuery }],
+        parts: [{ kind: 'text', text: researchQuery }],
+        kind: 'message',
+        messageId: researchTaskId,
       },
     });
+    if ('error' in researchResponse) {
+      throw new Error(researchResponse.error.message);
+    } else if ('messageId' in researchResponse.result) {
+      // TODO: Handle message response
+      // console.log(`MESSAGE: ${response.result.message}`);
+      return;
+    }
 
     const researchResult =
-      researchResponse.task.status.message?.parts[0]?.type === 'text'
-        ? researchResponse.task.status.message.parts[0].text
+      researchResponse.result.status.message?.parts[0]?.kind === 'text'
+        ? researchResponse.result.status.message.parts[0].text
         : '';
     console.log('\nResearch Results:');
     console.log(researchResult.substring(0, 150) + '...');
@@ -100,17 +121,25 @@ async function main() {
 
     const contentPrompt = `Transform this research into an engaging blog post introduction:\n\n${researchResult}`;
     const contentResponse = await secondA2aClient.sendMessage({
-      id: contentTaskId,
       message: {
         role: 'user',
-        parts: [{ type: 'text', text: contentPrompt }],
+        parts: [{ kind: 'text', text: contentPrompt }],
+        kind: 'message',
+        messageId: contentTaskId,
       },
     });
+    if ('error' in contentResponse) {
+      throw new Error(contentResponse.error.message);
+    } else if ('messageId' in contentResponse.result) {
+      // TODO: Handle message response
+      // console.log(`MESSAGE: ${response.result.message}`);
+      return;
+    }
 
     console.log('\nFinal Content:');
     console.log(
-      contentResponse.task.status.message?.parts[0]?.type === 'text'
-        ? contentResponse.task.status.message.parts[0].text
+      contentResponse.result.status.message?.parts[0]?.kind === 'text'
+        ? contentResponse.result.status.message.parts[0].text
         : 'No content generated',
     );
 
