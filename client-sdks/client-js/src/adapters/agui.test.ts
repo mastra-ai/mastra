@@ -210,9 +210,9 @@ describe('AGUIAdapter', () => {
       model: mockModel,
     });
 
-    // Wrap the agent in a client-side agent object that matches what AGUIAdapter expects
+    // Create a mock client agent that simulates the expected behavior
     const clientAgent = {
-      stream: vi.fn().mockImplementation(async params => {
+      stream: vi.fn().mockImplementation(async (params: any) => {
         // Verify the parameters are passed correctly
         expect(params).toHaveProperty('messages');
         expect(params).toHaveProperty('threadId');
@@ -220,18 +220,14 @@ describe('AGUIAdapter', () => {
         expect(params).toHaveProperty('runId');
         expect(params).toHaveProperty('clientTools');
 
-        // Call the real agent's stream method with extracted parameters
-        const result = await agent.stream(params.messages, {
-          threadId: params.threadId,
-          resourceId: params.resourceId,
-          runId: params.runId,
-          clientTools: params.clientTools,
-        });
+        // Verify that messages array is passed, not the entire request object
+        expect(Array.isArray(params.messages)).toBe(true);
+        expect(params.messages[0]).toHaveProperty('role');
+        expect(params.messages[0]).toHaveProperty('content');
 
         // Return a mock processDataStream that mimics the expected behavior
         return {
-          ...result,
-          processDataStream: vi.fn().mockImplementation(async ({ onTextPart, onFinishMessagePart }) => {
+          processDataStream: vi.fn().mockImplementation(async ({ onTextPart, onFinishMessagePart }: any) => {
             // Simulate streaming text
             if (onTextPart) {
               onTextPart('Hello from agent');
@@ -247,7 +243,7 @@ describe('AGUIAdapter', () => {
 
     const adapter = new AGUIAdapter({
       agent: clientAgent as any,
-      agentId: 'test-agent',
+      agentId: 'test',
       resourceId: 'testAgent',
     });
 
@@ -276,7 +272,15 @@ describe('AGUIAdapter', () => {
       });
     });
 
-    // Verify the agent.stream was called with the correct structure
+    // Verify we received the expected events
+    expect(events).toHaveLength(5); // RUN_STARTED, TEXT_MESSAGE_START, TEXT_MESSAGE_CONTENT, TEXT_MESSAGE_END, RUN_FINISHED
+    expect(events[0].type).toBe('RUN_STARTED');
+    expect(events[1].type).toBe('TEXT_MESSAGE_START');
+    expect(events[2].type).toBe('TEXT_MESSAGE_CONTENT');
+    expect(events[3].type).toBe('TEXT_MESSAGE_END');
+    expect(events[4].type).toBe('RUN_FINISHED');
+
+    // Verify the stream method was called with the correct parameters
     expect(clientAgent.stream).toHaveBeenCalledWith({
       threadId: 'test-thread-id',
       resourceId: 'testAgent',
