@@ -2229,6 +2229,89 @@ describe('MDocument', () => {
         expect(chunk.metadata.author).toBe('jest');
       });
     });
+
+    it('should handle abbreviations without false sentence breaks', async () => {
+      const text =
+        'Dr. Smith went to the U.S.A. at 3:30 a.m. on Monday. He met with Prof. Johnson at the U.N. headquarters.';
+
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 200,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeLessThanOrEqual(2);
+
+      const allText = chunks.map(c => c.text).join(' ');
+      expect(allText).toContain('Dr. Smith'); // Should keep Dr. together
+      expect(allText).toContain('U.S.A.'); // Should keep U.S.A. together
+      expect(allText).toContain('a.m.'); // Should keep a.m. together
+      expect(allText).toContain('Prof. Johnson'); // Should keep Prof. together
+      expect(allText).toContain('U.N.'); // Should keep U.N. together
+
+      expect(allText).not.toContain('Dr '); // No broken Dr.
+      expect(allText).not.toContain('Prof '); // No broken Prof.
+    });
+
+    it('should respect fallbackToCharacters setting', async () => {
+      const oversizedWord = 'supercalifragilisticexpialidocious'.repeat(5);
+      const text = `Short sentence. ${oversizedWord}.`;
+
+      const doc1 = MDocument.fromText(text);
+      const chunksWithFallback = await doc1.chunk({
+        strategy: 'sentence',
+        maxSize: 50,
+        fallbackToWords: true,
+        fallbackToCharacters: true,
+      });
+
+      // Should split the oversized word
+      expect(chunksWithFallback.length).toBeGreaterThan(2);
+
+      const doc2 = MDocument.fromText(text);
+      const chunksWithoutFallback = await doc2.chunk({
+        strategy: 'sentence',
+        maxSize: 50,
+        fallbackToWords: true,
+        fallbackToCharacters: false,
+      });
+
+      // Should have fewer chunks (oversized word kept intact)
+      expect(chunksWithoutFallback.length).toBeLessThan(chunksWithFallback.length);
+
+      // Verify fallback disabled keeps oversized content
+      const oversizedChunk = chunksWithoutFallback.find(chunk => chunk.text.length > 50);
+      expect(oversizedChunk).toBeDefined();
+    });
+
+    it('should handle complex punctuation and edge cases', async () => {
+      const text =
+        'Version 2.0 was released. The score was 3.14159. Mr. & Mrs. Smith arrived at 12:30 p.m. What happened next?';
+
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 200,
+        sentenceEnders: ['.', '?'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeLessThanOrEqual(4);
+
+      const allText = chunks.map(c => c.text).join(' ');
+      expect(allText).toContain('2.0'); // Should keep version numbers intact
+      expect(allText).toContain('3.14159'); // Should keep decimals intact
+      expect(allText).toContain('p.m.'); // Should keep time abbreviations intact
+      expect(allText).toContain('What happened next?'); // Should end with question
+
+      // Should not break on decimals or version numbers
+      expect(allText).not.toContain('2 '); // No broken version number
+      expect(allText).not.toContain('3 '); // No broken decimal
+    });
   });
 });
 

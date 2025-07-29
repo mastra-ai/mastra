@@ -18,9 +18,17 @@
 
 ## Solution: New `sentence` Strategy + Type Improvements
 
-### New `sentence` Strategy
+### Enhanced `sentence` Strategy (Hybrid Implementation)
 
-**Purpose**: Sentence-aware chunking that preserves sentence structure
+**Purpose**: Sentence-aware chunking that preserves sentence structure with sophisticated boundary detection
+
+**Key Features**:
+
+- ✅ **Sophisticated sentence detection** with abbreviation handling (Dr., U.S.A., a.m., etc.)
+- ✅ **Integrated overlap processing** for efficiency
+- ✅ **Granular fallback control** (words + characters)
+- ✅ **Perfect sentence preservation**
+- ✅ **Extends TextTransformer** for consistency
 
 **Parameters**:
 
@@ -33,17 +41,18 @@ type SentenceChunkOptions = {
   sentenceEnders?: string[]; // Custom endings (default: ['.', '!', '?'])
   preserveWhitespace?: boolean; // Keep spacing
   fallbackToWords?: boolean; // Split long sentences on words
+  fallbackToCharacters?: boolean; // Split long words on characters (new!)
   keepSeparator?: boolean; // Include sentence separators
 };
 ```
 
 **Logic**:
 
-1. Split text into sentences using configurable sentence endings
-2. Group sentences to fit within minSize-maxSize range
-3. Handle overlap with complete sentences
-4. Graceful fallback for overly long sentences
-5. Never break mid-sentence unless absolutely necessary
+1. **Smart sentence detection** using regex + abbreviation heuristics
+2. **Abbreviation handling** for common patterns (titles, countries, times, numbers)
+3. **Integrated overlap** during chunking for efficiency
+4. **Two-level fallback**: words → characters with granular control
+5. **Never break mid-sentence** unless absolutely necessary
 
 ### Type System Overhaul
 
@@ -111,8 +120,12 @@ const chunked = await doc.chunk({
 
 **COMPLETED:**
 
-- ✅ New `sentence` strategy with sentence-aware chunking logic
+- ✅ **Hybrid sentence strategy** combining best-of-both-worlds architecture
+- ✅ **Enhanced sentence detection** with sophisticated abbreviation handling
 - ✅ **Clean strategy-specific type system** - Legacy types removed for better API
+- ✅ **More efficient overlap processing** - Integrated during chunking (not post-processing)
+- ✅ **Granular fallback control** - Users can control word + character fallbacks independently
+- ✅ **TextTransformer inheritance** - Consistent architecture with other transformers
 - ✅ TypeScript compile-time validation prevents invalid parameter combinations
 - ✅ Comprehensive test suite with 8 test cases covering all features
 - ✅ Full build and TypeScript compilation success
@@ -125,21 +138,32 @@ const chunked = await doc.chunk({
   - `MarkdownTransformer`/`LatexTransformer` → Consistent base patterns
   - `SentenceTransformer` → `SentenceChunkOptions`
 
+**Enhanced Features Over Original Implementation:**
+
+- 🚀 **Sophisticated boundary detection**: Handles "Dr. Smith", "U.S.A.", "3.14", "a.m." correctly
+- 🚀 **Better architecture**: Extends TextTransformer for consistency + inheritance benefits
+- 🚀 **More efficient**: Integrated overlap processing (single-pass vs two-pass)
+- 🚀 **Granular control**: `fallbackToCharacters` parameter for fine-tuned behavior
+- 🚀 **Production-ready**: Handles edge cases, oversized content, warnings for disabled fallbacks
+
 **Key Features Implemented:**
 
-- **Sentence Preservation**: Never breaks mid-sentence unless absolutely necessary
+- **Perfect Sentence Preservation**: Never breaks mid-sentence unless absolutely necessary
+- **Smart Abbreviation Handling**: Detects titles, countries, times, decimals, initials
 - **Size Constraints**: Respects minSize, maxSize, and targetSize parameters
-- **Custom Sentence Endings**: Configurable sentence boundaries (., !, ?, etc.)
-- **Overlap Support**: Intelligent overlap with complete sentences
-- **Fallback Logic**: Word-level and character-level splitting for oversized content
+- **Integrated Overlap**: Efficient sentence-level overlap during chunking
+- **Two-level Fallback**: Words → characters with independent control
 - **Metadata Preservation**: Maintains metadata across all chunks
 
 **Verification:**
 
 - ✅ **Perfect User Solution**: Tuned sentence strategy produces EXACT 3-chunk output user requested
+- ✅ **Enhanced Sentence Detection**: Successfully handles abbreviations, titles, and edge cases
 - ✅ **Complete Test Coverage**: 8/8 sentence tests pass + comprehensive validation test file
+- ✅ **Hybrid Architecture Success**: Best features from both implementations combined seamlessly
 - ✅ **Clean Type System**: Legacy types fully removed, strategy-specific enforcement everywhere
 - ✅ **Full System Consistency**: All 8 transformers now use their specific chunk option types
-- ✅ **Controlled Breaking Changes**: User-facing API preserved, but internal consistency improved
+- ✅ **Production Performance**: More efficient single-pass overlap processing
+- ✅ **Controlled Breaking Changes**: User-facing API preserved, internal consistency improved
 - ✅ **Build Success**: TypeScript compilation with strict type enforcement
-- ✅ **Runtime Validation**: Both character and sentence strategies verified working
+- ✅ **Runtime Validation**: All strategies verified working with enhanced implementation

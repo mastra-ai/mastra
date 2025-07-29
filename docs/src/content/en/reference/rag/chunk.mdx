@@ -131,6 +131,7 @@ const chunks = await doc.chunk({
   maxSize: 450, // Sentence-specific option
   minSize: 50, // Sentence-specific option
   sentenceEnders: ["."], // Sentence-specific option
+  fallbackToCharacters: false, // Sentence-specific option
   keepSeparator: true, // general option
 });
 
@@ -256,6 +257,13 @@ The options documented below are passed directly at the top level of the configu
       isOptional: true,
       defaultValue: "true",
       description: "Whether to fall back to word-level splitting for sentences that exceed maxSize.",
+    },
+    {
+      name: "fallbackToCharacters",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Whether to fall back to character-level splitting for words that exceed maxSize. Only applies if fallbackToWords is enabled.",
     },
   ]}
 />

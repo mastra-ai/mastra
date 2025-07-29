@@ -1,97 +1,203 @@
-import { Document } from '../schema';
 import type { SentenceChunkOptions } from '../types';
-import type { Transformer } from './transformer';
+import { TextTransformer } from './text';
 
-export class SentenceTransformer implements Transformer {
+export class SentenceTransformer extends TextTransformer {
   protected minSize: number;
   protected maxSize: number;
   protected targetSize: number;
-  protected overlap: number;
   protected sentenceEnders: string[];
   protected preserveWhitespace: boolean;
   protected fallbackToWords: boolean;
-  protected keepSeparator: boolean;
-  protected lengthFunction: (text: string) => number;
-  protected addStartIndex: boolean;
-  protected stripWhitespace: boolean;
+  protected fallbackToCharacters: boolean;
 
-  constructor({
-    minSize = 50,
-    maxSize,
-    targetSize,
-    overlap = 0,
-    sentenceEnders = ['.', '!', '?'],
-    preserveWhitespace = true,
-    fallbackToWords = true,
-    keepSeparator = false,
-    lengthFunction = (text: string) => text.length,
-    addStartIndex = false,
-    stripWhitespace = true,
-  }: SentenceChunkOptions) {
-    if (!maxSize) {
-      throw new Error('maxSize is required for sentence chunking');
-    }
-    if (overlap >= maxSize) {
-      throw new Error(`Overlap (${overlap}) must be smaller than maxSize (${maxSize})`);
-    }
-    if (minSize > maxSize) {
-      throw new Error(`minSize (${minSize}) must be smaller than or equal to maxSize (${maxSize})`);
+  constructor(options: SentenceChunkOptions) {
+    // Ensure overlap doesn't exceed maxSize for parent validation
+    const parentOverlap = Math.min(options.overlap ?? 0, options.maxSize - 1);
+
+    const baseOptions = {
+      ...options,
+      size: options.maxSize,
+      overlap: parentOverlap, // Use adjusted overlap for parent
+    };
+
+    super(baseOptions);
+
+    this.maxSize = options.maxSize;
+    this.minSize = options.minSize ?? 50;
+    this.targetSize = options.targetSize ?? Math.floor(options.maxSize * 0.8);
+    this.sentenceEnders = options.sentenceEnders ?? ['.', '!', '?'];
+    this.preserveWhitespace = options.preserveWhitespace ?? true;
+    this.fallbackToWords = options.fallbackToWords ?? true;
+    this.fallbackToCharacters = options.fallbackToCharacters ?? true;
+
+    // Override with original overlap for our sentence logic
+    this.overlap = options.overlap ?? 0;
+  }
+
+  private detectSentenceBoundaries(text: string): string[] {
+    if (!text) return [];
+
+    const sentences: string[] = [];
+    let currentSentence = '';
+    let i = 0;
+
+    while (i < text.length) {
+      const char = text[i];
+      if (!char) break; // Safety check
+
+      currentSentence += char;
+
+      if (this.sentenceEnders.includes(char)) {
+        const remainingText = text.slice(i + 1);
+
+        if (this.isRealSentenceBoundary(currentSentence, remainingText)) {
+          sentences.push(currentSentence.trim());
+          currentSentence = '';
+        }
+      }
+      i++;
     }
 
-    this.minSize = minSize;
-    this.maxSize = maxSize;
-    this.targetSize = targetSize ?? Math.floor(maxSize * 0.8);
-    this.overlap = overlap;
-    this.sentenceEnders = sentenceEnders;
-    this.preserveWhitespace = preserveWhitespace;
-    this.fallbackToWords = fallbackToWords;
-    this.keepSeparator = typeof keepSeparator === 'boolean' ? keepSeparator : false;
-    this.lengthFunction = lengthFunction;
-    this.addStartIndex = addStartIndex;
-    this.stripWhitespace = stripWhitespace;
+    if (currentSentence.trim()) {
+      sentences.push(currentSentence.trim());
+    }
+
+    return sentences.filter(s => s.length > 0);
+  }
+
+  private isRealSentenceBoundary(currentSentence: string, remainingText: string): boolean {
+    if (!remainingText.trim()) {
+      return true;
+    }
+
+    if (!/^\s+[A-Z]/.test(remainingText)) {
+      return false;
+    }
+
+    const words = currentSentence.trim().split(/\s+/);
+    const lastWord = words[words.length - 1] || '';
+
+    const baseWord = lastWord.slice(0, -1);
+
+    if (this.isCommonAbbreviation(baseWord)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private isCommonAbbreviation(word: string): boolean {
+    // Common titles
+    const titles = ['Dr', 'Mr', 'Mrs', 'Ms', 'Prof', 'Sr', 'Jr'];
+    if (titles.includes(word)) {
+      return true;
+    }
+
+    // Multi-character abbreviations with periods (U.S.A., a.m., p.m., etc.)
+    if (/^[A-Z](\.[A-Z])*$/.test(word) || /^[a-z](\.[a-z])*$/.test(word)) {
+      return true;
+    }
+
+    // Single capital letters (initials)
+    if (/^[A-Z]$/.test(word)) {
+      return true;
+    }
+
+    // Numbers (versions, decimals)
+    if (/^\d+$/.test(word)) {
+      return true;
+    }
+
+    // Time abbreviations
+    if (/^[ap]\.?m$/i.test(word)) {
+      return true;
+    }
+
+    return false;
   }
 
   /**
-   * Split text into sentences using configured sentence endings
+   * Group sentences into chunks with integrated overlap processing
    */
-  private splitIntoSentences(text: string): string[] {
-    if (!text) return [];
+  private groupSentencesIntoChunks(sentences: string[]): string[] {
+    const chunks: string[] = [];
+    let currentChunk: string[] = [];
+    let currentSize = 0;
 
-    // Create regex pattern from sentence enders
-    const pattern = this.sentenceEnders.map(ender => ender.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const separator = this.preserveWhitespace ? ' ' : ' ';
 
-    const regex = new RegExp(`(${pattern})`, 'g');
+    for (const sentence of sentences) {
+      const sentenceLength = this.lengthFunction(sentence);
+      const separatorLength = currentChunk.length > 0 ? this.lengthFunction(separator) : 0;
+      const totalLength = currentSize + sentenceLength + separatorLength;
 
-    // Split text while preserving separators
-    const parts = text.split(regex);
-    const sentences: string[] = [];
-
-    for (let i = 0; i < parts.length; i += 2) {
-      const sentence = parts[i] || '';
-      const separator = parts[i + 1] || '';
-
-      if (sentence.trim()) {
-        const fullSentence = this.keepSeparator ? sentence + separator : sentence;
-
-        const finalSentence = this.stripWhitespace ? fullSentence.trim() : fullSentence;
-
-        if (finalSentence) {
-          sentences.push(finalSentence);
+      // Handle oversized sentences with fallback strategies
+      if (sentenceLength > this.maxSize) {
+        if (currentChunk.length > 0) {
+          chunks.push(currentChunk.join(separator));
+          currentChunk = [];
+          currentSize = 0;
         }
+
+        const fallbackChunks = this.handleOversizedSentence(sentence);
+        chunks.push(...fallbackChunks);
+        continue;
+      }
+
+      // If adding this sentence would exceed maxSize, finalize current chunk
+      if (currentChunk.length > 0 && totalLength > this.maxSize) {
+        chunks.push(currentChunk.join(separator));
+
+        const overlapSentences = this.calculateSentenceOverlap(currentChunk);
+        currentChunk = overlapSentences;
+        currentSize = this.calculateChunkSize(currentChunk);
+      }
+
+      currentChunk.push(sentence);
+      currentSize += sentenceLength + separatorLength;
+
+      // If we've reached our target size, consider finalizing the chunk
+      if (currentSize >= this.targetSize) {
+        chunks.push(currentChunk.join(separator));
+
+        const overlapSentences = this.calculateSentenceOverlap(currentChunk);
+        currentChunk = overlapSentences;
+        currentSize = this.calculateChunkSize(currentChunk);
       }
     }
 
-    return sentences;
+    if (currentChunk.length > 0) {
+      chunks.push(currentChunk.join(separator));
+    }
+
+    return chunks;
   }
 
   /**
-   * Split a long sentence into words as fallback
+   * Handle oversized sentences with fallback strategies
    */
-  private splitSentenceIntoWords(sentence: string): string[] {
-    if (!this.fallbackToWords) {
-      return [sentence]; // Return as-is if fallback disabled
+  private handleOversizedSentence(sentence: string): string[] {
+    // First fallback
+    if (this.fallbackToWords) {
+      const wordChunks = this.splitSentenceIntoWords(sentence);
+      if (wordChunks.length > 1) {
+        return wordChunks;
+      }
     }
 
+    // Second fallback
+    if (this.fallbackToCharacters) {
+      return this.splitSentenceIntoCharacters(sentence);
+    }
+
+    // Last resort
+    console.warn(
+      `Sentence exceeds maxSize (${this.maxSize}) and fallbacks are disabled: "${sentence.substring(0, 50)}..."`,
+    );
+    return [sentence];
+  }
+
+  private splitSentenceIntoWords(sentence: string): string[] {
     const words = sentence.split(/\s+/);
     const chunks: string[] = [];
     let currentChunk = '';
@@ -105,9 +211,13 @@ export class SentenceTransformer implements Transformer {
         if (currentChunk) {
           chunks.push(currentChunk);
         }
-        // If single word is too long, split it character-wise as last resort
+
         if (this.lengthFunction(word) > this.maxSize) {
-          chunks.push(...this.splitWordIntoChars(word));
+          if (this.fallbackToCharacters) {
+            chunks.push(...this.splitSentenceIntoCharacters(word));
+          } else {
+            chunks.push(word);
+          }
           currentChunk = '';
         } else {
           currentChunk = word;
@@ -122,14 +232,11 @@ export class SentenceTransformer implements Transformer {
     return chunks;
   }
 
-  /**
-   * Split a word into character chunks as absolute last resort
-   */
-  private splitWordIntoChars(word: string): string[] {
+  private splitSentenceIntoCharacters(text: string): string[] {
     const chunks: string[] = [];
     let currentChunk = '';
 
-    for (const char of word) {
+    for (const char of text) {
       if (this.lengthFunction(currentChunk + char) <= this.maxSize) {
         currentChunk += char;
       } else {
@@ -147,195 +254,62 @@ export class SentenceTransformer implements Transformer {
     return chunks;
   }
 
-  /**
-   * Group sentences into chunks that fit within size constraints
-   */
-  private groupSentencesIntoChunks(sentences: string[]): string[] {
-    const chunks: string[] = [];
-    let currentChunk: string[] = [];
-    let currentSize = 0;
+  private calculateSentenceOverlap(currentChunk: string[]): string[] {
+    if (this.overlap === 0 || currentChunk.length === 0) {
+      return [];
+    }
 
+    const overlapSentences: string[] = [];
+    let overlapSize = 0;
     const separator = this.preserveWhitespace ? ' ' : ' ';
 
-    for (const sentence of sentences) {
-      const sentenceSize = this.lengthFunction(sentence);
-      const separatorSize = currentChunk.length > 0 ? this.lengthFunction(separator) : 0;
-      const totalSize = currentSize + separatorSize + sentenceSize;
+    // Work backwards through sentences to build overlap
+    for (let i = currentChunk.length - 1; i >= 0; i--) {
+      const sentence = currentChunk[i];
+      if (!sentence) continue;
 
-      // If this sentence alone exceeds maxSize, handle it specially
-      if (sentenceSize > this.maxSize) {
-        // Flush current chunk first
-        if (currentChunk.length > 0) {
-          chunks.push(currentChunk.join(separator));
-          currentChunk = [];
-          currentSize = 0;
-        }
+      const sentenceLength = this.lengthFunction(sentence);
+      const separatorLength = overlapSentences.length > 0 ? this.lengthFunction(separator) : 0;
 
-        // Split the oversized sentence
-        const sentenceChunks = this.splitSentenceIntoWords(sentence);
-        chunks.push(...sentenceChunks);
-        continue;
-      }
-
-      // If adding this sentence would exceed maxSize
-      if (totalSize > this.maxSize) {
-        // Only flush if we have something in the current chunk
-        if (currentChunk.length > 0) {
-          chunks.push(currentChunk.join(separator));
-          currentChunk = [sentence];
-          currentSize = sentenceSize;
-        } else {
-          // This shouldn't happen given our size check above, but handle it
-          currentChunk = [sentence];
-          currentSize = sentenceSize;
-        }
-      } else {
-        // Add sentence to current chunk
-        currentChunk.push(sentence);
-        currentSize = totalSize;
-
-        // If we've reached our target size, flush the chunk
-        if (currentSize >= this.targetSize) {
-          chunks.push(currentChunk.join(separator));
-          currentChunk = [];
-          currentSize = 0;
-        }
-      }
-    }
-
-    // Flush remaining sentences
-    if (currentChunk.length > 0) {
-      chunks.push(currentChunk.join(separator));
-    }
-
-    return chunks;
-  }
-
-  /**
-   * Add overlap between chunks
-   */
-  private addOverlapToChunks(chunks: string[]): string[] {
-    if (this.overlap === 0 || chunks.length <= 1) {
-      return chunks;
-    }
-
-    const overlappedChunks: string[] = [];
-
-    for (let i = 0; i < chunks.length; i++) {
-      let chunk = chunks[i] || '';
-
-      // Add overlap from previous chunk
-      if (i > 0 && this.overlap > 0) {
-        const prevChunk = chunks[i - 1] || '';
-        const overlapText = this.extractOverlap(prevChunk, this.overlap);
-
-        if (overlapText) {
-          const separator = this.preserveWhitespace ? ' ' : ' ';
-          chunk = overlapText + separator + chunk;
-        }
-      }
-
-      overlappedChunks.push(chunk);
-    }
-
-    return overlappedChunks;
-  }
-
-  /**
-   * Extract overlap text from the end of a chunk
-   */
-  private extractOverlap(text: string, overlapSize: number): string {
-    if (overlapSize === 0 || !text) return '';
-
-    // Try to extract complete sentences for overlap
-    const sentences = this.splitIntoSentences(text);
-    let overlapText = '';
-
-    // Work backwards through sentences until we exceed overlap size
-    for (let i = sentences.length - 1; i >= 0; i--) {
-      const sentence = sentences[i] || '';
-      const testOverlap = sentence + (overlapText ? ' ' + overlapText : '');
-
-      if (this.lengthFunction(testOverlap) <= overlapSize) {
-        overlapText = testOverlap;
-      } else {
+      if (overlapSize + sentenceLength + separatorLength > this.overlap) {
         break;
       }
+
+      overlapSentences.unshift(sentence);
+      overlapSize += sentenceLength + separatorLength;
     }
 
-    // If no complete sentences fit, fall back to character-based overlap
-    if (!overlapText && text.length > overlapSize) {
-      overlapText = text.slice(-overlapSize);
-    }
-
-    return overlapText;
+    return overlapSentences;
   }
 
-  /**
-   * Main method to split text into sentence-aware chunks
-   */
+  private calculateChunkSize(sentences: string[]): number {
+    if (!sentences || sentences.length === 0) {
+      return 0;
+    }
+
+    let totalSize = 0;
+    const separator = this.preserveWhitespace ? ' ' : ' ';
+
+    for (let i = 0; i < sentences.length; i++) {
+      const sentence = sentences[i]!;
+      totalSize += this.lengthFunction(sentence);
+
+      // Add separator length for all but the last sentence
+      if (i < sentences.length - 1) {
+        totalSize += this.lengthFunction(separator);
+      }
+    }
+
+    return totalSize;
+  }
+
   splitText({ text }: { text: string }): string[] {
     if (!text) return [];
 
-    // Step 1: Split into sentences
-    const sentences = this.splitIntoSentences(text);
+    const sentences = this.detectSentenceBoundaries(text);
 
-    // Step 2: Group sentences into chunks
     const chunks = this.groupSentencesIntoChunks(sentences);
 
-    // Step 3: Add overlap if configured
-    const overlappedChunks = this.addOverlapToChunks(chunks);
-
-    return overlappedChunks.filter(chunk => chunk.trim().length > 0);
-  }
-
-  createDocuments(texts: string[], metadatas?: Record<string, any>[]): Document[] {
-    const _metadatas = metadatas || Array(texts.length).fill({});
-    const documents: Document[] = [];
-
-    texts.forEach((text, i) => {
-      let index = 0;
-      let previousChunkLen = 0;
-
-      this.splitText({ text }).forEach(chunk => {
-        const metadata = { ..._metadatas[i] };
-        if (this.addStartIndex) {
-          const offset = index + previousChunkLen - this.overlap;
-          index = text.indexOf(chunk, Math.max(0, offset));
-          metadata.startIndex = index;
-          previousChunkLen = chunk.length;
-        }
-        documents.push(
-          new Document({
-            text: chunk,
-            metadata,
-          }),
-        );
-      });
-    });
-
-    return documents;
-  }
-
-  splitDocuments(documents: Document[]): Document[] {
-    const texts: string[] = [];
-    const metadatas: Record<string, any>[] = [];
-    for (const doc of documents) {
-      texts.push(doc.text);
-      metadatas.push(doc.metadata);
-    }
-    return this.createDocuments(texts, metadatas);
-  }
-
-  transformDocuments(documents: Document[]): Document[] {
-    const texts: string[] = [];
-    const metadatas: Record<string, any>[] = [];
-
-    for (const doc of documents) {
-      texts.push(doc.text);
-      metadatas.push(doc.metadata);
-    }
-
-    return this.createDocuments(texts, metadatas);
+    return chunks.filter(chunk => chunk.trim().length > 0);
   }
 }

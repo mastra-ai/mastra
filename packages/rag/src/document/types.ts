@@ -97,6 +97,7 @@ export type SentenceChunkOptions = BaseChunkOptions & {
   sentenceEnders?: string[];
   preserveWhitespace?: boolean;
   fallbackToWords?: boolean;
+  fallbackToCharacters?: boolean;
 };
 
 export type ChunkStrategy = 'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex' | 'sentence';

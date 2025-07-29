@@ -278,6 +278,7 @@ export class MDocument {
       sentenceEnders: options?.sentenceEnders,
       preserveWhitespace: options?.preserveWhitespace,
       fallbackToWords: options?.fallbackToWords,
+      fallbackToCharacters: options?.fallbackToCharacters,
       keepSeparator: typeof options?.keepSeparator === 'boolean' ? options.keepSeparator : false,
       lengthFunction: options?.lengthFunction,
       addStartIndex: options?.addStartIndex,
