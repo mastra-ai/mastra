@@ -255,8 +255,7 @@ async function bundleExternals(
       }),
       nodeResolve({
         preferBuiltins: true,
-        exportConditions: ['node', 'import', 'require'],
-        mainFields: ['module', 'main'],
+        exportConditions: ['node'],
       }),
       // hono is imported from deployer, so we need to resolve from here instead of the project root
       aliasHono(),
