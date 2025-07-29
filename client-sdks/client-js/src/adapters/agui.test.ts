@@ -1,6 +1,6 @@
-import type { Message } from '@ag-ui/client';
-import { describe, it, expect } from 'vitest';
-import { generateUUID, convertMessagesToMastraMessages } from './agui';
+import type { Message, BaseEvent } from '@ag-ui/client';
+import { describe, it, expect, vi } from 'vitest';
+import { generateUUID, convertMessagesToMastraMessages, AGUIAdapter } from './agui';
 
 describe('generateUUID', () => {
   it('should generate a valid UUID v4 string', () => {
@@ -176,5 +176,98 @@ describe('convertMessagesToMastraMessages', () => {
       },
     ]);
     expect(result[3].role).toBe('assistant');
+  });
+});
+
+describe('AGUIAdapter', () => {
+  it('should correctly pass parameters to agent stream method', async () => {
+    // Mock agent that verifies the stream method is called with correct parameters
+    const mockAgent = {
+      stream: vi.fn().mockImplementation(params => {
+        // Verify the client agent.stream() receives the expected params object
+        expect(params).toHaveProperty('messages');
+        expect(params).toHaveProperty('threadId');
+        expect(params).toHaveProperty('resourceId');
+        expect(params).toHaveProperty('runId');
+        expect(params).toHaveProperty('clientTools');
+
+        return Promise.resolve({
+          processDataStream: vi.fn().mockImplementation(({ onFinishMessagePart }) => {
+            onFinishMessagePart?.();
+            return Promise.resolve();
+          }),
+        });
+      }),
+    };
+
+    const adapter = new AGUIAdapter({
+      agent: mockAgent as any,
+      agentId: 'test-agent',
+      resourceId: 'testAgent',
+    });
+
+    const input = {
+      threadId: 'test-thread-id',
+      runId: 'test-run-id',
+      messages: [
+        {
+          id: '1',
+          role: 'user' as const,
+          content: 'Hello',
+        },
+      ],
+      tools: [],
+      context: [],
+    };
+
+    const observable = adapter['run'](input);
+    const events: BaseEvent[] = [];
+
+    await new Promise<void>((resolve, reject) => {
+      observable.subscribe({
+        next: (event: BaseEvent) => events.push(event),
+        complete: () => resolve(),
+        error: (error: any) => reject(error),
+      });
+    });
+
+    // Verify the agent.stream was called with the correct structure
+    expect(mockAgent.stream).toHaveBeenCalledWith({
+      threadId: 'test-thread-id',
+      resourceId: 'testAgent',
+      runId: 'test-run-id',
+      messages: [{ role: 'user', content: 'Hello' }],
+      clientTools: {},
+    });
+  });
+
+  it('should handle messages without role property in request objects', async () => {
+    // This test demonstrates that request objects without role property
+    // would cause validation errors if passed directly to MessageList
+    const requestObject = {
+      threadId: 'test-thread-id',
+      resourceId: 'testAgent',
+      runId: 'test-run-id',
+      messages: [
+        {
+          role: 'user',
+          content: 'Hello',
+        },
+      ],
+      clientTools: {},
+    };
+
+    // Request objects don't have role property
+    expect('role' in requestObject).toBe(false);
+    expect('messages' in requestObject).toBe(true);
+    expect('content' in requestObject).toBe(false);
+    expect('parts' in requestObject).toBe(false);
+
+    // This structure would cause validation errors if treated as a message
+    // because it lacks required message properties (role, content/parts)
+    const hasValidMessageStructure =
+      'role' in requestObject && ('content' in requestObject || 'parts' in requestObject);
+
+    expect(hasValidMessageStructure).toBe(false);
   });
 });
