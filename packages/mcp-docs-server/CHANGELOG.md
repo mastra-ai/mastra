@@ -1,5 +1,39 @@
 # @mastra/mcp-docs-server
 
+## 0.13.7-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [e0f73c6]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+  - @mastra/core@0.12.0-alpha.1
+
+## 0.13.7-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
+## 0.13.6
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+- Updated dependencies [ce088f5]
+  - @mastra/mcp@0.10.7
+  - @mastra/core@0.11.1
+
 ## 0.13.5
 
 ### Patch Changes

@@ -1,10 +1,10 @@
 import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { createTool } from '@mastra/core/tools';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { LanguageModel } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { Agent } from '../../agent';
+import { createTool } from '../../tools';
 import 'dotenv/config';
 
 type Result = {
@@ -230,7 +230,7 @@ describe('Tool Schema Compatibility', () => {
     // Unions of objects are not supported
     // Google Models
     openrouter('google/gemini-2.5-pro-preview-03-25'),
-    openrouter('google/gemini-2.5-flash-preview'),
+    openrouter('google/gemini-2.5-flash'),
     openrouter('google/gemini-2.0-flash-lite-001'),
 
     // OpenAI Models

@@ -3,8 +3,14 @@ import { watch } from 'rollup';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
+import { tsConfigPaths } from './plugins/tsconfig-paths';
 
-export async function getInputOptions(entryFile: string, platform: 'node' | 'browser', env?: Record<string, string>) {
+export async function getInputOptions(
+  entryFile: string,
+  platform: 'node' | 'browser',
+  env?: Record<string, string>,
+  { sourcemap = false }: { sourcemap?: boolean } = {},
+) {
   const inputOptions = await getBundlerInputOptions(
     entryFile,
     {
@@ -14,15 +20,22 @@ export async function getInputOptions(entryFile: string, platform: 'node' | 'bro
     },
     platform,
     env,
+    { sourcemap },
   );
 
   if (Array.isArray(inputOptions.plugins)) {
     // filter out node-resolve plugin so all node_modules are external
+    // and tsconfig-paths plugin as we are injection a custom one
     inputOptions.plugins = inputOptions.plugins.filter(
       // @ts-ignore
-      plugin => !plugin || !plugin?.name || plugin.name !== 'node-resolve',
+      plugin => !plugin || !plugin?.name || (plugin.name !== 'node-resolve' && plugin.name !== 'tsconfig-paths'),
     );
 
+    inputOptions.plugins.unshift(
+      tsConfigPaths({
+        localResolve: true,
+      }),
+    );
     inputOptions.plugins.push(aliasHono());
     // fixes imports like lodash/fp/get
     inputOptions.plugins.push(nodeModulesExtensionResolver());

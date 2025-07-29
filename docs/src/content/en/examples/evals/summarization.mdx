@@ -7,183 +7,159 @@ import { GithubLink } from "@/components/github-link";
 
 # Summarization Evaluation
 
-This example demonstrates how to use Mastra's Summarization metric to evaluate how well LLM-generated summaries capture content while maintaining factual accuracy.
+Use `SummarizationMetric` to evaluate how well a response captures key information from the source while maintaining factual accuracy. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason, alignment score, and coverage score.
 
-## Overview
+## Installation
 
-The example shows how to:
-
-1. Configure the Summarization metric with an LLM
-2. Evaluate summary quality and factual accuracy
-3. Analyze alignment and coverage scores
-4. Handle different summary scenarios
-
-## Setup
-
-### Environment Setup
-
-Make sure to set up your environment variables:
-
-```bash filename=".env"
-OPENAI_API_KEY=your_api_key_here
+```bash copy
+npm install @mastra/evals
 ```
 
-### Dependencies
+## Accurate summary example
 
-Import the necessary dependencies:
+In this example, the summary accurately preserves all important facts from the source while maintaining faithful phrasing. The score reflects both complete coverage and perfect factual alignment.
 
-```typescript copy showLineNumbers filename="src/index.ts"
+```typescript filename="src/example-accurate-summary.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { SummarizationMetric } from "@mastra/evals/llm";
+
+const metric = new SummarizationMetric(openai("gpt-4o-mini"));
+
+const query =
+  "The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, the Roadster, was launched in 2008.";
+const response =
+  "Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car, the Roadster, in 2008. Elon Musk joined as the largest investor in 2004 and became CEO in 2008.";
+
+const result = await metric.measure(query, response);
 ```
 
-## Metric Configuration
+### Accurate summary output
 
-Set up the Summarization metric with an OpenAI model:
+A high score indicates that the summary captures all key details from the input without introducing errors. The `info` field confirms full alignment and complete coverage.
 
-```typescript copy showLineNumbers{4} filename="src/index.ts"
+```typescript
+{
+  score: 1,
+  info: {
+    reason: 'The score is 1 because the summary is completely factual and covers all key information from the original text.',
+    alignmentScore: 1,
+    coverageScore: 1
+  }
+}
+```
+
+## Partial summary example
+
+In this example, the summary is factually accurate but leaves out several key points from the source. The score reflects incomplete coverage despite strong alignment.
+
+```typescript filename="src/example-partial-summary.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { SummarizationMetric } from "@mastra/evals/llm";
+
+const metric = new SummarizationMetric(openai("gpt-4o-mini"));
+
+const query =
+  "The Python programming language was created by Guido van Rossum and was first released in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is dynamically typed and garbage-collected. It supports multiple programming paradigms, including structured, object-oriented, and functional programming.";
+const response = "Python, created by Guido van Rossum, is a programming language known for its readable code and use of whitespace. It was released in 1991.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+### Partial summary output
+
+The summary receives a moderate score due to missing key information from the input. The `info` field confirms factual alignment but highlights gaps in content coverage.
+
+```typescript
+{
+  score: 0.7,
+  info: {
+    reason: "The score is 0.7 because the summary accurately captures key facts about Python's creation, release date, and emphasis on readability, achieving a perfect alignment score. However, it fails to mention that Python is dynamically typed, garbage-collected, and supports multiple programming paradigms, which affects the coverage score.",
+    alignmentScore: 1,
+    coverageScore: 0.7
+  }
+}
+```
+
+## Inaccurate summary example
+
+In this example, the summary includes factual errors and misrepresents key details from the source. The score reflects poor alignment, even if some information is partially covered.
+
+```typescript filename="src/example-inaccurate-summary.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { SummarizationMetric } from "@mastra/evals/llm";
+
+const metric = new SummarizationMetric(openai("gpt-4o-mini"));
+
+const query =
+  "The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN. He published the first website in 1991. Berners-Lee made the Web freely available, with no patent and no royalties due.";
+const response = "The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went on to commercialize the technology through patents.";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+### Inaccurate summary output
+
+The summary receives a low score due to factual inaccuracies and misalignment with the input. The `info` field explains which details were incorrect and how the summary deviated from the source.
+
+```typescript
+{
+  score: 0,
+  info: {
+    reason: 'The score is 0 because the summary contains factual inaccuracies and fails to cover essential details from the original text. The claim that the Internet was created at MIT in the early 1990s contradicts the original text, which states that the World Wide Web was invented at CERN in 1989. Additionally, the summary incorrectly states that Berners-Lee commercialized the technology through patents, while the original text clearly mentions that he made the Web freely available with no patents or royalties.',
+    alignmentScore: 0,
+    coverageScore: 0.17
+  }
+}
+```
+
+## Metric configuration
+
+You can create a `SummarizationMetric` instance by providing a model. No additional configuration is required.
+
+```typescript showLineNumbers copy
 const metric = new SummarizationMetric(openai("gpt-4o-mini"));
 ```
 
-## Example Usage
+> See [SummarizationMetric](/reference/evals/summarization.mdx) for a full list of configuration options.
 
-### High-quality Summary Example
+## Understanding the results
 
-Evaluate a summary that maintains both factual accuracy and complete coverage:
+`SummarizationMetric` returns a result in the following shape:
 
-```typescript copy showLineNumbers{7} filename="src/index.ts"
-const input1 = `The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. 
-Elon Musk joined in 2004 as the largest investor and became CEO in 2008. The company's first car, 
-the Roadster, was launched in 2008.`;
-
-const output1 = `Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car, 
-the Roadster, in 2008. Elon Musk joined as the largest investor in 2004 and became CEO in 2008.`;
-
-console.log("Example 1 - High-quality Summary:");
-console.log("Input:", input1);
-console.log("Output:", output1);
-
-const result1 = await metric.measure(input1, output1);
-console.log("Metric Result:", {
-  score: result1.score,
+```typescript
+{
+  score: number,
   info: {
-    reason: result1.info.reason,
-    alignmentScore: result1.info.alignmentScore,
-    coverageScore: result1.info.coverageScore,
-  },
-});
-// Example Output:
-// Metric Result: {
-//   score: 1,
-//   info: {
-//     reason: "The score is 1 because the summary maintains perfect factual accuracy and includes all key information from the source text.",
-//     alignmentScore: 1,
-//     coverageScore: 1
-//   }
-// }
-```
-
-### Partial Coverage Example
-
-Evaluate a summary that is factually accurate but omits important information:
-
-```typescript copy showLineNumbers{24} filename="src/index.ts"
-const input2 = `The Python programming language was created by Guido van Rossum and was first released 
-in 1991. It emphasizes code readability with its notable use of significant whitespace. Python is 
-dynamically typed and garbage-collected. It supports multiple programming paradigms, including 
-structured, object-oriented, and functional programming.`;
-
-const output2 = `Python, created by Guido van Rossum, is a programming language known for its readable 
-code and use of whitespace. It was released in 1991.`;
-
-console.log("Example 2 - Partial Coverage:");
-console.log("Input:", input2);
-console.log("Output:", output2);
-
-const result2 = await metric.measure(input2, output2);
-console.log("Metric Result:", {
-  score: result2.score,
-  info: {
-    reason: result2.info.reason,
-    alignmentScore: result2.info.alignmentScore,
-    coverageScore: result2.info.coverageScore,
-  },
-});
-// Example Output:
-// Metric Result: {
-//   score: 0.4,
-//   info: {
-//     reason: "The score is 0.4 because while the summary is factually accurate (alignment score: 1), it only covers a portion of the key information from the source text (coverage score: 0.4), omitting several important technical details.",
-//     alignmentScore: 1,
-//     coverageScore: 0.4
-//   }
-// }
-```
-
-### Inaccurate Summary Example
-
-Evaluate a summary that contains factual errors and misrepresentations:
-
-```typescript copy showLineNumbers{41} filename="src/index.ts"
-const input3 = `The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN. 
-He published the first website in 1991. Berners-Lee made the Web freely available, with no patent 
-and no royalties due.`;
-
-const output3 = `The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went 
-on to commercialize the technology through patents.`;
-
-console.log("Example 3 - Inaccurate Summary:");
-console.log("Input:", input3);
-console.log("Output:", output3);
-
-const result3 = await metric.measure(input3, output3);
-console.log("Metric Result:", {
-  score: result3.score,
-  info: {
-    reason: result3.info.reason,
-    alignmentScore: result3.info.alignmentScore,
-    coverageScore: result3.info.coverageScore,
-  },
-});
-// Example Output:
-// Metric Result: {
-//   score: 0,
-//   info: {
-//     reason: "The score is 0 because the summary contains multiple factual errors and misrepresentations of key details from the source text, despite covering some of the basic information.",
-//     alignmentScore: 0,
-//     coverageScore: 0.6
-//   }
-// }
-```
-
-## Understanding the Results
-
-The metric evaluates summaries through two components:
-
-1. Alignment Score (0-1):
-
-   - 1.0: Perfect factual accuracy
-   - 0.7-0.9: Minor factual discrepancies
-   - 0.4-0.6: Some factual errors
-   - 0.1-0.3: Significant inaccuracies
-   - 0.0: Complete factual misrepresentation
-
-2. Coverage Score (0-1):
-   - 1.0: Complete information coverage
-   - 0.7-0.9: Most key information included
-   - 0.4-0.6: Partial coverage of key points
-   - 0.1-0.3: Missing most important details
-   - 0.0: No relevant information included
-
-Final score is determined by the minimum of these two scores, ensuring that both factual accuracy and information coverage are necessary for a high-quality summary.
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/summarization"
+    reason: string,
+    alignmentScore: number,
+    coverageScore: number
   }
+}
+```
+
+### Summarization score
+
+A summarization score between 0 and 1:
+
+- **1.0**: Perfect summary – fully accurate and complete.
+- **0.7–0.9**: Strong summary – minor omissions or slight inaccuracies.
+- **0.4–0.6**: Mixed summary – partially accurate or incomplete.
+- **0.1–0.3**: Weak summary – significant gaps or errors.
+- **0.0**: Failed summary – mostly inaccurate or missing key content.
+
+### Summarization info
+
+An explanation for the score, with details including:
+
+- Alignment with factual content from the input.
+- Coverage of key points from the source.
+- Individual scores for alignment and coverage.
+- Justification describing what was preserved, omitted, or misstated.
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/summarization"
 />
