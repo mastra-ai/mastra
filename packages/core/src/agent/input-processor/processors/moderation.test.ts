@@ -50,14 +50,6 @@ function createMockModerationResult(flagged: boolean, categories: string[] = [])
     'violence/graphic',
   ];
 
-  const categoryFlags = allCategories.reduce(
-    (flags, category) => {
-      flags[category] = categories.includes(category);
-      return flags;
-    },
-    {} as Record<string, boolean>,
-  );
-
   const categoryScores = allCategories.reduce(
     (scores, category) => {
       scores[category] = categories.includes(category) ? 0.8 : 0.1;
@@ -67,8 +59,6 @@ function createMockModerationResult(flagged: boolean, categories: string[] = [])
   );
 
   return {
-    flagged,
-    categories: categoryFlags,
     category_scores: categoryScores,
     reason: flagged ? `Content flagged for: ${categories.join(', ')}` : undefined,
   };
@@ -289,7 +279,7 @@ describe('ModerationInputProcessor', () => {
     it('should flag content when any score exceeds threshold', async () => {
       const mockResult = createMockModerationResult(false, []);
       // Override with high violence score to exceed threshold
-      mockResult.category_scores.violence = 0.7; // Above threshold (0.6)
+      mockResult.category_scores!.violence = 0.7; // Above threshold (0.6)
       mockResult.reason = 'High violence score';
       const model = setupMockModel({ object: mockResult });
       const moderator = new ModerationInputProcessor({
@@ -314,7 +304,7 @@ describe('ModerationInputProcessor', () => {
     it('should not flag content when scores are below threshold', async () => {
       const mockResult = createMockModerationResult(false, []);
       // Set violence score below threshold
-      mockResult.category_scores.violence = 0.7; // Below threshold (0.8)
+      mockResult.category_scores!.violence = 0.7; // Below threshold (0.8)
       const model = setupMockModel({ object: mockResult });
       const moderator = new ModerationInputProcessor({
         model,
