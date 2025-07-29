@@ -131,7 +131,6 @@ const moderationDetector = new ModerationInputProcessor({
   strategy: 'block',
 });
 
-
 export const chefAgentResponses = new Agent({
   name: 'Chef Agent Responses',
   instructions: `
