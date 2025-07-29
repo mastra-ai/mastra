@@ -1,5 +1,16 @@
 # mastra
 
+## 0.10.16-alpha.3
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+- Updated dependencies [f42c4c2]
+  - @mastra/deployer@0.12.0-alpha.5
+  - @mastra/loggers@0.10.5-alpha.0
+  - @mastra/mcp@0.10.8-alpha.0
+  - @mastra/core@0.12.0-alpha.5
+
 ## 0.10.16-alpha.2
 
 ### Patch Changes

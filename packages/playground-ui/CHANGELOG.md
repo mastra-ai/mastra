@@ -1,5 +1,13 @@
 # @mastra/playground-ui
 
+## 5.1.16-alpha.2
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+  - @mastra/core@0.12.0-alpha.5
+  - @mastra/client-js@0.10.17-alpha.5
+
 ## 5.1.16-alpha.1
 
 ### Patch Changes

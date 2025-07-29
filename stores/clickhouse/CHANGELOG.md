@@ -1,5 +1,12 @@
 # @mastra/clickhouse
 
+## 0.12.3-alpha.0
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+  - @mastra/core@0.12.0-alpha.5
+
 ## 0.12.2
 
 ### Patch Changes

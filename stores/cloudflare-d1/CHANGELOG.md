@@ -1,5 +1,12 @@
 # @mastra/cloudflare-d1
 
+## 0.12.4-alpha.2
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+  - @mastra/core@0.12.0-alpha.5
+
 ## 0.12.4-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @mastra/longmemeval
 
+## 0.1.4-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [f42c4c2]
+  - @mastra/memory@0.12.0-alpha.3
+  - @mastra/libsql@0.12.0-alpha.2
+  - @mastra/rag@1.0.5-alpha.1
+  - @mastra/core@0.12.0-alpha.5
+
 ## 0.1.4-alpha.4
 
 ### Patch Changes
