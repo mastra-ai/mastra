@@ -138,7 +138,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "pre-build": "tsup --silent --config tsup.config.ts --no-dts",
-    "build": "pnpm pre-build && node ./tools/commonjs-tsc-fixer.js",
+    "build": "node ./tools/commonjs-tsc-fixer.js",
     "build:watch": "pnpm build --watch",
     "test": "vitest run"
   },
