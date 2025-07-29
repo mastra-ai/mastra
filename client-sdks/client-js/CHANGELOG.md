@@ -1,5 +1,13 @@
 # @mastra/client-js
 
+## 0.10.17-alpha.3
+
+### Patch Changes
+
+- 9802f42: Added types and tests to ensure client-js and hono endpoints can save memory messages where the input is either a v1 or v2 mastra message
+- 1ac8f6b: deduplicate message
+  - @mastra/core@0.12.0-alpha.3
+
 ## 0.10.17-alpha.2
 
 ### Patch Changes

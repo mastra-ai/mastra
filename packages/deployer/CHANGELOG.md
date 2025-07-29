@@ -1,5 +1,14 @@
 # @mastra/deployer
 
+## 0.12.0-alpha.3
+
+### Patch Changes
+
+- 9802f42: Added types and tests to ensure client-js and hono endpoints can save memory messages where the input is either a v1 or v2 mastra message
+- Updated dependencies [9802f42]
+  - @mastra/server@0.12.0-alpha.3
+  - @mastra/core@0.12.0-alpha.3
+
 ## 0.12.0-alpha.2
 
 ### Patch Changes
