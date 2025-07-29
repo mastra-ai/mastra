@@ -322,14 +322,20 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
                           content: {
                             type: 'object',
                             properties: {
-                              format: { type: 'number', const: 2 },
+                              format: { type: 'number', enum: [2] },
                               parts: {
                                 type: 'array',
                                 items: { type: 'object' },
                               },
                               content: { type: 'string' },
-                              toolInvocations: { type: 'array' },
-                              experimental_attachments: { type: 'array' },
+                              toolInvocations: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                              experimental_attachments: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
                             },
                             required: ['format', 'parts'],
                           },
@@ -1042,14 +1048,20 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
                           content: {
                             type: 'object',
                             properties: {
-                              format: { type: 'number', const: 2 },
+                              format: { type: 'number', enum: [2] },
                               parts: {
                                 type: 'array',
                                 items: { type: 'object' },
                               },
                               content: { type: 'string' },
-                              toolInvocations: { type: 'array' },
-                              experimental_attachments: { type: 'array' },
+                              toolInvocations: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                              experimental_attachments: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
                             },
                             required: ['format', 'parts'],
                           },
