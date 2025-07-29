@@ -220,29 +220,25 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
    */
   async updateVector({ indexName: namespace, id, update }: UpstashUpdateVectorParams): Promise<void> {
     if (!update.vector && !update.metadata && !update.sparseVector) {
-      throw new MastraError(
-        {
-          id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { namespace, id },
-          text: 'No update data provided',
-        },
-      );
+      throw new MastraError({
+        id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { namespace, id },
+        text: 'No update data provided',
+      });
     }
 
     // The upstash client throws an exception as: 'This index requires dense/sparse vectors' when
     // only metadata is present in the update object.
     if (!update.vector && !update.sparseVector && update.metadata) {
-      throw new MastraError(
-        {
-          id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { namespace, id },
-          text: 'Both vector and metadata must be provided for an update'
-        },
-      );
+      throw new MastraError({
+        id: 'STORAGE_UPSTASH_VECTOR_UPDATE_VECTOR_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { namespace, id },
+        text: 'Both vector and metadata must be provided for an update',
+      });
     }
 
     try {
