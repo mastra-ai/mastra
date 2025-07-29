@@ -1,5 +1,10 @@
 import type { Mastra } from '@mastra/core';
-import type { StorageGetMessagesArg, MastraMessageFormat } from '@mastra/core/storage';
+import type {
+  StorageGetMessagesArg,
+  MastraMessageFormat,
+  ThreadOrderBy,
+  ThreadSortDirection,
+} from '@mastra/core/storage';
 import {
   getMemoryStatusHandler as getOriginalMemoryStatusHandler,
   getMemoryConfigHandler as getOriginalMemoryConfigHandler,
@@ -14,6 +19,7 @@ import {
   getWorkingMemoryHandler as getOriginalGetWorkingMemoryHandler,
   updateWorkingMemoryHandler as getOriginalUpdateWorkingMemoryHandler,
   searchMemoryHandler as getOriginalSearchMemoryHandler,
+  deleteMessagesHandler as getOriginalDeleteMessagesHandler,
 } from '@mastra/server/handlers/memory';
 import type { Context } from 'hono';
 
@@ -63,12 +69,16 @@ export async function getThreadsHandler(c: Context) {
     const agentId = c.req.query('agentId');
     const resourceId = c.req.query('resourceid');
     const networkId = c.req.query('networkId');
+    const orderBy = c.req.query('orderBy') as ThreadOrderBy | undefined;
+    const sortDirection = c.req.query('sortDirection') as ThreadSortDirection | undefined;
 
     const result = await getOriginalThreadsHandler({
       mastra,
       agentId,
       resourceId,
       networkId,
+      orderBy,
+      sortDirection,
     });
 
     return c.json(result);
@@ -305,5 +315,28 @@ export async function searchMemoryHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error searching memory');
+  }
+}
+
+export async function deleteMessagesHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.query('agentId');
+    const networkId = c.req.query('networkId');
+    const runtimeContext = c.get('runtimeContext');
+    const body = await c.req.json();
+    const messageIds = body?.messageIds;
+
+    const result = await getOriginalDeleteMessagesHandler({
+      mastra,
+      agentId,
+      messageIds,
+      networkId,
+      runtimeContext,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error deleting messages');
   }
 }
