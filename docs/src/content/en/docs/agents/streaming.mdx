@@ -44,7 +44,7 @@ We have a couple of utility functions on the stream to help you with the streami
 
 Each tool gets a `writer` argument, which is a writable stream with a custom write function. This write function is used to write the tool's response to the stream.
 
-```typescript
+```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -88,19 +88,19 @@ export const weatherInfo = createTool({
 
 If you want to use the stream in an agent, you can use the `streamVNext` method on the agent and pipe it to the agent's input stream.
 
-```typescript
+```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 export const weatherInfo = createTool({
   id: "Get Weather Information",
+  description: `Fetches the current weather information for a given city`,
   inputSchema: z.object({
     city: z.string(),
   }),
   outputSchema: z.object({
     text: z.string(),
   }),
-  description: `Fetches the current weather information for a given city`,
   execute: async ({ context: { city }, writer, mastra }) => {
     const agent = mastra.getAgent('weatherAgent')
     const stream = await agent.streamVNext(`What is the weather in ${city}?`);

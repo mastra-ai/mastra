@@ -41,7 +41,7 @@ We have a couple of utility functions on the stream to help you with the streami
 
 Each tool gets a `writer` argument, which is a writable stream with a custom write function. This write function is used to write the tool's response to the stream.
 
-```typescript
+```typescript filename="src/mastra/workflows/weather.ts" showLineNumbers copy
 import { createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -85,7 +85,7 @@ export const weatherInfo = createStep({
 
 If you want to use the stream in an agent, you can use the `streamVNext` method on the agent and pipe it to the agent's input stream.
 
-```typescript
+```typescript filename="src/mastra/workflows/weather.ts" showLineNumbers copy
 import { createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
