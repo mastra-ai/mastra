@@ -19,6 +19,7 @@ import {
   getWorkingMemoryHandler as getOriginalGetWorkingMemoryHandler,
   updateWorkingMemoryHandler as getOriginalUpdateWorkingMemoryHandler,
   searchMemoryHandler as getOriginalSearchMemoryHandler,
+  deleteMessagesHandler as getOriginalDeleteMessagesHandler,
 } from '@mastra/server/handlers/memory';
 import type { Context } from 'hono';
 
@@ -314,5 +315,28 @@ export async function searchMemoryHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error searching memory');
+  }
+}
+
+export async function deleteMessagesHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.query('agentId');
+    const networkId = c.req.query('networkId');
+    const runtimeContext = c.get('runtimeContext');
+    const body = await c.req.json();
+    const messageIds = body?.messageIds;
+
+    const result = await getOriginalDeleteMessagesHandler({
+      mastra,
+      agentId,
+      messageIds,
+      networkId,
+      runtimeContext,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error deleting messages');
   }
 }

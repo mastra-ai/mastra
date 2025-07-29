@@ -293,14 +293,14 @@ export class MemoryLibSQL extends MemoryStorage {
           );
         }
         return {
-          sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt, resourceId) 
+          sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId") 
                   VALUES (?, ?, ?, ?, ?, ?, ?)
                   ON CONFLICT(id) DO UPDATE SET
                     thread_id=excluded.thread_id,
                     content=excluded.content,
                     role=excluded.role,
                     type=excluded.type,
-                    resourceId=excluded.resourceId
+                    "resourceId"=excluded."resourceId"
                 `,
           args: [
             message.id,
@@ -316,12 +316,29 @@ export class MemoryLibSQL extends MemoryStorage {
 
       const now = new Date().toISOString();
       batchStatements.push({
-        sql: `UPDATE ${TABLE_THREADS} SET updatedAt = ? WHERE id = ?`,
+        sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ? WHERE id = ?`,
         args: [now, threadId],
       });
 
-      // Execute all inserts in a single batch
-      await this.client.batch(batchStatements, 'write');
+      // Execute in batches to avoid potential limitations
+      const BATCH_SIZE = 50; // Safe batch size for libsql
+
+      // Separate message statements from thread update
+      const messageStatements = batchStatements.slice(0, -1);
+      const threadUpdateStatement = batchStatements[batchStatements.length - 1];
+
+      // Process message statements in batches
+      for (let i = 0; i < messageStatements.length; i += BATCH_SIZE) {
+        const batch = messageStatements.slice(i, i + BATCH_SIZE);
+        if (batch.length > 0) {
+          await this.client.batch(batch, 'write');
+        }
+      }
+
+      // Execute thread update separately
+      if (threadUpdateStatement) {
+        await this.client.execute(threadUpdateStatement);
+      }
 
       const list = new MessageList().add(messages, 'memory');
       if (format === `v2`) return list.get.all.v2();
@@ -442,6 +459,74 @@ export class MemoryLibSQL extends MemoryStorage {
 
     const updatedResult = await this.client.execute({ sql: selectSql, args: messageIds });
     return updatedResult.rows.map(row => this.parseRow(row));
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
+    try {
+      // Process in batches to avoid SQL parameter limits
+      const BATCH_SIZE = 100;
+      const threadIds = new Set<string>();
+
+      // Use a transaction to ensure consistency
+      const tx = await this.client.transaction('write');
+
+      try {
+        for (let i = 0; i < messageIds.length; i += BATCH_SIZE) {
+          const batch = messageIds.slice(i, i + BATCH_SIZE);
+          const placeholders = batch.map(() => '?').join(',');
+
+          // Get thread IDs for this batch
+          const result = await tx.execute({
+            sql: `SELECT DISTINCT thread_id FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
+            args: batch,
+          });
+
+          result.rows?.forEach(row => {
+            if (row.thread_id) threadIds.add(row.thread_id as string);
+          });
+
+          // Delete messages in this batch
+          await tx.execute({
+            sql: `DELETE FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
+            args: batch,
+          });
+        }
+
+        // Update thread timestamps within the transaction
+        if (threadIds.size > 0) {
+          const now = new Date().toISOString();
+          for (const threadId of threadIds) {
+            await tx.execute({
+              sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ? WHERE id = ?`,
+              args: [now, threadId],
+            });
+          }
+        }
+
+        // Commit the transaction
+        await tx.commit();
+      } catch (error) {
+        // Rollback on error
+        await tx.rollback();
+        throw error;
+      }
+
+      // TODO: Delete from vector store if semantic recall is enabled
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_STORE_DELETE_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: messageIds.join(', ') },
+        },
+        error,
+      );
+    }
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

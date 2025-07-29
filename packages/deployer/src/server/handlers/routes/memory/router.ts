@@ -16,6 +16,7 @@ import {
   searchMemoryHandler,
   updateThreadHandler,
   updateWorkingMemoryHandler,
+  deleteMessagesHandler,
 } from './handlers';
 
 export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
@@ -307,6 +308,75 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     saveMessagesHandler,
+  );
+
+  router.post(
+    '/network/messages/delete',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Delete one or more messages',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messageIds: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
+                    {
+                      type: 'object',
+                      properties: { id: { type: 'string' } },
+                      required: ['id'],
+                    },
+                    {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: { id: { type: 'string' } },
+                        required: ['id'],
+                      },
+                    },
+                  ],
+                },
+              },
+              required: ['messageIds'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Messages deleted successfully',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean' },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    deleteMessagesHandler,
   );
 
   // Memory routes
@@ -914,6 +984,75 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     saveMessagesHandler,
+  );
+
+  router.post(
+    '/messages/delete',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Delete one or more messages',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messageIds: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
+                    {
+                      type: 'object',
+                      properties: { id: { type: 'string' } },
+                      required: ['id'],
+                    },
+                    {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: { id: { type: 'string' } },
+                        required: ['id'],
+                      },
+                    },
+                  ],
+                },
+              },
+              required: ['messageIds'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Messages deleted successfully',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean' },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    deleteMessagesHandler,
   );
 
   return router;

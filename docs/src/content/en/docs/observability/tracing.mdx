@@ -135,6 +135,50 @@ sdk.start();
 
 When Mastra finds a custom instrumentation file, it automatically replaces the default instrumentation and bundles it during the build process.
 
+### Tracing Outside Mastra Server Environment
+
+When using `mastra start` or `mastra dev` commands, Mastra automatically provisions and loads the necessary instrumentation files for tracing. However, when using Mastra as a dependency in your own application (outside the Mastra server environment), you'll need to manually provide the instrumentation file.
+
+To enable tracing in this case:
+
+1. Enable Mastra telemetry in your configuration:
+
+```typescript
+export const mastra = new Mastra({
+  telemetry: {
+    enabled: true,
+  },
+});
+```
+
+2. Create an instrumentation file in your project (e.g., `instrumentation.mjs`):
+
+```typescript
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter(),
+  instrumentations: [getNodeAutoInstrumentations()],
+});
+
+sdk.start();
+```
+
+3. Add OpenTelemetry environment variables:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.braintrust.dev/otel
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <Your API Key>, x-bt-parent=project_name:<Your Project Name>"
+```
+
+4. Run the OpenTelemetry SDK before your application:
+
+```bash
+node --import=./instrumentation.mjs --import=@opentelemetry/instrumentation/hook.mjs src/index.js
+```
+
 ### Next.js-specific Tracing steps
 
 If you're using Next.js, you have three additional configuration steps:

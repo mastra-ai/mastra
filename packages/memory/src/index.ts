@@ -16,6 +16,9 @@ import type { ZodTypeAny } from 'zod';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
 
+// Type for flexible message deletion input
+export type MessageDeleteInput = string[] | { id: string }[];
+
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
 
@@ -949,5 +952,48 @@ ${
     // TODO: Possibly handle updating the vector db here when a message is updated.
 
     return this.storage.updateMessages({ messages });
+  }
+
+  /**
+   * Deletes one or more messages
+   * @param input - Must be an array containing either:
+   *   - Message ID strings
+   *   - Message objects with 'id' properties
+   * @returns Promise that resolves when all messages are deleted
+   */
+  public async deleteMessages(input: MessageDeleteInput): Promise<void> {
+    // Normalize input to array of IDs
+    let messageIds: string[];
+
+    if (!Array.isArray(input)) {
+      throw new Error('Invalid input: must be an array of message IDs or message objects');
+    }
+
+    if (input.length === 0) {
+      return; // No-op for empty array
+    }
+
+    messageIds = input.map(item => {
+      if (typeof item === 'string') {
+        return item;
+      } else if (item && typeof item === 'object' && 'id' in item) {
+        return item.id;
+      } else {
+        throw new Error('Invalid input: array items must be strings or objects with an id property');
+      }
+    });
+
+    // Validate all IDs are non-empty strings
+    const invalidIds = messageIds.filter(id => !id || typeof id !== 'string');
+    if (invalidIds.length > 0) {
+      throw new Error('All message IDs must be non-empty strings');
+    }
+
+    // Delete from storage
+    await this.storage.deleteMessages(messageIds);
+
+    // TODO: Delete from vector store if semantic recall is enabled
+    // This would require getting the messages first to know their threadId/resourceId
+    // and then querying the vector store to delete associated embeddings
   }
 }

@@ -812,6 +812,51 @@ export class MemoryPG extends MemoryStorage {
     });
   }
 
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
+    try {
+      const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+      const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+
+      await this.client.tx(async t => {
+        // Get thread IDs for all messages
+        const placeholders = messageIds.map((_, idx) => `$${idx + 1}`).join(',');
+        const messages = await t.manyOrNone(
+          `SELECT DISTINCT thread_id FROM ${messageTableName} WHERE id IN (${placeholders})`,
+          messageIds,
+        );
+
+        const threadIds = messages?.map(msg => msg.thread_id).filter(Boolean) || [];
+
+        // Delete all messages
+        await t.none(`DELETE FROM ${messageTableName} WHERE id IN (${placeholders})`, messageIds);
+
+        // Update thread timestamps
+        if (threadIds.length > 0) {
+          const updatePromises = threadIds.map(threadId =>
+            t.none(`UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $1`, [threadId]),
+          );
+          await Promise.all(updatePromises);
+        }
+      });
+
+      // TODO: Delete from vector store if semantic recall is enabled
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'PG_STORE_DELETE_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: messageIds.join(', ') },
+        },
+        error,
+      );
+    }
+  }
+
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.schema) });
     const result = await this.client.oneOrNone<StorageResourceType & { createdAtZ: Date; updatedAtZ: Date }>(

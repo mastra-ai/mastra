@@ -568,7 +568,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
     try {
       const collection = await this.operations.getCollection(TABLE_THREADS);
-      const results = await collection.find<any>({ resourceId }).toArray();
+      const results = await collection.find<any>({ resourceId }).sort({ updatedAt: -1 }).toArray();
       if (!results.length) {
         return [];
       }

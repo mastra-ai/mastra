@@ -50,8 +50,8 @@ importers:
   auth/auth0:
     dependencies:
       jose:
-        specifier: ^6.0.11
-        version: 6.0.11
+        specifier: ^6.0.12
+        version: 6.0.12
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -1245,11 +1245,11 @@ importers:
         specifier: ^16.6.1
         version: 16.6.1
       hono:
-        specifier: ^4.8.4
-        version: 4.8.4
+        specifier: ^4.8.9
+        version: 4.8.9
       hono-openapi:
         specifier: ^0.4.8
-        version: 0.4.8(hono@4.8.4)(openapi-types@12.1.3)(zod@3.25.76)
+        version: 0.4.8(hono@4.8.9)(openapi-types@12.1.3)(zod@3.25.76)
       js-tiktoken:
         specifier: ^1.0.16
         version: 1.0.20
@@ -1457,8 +1457,8 @@ importers:
         specifier: ^14.1.0
         version: 14.1.0
       hono:
-        specifier: ^4.8.4
-        version: 4.8.4
+        specifier: ^4.8.9
+        version: 4.8.9
       resolve-from:
         specifier: ^5.0.0
         version: 5.0.0
@@ -1480,10 +1480,10 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.4)
+        version: 1.17.1(hono@4.8.9)
       '@hono/swagger-ui':
         specifier: ^0.5.2
-        version: 0.5.2(hono@4.8.4)
+        version: 0.5.2(hono@4.8.9)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1516,7 +1516,7 @@ importers:
         version: 2.1.0
       hono-openapi:
         specifier: ^0.4.8
-        version: 0.4.8(hono@4.8.4)(openapi-types@12.1.3)(zod@3.25.76)
+        version: 0.4.8(hono@4.8.9)(openapi-types@12.1.3)(zod@3.25.76)
       rollup-plugin-visualizer:
         specifier: ^5.14.0
         version: 5.14.0(rollup@4.44.2)
@@ -1694,7 +1694,7 @@ importers:
         version: 1.3.23(zod@3.25.76)
       '@hono/node-server':
         specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.4)
+        version: 1.17.1(hono@4.8.9)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1717,11 +1717,11 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       hono:
-        specifier: ^4.8.4
-        version: 4.8.4
+        specifier: ^4.8.9
+        version: 4.8.9
       hono-mcp-server-sse-transport:
         specifier: 0.0.7
-        version: 0.0.7(@modelcontextprotocol/sdk@1.13.3)(hono@4.8.4)
+        version: 0.0.7(@modelcontextprotocol/sdk@1.13.3)(hono@4.8.9)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
@@ -1776,7 +1776,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.4)
+        version: 1.17.1(hono@4.8.9)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1799,8 +1799,8 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       hono:
-        specifier: ^4.8.4
-        version: 4.8.4
+        specifier: ^4.8.9
+        version: 4.8.9
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
@@ -1831,7 +1831,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.4)
+        version: 1.17.1(hono@4.8.9)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1854,8 +1854,8 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       hono:
-        specifier: ^4.8.4
-        version: 4.8.4
+        specifier: ^4.8.9
+        version: 4.8.9
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
@@ -2668,7 +2668,7 @@ importers:
         specifier: 3.2.3
         version: 3.2.3(vitest@3.2.4)
       axios:
-        specifier: ^1.10.0
+        specifier: ^1.11.0
         version: 1.11.0(debug@4.4.1)
       eslint:
         specifier: ^9.30.1
@@ -2717,7 +2717,7 @@ importers:
         specifier: 3.2.3
         version: 3.2.3(vitest@3.2.4)
       axios:
-        specifier: ^1.10.0
+        specifier: ^1.11.0
         version: 1.11.0(debug@4.4.1)
       eslint:
         specifier: ^9.30.1
@@ -3548,13 +3548,13 @@ importers:
     dependencies:
       '@inngest/realtime':
         specifier: ^0.3.1
-        version: 0.3.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.4)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)(typescript@5.8.3)
+        version: 0.3.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.9)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)(typescript@5.8.3)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
       inngest:
         specifier: ^3.40.0
-        version: 3.40.0(encoding@0.1.13)(express@5.1.0)(hono@4.8.4)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
+        version: 3.40.0(encoding@0.1.13)(express@5.1.0)(hono@4.8.9)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
       zod:
         specifier: ^3.25.67
         version: 3.25.76
@@ -3564,7 +3564,7 @@ importers:
         version: 1.3.23(zod@3.25.76)
       '@hono/node-server':
         specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.4)
+        version: 1.17.1(hono@4.8.9)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3596,8 +3596,8 @@ importers:
         specifier: 7.1.0
         version: 7.1.0
       hono:
-        specifier: ^4.8.4
-        version: 4.8.4
+        specifier: ^4.8.9
+        version: 4.8.9
       inngest-cli:
         specifier: 1.8.2
         version: 1.8.2(encoding@0.1.13)
@@ -12175,8 +12175,8 @@ packages:
       zod-openapi:
         optional: true
 
-  hono@4.8.4:
-    resolution: {integrity: sha512-KOIBp1+iUs0HrKztM4EHiB2UtzZDTBihDtOF5K6+WaJjCPeaW4Q92R8j63jOhvJI5+tZSMuKD9REVEXXY9illg==}
+  hono@4.8.9:
+    resolution: {integrity: sha512-ERIxkXMRhUxGV7nS/Af52+j2KL60B1eg+k6cPtgzrGughS+espS9KQ7QO0SMnevtmRlBfAcN0mf1jKtO6j/doA==}
     engines: {node: '>=16.9.0'}
 
   hpagent@1.2.0:
@@ -12851,8 +12851,8 @@ packages:
   jose@5.6.3:
     resolution: {integrity: sha512-1Jh//hEEwMhNYPDDLwXHa2ePWgWiFNNUadVmguAAw2IJ6sj9mNxV5tGXJNqlMkJAybF6Lgw1mISDxTePP/187g==}
 
-  jose@6.0.11:
-    resolution: {integrity: sha512-QxG7EaliDARm1O1S8BGakqncGT9s25bKL1WSf6/oa17Tkqwi8D2ZNglqCF+DsYF88/rV66Q/Q2mFAy697E1DUg==}
+  jose@6.0.12:
+    resolution: {integrity: sha512-T8xypXs8CpmiIi78k0E+Lk7T2zlK4zDyg+o1CZ4AkOHgDg98ogdP2BeZ61lTFKFyoEwJ9RgAgN+SdM3iPgNonQ==}
 
   joycon@3.1.1:
     resolution: {integrity: sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw==}
@@ -19525,13 +19525,13 @@ snapshots:
 
   '@hey-api/client-fetch@0.3.4': {}
 
-  '@hono/node-server@1.17.1(hono@4.8.4)':
+  '@hono/node-server@1.17.1(hono@4.8.9)':
     dependencies:
-      hono: 4.8.4
+      hono: 4.8.9
 
-  '@hono/swagger-ui@0.5.2(hono@4.8.4)':
+  '@hono/swagger-ui@0.5.2(hono@4.8.9)':
     dependencies:
-      hono: 4.8.4
+      hono: 4.8.9
 
   '@hookform/resolvers@3.10.0(react-hook-form@7.59.0(react@19.1.0))':
     dependencies:
@@ -19721,11 +19721,11 @@ snapshots:
       '@types/node': 20.19.9
       typescript: 5.8.3
 
-  '@inngest/realtime@0.3.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.4)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)(typescript@5.8.3)':
+  '@inngest/realtime@0.3.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.9)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)(typescript@5.8.3)':
     dependencies:
       '@standard-schema/spec': 1.0.0
       debug: 4.4.1(supports-color@8.1.1)
-      inngest: 3.40.0(encoding@0.1.13)(express@5.1.0)(hono@4.8.4)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
+      inngest: 3.40.0(encoding@0.1.13)(express@5.1.0)(hono@4.8.9)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
       react: 19.1.0
       zod: 3.25.76
     transitivePeerDependencies:
@@ -27353,20 +27353,20 @@ snapshots:
 
   highlightjs-vue@1.0.0: {}
 
-  hono-mcp-server-sse-transport@0.0.7(@modelcontextprotocol/sdk@1.13.3)(hono@4.8.4):
+  hono-mcp-server-sse-transport@0.0.7(@modelcontextprotocol/sdk@1.13.3)(hono@4.8.9):
     dependencies:
       '@modelcontextprotocol/sdk': 1.13.3
-      hono: 4.8.4
+      hono: 4.8.9
 
-  hono-openapi@0.4.8(hono@4.8.4)(openapi-types@12.1.3)(zod@3.25.76):
+  hono-openapi@0.4.8(hono@4.8.9)(openapi-types@12.1.3)(zod@3.25.76):
     dependencies:
       json-schema-walker: 2.0.0
       openapi-types: 12.1.3
     optionalDependencies:
-      hono: 4.8.4
+      hono: 4.8.9
       zod: 3.25.76
 
-  hono@4.8.4: {}
+  hono@4.8.9: {}
 
   hpagent@1.2.0: {}
 
@@ -27525,7 +27525,7 @@ snapshots:
       - encoding
       - supports-color
 
-  inngest@3.40.0(encoding@0.1.13)(express@5.1.0)(hono@4.8.4)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3):
+  inngest@3.40.0(encoding@0.1.13)(express@5.1.0)(hono@4.8.9)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3):
     dependencies:
       '@bufbuild/protobuf': 2.5.2
       '@inngest/ai': 0.1.4
@@ -27551,7 +27551,7 @@ snapshots:
       zod: 3.22.5
     optionalDependencies:
       express: 5.1.0
-      hono: 4.8.4
+      hono: 4.8.9
       next: 15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       typescript: 5.8.3
     transitivePeerDependencies:
@@ -28229,7 +28229,7 @@ snapshots:
 
   jose@5.6.3: {}
 
-  jose@6.0.11: {}
+  jose@6.0.12: {}
 
   joycon@3.1.1: {}
 
