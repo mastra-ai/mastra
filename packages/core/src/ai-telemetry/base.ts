@@ -93,23 +93,6 @@ export abstract class MastraAITelemetry extends MastraBase {
     });
   }
 
-  startAgentRunSpan({
-    name,
-    metadata,
-    parent,
-  }: {
-    name: string;
-    metadata: AgentRunMetadata;
-    parent?: AISpan;
-  }): AISpan<AISpanMetadata> {
-    return this.startSpan<AgentRunMetadata>({
-      name,
-      type: AISpanType.AGENT_RUN,
-      metadata,
-      parent,
-    });
-  }
-
   startWorkflowStepSpan({
     name,
     metadata,
@@ -122,6 +105,23 @@ export abstract class MastraAITelemetry extends MastraBase {
     return this.startSpan<WorkflowStepMetadata>({
       name,
       type: AISpanType.WORKFLOW_STEP,
+      metadata,
+      parent,
+    });
+  }
+
+  startAgentRunSpan({
+    name,
+    metadata,
+    parent,
+  }: {
+    name: string;
+    metadata: AgentRunMetadata;
+    parent?: AISpan;
+  }): AISpan<AISpanMetadata> {
+    return this.startSpan<AgentRunMetadata>({
+      name,
+      type: AISpanType.AGENT_RUN,
       metadata,
       parent,
     });
@@ -155,25 +155,12 @@ export abstract class MastraAITelemetry extends MastraBase {
    * 1. Create a span with the provided metadata
    * 2. Set span.trace to the appropriate trace
    * 3. Set span.parent to options.parent (if any)
-   * 3. Set span.trace to span.parent.trace if options.parent, else to self.
-   * 4. Use createSpanWithCallbacks() helper to automatically wire up lifecycle callbacks
+   * 4. Set span.trace to span.parent.trace if options.parent, else to self.
+   * 5. Use createSpanWithCallbacks() helper to automatically wire up lifecycle callbacks
    *
    * The base class will automatically:
    * - Add the span to trace.rootSpans if it has no parent
    * - Emit span_started event
-   *
-   * Example:
-   * ```typescript
-   * protected _startSpan(options: SpanOptions): AISpan {
-   *   return this.createSpanWithCallbacks(options, (opts) => {
-   *     const span = new MySpanImplementation(opts);
-   *     span.type = spanType;
-   *     span.trace = getCurrentTrace(); // Set trace reference
-   *     span.parent = opts.parent;      // Set parent if any
-   *     return span;
-   *   });
-   * }
-   * ```
    */
   protected abstract _startSpan(options: AISpanOptions): AISpan;
 

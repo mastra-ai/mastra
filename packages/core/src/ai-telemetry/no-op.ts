@@ -3,9 +3,9 @@
  */
 
 import type { MastraAITelemetry } from './base';
-import type { AISpanType, type AISpan, type AISpanOptions, type AISpanMetadata } from './types';
+import type { AISpanType, AISpan, AISpanOptions, AISpanMetadata } from './types';
 
-export class NoOpAISpan implements AISpan {
+export class NoOpAISpan implements AISpan<AISpanMetadata> {
   public id: string;
   public name: string;
   public type: AISpanType;

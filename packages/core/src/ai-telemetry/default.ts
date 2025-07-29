@@ -124,7 +124,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
         );
         break;
       case 'span_ended':
-        const span = event.span as DefaultAISpan;
+        const span = event.span as AISpan;
         const duration = span.endTime && span.startTime ? span.endTime.getTime() - span.startTime.getTime() : 0;
         console.log(`[${timestamp}] SPAN_ENDED: ${span.type} (${span.id}) - Duration: ${duration}ms`);
         break;
@@ -146,8 +146,6 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
 // ============================================================================
 
 export class DefaultAITelemetry extends MastraAITelemetry {
-  private traces = new Map<string, AISpan>();
-
   constructor(config: { name: string } & AITelemetryConfig = { name: 'default-telemetry' }) {
     // Add console exporter by default if none provided
     if (!config.exporters || config.exporters.length === 0) {
@@ -166,23 +164,5 @@ export class DefaultAITelemetry extends MastraAITelemetry {
     return this.createSpanWithCallbacks(options, () => {
       return new DefaultAISpan(options, this);
     });
-  }
-
-  // ============================================================================
-  // Additional Helper Methods
-  // ============================================================================
-
-  /**
-   * Get all traces
-   */
-  getAllTraces(): AISpan[] {
-    return Array.from(this.traces.values());
-  }
-
-  /**
-   * Clear all traces (useful for testing)
-   */
-  clearTraces(): void {
-    this.traces.clear();
   }
 }
