@@ -1,5 +1,11 @@
 # @mastra/mcp
 
+## Unreleased
+
+### Patch Changes
+
+- Expose authProvider option for HTTP-based MCP servers to enable OAuth authentication with automatic token refresh. The authProvider is automatically passed to both Streamable HTTP and SSE transports for seamless authentication across different connection types.
+
 ## 0.10.7
 
 ### Patch Changes
