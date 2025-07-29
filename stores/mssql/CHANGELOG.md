@@ -1,5 +1,22 @@
 # Changelog for mastra-mssql
 
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- 4230a13: dependencies updates:
+  - Updated dependency [`mssql@^10.0.4` ↗︎](https://www.npmjs.com/package/mssql/v/10.0.4) (from `^10.0.0`, in `dependencies`)
+- Updated dependencies [27cc97a]
+- Updated dependencies [41daa63]
+- Updated dependencies [254a36b]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [ff9c125]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0-alpha.2
+
 ## 0.2.2
 
 ### Patch Changes

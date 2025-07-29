@@ -64,7 +64,7 @@ export function createFaithfulnessScorer({
       description: 'Reason about the results',
       createPrompt: ({ run }) => {
         const prompt = createFaithfulnessReasonPrompt({
-          input: run.input.map(input => input.content).join(', '),
+          input: run.input?.map(input => input.content).join(', ') || '',
           output: run.output.text,
           context: options?.context || [],
           score: run.score,

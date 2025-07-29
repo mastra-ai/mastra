@@ -1,3 +1,5 @@
+import { Tag } from "@/components/tag";
+
 const meta = {
   index: {
     title: "Overview",
@@ -21,6 +23,7 @@ const meta = {
   evals: {
     title: "Evals",
   },
+  scorers: <Tag text="experimental">Scorers</Tag>,
   voice: {
     title: "Voice",
   },

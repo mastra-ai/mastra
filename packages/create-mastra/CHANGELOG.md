@@ -1,5 +1,19 @@
 # create-mastra
 
+## 0.10.14-alpha.1
+
+### Patch Changes
+
+- 6336993: Fix workflow input form overflow
+
+## 0.10.14-alpha.0
+
+### Patch Changes
+
+- f442224: speech to text using voice config
+- d8dec5e: add a cta to invite to deploy to cloud
+- 89d2f4e: add TTS to the playground
+
 ## 0.10.13
 
 ### Patch Changes

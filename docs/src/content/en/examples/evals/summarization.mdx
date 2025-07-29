@@ -4,8 +4,11 @@ description: Example of using the Summarization metric to evaluate how well LLM-
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
 # Summarization Evaluation
+
+<ScorerCallout />
 
 Use `SummarizationMetric` to evaluate how well a response captures key information from the source while maintaining factual accuracy. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason, alignment score, and coverage score.
 

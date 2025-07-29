@@ -1,5 +1,22 @@
 # @mastra/cloudflare
 
+## 0.11.4-alpha.0
+
+### Patch Changes
+
+- 9881232: dependencies updates:
+  - Updated dependency [`cloudflare@^4.5.0` ↗︎](https://www.npmjs.com/package/cloudflare/v/4.5.0) (from `^4.4.1`, in `dependencies`)
+- Updated dependencies [27cc97a]
+- Updated dependencies [41daa63]
+- Updated dependencies [254a36b]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [ff9c125]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0-alpha.2
+
 ## 0.11.3
 
 ### Patch Changes

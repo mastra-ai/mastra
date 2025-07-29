@@ -22,7 +22,7 @@ export function createToxicityScorer({ model, options }: { model: LanguageModel;
       outputSchema: z.object({ verdicts: z.array(z.object({ verdict: z.string(), reason: z.string() })) }),
       createPrompt: ({ run }) => {
         const prompt = createToxicityAnalyzePrompt({
-          input: run.input.map(input => input.content).join(', '),
+          input: run.input?.map(input => input.content).join(', ') || '',
           output: run.output.text,
         });
         return prompt;

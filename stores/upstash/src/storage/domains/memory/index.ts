@@ -899,4 +899,74 @@ export class StoreMemoryUpstash extends MemoryStorage {
       );
     }
   }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
+    try {
+      const threadIds = new Set<string>();
+      const messageKeys: string[] = [];
+
+      // Find all message keys and collect thread IDs
+      for (const messageId of messageIds) {
+        const pattern = getMessageKey('*', messageId);
+        const keys = await this.operations.scanKeys(pattern);
+
+        for (const key of keys) {
+          const message = await this.client.get<MastraMessageV2 | MastraMessageV1>(key);
+          if (message && message.id === messageId) {
+            messageKeys.push(key);
+            if (message.threadId) {
+              threadIds.add(message.threadId);
+            }
+            break;
+          }
+        }
+      }
+
+      if (messageKeys.length === 0) {
+        // none of the message ids existed
+        return;
+      }
+
+      const pipeline = this.client.pipeline();
+
+      // Delete all messages
+      for (const key of messageKeys) {
+        pipeline.del(key);
+      }
+
+      // Update thread timestamps
+      if (threadIds.size > 0) {
+        for (const threadId of threadIds) {
+          const threadKey = getKey(TABLE_THREADS, { id: threadId });
+          const thread = await this.client.get<StorageThreadType>(threadKey);
+          if (thread) {
+            const updatedThread = {
+              ...thread,
+              updatedAt: new Date(),
+            };
+            pipeline.set(threadKey, processRecord(TABLE_THREADS, updatedThread).processedRecord);
+          }
+        }
+      }
+
+      // Execute all operations
+      await pipeline.exec();
+
+      // TODO: Delete from vector store if semantic recall is enabled
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_UPSTASH_DELETE_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: messageIds.join(', ') },
+        },
+        error,
+      );
+    }
+  }
 }

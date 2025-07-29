@@ -1,5 +1,61 @@
 # mastra
 
+## 0.10.16-alpha.2
+
+### Patch Changes
+
+- d5cc460: This change implements a fix to sourcemap mappings being off due to `removeDeployer` Babel plugin missing source map config.
+- a5681f2: fix: pagination breaks trace grouping
+- Updated dependencies [27cc97a]
+- Updated dependencies [27cc97a]
+- Updated dependencies [41daa63]
+- Updated dependencies [254a36b]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [ff9c125]
+- Updated dependencies [d5cc460]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0-alpha.2
+  - @mastra/deployer@0.12.0-alpha.2
+
+## 0.10.16-alpha.1
+
+### Patch Changes
+
+- 6336993: Fix workflow input form overflow
+- Updated dependencies [e0f73c6]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+  - @mastra/core@0.12.0-alpha.1
+  - @mastra/deployer@0.12.0-alpha.1
+
+## 0.10.16-alpha.0
+
+### Patch Changes
+
+- bc6b44a: Extract tools import from `createHonoServer`; the function now receives tools via a prop on the `options` parameter.
+- f442224: speech to text using voice config
+- 7a7754f: Fast follow scorers fixing input types, improve llm scorer reliability, fix ui to display scores that are 0
+- d8dec5e: add a cta to invite to deploy to cloud
+- 89d2f4e: add TTS to the playground
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [832691b]
+- Updated dependencies [557bb9d]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [bc6b44a]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+  - @mastra/deployer@0.12.0-alpha.0
+
 ## 0.10.15
 
 ### Patch Changes

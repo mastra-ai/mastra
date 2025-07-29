@@ -1,5 +1,39 @@
 # @mastra/cloudflare-d1
 
+## 0.12.4-alpha.1
+
+### Patch Changes
+
+- 9881232: dependencies updates:
+  - Updated dependency [`cloudflare@^4.5.0` ↗︎](https://www.npmjs.com/package/cloudflare/v/4.5.0) (from `^4.4.1`, in `dependencies`)
+- Updated dependencies [27cc97a]
+- Updated dependencies [41daa63]
+- Updated dependencies [254a36b]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [ff9c125]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0-alpha.2
+
+## 0.12.4-alpha.0
+
+### Patch Changes
+
+- 41c0698: fix executeRestQuery
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
 ## 0.12.3
 
 ### Patch Changes
