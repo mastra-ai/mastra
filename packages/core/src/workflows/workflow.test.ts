@@ -5863,6 +5863,147 @@ describe('Workflow', () => {
 
       expect(resumeResult.status).toBe('success');
     });
+
+    it('should support both explicit step resume and auto-resume (backwards compatibility)', async () => {
+      const suspendStep = createStep({
+        id: 'suspend-step',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        resumeSchema: z.object({
+          extraData: z.string(),
+        }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            // First execution - suspend
+            await suspend({ waitingFor: 'user-input', originalValue: inputData.value });
+            return { result: '' }; // Should not be reached
+          } else {
+            // Resume execution
+            return { result: `processed-${resumeData.extraData}` };
+          }
+        },
+      });
+
+      const completeStep = createStep({
+        id: 'complete-step',
+        inputSchema: z.object({
+          result: z.string(),
+        }),
+        outputSchema: z.object({
+          final: z.string(),
+        }),
+        execute: async ({ inputData }) => {
+          return { final: `Completed: ${inputData.result}` };
+        },
+      });
+
+      const testWorkflow = createWorkflow({
+        id: 'auto-resume-test-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ final: z.string() }),
+        mastra: new Mastra({ logger: false, storage: testStorage }),
+      })
+        .then(suspendStep)
+        .then(completeStep)
+        .commit();
+
+      // Test 1: Start workflow and suspend
+      const run1 = await testWorkflow.createRunAsync();
+      const result1 = await run1.start({ inputData: { value: 42 } });
+      expect(result1.status).toBe('suspended');
+      expect(result1.suspended).toEqual([['suspend-step']]);
+
+      // Test 2: Resume with explicit step parameter (backwards compatibility)
+      const explicitResumeResult = await run1.resume({
+        step: result1.suspended[0], // Pass the explicit suspended step
+        resumeData: { extraData: 'explicit-resume' },
+      });
+      expect(explicitResumeResult.status).toBe('success');
+      expect(explicitResumeResult.result.final).toBe('Completed: processed-explicit-resume');
+
+      // Test 3: Auto-resume without step parameter (new feature)
+      const run2 = await testWorkflow.createRunAsync();
+      const result2 = await run2.start({ inputData: { value: 100 } });
+      expect(result2.status).toBe('suspended');
+
+      const autoResumeResult = await run2.resume({
+        resumeData: { extraData: 'auto-resume' },
+        // No step parameter - should auto-detect
+      });
+      expect(autoResumeResult.status).toBe('success');
+      expect(autoResumeResult.result.final).toBe('Completed: processed-auto-resume');
+    });
+  });
+
+  it('should auto-resume simple suspended step without specifying step parameter', async () => {
+    const simpleStep = createStep({
+      id: 'simple-step',
+      inputSchema: z.object({
+        value: z.number(),
+      }),
+      outputSchema: z.object({
+        result: z.number(),
+      }),
+      resumeSchema: z.object({
+        multiplier: z.number(),
+      }),
+      execute: async ({ inputData, suspend, resumeData }) => {
+        if (!resumeData) {
+          await suspend({});
+          return { result: 0 };
+        }
+        return { result: inputData.value * resumeData.multiplier };
+      },
+    });
+
+    const simpleWorkflow = createWorkflow({
+      id: 'simple-auto-resume-workflow',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ result: z.number() }),
+      mastra: new Mastra({ logger: false, storage: testStorage }),
+    })
+      .then(simpleStep)
+      .commit();
+
+    const run = await simpleWorkflow.createRunAsync();
+
+    // Start workflow - should suspend
+    const startResult = await run.start({ inputData: { value: 10 } });
+    expect(startResult.status).toBe('suspended');
+    if (startResult.status === 'suspended') {
+      expect(startResult.suspended).toEqual([['simple-step']]);
+    }
+
+    // Test auto-resume without step parameter
+    const autoResumeResult = await run.resume({
+      resumeData: { multiplier: 5 },
+      // No step parameter - should auto-detect
+    });
+
+    expect(autoResumeResult.status).toBe('success');
+    if (autoResumeResult.status === 'success') {
+      expect(autoResumeResult.result.result).toBe(50); // 10 * 5
+    }
+
+    // Test explicit step parameter still works (backwards compatibility)
+    const run2 = await simpleWorkflow.createRunAsync();
+    const startResult2 = await run2.start({ inputData: { value: 20 } });
+    expect(startResult2.status).toBe('suspended');
+    if (startResult2.status === 'suspended') {
+      const explicitResumeResult = await run2.resume({
+        step: startResult2.suspended[0],
+        resumeData: { multiplier: 3 },
+      });
+
+      expect(explicitResumeResult.status).toBe('success');
+      if (explicitResumeResult.status === 'success') {
+        expect(explicitResumeResult.result.result).toBe(60); // 20 * 3
+      }
+    }
   });
 
   describe('Workflow Runs', () => {

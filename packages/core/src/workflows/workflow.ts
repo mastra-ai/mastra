@@ -1706,11 +1706,13 @@ export class Run<
         typeof step === 'string' ? step : step?.id,
       );
     } else {
-      // Get all suspended step paths by examining the step results in context
+      // Use suspendedPaths to detect suspended steps
       const suspendedStepPaths: string[][] = [];
 
-      Object.entries(snapshot?.context ?? {}).forEach(([stepId, stepResult]) => {
-        if (stepId !== 'input' && stepResult && typeof stepResult === 'object' && 'status' in stepResult) {
+      Object.entries(snapshot?.suspendedPaths ?? {}).forEach(([stepId, _executionPath]) => {
+        // Check if this step has nested workflow suspension data
+        const stepResult = snapshot?.context?.[stepId];
+        if (stepResult && typeof stepResult === 'object' && 'status' in stepResult) {
           const stepRes = stepResult as any;
           if (stepRes.status === 'suspended') {
             const nestedPath = stepRes.suspendPayload?.__workflow_meta?.path;
