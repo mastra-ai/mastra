@@ -69,6 +69,8 @@ export type StepResult<P, R, S, T> =
   | StepRunning<P, R, S>
   | StepWaiting<P, R, S>;
 
+export type WorkflowStepStatus = StepResult<any, any, any, any>['status'];
+
 export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
   [K in T[number]['id']]: Extract<T[number], { id: K }>;
 };
