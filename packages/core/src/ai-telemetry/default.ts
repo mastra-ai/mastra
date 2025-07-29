@@ -4,14 +4,15 @@
 
 import { MastraError } from '../error';
 import { MastraAITelemetry } from './base';
-import {
-  type AISpan,
-  type AISpanOptions,
-  type AISpanMetadata,
+import type {
   AISpanType,
-  type AITelemetryExporter,
-  type AITelemetryConfig,
-  type AIBaseMetadata,
+  AISpan,
+  AISpanOptions,
+  AISpanMetadata,
+  AITelemetryExporter,
+  AITelemetryConfig,
+  AIBaseMetadata,
+  AITelemetryEvent,
 } from './types';
 
 // ============================================================================
@@ -113,7 +114,7 @@ class DefaultAISpan implements AISpan<AIBaseMetadata> {
 export class DefaultConsoleExporter implements AITelemetryExporter {
   name = 'default-console';
 
-  async exportEvent(event: import('./types').AITelemetryEvent): Promise<void> {
+  async exportEvent(event: AITelemetryEvent): Promise<void> {
     const timestamp = new Date().toISOString();
 
     switch (event.type) {

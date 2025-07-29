@@ -6,6 +6,7 @@ import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger/constants';
 import type { RuntimeContext } from '../runtime-context';
 import { deepMerge } from '../utils';
+import { NoOpAISpan } from './no-op';
 import type {
   AITelemetryConfig,
   AISpan,
@@ -22,7 +23,6 @@ import type {
   AITraceContext,
 } from './types';
 import { AISpanType } from './types';
-import { NoOpAISpan } from './no-op';
 
 // ============================================================================
 // Default Configuration

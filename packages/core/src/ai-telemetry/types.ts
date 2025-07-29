@@ -2,9 +2,9 @@
  * AI Telemetry interfaces
  */
 
-import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows';
-import type { RuntimeContext } from '../runtime-context';
 import type { MastraError } from '../error';
+import type { RuntimeContext } from '../runtime-context';
+import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows';
 import type { MastraAITelemetry } from './base';
 
 // ============================================================================
