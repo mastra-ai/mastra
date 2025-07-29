@@ -717,7 +717,7 @@ export class Agent extends BaseResource {
                 this.processStreamResponse(
                   {
                     ...processedParams,
-                    messages: [...messageArray, ...messages, lastMessage],
+                    messages: [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage],
                   },
                   writable,
                 );
