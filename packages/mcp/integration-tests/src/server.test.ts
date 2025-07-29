@@ -2,21 +2,18 @@ import { spawn } from 'node:child_process';
 import { MCPClient } from '@mastra/mcp';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { ServerInfo } from '@mastra/core/mcp';
-import getPort from 'get-port';
 import path from 'node:path';
 
 vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
 
 describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
   let mastraServer: ReturnType<typeof spawn>;
-  let port: number;
+  const port: number = 4114;
   const mcpServerId = 'myMcpServer';
   const testToolId = 'calculator';
   let client: MCPClient;
 
   beforeAll(async () => {
-    port = await getPort();
-
     mastraServer = spawn(
       'pnpm',
       [
@@ -227,6 +224,15 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       } else {
         expect(body.next).toBeNull();
       }
+    });
+
+    it('Should be able to get lazy loaded tools', async () => {
+      const agent = await fetch(`http://localhost:${port}/api/agents/test`);
+      const agentJson = await agent.json();
+      const tools = agentJson.tools;
+
+      expect(tools).toHaveProperty('weather_fetchWeather');
+      expect(Object.keys(tools).length).toBe(4);
     });
   });
 });

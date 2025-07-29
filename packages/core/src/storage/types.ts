@@ -150,3 +150,12 @@ export type StorageMessageType = {
   createdAt: Date;
   resourceId: string | null;
 };
+
+export interface ThreadSortOptions {
+  orderBy?: ThreadOrderBy;
+  sortDirection?: ThreadSortDirection;
+}
+
+export type ThreadOrderBy = 'createdAt' | 'updatedAt';
+
+export type ThreadSortDirection = 'ASC' | 'DESC';

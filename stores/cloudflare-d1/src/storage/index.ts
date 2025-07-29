@@ -176,6 +176,7 @@ export class D1Store extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
+      deleteMessages: false,
     };
   }
 

@@ -19,7 +19,7 @@ const startServer = async (
   dotMastraPath: string,
   port: number,
   env: Map<string, string>,
-  startOptions: { inspect?: boolean; inspectBrk?: boolean } = {},
+  startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[] } = {},
   errorRestartCount = 0,
 ) => {
   let serverIsReady = false;
@@ -35,6 +35,10 @@ const startServer = async (
 
     if (startOptions.inspectBrk) {
       commands.push('--inspect-brk'); //stops at beginning of script
+    }
+
+    if (startOptions.customArgs) {
+      commands.push(...startOptions.customArgs);
     }
 
     if (!isWebContainer()) {
@@ -128,7 +132,7 @@ async function rebundleAndRestart(
   dotMastraPath: string,
   port: number,
   bundler: DevBundler,
-  startOptions: { inspect?: boolean; inspectBrk?: boolean } = {},
+  startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[] } = {},
 ) {
   if (isRestarting) {
     return;
@@ -158,6 +162,7 @@ export async function dev({
   env,
   inspect,
   inspectBrk,
+  customArgs,
 }: {
   dir?: string;
   root?: string;
@@ -166,6 +171,7 @@ export async function dev({
   env?: string;
   inspect?: boolean;
   inspectBrk?: boolean;
+  customArgs?: string[];
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
@@ -173,7 +179,7 @@ export async function dev({
 
   const defaultToolsPath = join(mastraDir, 'tools/**/*.{js,ts}');
   const discoveredTools = [defaultToolsPath, ...(tools || [])];
-  const startOptions = { inspect, inspectBrk };
+  const startOptions = { inspect, inspectBrk, customArgs };
 
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
