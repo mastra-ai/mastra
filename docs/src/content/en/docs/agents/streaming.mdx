@@ -9,10 +9,10 @@ Agents in Mastra have access to a powerful streaming protocol! With seamless int
 
 ## Usage
 
-To use the new protocol, you can use the `streamVNext` method on an agent. This method will return a custom MatraAgentStream. This stream extends a ReadableStream, so all basic stream methods are available.
+To use the new protocol, you can use the `streamVNext` method on an agent. This method will return a custom MastraAgentStream. This stream extends a ReadableStream, so all basic stream methods are available.
 
 ```typescript
-const stream = await agent.streamVNext({ role: "user", content: "Tell me a story." },);
+const stream = await agent.streamVNext({ role: "user", content: "Tell me a story." });
 
 for await (const chunk of stream) {
   console.log(chunk);
@@ -30,7 +30,7 @@ Each chunk is a JSON object with the following properties:
 }
 ```
 
-We have a couple of utlitiy functions on the stream to help you with the streaming process.
+We have a couple of utility functions on the stream to help you with the streaming process.
 
 - `stream.finishReason` - The reason the agent stopped streaming.
 - `stream.toolCalls` - The tool calls made by the agent.

@@ -13,7 +13,7 @@ The `streamVNext()` method enables real-time streaming of responses from a workf
 const run = await myWorkflow.createRunAsync();
 
 // Add a stream to monitor execution
-const result = run.streamVNext({ inputData: {...} });
+const stream = run.streamVNext({ inputData: {...} });
 
 
 for (const chunk of stream) {
@@ -126,8 +126,6 @@ for (const chunk of stream) {
 
 ## Returns
 
-The return value of the `streamVNext()` method depends on the options provided, specifically the `output` option.
-
 ### PropertiesTable for Return Values
 
 <PropertiesTable
@@ -137,7 +135,7 @@ The return value of the `streamVNext()` method depends on the options provided, 
       type: "Promise<object>",
       isOptional: true,
       description:
-        "Total usage of the agent, including agents/workflows as a tool.",
+        "Total usage of the workflow, including sub agents/workflows as a step.",
       properties: [
         {
           type: "number",
@@ -155,7 +153,7 @@ The return value of the `streamVNext()` method depends on the options provided, 
           parameters: [
             {
               name: "completionTokens",
-              type: "string",
+              type: "number",
               isOptional: true,
               description: "The number of completion tokens used by the agent.",
             },
@@ -193,13 +191,13 @@ The return value of the `streamVNext()` method depends on the options provided, 
 
 ## Examples
 
-### Basic Text Streaming
+### Basic Streaming
 
 ```typescript
 const run = await myWorkflow.createRunAsync();
 const stream = run.streamVNext({ inputData: {...} });
 
-for await (const chunk of stream.textStream) {
+for await (const chunk of stream) {
   process.stdout.write(chunk);
 }
 ```

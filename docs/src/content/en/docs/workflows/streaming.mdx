@@ -1,6 +1,6 @@
 ---
 title: "Using Workflow Streaming | Workflows | Mastra Docs"
-description: Documentation on how to stream agents
+description: Documentation on how to stream workflows
 ---
 
 # Workflow Streaming
@@ -31,7 +31,7 @@ Each chunk is a JSON object with the following properties:
 }
 ```
 
-We have a couple of utlitiy functions on the stream to help you with the streaming process.
+We have a couple of utility functions on the stream to help you with the streaming process.
 
 - `stream.status` - The status of the workflow run.
 - `stream.result` - The result of the workflow run.
@@ -42,7 +42,7 @@ We have a couple of utlitiy functions on the stream to help you with the streami
 Each tool gets a `writer` argument, which is a writable stream with a custom write function. This write function is used to write the tool's response to the stream.
 
 ```typescript
-import { createTool } from "@mastra/core/tools";
+import { createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 export const weatherInfo = createStep({
@@ -86,7 +86,7 @@ export const weatherInfo = createStep({
 If you want to use the stream in an agent, you can use the `streamVNext` method on the agent and pipe it to the agent's input stream.
 
 ```typescript
-import { createTool } from "@mastra/core/tools";
+import { createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 export const weatherInfo = createStep({

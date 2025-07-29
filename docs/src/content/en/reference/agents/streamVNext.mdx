@@ -417,7 +417,7 @@ Settings for telemetry collection during streaming:
           parameters: [
             {
               name: "example",
-              type: "{ type: 'tool-call', runId: '1', from: 'AGENT', payload: { toolCallId: 'uuid', result: { ... }, toolName: 'my tool' } }",
+              type: "{ type: 'tool-result', runId: '1', from: 'AGENT', payload: { toolCallId: 'uuid', result: { ... }, toolName: 'my tool' } }",
               description: "Example message structure",
               isOptional: false,
             },
@@ -428,7 +428,7 @@ Settings for telemetry collection during streaming:
     {
       name: "step-finish",
       type: "object",
-      description: "The start of a step",
+      description: "The end of a step",
       isOptional: false,
       properties: [
         {
@@ -504,7 +504,7 @@ The return value of the `streamVNext()` method is a custom MatraAgentStream. Thi
           parameters: [
             {
               name: "completionTokens",
-              type: "string",
+              type: "number",
               isOptional: true,
               description: "The number of completion tokens used by the agent.",
             },
