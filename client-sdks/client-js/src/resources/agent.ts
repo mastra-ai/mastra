@@ -632,7 +632,13 @@ export class Agent extends BaseResource {
       this.processChatResponse({
         stream: streamForProcessing,
         update: ({ message }) => {
-          messages.push(message);
+          const existingIndex = messages.findIndex(m => m.id === message.id);
+
+          if (existingIndex !== -1) {
+            messages[existingIndex] = message;
+          } else {
+            messages.push(message);
+          }
         },
         onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
@@ -711,7 +717,7 @@ export class Agent extends BaseResource {
                 this.processStreamResponse(
                   {
                     ...processedParams,
-                    messages: [...messageArray, ...messages, lastMessage],
+                    messages: [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage],
                   },
                   writable,
                 ).catch(error => {
