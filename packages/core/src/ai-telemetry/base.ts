@@ -153,13 +153,10 @@ export abstract class MastraAITelemetry extends MastraBase {
    *
    * Implementations should:
    * 1. Create a span with the provided metadata
-   * 2. Set span.trace to the appropriate trace
-   * 3. Set span.parent to options.parent (if any)
-   * 4. Set span.trace to span.parent.trace if options.parent, else to self.
-   * 5. Use createSpanWithCallbacks() helper to automatically wire up lifecycle callbacks
+   * 2. Set span.trace to span.parent.trace if options.parent, else to self.
+   * 3. Use createSpanWithCallbacks() helper to automatically wire up lifecycle callbacks
    *
    * The base class will automatically:
-   * - Add the span to trace.rootSpans if it has no parent
    * - Emit span_started event
    */
   protected abstract _startSpan(options: AISpanOptions): AISpan;
@@ -186,7 +183,6 @@ export abstract class MastraAITelemetry extends MastraBase {
     };
     const span = this._startSpan(options);
 
-    span.parent = options.parent;
     span.trace = options.parent ? options.parent.trace : span;
 
     // Emit span started event
@@ -305,6 +301,13 @@ export abstract class MastraAITelemetry extends MastraBase {
       case 'always_off':
         return false;
       case 'ratio':
+      case 'ratio':
+        if (sampling.probability === undefined || sampling.probability < 0 || sampling.probability > 1) {
+          this.logger.warn(
+            `Invalid sampling probability: ${sampling.probability}. Expected value between 0 and 1. Defaulting to no sampling.`,
+          );
+          return false;
+        }
         return Math.random() < sampling.probability;
       case 'custom':
         return sampling.sampler(traceContext);

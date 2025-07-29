@@ -191,10 +191,6 @@ export interface AISpan<TMetadata extends AISpanMetadata = AISpanMetadata> {
   endTime?: Date;
   /** AI-specific metadata */
   metadata: TMetadata;
-  /** Child spans */
-  children: AISpan[];
-  /** Parent span reference (undefined for root spans) */
-  parent?: AISpan;
   /** The top-level span */
   trace: AISpan;
   /** Pointer to the AITelemetry instance */

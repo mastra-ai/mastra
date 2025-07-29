@@ -28,8 +28,6 @@ class DefaultAISpan implements AISpan<AIBaseMetadata> {
   public name: string;
   public type: AISpanType;
   public metadata: AISpanMetadata;
-  public children: AISpan<AISpanMetadata>[] = [];
-  public parent?: AISpan<AISpanMetadata>;
   public trace: AISpan<AISpanMetadata>;
   public startTime: Date;
   public endTime?: Date;
@@ -40,15 +38,9 @@ class DefaultAISpan implements AISpan<AIBaseMetadata> {
     this.name = options.name;
     this.type = options.type;
     this.metadata = options.metadata;
-    this.parent = options.parent;
     this.trace = options.parent ? options.parent.trace : this;
     this.startTime = new Date();
     this.aiTelemetry = aiTelemetry;
-
-    // Add to parent's children if we have a parent
-    if (this.parent) {
-      this.parent.children.push(this);
-    }
   }
 
   end(metadata?: Partial<AIBaseMetadata>): void {
@@ -101,7 +93,6 @@ class DefaultAISpan implements AISpan<AIBaseMetadata> {
       metadata: this.metadata,
       startTime: this.startTime,
       endTime: this.endTime,
-      parentId: this.parent?.id,
       traceId: this.trace.id,
     });
   }
