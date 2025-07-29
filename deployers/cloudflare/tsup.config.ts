@@ -8,7 +8,7 @@ type Plugin = NonNullable<Options['plugins']>[number];
 const exec = promisify(spawn);
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: ['src/index.ts', 'src/secrets-manager/index.ts'],
   format: ['esm', 'cjs'],
   clean: true,
   dts: false,

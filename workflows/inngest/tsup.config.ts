@@ -8,15 +8,7 @@ type Plugin = NonNullable<Options['plugins']>[number];
 const exec = promisify(spawn);
 
 export default defineConfig({
-  entry: [
-    'src/index.ts',
-    'src/build/index.ts',
-    'src/server/index.ts',
-    'src/services/index.ts',
-    'src/bundler/index.ts',
-    'src/build/analyze.ts',
-    'src/validator/loader.ts',
-  ],
+  entry: ['src/index.ts'],
   format: ['esm', 'cjs'],
   clean: true,
   dts: false,
