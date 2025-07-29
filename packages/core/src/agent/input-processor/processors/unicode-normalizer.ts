@@ -63,6 +63,7 @@ export class UnicodeNormalizer implements InputProcessor {
       }));
     } catch {
       // do nothing, this isn't a critical processor
+      return args.messages;
     }
   }
 
