@@ -1,5 +1,14 @@
 # @mastra/deployer-vercel
 
+## 0.11.9-alpha.1
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+- Updated dependencies [f42c4c2]
+  - @mastra/deployer@0.12.0-alpha.5
+  - @mastra/core@0.12.0-alpha.5
+
 ## 0.11.9-alpha.0
 
 ### Patch Changes

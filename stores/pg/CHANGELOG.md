@@ -1,5 +1,15 @@
 # @mastra/pg
 
+## 0.13.0-alpha.1
+
+### Minor Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+
+### Patch Changes
+
+- @mastra/core@0.12.0-alpha.5
+
 ## 0.12.6-alpha.0
 
 ### Patch Changes

@@ -1,5 +1,17 @@
 # @mastra/deployer
 
+## 0.12.0-alpha.5
+
+### Minor Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+
+### Patch Changes
+
+- Updated dependencies [f42c4c2]
+  - @mastra/server@0.12.0-alpha.5
+  - @mastra/core@0.12.0-alpha.5
+
 ## 0.12.0-alpha.4
 
 ### Patch Changes
