@@ -29,15 +29,6 @@ export type MastraMessageV2 = {
   type?: string;
 };
 
-// function isToolCallMessage(message: CoreMessage): boolean {
-//   if (message.role === 'tool') {
-//     return true;
-//   }
-//   if (message.role === 'assistant' && Array.isArray(message.content)) {
-//     return message.content.some((part): part is ToolCallPart => part.type === 'tool-call');
-//   }
-//   return false;
-// }
 
 export type MessageInput = UIMessage | Message | MastraMessageV1 | CoreMessage | MastraMessageV2;
 type MessageSource = 'memory' | 'response' | 'user' | 'system' | 'context';
