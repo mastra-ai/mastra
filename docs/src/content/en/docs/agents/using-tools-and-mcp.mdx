@@ -7,6 +7,10 @@ description: Learn how to create tools, add them to Mastra agents, and integrate
 
 Tools are typed functions that can be executed by agents or workflows. Each tool has a schema defining its inputs, an executor function implementing its logic, and optional access to configured integrations.
 
+Mastra supports two patterns for providing tools to agents:
+- **Direct assignment**: Static tools available at initialization
+- **Function-based**: Dynamic tools resolved based on runtime context  
+
 ## Creating Tools
 
 Here's a basic example of creating a tool:
@@ -104,6 +108,41 @@ const agent = new Agent({
   instructions: "You can use tools from connected MCP servers.",
   model: openai("gpt-4o-mini"),
   tools: await mcp.getTools(),
+});
+```
+
+When creating agents that will consume an MCP server in the same repo they need to connect to, always use function based tools to prevent race conditions.
+
+```typescript filename="src/mastra/agents/selfReferencingAgent.ts"
+import { Agent } from "@mastra/core/agent";
+import { MCPServer } from "@mastra/mcp";
+import { MCPClient } from "@mastra/mcp";
+import { openai } from "@ai-sdk/openai";
+
+const myAgent = new Agent({
+  name: "My Agent",
+  description: "An agent that can use tools from an http MCP server", 
+  instructions: "You can use remote calculation tools.",
+  model: openai("gpt-4o-mini"),
+  tools: async () => {
+    // Tools resolve when needed, not during initialization
+    const mcpClient = new MCPClient({
+      servers: {
+        myServer: {
+          url: new URL("http://localhost:4111/api/mcp/mcpServer/mcp"),
+        },
+      },
+    });
+    return await mcpClient.getTools();
+  },
+});
+
+// This works because tools resolve after server startup
+export const mcpServer = new MCPServer({
+  name: "My MCP Server",
+  agents: {
+    myAgent
+  },
 });
 ```
 

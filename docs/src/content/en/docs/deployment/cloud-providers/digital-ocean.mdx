@@ -4,7 +4,6 @@ description: "Deploy your Mastra applications to Digital Ocean."
 ---
 
 import { Callout, Steps, Tabs } from "nextra/components";
-import ServerConfig from "@/components/content-blocks/server-config.mdx";
 
 ## Digital Ocean
 
@@ -25,8 +24,8 @@ Deploy your Mastra applications to Digital Ocean's App Platform and Droplets.
 
 #### Prerequisites [#app-platform-prerequisites]
 
-- A Git repository containing your Mastra application. This can be a GitHub repository, GitLab repository, or any other compatible source provider.
-- A Digital Ocean account
+- A Git repository containing your Mastra application. This can be a [GitHub](https://github.com/) repository, [GitLab](https://gitlab.com/) repository, or any other compatible source provider.
+- A [Digital Ocean account](https://www.digitalocean.com/)
 
 #### Deployment Steps
 
@@ -34,8 +33,8 @@ Deploy your Mastra applications to Digital Ocean's App Platform and Droplets.
 
 #### Create a new App
 
-- Log in to your Digital Ocean dashboard.
-- Navigate to the App Platform service.
+- Log in to your [Digital Ocean dashboard](https://cloud.digitalocean.com/).
+- Navigate to the [App Platform](https://docs.digitalocean.com/products/app-platform/) service.
 - Select your source provider and create a new app.
 
 #### Configure Deployment Source
@@ -76,21 +75,86 @@ such as `LibSQLStore` with a file URL.
 ### Droplets
 
 Deploy your Mastra application to Digital Ocean's Droplets.
-This guide will cover setting up a droplet, a reverse proxy using Nginx, and running your Mastra application.
-
-<Callout>
-The guide assumes your droplet runs Ubuntu 24+.
-</Callout>
 
 #### Prerequisites [#droplets-prerequisites]
 
-- A Digital Ocean account
-- A droplet running Ubuntu 24+
+- A [Digital Ocean account](https://www.digitalocean.com/)
+- A [Droplet](https://docs.digitalocean.com/products/droplets/) running Ubuntu 24+
 - A domain name with an A record pointing to your droplet
+- A reverse proxy configured (e.g., using [nginx](https://nginx.org/))
+- SSL certificate configured (e.g., using [Let's Encrypt](https://letsencrypt.org/))
+- Node.js 18+ installed on your droplet
 
-#### Setting up the droplet
+#### Deployment Steps
 
-<ServerConfig />
+<Steps>
+
+#### Clone your Mastra application
+
+Connect to your Droplet and clone your repository:
+
+<Tabs items={["Public Repository", "Private Repository"]}>
+<Tabs.Tab>
+
+```bash copy
+git clone https://github.com/<your-username>/<your-repository>.git
+```
+
+</Tabs.Tab>
+
+<Tabs.Tab>
+
+```bash copy
+git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
+```
+
+</Tabs.Tab>
+</Tabs>
+
+Navigate to the repository directory:
+
+```bash copy
+cd "<your-repository>"
+```
+
+#### Install dependencies
+
+```bash copy
+npm install
+```
+
+#### Set up environment variables
+
+Create a `.env` file and add your environment variables:
+
+```bash copy
+touch .env
+```
+
+Edit the `.env` file and add your environment variables:
+
+```bash copy
+OPENAI_API_KEY=<your-openai-api-key>
+# Add other required environment variables
+```
+
+#### Build the application
+
+```bash copy
+npm run build
+```
+
+#### Run the application
+
+```bash copy
+node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
+```
+
+<Callout>
+Your Mastra application will run on port 4111 by default. Ensure your reverse proxy is configured to forward requests to this port.
+</Callout>
+
+</Steps>
 
 </Tabs.Tab>
 
@@ -109,3 +173,9 @@ const mastraClient = new MastraClient({
   baseUrl: "https://<your-domain-name>",
 });
 ```
+
+## Next steps
+
+- [Mastra Client SDK](/docs/client-js/overview)
+- [Digital Ocean App Platform documentation](https://docs.digitalocean.com/products/app-platform/)
+- [Digital Ocean Droplets documentation](https://docs.digitalocean.com/products/droplets/)

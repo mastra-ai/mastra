@@ -27,6 +27,7 @@ const globalExternals = [
   'sqlite3',
   'fastembed',
   'nodemailer',
+  '#tools',
 ];
 
 function findExternalImporter(module: OutputChunk, external: string, allOutputs: OutputChunk[]): OutputChunk | null {
@@ -73,6 +74,7 @@ async function analyze(
   isVirtualFile: boolean,
   platform: 'node' | 'browser',
   logger: IMastraLogger,
+  sourcemapEnabled: boolean = false,
 ) {
   logger.info('Analyzing dependencies...');
   let virtualPlugin = null;
@@ -126,7 +128,7 @@ async function analyze(
         transformMixedEsModules: true,
         extensions: ['.js', '.ts'],
       }),
-      removeDeployer(normalizedMastraEntry),
+      removeDeployer(normalizedMastraEntry, { sourcemap: sourcemapEnabled }),
       esbuild({
         target: 'node20',
         platform,
@@ -253,8 +255,7 @@ async function bundleExternals(
       }),
       nodeResolve({
         preferBuiltins: true,
-        exportConditions: ['node', 'import', 'require'],
-        mainFields: ['module', 'main'],
+        exportConditions: ['node'],
       }),
       // hono is imported from deployer, so we need to resolve from here instead of the project root
       aliasHono(),
@@ -274,6 +275,10 @@ async function bundleExternals(
 
   for (const o of filteredChunks.filter(o => o.isEntry || o.isDynamicEntry)) {
     for (const external of allExternals) {
+      if (external === '#tools') {
+        continue;
+      }
+
       const importer = findExternalImporter(o, external, filteredChunks);
 
       if (importer) {
@@ -390,11 +395,12 @@ export async function analyzeBundle(
   outputDir: string,
   platform: 'node' | 'browser',
   logger: IMastraLogger,
+  sourcemapEnabled: boolean = false,
 ) {
   const depsToOptimize = new Map<string, string[]>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
-    const analyzeResult = await analyze(entry, mastraEntry, isVirtualFile, platform, logger);
+    const analyzeResult = await analyze(entry, mastraEntry, isVirtualFile, platform, logger, sourcemapEnabled);
 
     for (const [dep, exports] of analyzeResult.entries()) {
       if (depsToOptimize.has(dep)) {

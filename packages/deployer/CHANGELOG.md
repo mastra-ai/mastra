@@ -1,5 +1,202 @@
 # @mastra/deployer
 
+## 0.12.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ad0a58b]
+  - @mastra/core@0.12.0-alpha.4
+  - @mastra/server@0.12.0-alpha.4
+
+## 0.12.0-alpha.3
+
+### Patch Changes
+
+- 9802f42: Added types and tests to ensure client-js and hono endpoints can save memory messages where the input is either a v1 or v2 mastra message
+- Updated dependencies [9802f42]
+  - @mastra/server@0.12.0-alpha.3
+  - @mastra/core@0.12.0-alpha.3
+
+## 0.12.0-alpha.2
+
+### Patch Changes
+
+- 27cc97a: dependencies updates:
+  - Updated dependency [`hono@^4.8.9` ↗︎](https://www.npmjs.com/package/hono/v/4.8.9) (from `^4.8.4`, in `dependencies`)
+- ff9c125: enhance thread retrieval with sorting options in libsql and pg
+- d5cc460: This change implements a fix to sourcemap mappings being off due to `removeDeployer` Babel plugin missing source map config.
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- Updated dependencies [27cc97a]
+- Updated dependencies [41daa63]
+- Updated dependencies [254a36b]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [ff9c125]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0-alpha.2
+  - @mastra/server@0.12.0-alpha.2
+
+## 0.12.0-alpha.1
+
+### Patch Changes
+
+- a77c823: include PATCH method in default CORS configuration
+- Updated dependencies [e0f73c6]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+  - @mastra/core@0.12.0-alpha.1
+  - @mastra/server@0.12.0-alpha.1
+
+## 0.12.0-alpha.0
+
+### Patch Changes
+
+- 832691b: dependencies updates:
+  - Updated dependency [`@babel/core@^7.28.0` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.28.0) (from `^7.27.7`, in `dependencies`)
+- 557bb9d: dependencies updates:
+  - Updated dependency [`esbuild@^0.25.8` ↗︎](https://www.npmjs.com/package/esbuild/v/0.25.8) (from `^0.25.5`, in `dependencies`)
+- bc6b44a: Extract tools import from `createHonoServer`; the function now receives tools via a prop on the `options` parameter.
+- 09bca64: Log warning when telemetry is enabled but not loaded
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+  - @mastra/server@0.12.0-alpha.0
+
+## 0.11.1
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+- Updated dependencies [417fd92]
+- Updated dependencies [ce088f5]
+  - @mastra/server@0.11.1
+  - @mastra/core@0.11.1
+
+## 0.11.0
+
+### Minor Changes
+
+- 0938991: Refactored the hono server structure by extracting route logic into route groups based on namespace.
+
+### Patch Changes
+
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 82c6860: fix tool import
+- 7ba91fa: Throw mastra errors methods not implemented yet
+- a512ede: Add scores to deployer routes
+- 35b1155: Added "Semantic recall search" to playground UI chat sidebar, to search for messages and find them in the chat list
+- 45469c5: Resolve dependency of tsConfigPath modules
+- 6f50efd: Only enforce authorization on protected routes
+- 24eb25c: Provide fallback for extracted mastra options during bundling
+- bf6903e: Fix dependency resolving with directories
+
+  Follow import from `import x from 'pkg/dir'` => `import x from 'pkg/dir/index.js'`
+
+- 703ac71: scores schema
+- 4c06f06: Fix #tools import after the tools import rework
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 9de6f58: Unlocks the dev playground if auth is enabled
+- 7983e53: Revert cloudflare omit install deps step
+- 15ce274: Pipe all env vars in deloyer install
+
+  Fixes and issue with cloudflare
+
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [35b1155]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [7827943]
+- Updated dependencies [5889a31]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [62007b3]
+- Updated dependencies [dcd4802]
+- Updated dependencies [cbddd18]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0
+  - @mastra/server@0.11.0
+
+## 0.11.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [62007b3]
+  - @mastra/server@0.11.0-alpha.3
+  - @mastra/core@0.11.0-alpha.3
+
+## 0.11.0-alpha.2
+
+### Patch Changes
+
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 82c6860: fix tool import
+- 7ba91fa: Throw mastra errors methods not implemented yet
+- a512ede: Add scores to deployer routes
+- 35b1155: Added "Semantic recall search" to playground UI chat sidebar, to search for messages and find them in the chat list
+- 45469c5: Resolve dependency of tsConfigPath modules
+- 24eb25c: Provide fallback for extracted mastra options during bundling
+- 703ac71: scores schema
+- 4c06f06: Fix #tools import after the tools import rework
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 9de6f58: Unlocks the dev playground if auth is enabled
+- 15ce274: Pipe all env vars in deloyer install
+
+  Fixes and issue with cloudflare
+
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [35b1155]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [5889a31]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0-alpha.2
+  - @mastra/server@0.11.0-alpha.2
+
 ## 0.11.0-alpha.1
 
 ### Patch Changes
