@@ -201,9 +201,9 @@ export class ModerationInputProcessor implements InputProcessor {
   private isModerationFlagged(result: ModerationResult): boolean {
     // Check if any category scores exceed the threshold
     if (result.category_scores) {
-      const maxScore = Math.max(
-        ...(Object.values(result.category_scores).filter(score => typeof score === 'number') as number[]),
-      );
+      const scores = Object.values(result.category_scores).filter(score => typeof score === 'number') as number[];
+      if (scores.length === 0) return false;
+      const maxScore = Math.max(...scores);
       return maxScore >= this.threshold;
     }
 
