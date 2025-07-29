@@ -30,8 +30,8 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "pnpm run check && tsup --silent src/index.ts src/processors/index.ts --format esm,cjs --clean --treeshake=smallest --splitting --sourcemap --no-dts && tsc -p tsconfig.build.json",
-    "build:watch": "pnpm build --watch",
+    "build": "pnpm run check && tsup --silent --config tsup.config.ts",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test:integration": "cd integration-tests && pnpm run test",
     "test:unit": "pnpm vitest run ./src/*",
     "test": "pnpm test:integration && pnpm test:unit",
