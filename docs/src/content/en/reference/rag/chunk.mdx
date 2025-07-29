@@ -42,11 +42,13 @@ const chunksWithMetadata = await doc.chunk({
 
 ## Parameters
 
+The following parameters are available for all chunking strategies:
+
 <PropertiesTable
   content={[
     {
       name: "strategy",
-      type: "'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex'",
+      type: "'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex' | 'sentence'",
       isOptional: true,
       description:
         "The chunking strategy to use. If not specified, defaults based on document type. Depending on the chunking strategy, there are additional optionals. Defaults: .md files → 'markdown', .html/.htm → 'html', .json → 'json', .tex → 'latex', others → 'recursive'",
@@ -66,33 +68,38 @@ const chunksWithMetadata = await doc.chunk({
       description: "Number of characters/tokens that overlap between chunks.",
     },
     {
-      name: "separator",
-      type: "string",
+      name: "lengthFunction",
+      type: "(text: string) => number",
       isOptional: true,
-      defaultValue: "\\n\\n",
-      description:
-        "Character(s) to split on. Defaults to double newline for text content.",
-    },
-    {
-      name: "isSeparatorRegex",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether the separator is a regex pattern",
+      description: "Function to calculate text length. Defaults to character count.",
     },
     {
       name: "keepSeparator",
-      type: "'start' | 'end'",
+      type: "boolean | 'start' | 'end'",
       isOptional: true,
       description:
         "Whether to keep the separator at the start or end of chunks",
+    },
+    {
+      name: "addStartIndex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to add start index metadata to chunks.",
+    },
+    {
+      name: "stripWhitespace",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Whether to strip whitespace from chunks.",
     },
     {
       name: "extract",
       type: "ExtractParams",
       isOptional: true,
       description:
-        "Metadata extraction configuration. See [ExtractParams reference](./extract-params) for details.",
+        "Metadata extraction configuration. See [ExtractParams reference](/reference/rag/extract-params) for details.",
     },
   ]}
 />
@@ -102,6 +109,31 @@ const chunksWithMetadata = await doc.chunk({
 Strategy-specific options are passed as top-level parameters alongside the strategy parameter. For example:
 
 ```typescript showLineNumbers copy
+// Character strategy example
+const chunks = await doc.chunk({
+  strategy: "character",
+  separator: ".",
+  isSeparatorRegex: false, // Character-specific option
+  size: 300, // general option
+});
+
+// Recursive strategy example
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  separators: ["\n\n", "\n", " "], // Recursive-specific option
+  language: "markdown", // Recursive-specific option
+  size: 500, // general option
+});
+
+// Sentence strategy example
+const chunks = await doc.chunk({
+  strategy: "sentence",
+  maxSize: 450, // Sentence-specific option
+  minSize: 50, // Sentence-specific option
+  sentenceEnders: ["."], // Sentence-specific option
+  keepSeparator: true, // general option
+});
+
 // HTML strategy example
 const chunks = await doc.chunk({
   strategy: "html",
@@ -134,6 +166,99 @@ const chunks = await doc.chunk({
 ```
 
 The options documented below are passed directly at the top level of the configuration object, not nested within a separate options object.
+
+### Character
+
+<PropertiesTable
+  content={[
+    {
+      name: "separator",
+      type: "string",
+      isOptional: true,
+      defaultValue: "\\n\\n",
+      description: "Character(s) to split on. Defaults to double newline for text content.",
+    },
+    {
+      name: "isSeparatorRegex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether the separator is a regex pattern",
+    },
+  ]}
+/>
+
+### Recursive
+
+<PropertiesTable
+  content={[
+    {
+      name: "separators",
+      type: "string[]",
+      isOptional: true,
+      description: "Array of separators to try in order of preference. The strategy will attempt to split on the first separator, then fall back to subsequent ones.",
+    },
+    {
+      name: "isSeparatorRegex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether the separators are regex patterns",
+    },
+    {
+      name: "language",
+      type: "Language",
+      isOptional: true,
+      description: "Programming or markup language for language-specific splitting behavior. See Language enum for supported values.",
+    },
+  ]}
+/>
+
+### Sentence
+
+<PropertiesTable
+  content={[
+    {
+      name: "maxSize",
+      type: "number",
+      description: "Maximum size of each chunk (required for sentence strategy)",
+    },
+    {
+      name: "minSize",
+      type: "number",
+      isOptional: true,
+      defaultValue: "50",
+      description: "Minimum size of each chunk. Chunks smaller than this will be merged with adjacent chunks when possible.",
+    },
+    {
+      name: "targetSize",
+      type: "number",
+      isOptional: true,
+      description: "Preferred target size for chunks. Defaults to 80% of maxSize. The strategy will try to create chunks close to this size.",
+    },
+    {
+      name: "sentenceEnders",
+      type: "string[]",
+      isOptional: true,
+      defaultValue: "['.', '!', '?']",
+      description: "Array of characters that mark sentence endings for splitting boundaries.",
+    },
+    {
+      name: "preserveWhitespace",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Whether to preserve whitespace around sentence boundaries in the output.",
+    },
+    {
+      name: "fallbackToWords",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "Whether to fall back to word-level splitting for sentences that exceed maxSize.",
+    },
+  ]}
+/>
 
 ### HTML
 
@@ -200,6 +325,18 @@ The options documented below are passed directly at the top level of the configu
       isOptional: true,
       description: "Name of the model for tokenization",
     },
+    {
+      name: "allowedSpecial",
+      type: "Set<string> | 'all'",
+      isOptional: true,
+      description: "Set of special tokens allowed during tokenization, or 'all' to allow all special tokens",
+    },
+    {
+      name: "disallowedSpecial",
+      type: "Set<string> | 'all'",
+      isOptional: true,
+      description: "Set of special tokens to disallow during tokenization, or 'all' to disallow all special tokens",
+    },
   ]}
 />
 
@@ -232,6 +369,10 @@ The options documented below are passed directly at the top level of the configu
     },
   ]}
 />
+
+### Latex
+
+The Latex strategy uses only the base chunking parameters listed above. It provides LaTeX-aware splitting optimized for mathematical and academic documents.
 
 ## Return Value
 

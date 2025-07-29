@@ -25,6 +25,9 @@ Use `chunk` to split documents into manageable pieces. Mastra supports multiple 
 - `html`: HTML structure-aware splitting
 - `json`: JSON structure-aware splitting
 - `latex`: LaTeX structure-aware splitting
+- `sentence`: Sentence-aware splitting
+
+**Note:** Each strategy accepts different parameters optimized for its chunking approach.
 
 Here's an example of how to use the `recursive` strategy:
 
@@ -33,10 +36,23 @@ const chunks = await doc.chunk({
   strategy: "recursive",
   size: 512,
   overlap: 50,
-  separator: "\n",
+  separators: ["\n"],
   extract: {
     metadata: true, // Optionally extract metadata
   },
+});
+```
+
+For text where preserving sentence structure is important, here's an example of how to use the `sentence` strategy:
+
+```ts showLineNumbers copy
+const chunks = await doc.chunk({
+  strategy: "sentence",
+  maxSize: 450,
+  minSize: 50,
+  overlap: 0,
+  sentenceEnders: ["."],
+  keepSeparator: true,
 });
 ```
 
