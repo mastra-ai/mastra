@@ -3,36 +3,66 @@ title: "Logging | Mastra Observability Documentation"
 description: Documentation on effective logging in Mastra, crucial for understanding application behavior and improving AI accuracy.
 ---
 
-import Image from "next/image";
-
 # Logging
 
-In Mastra, logs can detail when certain functions run, what input data they receive, and how they respond.
+Mastra's logging system captures function execution, input data, and output responses in a structured format.
 
-## Basic Setup
+## PinoLogger
 
-Here's a minimal example that sets up a **console logger** at the `INFO` level. This will print out informational messages and above (i.e., `DEBUG`, `INFO`, `WARN`, `ERROR`) to the console.
+When [initializing a new Mastra project](../getting-started/installation.mdx) using the CLI, `PinoLogger` is included by default and configured to print informational messages to the [Mastra Cloud Logs](../mastra-cloud//observability.mdx).
 
-```typescript filename="mastra.config.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { PinoLogger } from "@mastra/loggers";
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from '@mastra/core/mastra';
+import { PinoLogger } from '@mastra/loggers';
 
 export const mastra = new Mastra({
-  // Other Mastra configuration...
+  // ...
   logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
+    name: 'Mastra',
+    level: 'info',
   }),
 });
 ```
 
-In this configuration:
+> See the [PinoLogger](../../reference//observability/logger.mdx) API reference for all available configuration options.
 
-- `name: "Mastra"` specifies the name to group logs under.
-- `level: "info"` sets the minimum severity of logs to record.
+### Configuration explained
 
-## Configuration
+- **name** – Sets the logger name used to group and identify logs.
+- **level** – Defines the minimum log level to record.
 
-- For more details on the options you can pass to `PinoLogger()`, see the [PinoLogger reference documentation](/reference/observability/logger).
-- Once you have a `Logger` instance, you can call its methods (e.g., `.info()`, `.warn()`, `.error()`) in the [Logger instance reference documentation](/reference/observability/logger).
-- If you want to send your logs to an external service for centralized collection, analysis, or storage, you can configure other logger types such as Upstash Redis. Consult the [Logger reference documentation](/reference/observability/logger) for details on parameters like `url`, `token`, and `key` when using the `UPSTASH` logger type.
+## Logging from workflow steps
+
+To capture detailed logs during workflow execution, use the logger instance available via the `mastra` parameter inside a step’s `execute` function. Use severity-based methods such as `info` and `error` to record relevant events during runtime.
+
+```typescript {6,9,15,18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  //...
+  execute: async ({ inputData, mastra }) => {
+    const { input } = inputData;
+
+    const logger = mastra.getLogger();
+
+    const agent = mastra.getAgent("testAgent");
+    const response = await agent.generate(input);
+
+    if (!agent) {
+      logger.error("This is an error log");
+    }
+
+    logger.info("This is an info log");
+
+    return {
+      output: response.text
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .commit();
+```
