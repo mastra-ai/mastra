@@ -1,6 +1,9 @@
 import type { Message, BaseEvent } from '@ag-ui/client';
 import { describe, it, expect, vi } from 'vitest';
 import { generateUUID, convertMessagesToMastraMessages, AGUIAdapter } from './agui';
+import { Agent } from '@mastra/core/agent';
+import { MockLanguageModelV1 } from 'ai/test';
+import { simulateReadableStream } from 'ai';
 
 describe('generateUUID', () => {
   it('should generate a valid UUID v4 string', () => {
@@ -181,27 +184,69 @@ describe('convertMessagesToMastraMessages', () => {
 
 describe('AGUIAdapter', () => {
   it('should correctly pass parameters to agent stream method', async () => {
-    // Mock agent that verifies the stream method is called with correct parameters
-    const mockAgent = {
-      stream: vi.fn().mockImplementation(params => {
-        // Verify the client agent.stream() receives the expected params object
+    // Create a real agent with MockLanguageModelV1
+    const mockModel = new MockLanguageModelV1({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [
+            { type: 'text-delta', textDelta: 'Hello' },
+            { type: 'text-delta', textDelta: ' from' },
+            { type: 'text-delta', textDelta: ' agent' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              logprobs: undefined,
+              usage: { completionTokens: 3, promptTokens: 10 },
+            },
+          ],
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+
+    const agent = new Agent({
+      name: 'Test Agent',
+      instructions: 'You are a test agent',
+      model: mockModel,
+    });
+
+    // Wrap the agent in a client-side agent object that matches what AGUIAdapter expects
+    const clientAgent = {
+      stream: vi.fn().mockImplementation(async params => {
+        // Verify the parameters are passed correctly
         expect(params).toHaveProperty('messages');
         expect(params).toHaveProperty('threadId');
         expect(params).toHaveProperty('resourceId');
         expect(params).toHaveProperty('runId');
         expect(params).toHaveProperty('clientTools');
 
-        return Promise.resolve({
-          processDataStream: vi.fn().mockImplementation(({ onFinishMessagePart }) => {
-            onFinishMessagePart?.();
+        // Call the real agent's stream method with extracted parameters
+        const result = await agent.stream(params.messages, {
+          threadId: params.threadId,
+          resourceId: params.resourceId,
+          runId: params.runId,
+          clientTools: params.clientTools,
+        });
+
+        // Return a mock processDataStream that mimics the expected behavior
+        return {
+          ...result,
+          processDataStream: vi.fn().mockImplementation(async ({ onTextPart, onFinishMessagePart }) => {
+            // Simulate streaming text
+            if (onTextPart) {
+              onTextPart('Hello from agent');
+            }
+            if (onFinishMessagePart) {
+              onFinishMessagePart();
+            }
             return Promise.resolve();
           }),
-        });
+        };
       }),
     };
 
     const adapter = new AGUIAdapter({
-      agent: mockAgent as any,
+      agent: clientAgent as any,
       agentId: 'test-agent',
       resourceId: 'testAgent',
     });
@@ -232,7 +277,7 @@ describe('AGUIAdapter', () => {
     });
 
     // Verify the agent.stream was called with the correct structure
-    expect(mockAgent.stream).toHaveBeenCalledWith({
+    expect(clientAgent.stream).toHaveBeenCalledWith({
       threadId: 'test-thread-id',
       resourceId: 'testAgent',
       runId: 'test-run-id',
