@@ -1,10 +1,12 @@
 import { openai } from '@ai-sdk/openai';
+import { google } from '@ai-sdk/google';
 import { jsonSchema, tool } from 'ai';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
+import { Agent, InputProcessor } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
+import { PIIDetector, LanguageDetector, PromptInjectionDetector } from '@mastra/core/agent/input-processor/processors';
 import { MCPClient } from '@mastra/mcp';
 
 const memory = new Memory();
@@ -84,6 +86,41 @@ export const dynamicAgent = new Agent({
   },
 });
 
+const vegetarianProcessor: InputProcessor = {
+  name: 'eat-more-tofu',
+  process: async ({ messages }) => {
+    messages.push({
+      id: crypto.randomUUID(),
+      createdAt: new Date(),
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Make the suggested recipe, but remove any meat and add tofu instead' }],
+      },
+    });
+
+    return messages;
+  },
+};
+
+const piiDetector = new PIIDetector({
+  model: google('gemini-2.0-flash-001'),
+  redactionMethod: 'mask',
+  preserveFormat: true,
+  includeDetections: true,
+});
+
+const languageDetector = new LanguageDetector({
+  model: google('gemini-2.0-flash-001'),
+  targetLanguages: ['en'],
+  strategy: 'translate',
+});
+
+const promptInjectionDetector = new PromptInjectionDetector({
+  model: google('gemini-2.0-flash-001'),
+  strategy: 'block',
+});
+
 const mcpInstance = new MCPClient({
   id: 'myMcpServerTwo',
   servers: {
@@ -110,4 +147,43 @@ export const chefAgentResponses = new Agent({
   workflows: {
     myWorkflow,
   },
+  inputProcessors: [
+    piiDetector,
+    vegetarianProcessor,
+    languageDetector,
+    promptInjectionDetector,
+    {
+      name: 'no-soup-for-you',
+      process: async ({ messages, abort }) => {
+        const hasSoup = messages.some(msg => {
+          for (const part of msg.content.parts) {
+            if (part.type === 'text' && part.text.includes('soup')) {
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (hasSoup) {
+          abort('No soup for you!');
+        }
+
+        return messages;
+      },
+    },
+    {
+      name: 'remove-spinach',
+      process: async ({ messages }) => {
+        for (const message of messages) {
+          for (const part of message.content.parts) {
+            if (part.type === 'text' && part.text.includes('spinach')) {
+              part.text = part.text.replaceAll('spinach', '');
+            }
+          }
+        }
+
+        return messages;
+      },
+    },
+  ],
 });
