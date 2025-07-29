@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.12.0-alpha.4
+
+### Patch Changes
+
+- ad0a58b: Enhancements for premade input processors
+
 ## 0.12.0-alpha.3
 
 ## 0.12.0-alpha.2
