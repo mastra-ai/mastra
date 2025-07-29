@@ -111,19 +111,6 @@ In this case, the logic resumes the first step listed in the `suspended` array. 
 }
 ```
 
-Alternatively, when exactly one step is suspended, you can omit the `step` parameter and the workflow will automatically resume that step:
-
-```typescript
-if (result.status === "suspended") {
-  const resumedResult = await run.resume({
-    resumeData: {
-      city: "Berlin"
-    }
-    // step parameter omitted - automatically resumes when exactly one step is suspended
-  });
-}
-```
-
 > See [Run Workflow Results](/workflows/overview#run-workflow-results) for more details.
 
 ## Resuming a workflow with `resume()`
@@ -157,29 +144,13 @@ if (result.status === "suspended") {
 
 You can also omit the `step` parameter when exactly one step is suspended:
 
-```typescript {16-18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
-
-const result = await run.start({
-   inputData: {
-    city: "London"
+```typescript {5} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const resumedResult = await run.resume({
+  resumeData: {
+    city: "Berlin"
   }
+  // step parameter omitted - automatically resumes the single suspended step
 });
-
-console.log(JSON.stringify(result, null, 2));
-
-if (result.status === "suspended") {
-  const resumedResult = await run.resume({
-    resumeData: {
-      city: "Berlin"
-    }
-    // step parameter omitted - automatically resumes the single suspended step
-  });
-
-  console.log(JSON.stringify(resumedResult, null, 2));
-}
 ```
 
 ### Resuming nested workflows
