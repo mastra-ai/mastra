@@ -2,25 +2,8 @@ import z from 'zod';
 import type { MastraLanguageModel } from '../../index';
 import { Agent } from '../../index';
 import type { MastraMessageV2 } from '../../message-list';
+import { TripWire } from '../../trip-wire';
 import type { InputProcessor } from '../index';
-
-/**
- * Moderation categories based on OpenAI's structure but configurable
- */
-export interface ModerationCategories {
-  hate?: boolean;
-  'hate/threatening'?: boolean;
-  harassment?: boolean;
-  'harassment/threatening'?: boolean;
-  'self-harm'?: boolean;
-  'self-harm/intent'?: boolean;
-  'self-harm/instructions'?: boolean;
-  sexual?: boolean;
-  'sexual/minors'?: boolean;
-  violence?: boolean;
-  'violence/graphic'?: boolean;
-  [customCategory: string]: boolean | undefined;
-}
 
 /**
  * Confidence scores for each moderation category (0-1)
@@ -41,12 +24,10 @@ export interface ModerationCategoryScores {
 }
 
 /**
- * Result structure similar to OpenAI's moderation API
+ * Result structure for moderation
  */
 export interface ModerationResult {
-  flagged: boolean;
-  categories: ModerationCategories;
-  category_scores: ModerationCategoryScores;
+  category_scores?: ModerationCategoryScores;
   reason?: string;
 }
 
@@ -158,7 +139,7 @@ export class ModerationInputProcessor implements InputProcessor {
         const moderationResult = await this.moderateContent(textContent);
         results.push(moderationResult);
 
-        if (moderationResult.flagged) {
+        if (this.isModerationFlagged(moderationResult)) {
           this.handleFlaggedContent(moderationResult, this.strategy, abort);
 
           // If we reach here, strategy is 'warn' or 'filter'
@@ -172,7 +153,7 @@ export class ModerationInputProcessor implements InputProcessor {
 
       return passedMessages;
     } catch (error) {
-      if (error instanceof Error && error.message.includes('Tripwire')) {
+      if (error instanceof TripWire) {
         throw error; // Re-throw tripwire errors
       }
       args.abort(`Moderation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -188,25 +169,17 @@ export class ModerationInputProcessor implements InputProcessor {
     try {
       const response = await this.moderationAgent.generate(prompt, {
         output: z.object({
-          flagged: z.boolean(),
-          categories: z.object(
-            this.categories.reduce(
-              (props, category) => {
-                props[category] = z.boolean();
-                return props;
-              },
-              {} as Record<string, z.ZodType<boolean>>,
-            ),
-          ),
-          category_scores: z.object(
-            this.categories.reduce(
-              (props, category) => {
-                props[category] = z.number().min(0).max(1);
-                return props;
-              },
-              {} as Record<string, z.ZodType<number>>,
-            ),
-          ),
+          category_scores: z
+            .object(
+              this.categories.reduce(
+                (props, category) => {
+                  props[category] = z.number().min(0).max(1).optional();
+                  return props;
+                },
+                {} as Record<string, z.ZodType<number | undefined>>,
+              ),
+            )
+            .optional(),
           reason: z.string().optional(),
         }),
         temperature: 0,
@@ -214,29 +187,27 @@ export class ModerationInputProcessor implements InputProcessor {
 
       const result = response.object as ModerationResult;
 
-      // Validate and apply threshold
-      const maxScore = Math.max(
-        ...(Object.values(result.category_scores).filter(score => typeof score === 'number') as number[]),
-      );
-      result.flagged = result.flagged || maxScore >= this.threshold;
-
       return result;
     } catch (error) {
       console.warn('[ModerationInputProcessor] Agent moderation failed, allowing content:', error);
-      // Fail open - return non-flagged result if moderation agent fails
-      return {
-        flagged: false,
-        categories: this.categories.reduce((cats, category) => {
-          cats[category] = false;
-          return cats;
-        }, {} as ModerationCategories),
-        category_scores: this.categories.reduce((scores, category) => {
-          scores[category] = 0;
-          return scores;
-        }, {} as ModerationCategoryScores),
-        reason: 'Moderation agent failed, content allowed by default',
-      };
+      // Fail open - return empty result if moderation agent fails (no moderation needed)
+      return {};
     }
+  }
+
+  /**
+   * Determine if content is flagged based on category scores above threshold
+   */
+  private isModerationFlagged(result: ModerationResult): boolean {
+    // Check if any category scores exceed the threshold
+    if (result.category_scores) {
+      const scores = Object.values(result.category_scores).filter(score => typeof score === 'number') as number[];
+      if (scores.length === 0) return false;
+      const maxScore = Math.max(...scores);
+      return maxScore >= this.threshold;
+    }
+
+    return false;
   }
 
   /**
@@ -247,8 +218,8 @@ export class ModerationInputProcessor implements InputProcessor {
     strategy: 'block' | 'warn' | 'filter',
     abort: (reason?: string) => never,
   ): void {
-    const flaggedCategories = Object.entries(result.categories)
-      .filter(([_, flagged]) => flagged)
+    const flaggedCategories = Object.entries(result.category_scores || {})
+      .filter(([_, score]) => typeof score === 'number' && score >= this.threshold)
       .map(([category]) => category);
 
     const message = `Content flagged for moderation. Categories: ${flaggedCategories.join(', ')}${
@@ -298,18 +269,14 @@ export class ModerationInputProcessor implements InputProcessor {
 Evaluate the provided content against these categories:
 ${this.categories.map(cat => `- ${cat}`).join('\n')}
 
-For each category, provide:
-1. A boolean indicating if the content violates that category
-2. A confidence score between 0-1 (where 1 means definitely violates)
+IMPORTANT: IF NO MODERATION IS NEEDED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHING ELSE. Do not include any zeros in your response, if the response should be 0, omit it, they will be counted as false.
 
 Guidelines:
 - Be thorough but not overly strict
 - Consider context and intent
 - Educational, historical, or creative content may be acceptable even if it touches sensitive topics
 - Focus on content that could cause real harm
-- Provide a brief reason if any category is flagged
-
-Return your assessment in the required JSON format.`;
+- Provide a brief reason if any category is flagged`;
   }
 
   /**
@@ -318,10 +285,6 @@ Return your assessment in the required JSON format.`;
   private createModerationPrompt(content: string): string {
     return `Please evaluate the following content for moderation:
 
-Content: "${content}"
-
-Evaluate against categories: ${this.categories.join(', ')}
-
-Provide a detailed assessment with boolean flags, confidence scores (0-1), and reasoning for any flags.`;
+Content: "${content}"`;
   }
 }

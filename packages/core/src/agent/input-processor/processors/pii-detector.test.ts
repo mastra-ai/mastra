@@ -24,9 +24,9 @@ function createMockPIIResult(
 ): PIIDetectionResult {
   const result: PIIDetectionResult = {};
 
-  // Only include category_scores if there are detected PII types
+  // Only include categories if there are detected PII types
   if (piiTypes.length > 0) {
-    result.category_scores = piiTypes.reduce(
+    result.categories = piiTypes.reduce(
       (scores, type) => {
         scores[type] = 0.8; // High confidence score for detected types
         return scores;
@@ -469,8 +469,8 @@ describe('PIIDetector', () => {
         },
       ];
       const mockResult = createMockPIIResult(['email'], detections);
-      if (mockResult.category_scores) {
-        mockResult.category_scores.email = 0.7; // Above threshold (0.6)
+      if (mockResult.categories) {
+        mockResult.categories.email = 0.7; // Above threshold (0.6)
       }
 
       const model = setupMockModel(mockResult);
@@ -486,8 +486,8 @@ describe('PIIDetector', () => {
 
     it('should not trigger when below threshold', async () => {
       const mockResult = createMockPIIResult(['email']);
-      if (mockResult.category_scores) {
-        mockResult.category_scores.email = 0.3; // Below threshold (0.6)
+      if (mockResult.categories) {
+        mockResult.categories.email = 0.3; // Below threshold (0.6)
       }
 
       const model = setupMockModel(mockResult);
@@ -504,9 +504,7 @@ describe('PIIDetector', () => {
   describe('custom detection types', () => {
     it('should work with custom PII types', async () => {
       const mockResult = {
-        flagged: true,
-        categories: { 'employee-id': true, 'customer-id': false },
-        category_scores: { 'employee-id': 0.9, 'customer-id': 0.1 },
+        categories: { 'employee-id': 0.9, 'customer-id': 0.1 },
         detections: [
           {
             type: 'employee-id',

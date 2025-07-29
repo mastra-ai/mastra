@@ -62,7 +62,7 @@ import type {
 } from './types';
 export type { ChunkType, MastraAgentStream } from '../stream/MastraAgentStream';
 export * from './input-processor';
-
+export { TripWire };
 export { MessageList };
 export * from './types';
 type IDGenerator = () => string;
