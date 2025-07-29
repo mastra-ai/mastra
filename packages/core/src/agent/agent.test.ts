@@ -411,10 +411,10 @@ describe('agent', () => {
 
     let previousPartialObject = {} as { winner: string };
     for await (const partialObject of partialObjectStream) {
-      if (partialObject['winner'] && previousPartialObject['winner']) {
-        expect(partialObject['winner'] === previousPartialObject['winner']).toBe(false);
+      if (partialObject!['winner'] && previousPartialObject['winner']) {
+        expect(partialObject!['winner'] === previousPartialObject['winner']).toBe(false);
       }
-      previousPartialObject = partialObject as { winner: string };
+      previousPartialObject = partialObject! as { winner: string };
       expect(partialObject).toBeDefined();
     }
 
@@ -3573,6 +3573,467 @@ describe('dynamic memory configuration', () => {
     const thread = await mockMemory.getThreadById({ threadId: 'thread-stream' });
     expect(thread).toBeDefined();
     expect(thread?.resourceId).toBe('user-1');
+  });
+});
+
+describe('Input Processors', () => {
+  let mockModel: MockLanguageModelV1;
+
+  // Helper function to create a MastraMessageV2
+  const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): MastraMessageV2 => ({
+    id: crypto.randomUUID(),
+    role,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+    },
+    createdAt: new Date(),
+  });
+
+  beforeEach(() => {
+    mockModel = new MockLanguageModelV1({
+      doGenerate: async ({ prompt }) => {
+        // Extract text content from the prompt messages
+        const messages = Array.isArray(prompt) ? prompt : [];
+        const textContent = messages
+          .map(msg => {
+            if (typeof msg.content === 'string') {
+              return msg.content;
+            } else if (Array.isArray(msg.content)) {
+              return msg.content
+                .filter(part => part.type === 'text')
+                .map(part => part.text)
+                .join(' ');
+            }
+            return '';
+          })
+          .filter(Boolean)
+          .join(' ');
+
+        return {
+          text: `processed: ${textContent}`,
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          rawCall: { rawPrompt: prompt, rawSettings: {} },
+        };
+      },
+      doStream: async ({ prompt }) => {
+        // Extract text content from the prompt messages
+        const messages = Array.isArray(prompt) ? prompt : [];
+        const textContent = messages
+          .map(msg => {
+            if (typeof msg.content === 'string') {
+              return msg.content;
+            } else if (Array.isArray(msg.content)) {
+              return msg.content
+                .filter(part => part.type === 'text')
+                .map(part => part.text)
+                .join(' ');
+            }
+            return '';
+          })
+          .filter(Boolean)
+          .join(' ');
+
+        return {
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'text-delta', textDelta: 'processed: ' },
+              { type: 'text-delta', textDelta: textContent },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 20 },
+              },
+            ],
+          }),
+          rawCall: { rawPrompt: prompt, rawSettings: {} },
+        };
+      },
+    });
+  });
+
+  describe('basic functionality', () => {
+    it('should run input processors before generation', async () => {
+      const processor = {
+        name: 'test-processor',
+        process: async ({ messages }) => {
+          messages.push(createMessage('Processor was here!'));
+          return messages;
+        },
+      };
+
+      const agentWithProcessor = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: [processor],
+      });
+
+      const result = await agentWithProcessor.generate('Hello world');
+
+      // The processor should have added a message
+      expect(result.text).toContain('processed:');
+      expect(result.text).toContain('Processor was here!');
+    });
+
+    it('should run multiple processors in order', async () => {
+      const processor1 = {
+        name: 'processor-1',
+        process: async ({ messages }) => {
+          messages.push(createMessage('First processor'));
+          return messages;
+        },
+      };
+
+      const processor2 = {
+        name: 'processor-2',
+        process: async ({ messages }) => {
+          messages.push(createMessage('Second processor'));
+          return messages;
+        },
+      };
+
+      const agentWithProcessors = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: [processor1, processor2],
+      });
+
+      const result = await agentWithProcessors.generate('Hello');
+
+      expect(result.text).toContain('First processor');
+      expect(result.text).toContain('Second processor');
+    });
+
+    it('should support async processors running in sequence', async () => {
+      const processor1 = {
+        name: 'async-processor-1',
+        process: async ({ messages }) => {
+          messages.push(createMessage('First processor'));
+          return messages;
+        },
+      };
+
+      const processor2 = {
+        name: 'async-processor-2',
+        process: async ({ messages }) => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          messages.push(createMessage('Second processor'));
+          return messages;
+        },
+      };
+
+      const agentWithAsyncProcessors = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: [processor1, processor2],
+      });
+
+      const result = await agentWithAsyncProcessors.generate('Test async');
+
+      // Processors run sequentially, so "First processor" should appear before "Second processor"
+      expect(result.text).toContain('First processor');
+      expect(result.text).toContain('Second processor');
+    });
+  });
+
+  describe('tripwire functionality', () => {
+    it('should handle processor abort with default message', async () => {
+      const abortProcessor = {
+        name: 'abort-processor',
+        process: async ({ abort, messages }) => {
+          abort();
+          return messages;
+        },
+      };
+
+      const agentWithAbortProcessor = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: [abortProcessor],
+      });
+
+      const result = await agentWithAbortProcessor.generate('This should be aborted');
+
+      expect(result.tripwire).toBe(true);
+      expect(result.tripwireReason).toBe('Tripwire triggered by abort-processor');
+      expect(result.text).toBe('');
+      expect(result.finishReason).toBe('other');
+    });
+
+    it('should handle processor abort with custom message', async () => {
+      const customAbortProcessor = {
+        name: 'custom-abort',
+        process: async ({ abort, messages }) => {
+          abort('Custom abort reason');
+          return messages;
+        },
+      };
+
+      const agentWithCustomAbort = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: [customAbortProcessor],
+      });
+
+      const result = await agentWithCustomAbort.generate('Custom abort test');
+
+      expect(result.tripwire).toBe(true);
+      expect(result.tripwireReason).toBe('Custom abort reason');
+      expect(result.text).toBe('');
+    });
+
+    it('should not execute subsequent processors after abort', async () => {
+      let secondProcessorExecuted = false;
+
+      const abortProcessor = {
+        name: 'abort-first',
+        process: async ({ abort, messages }) => {
+          abort('Stop here');
+          return messages;
+        },
+      };
+
+      const shouldNotRunProcessor = {
+        name: 'should-not-run',
+        process: async ({ messages }) => {
+          secondProcessorExecuted = true;
+          messages.push(createMessage('This should not be added'));
+          return messages;
+        },
+      };
+
+      const agentWithAbortSequence = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: [abortProcessor, shouldNotRunProcessor],
+      });
+
+      const result = await agentWithAbortSequence.generate('Abort sequence test');
+
+      expect(result.tripwire).toBe(true);
+      expect(secondProcessorExecuted).toBe(false);
+    });
+  });
+
+  describe('streaming with input processors', () => {
+    it('should handle input processors with streaming', async () => {
+      const streamProcessor = {
+        name: 'stream-processor',
+        process: async ({ messages }) => {
+          messages.push(createMessage('Stream processor active'));
+          return messages;
+        },
+      };
+
+      const agentWithStreamProcessor = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: [streamProcessor],
+      });
+
+      const stream = await agentWithStreamProcessor.stream('Stream test');
+
+      let fullText = '';
+      for await (const textPart of stream.textStream) {
+        fullText += textPart;
+      }
+
+      expect(fullText).toContain('Stream processor active');
+    });
+
+    it('should handle abort in streaming with tripwire response', async () => {
+      const streamAbortProcessor = {
+        name: 'stream-abort',
+        process: async ({ abort, messages }) => {
+          abort('Stream aborted');
+          return messages;
+        },
+      };
+
+      const agentWithStreamAbort = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: [streamAbortProcessor],
+      });
+
+      const stream = await agentWithStreamAbort.stream('Stream abort test');
+
+      expect(stream.tripwire).toBe(true);
+      expect(stream.tripwireReason).toBe('Stream aborted');
+
+      // Stream should be empty
+      let textReceived = '';
+      for await (const textPart of stream.textStream) {
+        textReceived += textPart;
+      }
+      expect(textReceived).toBe('');
+    });
+
+    it('should include deployer methods when tripwire is triggered in streaming', async () => {
+      const deployerAbortProcessor = {
+        name: 'deployer-abort',
+        process: async ({ abort, messages }) => {
+          abort('Deployer test abort');
+          return messages;
+        },
+      };
+
+      const agentWithDeployerAbort = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: [deployerAbortProcessor],
+      });
+
+      const stream = await agentWithDeployerAbort.stream('Deployer abort test');
+
+      expect(stream.tripwire).toBe(true);
+      expect(stream.tripwireReason).toBe('Deployer test abort');
+
+      // Verify deployer methods exist and return Response objects
+      expect(typeof stream.toDataStreamResponse).toBe('function');
+      expect(typeof stream.toTextStreamResponse).toBe('function');
+
+      const dataStreamResponse = stream.toDataStreamResponse();
+      const textStreamResponse = stream.toTextStreamResponse();
+
+      expect(dataStreamResponse).toBeInstanceOf(Response);
+      expect(textStreamResponse).toBeInstanceOf(Response);
+      expect(dataStreamResponse.status).toBe(200);
+      expect(textStreamResponse.status).toBe(200);
+
+      // Verify other required methods are present
+      expect(typeof stream.pipeDataStreamToResponse).toBe('function');
+      expect(typeof stream.pipeTextStreamToResponse).toBe('function');
+      expect(stream.experimental_partialOutputStream).toBeDefined();
+      expect(typeof stream.experimental_partialOutputStream[Symbol.asyncIterator]).toBe('function');
+    });
+  });
+
+  describe('dynamic input processors', () => {
+    it('should support function-based input processors', async () => {
+      const runtimeContext = new RuntimeContext<{ processorMessage: string }>();
+      runtimeContext.set('processorMessage', 'Dynamic message');
+
+      const agentWithDynamicProcessors = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: ({ runtimeContext }) => {
+          const message: string = runtimeContext.get('processorMessage') || 'Default message';
+          return [
+            {
+              name: 'dynamic-processor',
+              process: async ({ messages }) => {
+                messages.push(createMessage(message));
+                return messages;
+              },
+            },
+          ];
+        },
+      });
+
+      const result = await agentWithDynamicProcessors.generate('Test dynamic', {
+        runtimeContext,
+      });
+
+      expect(result.text).toContain('Dynamic message');
+    });
+
+    it('should handle empty processors array', async () => {
+      const agentWithEmptyProcessors = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: [],
+      });
+
+      const result = await agentWithEmptyProcessors.generate('No processors test');
+
+      expect(result.text).toContain('processed:');
+      expect(result.text).toContain('No processors test');
+    });
+  });
+
+  describe('message manipulation', () => {
+    it('should allow processors to modify message content', async () => {
+      const messageModifierProcessor = {
+        name: 'message-modifier',
+        process: async ({ messages }) => {
+          // Access existing messages and modify them
+          const lastMessage = messages[messages.length - 1];
+
+          if (lastMessage && lastMessage.content.parts.length > 0) {
+            // Add a prefix to user messages
+            messages.push(createMessage('MODIFIED: Original message was received'));
+          }
+          return messages;
+        },
+      };
+
+      const agentWithModifier = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: [messageModifierProcessor],
+      });
+
+      const result = await agentWithModifier.generate('Original user message');
+
+      expect(result.text).toContain('MODIFIED: Original message was received');
+      expect(result.text).toContain('Original user message');
+    });
+
+    it('should allow processors to filter or validate messages', async () => {
+      const validationProcessor = {
+        name: 'validator',
+        process: async ({ messages, abort }) => {
+          // Extract text content from all messages
+          const textContent = messages
+            .map(msg =>
+              msg.content.parts
+                .filter(part => part.type === 'text')
+                .map(part => part.text)
+                .join(' '),
+            )
+            .join(' ');
+
+          const hasInappropriateContent = textContent.includes('inappropriate');
+
+          if (hasInappropriateContent) {
+            abort('Content validation failed');
+          } else {
+            messages.push(createMessage('Content validated'));
+          }
+          return messages;
+        },
+      };
+
+      const agentWithValidator = new Agent({
+        name: 'test-agent',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        inputProcessors: [validationProcessor],
+      });
+
+      // Test valid content
+      const validResult = await agentWithValidator.generate('This is appropriate content');
+      expect(validResult.text).toContain('Content validated');
+
+      // Test invalid content
+      const invalidResult = await agentWithValidator.generate('This contains inappropriate content');
+      expect(invalidResult.tripwire).toBe(true);
+      expect(invalidResult.tripwireReason).toBe('Content validation failed');
+    });
   });
 });
 
