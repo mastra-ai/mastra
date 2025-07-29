@@ -5851,7 +5851,9 @@ describe('Workflow', () => {
         });
       } catch (error) {
         const errMessage = (error as { message: string })?.message;
-        expect(errMessage).toBe('This workflow step was not suspended');
+        expect(errMessage).toBe(
+          'This workflow step "increment" was not suspended. Available suspended steps: [resume]',
+        );
       }
 
       const resumeResult = await run.resume({
