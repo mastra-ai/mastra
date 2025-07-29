@@ -101,12 +101,14 @@ export abstract class MastraStorage extends MastraBase {
     resourceWorkingMemory: boolean;
     hasColumn: boolean;
     createTable: boolean;
+    deleteMessages: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
       resourceWorkingMemory: false,
       hasColumn: false,
       createTable: false,
+      deleteMessages: false,
     };
   }
 
@@ -277,6 +279,13 @@ export abstract class MastraStorage extends MastraBase {
         content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
       }[];
   }): Promise<MastraMessageV2[]>;
+
+  async deleteMessages(_messageIds: string[]): Promise<void> {
+    throw new Error(
+      `Message deletion is not supported by this storage adapter (${this.constructor.name}). ` +
+        `The deleteMessages method needs to be implemented in the storage adapter.`,
+    );
+  }
 
   abstract getTraces(args: StorageGetTracesArg): Promise<Trace[]>;
 

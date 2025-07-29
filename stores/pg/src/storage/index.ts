@@ -128,6 +128,7 @@ export class PostgresStore extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
+      deleteMessages: true,
     };
   }
 
@@ -288,6 +289,10 @@ export class PostgresStore extends MastraStorage {
     })[];
   }): Promise<MastraMessageV2[]> {
     return this.stores.memory.updateMessages({ messages });
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

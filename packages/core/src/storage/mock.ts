@@ -81,6 +81,16 @@ export class InMemoryStore extends MastraStorage {
     };
   }
 
+  public get supports() {
+    return {
+      selectByIncludeResourceScope: false,
+      resourceWorkingMemory: false,
+      hasColumn: false,
+      createTable: false,
+      deleteMessages: true,
+    };
+  }
+
   async persistWorkflowSnapshot({
     workflowName,
     runId,
@@ -220,6 +230,10 @@ export class InMemoryStore extends MastraStorage {
 
   async updateMessages(args: { messages: Partial<MastraMessageV2> & { id: string }[] }): Promise<MastraMessageV2[]> {
     return this.stores.memory.updateMessages(args);
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
   }
 
   async getThreadsByResourceIdPaginated(

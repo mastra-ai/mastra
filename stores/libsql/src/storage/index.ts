@@ -118,6 +118,7 @@ export class LibSQLStore extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
+      deleteMessages: true,
     };
   }
 
@@ -250,6 +251,10 @@ export class LibSQLStore extends MastraStorage {
     })[];
   }): Promise<MastraMessageV2[]> {
     return this.stores.memory.updateMessages({ messages });
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
   }
 
   /** @deprecated use getEvals instead */
