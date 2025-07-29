@@ -16,6 +16,7 @@ import {
   searchMemoryHandler,
   updateThreadHandler,
   updateWorkingMemoryHandler,
+  deleteMessagesHandler,
 } from './handlers';
 
 export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
@@ -61,6 +62,28 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           in: 'query',
           required: true,
           schema: { type: 'string' },
+        },
+        {
+          name: 'orderBy',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'string',
+            enum: ['createdAt', 'updatedAt'],
+            default: 'createdAt',
+          },
+          description: 'Field to sort by',
+        },
+        {
+          name: 'sortDirection',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'string',
+            enum: ['ASC', 'DESC'],
+            default: 'DESC',
+          },
+          description: 'Sort direction',
         },
       ],
       responses: {
@@ -270,7 +293,57 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 messages: {
                   type: 'array',
-                  items: { type: 'object' },
+                  description: 'Array of messages in either v1 or v2 format',
+                  items: {
+                    oneOf: [
+                      {
+                        type: 'object',
+                        description: 'Mastra Message v1 format',
+                        properties: {
+                          id: { type: 'string' },
+                          content: { type: 'string' },
+                          role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
+                          type: { type: 'string', enum: ['text', 'tool-call', 'tool-result'] },
+                          createdAt: { type: 'string', format: 'date-time' },
+                          threadId: { type: 'string' },
+                          resourceId: { type: 'string' },
+                        },
+                        required: ['content', 'role', 'type', 'threadId', 'resourceId'],
+                      },
+                      {
+                        type: 'object',
+                        description: 'Mastra Message v2 format',
+                        properties: {
+                          id: { type: 'string' },
+                          role: { type: 'string', enum: ['user', 'assistant'] },
+                          createdAt: { type: 'string', format: 'date-time' },
+                          threadId: { type: 'string' },
+                          resourceId: { type: 'string' },
+                          content: {
+                            type: 'object',
+                            properties: {
+                              format: { type: 'number', enum: [2] },
+                              parts: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                              content: { type: 'string' },
+                              toolInvocations: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                              experimental_attachments: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                            },
+                            required: ['format', 'parts'],
+                          },
+                        },
+                        required: ['role', 'content', 'threadId', 'resourceId'],
+                      },
+                    ],
+                  },
                 },
               },
               required: ['messages'],
@@ -285,6 +358,75 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     saveMessagesHandler,
+  );
+
+  router.post(
+    '/network/messages/delete',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Delete one or more messages',
+      tags: ['networkMemory'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messageIds: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
+                    {
+                      type: 'object',
+                      properties: { id: { type: 'string' } },
+                      required: ['id'],
+                    },
+                    {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: { id: { type: 'string' } },
+                        required: ['id'],
+                      },
+                    },
+                  ],
+                },
+              },
+              required: ['messageIds'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Messages deleted successfully',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean' },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    deleteMessagesHandler,
   );
 
   // Memory routes
@@ -406,6 +548,28 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           in: 'query',
           required: true,
           schema: { type: 'string' },
+        },
+        {
+          name: 'orderBy',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'string',
+            enum: ['createdAt', 'updatedAt'],
+            default: 'createdAt',
+          },
+          description: 'Field to sort by',
+        },
+        {
+          name: 'sortDirection',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'string',
+            enum: ['ASC', 'DESC'],
+            default: 'DESC',
+          },
+          description: 'Sort direction',
         },
       ],
       responses: {
@@ -855,7 +1019,57 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 messages: {
                   type: 'array',
-                  items: { type: 'object' },
+                  description: 'Array of messages in either v1 or v2 format',
+                  items: {
+                    oneOf: [
+                      {
+                        type: 'object',
+                        description: 'Mastra Message v1 format',
+                        properties: {
+                          id: { type: 'string' },
+                          content: { type: 'string' },
+                          role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
+                          type: { type: 'string', enum: ['text', 'tool-call', 'tool-result'] },
+                          createdAt: { type: 'string', format: 'date-time' },
+                          threadId: { type: 'string' },
+                          resourceId: { type: 'string' },
+                        },
+                        required: ['content', 'role', 'type', 'threadId', 'resourceId'],
+                      },
+                      {
+                        type: 'object',
+                        description: 'Mastra Message v2 format',
+                        properties: {
+                          id: { type: 'string' },
+                          role: { type: 'string', enum: ['user', 'assistant'] },
+                          createdAt: { type: 'string', format: 'date-time' },
+                          threadId: { type: 'string' },
+                          resourceId: { type: 'string' },
+                          content: {
+                            type: 'object',
+                            properties: {
+                              format: { type: 'number', enum: [2] },
+                              parts: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                              content: { type: 'string' },
+                              toolInvocations: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                              experimental_attachments: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                            },
+                            required: ['format', 'parts'],
+                          },
+                        },
+                        required: ['role', 'content', 'threadId', 'resourceId'],
+                      },
+                    ],
+                  },
                 },
               },
               required: ['messages'],
@@ -870,6 +1084,75 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     saveMessagesHandler,
+  );
+
+  router.post(
+    '/messages/delete',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Delete one or more messages',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                messageIds: {
+                  oneOf: [
+                    { type: 'string' },
+                    {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
+                    {
+                      type: 'object',
+                      properties: { id: { type: 'string' } },
+                      required: ['id'],
+                    },
+                    {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: { id: { type: 'string' } },
+                        required: ['id'],
+                      },
+                    },
+                  ],
+                },
+              },
+              required: ['messageIds'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Messages deleted successfully',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean' },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    deleteMessagesHandler,
   );
 
   return router;

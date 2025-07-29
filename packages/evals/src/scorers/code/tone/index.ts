@@ -8,7 +8,7 @@ export function createToneScorer() {
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
     analyze: async run => {
       const sentiment = new Sentiment();
-      const input = run.input.map(i => i.content).join(', ');
+      const input = run.input?.map(i => i.content).join(', ') || '';
       const output = run.output.text;
       const responseSentiment = sentiment.analyze(input);
 

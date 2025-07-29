@@ -4,8 +4,11 @@ description: Example of using the Content Similarity metric to evaluate text sim
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
 # Content Similarity Evaluation
+
+<ScorerCallout />
 
 Use `ContentSimilarityMetric` to evaluate how similar the response is to a reference based on content overlap. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a similarity value.
 

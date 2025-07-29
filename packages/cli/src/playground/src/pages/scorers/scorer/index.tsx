@@ -544,7 +544,7 @@ function ScoreDetails({
                         <span className="text-icon5 font-bold text-[0.875rem]">{key}</span>
                       </div>
                       <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
-                        {value && <pre>{value}</pre>}
+                        {value && <pre className="text-wrap">{value}</pre>}
                       </div>
                     </Fragment>
                   ) : null,

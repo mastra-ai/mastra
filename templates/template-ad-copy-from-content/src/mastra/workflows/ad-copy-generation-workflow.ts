@@ -1,4 +1,4 @@
-import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { createWorkflow, createStep, mapVariable } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { RuntimeContext } from '@mastra/core/di';
 import { pdfContentExtractorTool } from '../tools/pdf-content-extractor-tool';
@@ -31,83 +31,15 @@ const inputSchema = z.object({
     .optional()
     .default('modern')
     .describe('Style for generated images'),
-  brandColors: z.array(z.string()).optional().describe('Brand colors to use (hex codes)'),
 });
 
 const outputSchema = z.object({
-  extractedContent: z
-    .object({
-      marketingSummary: z.string(),
-      keyPoints: z.array(z.string()),
-      targetAudience: z.string().optional(),
-      valueProposition: z.string().optional(),
-      fileSize: z.number().optional(),
-      pagesCount: z.number().optional(),
-      characterCount: z.number().optional(),
-    })
-    .optional()
-    .describe('Content extracted from PDF (if applicable)'),
-  adCopy: z
-    .object({
-      headlines: z.array(
-        z.object({
-          text: z.string(),
-          variation: z.string(),
-          length: z.number(),
-        }),
-      ),
-      bodyCopy: z.array(
-        z.object({
-          text: z.string(),
-          variation: z.string(),
-          length: z.number(),
-        }),
-      ),
-      ctas: z.array(
-        z.object({
-          text: z.string(),
-          variation: z.string(),
-        }),
-      ),
-      adSets: z.array(
-        z.object({
-          name: z.string(),
-          headline: z.string(),
-          body: z.string(),
-          cta: z.string(),
-          description: z.string(),
-        }),
-      ),
-      platformRecommendations: z.object({
-        characterLimits: z.record(z.number()).optional(),
-        bestPractices: z.array(z.string()),
-        optimizationTips: z.array(z.string()),
-      }),
-    })
-    .describe('Generated ad copy variations'),
-  images: z
-    .array(
-      z.object({
-        imageUrl: z.string(),
-        revisedPrompt: z.string(),
-        dimensions: z.object({
-          width: z.number(),
-          height: z.number(),
-        }),
-        generatedAt: z.string(),
-      }),
-    )
-    .optional()
-    .describe('Generated promotional images with direct DALL-E URLs'),
-  campaignSummary: z
-    .object({
-      platform: z.string(),
-      campaignType: z.string(),
-      targetAudience: z.string(),
-      totalVariations: z.number(),
-      recommendedNext: z.array(z.string()),
-    })
-    .describe('Campaign summary and recommendations'),
+  adCopy: z.object({
+    headline: z.string(),
+    body: z.string(),
+    cta: z.string(),
+  }),
+  imageUrl: z.string().optional(),
 });
 
 // Step 1: Extract content from PDF, URL, or use provided text
@@ -204,6 +136,7 @@ const extractContentStep = createStep({
       try {
         // Use the PDF content extractor tool
         const extractionResult = await pdfContentExtractorTool.execute({
+          mastra,
           context: {
             pdfUrl: contentInput,
             focusAreas: ['benefits', 'features', 'value-proposition'],
@@ -250,10 +183,10 @@ const extractContentStep = createStep({
   },
 });
 
-// Step 2: Generate ad copy variations
+// Step 2: Generate ad copy
 const generateAdCopyStep = createStep({
   id: 'generate-ad-copy',
-  description: 'Generate multiple ad copy variations optimized for the specified platform',
+  description: 'Generate ad copy optimized for the specified platform',
   inputSchema: z.object({
     processedContent: z.string(),
     extractedData: z.any().optional(),
@@ -264,53 +197,21 @@ const generateAdCopyStep = createStep({
     productType: z.string().optional(),
   }),
   outputSchema: z.object({
-    headlines: z.array(
-      z.object({
-        text: z.string(),
-        variation: z.string(),
-        length: z.number(),
-      }),
-    ),
-    bodyCopy: z.array(
-      z.object({
-        text: z.string(),
-        variation: z.string(),
-        length: z.number(),
-      }),
-    ),
-    ctas: z.array(
-      z.object({
-        text: z.string(),
-        variation: z.string(),
-      }),
-    ),
-    adSets: z.array(
-      z.object({
-        name: z.string(),
-        headline: z.string(),
-        body: z.string(),
-        cta: z.string(),
-        description: z.string(),
-      }),
-    ),
-    platformRecommendations: z.object({
-      characterLimits: z.record(z.number()).optional(),
-      bestPractices: z.array(z.string()),
-      optimizationTips: z.array(z.string()),
-    }),
+    headline: z.string(),
+    body: z.string(),
+    cta: z.string(),
   }),
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, runtimeContext, mastra }) => {
     const { processedContent, extractedData, platform, campaignType, targetAudience, tone, productType } = inputData;
 
-    console.log('✍️ Generating ad copy variations...');
+    console.log('✍️ Generating ad copy...');
 
-    // Determine key benefits and target audience
     const keyBenefits = extractedData?.keyPoints || [];
     const finalTargetAudience = targetAudience || extractedData?.targetAudience || 'General audience';
 
     try {
-      // Use the ad copy generator tool
       const adCopyResults = await adCopyGeneratorTool.execute({
+        mastra,
         context: {
           content: processedContent,
           platform: platform as 'facebook' | 'google' | 'instagram' | 'linkedin' | 'twitter' | 'tiktok' | 'generic',
@@ -323,201 +224,77 @@ const generateAdCopyStep = createStep({
         runtimeContext: runtimeContext || new RuntimeContext(),
       });
 
-      return adCopyResults;
+      // Return just the first ad set for simplicity
+      const firstAdSet = adCopyResults.adSets[0] || {
+        headline: `Amazing ${productType || 'Product'} for ${finalTargetAudience}`,
+        body: `Discover how ${processedContent.substring(0, 50)}... can change everything.`,
+        cta: 'Get Started Now',
+      };
+
+      return {
+        headline: firstAdSet.headline,
+        body: firstAdSet.body,
+        cta: firstAdSet.cta,
+      };
     } catch (error) {
       console.error('❌ Ad copy generation failed:', error);
 
-      // Fallback to mock data if tool fails
       return {
-        headlines: [
-          {
-            text: `Amazing ${productType || 'Product'} for ${finalTargetAudience}`,
-            variation: 'benefit-focused',
-            length: 50,
-          },
-          {
-            text: `Transform Your Life with ${productType || 'Our Solution'}`,
-            variation: 'transformation',
-            length: 45,
-          },
-          { text: `Get Results with ${productType || 'Premium Solution'}`, variation: 'result-oriented', length: 40 },
-        ],
-        bodyCopy: [
-          {
-            text: `Discover how ${processedContent.substring(0, 50)}... can change everything for you.`,
-            variation: 'storytelling',
-            length: 80,
-          },
-          {
-            text: `Join thousands who chose ${productType || 'our solution'} for ${campaignType} results.`,
-            variation: 'social-proof',
-            length: 75,
-          },
-        ],
-        ctas: [
-          { text: 'Get Started Now', variation: 'direct' },
-          { text: 'Learn More', variation: 'soft' },
-          { text: 'Try Free Today', variation: 'trial' },
-        ],
-        adSets: [
-          {
-            name: 'Primary Campaign',
-            headline: `Amazing ${productType || 'Product'} for ${finalTargetAudience}`,
-            body: `Discover how ${processedContent.substring(0, 30)}... can change everything.`,
-            cta: 'Get Started Now',
-            description: 'Main campaign targeting core audience',
-          },
-          {
-            name: 'Secondary Campaign',
-            headline: `Transform Your Life with ${productType || 'Our Solution'}`,
-            body: `Join thousands who chose ${productType || 'our solution'} for results.`,
-            cta: 'Learn More',
-            description: 'Alternative approach for broader reach',
-          },
-        ],
-        platformRecommendations: {
-          characterLimits: { headline: 30, body: 90 },
-          bestPractices: [`Optimize for ${platform} audience`, 'Use clear value proposition', 'Include strong CTA'],
-          optimizationTips: ['A/B test headlines', 'Monitor engagement rates', 'Adjust based on performance'],
-        },
+        headline: `Amazing ${productType || 'Product'} for ${finalTargetAudience}`,
+        body: `Discover how ${processedContent.substring(0, 50)}... can change everything.`,
+        cta: 'Get Started Now',
       };
     }
   },
 });
 
-// Step 3: Generate promotional images (conditional)
-const generateImagesStep = createStep({
-  id: 'generate-images',
-  description: 'Generate promotional images that complement the ad copy',
+// Step 3: Generate promotional image
+const generateImageStep = createStep({
+  id: 'generate-image',
+  description: 'Generate a promotional image that complements the ad copy',
   inputSchema: z.object({
     generateImages: z.boolean(),
     imageStyle: z.enum(['photographic', 'digital_art', 'illustration', 'minimalist', 'vintage', 'modern']).optional(),
     platform: z.enum(['facebook', 'google', 'instagram', 'linkedin', 'twitter', 'tiktok', 'generic']).optional(),
-    brandColors: z.array(z.string()).optional(),
-    adSets: z.array(
-      z.object({
-        name: z.string(),
-        headline: z.string(),
-        body: z.string(),
-      }),
-    ),
+    headline: z.string(),
+    body: z.string(),
   }),
   outputSchema: z.object({
-    images: z
-      .array(
-        z.object({
-          imageUrl: z.string(),
-          revisedPrompt: z.string(),
-          dimensions: z.object({
-            width: z.number(),
-            height: z.number(),
-          }),
-          generatedAt: z.string(),
-        }),
-      )
-      .optional(),
+    imageUrl: z.string().optional(),
   }),
-  execute: async ({ inputData, runtimeContext }) => {
-    const { generateImages, imageStyle = 'modern', platform, adSets } = inputData;
+  execute: async ({ inputData, runtimeContext, mastra }) => {
+    const { generateImages, imageStyle = 'modern', platform, headline, body } = inputData;
 
     if (!generateImages) {
       console.log('⏭️ Skipping image generation as requested...');
-      return { images: undefined };
+      return { imageUrl: undefined };
     }
 
-    console.log('🎨 Generating promotional images...');
+    console.log('🎨 Generating promotional image...');
 
-    // Generate images for the top 2 ad sets
-    const topAdSets = adSets.slice(0, 2);
-    const generatedImages = [];
+    try {
+      const imagePrompt = `Professional promotional image for advertisement: ${headline}. ${body.substring(0, 100)}...`;
 
-    for (let i = 0; i < topAdSets.length; i++) {
-      const adSet = topAdSets[i];
+      const imageResult = await imageGeneratorTool.execute({
+        mastra,
+        context: {
+          prompt: imagePrompt,
+          style: imageStyle as 'photographic' | 'digital_art' | 'illustration' | 'minimalist' | 'vintage' | 'modern',
+          platform:
+            platform === 'google' || platform === 'tiktok'
+              ? 'generic'
+              : (platform as 'facebook' | 'instagram' | 'linkedin' | 'twitter' | 'generic') || 'generic',
+          size: platform === 'instagram' ? '1024x1024' : '1792x1024',
+        },
+        runtimeContext: runtimeContext || new RuntimeContext(),
+      });
 
-      try {
-        const imagePrompt = `Professional promotional image for advertisement: ${adSet.headline}. ${adSet.body.substring(0, 100)}...`;
-
-        // Use the image generator tool
-        const imageResult = await imageGeneratorTool.execute({
-          context: {
-            prompt: imagePrompt,
-            style: imageStyle as 'photographic' | 'digital_art' | 'illustration' | 'minimalist' | 'vintage' | 'modern',
-            platform:
-              platform === 'google' || platform === 'tiktok'
-                ? 'generic'
-                : (platform as 'facebook' | 'instagram' | 'linkedin' | 'twitter' | 'generic') || 'generic',
-            size: platform === 'instagram' ? '1024x1024' : '1792x1024',
-          },
-          runtimeContext: runtimeContext || new RuntimeContext(),
-        });
-
-        generatedImages.push(imageResult);
-        console.log(`✅ Generated image ${i + 1} for ad set: ${adSet.name}`);
-      } catch (error) {
-        console.error(`❌ Failed to generate image ${i + 1}:`, error);
-        // Skip failed images rather than using placeholders
-        console.log(`⚠️ Skipping image ${i + 1} for ad set: ${adSet.name} due to generation failure`);
-      }
+      console.log('✅ Generated promotional image');
+      return { imageUrl: imageResult.imageUrl };
+    } catch (error) {
+      console.error('❌ Failed to generate image:', error);
+      return { imageUrl: undefined };
     }
-
-    return {
-      images: generatedImages.length > 0 ? generatedImages : undefined,
-    };
-  },
-});
-
-// Step 4: Create campaign summary and recommendations
-const createSummaryStep = createStep({
-  id: 'create-summary',
-  description: 'Create campaign summary with recommendations for next steps',
-  inputSchema: z.object({
-    platform: z.string(),
-    campaignType: z.string(),
-    targetAudience: z.string().optional(),
-    extractedTargetAudience: z.string().optional(),
-    headlines: z.array(z.any()),
-    bodyCopy: z.array(z.any()),
-    ctas: z.array(z.any()),
-    images: z.array(z.any()).optional(),
-  }),
-  outputSchema: z.object({
-    platform: z.string(),
-    campaignType: z.string(),
-    targetAudience: z.string(),
-    totalVariations: z.number(),
-    recommendedNext: z.array(z.string()),
-  }),
-  execute: async ({ inputData }) => {
-    const { platform, campaignType, targetAudience, extractedTargetAudience, headlines, bodyCopy, ctas, images } =
-      inputData;
-
-    console.log('📊 Creating campaign summary...');
-
-    const totalHeadlines = headlines?.length || 0;
-    const totalBodyCopy = bodyCopy?.length || 0;
-    const totalCTAs = ctas?.length || 0;
-    const totalImages = images?.length || 0;
-
-    const finalTargetAudience = targetAudience || extractedTargetAudience || 'General audience';
-
-    const recommendedNext = [
-      'A/B test the top 3 headline variations',
-      `Launch campaigns on ${platform} with generated assets`,
-      'Monitor performance metrics and optimize based on results',
-      'Create additional variations for underperforming elements',
-    ];
-
-    if (totalImages > 0) {
-      recommendedNext.push('Test different image styles to optimize visual performance');
-    }
-
-    return {
-      platform,
-      campaignType,
-      targetAudience: finalTargetAudience,
-      totalVariations: totalHeadlines + totalBodyCopy + totalCTAs + totalImages,
-      recommendedNext,
-    };
   },
 });
 
@@ -598,162 +375,26 @@ export const adCopyGenerationWorkflow = createWorkflow({
         return initData.platform;
       },
     },
-    brandColors: {
-      schema: z.array(z.string()).optional(),
-      fn: async ({ getInitData }) => {
-        const initData = getInitData();
-        return initData.brandColors;
-      },
-    },
-    adSets: {
+    headline: {
       step: generateAdCopyStep,
-      path: 'adSets',
-      schema: z.array(
-        z.object({
-          name: z.string(),
-          headline: z.string(),
-          body: z.string(),
-        }),
-      ),
+      path: 'headline',
+      schema: z.string(),
+    },
+    body: {
+      step: generateAdCopyStep,
+      path: 'body',
+      schema: z.string(),
     },
   })
-  .then(generateImagesStep)
+  .then(generateImageStep)
   .map({
-    platform: {
-      schema: z.string(),
-      fn: async ({ getInitData }) => {
-        const initData = getInitData();
-        return initData.platform;
-      },
-    },
-    campaignType: {
-      schema: z.string(),
-      fn: async ({ getInitData }) => {
-        const initData = getInitData();
-        return initData.campaignType;
-      },
-    },
-    targetAudience: {
-      schema: z.string().optional(),
-      fn: async ({ getInitData }) => {
-        const initData = getInitData();
-        return initData.targetAudience;
-      },
-    },
-    extractedTargetAudience: {
-      schema: z.string().optional(),
-      fn: async ({ getStepResult }) => {
-        const contentResult = getStepResult(extractContentStep);
-        return contentResult.extractedData?.targetAudience;
-      },
-    },
-    headlines: {
+    adCopy: mapVariable({
       step: generateAdCopyStep,
-      path: 'headlines',
-      schema: z.array(z.any()),
-    },
-    bodyCopy: {
-      step: generateAdCopyStep,
-      path: 'bodyCopy',
-      schema: z.array(z.any()),
-    },
-    ctas: {
-      step: generateAdCopyStep,
-      path: 'ctas',
-      schema: z.array(z.any()),
-    },
-    images: {
-      step: generateImagesStep,
-      path: 'images',
-      schema: z.array(z.any()).optional(),
-    },
-  })
-  .then(createSummaryStep)
-  .map({
-    extractedContent: {
-      schema: z
-        .object({
-          marketingSummary: z.string(),
-          keyPoints: z.array(z.string()),
-          targetAudience: z.string().optional(),
-          valueProposition: z.string().optional(),
-          fileSize: z.number().optional(),
-          pagesCount: z.number().optional(),
-          characterCount: z.number().optional(),
-        })
-        .optional(),
-      fn: async ({ getStepResult }) => {
-        const contentResult = getStepResult(extractContentStep);
-        return contentResult.extractedData;
-      },
-    },
-    adCopy: {
-      step: generateAdCopyStep,
-      path: '',
-      schema: z.object({
-        headlines: z.array(
-          z.object({
-            text: z.string(),
-            variation: z.string(),
-            length: z.number(),
-          }),
-        ),
-        bodyCopy: z.array(
-          z.object({
-            text: z.string(),
-            variation: z.string(),
-            length: z.number(),
-          }),
-        ),
-        ctas: z.array(
-          z.object({
-            text: z.string(),
-            variation: z.string(),
-          }),
-        ),
-        adSets: z.array(
-          z.object({
-            name: z.string(),
-            headline: z.string(),
-            body: z.string(),
-            cta: z.string(),
-            description: z.string(),
-          }),
-        ),
-        platformRecommendations: z.object({
-          characterLimits: z.record(z.number()).optional(),
-          bestPractices: z.array(z.string()),
-          optimizationTips: z.array(z.string()),
-        }),
-      }),
-    },
-    images: {
-      step: generateImagesStep,
-      path: 'images',
-      schema: z
-        .array(
-          z.object({
-            imageUrl: z.string(),
-            revisedPrompt: z.string(),
-            dimensions: z.object({
-              width: z.number(),
-              height: z.number(),
-            }),
-            generatedAt: z.string(),
-          }),
-        )
-        .optional(),
-    },
-    campaignSummary: {
-      step: createSummaryStep,
-      path: '',
-      schema: z.object({
-        platform: z.string(),
-        campaignType: z.string(),
-        targetAudience: z.string(),
-        totalVariations: z.number(),
-        recommendedNext: z.array(z.string()),
-      }),
-    },
+      path: '.',
+    }),
+    imageUrl: mapVariable({
+      step: generateImageStep,
+      path: 'imageUrl',
+    }),
   })
   .commit();

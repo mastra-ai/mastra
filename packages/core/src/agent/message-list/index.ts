@@ -29,8 +29,28 @@ export type MastraMessageV2 = {
   type?: string;
 };
 
+// Extend UIMessage to include optional metadata field
+export type UIMessageWithMetadata = UIMessage & {
+  metadata?: Record<string, unknown>;
+};
 
-export type MessageInput = UIMessage | Message | MastraMessageV1 | CoreMessage | MastraMessageV2;
+function isToolCallMessage(message: CoreMessage): boolean {
+  if (message.role === 'tool') {
+    return true;
+  }
+  if (message.role === 'assistant' && Array.isArray(message.content)) {
+    return message.content.some((part): part is ToolCallPart => part.type === 'tool-call');
+  }
+  return false;
+}
+
+export type MessageInput =
+  | UIMessage
+  | UIMessageWithMetadata
+  | Message
+  | MastraMessageV1
+  | CoreMessage
+  | MastraMessageV2;
 type MessageSource = 'memory' | 'response' | 'user' | 'system' | 'context';
 type MemoryInfo = { threadId: string; resourceId?: string };
 
@@ -94,6 +114,18 @@ export class MessageList {
       remembered: this.remembered,
       input: this.input,
       response: this.response,
+    };
+  }
+  public get clear() {
+    return {
+      input: {
+        v2: () => {
+          const userMessages = Array.from(this.newUserMessages);
+          this.messages = this.messages.filter(m => !this.newUserMessages.has(m));
+          this.newUserMessages.clear();
+          return userMessages;
+        },
+      },
     };
   }
   private all = {
@@ -217,7 +249,7 @@ export class MessageList {
       m => MessageList.cacheKeyFromContent(m.content) === MessageList.cacheKeyFromContent(message.content),
     );
   }
-  private static toUIMessage(m: MastraMessageV2): UIMessage {
+  private static toUIMessage(m: MastraMessageV2): UIMessageWithMetadata {
     const experimentalAttachments: UIMessage['experimental_attachments'] = m.content.experimental_attachments
       ? [...m.content.experimental_attachments]
       : [];
@@ -258,7 +290,7 @@ export class MessageList {
     }
 
     if (m.role === `user`) {
-      return {
+      const uiMessage: UIMessageWithMetadata = {
         id: m.id,
         role: m.role,
         content: m.content.content || contentString,
@@ -266,8 +298,13 @@ export class MessageList {
         parts,
         experimental_attachments: experimentalAttachments,
       };
+      // Preserve metadata if present
+      if (m.content.metadata) {
+        uiMessage.metadata = m.content.metadata;
+      }
+      return uiMessage;
     } else if (m.role === `assistant`) {
-      return {
+      const uiMessage: UIMessageWithMetadata = {
         id: m.id,
         role: m.role,
         content: m.content.content || contentString,
@@ -277,9 +314,14 @@ export class MessageList {
         toolInvocations:
           `toolInvocations` in m.content ? m.content.toolInvocations?.filter(t => t.state === 'result') : undefined,
       };
+      // Preserve metadata if present
+      if (m.content.metadata) {
+        uiMessage.metadata = m.content.metadata;
+      }
+      return uiMessage;
     }
 
-    return {
+    const uiMessage: UIMessageWithMetadata = {
       id: m.id,
       role: m.role,
       content: m.content.content || contentString,
@@ -287,6 +329,11 @@ export class MessageList {
       parts,
       experimental_attachments: experimentalAttachments,
     };
+    // Preserve metadata if present
+    if (m.content.metadata) {
+      uiMessage.metadata = m.content.metadata;
+    }
+    return uiMessage;
   }
   private getMessageById(id: string) {
     return this.messages.find(m => m.id === id);
@@ -693,7 +740,10 @@ export class MessageList {
     if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
     return message;
   }
-  private vercelUIMessageToMastraMessageV2(message: UIMessage, messageSource: MessageSource): MastraMessageV2 {
+  private vercelUIMessageToMastraMessageV2(
+    message: UIMessage | UIMessageWithMetadata,
+    messageSource: MessageSource,
+  ): MastraMessageV2 {
     const content: MastraMessageContentV2 = {
       format: 2,
       parts: message.parts,
@@ -704,6 +754,11 @@ export class MessageList {
     if (message.annotations) content.annotations = message.annotations;
     if (message.experimental_attachments) {
       content.experimental_attachments = message.experimental_attachments;
+    }
+
+    // Preserve metadata field if present
+    if ('metadata' in message && message.metadata !== null && message.metadata !== undefined) {
+      content.metadata = message.metadata as Record<string, unknown>;
     }
 
     return {
@@ -825,7 +880,7 @@ export class MessageList {
     };
   }
 
-  static isVercelUIMessage(msg: MessageInput): msg is UIMessage {
+  static isVercelUIMessage(msg: MessageInput): msg is UIMessage | UIMessageWithMetadata {
     return !MessageList.isMastraMessage(msg) && isUiMessage(msg);
   }
   static isVercelCoreMessage(msg: MessageInput): msg is CoreMessage {

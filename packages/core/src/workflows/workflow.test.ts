@@ -372,6 +372,7 @@ describe('Workflow', () => {
       new Mastra({
         workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        idGenerator: randomUUID,
       });
 
       const agentStep1 = createStep(agent);
@@ -925,6 +926,70 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+    });
+
+    it('should preserve input property from snapshot context after resume', async () => {
+      const step1Action = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ result: 'resumed' }));
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({ originalInput: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ originalInput: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).commit();
+
+      new Mastra({
+        storage: testStorage,
+        workflows: { 'test-workflow': workflow },
+      });
+
+      const run = await workflow.createRunAsync({ runId: 'test-run-id' });
+      const originalInput = { originalInput: 'original-data' };
+
+      const { stream, getWorkflowState } = run.stream({ inputData: originalInput });
+
+      for await (const data of stream) {
+        if (data.type === 'step-suspended') {
+          // Resume with different data to test that input comes from snapshot, not resume data
+          setImmediate(() => {
+            const resumeData = { stepId: 'step1', context: { differentData: 'resume-data' } };
+            run.resume({ resumeData: resumeData as any, step: step1 });
+          });
+        }
+      }
+
+      const result = await getWorkflowState();
+
+      expect.assertions(3);
+      // Verify that the input property is preserved from the original snapshot context
+      // This is the key test: input should come from snapshot.context.input, not from resumeData
+      expect(result.steps.input).toEqual(originalInput);
+
+      // Also verify that the step received the original input as payload, not the resume data
+      expect(result.steps.step1.payload).toEqual(originalInput);
+
+      // Verify that resume data is separate from the input
+      if (result.steps.step1.status === 'success') {
+        expect(result.steps.step1).toMatchObject({
+          output: { result: 'resumed' },
+          resumePayload: { stepId: 'step1', context: { differentData: 'resume-data' } },
+        });
+      }
     });
 
     it('should handle waitForEvent waiting flow', async () => {
@@ -5659,8 +5724,10 @@ describe('Workflow', () => {
         step: ['simple-resume-workflow', 'increment'],
       });
 
+      // After resume with increment of 2, value becomes 4
+      // Since 4 < 10, the loop continues and the nested workflow suspends again
       expect(resumeResult.steps['simple-resume-workflow']).toMatchObject({
-        status: 'success',
+        status: 'suspended',
       });
     });
 

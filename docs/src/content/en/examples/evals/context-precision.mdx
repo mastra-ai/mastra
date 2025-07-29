@@ -4,8 +4,11 @@ description: Example of using the Context Precision metric to evaluate how preci
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
 # Context Precision Evaluation
+
+<ScorerCallout />
 
 Use `ContextPrecisionMetric` to evaluate whether the response relies on the most relevant parts of the provided context. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 

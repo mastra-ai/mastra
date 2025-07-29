@@ -11,7 +11,7 @@ import type {
   PaginationInfo,
   MastraMessageV2,
 } from '@mastra/core';
-import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput } from '@mastra/core/agent';
+import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput, UIMessageWithMetadata } from '@mastra/core/agent';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
@@ -70,7 +70,7 @@ export interface GetAgentResponse {
 }
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
-  messages: string | string[] | CoreMessage[] | AiMessageType[];
+  messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
   runtimeContext?: RuntimeContext | Record<string, any>;
@@ -80,7 +80,7 @@ export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undef
 >;
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
-  messages: string | string[] | CoreMessage[] | AiMessageType[];
+  messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
   runtimeContext?: RuntimeContext | Record<string, any>;
@@ -198,16 +198,16 @@ export interface GetVectorIndexResponse {
 }
 
 export interface SaveMessageToMemoryParams {
-  messages: MastraMessageV1[];
+  messages: (MastraMessageV1 | MastraMessageV2)[];
   agentId: string;
 }
 
 export interface SaveNetworkMessageToMemoryParams {
-  messages: MastraMessageV1[];
+  messages: (MastraMessageV1 | MastraMessageV2)[];
   networkId: string;
 }
 
-export type SaveMessageToMemoryResponse = MastraMessageV1[];
+export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraMessageV2)[];
 
 export interface CreateMemoryThreadParams {
   title?: string;
@@ -475,7 +475,7 @@ export interface GetScoresByEntityIdParams {
 }
 
 export interface SaveScoreParams {
-  score: ScoreRowData;
+  score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>;
 }
 
 export interface GetScoresResponse {
