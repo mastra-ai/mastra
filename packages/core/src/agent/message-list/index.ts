@@ -114,9 +114,6 @@ export class MessageList {
       const coreMessages = this.all.core();
 
       // Some LLM providers will throw an error if the first message is a tool call.
-      // while (coreMessages[0] && isToolCallMessage(coreMessages[0])) {
-      //   coreMessages.shift();
-      // }
 
       const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
 
