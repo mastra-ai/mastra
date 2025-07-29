@@ -175,8 +175,8 @@ export class RecursiveJsonTransformer {
   private isWithinSizeLimit(value: any, currentSize: number = 0): boolean {
     const size = RecursiveJsonTransformer.jsonSize(value);
     // If this is a new chunk (currentSize = 0), allow items smaller than maxSize
-    // If adding to existing chunk, ensure we're above minSize before splitting
-    return currentSize === 0 ? size <= this.maxSize : size + currentSize <= this.maxSize || currentSize < this.minSize;
+    // If adding to existing chunk, ensure total size doesn't exceed maxSize
+    return currentSize === 0 ? size <= this.maxSize : size + currentSize <= this.maxSize;
   }
 
   /**

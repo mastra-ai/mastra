@@ -43,9 +43,8 @@ describe('MDocument', () => {
       const doc = MDocument.fromMarkdown(sampleMarkdown);
 
       chunks = await doc.chunk({
-        size: 1500,
+        maxSize: 1500,
         overlap: 0,
-        separator: `\n`,
         extract: {
           keywords: true,
         },
@@ -75,7 +74,7 @@ describe('MDocument', () => {
         strategy: 'character',
         separator: '\n\n',
         isSeparatorRegex: false,
-        size: 50,
+        maxSize: 50,
         overlap: 5,
       });
 
@@ -96,7 +95,7 @@ describe('MDocument', () => {
         strategy: 'character',
         separator: '\\s+',
         isSeparatorRegex: true,
-        size: 50,
+        maxSize: 50,
         overlap: 5,
       });
 
@@ -112,7 +111,7 @@ describe('MDocument', () => {
         strategy: 'character',
         separator: '\n\n',
         isSeparatorRegex: false,
-        size: 50,
+        maxSize: 50,
         overlap: 5,
         keepSeparator: 'end',
       });
@@ -132,7 +131,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'end',
         });
@@ -153,7 +152,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'start',
         });
@@ -175,7 +174,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'end',
         });
@@ -195,7 +194,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'end',
         });
@@ -215,7 +214,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'start',
         });
@@ -235,7 +234,7 @@ describe('MDocument', () => {
 
       const result = await doc.chunk({
         strategy: 'character',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap,
       });
 
@@ -265,7 +264,7 @@ describe('MDocument', () => {
       const doc = MDocument.fromText(text);
       const chunks = await doc.chunk({
         strategy: 'character',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap,
       });
 
@@ -309,7 +308,7 @@ describe('MDocument', () => {
       const testDoc = MDocument.fromText(text);
       const chunks = await testDoc.chunk({
         strategy: 'character',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap,
       });
 
@@ -326,7 +325,7 @@ describe('MDocument', () => {
       }
       expect(allChunksValid).toBe(true);
 
-      // Verify each chunk size explicitly
+      // Verify each chunk maxSize explicitly
       for (const chunk of chunks) {
         expect(chunk.text.length).toBeLessThanOrEqual(chunkSize);
       }
@@ -352,7 +351,7 @@ describe('MDocument', () => {
       const doc = MDocument.fromText(text);
       const chunks = await doc.chunk({
         strategy: 'character',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap,
       });
 
@@ -360,7 +359,7 @@ describe('MDocument', () => {
       chunks.forEach(chunk => {
         // Each chunk should be either:
         // 1. Full size (chunkSize)
-        // 2. Or at least half the chunk size if it's the last chunk
+        // 2. Or at least half the chunk maxSize if it's the last chunk
         const minSize = chunk === chunks[chunks.length - 1] ? Math.floor(chunkSize / 2) : chunkSize;
         expect(chunk.text.length).toBeGreaterThanOrEqual(minSize);
       });
@@ -386,7 +385,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'recursive',
-        size,
+        maxSize: size,
         overlap: overlapSize,
         separators: ['\n\n'], // Split on double newlines
       });
@@ -420,7 +419,7 @@ describe('MDocument', () => {
         strategy: 'recursive',
         separators: ['\n\n', '\n', ' ', ''],
         isSeparatorRegex: false,
-        size: 50,
+        maxSize: 50,
         overlap: 5,
       });
 
@@ -446,7 +445,7 @@ describe('MDocument', () => {
       const doc = MDocument.fromText(tsCode, { meta: 'data' });
 
       await doc.chunk({
-        size: 50,
+        maxSize: 50,
         overlap: 5,
         language: Language.TS,
       });
@@ -461,7 +460,7 @@ describe('MDocument', () => {
 
       await expect(
         doc.chunk({
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           language: 'invalid-language' as any,
         }),
@@ -481,7 +480,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'recursive',
-        size: 500, // Smaller chunk size to ensure multiple chunks
+        maxSize: 500, // Smaller chunk maxSize to ensure multiple chunks
         overlap: overlapSize,
       });
 
@@ -517,7 +516,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'recursive',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap: overlapSize,
       });
 
@@ -1373,7 +1372,7 @@ describe('MDocument', () => {
       await doc.chunk({
         strategy: 'token',
         encodingName: 'cl100k_base',
-        size: 10,
+        maxSize: 10,
         overlap: 2,
       });
 
@@ -1391,7 +1390,7 @@ describe('MDocument', () => {
       await doc.chunk({
         strategy: 'token',
         encodingName: 'gpt2',
-        size: 10,
+        maxSize: 10,
         disallowedSpecial: new Set(),
         allowedSpecial: new Set(['<|endoftext|>']),
         overlap: 2,
@@ -1410,7 +1409,7 @@ describe('MDocument', () => {
       await doc.chunk({
         strategy: 'token',
         encodingName: 'gpt2',
-        size: 10,
+        maxSize: 10,
         disallowedSpecial: new Set(),
         allowedSpecial: new Set(['<|endoftext|>']),
         overlap: 2,
@@ -1424,15 +1423,15 @@ describe('MDocument', () => {
     });
 
     describe('Error cases', () => {
-      it('should throw error for invalid chunk size and overlap', async () => {
+      it('should throw error for invalid chunk maxSize and overlap', async () => {
         const text = '  This has whitespace   ';
         const doc = MDocument.fromText(text, { meta: 'data' });
 
         await expect(
           doc.chunk({
             strategy: 'token',
-            size: 100,
-            overlap: 150, // overlap larger than chunk size
+            maxSize: 100,
+            overlap: 150, // overlap larger than chunk maxSize
           }),
         ).rejects.toThrow();
       });
@@ -1445,8 +1444,8 @@ describe('MDocument', () => {
           doc.chunk({
             strategy: 'token',
             encodingName: 'invalid-encoding' as any,
-            size: 100,
-            overlap: 150, // overlap larger than chunk size
+            maxSize: 100,
+            overlap: 150, // overlap larger than chunk maxSize
           }),
         ).rejects.toThrow();
       });
@@ -1472,7 +1471,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'markdown',
-        size: 100,
+        maxSize: 100,
         overlap: 10,
       });
 
@@ -1496,7 +1495,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'markdown',
-        size: 100,
+        maxSize: 100,
         overlap: 10,
       });
 
@@ -1527,7 +1526,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'latex',
-        size: 100,
+        maxSize: 100,
         overlap: 10,
         keepSeparator: 'start',
       });
@@ -1557,7 +1556,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'latex',
-        size: 100,
+        maxSize: 100,
         overlap: 10,
         keepSeparator: 'start',
       });
@@ -1579,7 +1578,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'latex',
-        size: 50,
+        maxSize: 50,
         overlap: 0,
         keepSeparator: 'end',
       });
@@ -1600,7 +1599,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'latex',
-        size: 100,
+        maxSize: 100,
         overlap: 0,
         stripWhitespace: true,
       });
@@ -1759,7 +1758,7 @@ describe('MDocument', () => {
       const doc = MDocument.fromMarkdown(markdown);
       const chunks = await doc.chunk({
         strategy: 'markdown',
-        size: 500,
+        maxSize: 500,
         overlap: 0,
         headers: [
           ['#', 'h1'],
@@ -2006,7 +2005,7 @@ describe('MDocument', () => {
       const chunks = await doc.chunk({
         strategy: 'character',
         separator: '\n\n',
-        size: 20,
+        maxSize: 20,
         overlap: 0,
         extract: { keywords: true },
       });
@@ -2095,7 +2094,7 @@ describe('MDocument', () => {
           strategy: 'sentence',
           minSize: 50,
         } as any),
-      ).rejects.toThrow('Sentence chunking requires maxSize to be specified');
+      ).rejects.toThrow('Invalid parameters for sentence strategy: maxSize: Required');
     });
 
     it('should handle custom sentence enders', async () => {

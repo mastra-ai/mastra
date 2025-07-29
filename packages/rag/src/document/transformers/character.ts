@@ -67,7 +67,7 @@ export class CharacterTransformer extends TextTransformer {
     // If length of any split is greater than chunk size, perform additional splitting
     const chunks: string[] = [];
     for (const split of initialSplits) {
-      if (this.lengthFunction(split) <= this.size) {
+      if (this.lengthFunction(split) <= this.maxSize) {
         chunks.push(split);
       } else {
         // If a single split is too large, split it further with overlap
@@ -87,7 +87,7 @@ export class CharacterTransformer extends TextTransformer {
       let chunkEnd = currentPosition;
 
       // Build chunk up to max size
-      while (chunkEnd < text.length && this.lengthFunction(text.slice(currentPosition, chunkEnd + 1)) <= this.size) {
+      while (chunkEnd < text.length && this.lengthFunction(text.slice(currentPosition, chunkEnd + 1)) <= this.maxSize) {
         chunkEnd++;
       }
 
@@ -146,7 +146,7 @@ export class RecursiveCharacterTransformer extends TextTransformer {
     const mergeSeparator = this.keepSeparator ? '' : separator;
 
     for (const s of splits) {
-      if (this.lengthFunction(s) < this.size) {
+      if (this.lengthFunction(s) < this.maxSize) {
         goodSplits.push(s);
       } else {
         if (goodSplits.length > 0) {

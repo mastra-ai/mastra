@@ -16,7 +16,6 @@ export class SentenceTransformer extends TextTransformer {
 
     const baseOptions = {
       ...options,
-      size: options.maxSize,
       overlap: parentOverlap, // Use adjusted overlap for parent
     };
 

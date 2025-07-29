@@ -43,7 +43,7 @@ export type ExtractParams = {
 };
 
 export type BaseChunkOptions = {
-  size?: number;
+  maxSize?: number;
   overlap?: number;
   lengthFunction?: (text: string) => number;
   keepSeparator?: boolean | 'start' | 'end';
@@ -82,7 +82,6 @@ export type HTMLChunkOptions = BaseChunkOptions & {
 };
 
 export type JsonChunkOptions = BaseChunkOptions & {
-  maxSize: number;
   minSize?: number;
   ensureAscii?: boolean;
   convertLists?: boolean;
@@ -91,8 +90,8 @@ export type JsonChunkOptions = BaseChunkOptions & {
 export type LatexChunkOptions = BaseChunkOptions & {};
 
 export type SentenceChunkOptions = BaseChunkOptions & {
+  maxSize: number; // Override to make required for sentence strategy
   minSize?: number;
-  maxSize: number;
   targetSize?: number;
   sentenceEnders?: string[];
   preserveWhitespace?: boolean;

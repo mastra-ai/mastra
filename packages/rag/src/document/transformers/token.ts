@@ -79,7 +79,7 @@ export class TokenTransformer extends TextTransformer {
 
     const tokenizer: Tokenizer = {
       overlap: this.overlap,
-      tokensPerChunk: this.size,
+      tokensPerChunk: this.maxSize,
       decode,
       encode,
     };
@@ -128,7 +128,7 @@ export class TokenTransformer extends TextTransformer {
       allowedSpecial: options.allowedSpecial,
       disallowedSpecial: options.disallowedSpecial,
       options: {
-        size: options.size,
+        maxSize: options.maxSize,
         overlap: options.overlap,
         lengthFunction: tikTokenEncoder,
       },

@@ -10,6 +10,7 @@ import { MarkdownHeaderTransformer, MarkdownTransformer } from './transformers/m
 import { SentenceTransformer } from './transformers/sentence';
 import { TokenTransformer } from './transformers/token';
 import type { BaseChunkOptions, ChunkParams, ChunkStrategy, ExtractParams } from './types';
+import { validateChunkParams } from './validation';
 
 export class MDocument {
   private chunks: Chunk[];
@@ -293,6 +294,8 @@ export class MDocument {
     const { strategy: passedStrategy, extract, ...chunkOptions } = params || {};
     // Determine the default strategy based on type if not specified
     const strategy = passedStrategy || this.defaultStrategy();
+
+    validateChunkParams(strategy, chunkOptions);
 
     // Apply the appropriate chunking strategy
     await this.chunkBy(strategy, chunkOptions);

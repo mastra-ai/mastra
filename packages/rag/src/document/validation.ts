@@ -1,0 +1,111 @@
+import { z } from 'zod';
+import type { ChunkStrategy } from './types';
+
+// Base options that apply to all strategies
+const baseChunkOptionsSchema = z.object({
+  maxSize: z.number().positive().optional(),
+  overlap: z.number().min(0).optional(),
+  lengthFunction: z.function().optional(),
+  keepSeparator: z.union([z.boolean(), z.literal('start'), z.literal('end')]).optional(),
+  addStartIndex: z.boolean().optional(),
+  stripWhitespace: z.boolean().optional(),
+});
+
+// Strategy-specific schemas
+const characterChunkOptionsSchema = baseChunkOptionsSchema
+  .extend({
+    separator: z.string().optional(),
+    isSeparatorRegex: z.boolean().optional(),
+  })
+  .strict();
+
+const recursiveChunkOptionsSchema = baseChunkOptionsSchema
+  .extend({
+    separators: z.array(z.string()).optional(),
+    isSeparatorRegex: z.boolean().optional(),
+    language: z.string().optional(),
+  })
+  .strict();
+
+const sentenceChunkOptionsSchema = baseChunkOptionsSchema
+  .extend({
+    maxSize: z.number().positive(),
+    minSize: z.number().positive().optional(),
+    targetSize: z.number().positive().optional(),
+    sentenceEnders: z.array(z.string()).optional(),
+    preserveWhitespace: z.boolean().optional(),
+    fallbackToWords: z.boolean().optional(),
+    fallbackToCharacters: z.boolean().optional(),
+  })
+  .strict();
+
+const tokenChunkOptionsSchema = baseChunkOptionsSchema
+  .extend({
+    encodingName: z.string().optional(),
+    modelName: z.string().optional(),
+    allowedSpecial: z.union([z.instanceof(Set), z.literal('all')]).optional(),
+    disallowedSpecial: z.union([z.instanceof(Set), z.literal('all')]).optional(),
+  })
+  .strict();
+
+const jsonChunkOptionsSchema = baseChunkOptionsSchema
+  .extend({
+    minSize: z.number().positive().optional(),
+    ensureAscii: z.boolean().optional(),
+    convertLists: z.boolean().optional(),
+  })
+  .strict();
+
+const htmlChunkOptionsSchema = baseChunkOptionsSchema
+  .extend({
+    headers: z.array(z.tuple([z.string(), z.string()])).optional(),
+    sections: z.array(z.tuple([z.string(), z.string()])).optional(),
+    returnEachLine: z.boolean().optional(),
+  })
+  .strict();
+
+const markdownChunkOptionsSchema = baseChunkOptionsSchema
+  .extend({
+    headers: z.array(z.tuple([z.string(), z.string()])).optional(),
+    returnEachLine: z.boolean().optional(),
+    stripHeaders: z.boolean().optional(),
+  })
+  .strict();
+
+const latexChunkOptionsSchema = baseChunkOptionsSchema.strict();
+
+// Strategy-specific validation schemas
+const validationSchemas = {
+  character: characterChunkOptionsSchema,
+  recursive: recursiveChunkOptionsSchema,
+  sentence: sentenceChunkOptionsSchema,
+  token: tokenChunkOptionsSchema,
+  json: jsonChunkOptionsSchema,
+  html: htmlChunkOptionsSchema,
+  markdown: markdownChunkOptionsSchema,
+  latex: latexChunkOptionsSchema,
+} as const;
+
+export function validateChunkParams(strategy: ChunkStrategy, params: any): void {
+  const schema = validationSchemas[strategy];
+  if (!schema) {
+    throw new Error(`Unknown chunking strategy: ${strategy}`);
+  }
+
+  const result = schema.safeParse(params);
+  if (!result.success) {
+    // Extract unrecognized keys for cleaner error message
+    const unrecognizedError = result.error.errors.find(e => e.code === 'unrecognized_keys');
+    if (unrecognizedError && 'keys' in unrecognizedError) {
+      const keys = unrecognizedError.keys.join(', ');
+      throw new Error(`Invalid parameters for ${strategy} strategy: '${keys}' not supported`);
+    }
+
+    // Fallback to general error message for other validation issues
+    const errorMessage = result.error.errors
+      .map(e => `${e.path.length > 0 ? e.path.join('.') : 'parameter'}: ${e.message}`)
+      .join(', ');
+
+    throw new Error(`Invalid parameters for ${strategy} strategy: ${errorMessage}`);
+  }
+}
