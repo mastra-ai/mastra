@@ -125,7 +125,7 @@ export class MessageList {
       if (needsDefaultUserMessage) {
         const defaultMessage: CoreMessage = {
           role: 'user',
-          content: 'hello',
+          content: '.',
         };
 
         messages.unshift(defaultMessage);
