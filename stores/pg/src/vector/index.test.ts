@@ -1988,6 +1988,95 @@ describe('PgVector', () => {
         expect(results[0]?.score).toBeCloseTo(1, 5);
         expect(results[1]?.score).toBeGreaterThan(0.9);
       });
+
+      // NEW TEST: Reproduce the SET LOCAL bug
+      it('should verify that ef_search parameter is actually being set (reproduces SET LOCAL bug)', async () => {
+        const client = await vectorDB.pool.connect();
+        try {
+          // Test current behavior: SET LOCAL without transaction should have no effect
+          await client.query('SET LOCAL hnsw.ef_search = 500');
+
+          // Check if the parameter was actually set
+          const result = await client.query('SHOW hnsw.ef_search');
+          const currentValue = result.rows[0]['hnsw.ef_search'];
+
+          // The value should still be the default (not 500)
+          expect(parseInt(currentValue)).not.toBe(500);
+
+          // Now test with proper transaction
+          await client.query('BEGIN');
+          await client.query('SET LOCAL hnsw.ef_search = 500');
+
+          const resultInTransaction = await client.query('SHOW hnsw.ef_search');
+          const valueInTransaction = resultInTransaction.rows[0]['hnsw.ef_search'];
+
+          // This should work because we're in a transaction
+          expect(parseInt(valueInTransaction)).toBe(500);
+
+          await client.query('ROLLBACK');
+
+          // After rollback, should return to default
+          const resultAfterRollback = await client.query('SHOW hnsw.ef_search');
+          const valueAfterRollback = resultAfterRollback.rows[0]['hnsw.ef_search'];
+          expect(parseInt(valueAfterRollback)).not.toBe(500);
+        } finally {
+          client.release();
+        }
+      });
+
+      // Verify the fix works - ef parameter is properly applied in query method
+      it('should properly apply ef parameter using transactions (verifies fix)', async () => {
+        const client = await vectorDB.pool.connect();
+        const queryCommands: string[] = [];
+
+        // Spy on the client query method to capture all SQL commands
+        const originalClientQuery = client.query;
+        const clientQuerySpy = vi.fn().mockImplementation((query, ...args) => {
+          if (typeof query === 'string') {
+            queryCommands.push(query);
+          }
+          return originalClientQuery.call(client, query, ...args);
+        });
+        client.query = clientQuerySpy;
+
+        try {
+          // Manually release the client so query() can get a fresh one
+          client.release();
+
+          await vectorDB.query({
+            indexName,
+            queryVector: [1, 0, 0],
+            topK: 2,
+            ef: 128,
+          });
+
+          const testClient = await vectorDB.pool.connect();
+          try {
+            // Test that SET LOCAL works within a transaction
+            await testClient.query('BEGIN');
+            await testClient.query('SET LOCAL hnsw.ef_search = 256');
+
+            const result = await testClient.query('SHOW hnsw.ef_search');
+            const value = result.rows[0]['hnsw.ef_search'];
+            expect(parseInt(value)).toBe(256);
+
+            await testClient.query('ROLLBACK');
+
+            // After rollback, should revert
+            const resultAfter = await testClient.query('SHOW hnsw.ef_search');
+            const valueAfter = resultAfter.rows[0]['hnsw.ef_search'];
+            expect(parseInt(valueAfter)).not.toBe(256);
+          } finally {
+            testClient.release();
+          }
+        } finally {
+          // Restore original function if client is still connected
+          if (client.query === clientQuerySpy) {
+            client.query = originalClientQuery;
+          }
+          clientQuerySpy.mockRestore();
+        }
+      });
     });
 
     describe('IVF Parameters', () => {

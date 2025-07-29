@@ -1,8 +1,8 @@
-import { createMockModel } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { AgentNetwork } from '@mastra/core/network';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { getNetworksHandler, getNetworkByIdHandler, generateHandler, streamGenerateHandler } from './network';

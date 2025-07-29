@@ -1,5 +1,106 @@
 # @mastra/mongodb
 
+## 0.12.3-alpha.1
+
+### Patch Changes
+
+- 9881232: dependencies updates:
+  - Updated dependency [`cloudflare@^4.5.0` ↗︎](https://www.npmjs.com/package/cloudflare/v/4.5.0) (from `^4.4.1`, in `dependencies`)
+- eba48c8: Sort getThreads by updatedAt.
+- 14456f3: fix: [MongoDB] batchInsert with process json
+- Updated dependencies [27cc97a]
+- Updated dependencies [41daa63]
+- Updated dependencies [254a36b]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [ff9c125]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0-alpha.2
+
+## 0.12.3-alpha.0
+
+### Patch Changes
+
+- 25f2987: fix: filter.\_id.\$in cannot be empty
+- b0f1e2f: fix: mongodb save scores as an object
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
+## 0.12.2
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+  - @mastra/core@0.11.1
+
+## 0.12.1
+
+### Patch Changes
+
+- 728b203: feat(mongodb): implement ConnectorHandler interface and MongoDBConnector
+- 7ba91fa: Throw mastra errors methods not implemented yet
+- 65ab763: Pre-filter on properties when running `MongoDBVector` queries
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [7827943]
+- Updated dependencies [5889a31]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [cbddd18]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0
+
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- 728b203: feat(mongodb): implement ConnectorHandler interface and MongoDBConnector
+- 7ba91fa: Throw mastra errors methods not implemented yet
+- 65ab763: Pre-filter on properties when running `MongoDBVector` queries
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [5889a31]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0-alpha.2
+
 ## 0.12.0
 
 ### Minor Changes

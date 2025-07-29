@@ -3,13 +3,14 @@ import type { JSONSchema7 } from 'json-schema';
 
 export type { MastraMessageV2 } from '../agent';
 import type { ZodObject } from 'zod';
-import type { MastraLanguageModel, DynamicArgument } from '../agent/types';
+import type { MastraLanguageModel } from '../agent/types';
 import type { MastraStorage } from '../storage';
+import type { DynamicArgument } from '../types';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
 
 export type { Message as AiMessageType } from 'ai';
-export type { MastraLanguageModel, DynamicArgument };
+export type { MastraLanguageModel };
 
 // Types for the memory system
 export type MastraMessageV1 = {

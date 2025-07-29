@@ -715,6 +715,16 @@ export default withGT(
         destination: "/:locale/docs/frameworks/agentic-uis/ai-sdk",
         permanent: true,
       },
+      {
+        source: "/examples/evals/word-inclusion",
+        destination: "/examples/evals/custom-native-javascript-eval",
+        permanent: true,
+      },
+      {
+        source: "/examples/evals/custom-eval",
+        destination: "/examples/evals/custom-llm-judge-eval",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),

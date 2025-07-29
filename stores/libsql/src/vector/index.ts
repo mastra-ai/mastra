@@ -232,7 +232,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
       await tx.commit();
       return vectorIds;
     } catch (error) {
-      await tx.rollback();
+      !tx.closed && (await tx.rollback());
       if (error instanceof Error && error.message?.includes('dimensions are different')) {
         const match = error.message.match(/dimensions are different: (\d+) != (\d+)/);
         if (match) {

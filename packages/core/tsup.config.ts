@@ -1,14 +1,17 @@
+import { spawn } from 'child_process';
+import { promisify } from 'util';
 import babel from '@babel/core';
 import { defineConfig } from 'tsup';
 import type { Options } from 'tsup';
-
 import treeshakeDecoratorsBabelPlugin from './tools/treeshake-decorators';
 
 type Plugin = NonNullable<Options['plugins']>[number];
 
+const exec = promisify(spawn);
+
 let treeshakeDecorators = {
   name: 'treeshake-decorators',
-  renderChunk(code, info) {
+  renderChunk(code: string, info: { path: string }) {
     if (!code.includes('__decoratorStart')) {
       return null;
     }
@@ -44,14 +47,14 @@ export default defineConfig({
     'src/utils.ts',
     '!src/action/index.ts',
     'src/*/index.ts',
+    'src/tools/is-vercel-tool.ts',
     'src/workflows/legacy/index.ts',
     'src/workflows/constants.ts',
     'src/network/index.ts',
     'src/network/vNext/index.ts',
-    'src/storage/libsql/index.ts',
-    'src/vector/libsql/index.ts',
     'src/vector/filter/index.ts',
     'src/telemetry/otel-vendor.ts',
+    'src/test-utils/llm-mock.ts',
   ],
   format: ['esm', 'cjs'],
   clean: true,
@@ -62,4 +65,9 @@ export default defineConfig({
   },
   plugins: [treeshakeDecorators],
   sourcemap: true,
+  onSuccess: async () => {
+    await exec('pnpm', ['tsc', '-p', 'tsconfig.build.json'], {
+      stdio: 'inherit',
+    });
+  },
 });
