@@ -109,7 +109,7 @@
     "find-workspaces": "^0.3.1",
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
-    "hono": "^4.8.4",
+    "hono": "^4.8.9",
     "resolve-from": "^5.0.0",
     "rollup": "~4.44.2",
     "rollup-plugin-esbuild": "^6.2.1",
