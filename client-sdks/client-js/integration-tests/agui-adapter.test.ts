@@ -24,8 +24,9 @@ describe('AGUIAdapter Integration Tests', () => {
   beforeAll(async () => {
     port = await getAvailablePort();
 
-    // Run mastra dev from the integration tests directory
-    mastraServer = spawn('pnpm', ['mastra', 'dev', '--port', port.toString()], {
+    // Run mastra dev from the integration tests directory using the built CLI
+    const cliPath = path.resolve(import.meta.dirname, '..', '..', '..', 'packages', 'cli', 'dist', 'index.js');
+    mastraServer = spawn('node', [cliPath, 'dev', '--port', port.toString()], {
       cwd: path.resolve(import.meta.dirname),
       stdio: 'pipe',
       detached: true, // Run in a new process group so we can kill it and children
