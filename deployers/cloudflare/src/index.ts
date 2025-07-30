@@ -146,7 +146,6 @@ export class CloudflareDeployer extends Deployer {
       }
     });
 
-
     const handler = async (request, env, context) => {
       const app = await createHonoServer(mastra, { tools: getToolExports(tools) });
       return app.fetch(request, env, context);
@@ -177,8 +176,11 @@ export class CloudflareDeployer extends Deployer {
     };
 
     export default telemetry.enabled !== false ? instrument({
-      fetch: handler
-    }, config) : handler;
+      fetch: handler,
+      config,
+    }, config) : {
+      fetch: handler,
+    };
 `;
   }
   async prepare(outputDirectory: string): Promise<void> {
