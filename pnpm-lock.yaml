@@ -3340,8 +3340,8 @@ importers:
   voice/murf:
     dependencies:
       ky:
-        specifier: ^1.8.1
-        version: 1.8.1
+        specifier: ^1.8.2
+        version: 1.8.2
       zod:
         specifier: ^3.25.67
         version: 3.25.76
@@ -12656,8 +12656,8 @@ packages:
   kolorist@1.8.0:
     resolution: {integrity: sha512-Y+60/zizpJ3HRH8DCss+q95yr6145JXZo46OTpFvDZWLfRCE4qChOyk1b26nMaNpfHHgxagk9dXT5OP0Tfe+dQ==}
 
-  ky@1.8.1:
-    resolution: {integrity: sha512-7Bp3TpsE+L+TARSnnDpk3xg8Idi8RwSLdj6CMbNWoOARIrGrbuLGusV0dYwbZOm4bB3jHNxSw8Wk/ByDqJEnDw==}
+  ky@1.8.2:
+    resolution: {integrity: sha512-XybQJ3d4Ea1kI27DoelE5ZCT3bSJlibYTtQuMsyzKox3TMyayw1asgQdl54WroAm+fIA3ZCr8zXW2RpR7qWVpA==}
     engines: {node: '>=18'}
 
   langsmith@0.3.33:
@@ -27411,7 +27411,7 @@ snapshots:
 
   kolorist@1.8.0: {}
 
-  ky@1.8.1: {}
+  ky@1.8.2: {}
 
   langsmith@0.3.33(openai@5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)):
     dependencies:
