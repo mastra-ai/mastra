@@ -120,7 +120,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           resolve(event.data);
         }
 
-        await ack();
+        await ack?.();
       };
 
       this.pubsub.subscribe('workflows-finish', finishCb).catch(() => {});
@@ -132,15 +132,15 @@ export class EventedExecutionEngine extends ExecutionEngine {
     console.log('active promises resolved');
     await this.pubsub.unsubscribe('workflows-finish', tempCb);
 
-    console.log('resultData', resultData);
-
     if (resultData.prevResult.status === 'failed') {
+      console.log('failed');
       return {
         status: 'failed',
         error: resultData.prevResult.error,
         steps: resultData.stepResults,
       } as TOutput;
     } else if (resultData.prevResult.status === 'suspended') {
+      console.log('suspended');
       const suspendedSteps = Object.entries(resultData.stepResults)
         .map(([stepId, stepResult]: [string, any]) => {
           if (stepResult.status === 'suspended') {
@@ -150,6 +150,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           return null;
         })
         .filter(Boolean);
+      console.log('returning suspended');
       return {
         status: 'suspended',
         steps: resultData.stepResults,
@@ -157,6 +158,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       } as TOutput;
     }
 
+    console.log('returning success');
     return {
       status: resultData.prevResult.status,
       result: resultData.prevResult?.output,

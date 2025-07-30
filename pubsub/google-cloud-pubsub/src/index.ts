@@ -91,7 +91,10 @@ export class GoogleCloudPubSub extends PubSub {
 
           console.log('acking message');
           try {
-            const ackResponse = await message.ackWithResponse();
+            const ackResponse = await Promise.race([
+              message.ackWithResponse(),
+              new Promise(resolve => setTimeout(resolve, 5000)),
+            ]);
             console.log('message acked', ackResponse);
           } catch (e) {
             console.error('Error acking message', e);
