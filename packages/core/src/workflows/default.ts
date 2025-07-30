@@ -981,7 +981,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     const results: { result: StepResult<any, any, any, any> }[] = await Promise.all(
-      stepsToExecute.map((step, index) =>
+      stepsToExecute.map((step, _index) =>
         this.executeEntry({
           workflowId,
           runId,
