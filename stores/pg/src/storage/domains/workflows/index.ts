@@ -57,7 +57,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       const now = new Date().toISOString();
       await this.client.none(
-        `INSERT INTO ${TABLE_WORKFLOW_SNAPSHOT} (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
+        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET snapshot = $3, "updatedAt" = $5`,
@@ -129,8 +129,8 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       // Get results
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} 
-          ${whereClause} 
+          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
+          ${whereClause}
         `;
 
       const queryValues = values;
@@ -220,8 +220,8 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       // Get results
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} 
-          ${whereClause} 
+          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
+          ${whereClause}
           ORDER BY "createdAt" DESC
           ${limit !== undefined && offset !== undefined ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
         `;

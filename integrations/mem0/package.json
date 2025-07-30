@@ -26,8 +26,8 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake",
-    "build:watch": "pnpm build --watch",
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "lint": "eslint .",
     "start": "dts watch",
     "test": "vitest"
