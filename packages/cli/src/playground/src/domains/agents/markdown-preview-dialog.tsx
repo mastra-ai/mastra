@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import MarkdownRenderer from '@/components/ui/markdown-renderer';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export interface MarkdownPreviewDialogProps {
   open: boolean;
@@ -17,22 +17,26 @@ export const MarkdownPreviewDialog = ({
   title = 'Markdown Preview',
   description = 'Preview of your markdown content',
 }: MarkdownPreviewDialogProps) => {
-  // Handle escape key
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && open) {
+        event.preventDefault();
         onOpenChange(false);
       }
     };
 
     if (open) {
-      document.addEventListener('keydown', handleEscape);
+      document.addEventListener('keydown', handleEscape, true);
     }
 
     return () => {
-      document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('keydown', handleEscape, true);
     };
   }, [open, onOpenChange]);
+
+  if (!open) {
+    return null;
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
