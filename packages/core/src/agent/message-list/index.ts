@@ -34,16 +34,6 @@ export type UIMessageWithMetadata = UIMessage & {
   metadata?: Record<string, unknown>;
 };
 
-function isToolCallMessage(message: CoreMessage): boolean {
-  if (message.role === 'tool') {
-    return true;
-  }
-  if (message.role === 'assistant' && Array.isArray(message.content)) {
-    return message.content.some((part): part is ToolCallPart => part.type === 'tool-call');
-  }
-  return false;
-}
-
 export type MessageInput =
   | UIMessage
   | UIMessageWithMetadata
