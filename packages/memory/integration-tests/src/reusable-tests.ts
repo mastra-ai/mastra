@@ -808,8 +808,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       expect(result.perPage).toBe(10);
       expect(result.hasMore).toBe(true);
 
-      console.log('getThreadsByResourceIdPaginated:', JSON.stringify(result.threads));
-
       // Verify threads are retrieved in latest-first order
       expect(result.threads[0].title).toBe('Paginated Thread 25');
       expect(result.threads[9].title).toBe('Paginated Thread 16');
