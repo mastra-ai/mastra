@@ -21,14 +21,6 @@ import {
 import { ConvexClient, ConvexHttpClient } from 'convex/browser';
 
 /**
- * The Convex API type that matches the auto-generated API from Convex
- * Import the actual API type from the generated file
- */
-// import type { api as GeneratedApi } from '../../convex/_generated/api';
-
-// type ConvexPublicApi = typeof GeneratedApi;
-
-/**
  * Configuration options for ConvexStorage
  */
 export interface ConvexStorageConfig {

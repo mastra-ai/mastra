@@ -8,13 +8,17 @@
  * @module
  */
 
-import type { ApiFromModules, FilterApi, FunctionReference } from 'convex/server';
-import type * as evals from '../evals.js';
-import type * as messages from '../messages.js';
-import type * as system from '../system.js';
-import type * as threads from '../threads.js';
-import type * as traces from '../traces.js';
-import type * as workflowRuns from '../workflowRuns.js';
+import type {
+  ApiFromModules,
+  FilterApi,
+  FunctionReference,
+} from "convex/server";
+import type * as evals from "../evals.js";
+import type * as messages from "../messages.js";
+import type * as system from "../system.js";
+import type * as threads from "../threads.js";
+import type * as traces from "../traces.js";
+import type * as workflowRuns from "../workflowRuns.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -32,5 +36,11 @@ declare const fullApi: ApiFromModules<{
   traces: typeof traces;
   workflowRuns: typeof workflowRuns;
 }>;
-export declare const api: FilterApi<typeof fullApi, FunctionReference<any, 'public'>>;
-export declare const internal: FilterApi<typeof fullApi, FunctionReference<any, 'internal'>>;
+export declare const api: FilterApi<
+  typeof fullApi,
+  FunctionReference<any, "public">
+>;
+export declare const internal: FilterApi<
+  typeof fullApi,
+  FunctionReference<any, "internal">
+>;
