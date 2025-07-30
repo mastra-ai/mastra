@@ -1,9 +1,6 @@
 import { spawn } from 'child_process';
 import { promisify } from 'util';
 import { defineConfig } from 'tsup';
-import type { Options } from 'tsup';
-
-type Plugin = NonNullable<Options['plugins']>[number];
 
 const exec = promisify(spawn);
 
