@@ -29,7 +29,9 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake=smallest --splitting",
     "dev": "pnpm build --watch",
-    "test": "vitest run"
+    "test": "vitest run && pnpm run test:integration",
+    "test:unit": "vitest run",
+    "test:integration": "cd integration-tests && pnpm test"
   },
   "dependencies": {
     "@ag-ui/client": "^0.0.27",
