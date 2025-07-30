@@ -79,6 +79,13 @@
       "matchPackageNames": ["@ag-ui/client"]
     },
     {
+      "groupName": "Mastra",
+      "matchSourceUrls": ["https://github.com/mastra-ai/mastra"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "minimumReleaseAge": "0",
+      "automerge": true
+    },
+    {
       "groupName": "E2E tests",
       "commitMessageTopic": "e2e-tests",
       "matchFileNames": ["e2e-tests/**/package.json"],
