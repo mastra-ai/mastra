@@ -155,7 +155,7 @@ function createMastraWithMemory(idGenerator?: () => string) {
   const memory = new MockMemory();
 
   // Register the memory with Mastra
-  memory.__registerMastra(mastra);
+  // memory.__registerMastra(mastra);
 
   // Create an agent with the registered memory
   const agent = new Agent({
@@ -173,7 +173,7 @@ function createMastraWithMemory(idGenerator?: () => string) {
   });
 
   // Register the agent with Mastra
-  agent.__registerMastra(mastra);
+  // agent.__registerMastra(mastra);
 
   return { mastra, agent, memory };
 }

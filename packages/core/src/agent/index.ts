@@ -254,6 +254,10 @@ export class Agent<
       }
     }
 
+    if (this.#mastra) {
+      resolvedMemory.__registerMastra(this.#mastra);
+    }
+
     return resolvedMemory;
   }
 
