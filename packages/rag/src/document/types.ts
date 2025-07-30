@@ -94,7 +94,6 @@ export type SentenceChunkOptions = BaseChunkOptions & {
   minSize?: number;
   targetSize?: number;
   sentenceEnders?: string[];
-  preserveWhitespace?: boolean;
   fallbackToWords?: boolean;
   fallbackToCharacters?: boolean;
 };

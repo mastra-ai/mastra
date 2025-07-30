@@ -6,7 +6,6 @@ export class SentenceTransformer extends TextTransformer {
   protected maxSize: number;
   protected targetSize: number;
   protected sentenceEnders: string[];
-  protected preserveWhitespace: boolean;
   protected fallbackToWords: boolean;
   protected fallbackToCharacters: boolean;
   protected keepSeparator: boolean | 'start' | 'end';
@@ -26,7 +25,6 @@ export class SentenceTransformer extends TextTransformer {
     this.minSize = options.minSize ?? 50;
     this.targetSize = options.targetSize ?? Math.floor(options.maxSize * 0.8);
     this.sentenceEnders = options.sentenceEnders ?? ['.', '!', '?'];
-    this.preserveWhitespace = options.preserveWhitespace ?? true;
     this.fallbackToWords = options.fallbackToWords ?? true;
     this.fallbackToCharacters = options.fallbackToCharacters ?? true;
     this.keepSeparator = options.keepSeparator ?? false;
@@ -125,7 +123,7 @@ export class SentenceTransformer extends TextTransformer {
     let currentChunk: string[] = [];
     let currentSize = 0;
 
-    const separator = this.preserveWhitespace ? ' ' : ' ';
+    const separator = ' ';
 
     for (const sentence of sentences) {
       const sentenceLength = this.lengthFunction(sentence);
@@ -262,7 +260,7 @@ export class SentenceTransformer extends TextTransformer {
 
     const overlapSentences: string[] = [];
     let overlapSize = 0;
-    const separator = this.preserveWhitespace ? ' ' : ' ';
+    const separator = ' ';
 
     // Work backwards through sentences to build overlap
     for (let i = currentChunk.length - 1; i >= 0; i--) {
@@ -289,7 +287,7 @@ export class SentenceTransformer extends TextTransformer {
     }
 
     let totalSize = 0;
-    const separator = this.preserveWhitespace ? ' ' : ' ';
+    const separator = ' ';
 
     for (let i = 0; i < sentences.length; i++) {
       const sentence = sentences[i]!;

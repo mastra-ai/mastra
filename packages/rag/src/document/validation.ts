@@ -33,7 +33,6 @@ const sentenceChunkOptionsSchema = baseChunkOptionsSchema
     minSize: z.number().positive().optional(),
     targetSize: z.number().positive().optional(),
     sentenceEnders: z.array(z.string()).optional(),
-    preserveWhitespace: z.boolean().optional(),
     fallbackToWords: z.boolean().optional(),
     fallbackToCharacters: z.boolean().optional(),
   })

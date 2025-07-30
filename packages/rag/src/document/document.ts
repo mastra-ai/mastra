@@ -270,7 +270,6 @@ export class MDocument {
       targetSize: options?.targetSize,
       overlap: options?.overlap,
       sentenceEnders: options?.sentenceEnders,
-      preserveWhitespace: options?.preserveWhitespace,
       fallbackToWords: options?.fallbackToWords,
       fallbackToCharacters: options?.fallbackToCharacters,
       keepSeparator: options?.keepSeparator,
