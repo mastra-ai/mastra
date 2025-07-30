@@ -1,0 +1,118 @@
+---
+title: "Using Agent Streaming | Agents | Mastra Docs"
+description: Documentation on how to stream agents
+---
+
+# Agent Streaming
+
+Agents in Mastra have access to a powerful streaming protocol! With seamless integration into tools or agents as a tool, you can stream responses directly back to your clients, creating a more interactive and engaging experience.
+
+## Usage
+
+To use the new protocol, you can use the `streamVNext` method on an agent. This method will return a custom MastraAgentStream. This stream extends a ReadableStream, so all basic stream methods are available.
+
+```typescript
+const stream = await agent.streamVNext({ role: "user", content: "Tell me a story." });
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+Each chunk is a JSON object with the following properties:
+
+```json
+{
+  type: string;
+  runId: string;
+  from: string;
+  payload: Record<string, any>;
+}
+```
+
+We have a couple of utility functions on the stream to help you with the streaming process.
+
+- `stream.finishReason` - The reason the agent stopped streaming.
+- `stream.toolCalls` - The tool calls made by the agent.
+- `stream.toolResults` - The tool results returned by the agent.
+- `stream.usage` - The total token usage of the agent, including agents/workflows as a tool.
+- `stream.text` - The full text of the agent's response.
+- `stream.object` - The object of the agent's response, if you use output or experimental output.
+- `stream.textStream` - A readable stream that will emit the text of the agent's response.
+
+### How to use the stream in a tool
+
+Each tool gets a `writer` argument, which is a writable stream with a custom write function. This write function is used to write the tool's response to the stream.
+
+```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherInfo = createTool({
+  id: "Get Weather Information",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    conditions: z.string(),
+    temperature: z.number(),
+  }),
+  description: `Fetches the current weather information for a given city`,
+  execute: async ({ context: { city }, writer }) => {
+    writer.write({
+      type: "weather-data",
+      args: {
+        city
+      },
+      status: "pending"
+    })
+    // Tool logic here (e.g., API call)
+    console.log("Using tool to fetch weather information for", city);
+
+    writer.write({
+      type: "weather-data",
+      args: {
+        city
+      },
+      status: "success",
+      result: {
+        temperature: 20,
+        conditions: "Sunny"
+      }
+    })
+
+    return { temperature: 20, conditions: "Sunny" }; // Example return
+  },
+});
+```
+
+If you want to use the stream in an agent, you can use the `streamVNext` method on the agent and pipe it to the agent's input stream.
+
+```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherInfo = createTool({
+  id: "Get Weather Information",
+  description: `Fetches the current weather information for a given city`,
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    text: z.string(),
+  }),
+  execute: async ({ context: { city }, writer, mastra }) => {
+    const agent = mastra.getAgent('weatherAgent')
+    const stream = await agent.streamVNext(`What is the weather in ${city}?`);
+
+    await stream.pipeTo(writer);
+
+    return {
+      text: await stream.text,
+    }
+  },
+});
+```
+
+Piping the stream to the agent's input stream will allow us to automatically sum up the usage of the agent so the total usage count can be calculated.
+
