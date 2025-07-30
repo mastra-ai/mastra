@@ -29,12 +29,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   ```
 - `pnpm test` - Run all tests (slow, use sparingly)
 - `pnpm test:watch` - Run tests in watch mode
+- Package-specific tests: `pnpm test:core`, `pnpm test:cli`, `pnpm test:memory`, `pnpm test:rag`, etc.
 
 ### Development
 
 - `pnpm dev:services:down` - Stop local Docker services
 - `pnpm typecheck` - Run TypeScript checks across all packages
 - `pnpm prettier:format` - Format code with Prettier
+- `pnpm format` - Run linting across all packages with auto-fix (excludes examples, docs, integrations, playground)
 
 ## Documentation
 
@@ -67,10 +69,10 @@ Mastra is a modular AI framework built around central orchestration with pluggab
 
 ### Package Structure
 
-- **packages/** - Core framework packages (core, cli, deployer, rag, memory, evals, mcp)
+- **packages/** - Core framework packages (core, cli, deployer, rag, memory, evals, mcp, server)
 - **stores/** - Storage adapters (pg, chroma, pinecone, etc.)
 - **deployers/** - Platform deployment adapters (vercel, netlify, cloudflare)
-- **voice/** - Speech processing packages
+- **speech/** - Speech processing packages (voice synthesis and recognition)
 - **client-sdks/** - Client libraries for different platforms
 - **integrations/** - Third-party API integrations (github, firecrawl, etc.)
 - **examples/** - Demo applications
