@@ -74,6 +74,9 @@ jobs:
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
 
+      - name: Type Check
+        run: pnpm typecheck
+
   check-bundle:
     name: Validate build outputs
     runs-on: ubuntu-latest
