@@ -159,12 +159,6 @@ export class CloudflareDeployer extends Deployer {
         },
       };
 
-      // Configure sampling
-      if (telemetry.sampling?.type === 'ratio') {
-        telemetryConfig.sampling = {
-          headSamplingRatio: telemetry.sampling.probability,
-        };
-      }
 
       // Configure export
         telemetryConfig.exporter = {
