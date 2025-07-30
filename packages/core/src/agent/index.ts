@@ -247,10 +247,14 @@ export class Agent<
       }
     }
 
-    if (resolvedMemory && !resolvedMemory.hasOwnStorage && this.#mastra) {
-      const storage = this.#mastra.getStorage();
-      if (storage) {
-        resolvedMemory.setStorage(storage);
+    if (this.#mastra && resolvedMemory) {
+      resolvedMemory.__registerMastra(this.#mastra);
+
+      if (!resolvedMemory.hasOwnStorage) {
+        const storage = this.#mastra.getStorage();
+        if (storage) {
+          resolvedMemory.setStorage(storage);
+        }
       }
     }
 

@@ -19,8 +19,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting --silent",
+    "build": "tsup --silent --config tsup.config.ts",
     "buld:watch": "pnpm build --watch",
     "vitest": "vitest",
     "test": "vitest run",
