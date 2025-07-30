@@ -730,6 +730,11 @@ export default withGT(
         destination: "/examples/workflows/agent-as-step",
         permanent: true,
       },
+      {
+        source: "/reference/agents/createTool",
+        destination: "/reference/tools/create-tool",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),

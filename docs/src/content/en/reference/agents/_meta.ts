@@ -1,15 +1,15 @@
 const meta = {
   agent: "Agent",
   getAgent: "getAgent()",
-  createTool: "createTool()",
   generate: "generate()",
   stream: "stream()",
   getWorkflows: "getWorkflows()",
-  getVoice: "getVoice()",
-  getInstructions: "getInstructions()",
   getTools: "getTools()",
+  getInstructions: "getInstructions()",
   getModel: "getModel()",
   getMemory: "getMemory()",
+  getVoice: "getVoice()",
+  streamVNext: "streamVNext()",
 };
 
 export default meta;
