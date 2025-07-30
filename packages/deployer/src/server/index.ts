@@ -220,7 +220,7 @@ export async function createHonoServer(
    */
 
   app.get(
-    '/.well-known/:agentId/agent.json',
+    '/.well-known/:agentId/agent-card.json',
     describeRoute({
       description: 'Get agent configuration',
       tags: ['agents'],

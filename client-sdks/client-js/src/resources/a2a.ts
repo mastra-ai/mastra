@@ -26,7 +26,7 @@ export class A2A extends BaseResource {
    * @returns Promise containing the agent card information
    */
   async getCard(): Promise<AgentCard> {
-    return this.request(`/.well-known/${this.agentId}/agent.json`);
+    return this.request(`/.well-known/${this.agentId}/agent-card.json`);
   }
 
   /**
