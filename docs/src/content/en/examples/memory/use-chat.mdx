@@ -3,9 +3,29 @@ title: AI SDK useChat Hook
 description: Example showing how to integrate Mastra memory with the Vercel AI SDK useChat hook.
 ---
 
-# Example: AI SDK `useChat` Hook
+# Example: AI SDK `useChat` Hook with Mastra Server
 
-Integrating Mastra's memory with frontend frameworks like React using the Vercel AI SDK's `useChat` hook requires careful handling of message history to avoid duplication. This example shows the recommended pattern.
+This example shows how to integrate Mastra's memory with the Vercel AI SDK's `useChat` hook when using a Mastra Server deployment. The key is connecting your Next.js app to the Mastra Server via the MastraClient SDK.
+
+## Architecture Overview
+
+When using a Mastra Server, you have two options:
+
+**Option 1: Via API Route (Recommended for production)**
+1. Your React frontend uses the `useChat` hook to manage UI state
+2. Your API route uses `MastraClient` to communicate with the Mastra Server
+3. The Mastra Server handles agent execution, memory, and tools
+
+Benefits:
+- Keeps your Mastra Server URL and API keys secure on the backend
+- Allows you to add additional authentication/authorization logic
+- Enables request transformation and response handling
+- Better for multi-tenant applications
+
+**Option 2: Direct Connection (Good for development/prototyping)**
+1. Your React frontend uses the `useChat` hook to manage UI state
+2. The `useChat` hook connects directly to the Mastra Server's stream endpoint
+3. The Mastra Server handles agent execution, memory, and tools
 
 ## Preventing Message Duplication with `useChat`
 
@@ -13,8 +33,7 @@ The default behavior of `useChat` sends the entire chat history with each reques
 
 **Solution:** Configure `useChat` to send **only the latest message** along with your `threadId` and `resourceId`.
 
-```typescript
-// components/Chat.tsx (React Example)
+```typescript filename="components/Chat.tsx" showLineNumbers copy
 import { useChat } from "ai/react";
 
 export function Chat({ threadId, resourceId }) {
@@ -48,22 +67,19 @@ export function Chat({ threadId, resourceId }) {
   );
 }
 
-// app/api/chat/route.ts (Next.js Example)
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
-import { openai } from "@ai-sdk/openai";
+```
+
+```typescript filename="app/api/chat/route.ts" showLineNumbers copy
+import { MastraClient } from "@mastra/client-js";
 import { CoreMessage } from "@mastra/core";
 
-const agent = new Agent({
-  name: "ChatAgent",
-  instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o"),
-  memory: new Memory({
-    storage: new LibSQLStore({
-      url: "file:../mastra.db", // Or your database URL
-    }),
-  });
+// Initialize the Mastra client to connect to your server
+const mastraClient = new MastraClient({
+  baseUrl: process.env.MASTRA_SERVER_URL || "http://localhost:4111",
+  // Optional: Add API key if your server requires authentication
+  headers: {
+    "x-api-key": process.env.MASTRA_API_KEY,
+  },
 });
 
 export async function POST(request: Request) {
@@ -72,21 +88,65 @@ export async function POST(request: Request) {
 
   // Handle cases where message might be null (e.g., initial load or error)
   if (!message || !message.content) {
-    // Return an appropriate response or error
     return new Response("Missing message content", { status: 400 });
   }
 
-  // Process with memory using the single message content
-  const stream = await agent.stream(message.content, {
+  // Get the agent from your Mastra Server
+  const agent = mastraClient.getAgent("ChatAgent"); // Use your agent's ID
+
+  // Stream the response with memory context
+  const response = await agent.stream({
+    messages: [{ role: message.role || "user", content: message.content }],
     threadId,
     resourceId,
-    // Pass other message properties if needed, e.g., role
-    // messageOptions: { role: message.role }
   });
 
-  // Return the streaming response
-  return stream.toDataStreamResponse();
+  // Return the streaming response to the frontend
+  return new Response(response.body);
 }
+```
+
+## Alternative: Direct Server Route
+
+If you've deployed your Mastra Server with a custom route handler for chat, you can also connect directly:
+
+```typescript filename="components/Chat.tsx" showLineNumbers copy
+import { useChat } from "ai/react";
+
+export function Chat({ threadId, resourceId, agentId = "ChatAgent" }) {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    // Connect directly to your Mastra Server's stream endpoint
+    api: `${process.env.NEXT_PUBLIC_MASTRA_SERVER_URL}/api/agents/${agentId}/stream`,
+    experimental_prepareRequestBody: (request) => {
+      const lastMessage = request.messages.length > 0 ? request.messages[request.messages.length - 1] : null;
+      // The Mastra Server expects the full messages array, not just a single message
+      return {
+        messages: lastMessage ? [lastMessage] : [],
+        threadId,
+        resourceId,
+      };
+    },
+    headers: {
+      // Include authentication if required
+      "x-api-key": process.env.NEXT_PUBLIC_MASTRA_API_KEY,
+    },
+  });
+
+  // ... rest of component
+}
+```
+
+## Environment Variables
+
+Make sure to configure your environment variables:
+
+```bash filename=".env.local" copy
+MASTRA_SERVER_URL=http://localhost:4111  # Your Mastra Server URL
+MASTRA_API_KEY=your-api-key             # If authentication is enabled
+
+# For direct client connection (if using the alternative approach)
+NEXT_PUBLIC_MASTRA_SERVER_URL=http://localhost:4111
+NEXT_PUBLIC_MASTRA_API_KEY=your-api-key
 ```
 
 See the [AI SDK documentation on message persistence](https://sdk.vercel.ai/docs/ai-sdk-ui/chatbot-message-persistence) for more background.
@@ -95,8 +155,7 @@ See the [AI SDK documentation on message persistence](https://sdk.vercel.ai/docs
 
 While this page focuses on `useChat`, you can also build UIs for managing threads (listing, creating, selecting). This typically involves backend API endpoints that interact with Mastra's memory functions like `memory.getThreadsByResourceId()` and `memory.createThread()`.
 
-```typescript
-// Conceptual React component for a thread list
+```typescript filename="components/ThreadList.tsx" showLineNumbers copy
 import React, { useState, useEffect } from 'react';
 
 // Assume API functions exist: fetchThreads, createNewThread
@@ -147,7 +206,7 @@ function ChatApp() {
       />
       <div style={{ flexGrow: 1 }}>
         {currentThreadId ? (
-          <Chat threadId={currentThreadId} resourceId={userId} /> // Your useChat component
+          <Chat threadId={currentThreadId} resourceId={userId} agentId="your-agent-id" /> // Your useChat component
         ) : (
           <div>Select or start a conversation.</div>
         )}
@@ -157,7 +216,32 @@ function ChatApp() {
 }
 ```
 
+## Key Differences: Mastra Server vs Direct Integration
+
+### When using Mastra Server:
+- Your Next.js app acts as a client to the Mastra Server
+- Use `MastraClient` to communicate with the server
+- Agent configuration, memory, and tools are managed on the server
+- Better for production deployments and multi-client scenarios
+
+### When using direct integration (from the AI SDK docs):
+- Agent runs directly in your Next.js server
+- You manage agent configuration and dependencies locally
+- Simpler for development but requires more setup
+
+## Troubleshooting
+
+### Common Issues:
+
+1. **Connection refused**: Ensure your Mastra Server is running and accessible
+2. **Authentication errors**: Check your API key configuration
+3. **Message duplication**: Verify you're only sending the latest message
+4. **Missing thread history**: Ensure `threadId` and `resourceId` are passed correctly
+5. **CORS errors (direct connection)**: Configure your Mastra Server to allow requests from your frontend origin
+
 ## Related
 
-- **[Getting Started](../../docs/memory/overview.mdx)**: Covers the core concepts of `resourceId` and `threadId`.
-- **[Memory Reference](../../reference/memory/Memory.mdx)**: API details for `Memory` class methods.
+- **[MastraClient Overview](../../docs/server-db/mastra-client.mdx)**: Learn more about the Mastra Client SDK
+- **[Mastra Server](../../docs/deployment/server.mdx)**: How to deploy and configure a Mastra Server
+- **[Memory Overview](../../docs/memory/overview.mdx)**: Core concepts of `resourceId` and `threadId`
+- **[AI SDK Integration](../../docs/frameworks/agentic-uis/ai-sdk.mdx#usechat)**: General useChat documentation

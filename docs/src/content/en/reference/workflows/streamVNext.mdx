@@ -1,0 +1,215 @@
+---
+title: "Reference: Workflow.streamVNext() | Streaming | Workflows | Mastra Docs"
+description: Documentation for the `.streamVNext()` method in Mastra workflows, which enables real-time streaming of responses.
+---
+
+# `streamVNext()`
+
+The `streamVNext()` method enables real-time streaming of responses from a workflow.
+
+## Usage
+
+```typescript
+const run = await myWorkflow.createRunAsync();
+
+// Add a stream to monitor execution
+const stream = run.streamVNext({ inputData: {...} });
+
+
+for (const chunk of stream) {
+  // do something with the chunk
+}
+
+```
+
+## Protocol
+
+<PropertiesTable
+  content={[
+    {
+      name: "start",
+      type: "object",
+      description: "The workflow starts",
+      isOptional: false,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "example",
+              type: "{ type: 'start', runId: '1', from: 'WORKFLOW', payload: { runId: '1' } }",
+              description: "Example message structure",
+              isOptional: false,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "step-start",
+      type: "object",
+      description: "The start of a step",
+      isOptional: false,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "example",
+              type: "{ type: 'step-start', runId: '1', from: 'WORKFLOW', payload: { id: 'fetch-weather' } }",
+              description: "Example message structure",
+              isOptional: false,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "step-output",
+      type: "object",
+      description: "Custom output from a step",
+      isOptional: false,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "example",
+              type: "{ type: 'step-output', runId: '1', from: 'WORKFLOW', payload: { stepName: 'my step', args: { ... }, stepCallId: 'uuid', startedAt: 1717000000000, status: 'running' } }",
+              description: "Example message structure",
+              isOptional: false,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "step-result",
+      type: "object",
+      description: "The result of a step",
+      isOptional: false,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "example",
+              type: "{ type: 'step-result', runId: '1', from: 'WORKFLOW', payload: { stepName: 'my step', result: { ... }, stepCallId: 'uuid', endedAt: 1717000000000, status: 'success', output: [Object] } }",
+              description: "Example message structure",
+              isOptional: false,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "finish",
+      type: "object",
+      description: "The end of the workflow",
+      isOptional: false,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "example",
+              type: "{ type: 'finish', runId: '1', from: 'WORKFLOW', payload: { totalUsage: { promptTokens: 100, completionTokens: 100, totalTokens: 200 } } }",
+              description: "Example message structure",
+              isOptional: false,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## Returns
+
+### PropertiesTable for Return Values
+
+<PropertiesTable
+  content={[
+    {
+      name: "usage",
+      type: "Promise<object>",
+      isOptional: true,
+      description:
+        "Total usage of the workflow, including sub agents/workflows as a step.",
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "promptTokens",
+              type: "number",
+              isOptional: true,
+              description: "The number of prompt tokens used by the agent.",
+            },
+          ],
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "completionTokens",
+              type: "number",
+              isOptional: true,
+              description: "The number of completion tokens used by the agent.",
+            },
+          ],
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "totalTokens",
+              type: "number", 
+              isOptional: true,
+              description: "The total number of tokens used by the agent.",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "status",
+      type: "Promise<string>",
+      isOptional: true,
+      description:
+        "The status of the workflow run.",
+    },
+    {
+      name: "result",
+      type: "Promise<object>",
+      isOptional: true,
+      description:
+        "The result of the workflow run.",
+    },
+  ]}
+/>
+
+## Examples
+
+### Basic Streaming
+
+```typescript
+const run = await myWorkflow.createRunAsync();
+const stream = run.streamVNext({ inputData: {...} });
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk);
+}
+```
+
+### Structured Output Streaming
+
+```typescript
+const run = await myWorkflow.createRunAsync();
+const stream = run.streamVNext({ inputData: {...} });
+
+
+const result = await stream.result;
+console.log("Final structured result:", result);
+```
+

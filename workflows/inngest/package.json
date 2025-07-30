@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "0.11.6",
+  "version": "0.11.7",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
   "dependencies": {
     "@inngest/realtime": "^0.3.1",
     "@opentelemetry/api": "^1.9.0",
-    "inngest": "^3.40.0",
+    "inngest": "^3.40.1",
     "zod": "^3.25.67"
   },
   "devDependencies": {
@@ -50,6 +50,6 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.11.0-0 <0.12.0-0"
+    "@mastra/core": ">=0.11.0-0 <0.13.0-0"
   }
 }

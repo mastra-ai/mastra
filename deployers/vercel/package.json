@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "0.11.9-alpha.0",
+  "version": "0.11.9",
   "description": "",
   "type": "module",
   "files": [
@@ -47,6 +47,6 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.1-0 <0.12.0-0"
+    "@mastra/core": ">=0.10.1-0 <0.13.0-0"
   }
 }

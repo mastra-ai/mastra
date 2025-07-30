@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.12.0-alpha.4",
+  "version": "0.12.0",
   "description": "",
   "type": "module",
   "files": [
@@ -83,7 +83,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
-    "build:watch": "tsup --watch --silent --config tsup.config.ts",
+    "build:watch": "pnpm build --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run",
     "lint": "eslint ."
@@ -96,6 +96,7 @@
     "@babel/helper-module-imports": "^7.27.1",
     "@mastra/server": "workspace:^",
     "@neon-rs/load": "^0.1.82",
+    "@optimize-lodash/rollup-plugin": "^5.0.2",
     "@rollup/plugin-alias": "^5.1.1",
     "@rollup/plugin-commonjs": "^28.0.6",
     "@rollup/plugin-json": "^6.1.0",
@@ -139,6 +140,6 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.11.0-0 <0.12.0-0"
+    "@mastra/core": ">=0.12.0-0 <0.13.0-0"
   }
 }

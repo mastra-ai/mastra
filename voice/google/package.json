@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-google",
-  "version": "0.10.5",
+  "version": "0.10.6",
   "description": "Mastra Google voice integration",
   "type": "module",
   "files": [
@@ -43,6 +43,6 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.12.0-0"
+    "@mastra/core": ">=0.10.7-0 <0.13.0-0"
   }
 }

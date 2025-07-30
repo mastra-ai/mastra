@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "0.10.8-alpha.1",
+  "version": "0.11.0",
   "description": "",
   "type": "module",
   "files": [
@@ -74,7 +74,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "build": "pnpm check && tsup --silent --config tsup.config.ts",
-    "build:watch": "tsup --watch --silent --config tsup.config.ts",
+    "build:watch": "pnpm build --watch",
     "test": "vitest",
     "lint": "eslint ."
   },
@@ -91,7 +91,7 @@
     "zod": "^3.25.67"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.11.0-0 <0.12.0-0",
+    "@mastra/core": ">=0.12.0-0 <0.13.0-0",
     "ai": "^4.0.0"
   },
   "devDependencies": {
