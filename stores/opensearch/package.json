@@ -1,6 +1,6 @@
 {
   "name": "@mastra/opensearch",
-  "version": "0.11.2-alpha.0",
+  "version": "0.11.2",
   "description": "OpenSearch vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
