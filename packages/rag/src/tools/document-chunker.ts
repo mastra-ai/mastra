@@ -1,26 +1,28 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { MDocument, ChunkParams } from '../document';
+import type { MDocument, ChunkParams, RecursiveChunkOptions } from '../document';
+
+const DEFAULT_CHUNK_PARAMS: RecursiveChunkOptions & { strategy: 'recursive' } = {
+  strategy: 'recursive',
+  maxSize: 512,
+  overlap: 50,
+  separators: ['\n'],
+};
 
 export const createDocumentChunkerTool = ({
   doc,
-  params = {
-    strategy: 'recursive',
-    maxSize: 512,
-    overlap: 50,
-    separators: ['\n'],
-  } as ChunkParams,
+  params = DEFAULT_CHUNK_PARAMS,
 }: {
   doc: MDocument;
   params?: ChunkParams;
 }): ReturnType<typeof createTool> => {
-  const maxSize = 'maxSize' in params ? params.maxSize : 512;
-
   return createTool({
-    id: `Document Chunker ${params.strategy} ${maxSize}`,
+    id: `Document Chunker ${params.strategy} ${params.maxSize}`,
     inputSchema: z.object({}),
-    description: `Chunks document using ${params.strategy} strategy with maxSize ${maxSize} and ${params.overlap || 0} overlap`,
+    description: `Chunks document using ${params.strategy} strategy with maxSize ${params.maxSize} and ${
+      params.overlap || 0
+    } overlap`,
     execute: async () => {
       const chunks = await doc.chunk(params);
 
