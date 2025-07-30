@@ -16,6 +16,7 @@ import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { writeFile } from 'node:fs/promises';
 import { getBundlerOptions } from './bundlerOptions';
 import resolveFrom from 'resolve-from';
+import { packageDirectory } from 'package-directory';
 
 // TODO: Make thie extendable or find a rollup plugin that can do this
 const globalExternals = [
@@ -230,7 +231,13 @@ export async function bundleExternals(
 
   const transpilePackagesMap = new Map<string, string>();
   for (const pkg of transpilePackages) {
-    transpilePackagesMap.set(pkg, dirname(resolveFrom(outputDir, `${pkg}/package.json`)));
+    const entryPoint = dirname(resolveFrom(outputDir, pkg));
+    const dir = await packageDirectory({
+      cwd: entryPoint,
+    });
+    if (dir) {
+      transpilePackagesMap.set(pkg, dir);
+    }
   }
 
   const bundler = await rollup({
