@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import MarkdownRenderer from '@/components/ui/markdown-renderer';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
 export interface MarkdownPreviewDialogProps {
   open: boolean;
@@ -24,13 +24,11 @@ export const MarkdownPreviewDialog = ({
         onOpenChange(false);
       }
     };
-
     if (open) {
-      document.addEventListener('keydown', handleEscape, true);
+      document.addEventListener('keydown', handleEscape, false);
     }
-
     return () => {
-      document.removeEventListener('keydown', handleEscape, true);
+      document.removeEventListener('keydown', handleEscape, false);
     };
   }, [open, onOpenChange]);
 

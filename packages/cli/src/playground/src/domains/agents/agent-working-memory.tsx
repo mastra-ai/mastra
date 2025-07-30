@@ -130,16 +130,18 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                 >
                   {isUpdating ? <RefreshCcwIcon className="w-3 h-3 animate-spin" /> : 'Save Changes'}
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowPreview(true)}
-                  disabled={isUpdating}
-                  className="text-xs"
-                >
-                  <Eye className="w-3 h-3 mr-1" />
-                  Preview
-                </Button>
+                {editValue && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowPreview(true)}
+                    disabled={isUpdating}
+                    className="text-xs"
+                  >
+                    <Eye className="w-3 h-3 mr-1" />
+                    Preview
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
                   size="sm"
