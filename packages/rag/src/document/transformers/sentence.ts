@@ -9,6 +9,7 @@ export class SentenceTransformer extends TextTransformer {
   protected preserveWhitespace: boolean;
   protected fallbackToWords: boolean;
   protected fallbackToCharacters: boolean;
+  protected keepSeparator: boolean | 'start' | 'end';
 
   constructor(options: SentenceChunkOptions) {
     // Ensure overlap doesn't exceed maxSize for parent validation
@@ -28,6 +29,7 @@ export class SentenceTransformer extends TextTransformer {
     this.preserveWhitespace = options.preserveWhitespace ?? true;
     this.fallbackToWords = options.fallbackToWords ?? true;
     this.fallbackToCharacters = options.fallbackToCharacters ?? true;
+    this.keepSeparator = options.keepSeparator ?? false;
 
     // Override with original overlap for our sentence logic
     this.overlap = options.overlap ?? 0;
