@@ -1,6 +1,6 @@
 {
   "name": "@mastra/astra",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "description": "Astra DB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -39,6 +39,6 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.12.0-0"
+    "@mastra/core": ">=0.10.7-0 <0.13.0-0"
   }
 }
