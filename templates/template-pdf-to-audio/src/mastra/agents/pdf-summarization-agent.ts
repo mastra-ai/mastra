@@ -13,7 +13,8 @@ const memory = new Memory({
 
 export const pdfSummarizationAgent = new Agent({
   name: 'PDF Summarization Agent with Voice',
-  description: 'An agent that summarizes extracted PDF text using a large context window model and can provide audio summaries',
+  description:
+    'An agent that summarizes extracted PDF text using a large context window model and can provide audio summaries',
   instructions: `
 You are a PDF summarization specialist with access to a large context window model and voice synthesis capabilities. Your role is to create concise, comprehensive summaries of PDF content and deliver them in both text and audio formats.
 

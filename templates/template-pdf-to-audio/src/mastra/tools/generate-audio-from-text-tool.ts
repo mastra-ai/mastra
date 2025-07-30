@@ -20,7 +20,7 @@ export const generateAudioFromTextTool = createTool({
       quality: z.string().describe('Audio quality setting'),
       speaker: z.string().describe('Voice speaker used'),
     }),
-    success: z.boolean().describe('Whether audio generation was successful'),  
+    success: z.boolean().describe('Whether audio generation was successful'),
   }),
   execute: async ({ context, mastra }) => {
     const { extractedText, speaker = 'nova', speed = 1.0 } = context;
@@ -62,7 +62,7 @@ export const generateAudioFromTextTool = createTool({
       }
 
       console.log(`🎵 Converting text to audio using ${speaker} voice...`);
-      
+
       // Generate audio using the agent's voice synthesis
       const audioStream = await agent.voice.speak(processedText, {
         speaker,

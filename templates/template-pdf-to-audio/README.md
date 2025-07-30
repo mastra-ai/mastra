@@ -132,7 +132,8 @@ const agent = mastra.getAgent('pdfToAudioAgent');
 const response = await agent.stream([
   {
     role: 'user',
-    content: 'Please download this PDF and convert it to audio using a professional voice: https://example.com/document.pdf',
+    content:
+      'Please download this PDF and convert it to audio using a professional voice: https://example.com/document.pdf',
   },
 ]);
 
@@ -227,7 +228,7 @@ console.log(`Audio generated: ${audioResult.estimatedDuration} seconds duration`
 ### Available Voices
 
 - **alloy**: Neutral, balanced voice
-- **echo**: Friendly, conversational tone  
+- **echo**: Friendly, conversational tone
 - **fable**: Warm, expressive voice
 - **onyx**: Deep, authoritative voice
 - **nova**: Clear, professional voice (recommended for documents)
@@ -297,7 +298,7 @@ export const textToAudioAgent = new Agent({
 src/mastra/
 ├── agents/
 │   ├── pdf-to-audio-agent.ts         # PDF processing and audio generation agent
-│   ├── text-to-audio-agent.ts        # Text to audio conversion agent  
+│   ├── text-to-audio-agent.ts        # Text to audio conversion agent
 │   └── pdf-summarization-agent.ts    # PDF summarization agent with voice
 ├── tools/
 │   ├── download-pdf-tool.ts           # PDF download and summarization tool

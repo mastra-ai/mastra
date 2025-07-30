@@ -88,7 +88,7 @@ const generateAudioFromSummaryStep = createStep({
 
     try {
       const result = await generateAudioFromTextTool.execute({
-        context: { 
+        context: {
           extractedText: summary, // Use summary as the text input
           speaker,
           speed,
