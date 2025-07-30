@@ -92,7 +92,7 @@ export async function getThreadsPaginatedHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
-    const resourceId = c.req.query('resourceid');
+    const resourceId = c.req.query('resourceId');
     const networkId = c.req.query('networkId');
     const page = parseInt(c.req.query('page') || '0', 10);
     const perPage = parseInt(c.req.query('perPage') || '100', 10);
