@@ -2,12 +2,13 @@ import { useWorkingMemory } from '@mastra/playground-ui';
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
+import { RefreshCcwIcon, ExternalLink, Eye } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { CodeDisplay } from '@/components/ui/code-display';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useMemoryConfig } from '@/hooks/use-memory';
+import { MarkdownPreviewDialog } from './markdown-preview-dialog';
 
 interface AgentWorkingMemoryProps {
   agentId: string;
@@ -29,6 +30,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
   });
   const [editValue, setEditValue] = useState<string>(workingMemoryData ?? '');
   const [isEditing, setIsEditing] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   React.useEffect(() => {
     setEditValue(workingMemoryData ?? '');
@@ -86,15 +88,29 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
           )}
           <div className="flex gap-2">
             {!isEditing ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setIsEditing(true)}
-                disabled={!threadExists || isUpdating}
-                className="text-xs"
-              >
-                Edit Working Memory
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsEditing(true)}
+                  disabled={!threadExists || isUpdating}
+                  className="text-xs"
+                >
+                  Edit Working Memory
+                </Button>
+                {workingMemoryData && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowPreview(true)}
+                    disabled={!threadExists || isUpdating}
+                    className="text-xs"
+                  >
+                    <Eye className="w-3 h-3 mr-1" />
+                    Preview
+                  </Button>
+                )}
+              </>
             ) : (
               <>
                 <Button
@@ -113,6 +129,16 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                   className="text-xs"
                 >
                   {isUpdating ? <RefreshCcwIcon className="w-3 h-3 animate-spin" /> : 'Save Changes'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowPreview(true)}
+                  disabled={isUpdating}
+                  className="text-xs"
+                >
+                  <Eye className="w-3 h-3 mr-1" />
+                  Preview
                 </Button>
                 <Button
                   variant="secondary"
@@ -146,6 +172,14 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
           </a>
         </div>
       )}
+
+      <MarkdownPreviewDialog
+        open={showPreview}
+        onOpenChange={setShowPreview}
+        content={isEditing ? editValue : (workingMemoryData || '')}
+        title="Working Memory Preview"
+        description="Preview how your working memory content will be rendered"
+      />
     </div>
   );
 };
