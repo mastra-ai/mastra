@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import get from 'lodash/fp/get';
+import { get as getFp } from 'lodash/fp';
 import endOfDay from 'date-fns/endOfDay';
 
 export const lodashTool = createTool({
@@ -10,6 +11,7 @@ export const lodashTool = createTool({
     date: z.string(),
   }),
   execute: async context => {
-    return endOfDay(get('date', context.data));
+    const x = getFp('date', context.data);
+    return x || endOfDay(get('date', context.data));
   },
 });

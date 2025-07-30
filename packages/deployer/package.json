@@ -96,6 +96,7 @@
     "@babel/helper-module-imports": "^7.27.1",
     "@mastra/server": "workspace:^",
     "@neon-rs/load": "^0.1.82",
+    "@optimize-lodash/rollup-plugin": "^5.0.2",
     "@rollup/plugin-alias": "^5.1.1",
     "@rollup/plugin-commonjs": "^28.0.6",
     "@rollup/plugin-json": "^6.1.0",
