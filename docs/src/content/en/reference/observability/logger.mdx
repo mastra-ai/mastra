@@ -5,7 +5,9 @@ description: Documentation for PinoLogger, which provides methods to record even
 
 # PinoLogger
 
-A Logger instance is created using `new PinoLogger()` and provides methods to record events at various severity levels. Depending on the logger type, messages will be written to [Mastra Cloud Logs](../mastra-cloud/observability.mdx), a file, or an external service.
+A Logger instance is created using `new PinoLogger()` and provides methods to record events at various severity levels.
+
+When deploying to Mastra Cloud, logs are displayed on the [Logs](../mastra-cloud/observability.mdx) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
 ## Usage example
 
@@ -81,7 +83,6 @@ fileLogger.warn("Low disk space", {
 ## Upstash Logger (Remote Log Drain)
 
 Streams structured logs to a remote Redis list using the `UpstashTransport`. The logger accepts a string message and a structured metadata object. This enables centralized logging for distributed environments, supporting filtering by `destinationPath`, `type`, and `runId`.
-
 
 ```typescript showLineNumbers copy
 import { UpstashTransport } from "@mastra/loggers/upstash";
