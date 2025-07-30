@@ -691,7 +691,7 @@ export class ConvexStorage extends MastraStorage {
         return messages.map((msg: MastraMessageV2) => {
           // Create a basic MastraMessageV1 from a MastraMessageV2
           const contentV1 = msg.content.parts.map((part: any) => {
-            return part.text.concat();
+            return part.text;
           });
           const contentString = contentV1.join('');
           const v1Msg: MastraMessageV1 = {

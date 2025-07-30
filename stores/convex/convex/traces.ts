@@ -47,7 +47,7 @@ export const save = mutation({
     // Check if trace already exists
     const existingTrace = await ctx.db
       .query('traces')
-      .withIndex('by_traceId', q => q.eq('traceId', trace.id))
+      .filter(q => q.eq(q.field('id'), trace.id))
       .first();
 
     if (existingTrace) {
