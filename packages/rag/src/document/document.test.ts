@@ -325,7 +325,7 @@ describe('MDocument', () => {
       }
       expect(allChunksValid).toBe(true);
 
-      // Verify each chunk maxSize explicitly
+      // Verify the size of each chunk explicitly
       for (const chunk of chunks) {
         expect(chunk.text.length).toBeLessThanOrEqual(chunkSize);
       }
