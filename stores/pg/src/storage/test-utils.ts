@@ -21,6 +21,7 @@ export function pgTests() {
   describe('PG specific tests', () => {
     beforeAll(async () => {
       store = new PostgresStore(TEST_CONFIG);
+      await store.init();
     });
     afterAll(async () => {
       try {
@@ -362,6 +363,12 @@ export function pgTests() {
       });
       it('does not throw on non-empty connection string', () => {
         expect(() => new PostgresStore({ connectionString })).not.toThrow();
+      });
+      it('throws if store is not initialized', () => {
+        expect(() => new PostgresStore(validConfig).db.any('SELECT 1')).toThrow(
+          /PostgresStore: Store is not initialized/,
+        );
+        expect(() => new PostgresStore(validConfig).pgp).toThrow(/PostgresStore: Store is not initialized/);
       });
     });
   });

@@ -3,6 +3,8 @@ import { join } from 'path';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import virtual from '@rollup/plugin-virtual';
+import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
+import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
 
 interface CFRoute {
   pattern: string;
@@ -102,47 +104,49 @@ export class CloudflareDeployer extends Deployer {
     import { TABLE_EVALS } from '@mastra/core/storage';
     import { checkEvalStorageFields } from '@mastra/core/utils';
 
-    registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
-      evaluate({
-        agentName,
-        input,
-        metric,
-        output,
-        runId,
-        globalRunId: runId,
-        instructions,
-      });
-    });
-
-    registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
-      const storage = mastra.getStorage();
-      if (storage) {
-        // Check for required fields
-        const logger = mastra?.getLogger();
-        const areFieldsValid = checkEvalStorageFields(traceObject, logger);
-        if (!areFieldsValid) return;
-
-        await storage.insert({
-          tableName: TABLE_EVALS,
-          record: {
-            input: traceObject.input,
-            output: traceObject.output,
-            result: JSON.stringify(traceObject.result || {}),
-            agent_name: traceObject.agentName,
-            metric_name: traceObject.metricName,
-            instructions: traceObject.instructions,
-            test_info: null,
-            global_run_id: traceObject.globalRunId,
-            run_id: traceObject.runId,
-            created_at: new Date().toISOString(),
-          },
-        });
-      }
-    });
-
     export default {
       fetch: async (request, env, context) => {
-        const app = await createHonoServer(mastra, { tools: getToolExports(tools) });
+        const _mastra = mastra();
+
+        registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
+          evaluate({
+            agentName,
+            input,
+            metric,
+            output,
+            runId,
+            globalRunId: runId,
+            instructions,
+          });
+        });
+
+        registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
+          const storage = _mastra.getStorage();
+          if (storage) {
+            // Check for required fields
+            const logger = _mastra?.getLogger();
+            const areFieldsValid = checkEvalStorageFields(traceObject, logger);
+            if (!areFieldsValid) return;
+
+            await storage.insert({
+              tableName: TABLE_EVALS,
+              record: {
+                input: traceObject.input,
+                output: traceObject.output,
+                result: JSON.stringify(traceObject.result || {}),
+                agent_name: traceObject.agentName,
+                metric_name: traceObject.metricName,
+                instructions: traceObject.instructions,
+                test_info: null,
+                global_run_id: traceObject.globalRunId,
+                run_id: traceObject.runId,
+                created_at: new Date().toISOString(),
+              },
+            });
+          }
+        });
+      
+        const app = await createHonoServer(_mastra, { tools: getToolExports(tools) });
         return app.fetch(request, env, context);
       }
     }
@@ -170,6 +174,8 @@ process.versions.node = '${process.versions.node}';
       `,
         }),
         ...inputOptions.plugins,
+        postgresStoreInstanceChecker(),
+        mastraInstanceWrapper(mastraEntryFile),
       ];
     }
 
