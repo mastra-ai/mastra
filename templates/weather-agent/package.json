@@ -13,7 +13,7 @@
   "description": "One Agent, one Workflow and one Tool to bring you the weather in your city.",
   "type": "module",
   "dependencies": {
-    "@ai-sdk/openai": "^1.3.22",
+    "@ai-sdk/openai": "^1.3.23",
     "@mastra/core": "latest",
     "@mastra/loggers": "latest",
     "zod": "^3.25.67"

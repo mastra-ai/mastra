@@ -13,7 +13,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@ai-sdk/openai": "^1.3.22",
+    "@ai-sdk/openai": "^1.3.23",
     "@mastra/core": "latest",
     "@mastra/mcp": "latest",
     "@mastra/mcp-registry-registry": "latest",

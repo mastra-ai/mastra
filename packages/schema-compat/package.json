@@ -46,7 +46,7 @@
     "@internal/lint": "workspace:*",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^20.19.0",
-    "ai": "4.3.16",
+    "ai": "4.3.19",
     "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
