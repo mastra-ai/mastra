@@ -176,11 +176,7 @@ export class MDocument {
       return;
     }
 
-    const rt = new RecursiveCharacterTransformer({
-      ...options,
-      separators: options?.separators,
-      isSeparatorRegex: options?.isSeparatorRegex,
-    });
+    const rt = new RecursiveCharacterTransformer(options);
     const textSplit = rt.transformDocuments(this.chunks);
     this.chunks = textSplit;
   }
