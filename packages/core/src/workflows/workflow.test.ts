@@ -8872,4 +8872,299 @@ describe('Workflow', () => {
       expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
     });
   });
+  describe('Parallel and Branching Suspended Steps Bug Tests', () => {
+    let testStorage: InstanceType<typeof MockStore>;
+
+    beforeEach(async () => {
+      testStorage = new MockStore();
+    });
+
+    it('should NOT complete parallel workflow when only one suspended step is resumed', async () => {
+      // This test WILL FAIL until the parallel suspension bug is fixed
+      // Related to GitHub issue #6418
+      const parallelStep1 = createStep({
+        id: 'parallel-step-1',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        resumeSchema: z.object({ multiplier: z.number() }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            await suspend({});
+            return { result: 0 };
+          }
+          return { result: inputData.value * resumeData.multiplier };
+        },
+      });
+
+      const parallelStep2 = createStep({
+        id: 'parallel-step-2',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        resumeSchema: z.object({ divisor: z.number() }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            await suspend({});
+            return { result: 0 };
+          }
+          return { result: inputData.value / resumeData.divisor };
+        },
+      });
+
+      const parallelWorkflow = createWorkflow({
+        id: 'parallel-suspension-bug-test',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          'parallel-step-1': z.object({ result: z.number() }),
+          'parallel-step-2': z.object({ result: z.number() }),
+        }),
+        mastra: new Mastra({ logger: false, storage: testStorage }),
+      })
+        .parallel([parallelStep1, parallelStep2])
+        .commit();
+
+      const run = await parallelWorkflow.createRunAsync();
+
+      // Start workflow - both parallel steps should suspend
+      const startResult = await run.start({ inputData: { value: 100 } });
+      expect(startResult.status).toBe('suspended');
+      if (startResult.status === 'suspended') {
+        expect(startResult.suspended).toHaveLength(2);
+      }
+
+      // Resume ONLY the first parallel step
+      const resumeResult1 = await run.resume({
+        step: 'parallel-step-1',
+        resumeData: { multiplier: 2 },
+      });
+      console.log('resumeResult1', JSON.stringify(resumeResult1, null, 2));
+      // BUG: Currently this will be 'success' but should be 'suspended'
+      // The parallel block should NOT complete until ALL parallel steps are resumed
+      expect(resumeResult1.status).toBe('suspended');
+      if (resumeResult1.status === 'suspended') {
+        expect(resumeResult1.suspended).toHaveLength(1);
+        expect(resumeResult1.suspended[0]).toContain('parallel-step-2');
+      }
+
+      // Only after resuming the second step should the workflow complete
+      const resumeResult2 = await run.resume({
+        step: 'parallel-step-2',
+        resumeData: { divisor: 5 },
+      });
+      console.log('resumeResult2', JSON.stringify(resumeResult2, null, 2));
+      expect(resumeResult2.status).toBe('success');
+      if (resumeResult2.status === 'success') {
+        expect(resumeResult2.result).toEqual({
+          'parallel-step-1': { result: 200 },
+          'parallel-step-2': { result: 20 },
+        });
+      }
+    });
+
+    it('should maintain correct step status after resuming in branching workflows', async () => {
+      // This test validates that step status is properly updated after resume
+      // Related to the workflow state management bug observed in branching scenarios
+      const branchStep1 = createStep({
+        id: 'branch-step-1',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        resumeSchema: z.object({ multiplier: z.number() }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            await suspend({});
+            return { result: 0 };
+          }
+          return { result: inputData.value * resumeData.multiplier };
+        },
+      });
+
+      const branchStep2 = createStep({
+        id: 'branch-step-2',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        resumeSchema: z.object({ divisor: z.number() }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            await suspend({});
+            return { result: 0 };
+          }
+          return { result: inputData.value / resumeData.divisor };
+        },
+      });
+
+      const branchingWorkflow = createWorkflow({
+        id: 'branching-state-bug-test',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({}),
+        mastra: new Mastra({ logger: false, storage: testStorage }),
+      })
+        .branch([
+          [() => Promise.resolve(true), branchStep1],
+          [() => Promise.resolve(true), branchStep2],
+        ])
+        .commit();
+
+      const run = await branchingWorkflow.createRunAsync();
+
+      // Start workflow - both branch steps should suspend
+      const startResult = await run.start({ inputData: { value: 100 } });
+      expect(startResult.status).toBe('suspended');
+      if (startResult.status === 'suspended') {
+        expect(startResult.suspended.length).toBeGreaterThan(1);
+      }
+
+      // Resume first step
+      const resumeResult1 = await run.resume({
+        step: 'branch-step-1',
+        resumeData: { multiplier: 2 },
+      });
+
+      // Validate that the resumed step has correct status
+      expect(resumeResult1.steps['branch-step-1'].status).toBe('success');
+      if (resumeResult1.steps['branch-step-1'].status === 'success') {
+        expect(resumeResult1.steps['branch-step-1'].output).toEqual({ result: 200 });
+      }
+
+      // Resume second step
+      const resumeResult2 = await run.resume({
+        step: 'branch-step-2',
+        resumeData: { divisor: 5 },
+      });
+
+      // Both steps should now have 'success' status and correct outputs
+      expect(resumeResult2.steps['branch-step-1'].status).toBe('success');
+      if (resumeResult2.steps['branch-step-1'].status === 'success') {
+        expect(resumeResult2.steps['branch-step-1'].output).toEqual({ result: 200 });
+      }
+      expect(resumeResult2.steps['branch-step-2'].status).toBe('success');
+      if (resumeResult2.steps['branch-step-2'].status === 'success') {
+        expect(resumeResult2.steps['branch-step-2'].output).toEqual({ result: 20 });
+      }
+
+      // Final workflow status should be success
+      expect(resumeResult2.status).toBe('success');
+    });
+
+    it('should handle parallel steps that never suspend correctly', async () => {
+      // Control test: parallel steps that don't suspend should work normally
+      const normalStep1 = createStep({
+        id: 'normal-step-1',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        execute: async ({ inputData }) => {
+          return { result: inputData.value * 2 };
+        },
+      });
+
+      const normalStep2 = createStep({
+        id: 'normal-step-2',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        execute: async ({ inputData }) => {
+          return { result: inputData.value / 2 };
+        },
+      });
+
+      const normalParallelWorkflow = createWorkflow({
+        id: 'normal-parallel-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          'normal-step-1': z.object({ result: z.number() }),
+          'normal-step-2': z.object({ result: z.number() }),
+        }),
+        mastra: new Mastra({ logger: false, storage: testStorage }),
+      })
+        .parallel([normalStep1, normalStep2])
+        .commit();
+
+      const run = await normalParallelWorkflow.createRunAsync();
+      const result = await run.start({ inputData: { value: 100 } });
+
+      // Should complete immediately since no steps suspend
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result).toEqual({
+          'normal-step-1': { result: 200 },
+          'normal-step-2': { result: 50 },
+        });
+      }
+      expect(result.steps['normal-step-1'].status).toBe('success');
+      expect(result.steps['normal-step-2'].status).toBe('success');
+    });
+
+    it('should correctly track multiple suspend/resume cycles in parallel workflow', async () => {
+      // Test multiple suspend/resume cycles to ensure state consistency
+      let step1ResumeCount = 0;
+      let step2ResumeCount = 0;
+
+      const multiResumeStep1 = createStep({
+        id: 'multi-resume-step-1',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        resumeSchema: z.object({ increment: z.number() }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          step1ResumeCount++;
+          if (step1ResumeCount < 3 && !resumeData) {
+            await suspend({});
+            return { result: 0 };
+          }
+          const increment = resumeData?.increment || 0;
+          return { result: inputData.value + increment };
+        },
+      });
+
+      const multiResumeStep2 = createStep({
+        id: 'multi-resume-step-2',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        resumeSchema: z.object({ multiplier: z.number() }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          step2ResumeCount++;
+          if (step2ResumeCount < 2 && !resumeData) {
+            await suspend({});
+            return { result: 0 };
+          }
+          const multiplier = resumeData?.multiplier || 1;
+          return { result: inputData.value * multiplier };
+        },
+      });
+
+      const multiCycleWorkflow = createWorkflow({
+        id: 'multi-cycle-parallel-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          'multi-resume-step-1': z.object({ result: z.number() }),
+          'multi-resume-step-2': z.object({ result: z.number() }),
+        }),
+        mastra: new Mastra({ logger: false, storage: testStorage }),
+      })
+        .parallel([multiResumeStep1, multiResumeStep2])
+        .commit();
+
+      const run = await multiCycleWorkflow.createRunAsync();
+
+      // Initial start - both should suspend
+      const startResult = await run.start({ inputData: { value: 10 } });
+      expect(startResult.status).toBe('suspended');
+
+      // First resume of step1 - should still be suspended since step2 also suspended
+      const resume1 = await run.resume({
+        step: 'multi-resume-step-1',
+        resumeData: { increment: 5 },
+      });
+      expect(resume1.status).toBe('suspended'); // Should remain suspended until both are done
+
+      // Resume step2 - workflow should complete since both steps are now resolved
+      const resume2 = await run.resume({
+        step: 'multi-resume-step-2',
+        resumeData: { multiplier: 3 },
+      });
+      expect(resume2.status).toBe('success');
+      if (resume2.status === 'success') {
+        expect(resume2.result).toEqual({
+          'multi-resume-step-1': { result: 15 },
+          'multi-resume-step-2': { result: 30 },
+        });
+      }
+    });
+  });
 });
