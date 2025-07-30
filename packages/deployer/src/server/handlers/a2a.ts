@@ -9,6 +9,7 @@ import {
 
 import type { Context } from 'hono';
 import { stream } from 'hono/streaming';
+import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 
 export async function getAgentCardByIdHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
@@ -28,6 +29,7 @@ export async function getAgentExecutionHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
   const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const taskStore: InMemoryTaskStore = c.get('taskStore');
   const logger = mastra.getLogger();
   const body = await c.req.json();
 
@@ -43,6 +45,7 @@ export async function getAgentExecutionHandler(c: Context) {
     requestId: randomUUID(),
     method: body.method as 'message/send' | 'message/stream' | 'tasks/get' | 'tasks/cancel',
     params: body.params as MessageSendParams | TaskQueryParams | TaskIdParams,
+    taskStore,
     logger,
   });
 

@@ -19,6 +19,7 @@ import type { Context } from '../types';
 const messageSendParamsSchema = z.object({
   // id: z.string().min(1, 'Invalid or missing task ID (params.id).'),
   message: z.object({
+    role: z.enum(['user', 'agent']),
     parts: z.array(
       z.object({
         kind: z.enum(['text']),
@@ -100,7 +101,7 @@ function validateMessageSendParams(params: MessageSendParams) {
   }
 }
 
-export async function handleTaskSend({
+export async function handleMessageSend({
   requestId,
   params,
   taskStore,
@@ -120,11 +121,12 @@ export async function handleTaskSend({
   validateMessageSendParams(params);
 
   const { message, metadata } = params;
-  const { taskId, contextId } = message;
+  const { contextId } = message;
+  const taskId = message.taskId || crypto.randomUUID();
 
   // Load or create task
   let currentData = await loadOrCreateTask({
-    taskId: taskId ? taskId : crypto.randomUUID(),
+    taskId,
     taskStore,
     agentId,
     message,
@@ -215,7 +217,7 @@ export async function handleTaskGet({
   return createSuccessResponse(requestId, task);
 }
 
-export async function* handleTaskSendSubscribe({
+export async function* handleMessageStream({
   requestId,
   params,
   taskStore,
@@ -235,14 +237,16 @@ export async function* handleTaskSendSubscribe({
   yield createSuccessResponse(requestId, {
     state: 'working',
     message: {
+      messageId: crypto.randomUUID(),
+      kind: 'message',
       role: 'agent',
-      parts: [{ type: 'text', text: 'Generating response...' }],
+      parts: [{ kind: 'text', text: 'Generating response...' }],
     },
   });
 
   let result;
   try {
-    result = await handleTaskSend({
+    result = await handleMessageSend({
       requestId,
       params,
       taskStore,
@@ -326,7 +330,7 @@ export async function getAgentExecutionHandler({
   runtimeContext,
   method,
   params,
-  taskStore = new InMemoryTaskStore(),
+  taskStore,
   logger,
 }: Context & {
   requestId: string;
@@ -334,7 +338,7 @@ export async function getAgentExecutionHandler({
   agentId: string;
   method: 'message/send' | 'message/stream' | 'tasks/get' | 'tasks/cancel';
   params: MessageSendParams | TaskQueryParams | TaskIdParams;
-  taskStore?: InMemoryTaskStore;
+  taskStore: InMemoryTaskStore;
   logger?: IMastraLogger;
 }): Promise<any> {
   const agent = mastra.getAgent(agentId);
@@ -349,7 +353,7 @@ export async function getAgentExecutionHandler({
     // 2. Route based on method
     switch (method) {
       case 'message/send': {
-        const result = await handleTaskSend({
+        const result = await handleMessageSend({
           requestId,
           params: params as MessageSendParams,
           taskStore,
@@ -360,7 +364,7 @@ export async function getAgentExecutionHandler({
         return result;
       }
       case 'message/stream':
-        const result = await handleTaskSendSubscribe({
+        const result = await handleMessageStream({
           requestId,
           taskStore,
           params: params as MessageSendParams,

@@ -63,20 +63,20 @@ async function main() {
 
     console.log('\n-------------------\n');
 
-    // // Step 3: Get task status
-    // const taskId = response.result.id;
-    // console.log(`📥 Checking task status (Task ID: ${taskId})...`);
+    // Step 3: Get task status
+    const taskId = response.result.id;
+    console.log(`📥 Checking task status (Task ID: ${taskId})...`);
 
-    // const taskStatus = await a2aClient.getTask({
-    //   id: taskId,
-    // });
-    // if ('error' in taskStatus) {
-    //   console.log(taskStatus);
-    //   throw new Error(taskStatus.error.message);
-    // }
+    const taskStatus = await a2aClient.getTask({
+      id: taskId,
+    });
+    if ('error' in taskStatus) {
+      console.log(taskStatus);
+      throw new Error(taskStatus.error.message);
+    }
 
-    // console.log(`Task Status: ${taskStatus.result.status.state}`);
-    // console.log('\n-------------------\n');
+    console.log(`Task Status: ${taskStatus.result.status.state}`);
+    console.log('\n-------------------\n');
 
     // Step 4: Demonstrate agent-to-agent communication
     console.log('🔄 Demonstrating agent-to-agent communication...');
