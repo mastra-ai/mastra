@@ -1,14 +1,14 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { MDocument, ChunkParams, RecursiveChunkOptions } from '../document';
+import type { MDocument, ChunkParams } from '../document';
 
-const DEFAULT_CHUNK_PARAMS: RecursiveChunkOptions & { strategy: 'recursive' } = {
-  strategy: 'recursive',
+const DEFAULT_CHUNK_PARAMS = {
+  strategy: 'recursive' as const,
   maxSize: 512,
   overlap: 50,
   separators: ['\n'],
-};
+} satisfies ChunkParams;
 
 export const createDocumentChunkerTool = ({
   doc,
