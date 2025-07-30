@@ -310,14 +310,6 @@ src/mastra/
 └── index.ts                           # Mastra configuration
 ```
 
-### Testing
-
-```bash
-# Run with a test PDF
-export OPENAI_API_KEY="your-api-key"
-npx tsx example.ts
-```
-
 ## Common Issues
 
 ### "OPENAI_API_KEY is not set"
