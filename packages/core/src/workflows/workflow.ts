@@ -1682,7 +1682,7 @@ export class Run<
 
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.infer<TResumeSchema>;
-    step:
+    step?:
       | Step<string, any, any, TResumeSchema, any, TEngineType>
       | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, TResumeSchema, any, TEngineType>]
       | string
@@ -1690,9 +1690,6 @@ export class Run<
     runtimeContext?: RuntimeContext;
     runCount?: number;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
-    const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
-      typeof step === 'string' ? step : step?.id,
-    );
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -1700,6 +1697,50 @@ export class Run<
 
     if (!snapshot) {
       throw new Error('No snapshot found for this workflow run');
+    }
+
+    // Auto-detect suspended steps if no step is provided
+    let steps: string[];
+    if (params.step) {
+      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
+        typeof step === 'string' ? step : step?.id,
+      );
+    } else {
+      // Use suspendedPaths to detect suspended steps
+      const suspendedStepPaths: string[][] = [];
+
+      Object.entries(snapshot?.suspendedPaths ?? {}).forEach(([stepId, _executionPath]) => {
+        // Check if this step has nested workflow suspension data
+        const stepResult = snapshot?.context?.[stepId];
+        if (stepResult && typeof stepResult === 'object' && 'status' in stepResult) {
+          const stepRes = stepResult as any;
+          if (stepRes.status === 'suspended') {
+            const nestedPath = stepRes.suspendPayload?.__workflow_meta?.path;
+            if (nestedPath && Array.isArray(nestedPath)) {
+              // For nested workflows, combine the parent step ID with the nested path
+              suspendedStepPaths.push([stepId, ...nestedPath]);
+            } else {
+              // For single-level suspension, just use the step ID
+              suspendedStepPaths.push([stepId]);
+            }
+          }
+        }
+      });
+
+      if (suspendedStepPaths.length === 0) {
+        throw new Error('No suspended steps found in this workflow run');
+      }
+
+      if (suspendedStepPaths.length === 1) {
+        // For single suspended step, use the full path
+        steps = suspendedStepPaths[0]!;
+      } else {
+        const pathStrings = suspendedStepPaths.map(path => `[${path.join(', ')}]`);
+        throw new Error(
+          `Multiple suspended steps found: ${pathStrings.join(', ')}. ` +
+            'Please specify which step to resume using the "step" parameter.',
+        );
+      }
     }
 
     if (!params.runCount) {
@@ -1712,7 +1753,9 @@ export class Run<
       const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
 
       if (!isStepSuspended) {
-        throw new Error('This workflow step was not suspended');
+        throw new Error(
+          `This workflow step "${steps?.[0]}" was not suspended. Available suspended steps: [${suspendedStepIds.join(', ')}]`,
+        );
       }
     }
 
