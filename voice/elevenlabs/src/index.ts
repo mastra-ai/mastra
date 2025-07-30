@@ -185,7 +185,7 @@ export class ElevenLabsVoice extends MastraVoice {
 
       const transcription = await this.client.speechToText.convert(
         {
-          file: file as any,
+          file: file,
           model_id: this.listeningModel?.name as ElevenLabsModel,
           language_code,
           tag_audio_events,
