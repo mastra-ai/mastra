@@ -39,12 +39,33 @@ const sentenceChunkOptionsSchema = baseChunkOptionsSchema
   })
   .strict();
 
+// Predicate to check for Set-like objects
+const isSetLike = (value: unknown): value is Set<any> => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Set<any>).has === 'function' &&
+    typeof (value as Set<any>).add === 'function' &&
+    typeof (value as Set<any>).delete === 'function' &&
+    typeof (value as Set<any>).clear === 'function' &&
+    typeof (value as Set<any>).size === 'number'
+  );
+};
+
+// Zod schema for a Set or the literal 'all'
+const setOrAllSchema = z
+  .any()
+  .refine(value => value === 'all' || isSetLike(value), {
+    message: "Must be a Set object or the literal 'all'",
+  })
+  .optional();
+
 const tokenChunkOptionsSchema = baseChunkOptionsSchema
   .extend({
     encodingName: z.string().optional(),
     modelName: z.string().optional(),
-    allowedSpecial: z.union([z.instanceof(Set), z.literal('all')]).optional(),
-    disallowedSpecial: z.union([z.instanceof(Set), z.literal('all')]).optional(),
+    allowedSpecial: setOrAllSchema,
+    disallowedSpecial: setOrAllSchema,
   })
   .strict();
 
