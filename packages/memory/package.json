@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.11.6-alpha.1",
+  "version": "0.12.0",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -69,6 +69,6 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.9-0 <0.12.0-0"
+    "@mastra/core": ">=0.12.0-0 <0.13.0-0"
   }
 }

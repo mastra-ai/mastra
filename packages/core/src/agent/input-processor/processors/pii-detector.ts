@@ -3,6 +3,7 @@ import z from 'zod';
 import type { MastraLanguageModel } from '../../index';
 import { Agent } from '../../index';
 import type { MastraMessageV2 } from '../../message-list';
+import { TripWire } from '../../trip-wire';
 import type { InputProcessor } from '../index';
 
 /**
@@ -61,7 +62,7 @@ export interface PIIDetection {
  * Result structure for PII detection (simplified for minimal tokens)
  */
 export interface PIIDetectionResult {
-  category_scores?: PIICategoryScores;
+  categories?: PIICategoryScores;
   detections?: PIIDetection[];
   redacted_content?: string;
 }
@@ -215,6 +216,9 @@ export class PIIDetector implements InputProcessor {
 
       return processedMessages;
     } catch (error) {
+      if (error instanceof TripWire) {
+        throw error; // Re-throw tripwire errors
+      }
       throw new Error(`PII detection failed: ${error instanceof Error ? error.stack : 'Unknown error'}`);
     }
   }
@@ -228,15 +232,14 @@ export class PIIDetector implements InputProcessor {
     try {
       const response = await this.detectionAgent.generate(prompt, {
         output: z.object({
-          category_scores: z
+          categories: z
             .object(
               this.detectionTypes.reduce(
                 (props, type) => {
-                  // @ts-ignore
                   props[type] = z.number().min(0).max(1).optional();
                   return props;
                 },
-                {} as Record<string, z.ZodType<number>>,
+                {} as Record<string, z.ZodType<number | undefined>>,
               ),
             )
             .optional(),
@@ -286,9 +289,9 @@ export class PIIDetector implements InputProcessor {
     }
 
     // Check if any category scores exceed the threshold
-    if (result.category_scores) {
+    if (result.categories) {
       const maxScore = Math.max(
-        ...(Object.values(result.category_scores).filter(score => typeof score === 'number') as number[]),
+        ...(Object.values(result.categories).filter(score => typeof score === 'number') as number[]),
       );
       return maxScore >= this.threshold;
     }
@@ -305,7 +308,7 @@ export class PIIDetector implements InputProcessor {
     strategy: 'block' | 'warn' | 'filter' | 'redact',
     abort: (reason?: string) => never,
   ): MastraMessageV2 | null {
-    const detectedTypes = Object.entries(result.category_scores || {})
+    const detectedTypes = Object.entries(result.categories || {})
       .filter(([_, detected]) => detected)
       .map(([type]) => type);
 
@@ -497,7 +500,7 @@ export class PIIDetector implements InputProcessor {
 Detect and analyze the following PII types:
 ${this.detectionTypes.map(type => `- ${type}`).join('\n')}
 
-For any false or 0 values, you can omit them and they'll be counted as 0 or false. Do not include any zeros.`;
+IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHING ELSE. Do not include any zeros in your response, if the response should be 0, omit it, they will be counted as false.`;
   }
 
   /**

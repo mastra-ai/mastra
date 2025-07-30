@@ -1738,7 +1738,7 @@ export class Run<
         runId: this.runId,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
-        input: params.resumeData,
+        input: snapshot?.context?.input,
         resume: {
           steps,
           stepResults,

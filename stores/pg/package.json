@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "0.12.5",
+  "version": "0.13.0",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -52,6 +52,6 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.12.0-0"
+    "@mastra/core": ">=0.12.0-0 <0.13.0-0"
   }
 }

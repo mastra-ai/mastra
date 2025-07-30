@@ -725,6 +725,11 @@ export default withGT(
         destination: "/examples/evals/custom-llm-judge-eval",
         permanent: true,
       },
+      {
+        source: "/examples/workflows/agent-and-tool-interop",
+        destination: "/examples/workflows/agent-as-step",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),

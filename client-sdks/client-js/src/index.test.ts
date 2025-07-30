@@ -310,6 +310,114 @@ describe('MastraClient Resources', () => {
       }
     });
 
+    it('should stream responses with tool calls', async () => {
+      const firstMockChunk = `0:"test "
+0:"response"
+9:{"toolCallId":"tool1","toolName":"testTool","args":{"arg1":"value1"}}
+e:{"finishReason":"tool-calls","usage":{"promptTokens":1,"completionTokens":1},"isContinued":false}
+d:{"finishReason":"tool-calls","usage":{"promptTokens":2,"completionTokens":2}}
+`;
+
+      const secondMockChunk = `0:"final response"
+e:{"finishReason":"stop","usage":{"promptTokens":2,"completionTokens":2},"isContinued":false}
+d:{"finishReason":"stop","usage":{"promptTokens":2,"completionTokens":2}}
+`;
+
+      const firstResponseBody = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(firstMockChunk));
+          controller.close();
+        },
+      });
+
+      const secondResponseBody = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(secondMockChunk));
+          controller.close();
+        },
+      });
+
+      (global.fetch as any)
+        .mockResolvedValueOnce(
+          new Response(firstResponseBody, {
+            status: 200,
+            headers: new Headers({ 'Content-Type': 'text/event-stream' }),
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(secondResponseBody, {
+            status: 200,
+            headers: new Headers({ 'Content-Type': 'text/event-stream' }),
+          }),
+        );
+
+      const response = await agent.stream({
+        messages: [
+          {
+            role: 'user',
+            content: 'test',
+          },
+        ],
+        clientTools: {
+          testTool: {
+            id: 'testTool',
+            description: 'Test Tool',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                arg1: { type: 'string' },
+              },
+            },
+            execute: async () => {
+              return 'test result';
+            },
+          },
+        },
+      });
+
+      expect(response.body).toBeInstanceOf(ReadableStream);
+      const reader = response?.body?.getReader();
+      expect(reader).toBeDefined();
+
+      let output = '';
+      if (reader) {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          output += new TextDecoder().decode(value);
+        }
+      }
+
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+
+      const [secondUrl, secondConfig] = (global.fetch as any).mock.calls[1];
+      expect(secondUrl).toBe(`${clientOptions.baseUrl}/api/agents/test-agent/stream`);
+
+      const secondRequestBody = JSON.parse(secondConfig.body);
+      expect(secondRequestBody.messages).toHaveLength(2);
+      expect(secondRequestBody.messages[0].content).toBe('test');
+      expect(secondRequestBody.messages[1].content).toBe('test response');
+      expect(secondRequestBody.messages[1].parts).toEqual([
+        {
+          type: 'text',
+          text: 'test response',
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            step: 0,
+            toolCallId: 'tool1',
+            toolName: 'testTool',
+            args: {
+              arg1: 'value1',
+            },
+            result: 'test result',
+          },
+        },
+      ]);
+    });
+
     it('should get agent tool', async () => {
       const mockResponse = {
         id: 'tool1',
