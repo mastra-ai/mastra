@@ -228,7 +228,14 @@ export class ConvexStorage extends MastraStorage {
         }
         case TABLE_WORKFLOW_SNAPSHOT: {
           const workflowRuns = records as WorkflowRun[];
-          await this.httpClient.mutation(this.api.workflowRuns.batchSave, { workflowRuns });
+          const workflowRunsToSave = workflowRuns.map(workflowRun => {
+            return {
+              ...workflowRun,
+              createdAt: workflowRun.createdAt.getTime(),
+              updatedAt: workflowRun.updatedAt.getTime(),
+            };
+          });
+          await this.httpClient.mutation(this.api.workflowRuns.batchSave, { workflowRuns: workflowRunsToSave });
           break;
         }
         case TABLE_EVALS: {

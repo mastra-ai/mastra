@@ -1811,12 +1811,11 @@ describe('ConvexStorage Tests', () => {
 
     test('should insert a single workflow run using insert method', async () => {
       const runId = `run-${Date.now()}`;
-      const workflowRun = {
+      const workflowRun: WorkflowRun = {
         runId,
         workflowName: 'test-workflow',
         resourceId: 'test-resource',
-        status: 'running',
-        state: {
+        snapshot: {
           runId,
           status: 'running',
           value: { key: 'value' },
@@ -1826,8 +1825,8 @@ describe('ConvexStorage Tests', () => {
           suspendedPaths: {},
           timestamp: Date.now(),
         },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
 
       // Insert the workflow run
@@ -1851,13 +1850,12 @@ describe('ConvexStorage Tests', () => {
 
     test('should batch insert multiple workflow runs using batchInsert method', async () => {
       const commonResourceId = `resource-${Date.now()}`;
-      const workflowRuns = [
+      const workflowRuns: WorkflowRun[] = [
         {
           runId: `run-1-${Date.now()}`,
           workflowName: 'test-workflow-1',
           resourceId: commonResourceId,
-          status: 'running',
-          state: {
+          snapshot: {
             runId: `run-1-${Date.now()}`,
             status: 'running',
             value: { key: 'value1' },
@@ -1867,15 +1865,14 @@ describe('ConvexStorage Tests', () => {
             suspendedPaths: {},
             timestamp: Date.now(),
           },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
         },
         {
           runId: `run-2-${Date.now()}`,
           workflowName: 'test-workflow-2',
           resourceId: commonResourceId,
-          status: 'success',
-          state: {
+          snapshot: {
             runId: `run-2-${Date.now()}`,
             status: 'success',
             value: { key: 'value2' },
@@ -1885,8 +1882,8 @@ describe('ConvexStorage Tests', () => {
             suspendedPaths: {},
             timestamp: Date.now() + 1000,
           },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
         },
       ];
 

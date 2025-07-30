@@ -25,21 +25,29 @@ function convertDbToAppModel(run: Doc<'workflowRuns'>): any {
  * Save a workflow run
  */
 export const save = mutation({
-  args: { workflowRun: v.any() },
+  args: {
+    workflowRun: v.object({
+      runId: v.string(),
+      workflowName: v.string(),
+      resourceId: v.string(),
+      snapshot: v.any(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }),
+  },
   handler: async (ctx, args) => {
     const { workflowRun } = args;
 
-    // For stateType-based queries, respect explicit stateType or status from state/snapshot
-    const status = workflowRun.stateType || workflowRun.state?.status || workflowRun.snapshot?.status || 'pending';
+    const status = workflowRun?.snapshot?.status || 'pending';
 
     const runData = {
       runId: workflowRun.runId,
       workflowName: workflowRun.workflowName || 'unknown',
       resourceId: workflowRun.resourceId,
-      snapshot: workflowRun.state || workflowRun.snapshot || {},
+      snapshot: workflowRun.snapshot || {},
       status: status as WorkflowRunStatus,
-      createdAt: new Date(workflowRun.createdAt).getTime(),
-      updatedAt: new Date(workflowRun.updatedAt).getTime(),
+      createdAt: workflowRun.createdAt,
+      updatedAt: workflowRun.updatedAt,
     };
 
     // Check if workflow run already exists
@@ -73,10 +81,7 @@ export const batchSave = mutation({
         runId: v.string(),
         workflowName: v.optional(v.string()),
         resourceId: v.optional(v.string()),
-        state: v.optional(v.any()),
         snapshot: v.optional(v.any()),
-        stateType: v.optional(v.string()),
-        status: v.optional(v.string()),
         createdAt: v.optional(v.union(v.string(), v.number())),
         updatedAt: v.optional(v.union(v.string(), v.number())),
       }),
@@ -87,10 +92,8 @@ export const batchSave = mutation({
     const savedRuns = [];
 
     for (const workflowRun of workflowRuns) {
-      // For stateType-based queries, respect explicit stateType or status from state/snapshot
-      const status = workflowRun.stateType || workflowRun.state?.status || workflowRun.snapshot?.status || 'pending';
+      const status = workflowRun.snapshot?.status || 'pending';
 
-      // Convert dates to timestamps if they're strings
       const createdAt = workflowRun.createdAt ? new Date(workflowRun.createdAt).getTime() : Date.now();
       const updatedAt = workflowRun.updatedAt ? new Date(workflowRun.updatedAt).getTime() : Date.now();
 
@@ -98,7 +101,7 @@ export const batchSave = mutation({
         runId: workflowRun.runId,
         workflowName: workflowRun.workflowName || 'unknown',
         resourceId: workflowRun.resourceId || '',
-        snapshot: workflowRun.state || workflowRun.snapshot || {},
+        snapshot: workflowRun.snapshot || {},
         status: status as WorkflowRunStatus,
         createdAt,
         updatedAt,
