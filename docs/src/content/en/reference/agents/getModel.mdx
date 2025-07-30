@@ -18,10 +18,10 @@ const model = await agent.getModel();
 <PropertiesTable
   content={[
     {
-      name: "options",
+      name: "{ runtimeContext = new RuntimeContext() }",
       type: "{ runtimeContext?: RuntimeContext }",
       isOptional: true,
-      defaultValue: "{}",
+      defaultValue: "new RuntimeContext()",
       description: "Optional configuration object containing runtime context.",
     },
   ]}
