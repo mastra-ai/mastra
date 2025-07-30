@@ -6478,6 +6478,38 @@ packages:
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
+  '@mastra/core@0.10.15':
+    resolution: {integrity: sha512-TmNe71FyyxdjIy8J5gD/a33zsfaBiaiYYica33HPat5z8sBnn5DyTyswOaqgVJUCRcnEb98snOBphAVtN/y9VA==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      zod: ^3.0.0
+
+  '@mastra/deployer@0.10.15':
+    resolution: {integrity: sha512-8v7KFEuQ2kADW/pkL58791vq3BOr8m0t4vlDoeSBpbs9pyuOQJE0y5cfX9FlSdAdtp3krFfbuXo6IDQbRN7rPQ==}
+    peerDependencies:
+      '@mastra/core': '>=0.10.9-0 <0.11.0-0'
+
+  '@mastra/libsql@0.11.0':
+    resolution: {integrity: sha512-bnSXI24nJNYbZAN4z6rNlE7Vs0BStKLTbOLffRf9au0AUKRg44TBzGnJve/JpprPDT9KfFrww+CgdCYPWnSh7Q==}
+    peerDependencies:
+      '@mastra/core': '>=0.10.7-0 <0.11.0-0'
+
+  '@mastra/loggers@0.10.3':
+    resolution: {integrity: sha512-71bAZlOVGbgrMpTYzFw+oOu0ljaDtJSBkAFM9xVTkiHn+K3AIYisJXxCLqMYiWzcIRyIoBQo1cINDXckLbhDAQ==}
+    peerDependencies:
+      '@mastra/core': '>=0.10.4-0 <0.11.0'
+
+  '@mastra/mcp@0.10.6':
+    resolution: {integrity: sha512-NB8ihMacWu+el4y0qMB1gcZ+vB6A8KMgDgTMqaOIWbx5NT8I6xNaSDn1JyjjeGvO1Wgljy5vaW35CfqxQhjIdA==}
+    peerDependencies:
+      '@mastra/core': ^0.10.2-alpha.0
+      zod: ^3.0.0
+
+  '@mastra/memory@0.11.3':
+    resolution: {integrity: sha512-MJny4YSZ0bMiEkghWyPHI29K2n3gpJ4c9cZ2beJsuI8YKpBla6fOkdk1oqcN+2A8wvFQcTghdk1U/0ApmjnLiA==}
+    peerDependencies:
+      '@mastra/core': '>=0.10.9-0 <0.11.0-0'
+
   '@mastra/rag@1.0.2':
     resolution: {integrity: sha512-Nk7LdgBdEvLV6JaFkkurVb1DsSfdmnlipQ+tmQAOT29M/q+7xFMts50AZjbLrU1m/FyFGg1Bvdr3ejtYgphFcQ==}
     peerDependencies:
@@ -8575,15 +8607,34 @@ packages:
   '@radix-ui/rect@1.1.1':
     resolution: {integrity: sha512-HPwpGIzkl28mWyZqG52jiqDJ12waP11Pa1lGoiyUkIEuMLBP0oeK/C89esbXrxsky5we7dfd8U58nm0SgAWpVw==}
 
+  '@redis/bloom@1.2.0':
+    resolution: {integrity: sha512-HG2DFjYKbpNmVXsa0keLHp/3leGJz1mjh09f2RLGGLQZzSHpkmZWuwJbAvo3QcRY8p80m5+ZdXZdYOSBLlp7Cg==}
+    peerDependencies:
+      '@redis/client': ^1.0.0
+
   '@redis/bloom@5.6.0':
     resolution: {integrity: sha512-l13/d6BaZDJzogzZJEphIeZ8J0hpQpjkMiozomTm6nJiMNYkoPsNOBOOQua4QsG0fFjyPmLMDJFPAp5FBQtTXg==}
     engines: {node: '>= 18'}
     peerDependencies:
       '@redis/client': ^5.6.0
 
+  '@redis/client@1.6.1':
+    resolution: {integrity: sha512-/KCsg3xSlR+nCK8/8ZYSknYxvXHwubJrU82F3Lm1Fp6789VQ0/3RJKfsmRXjqfaTA++23CvC3hqmqe/2GEt6Kw==}
+    engines: {node: '>=14'}
+
   '@redis/client@5.6.0':
     resolution: {integrity: sha512-wmP9kCFElCSr4MM4+1E4VckDuN4wLtiXSM/J0rKVQppajxQhowci89RGZr2OdLualowb8SRJ/R6OjsXrn9ZNFA==}
     engines: {node: '>= 18'}
+
+  '@redis/graph@1.1.1':
+    resolution: {integrity: sha512-FEMTcTHZozZciLRl6GiiIB4zGm5z5F3F6a6FZCyrfxdKOhFlGkiAqlexWMBzCi4DcRoyiOsuLfW+cjlGWyExOw==}
+    peerDependencies:
+      '@redis/client': ^1.0.0
+
+  '@redis/json@1.0.7':
+    resolution: {integrity: sha512-6UyXfjVaTBTJtKNG4/9Z8PSpKE6XgSyEb8iwaqDcy+uKrd/DGYHTWkUdnQDyzm727V7p21WUMhsqz5oy65kPcQ==}
+    peerDependencies:
+      '@redis/client': ^1.0.0
 
   '@redis/json@5.6.0':
     resolution: {integrity: sha512-YQN9ZqaSDpdLfJqwzcF4WeuJMGru/h4WsV7GeeNtXsSeyQjHTyDxrd48xXfRRJGv7HitA7zGnzdHplNeKOgrZA==}
@@ -8591,11 +8642,21 @@ packages:
     peerDependencies:
       '@redis/client': ^5.6.0
 
+  '@redis/search@1.2.0':
+    resolution: {integrity: sha512-tYoDBbtqOVigEDMAcTGsRlMycIIjwMCgD8eR2t0NANeQmgK/lvxNAvYyb6bZDD4frHRhIHkJu2TBRvB0ERkOmw==}
+    peerDependencies:
+      '@redis/client': ^1.0.0
+
   '@redis/search@5.6.0':
     resolution: {integrity: sha512-sLgQl92EyMVNHtri5K8Q0j2xt9c0cO9HYurXz667Un4xeUYR+B/Dw5lLG35yqO7VvVxb9amHJo9sAWumkKZYwA==}
     engines: {node: '>= 18'}
     peerDependencies:
       '@redis/client': ^5.6.0
+
+  '@redis/time-series@1.1.0':
+    resolution: {integrity: sha512-c1Q99M5ljsIuc4YdaCwfUEXsofakb9c8+Zse2qxTadu8TalLXuAESzLvFAvNVbkmSlvlzIQOLpBCmWI9wTOt+g==}
+    peerDependencies:
+      '@redis/client': ^1.0.0
 
   '@redis/time-series@5.6.0':
     resolution: {integrity: sha512-tXABmN1vu4aTNL3WI4Iolpvx/5jgil2Bs31ozvKblT+jkUoRkk8ykmYo9Pv/Mp7Gk6/Qkr/2rMgVminrt/4BBQ==}
@@ -11911,6 +11972,10 @@ packages:
     engines: {node: '>= 18.0.0'}
     hasBin: true
 
+  generic-pool@3.9.0:
+    resolution: {integrity: sha512-hymDOu5B53XvN4QT9dBmZxPX4CWhBPPLguTZ9MMFeFa/Kg0xWVfylOVNlJji/E7yTZWFd/q9GO5TxDLq156D7g==}
+    engines: {node: '>= 4'}
+
   gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
     engines: {node: '>=6.9.0'}
@@ -13232,6 +13297,12 @@ packages:
 
   markdown-table@3.0.4:
     resolution: {integrity: sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw==}
+
+  mastra@0.10.13:
+    resolution: {integrity: sha512-/X2lfKig6s0DSS7E0z1nDf29j+RxL+A0KQE+TimD1c1oV/laJtvSkGydBap50x2mFrsvOavUEae6jx07V9oiEQ==}
+    hasBin: true
+    peerDependencies:
+      '@mastra/core': ^0.10.2-alpha.0
 
   matcher@3.0.0:
     resolution: {integrity: sha512-OkeDaAZ/bQCxeFAozM55PKcKU0yJMPGifLwV4Qgjitu+5MoAfSQN4lsLJeXZ1b8w0x+/Emda6MZgXS1jvsapng==}
@@ -17901,7 +17972,7 @@ snapshots:
       '@babel/traverse': 7.28.0
       '@babel/types': 7.28.2
       convert-source-map: 2.0.0
-      debug: 4.4.1(supports-color@8.1.1)
+      debug: 4.4.1
       gensync: 1.0.0-beta.2
       json5: 2.2.3
       semver: 6.3.1
@@ -22274,6 +22345,17 @@ snapshots:
       - encoding
       - supports-color
 
+  '@opentelemetry/resource-detector-gcp@0.36.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
+    dependencies:
+      '@opentelemetry/api': 1.9.0
+      '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/semantic-conventions': 1.34.0
+      gcp-metadata: 6.1.1(encoding@0.1.13)
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+
   '@opentelemetry/resources@1.30.1(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
@@ -23073,21 +23155,47 @@ snapshots:
 
   '@radix-ui/rect@1.1.1': {}
 
+  '@redis/bloom@1.2.0(@redis/client@1.6.1)':
+    dependencies:
+      '@redis/client': 1.6.1
+
   '@redis/bloom@5.6.0(@redis/client@5.6.0)':
     dependencies:
       '@redis/client': 5.6.0
+
+  '@redis/client@1.6.1':
+    dependencies:
+      cluster-key-slot: 1.1.2
+      generic-pool: 3.9.0
+      yallist: 4.0.0
 
   '@redis/client@5.6.0':
     dependencies:
       cluster-key-slot: 1.1.2
 
+  '@redis/graph@1.1.1(@redis/client@1.6.1)':
+    dependencies:
+      '@redis/client': 1.6.1
+
+  '@redis/json@1.0.7(@redis/client@1.6.1)':
+    dependencies:
+      '@redis/client': 1.6.1
+
   '@redis/json@5.6.0(@redis/client@5.6.0)':
     dependencies:
       '@redis/client': 5.6.0
 
+  '@redis/search@1.2.0(@redis/client@1.6.1)':
+    dependencies:
+      '@redis/client': 1.6.1
+
   '@redis/search@5.6.0(@redis/client@5.6.0)':
     dependencies:
       '@redis/client': 5.6.0
+
+  '@redis/time-series@1.1.0(@redis/client@1.6.1)':
+    dependencies:
+      '@redis/client': 1.6.1
 
   '@redis/time-series@5.6.0(@redis/client@5.6.0)':
     dependencies:
@@ -25210,7 +25318,7 @@ snapshots:
     dependencies:
       bytes: 3.1.2
       content-type: 1.0.5
-      debug: 4.4.1(supports-color@8.1.1)
+      debug: 4.4.1
       http-errors: 2.0.0
       iconv-lite: 0.6.3
       on-finished: 2.4.1
@@ -25936,6 +26044,10 @@ snapshots:
     dependencies:
       ms: 2.1.2
 
+  debug@4.4.1:
+    dependencies:
+      ms: 2.1.3
+
   debug@4.4.1(supports-color@8.1.1):
     dependencies:
       ms: 2.1.3
@@ -26630,7 +26742,7 @@ snapshots:
       content-type: 1.0.5
       cookie: 0.7.2
       cookie-signature: 1.2.2
-      debug: 4.4.1(supports-color@8.1.1)
+      debug: 4.4.1
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
@@ -26781,7 +26893,7 @@ snapshots:
 
   finalhandler@2.1.0:
     dependencies:
-      debug: 4.4.1(supports-color@8.1.1)
+      debug: 4.4.1
       encodeurl: 2.0.0
       escape-html: 1.0.3
       on-finished: 2.4.1
@@ -26845,6 +26957,8 @@ snapshots:
   flatbuffers@24.12.23: {}
 
   flatted@3.3.3: {}
+
+  follow-redirects@1.15.9: {}
 
   follow-redirects@1.15.9(debug@4.4.1):
     optionalDependencies:
@@ -27043,6 +27157,8 @@ snapshots:
       which: 4.0.0
     transitivePeerDependencies:
       - supports-color
+
+  generic-pool@3.9.0: {}
 
   gensync@1.0.0-beta.2: {}
 
@@ -27436,7 +27552,7 @@ snapshots:
   https-proxy-agent@7.0.6:
     dependencies:
       agent-base: 7.1.3
-      debug: 4.4.1(supports-color@8.1.1)
+      debug: 4.4.1
     transitivePeerDependencies:
       - supports-color
 
@@ -28646,6 +28762,52 @@ snapshots:
   map-obj@4.3.0: {}
 
   markdown-table@3.0.4: {}
+
+  mastra@0.10.13(@mastra/core@0.10.15(encoding@0.1.13)(openapi-types@12.1.3)(react@19.1.0)(zod@3.25.67))(@opentelemetry/api@1.9.0)(encoding@0.1.13)(react@19.1.0)(typescript@5.8.3):
+    dependencies:
+      '@clack/prompts': 0.11.0
+      '@lukeed/uuid': 2.0.1
+      '@mastra/core': 0.10.15(encoding@0.1.13)(openapi-types@12.1.3)(react@19.1.0)(zod@3.25.67)
+      '@mastra/deployer': 0.10.15(@mastra/core@0.10.15(encoding@0.1.13)(openapi-types@12.1.3)(react@19.1.0)(zod@3.25.67))(typescript@5.8.3)
+      '@mastra/loggers': 0.10.3(@mastra/core@0.10.15(encoding@0.1.13)(openapi-types@12.1.3)(react@19.1.0)(zod@3.25.67))
+      '@mastra/mcp': 0.10.6(@mastra/core@0.10.15(encoding@0.1.13)(openapi-types@12.1.3)(react@19.1.0)(zod@3.25.67))(zod@3.25.67)
+      '@opentelemetry/auto-instrumentations-node': 0.60.1(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+      '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-trace-otlp-grpc': 0.202.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-trace-otlp-http': 0.202.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation': 0.202.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-node': 0.202.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-base': 2.0.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/semantic-conventions': 1.34.0
+      '@webcontainer/env': 1.1.1
+      commander: 12.1.0
+      dotenv: 16.6.1
+      execa: 9.6.0
+      fs-extra: 11.3.0
+      get-port: 7.1.0
+      json-schema-to-zod: 2.6.1
+      open: 10.1.2
+      picocolors: 1.1.1
+      posthog-node: 4.18.0
+      prettier: 3.6.2
+      prompt: 1.3.0
+      shell-quote: 1.8.3
+      shiki: 1.29.2
+      strip-json-comments: 5.0.2
+      superjson: 2.2.2
+      swr: 2.3.4(react@19.1.0)
+      tcp-port-used: 1.0.2
+      yocto-spinner: 0.2.3
+      zod: 3.25.67
+      zod-to-json-schema: 3.24.6(zod@3.25.67)
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - debug
+      - encoding
+      - react
+      - supports-color
+      - typescript
 
   matcher@3.0.0:
     dependencies:
@@ -30539,7 +30701,7 @@ snapshots:
 
   require-in-the-middle@7.5.2:
     dependencies:
-      debug: 4.4.1(supports-color@8.1.1)
+      debug: 4.4.1
       module-details-from-path: 1.0.4
       resolve: 1.22.10
     transitivePeerDependencies:
@@ -30705,7 +30867,7 @@ snapshots:
 
   router@2.2.0:
     dependencies:
-      debug: 4.4.1(supports-color@8.1.1)
+      debug: 4.4.1
       depd: 2.0.0
       is-promise: 4.0.0
       parseurl: 1.3.3
@@ -30778,7 +30940,7 @@ snapshots:
 
   send@1.2.0:
     dependencies:
-      debug: 4.4.1(supports-color@8.1.1)
+      debug: 4.4.1
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
