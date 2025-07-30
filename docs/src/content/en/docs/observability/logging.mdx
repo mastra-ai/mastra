@@ -36,7 +36,7 @@ export const mastra = new Mastra({
 
 To capture detailed logs during workflow execution, use the logger instance available via the `mastra` parameter inside a step’s `execute` function. Use severity-based methods such as `info` and `error` to record relevant events during runtime.
 
-```typescript {6,9,15,18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {14,20} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -47,12 +47,14 @@ const step1 = createStep({
 
     const logger = mastra.getLogger();
 
-    const agent = mastra.getAgent("testAgent");
-    const response = await agent.generate(input);
+    const agent = mastra.getAgent("testAgents");
 
     if (!agent) {
       logger.error("This is an error log");
+      return { output: "Agent not found" };
     }
+
+    const response = await agent.generate(`Create an interesting fact about ${input}`);
 
     logger.info("This is an info log");
 
