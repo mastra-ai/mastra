@@ -152,6 +152,32 @@ export class CoreToolBuilder extends MastraBase {
       try {
         logger.debug(start, { ...rest, args });
 
+        // Validate input parameters if schema exists
+        const parameters = this.getParameters();
+        if (parameters && 'safeParse' in parameters) {
+          const validation = parameters.safeParse(args);
+          if (!validation.success) {
+            const errorMessages = validation.error.errors
+              .map((e: any) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+              .join('\n');
+
+            logger.warn(`Tool input validation failed for '${options.name}': ${errorMessages}`, {
+              toolName: options.name,
+              errors: validation.error.format(),
+              args,
+            });
+
+            // Return error as a result instead of throwing
+            return {
+              error: true,
+              message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`,
+              validationErrors: validation.error.format(),
+            };
+          }
+          // Use validated/transformed data
+          args = validation.data;
+        }
+
         // there is a small delay in stream output so we add an immediate to ensure the stream is ready
         return await new Promise((resolve, reject) => {
           setImmediate(async () => {
