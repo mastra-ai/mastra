@@ -29,7 +29,7 @@ interface WorkerTestConfig {
 const createTestThread = (title: string, metadata = {}, i = 0) => {
   const now = Date.now();
   return {
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     title,
     resourceId,
     metadata,
