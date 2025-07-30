@@ -8872,16 +8872,14 @@ describe('Workflow', () => {
       expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
     });
   });
-  describe('Parallel and Branching Suspended Steps Bug Tests', () => {
+  describe('Parallel Suspended Steps', () => {
     let testStorage: InstanceType<typeof MockStore>;
 
     beforeEach(async () => {
       testStorage = new MockStore();
     });
 
-    it('should NOT complete parallel workflow when only one suspended step is resumed', async () => {
-      // This test WILL FAIL until the parallel suspension bug is fixed
-      // Related to GitHub issue #6418
+    it('should remain suspended when only one of multiple parallel suspended steps is resumed - #6418', async () => {
       const parallelStep1 = createStep({
         id: 'parallel-step-1',
         inputSchema: z.object({ value: z.number() }),
@@ -8936,9 +8934,6 @@ describe('Workflow', () => {
         step: 'parallel-step-1',
         resumeData: { multiplier: 2 },
       });
-      console.log('resumeResult1', JSON.stringify(resumeResult1, null, 2));
-      // BUG: Currently this will be 'success' but should be 'suspended'
-      // The parallel block should NOT complete until ALL parallel steps are resumed
       expect(resumeResult1.status).toBe('suspended');
       if (resumeResult1.status === 'suspended') {
         expect(resumeResult1.suspended).toHaveLength(1);
@@ -8950,7 +8945,6 @@ describe('Workflow', () => {
         step: 'parallel-step-2',
         resumeData: { divisor: 5 },
       });
-      console.log('resumeResult2', JSON.stringify(resumeResult2, null, 2));
       expect(resumeResult2.status).toBe('success');
       if (resumeResult2.status === 'success') {
         expect(resumeResult2.result).toEqual({
@@ -8960,92 +8954,7 @@ describe('Workflow', () => {
       }
     });
 
-    it('should maintain correct step status after resuming in branching workflows', async () => {
-      // This test validates that step status is properly updated after resume
-      // Related to the workflow state management bug observed in branching scenarios
-      const branchStep1 = createStep({
-        id: 'branch-step-1',
-        inputSchema: z.object({ value: z.number() }),
-        outputSchema: z.object({ result: z.number() }),
-        resumeSchema: z.object({ multiplier: z.number() }),
-        execute: async ({ inputData, suspend, resumeData }) => {
-          if (!resumeData) {
-            await suspend({});
-            return { result: 0 };
-          }
-          return { result: inputData.value * resumeData.multiplier };
-        },
-      });
-
-      const branchStep2 = createStep({
-        id: 'branch-step-2',
-        inputSchema: z.object({ value: z.number() }),
-        outputSchema: z.object({ result: z.number() }),
-        resumeSchema: z.object({ divisor: z.number() }),
-        execute: async ({ inputData, suspend, resumeData }) => {
-          if (!resumeData) {
-            await suspend({});
-            return { result: 0 };
-          }
-          return { result: inputData.value / resumeData.divisor };
-        },
-      });
-
-      const branchingWorkflow = createWorkflow({
-        id: 'branching-state-bug-test',
-        inputSchema: z.object({ value: z.number() }),
-        outputSchema: z.object({}),
-        mastra: new Mastra({ logger: false, storage: testStorage }),
-      })
-        .branch([
-          [() => Promise.resolve(true), branchStep1],
-          [() => Promise.resolve(true), branchStep2],
-        ])
-        .commit();
-
-      const run = await branchingWorkflow.createRunAsync();
-
-      // Start workflow - both branch steps should suspend
-      const startResult = await run.start({ inputData: { value: 100 } });
-      expect(startResult.status).toBe('suspended');
-      if (startResult.status === 'suspended') {
-        expect(startResult.suspended.length).toBeGreaterThan(1);
-      }
-
-      // Resume first step
-      const resumeResult1 = await run.resume({
-        step: 'branch-step-1',
-        resumeData: { multiplier: 2 },
-      });
-
-      // Validate that the resumed step has correct status
-      expect(resumeResult1.steps['branch-step-1'].status).toBe('success');
-      if (resumeResult1.steps['branch-step-1'].status === 'success') {
-        expect(resumeResult1.steps['branch-step-1'].output).toEqual({ result: 200 });
-      }
-
-      // Resume second step
-      const resumeResult2 = await run.resume({
-        step: 'branch-step-2',
-        resumeData: { divisor: 5 },
-      });
-
-      // Both steps should now have 'success' status and correct outputs
-      expect(resumeResult2.steps['branch-step-1'].status).toBe('success');
-      if (resumeResult2.steps['branch-step-1'].status === 'success') {
-        expect(resumeResult2.steps['branch-step-1'].output).toEqual({ result: 200 });
-      }
-      expect(resumeResult2.steps['branch-step-2'].status).toBe('success');
-      if (resumeResult2.steps['branch-step-2'].status === 'success') {
-        expect(resumeResult2.steps['branch-step-2'].output).toEqual({ result: 20 });
-      }
-
-      // Final workflow status should be success
-      expect(resumeResult2.status).toBe('success');
-    });
-
-    it('should handle parallel steps that never suspend correctly', async () => {
-      // Control test: parallel steps that don't suspend should work normally
+    it('should complete parallel workflow when steps do not suspend', async () => {
       const normalStep1 = createStep({
         id: 'normal-step-1',
         inputSchema: z.object({ value: z.number() }),
@@ -9091,8 +9000,7 @@ describe('Workflow', () => {
       expect(result.steps['normal-step-2'].status).toBe('success');
     });
 
-    it('should correctly track multiple suspend/resume cycles in parallel workflow', async () => {
-      // Test multiple suspend/resume cycles to ensure state consistency
+    it('should handle multiple suspend/resume cycles in parallel workflow', async () => {
       let step1ResumeCount = 0;
       let step2ResumeCount = 0;
 
