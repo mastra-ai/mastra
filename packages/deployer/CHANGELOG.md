@@ -1,5 +1,582 @@
 # @mastra/deployer
 
+## 0.12.0
+
+### Minor Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+
+### Patch Changes
+
+- 832691b: dependencies updates:
+  - Updated dependency [`@babel/core@^7.28.0` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.28.0) (from `^7.27.7`, in `dependencies`)
+- 557bb9d: dependencies updates:
+  - Updated dependency [`esbuild@^0.25.8` ↗︎](https://www.npmjs.com/package/esbuild/v/0.25.8) (from `^0.25.5`, in `dependencies`)
+- 27cc97a: dependencies updates:
+  - Updated dependency [`hono@^4.8.9` ↗︎](https://www.npmjs.com/package/hono/v/4.8.9) (from `^4.8.4`, in `dependencies`)
+- bc6b44a: Extract tools import from `createHonoServer`; the function now receives tools via a prop on the `options` parameter.
+- a77c823: include PATCH method in default CORS configuration
+- ff9c125: enhance thread retrieval with sorting options in libsql and pg
+- 09bca64: Log warning when telemetry is enabled but not loaded
+- 9802f42: Added types and tests to ensure client-js and hono endpoints can save memory messages where the input is either a v1 or v2 mastra message
+- d5cc460: This change implements a fix to sourcemap mappings being off due to `removeDeployer` Babel plugin missing source map config.
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [9802f42]
+- Updated dependencies [f42c4c2]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+  - @mastra/server@0.12.0
+
+## 0.12.0-alpha.5
+
+### Minor Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+
+### Patch Changes
+
+- Updated dependencies [f42c4c2]
+  - @mastra/server@0.12.0-alpha.5
+  - @mastra/core@0.12.0-alpha.5
+
+## 0.12.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ad0a58b]
+  - @mastra/core@0.12.0-alpha.4
+  - @mastra/server@0.12.0-alpha.4
+
+## 0.12.0-alpha.3
+
+### Patch Changes
+
+- 9802f42: Added types and tests to ensure client-js and hono endpoints can save memory messages where the input is either a v1 or v2 mastra message
+- Updated dependencies [9802f42]
+  - @mastra/server@0.12.0-alpha.3
+  - @mastra/core@0.12.0-alpha.3
+
+## 0.12.0-alpha.2
+
+### Patch Changes
+
+- 27cc97a: dependencies updates:
+  - Updated dependency [`hono@^4.8.9` ↗︎](https://www.npmjs.com/package/hono/v/4.8.9) (from `^4.8.4`, in `dependencies`)
+- ff9c125: enhance thread retrieval with sorting options in libsql and pg
+- d5cc460: This change implements a fix to sourcemap mappings being off due to `removeDeployer` Babel plugin missing source map config.
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- Updated dependencies [27cc97a]
+- Updated dependencies [41daa63]
+- Updated dependencies [254a36b]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [ff9c125]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0-alpha.2
+  - @mastra/server@0.12.0-alpha.2
+
+## 0.12.0-alpha.1
+
+### Patch Changes
+
+- a77c823: include PATCH method in default CORS configuration
+- Updated dependencies [e0f73c6]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+  - @mastra/core@0.12.0-alpha.1
+  - @mastra/server@0.12.0-alpha.1
+
+## 0.12.0-alpha.0
+
+### Patch Changes
+
+- 832691b: dependencies updates:
+  - Updated dependency [`@babel/core@^7.28.0` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.28.0) (from `^7.27.7`, in `dependencies`)
+- 557bb9d: dependencies updates:
+  - Updated dependency [`esbuild@^0.25.8` ↗︎](https://www.npmjs.com/package/esbuild/v/0.25.8) (from `^0.25.5`, in `dependencies`)
+- bc6b44a: Extract tools import from `createHonoServer`; the function now receives tools via a prop on the `options` parameter.
+- 09bca64: Log warning when telemetry is enabled but not loaded
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+  - @mastra/server@0.12.0-alpha.0
+
+## 0.11.1
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+- Updated dependencies [417fd92]
+- Updated dependencies [ce088f5]
+  - @mastra/server@0.11.1
+  - @mastra/core@0.11.1
+
+## 0.11.0
+
+### Minor Changes
+
+- 0938991: Refactored the hono server structure by extracting route logic into route groups based on namespace.
+
+### Patch Changes
+
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 82c6860: fix tool import
+- 7ba91fa: Throw mastra errors methods not implemented yet
+- a512ede: Add scores to deployer routes
+- 35b1155: Added "Semantic recall search" to playground UI chat sidebar, to search for messages and find them in the chat list
+- 45469c5: Resolve dependency of tsConfigPath modules
+- 6f50efd: Only enforce authorization on protected routes
+- 24eb25c: Provide fallback for extracted mastra options during bundling
+- bf6903e: Fix dependency resolving with directories
+
+  Follow import from `import x from 'pkg/dir'` => `import x from 'pkg/dir/index.js'`
+
+- 703ac71: scores schema
+- 4c06f06: Fix #tools import after the tools import rework
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 9de6f58: Unlocks the dev playground if auth is enabled
+- 7983e53: Revert cloudflare omit install deps step
+- 15ce274: Pipe all env vars in deloyer install
+
+  Fixes and issue with cloudflare
+
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [35b1155]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [7827943]
+- Updated dependencies [5889a31]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [62007b3]
+- Updated dependencies [dcd4802]
+- Updated dependencies [cbddd18]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0
+  - @mastra/server@0.11.0
+
+## 0.11.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [62007b3]
+  - @mastra/server@0.11.0-alpha.3
+  - @mastra/core@0.11.0-alpha.3
+
+## 0.11.0-alpha.2
+
+### Patch Changes
+
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 82c6860: fix tool import
+- 7ba91fa: Throw mastra errors methods not implemented yet
+- a512ede: Add scores to deployer routes
+- 35b1155: Added "Semantic recall search" to playground UI chat sidebar, to search for messages and find them in the chat list
+- 45469c5: Resolve dependency of tsConfigPath modules
+- 24eb25c: Provide fallback for extracted mastra options during bundling
+- 703ac71: scores schema
+- 4c06f06: Fix #tools import after the tools import rework
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 9de6f58: Unlocks the dev playground if auth is enabled
+- 15ce274: Pipe all env vars in deloyer install
+
+  Fixes and issue with cloudflare
+
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [35b1155]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [5889a31]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0-alpha.2
+  - @mastra/server@0.11.0-alpha.2
+
+## 0.11.0-alpha.1
+
+### Patch Changes
+
+- 7983e53: Revert cloudflare omit install deps step
+  - @mastra/core@0.11.0-alpha.1
+  - @mastra/server@0.11.0-alpha.1
+
+## 0.11.0-alpha.0
+
+### Minor Changes
+
+- 0938991: Refactored the hono server structure by extracting route logic into route groups based on namespace.
+
+### Patch Changes
+
+- 6f50efd: Only enforce authorization on protected routes
+- bf6903e: Fix dependency resolving with directories
+
+  Follow import from `import x from 'pkg/dir'` => `import x from 'pkg/dir/index.js'`
+
+- Updated dependencies [7827943]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [cbddd18]
+  - @mastra/core@0.11.0-alpha.0
+  - @mastra/server@0.11.0-alpha.0
+
+## 0.10.15
+
+### Patch Changes
+
+- 7776324: dependencies updates:
+  - Updated dependency [`rollup@^4.45.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.45.0) (from `^4.44.2`, in `dependencies`)
+- 7b57e2c: Support private packages that are external deps in bundle output
+- fe4bbd4: Turn off installDependencies for cloudflare deployer build
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- Updated dependencies [0b56518]
+- Updated dependencies [db5cc15]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [5237998]
+- Updated dependencies [c3a30de]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [cf3a184]
+- Updated dependencies [d6bfd60]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/core@0.10.15
+  - @mastra/server@0.10.15
+
+## 0.10.15-alpha.1
+
+### Patch Changes
+
+- fe4bbd4: Turn off installDependencies for cloudflare deployer build
+- Updated dependencies [0b56518]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [c3a30de]
+- Updated dependencies [cf3a184]
+- Updated dependencies [d6bfd60]
+  - @mastra/core@0.10.15-alpha.1
+  - @mastra/server@0.10.15-alpha.1
+
+## 0.10.15-alpha.0
+
+### Patch Changes
+
+- 7776324: dependencies updates:
+  - Updated dependency [`rollup@^4.45.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.45.0) (from `^4.44.2`, in `dependencies`)
+- 7b57e2c: Support private packages that are external deps in bundle output
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- Updated dependencies [db5cc15]
+- Updated dependencies [5237998]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/core@0.10.15-alpha.0
+  - @mastra/server@0.10.15-alpha.0
+
+## 0.10.14
+
+### Patch Changes
+
+- 71907f3: Pin rollup to fix breaking change
+  - @mastra/core@0.10.14
+  - @mastra/server@0.10.14
+
+## 0.10.12
+
+### Patch Changes
+
+- 53e3f58: Add support for custom instrumentation files
+- Updated dependencies [b4a9811]
+- Updated dependencies [4d5583d]
+  - @mastra/core@0.10.12
+  - @mastra/server@0.10.12
+
+## 0.10.12-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [4d5583d]
+  - @mastra/core@0.10.12-alpha.1
+  - @mastra/server@0.10.12-alpha.1
+
+## 0.10.12-alpha.0
+
+### Patch Changes
+
+- 53e3f58: Add support for custom instrumentation files
+- Updated dependencies [b4a9811]
+  - @mastra/core@0.10.12-alpha.0
+  - @mastra/server@0.10.12-alpha.0
+
+## 0.10.11
+
+### Patch Changes
+
+- bc40cdd: dependencies updates:
+  - Updated dependency [`@babel/core@^7.27.7` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.27.7) (from `^7.27.4`, in `dependencies`)
+- 2873c7f: dependencies updates:
+  - Updated dependency [`dotenv@^16.6.1` ↗︎](https://www.npmjs.com/package/dotenv/v/16.6.1) (from `^16.5.0`, in `dependencies`)
+- 1c1c6a1: dependencies updates:
+  - Updated dependency [`hono@^4.8.4` ↗︎](https://www.npmjs.com/package/hono/v/4.8.4) (from `^4.8.3`, in `dependencies`)
+- d9b26b5: dependencies updates:
+  - Updated dependency [`rollup@^4.44.2` ↗︎](https://www.npmjs.com/package/rollup/v/4.44.2) (from `^4.43.0`, in `dependencies`)
+- 18ca936: Remove require exportCondition from rollup config to improve bundling
+- 40cd025: Check if tool is actually a tool for /api/tools
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [565cc0c]
+- Updated dependencies [b790fd1]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [cb16baf]
+- Updated dependencies [f36e4f1]
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11
+  - @mastra/server@0.10.11
+
+## 0.10.11-alpha.4
+
+### Patch Changes
+
+- 40cd025: Check if tool is actually a tool for /api/tools
+  - @mastra/core@0.10.11-alpha.4
+  - @mastra/server@0.10.11-alpha.4
+
+## 0.10.11-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [cb16baf]
+  - @mastra/core@0.10.11-alpha.3
+  - @mastra/server@0.10.11-alpha.3
+
+## 0.10.11-alpha.2
+
+### Patch Changes
+
+- 2873c7f: dependencies updates:
+  - Updated dependency [`dotenv@^16.6.1` ↗︎](https://www.npmjs.com/package/dotenv/v/16.6.1) (from `^16.5.0`, in `dependencies`)
+- 1c1c6a1: dependencies updates:
+  - Updated dependency [`hono@^4.8.4` ↗︎](https://www.npmjs.com/package/hono/v/4.8.4) (from `^4.8.3`, in `dependencies`)
+- d9b26b5: dependencies updates:
+  - Updated dependency [`rollup@^4.44.2` ↗︎](https://www.npmjs.com/package/rollup/v/4.44.2) (from `^4.43.0`, in `dependencies`)
+- 18ca936: Remove require exportCondition from rollup config to improve bundling
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [565cc0c]
+  - @mastra/core@0.10.11-alpha.2
+  - @mastra/server@0.10.11-alpha.2
+
+## 0.10.11-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11-alpha.1
+  - @mastra/server@0.10.11-alpha.1
+
+## 0.10.11-alpha.0
+
+### Patch Changes
+
+- bc40cdd: dependencies updates:
+  - Updated dependency [`@babel/core@^7.27.7` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.27.7) (from `^7.27.4`, in `dependencies`)
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/core@0.10.11-alpha.0
+  - @mastra/server@0.10.11-alpha.0
+
+## 0.10.10
+
+### Patch Changes
+
+- 6e13b80: Add error cause and stack trace to mastra server error handler
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+- Updated dependencies [6e13b80]
+- Updated dependencies [6997af1]
+- Updated dependencies [4d3fbdf]
+  - @mastra/server@0.10.10
+  - @mastra/core@0.10.10
+
+## 0.10.10-alpha.1
+
+### Patch Changes
+
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+- Updated dependencies [6997af1]
+  - @mastra/server@0.10.10-alpha.1
+  - @mastra/core@0.10.10-alpha.1
+
+## 0.10.10-alpha.0
+
+### Patch Changes
+
+- 6e13b80: Add error cause and stack trace to mastra server error handler
+- Updated dependencies [6e13b80]
+- Updated dependencies [4d3fbdf]
+  - @mastra/server@0.10.10-alpha.0
+  - @mastra/core@0.10.10-alpha.0
+
+## 0.10.9
+
+### Patch Changes
+
+- 9dda1ac: dependencies updates:
+  - Updated dependency [`hono@^4.8.3` ↗︎](https://www.npmjs.com/package/hono/v/4.8.3) (from `^4.7.11`, in `dependencies`)
+- 038e5ae: Add cancel workflow run
+- 6f87544: Added support for individual tool calling in cloudflare
+
+  We're now bundling tools differently to make it compatible with other node runtimes
+
+- 81a1b3b: Update peerdeps
+- 7e801dd: Add tools to network api response
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [81a1b3b]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [7e801dd]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9
+  - @mastra/server@0.10.9
+
+## 0.10.9-alpha.0
+
+### Patch Changes
+
+- 9dda1ac: dependencies updates:
+  - Updated dependency [`hono@^4.8.3` ↗︎](https://www.npmjs.com/package/hono/v/4.8.3) (from `^4.7.11`, in `dependencies`)
+- 038e5ae: Add cancel workflow run
+- 6f87544: Added support for individual tool calling in cloudflare
+
+  We're now bundling tools differently to make it compatible with other node runtimes
+
+- 81a1b3b: Update peerdeps
+- 7e801dd: Add tools to network api response
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [81a1b3b]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [7e801dd]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9-alpha.0
+  - @mastra/server@0.10.9-alpha.0
+
 ## 0.10.8
 
 ### Patch Changes

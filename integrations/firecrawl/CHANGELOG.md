@@ -1,5 +1,150 @@
 # @mastra/firecrawl
 
+## 1.2.9
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [fc437d9]
+- Updated dependencies [3f89307]
+- Updated dependencies [b5a6da2]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [f42c4c2]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+  - @mastra/rag@1.0.5
+
+## 1.2.9-alpha.1
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+- Updated dependencies [f42c4c2]
+  - @mastra/rag@1.0.5-alpha.1
+  - @mastra/core@0.12.0-alpha.5
+
+## 1.2.9-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [fc437d9]
+- Updated dependencies [3f89307]
+- Updated dependencies [b5a6da2]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+  - @mastra/rag@1.0.5-alpha.0
+
+## 1.2.8
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+- Updated dependencies [ce088f5]
+  - @mastra/rag@1.0.4
+  - @mastra/core@0.11.1
+
+## 1.2.7
+
+### Patch Changes
+
+- Updated dependencies [0b56518]
+- Updated dependencies [db5cc15]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [edff568]
+- Updated dependencies [5237998]
+- Updated dependencies [c3a30de]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [cf3a184]
+- Updated dependencies [d6bfd60]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/core@0.10.15
+  - @mastra/rag@1.0.3
+
+## 1.2.7-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [db5cc15]
+- Updated dependencies [edff568]
+- Updated dependencies [5237998]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/core@0.10.15-alpha.0
+  - @mastra/rag@1.0.3-alpha.0
+
+## 1.2.6
+
+### Patch Changes
+
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [565cc0c]
+- Updated dependencies [43da563]
+- Updated dependencies [b790fd1]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [cb16baf]
+- Updated dependencies [f36e4f1]
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11
+  - @mastra/rag@1.0.2
+
+## 1.2.6-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [43da563]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [cb16baf]
+  - @mastra/core@0.10.11-alpha.3
+  - @mastra/rag@1.0.2-alpha.0
+
 ## 1.2.5
 
 ### Patch Changes

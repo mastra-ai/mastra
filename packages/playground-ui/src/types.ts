@@ -3,10 +3,38 @@ export interface Message {
   role: 'user' | 'assistant';
   content: any;
   isError?: boolean;
-  parts?: Array<{
-    type: 'text' | 'step-start';
-    text?: string;
-  }>;
+  parts?: Array<
+    | {
+        type: 'text';
+        text: string;
+      }
+    | {
+        type: 'step-start';
+      }
+    | {
+        type: 'reasoning';
+        reasoning: string;
+        details: Array<{ type: 'text'; text: string }>;
+      }
+  >;
+}
+
+export interface AssistantMessage {
+  id: string;
+  formattedMessageId: string;
+  finalStepId: string;
+  routingDecision?: {
+    resourceId: string;
+    resourceType: string;
+    selectionReason: string;
+    prompt: string;
+  };
+  finalResponse: string;
+  taskCompleteDecision?: {
+    isComplete: boolean;
+    finalResult: string;
+    completionReason: string;
+  };
 }
 
 export interface ModelSettings {
@@ -19,6 +47,12 @@ export interface ModelSettings {
   topK?: number;
   topP?: number;
   instructions?: string;
+  providerOptions?: Record<string, unknown>;
+  chatWithGenerate?: boolean;
+}
+
+export interface AgentSettingsType {
+  modelSettings: ModelSettings;
 }
 
 export interface ChatProps {
@@ -28,10 +62,9 @@ export interface ChatProps {
   initialMessages?: Message[];
   memory?: boolean;
   refreshThreadList?: () => void;
-  modelSettings?: ModelSettings;
-  chatWithGenerate?: boolean;
+  settings?: AgentSettingsType;
   runtimeContext?: Record<string, any>;
-  showFileSupport?: boolean;
+  onInputChange?: (value: string) => void;
 }
 
 export type SpanStatus = {

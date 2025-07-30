@@ -1,5 +1,182 @@
 # @mastra/dynamodb
 
+## 0.13.3
+
+### Patch Changes
+
+- 34d3410: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.848.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.848.0) (from `^3.840.0`, in `dependencies`)
+- f42c4c2: update peer deps for packages to latest core range
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+
+## 0.13.3-alpha.1
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+  - @mastra/core@0.12.0-alpha.5
+
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- 34d3410: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.848.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.848.0) (from `^3.840.0`, in `dependencies`)
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
+## 0.13.2
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+  - @mastra/core@0.11.1
+
+## 0.13.1
+
+### Patch Changes
+
+- 7ba91fa: Throw mastra errors methods not implemented yet
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [7827943]
+- Updated dependencies [5889a31]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [cbddd18]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0
+
+## 0.13.1-alpha.0
+
+### Patch Changes
+
+- 7ba91fa: Throw mastra errors methods not implemented yet
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [5889a31]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0-alpha.2
+
+## 0.13.0
+
+### Minor Changes
+
+- 10cd23a: Change DynamoDB saveThread from create to upsert to handle updates.
+
+### Patch Changes
+
+- 7228a97: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.839.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.839.0) (from `^3.828.0`, in `dependencies`)
+- 7d16f45: dependencies updates:
+  - Updated dependency [`@aws-sdk/lib-dynamodb@^3.840.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/lib-dynamodb/v/3.840.0) (from `^3.830.0`, in `dependencies`)
+- 649274f: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.840.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.840.0) (from `^3.839.0`, in `dependencies`)
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [565cc0c]
+- Updated dependencies [b790fd1]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [cb16baf]
+- Updated dependencies [f36e4f1]
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11
+
+## 0.13.0-alpha.1
+
+### Minor Changes
+
+- 10cd23a: Change DynamoDB saveThread from create to upsert to handle updates.
+
+### Patch Changes
+
+- 7d16f45: dependencies updates:
+  - Updated dependency [`@aws-sdk/lib-dynamodb@^3.840.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/lib-dynamodb/v/3.840.0) (from `^3.830.0`, in `dependencies`)
+- 649274f: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.840.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.840.0) (from `^3.839.0`, in `dependencies`)
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [565cc0c]
+  - @mastra/core@0.10.11-alpha.2
+
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- 7228a97: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.839.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.839.0) (from `^3.828.0`, in `dependencies`)
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/core@0.10.11-alpha.0
+
 ## 0.12.0
 
 ### Minor Changes
@@ -340,7 +517,6 @@
 - d2d4fe4: Add a DynamoDB storage connector using a single-table design pattern with ElectroDB.
 
   Features:
-
   - Efficient single-table design for all Mastra storage needs
   - Based on ElectroDB for type-safe DynamoDB access
   - Support for AWS credentials, regions, and endpoints
@@ -375,7 +551,6 @@
 - d2d4fe4: Add a DynamoDB storage connector using a single-table design pattern with ElectroDB.
 
   Features:
-
   - Efficient single-table design for all Mastra storage needs
   - Based on ElectroDB for type-safe DynamoDB access
   - Support for AWS credentials, regions, and endpoints

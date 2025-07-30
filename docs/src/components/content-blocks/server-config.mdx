@@ -16,6 +16,18 @@ sudo apt update && sudo apt upgrade -y
 sudo apt install nginx -y
 ```
 
+##### Ensure nginx.conf includes sites-enabled
+
+Check if the main nginx configuration includes the sites-enabled directory. This is crucial for our site configuration to work.
+
+```bash copy
+sudo grep -q "include /etc/nginx/sites-enabled/" /etc/nginx/nginx.conf || sudo sed -i '/http {/a\\tinclude /etc/nginx/sites-enabled/*;' /etc/nginx/nginx.conf
+```
+
+<Callout>
+This command checks if the `include /etc/nginx/sites-enabled/*;` directive exists in the nginx.conf file. If it doesn't exist, it adds it to the http block. This ensures that our site configuration files in sites-enabled will be loaded by nginx.
+</Callout>
+
 ##### Remove nginx files if they exist
 
 Let's start by setting up an environment variable for the site name. In our example, we will use `mastra` as the site name.

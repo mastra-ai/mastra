@@ -3,10 +3,9 @@ import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { RuntimeContext } from '../../runtime-context';
+import { MockProvider } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { makeCoreTool } from '../../utils';
-
-import { MockProvider } from './mock';
 
 describe('MastraLLM', () => {
   const mockMastra = {
@@ -102,7 +101,6 @@ describe('MastraLLM', () => {
       const result = await aisdkObject.generate(messages, {
         tools: mockTools,
         temperature: 0.7,
-        maxSteps: 5,
         output: schema,
         runtimeContext,
       });
@@ -517,7 +515,6 @@ describe('MastraLLM', () => {
         runtimeContext,
         structuredOutput: schema,
         temperature: 0.7,
-        maxSteps: 5,
       });
 
       expect(result?.object?.content).toEqual('Custom object response');
@@ -532,7 +529,6 @@ describe('MastraLLM', () => {
         messages,
         structuredOutput: arraySchema,
         temperature: 0.7,
-        maxSteps: 5,
         runtimeContext,
       });
 
@@ -554,7 +550,6 @@ describe('MastraLLM', () => {
         messages,
         structuredOutput: jsonSchema,
         temperature: 0.7,
-        maxSteps: 5,
         runtimeContext,
       });
 
@@ -573,7 +568,6 @@ describe('MastraLLM', () => {
         tools: mockTools,
         structuredOutput: schema,
         temperature: 0.7,
-        maxSteps: 5,
         runtimeContext,
       });
     });

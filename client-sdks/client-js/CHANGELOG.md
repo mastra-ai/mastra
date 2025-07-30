@@ -1,5 +1,449 @@
 # @mastra/client-js
 
+## 0.10.17
+
+### Patch Changes
+
+- aa2715b: process stream response error handling
+- 6bd354c: Should not send content type if body instance of FormData
+- cda801d: Added the ability to pass in metadata for UIMessage and MastraMessageV2 in client-js and agent.stream/generate
+- b641ba3: fix: save score params
+- 9802f42: Added types and tests to ensure client-js and hono endpoints can save memory messages where the input is either a v1 or v2 mastra message
+- 1ac8f6b: deduplicate message
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+
+## 0.10.17-alpha.5
+
+### Patch Changes
+
+- @mastra/core@0.12.0-alpha.5
+
+## 0.10.17-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ad0a58b]
+  - @mastra/core@0.12.0-alpha.4
+
+## 0.10.17-alpha.3
+
+### Patch Changes
+
+- 9802f42: Added types and tests to ensure client-js and hono endpoints can save memory messages where the input is either a v1 or v2 mastra message
+- 1ac8f6b: deduplicate message
+  - @mastra/core@0.12.0-alpha.3
+
+## 0.10.17-alpha.2
+
+### Patch Changes
+
+- aa2715b: process stream response error handling
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- Updated dependencies [27cc97a]
+- Updated dependencies [41daa63]
+- Updated dependencies [254a36b]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [ff9c125]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0-alpha.2
+
+## 0.10.17-alpha.1
+
+### Patch Changes
+
+- cda801d: Added the ability to pass in metadata for UIMessage and MastraMessageV2 in client-js and agent.stream/generate
+- Updated dependencies [e0f73c6]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+  - @mastra/core@0.12.0-alpha.1
+
+## 0.10.17-alpha.0
+
+### Patch Changes
+
+- 6bd354c: Should not send content type if body instance of FormData
+- b641ba3: fix: save score params
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
+## 0.10.16
+
+### Patch Changes
+
+- @mastra/core@0.11.1
+
+## 0.10.15
+
+### Patch Changes
+
+- 4832752: Do not set content-type header when making POST/PUT requests without a body
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 2affc57: Fix output type of network loop
+- 032cb66: ClientJS
+- 7827943: Handle streaming large data
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 80c2b06: Fix agent chat stop button to cancel stream/generate reqs in the playground
+- 6f6e651: Alias createRun -> createRunAsync to match Mastra Workflow class
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [7827943]
+- Updated dependencies [5889a31]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [cbddd18]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0
+
+## 0.10.15-alpha.3
+
+### Patch Changes
+
+- @mastra/core@0.11.0-alpha.3
+
+## 0.10.15-alpha.2
+
+### Patch Changes
+
+- 4832752: Do not set content-type header when making POST/PUT requests without a body
+- f248d53: Adding `getMessagesPaginated` to the serve, deployer, and client-js
+- 2affc57: Fix output type of network loop
+- 032cb66: ClientJS
+- 65e3395: Add Scores playground-ui and add scorer hooks
+- 80c2b06: Fix agent chat stop button to cancel stream/generate reqs in the playground
+- 6f6e651: Alias createRun -> createRunAsync to match Mastra Workflow class
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [5889a31]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0-alpha.2
+
+## 0.10.15-alpha.1
+
+### Patch Changes
+
+- @mastra/core@0.11.0-alpha.1
+
+## 0.10.15-alpha.0
+
+### Patch Changes
+
+- 7827943: Handle streaming large data
+- Updated dependencies [7827943]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [cbddd18]
+  - @mastra/core@0.11.0-alpha.0
+
+## 0.10.14
+
+### Patch Changes
+
+- 31f9f6b: Replace crypto randomUUID in client SDK"
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- Updated dependencies [0b56518]
+- Updated dependencies [db5cc15]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [5237998]
+- Updated dependencies [c3a30de]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [cf3a184]
+- Updated dependencies [d6bfd60]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/core@0.10.15
+
+## 0.10.14-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [0b56518]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [c3a30de]
+- Updated dependencies [cf3a184]
+- Updated dependencies [d6bfd60]
+  - @mastra/core@0.10.15-alpha.1
+
+## 0.10.14-alpha.0
+
+### Patch Changes
+
+- 31f9f6b: Replace crypto randomUUID in client SDK"
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- 626b0f4: [Cloud-126] Working Memory Playground - Added working memory to playground to allow users to view/edit working memory
+- Updated dependencies [db5cc15]
+- Updated dependencies [5237998]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/core@0.10.15-alpha.0
+
+## 0.10.13
+
+### Patch Changes
+
+- @mastra/core@0.10.14
+
+## 0.10.11
+
+### Patch Changes
+
+- 9468be4: Fix error on agent generate while using antropic
+- 44731a4: Client SDK - Expose processTextStream util for agent textstream with structured output
+- Updated dependencies [b4a9811]
+- Updated dependencies [4d5583d]
+  - @mastra/core@0.10.12
+
+## 0.10.11-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [4d5583d]
+  - @mastra/core@0.10.12-alpha.1
+
+## 0.10.11-alpha.0
+
+### Patch Changes
+
+- 9468be4: Fix error on agent generate while using antropic
+- 44731a4: Client SDK - Expose processTextStream util for agent textstream with structured output
+- Updated dependencies [b4a9811]
+  - @mastra/core@0.10.12-alpha.0
+
+## 0.10.10
+
+### Patch Changes
+
+- 18da791: Add abortSignal to client SDK options
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [565cc0c]
+- Updated dependencies [b790fd1]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [cb16baf]
+- Updated dependencies [f36e4f1]
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11
+
+## 0.10.10-alpha.4
+
+### Patch Changes
+
+- @mastra/core@0.10.11-alpha.4
+
+## 0.10.10-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [cb16baf]
+  - @mastra/core@0.10.11-alpha.3
+
+## 0.10.10-alpha.2
+
+### Patch Changes
+
+- 18da791: Add abortSignal to client SDK options
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [565cc0c]
+  - @mastra/core@0.10.11-alpha.2
+
+## 0.10.10-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11-alpha.1
+
+## 0.10.10-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/core@0.10.11-alpha.0
+
+## 0.10.9
+
+### Patch Changes
+
+- b60f510: Fix getWorkflowRuns by limit and offset
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10
+
+## 0.10.9-alpha.1
+
+### Patch Changes
+
+- b60f510: Fix getWorkflowRuns by limit and offset
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+  - @mastra/core@0.10.10-alpha.1
+
+## 0.10.9-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10-alpha.0
+
+## 0.10.8
+
+### Patch Changes
+
+- 9047bda: clientTools - stream tool-result part
+- a606c75: show right suspend schema for nested workflow on playground
+- 1760a1c: Use workflow stream in playground instead of watch
+- 038e5ae: Add cancel workflow run
+- 7e801dd: Add tools to network api response
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9
+
+## 0.10.8-alpha.0
+
+### Patch Changes
+
+- 9047bda: clientTools - stream tool-result part
+- a606c75: show right suspend schema for nested workflow on playground
+- 1760a1c: Use workflow stream in playground instead of watch
+- 038e5ae: Add cancel workflow run
+- 7e801dd: Add tools to network api response
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9-alpha.0
+
 ## 0.10.7
 
 ### Patch Changes

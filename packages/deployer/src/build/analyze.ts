@@ -27,6 +27,7 @@ const globalExternals = [
   'sqlite3',
   'fastembed',
   'nodemailer',
+  '#tools',
 ];
 
 function findExternalImporter(module: OutputChunk, external: string, allOutputs: OutputChunk[]): OutputChunk | null {
@@ -73,6 +74,7 @@ async function analyze(
   isVirtualFile: boolean,
   platform: 'node' | 'browser',
   logger: IMastraLogger,
+  sourcemapEnabled: boolean = false,
 ) {
   logger.info('Analyzing dependencies...');
   let virtualPlugin = null;
@@ -104,6 +106,14 @@ async function analyze(
           if (id.startsWith('@mastra/server')) {
             return fileURLToPath(import.meta.resolve(id));
           }
+
+          // Tools is generated dependency, we don't want it to be handled by the bundler but instead read from disk at runtime
+          if (id === '#tools') {
+            return {
+              id: '#tools',
+              external: true,
+            };
+          }
         },
       } satisfies Plugin,
       json(),
@@ -118,7 +128,7 @@ async function analyze(
         transformMixedEsModules: true,
         extensions: ['.js', '.ts'],
       }),
-      removeDeployer(normalizedMastraEntry),
+      removeDeployer(normalizedMastraEntry, { sourcemap: sourcemapEnabled }),
       esbuild({
         target: 'node20',
         platform,
@@ -142,11 +152,19 @@ async function analyze(
   }
 
   for (const o of output) {
-    if (o.type !== 'chunk' || o.dynamicImports.length === 0) {
+    if (o.type !== 'chunk') {
       continue;
     }
 
-    for (const dynamicImport of o.dynamicImports) {
+    // Tools is generated dependency, we don't want our analyzer to handle it
+    const dynamicImports = o.dynamicImports.filter(d => d !== '#tools');
+    if (!dynamicImports.length) {
+      continue;
+    }
+
+    console.log(dynamicImports);
+
+    for (const dynamicImport of dynamicImports) {
       if (!depsToOptimize.has(dynamicImport) && !isNodeBuiltin(dynamicImport)) {
         depsToOptimize.set(dynamicImport, ['*']);
       }
@@ -237,8 +255,7 @@ async function bundleExternals(
       }),
       nodeResolve({
         preferBuiltins: true,
-        exportConditions: ['node', 'import', 'require'],
-        mainFields: ['module', 'main'],
+        exportConditions: ['node'],
       }),
       // hono is imported from deployer, so we need to resolve from here instead of the project root
       aliasHono(),
@@ -258,6 +275,10 @@ async function bundleExternals(
 
   for (const o of filteredChunks.filter(o => o.isEntry || o.isDynamicEntry)) {
     for (const external of allExternals) {
+      if (external === '#tools') {
+        continue;
+      }
+
       const importer = findExternalImporter(o, external, filteredChunks);
 
       if (importer) {
@@ -374,11 +395,12 @@ export async function analyzeBundle(
   outputDir: string,
   platform: 'node' | 'browser',
   logger: IMastraLogger,
+  sourcemapEnabled: boolean = false,
 ) {
   const depsToOptimize = new Map<string, string[]>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
-    const analyzeResult = await analyze(entry, mastraEntry, isVirtualFile, platform, logger);
+    const analyzeResult = await analyze(entry, mastraEntry, isVirtualFile, platform, logger, sourcemapEnabled);
 
     for (const [dep, exports] of analyzeResult.entries()) {
       if (depsToOptimize.has(dep)) {

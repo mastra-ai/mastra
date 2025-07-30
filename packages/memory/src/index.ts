@@ -1,22 +1,31 @@
-import { deepMerge } from '@mastra/core';
+import { generateEmptyFromSchema } from '@mastra/core';
 import type { CoreTool, MastraMessageV1 } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
-import type { StorageGetMessagesArg } from '@mastra/core/storage';
+import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
 import { embedMany } from 'ai';
-import type { CoreMessage, TextPart, UIMessage } from 'ai';
+import type { CoreMessage, TextPart } from 'ai';
+import { Mutex } from 'async-mutex';
+import type { JSONSchema7 } from 'json-schema';
 
 import xxhash from 'xxhash-wasm';
+import { ZodObject } from 'zod';
+import type { ZodTypeAny } from 'zod';
 import zodToJsonSchema from 'zod-to-json-schema';
-import { updateWorkingMemoryTool } from './tools/working-memory';
+import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
+
+// Type for flexible message deletion input
+export type MessageDeleteInput = string[] | { id: string }[];
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
 
 const DEFAULT_MESSAGE_RANGE = { before: 2, after: 2 } as const;
 const DEFAULT_TOP_K = 2;
+
+const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -36,11 +45,9 @@ export class Memory extends MastraMemory {
       },
     });
     this.threadConfig = mergedConfig;
-
-    this.checkStorageFeatureSupport(mergedConfig);
   }
 
-  private async validateThreadIsOwnedByResource(threadId: string, resourceId: string) {
+  protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string) {
     const thread = await this.storage.getThreadById({ threadId });
     if (!thread) {
       throw new Error(`No thread found with id ${threadId}`);
@@ -52,7 +59,7 @@ export class Memory extends MastraMemory {
     }
   }
 
-  private checkStorageFeatureSupport(config: MemoryConfig) {
+  protected checkStorageFeatureSupport(config: MemoryConfig) {
     if (
       typeof config.semanticRecall === `object` &&
       config.semanticRecall.scope === `resource` &&
@@ -81,7 +88,7 @@ export class Memory extends MastraMemory {
     threadConfig,
   }: StorageGetMessagesArg & {
     threadConfig?: MemoryConfig;
-  }): Promise<{ messages: CoreMessage[]; uiMessages: UIMessage[]; messagesV2: MastraMessageV2[] }> {
+  }): Promise<{ messages: CoreMessage[]; uiMessages: UIMessageWithMetadata[]; messagesV2: MastraMessageV2[] }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
     const vectorResults: {
@@ -243,56 +250,15 @@ export class Memory extends MastraMemory {
     return this.storage.getThreadById({ threadId });
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    return this.storage.getThreadsByResourceId({ resourceId });
+  async getThreadsByResourceId({
+    resourceId,
+    orderBy,
+    sortDirection,
+  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
+    return this.storage.getThreadsByResourceId({ resourceId, orderBy, sortDirection });
   }
 
-  async saveThread({
-    thread,
-    memoryConfig,
-  }: {
-    thread: StorageThreadType;
-    memoryConfig?: MemoryConfig;
-  }): Promise<StorageThreadType> {
-    const config = this.getMergedThreadConfig(memoryConfig || {});
-
-    if (config.workingMemory?.enabled) {
-      const scope = config.workingMemory.scope || 'thread';
-
-      if (scope === 'resource' && thread.resourceId) {
-        // For resource scope, initialize working memory in resource table
-        const existingResource = await this.storage.getResourceById({ resourceId: thread.resourceId });
-
-        if (!existingResource?.workingMemory) {
-          let workingMemory = config.workingMemory.template || this.defaultWorkingMemoryTemplate;
-
-          if (config.workingMemory.schema) {
-            workingMemory = JSON.stringify(zodToJsonSchema(config.workingMemory.schema));
-          }
-
-          await this.storage.updateResource({
-            resourceId: thread.resourceId,
-            workingMemory,
-          });
-        }
-      } else if (scope === 'thread' && !thread?.metadata?.workingMemory) {
-        // For thread scope, initialize working memory in thread metadata (existing behavior)
-        let workingMemory = config.workingMemory.template || this.defaultWorkingMemoryTemplate;
-
-        if (config.workingMemory.schema) {
-          workingMemory = JSON.stringify(zodToJsonSchema(config.workingMemory.schema));
-        }
-
-        return this.storage.saveThread({
-          thread: deepMerge(thread, {
-            metadata: {
-              workingMemory,
-            },
-          }),
-        });
-      }
-    }
-
+  async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
     return this.storage.saveThread({ thread });
   }
 
@@ -333,6 +299,8 @@ export class Memory extends MastraMemory {
       throw new Error('Working memory is not enabled for this memory instance');
     }
 
+    this.checkStorageFeatureSupport(config);
+
     const scope = config.workingMemory.scope || 'thread';
 
     if (scope === 'resource' && resourceId) {
@@ -359,7 +327,119 @@ export class Memory extends MastraMemory {
     }
   }
 
-  private chunkText(text: string, tokenSize = 4096) {
+  private updateWorkingMemoryMutexes = new Map<string, Mutex>();
+  /**
+   * @warning experimental! can be removed or changed at any time
+   */
+  async __experimental_updateWorkingMemoryVNext({
+    threadId,
+    resourceId,
+    workingMemory,
+    searchString,
+    memoryConfig,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string;
+    searchString?: string;
+    memoryConfig?: MemoryConfig;
+  }): Promise<{ success: boolean; reason: string }> {
+    const config = this.getMergedThreadConfig(memoryConfig || {});
+
+    if (!config.workingMemory?.enabled) {
+      throw new Error('Working memory is not enabled for this memory instance');
+    }
+
+    this.checkStorageFeatureSupport(config);
+
+    // If the agent calls the update working memory tool multiple times simultaneously
+    // each call could overwrite the other call
+    // so get an in memory mutex to make sure this.getWorkingMemory() returns up to date data each time
+    const mutexKey =
+      memoryConfig?.workingMemory?.scope === `resource` ? `resource-${resourceId}` : `thread-${threadId}`;
+    const mutex = this.updateWorkingMemoryMutexes.has(mutexKey)
+      ? this.updateWorkingMemoryMutexes.get(mutexKey)!
+      : new Mutex();
+    this.updateWorkingMemoryMutexes.set(mutexKey, mutex);
+    const release = await mutex.acquire();
+
+    try {
+      const existingWorkingMemory = (await this.getWorkingMemory({ threadId, resourceId, memoryConfig })) || '';
+      const template = await this.getWorkingMemoryTemplate({ memoryConfig });
+
+      let reason = '';
+      if (existingWorkingMemory) {
+        if (searchString && existingWorkingMemory?.includes(searchString)) {
+          workingMemory = existingWorkingMemory.replace(searchString, workingMemory);
+          reason = `found and replaced searchString with newMemory`;
+        } else if (
+          existingWorkingMemory.includes(workingMemory) ||
+          template?.content?.trim() === workingMemory.trim()
+        ) {
+          return {
+            success: false,
+            reason: `attempted to insert duplicate data into working memory. this entry was skipped`,
+          };
+        } else {
+          if (searchString) {
+            reason = `attempted to replace working memory string that doesn't exist. Appending to working memory instead.`;
+          } else {
+            reason = `appended newMemory to end of working memory`;
+          }
+
+          workingMemory = existingWorkingMemory + `\n${workingMemory}`;
+        }
+      } else if (workingMemory === template?.content) {
+        return {
+          success: false,
+          reason: `try again when you have data to add. newMemory was equal to the working memory template`,
+        };
+      } else {
+        reason = `started new working memory`;
+      }
+
+      // remove empty template insertions which models sometimes duplicate
+      workingMemory = template?.content ? workingMemory.replaceAll(template?.content, '') : workingMemory;
+
+      const scope = config.workingMemory.scope || 'thread';
+
+      if (scope === 'resource' && resourceId) {
+        // Update working memory in resource table
+        await this.storage.updateResource({
+          resourceId,
+          workingMemory,
+        });
+
+        if (reason) {
+          return { success: true, reason };
+        }
+      } else {
+        // Update working memory in thread metadata (existing behavior)
+        const thread = await this.storage.getThreadById({ threadId });
+        if (!thread) {
+          throw new Error(`Thread ${threadId} not found`);
+        }
+
+        await this.storage.updateThread({
+          id: threadId,
+          title: thread.title || 'Untitled Thread',
+          metadata: {
+            ...thread.metadata,
+            workingMemory,
+          },
+        });
+      }
+
+      return { success: true, reason };
+    } catch (e) {
+      this.logger.error(e instanceof Error ? e.stack || e.message : JSON.stringify(e));
+      return { success: false, reason: 'Tool error.' };
+    } finally {
+      release();
+    }
+  }
+
+  protected chunkText(text: string, tokenSize = 4096) {
     // Convert token size to character size with some buffer
     const charSize = tokenSize * CHARS_PER_TOKEN;
     const chunks: string[] = [];
@@ -401,7 +481,7 @@ export class Memory extends MastraMemory {
     }
   >();
   private firstEmbed: Promise<any> | undefined;
-  private async embedMessageContent(content: string) {
+  protected async embedMessageContent(content: string) {
     // use fast xxhash for lower memory usage. if we cache by content string we will store all messages in memory for the life of the process
     const key = (await this.hasher).h32(content);
     const cached = this.embeddingCache.get(key);
@@ -634,6 +714,8 @@ export class Memory extends MastraMemory {
       return null;
     }
 
+    this.checkStorageFeatureSupport(config);
+
     const scope = config.workingMemory.scope || 'thread';
     let workingMemoryData: string | null = null;
 
@@ -654,18 +736,39 @@ export class Memory extends MastraMemory {
     return workingMemoryData;
   }
 
-  public async getWorkingMemoryTemplate(): Promise<WorkingMemoryTemplate | null> {
-    if (!this.threadConfig.workingMemory?.enabled) {
+  /**
+   * Gets the working memory template for the current memory configuration.
+   * Supports both ZodObject and JSONSchema7 schemas.
+   *
+   * @param memoryConfig - The memory configuration containing the working memory settings
+   * @returns The working memory template with format and content, or null if working memory is disabled
+   */
+  public async getWorkingMemoryTemplate({
+    memoryConfig,
+  }: {
+    memoryConfig?: MemoryConfig;
+  }): Promise<WorkingMemoryTemplate | null> {
+    const config = this.getMergedThreadConfig(memoryConfig || {});
+
+    if (!config.workingMemory?.enabled) {
       return null;
     }
 
     // Get thread from storage
-    if (this.threadConfig?.workingMemory?.schema) {
+    if (config.workingMemory?.schema) {
       try {
-        const schema = this.threadConfig.workingMemory.schema;
-        const convertedSchema = zodToJsonSchema(schema, {
-          $refStrategy: 'none',
-        });
+        const schema = config.workingMemory.schema;
+        let convertedSchema: JSONSchema7;
+
+        if (isZodObject(schema as ZodTypeAny)) {
+          // Convert ZodObject to JSON Schema
+          convertedSchema = zodToJsonSchema(schema as ZodTypeAny, {
+            $refStrategy: 'none',
+          }) as JSONSchema7;
+        } else {
+          // Already a JSON Schema
+          convertedSchema = schema as any as JSONSchema7;
+        }
 
         return { format: 'json', content: JSON.stringify(convertedSchema) };
       } catch (error) {
@@ -675,8 +778,7 @@ export class Memory extends MastraMemory {
     }
 
     // Return working memory from metadata
-    const memory = this.threadConfig.workingMemory.template || this.defaultWorkingMemoryTemplate;
-
+    const memory = config.workingMemory.template || this.defaultWorkingMemoryTemplate;
     return { format: 'markdown', content: memory.trim() };
   }
 
@@ -694,17 +796,22 @@ export class Memory extends MastraMemory {
       return null;
     }
 
-    const workingMemoryTemplate = await this.getWorkingMemoryTemplate();
+    const workingMemoryTemplate = await this.getWorkingMemoryTemplate({ memoryConfig: config });
     const workingMemoryData = await this.getWorkingMemory({ threadId, resourceId, memoryConfig: config });
 
     if (!workingMemoryTemplate) {
       return null;
     }
 
-    return this.getWorkingMemoryToolInstruction({
-      template: workingMemoryTemplate,
-      data: workingMemoryData,
-    });
+    return this.isVNextWorkingMemoryConfig(memoryConfig)
+      ? this.__experimental_getWorkingMemoryToolInstructionVNext({
+          template: workingMemoryTemplate,
+          data: workingMemoryData,
+        })
+      : this.getWorkingMemoryToolInstruction({
+          template: workingMemoryTemplate,
+          data: workingMemoryData,
+        });
   }
 
   public defaultWorkingMemoryTemplate = `
@@ -720,13 +827,18 @@ export class Memory extends MastraMemory {
 - **Projects**: 
 `;
 
-  private getWorkingMemoryToolInstruction({
+  protected getWorkingMemoryToolInstruction({
     template,
     data,
   }: {
     template: WorkingMemoryTemplate;
     data: string | null;
   }) {
+    const emptyWorkingMemoryTemplateObject =
+      template.format === 'json' ? generateEmptyFromSchema(template.content) : null;
+    const hasEmptyWorkingMemoryTemplateObject =
+      emptyWorkingMemoryTemplateObject && Object.keys(emptyWorkingMemoryTemplateObject).length > 0;
+
     return `WORKING_MEMORY_SYSTEM_INSTRUCTION:
 Store and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!
 
@@ -735,12 +847,20 @@ Guidelines:
 2. Update proactively when information changes, no matter how small
 3. Use ${template.format === 'json' ? 'JSON' : 'Markdown'} format for all data
 4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for "information about yourself"
+5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. 
+6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.
+7. IMPORTANT: Data must only be sent as a string no matter which format is used.
 
-WORKING MEMORY TEMPLATE:
+<working_memory_template>
 ${template.content}
+</working_memory_template>
 
-WORKING MEMORY DATA:
+${hasEmptyWorkingMemoryTemplateObject ? 'When working with json data, the object format below represents the template:' : ''}
+${hasEmptyWorkingMemoryTemplateObject ? JSON.stringify(emptyWorkingMemoryTemplateObject) : ''}
+
+<working_memory_data>
 ${data}
+</working_memory_data>
 
 Notes:
 - Update memory whenever referenced information changes
@@ -752,17 +872,66 @@ Notes:
 - IMPORTANT: Preserve the ${template.format === 'json' ? 'JSON' : 'Markdown'} formatting structure above while updating the content.`;
   }
 
+  protected __experimental_getWorkingMemoryToolInstructionVNext({
+    template,
+    data,
+  }: {
+    template: WorkingMemoryTemplate;
+    data: string | null;
+  }) {
+    return `WORKING_MEMORY_SYSTEM_INSTRUCTION:
+Store and update any conversation-relevant information by calling the updateWorkingMemory tool.
+
+Guidelines:
+1. Store anything that could be useful later in the conversation
+2. Update proactively when information changes, no matter how small
+3. Use ${template.format === 'json' ? 'JSON' : 'Markdown'} format for all data
+4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for "information about yourself"
+5. If your memory has not changed, you do not need to call the updateWorkingMemory tool. By default it will persist and be available for you in future interactions
+6. Information not being relevant to the current conversation is not a valid reason to replace or remove working memory information. Your working memory spans across multiple conversations and may be needed again later, even if it's not currently relevant.
+
+<working_memory_template>
+${template.content}
+</working_memory_template>
+
+<working_memory_data>
+${data}
+</working_memory_data>
+
+Notes:
+- Update memory whenever referenced information changes
+${
+  template.content !== this.defaultWorkingMemoryTemplate
+    ? `- Only store information if it's in the working memory template, do not store other information unless the user asks you to remember it, as that non-template information may be irrelevant`
+    : `- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)
+`
+}
+- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history
+- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the ${template.format === 'json' ? 'JSON' : 'Markdown'} content. The system will store it for you. The user will not see it. 
+- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information if that information is not already stored.
+- IMPORTANT: Preserve the ${template.format === 'json' ? 'JSON' : 'Markdown'} formatting structure above while updating the content.
+`;
+  }
+
+  private isVNextWorkingMemoryConfig(config?: MemoryConfig): boolean {
+    if (!config?.workingMemory) return false;
+
+    const isMDWorkingMemory =
+      !(`schema` in config.workingMemory) &&
+      (typeof config.workingMemory.template === `string` || config.workingMemory.template) &&
+      config.workingMemory;
+
+    return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
+  }
+
   public getTools(config?: MemoryConfig): Record<string, CoreTool> {
     const mergedConfig = this.getMergedThreadConfig(config);
     if (mergedConfig.workingMemory?.enabled) {
-      if (mergedConfig.workingMemory.schema) {
-        return {
-          updateWorkingMemory: updateWorkingMemoryTool({ format: 'json' }),
-        };
-      }
-
       return {
-        updateWorkingMemory: updateWorkingMemoryTool({ format: 'markdown' }),
+        updateWorkingMemory: this.isVNextWorkingMemoryConfig(mergedConfig)
+          ? // use the new experimental tool
+            __experimental_updateWorkingMemoryToolVNext(mergedConfig)
+          : updateWorkingMemoryTool(mergedConfig),
       };
     }
     return {};
@@ -783,5 +952,48 @@ Notes:
     // TODO: Possibly handle updating the vector db here when a message is updated.
 
     return this.storage.updateMessages({ messages });
+  }
+
+  /**
+   * Deletes one or more messages
+   * @param input - Must be an array containing either:
+   *   - Message ID strings
+   *   - Message objects with 'id' properties
+   * @returns Promise that resolves when all messages are deleted
+   */
+  public async deleteMessages(input: MessageDeleteInput): Promise<void> {
+    // Normalize input to array of IDs
+    let messageIds: string[];
+
+    if (!Array.isArray(input)) {
+      throw new Error('Invalid input: must be an array of message IDs or message objects');
+    }
+
+    if (input.length === 0) {
+      return; // No-op for empty array
+    }
+
+    messageIds = input.map(item => {
+      if (typeof item === 'string') {
+        return item;
+      } else if (item && typeof item === 'object' && 'id' in item) {
+        return item.id;
+      } else {
+        throw new Error('Invalid input: array items must be strings or objects with an id property');
+      }
+    });
+
+    // Validate all IDs are non-empty strings
+    const invalidIds = messageIds.filter(id => !id || typeof id !== 'string');
+    if (invalidIds.length > 0) {
+      throw new Error('All message IDs must be non-empty strings');
+    }
+
+    // Delete from storage
+    await this.storage.deleteMessages(messageIds);
+
+    // TODO: Delete from vector store if semantic recall is enabled
+    // This would require getting the messages first to know their threadId/resourceId
+    // and then querying the vector store to delete associated embeddings
   }
 }

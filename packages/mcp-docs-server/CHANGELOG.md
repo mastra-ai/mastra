@@ -1,5 +1,204 @@
 # @mastra/mcp-docs-server
 
+## 0.13.7
+
+### Patch Changes
+
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [f42c4c2]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+  - @mastra/mcp@0.10.8
+
+## 0.13.7-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [f42c4c2]
+  - @mastra/mcp@0.10.8-alpha.0
+  - @mastra/core@0.12.0-alpha.5
+
+## 0.13.7-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ad0a58b]
+  - @mastra/core@0.12.0-alpha.4
+
+## 0.13.7-alpha.3
+
+### Patch Changes
+
+- @mastra/core@0.12.0-alpha.3
+
+## 0.13.7-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [27cc97a]
+- Updated dependencies [41daa63]
+- Updated dependencies [254a36b]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [ff9c125]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0-alpha.2
+
+## 0.13.7-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [e0f73c6]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+  - @mastra/core@0.12.0-alpha.1
+
+## 0.13.7-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [09bca64]
+  - @mastra/core@0.12.0-alpha.0
+
+## 0.13.6
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+- Updated dependencies [ce088f5]
+  - @mastra/mcp@0.10.7
+  - @mastra/core@0.11.1
+
+## 0.13.5
+
+### Patch Changes
+
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [f5ec3a4]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [ab3bbff]
+- Updated dependencies [8c846b6]
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [565cc0c]
+- Updated dependencies [b790fd1]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [c0ba5e2]
+- Updated dependencies [cb16baf]
+- Updated dependencies [f36e4f1]
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11
+  - @mastra/mcp@0.10.6
+
+## 0.13.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [f5ec3a4]
+- Updated dependencies [ab3bbff]
+- Updated dependencies [565cc0c]
+  - @mastra/core@0.10.11-alpha.2
+  - @mastra/mcp@0.10.6-alpha.0
+
+## 0.13.4
+
+### Patch Changes
+
+- 16bc2f9: Fix blog tool for fetching blogpost
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10
+
+## 0.13.4-alpha.0
+
+### Patch Changes
+
+- 16bc2f9: Fix blog tool for fetching blogpost
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10-alpha.0
+
+## 0.13.3
+
+### Patch Changes
+
+- 07c7e7e: Slimmed down the number of tokens in each code example by removing extra keys from package.json files and adding an mcp docs config file into code examples to intentionally exclude some files - for ex the agent-network example went from 1300 LOC to 300
+- f043a63: Update transaction tool to use csv format
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9
+
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- 07c7e7e: Slimmed down the number of tokens in each code example by removing extra keys from package.json files and adding an mcp docs config file into code examples to intentionally exclude some files - for ex the agent-network example went from 1300 LOC to 300
+- f043a63: Update transaction tool to use csv format
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9-alpha.0
+
 ## 0.13.2
 
 ### Patch Changes

@@ -13,7 +13,6 @@ This guide provides instructions for developers who want to contribute to or wor
 Mastra is organized as a monorepo with the following key directories:
 
 - **packages/** - Core packages that make up the Mastra framework
-
   - **core/** - The foundation of the Mastra framework that provides essential components including agent system, LLM abstractions, workflow orchestration, vector storage, memory management, and tools infrastructure
   - **cli/** - Command-line interface for creating, running, and managing Mastra projects, including the interactive playground UI for testing agents and workflows
   - **deployer/** - Server infrastructure and build tools for deploying Mastra applications to various environments, with API endpoints for agents, workflows, and memory management

@@ -2,7 +2,7 @@
 import { Command } from 'commander';
 
 import { config } from 'dotenv';
-import { PosthogAnalytics } from './analytics/index';
+import { PosthogAnalytics, setAnalytics } from './analytics/index';
 import type { CLI_ORIGIN } from './analytics/index';
 import { build } from './commands/build/build';
 import { create } from './commands/create/create';
@@ -23,6 +23,8 @@ const analytics = new PosthogAnalytics({
   host: 'https://us.posthog.com',
   version: version!,
 });
+
+setAnalytics(analytics);
 
 const program = new Command();
 
@@ -59,6 +61,10 @@ program
     'Project name that will be used in package.json and as the project directory name.',
   )
   .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)')
+  .option(
+    '--template [template-name]',
+    'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
+  )
   .action(async (projectNameArg, args) => {
     // Unify: use argument if present, else option
     const projectName = projectNameArg || args.projectName;
@@ -74,6 +80,7 @@ program
             addExample: true,
             timeout,
             mcpServer: args.mcp,
+            template: args.template,
           });
           return;
         }
@@ -86,6 +93,7 @@ program
           projectName,
           directory: args.dir,
           mcpServer: args.mcp,
+          template: args.template,
         });
       },
       origin,
@@ -173,6 +181,12 @@ program
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-p, --port <port>', 'deprecated: Port number for the development server (defaults to 4111)')
   .option('-e, --env <env>', 'Custom env file to include in the dev server')
+  .option('-i, --inspect', 'Start the dev server in inspect mode')
+  .option('-b, --inspect-brk', 'Start the dev server in inspect mode and break at the beginning of the script')
+  .option(
+    '-c, --custom-args <args>',
+    'Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-transform-types',
+  )
   .action(args => {
     analytics.trackCommand({
       command: 'dev',
@@ -189,6 +203,9 @@ program
       root: args?.root,
       tools: args?.tools ? args.tools.split(',') : [],
       env: args?.env,
+      inspect: args?.inspect && !args?.inspectBrk,
+      inspectBrk: args?.inspectBrk,
+      customArgs: args?.customArgs ? args.customArgs.split(',') : [],
     }).catch(err => {
       logger.error(err.message);
     });

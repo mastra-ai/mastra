@@ -1,5 +1,29 @@
 # @mastra/schema-compat
 
+## 0.10.5
+
+### Patch Changes
+
+- 4da943f: Fix Cannot read properties of undefined (reading 'typeName') in schema compat check
+
+## 0.10.5-alpha.0
+
+### Patch Changes
+
+- 4da943f: Fix Cannot read properties of undefined (reading 'typeName') in schema compat check
+
+## 0.10.4
+
+### Patch Changes
+
+- 0c85311: Fix Google models ZodNull tool schema handling
+
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- 0c85311: Fix Google models ZodNull tool schema handling
+
 ## 0.10.3
 
 ### Patch Changes

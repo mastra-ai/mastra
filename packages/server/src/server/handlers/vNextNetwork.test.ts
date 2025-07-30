@@ -1,9 +1,9 @@
-import { createMockModel } from '@mastra/core';
 import type { Workflow } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { NewAgentNetwork } from '@mastra/core/network/vNext';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -145,6 +145,7 @@ describe('VNextNetwork Handlers', () => {
               outputSchema: expect.any(String),
             },
           ],
+          tools: [],
           routingModel: { provider: llm.getProvider(), modelId: llm.getModelId() },
         },
       ]);
@@ -189,6 +190,7 @@ describe('VNextNetwork Handlers', () => {
             outputSchema: expect.any(String),
           },
         ],
+        tools: [],
         routingModel: { provider: llm.getProvider(), modelId: llm.getModelId() },
       });
     });

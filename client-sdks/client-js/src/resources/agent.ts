@@ -9,11 +9,13 @@ import {
   type UIMessage,
   type UseChatOptions,
 } from '@ai-sdk/ui-utils';
-import { Tool, type CoreMessage, type GenerateReturn } from '@mastra/core';
+import { Tool, type CoreMessage } from '@mastra/core';
+import { type GenerateReturn } from '@mastra/core/llm';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { processClientTools } from '../utils/process-client-tools';
+import { v4 as uuid } from '@lukeed/uuid';
 
 import type {
   GenerateParams,
@@ -116,18 +118,19 @@ export class Agent extends BaseResource {
    * @param params - Generation parameters including prompt
    * @returns Promise containing the generated response
    */
-  async generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
-    params: GenerateParams<T> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateReturn<T>>;
-  async generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
-    params: GenerateParams<T> & { output: T; experimental_output?: never },
-  ): Promise<GenerateReturn<T>>;
-  async generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
-    params: GenerateParams<T> & { output?: never; experimental_output: T },
-  ): Promise<GenerateReturn<T>>;
-  async generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
-    params: GenerateParams<T>,
-  ): Promise<GenerateReturn<T>> {
+  async generate(
+    params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
+  ): Promise<GenerateReturn<any, undefined, undefined>>;
+  async generate<Output extends JSONSchema7 | ZodSchema>(
+    params: GenerateParams<Output> & { output: Output; experimental_output?: never },
+  ): Promise<GenerateReturn<any, Output, undefined>>;
+  async generate<StructuredOutput extends JSONSchema7 | ZodSchema>(
+    params: GenerateParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
+  ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
+  async generate<
+    Output extends JSONSchema7 | ZodSchema | undefined = undefined,
+    StructuredOutput extends JSONSchema7 | ZodSchema | undefined = undefined,
+  >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
@@ -138,18 +141,27 @@ export class Agent extends BaseResource {
 
     const { runId, resourceId, threadId, runtimeContext } = processedParams as GenerateParams;
 
-    const response: GenerateReturn<T> = await this.request(`/api/agents/${this.agentId}/generate`, {
-      method: 'POST',
-      body: processedParams,
-    });
+    const response: GenerateReturn<any, Output, StructuredOutput> = await this.request(
+      `/api/agents/${this.agentId}/generate`,
+      {
+        method: 'POST',
+        body: processedParams,
+      },
+    );
 
     if (response.finishReason === 'tool-calls') {
-      for (const toolCall of (
+      const toolCalls = (
         response as unknown as {
           toolCalls: { toolName: string; args: any; toolCallId: string }[];
           messages: CoreMessage[];
         }
-      ).toolCalls) {
+      ).toolCalls;
+
+      if (!toolCalls || !Array.isArray(toolCalls)) {
+        return response;
+      }
+
+      for (const toolCall of toolCalls) {
         const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
@@ -219,7 +231,7 @@ export class Agent extends BaseResource {
     const message: UIMessage = replaceLastMessage
       ? structuredClone(lastMessage)
       : {
-          id: crypto.randomUUID(),
+          id: uuid(),
           createdAt: getCurrentDate(),
           role: 'assistant',
           content: '',
@@ -279,7 +291,7 @@ export class Agent extends BaseResource {
         // changes. This is why we need to add a revision id to ensure that the message
         // is updated with SWR (without it, the changes get stuck in SWR and are not
         // forwarded to rendering):
-        revisionId: crypto.randomUUID(),
+        revisionId: uuid(),
       } as UIMessage;
 
       update({
@@ -620,7 +632,13 @@ export class Agent extends BaseResource {
       this.processChatResponse({
         stream: streamForProcessing,
         update: ({ message }) => {
-          messages.push(message);
+          const existingIndex = messages.findIndex(m => m.id === message.id);
+
+          if (existingIndex !== -1) {
+            messages[existingIndex] = message;
+          } else {
+            messages.push(message);
+          }
         },
         onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
@@ -673,6 +691,24 @@ export class Agent extends BaseResource {
                   toolInvocation.result = result;
                 }
 
+                // write the tool result part to the stream
+                const writer = writable.getWriter();
+
+                try {
+                  await writer.write(
+                    new TextEncoder().encode(
+                      'a:' +
+                        JSON.stringify({
+                          toolCallId: toolCall.toolCallId,
+                          result,
+                        }) +
+                        '\n',
+                    ),
+                  );
+                } finally {
+                  writer.releaseLock();
+                }
+
                 // Convert messages to the correct format for the recursive call
                 const originalMessages = processedParams.messages;
                 const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
@@ -681,10 +717,12 @@ export class Agent extends BaseResource {
                 this.processStreamResponse(
                   {
                     ...processedParams,
-                    messages: [...messageArray, ...messages, lastMessage],
+                    messages: [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage],
                   },
                   writable,
-                );
+                ).catch(error => {
+                  console.error('Error processing stream response:', error);
+                });
               }
             }
           } else {
@@ -694,6 +732,8 @@ export class Agent extends BaseResource {
           }
         },
         lastMessage: undefined,
+      }).catch(error => {
+        console.error('Error processing stream response:', error);
       });
     } catch (error) {
       console.error('Error processing stream response:', error);

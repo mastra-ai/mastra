@@ -1,6 +1,6 @@
 import { client } from '@/lib/client';
 import { LegacyWorkflowRunResult, WorkflowWatchResult } from '@mastra/client-js';
-import { WorkflowRunStatus } from '@mastra/core';
+import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -378,20 +378,6 @@ export const useStreamWorkflow = () => {
             status = value.payload.status;
             setStreamResult((prev: WorkflowWatchResult) => {
               const current = prev?.payload?.workflowState?.steps?.[value.payload.id] || {};
-              const { output: valueOutput, ...rest } = value.payload;
-
-              const output =
-                valueOutput && Object.keys(valueOutput).length > 0
-                  ? Object.entries(valueOutput).reduce(
-                      (_acc, [_key, _value]) => {
-                        const val = _value as { type: string; data: unknown };
-                        _acc[_key] =
-                          val.type?.toLowerCase() === 'buffer' ? { type: 'Buffer', data: `[...buffered data]` } : val;
-                        return _acc;
-                      },
-                      {} as Record<string, unknown>,
-                    )
-                  : valueOutput || undefined;
               return {
                 ...prev,
                 payload: {
@@ -399,8 +385,7 @@ export const useStreamWorkflow = () => {
                   currentStep: {
                     id: value.payload.id,
                     ...(prev?.payload?.currentStep || {}),
-                    ...rest,
-                    output,
+                    ...value.payload,
                   },
                   workflowState: {
                     ...prev.payload.workflowState,
@@ -409,8 +394,7 @@ export const useStreamWorkflow = () => {
                       ...prev.payload.workflowState.steps,
                       [value.payload.id]: {
                         ...current,
-                        ...rest,
-                        output,
+                        ...value.payload,
                       },
                     },
                   },
@@ -450,6 +434,9 @@ export const useStreamWorkflow = () => {
             });
           }
         }
+      } catch (error) {
+        console.error('Error streaming workflow:', error);
+        //silent error
       } finally {
         setIsStreaming(false);
         reader.releaseLock();
@@ -578,4 +565,36 @@ export const useResumeWorkflow = () => {
     resumeLegacyWorkflow,
     resumeWorkflow,
   };
+};
+
+export const useCancelWorkflowRun = () => {
+  const cancelWorkflowRun = useMutation({
+    mutationFn: async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
+      try {
+        const response = await client.getWorkflow(workflowId).cancelRun(runId);
+        return response;
+      } catch (error) {
+        console.error('Error canceling workflow run:', error);
+        throw error;
+      }
+    },
+  });
+
+  return cancelWorkflowRun;
+};
+
+export const useSendWorkflowRunEvent = (workflowId: string) => {
+  const sendWorkflowRunEvent = useMutation({
+    mutationFn: async ({ runId, event, data }: { runId: string; event: string; data: unknown }) => {
+      try {
+        const response = await client.getWorkflow(workflowId).sendRunEvent({ runId, event, data });
+        return response;
+      } catch (error) {
+        console.error('Error sending workflow run event:', error);
+        throw error;
+      }
+    },
+  });
+
+  return sendWorkflowRunEvent;
 };

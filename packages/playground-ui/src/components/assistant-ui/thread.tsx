@@ -6,29 +6,29 @@ import {
   useComposerRuntime,
 } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
-import type { FC } from 'react';
 
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 
-import { AssistantMessage } from './assistant-message';
-import { UserMessage } from './user-message';
+import { AssistantMessage } from './messages/assistant-message';
+import { UserMessage } from './messages/user-messages';
 import { useEffect, useRef } from 'react';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { Txt } from '@/ds/components/Txt';
 import { Icon, InfoIcon } from '@/ds/icons';
-import { useSpeechRecognition } from '@/hooks/use-speech-recognition';
-import { ComposerAttachments } from './attachment';
+import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
+import { ComposerAttachments } from './attachments/attachment';
 
 export interface ThreadProps {
   ToolFallback?: ToolCallContentPartComponent;
   agentName?: string;
+  agentId?: string;
   hasMemory?: boolean;
-  showFileSupport?: boolean;
+  onInputChange?: (value: string) => void;
 }
 
-export const Thread = ({ ToolFallback, agentName, hasMemory, showFileSupport }: ThreadProps) => {
+export const Thread = ({ ToolFallback, agentName, agentId, hasMemory, onInputChange }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
@@ -56,7 +56,7 @@ export const Thread = ({ ToolFallback, agentName, hasMemory, showFileSupport }: 
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} showFileSupport={showFileSupport} />
+      <Composer hasMemory={hasMemory} onInputChange={onInputChange} agentId={agentId} />
     </ThreadWrapper>
   );
 };
@@ -97,11 +97,17 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
   );
 };
 
-const Composer: FC<{ hasMemory?: boolean; showFileSupport?: boolean }> = ({ hasMemory, showFileSupport }) => {
+interface ComposerProps {
+  hasMemory?: boolean;
+  onInputChange?: (value: string) => void;
+  agentId?: string;
+}
+
+const Composer = ({ hasMemory, onInputChange, agentId }: ComposerProps) => {
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
-        <div className="max-w-[568px] w-full mx-auto px-2 py-3">
+        <div className="max-w-[568px] w-full mx-auto pb-2">
           <ComposerAttachments />
         </div>
 
@@ -113,11 +119,12 @@ const Composer: FC<{ hasMemory?: boolean; showFileSupport?: boolean }> = ({ hasM
               placeholder="Enter your message..."
               name=""
               id=""
+              onChange={e => onInputChange?.(e.target.value)}
             ></textarea>
           </ComposerPrimitive.Input>
           <div className="flex justify-end gap-2">
-            <SpeechInput />
-            <ComposerAction showFileSupport={showFileSupport} />
+            <SpeechInput agentId={agentId} />
+            <ComposerAction />
           </div>
         </div>
       </ComposerPrimitive.Root>
@@ -134,9 +141,9 @@ const Composer: FC<{ hasMemory?: boolean; showFileSupport?: boolean }> = ({ hasM
   );
 };
 
-const SpeechInput = () => {
+const SpeechInput = ({ agentId }: { agentId?: string }) => {
   const composerRuntime = useComposerRuntime();
-  const { start, stop, isListening, transcript } = useSpeechRecognition();
+  const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId });
 
   useEffect(() => {
     if (!transcript) return;
@@ -157,16 +164,14 @@ const SpeechInput = () => {
   );
 };
 
-const ComposerAction: FC<{ showFileSupport?: boolean }> = ({ showFileSupport }) => {
+const ComposerAction = () => {
   return (
     <>
-      {showFileSupport && (
-        <ComposerPrimitive.AddAttachment asChild>
-          <TooltipIconButton tooltip="Add attachment" variant="ghost" className="rounded-full">
-            <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
-          </TooltipIconButton>
-        </ComposerPrimitive.AddAttachment>
-      )}
+      <ComposerPrimitive.AddAttachment asChild>
+        <TooltipIconButton tooltip="Add attachment" variant="ghost" className="rounded-full">
+          <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
+        </TooltipIconButton>
+      </ComposerPrimitive.AddAttachment>
 
       <ThreadPrimitive.If running={false}>
         <ComposerPrimitive.Send asChild>
@@ -190,7 +195,7 @@ const ComposerAction: FC<{ showFileSupport?: boolean }> = ({ showFileSupport }) 
   );
 };
 
-const EditComposer: FC = () => {
+const EditComposer = () => {
   return (
     <ComposerPrimitive.Root>
       <ComposerPrimitive.Input />

@@ -1,5 +1,215 @@
 # create-mastra
 
+## 0.10.14
+
+### Patch Changes
+
+- f442224: speech to text using voice config
+- d8dec5e: add a cta to invite to deploy to cloud
+- 6336993: Fix workflow input form overflow
+- 89d2f4e: add TTS to the playground
+
+## 0.10.14-alpha.1
+
+### Patch Changes
+
+- 6336993: Fix workflow input form overflow
+
+## 0.10.14-alpha.0
+
+### Patch Changes
+
+- f442224: speech to text using voice config
+- d8dec5e: add a cta to invite to deploy to cloud
+- 89d2f4e: add TTS to the playground
+
+## 0.10.13
+
+### Patch Changes
+
+- dd2a4c9: change the way we start the dev process of playground
+- af1f902: share thread list between agent, network and cloud
+- 8f89bcd: fix traces pagination + sharing trace view with cloud
+- 0bf0bc8: fix link in shared components + add e2e tests
+- 2affc57: Fix output type of network loop
+- f6c4d75: fix date picker on change
+- 59f0dcd: Add light background color for step statuses
+- 698518b: Allow external templates from github
+- cf8d497: factorize tabs component between cloud and core
+- 7827943: Handle streaming large data
+- 808b493: wrap runtime context with tooltip provider for usage in cloud
+- 09464dd: Share AgentMetadata component with cloud
+- 80692d5: refactor: sharing only the UI and not data fetching for traces
+
+## 0.10.13-alpha.2
+
+### Patch Changes
+
+- dd2a4c9: change the way we start the dev process of playground
+- af1f902: share thread list between agent, network and cloud
+- 2affc57: Fix output type of network loop
+- f6c4d75: fix date picker on change
+- 698518b: Allow external templates from github
+- 09464dd: Share AgentMetadata component with cloud
+
+## 0.10.13-alpha.1
+
+### Patch Changes
+
+- 8f89bcd: fix traces pagination + sharing trace view with cloud
+- 59f0dcd: Add light background color for step statuses
+- cf8d497: factorize tabs component between cloud and core
+- 80692d5: refactor: sharing only the UI and not data fetching for traces
+
+## 0.10.13-alpha.0
+
+### Patch Changes
+
+- 0bf0bc8: fix link in shared components + add e2e tests
+- 7827943: Handle streaming large data
+- 808b493: wrap runtime context with tooltip provider for usage in cloud
+
+## 0.10.12
+
+### Patch Changes
+
+- 984887a: dependencies updates:
+  - Updated dependency [`prettier@^3.6.2` ↗︎](https://www.npmjs.com/package/prettier/v/3.6.2) (from `^3.5.3`, in `dependencies`)
+- 593631d: allow to pass ref to the link abstraction
+- 5237998: Fix foreach output
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- d49334d: export tool list for usage in cloud
+- 9cdfcb5: fix infinite rerenders on agents table + share runtime context for cloud
+- 794d9f3: Fix thread creation in playground
+- aa9528a: Display reasoning in playground
+- 45174f3: share network list between core and cloud
+- 48f5532: export workflow list for usage in cloud
+- e1d0080: abstract Link component between cloud and core
+- f9b1508: add the same agent table as in cloud and export it from the playground
+- dfbeec6: Fix navigation to vnext AgentNetwork agents
+
+## 0.10.12-alpha.2
+
+### Patch Changes
+
+- 794d9f3: Fix thread creation in playground
+- dfbeec6: Fix navigation to vnext AgentNetwork agents
+
+## 0.10.12-alpha.1
+
+### Patch Changes
+
+- d49334d: export tool list for usage in cloud
+- 9cdfcb5: fix infinite rerenders on agents table + share runtime context for cloud
+- 45174f3: share network list between core and cloud
+- 48f5532: export workflow list for usage in cloud
+
+## 0.10.12-alpha.0
+
+### Patch Changes
+
+- 984887a: dependencies updates:
+  - Updated dependency [`prettier@^3.6.2` ↗︎](https://www.npmjs.com/package/prettier/v/3.6.2) (from `^3.5.3`, in `dependencies`)
+- 593631d: allow to pass ref to the link abstraction
+- 5237998: Fix foreach output
+- 1aa60b1: Pipe runtimeContext to vNext network agent stream and generate steps, wire up runtimeContext for vNext Networks in cliet SDK & playground
+- aa9528a: Display reasoning in playground
+- e1d0080: abstract Link component between cloud and core
+- f9b1508: add the same agent table as in cloud and export it from the playground
+
+## 0.10.11
+
+### Patch Changes
+
+- 640f47e: move agent model settings into agent settings
+
+## 0.10.11-alpha.0
+
+### Patch Changes
+
+- 640f47e: move agent model settings into agent settings
+
+## 0.10.10
+
+### Patch Changes
+
+- af9e40e: Map log level number to string value
+- f457d86: reset localstorage when resetting model settings
+- 8722d53: Fix multi modal remaining steps
+- 4219597: add JSON input close to form input
+- b790fd1: Use SerializedStepFlowEntry in playground
+- a7a836a: Highlight send event button
+- 18ca936: Update rollup config for create-mastra
+
+## 0.10.10-alpha.3
+
+### Patch Changes
+
+- f457d86: reset localstorage when resetting model settings
+- 8722d53: Fix multi modal remaining steps
+
+## 0.10.10-alpha.2
+
+### Patch Changes
+
+- 4219597: add JSON input close to form input
+- 18ca936: Update rollup config for create-mastra
+
+## 0.10.10-alpha.1
+
+### Patch Changes
+
+- a7a836a: Highlight send event button
+
+## 0.10.10-alpha.0
+
+### Patch Changes
+
+- af9e40e: Map log level number to string value
+- b790fd1: Use SerializedStepFlowEntry in playground
+
+## 0.10.9
+
+### Patch Changes
+
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+
+## 0.10.9-alpha.0
+
+### Patch Changes
+
+- 6997af1: add send event to server, deployer, client-js and playground-ui
+
+## 0.10.8
+
+### Patch Changes
+
+- 4e06e3f: timing not displayed correctly in traces
+- 7e801dd: [MASTRA-4118] fixes issue with agent network loopStream where subsequent messages aren't present in playground on refresh
+- a606c75: show right suspend schema for nested workflow on playground
+- 1760a1c: Use workflow stream in playground instead of watch
+- 038e5ae: Add cancel workflow run
+- ac369c6: Show resume data on workflow graph
+- 976a62b: remove persistence capabilities in model settings components
+- 4e809ad: Visualizations for .sleep()/.sleepUntil()/.waitForEvent()
+- f78f399: Make AgentModelSettings shareable between cloud and playground
+- 57929df: agent network display
+
+## 0.10.8-alpha.0
+
+### Patch Changes
+
+- 4e06e3f: timing not displayed correctly in traces
+- 7e801dd: [MASTRA-4118] fixes issue with agent network loopStream where subsequent messages aren't present in playground on refresh
+- a606c75: show right suspend schema for nested workflow on playground
+- 1760a1c: Use workflow stream in playground instead of watch
+- 038e5ae: Add cancel workflow run
+- ac369c6: Show resume data on workflow graph
+- 976a62b: remove persistence capabilities in model settings components
+- 4e809ad: Visualizations for .sleep()/.sleepUntil()/.waitForEvent()
+- f78f399: Make AgentModelSettings shareable between cloud and playground
+- 57929df: agent network display
+
 ## 0.10.7
 
 ### Patch Changes

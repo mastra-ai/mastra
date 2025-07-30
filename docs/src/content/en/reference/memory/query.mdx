@@ -1,6 +1,6 @@
 # query
 
-Retrieves messages from a specific thread, with support for pagination and filtering options.
+Retrieves messages from a specific thread, with support for pagination, filtering options, and semantic search.
 
 ## Usage Example
 
@@ -12,7 +12,7 @@ const memory = new Memory({
 });
 
 // Get last 50 messages
-const { messages, uiMessages } = await memory.query({
+const { messages, uiMessages, messagesV2 } = await memory.query({
   threadId: "thread-123",
   selectBy: {
     last: 50,
@@ -43,7 +43,7 @@ const { messages } = await memory.query({
     vectorSearchString: "What was discussed about deployment?",
   },
   threadConfig: {
-    historySearch: true,
+    semanticRecall: true,
   },
 });
 ```
@@ -69,13 +69,13 @@ const { messages } = await memory.query({
     {
       name: "selectBy",
       type: "object",
-      description: "Options for filtering messages",
+      description: "Options for filtering and selecting messages",
       isOptional: true,
     },
     {
       name: "threadConfig",
       type: "MemoryConfig",
-      description: "Configuration options for message retrieval",
+      description: "Configuration options for message retrieval and semantic search",
       isOptional: true,
     },
   ]}
@@ -88,7 +88,7 @@ const { messages } = await memory.query({
     {
       name: "vectorSearchString",
       type: "string",
-      description: "Search string for finding semantically similar messages",
+      description: "Search string for finding semantically similar messages. Requires semantic recall to be enabled in threadConfig.",
       isOptional: true,
     },
     {
@@ -102,9 +102,9 @@ const { messages } = await memory.query({
     {
       name: "include",
       type: "array",
-      description: "Array of message IDs to include with context",
+      description: "Array of specific message IDs to include with optional context messages",
       isOptional: true,
-    },
+    }
   ]}
 />
 
@@ -117,6 +117,12 @@ const { messages } = await memory.query({
       type: "string",
       description: "ID of the message to include",
       isOptional: false,
+    },
+    {
+      name: "threadId",
+      type: "string",
+      description: "Optional thread ID (defaults to the main threadId parameter)",
+      isOptional: true,
     },
     {
       name: "withPreviousMessages",
@@ -142,22 +148,37 @@ const { messages } = await memory.query({
     {
       name: "messages",
       type: "CoreMessage[]",
-      description: "Array of retrieved messages in their core format",
+      description: "Array of retrieved messages in their core format (v1 format for backwards compatibility)",
     },
     {
       name: "uiMessages",
-      type: "AiMessage[]",
-      description: "Array of messages formatted for UI display",
+      type: "UIMessage[]",
+      description: "Array of messages formatted for UI display, including proper threading of tool calls and results",
+    },
+    {
+      name: "messagesV2",
+      type: "MastraMessageV2[]",
+      description: "Array of messages in the v2 format, the current internal message format",
     },
   ]}
 />
 
 ## Additional Notes
 
-The `query` function returns two different message formats:
+The `query` function returns three different message formats:
 
-- `messages`: Core message format used internally
-- `uiMessages`: Formatted messages suitable for UI display, including proper threading of tool calls and results
+- `messages`: Core message format (v1) used for backwards compatibility with older APIs
+- `uiMessages`: Formatted messages suitable for UI display, including proper threading of tool calls and results  
+- `messagesV2`: The current internal message format with enhanced structure and metadata
+
+### Semantic Search
+
+When using `vectorSearchString`, ensure that:
+- Semantic recall is enabled in your `threadConfig` 
+- A vector database is configured in your Memory instance
+- An embedding model is provided
+
+The function will automatically include context messages around semantically similar results based on the configured `messageRange`.
 
 ### Related
 

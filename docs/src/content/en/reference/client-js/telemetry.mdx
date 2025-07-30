@@ -7,20 +7,12 @@ description: Learn how to retrieve and analyze traces from your Mastra applicati
 
 The Telemetry API provides methods to retrieve and analyze traces from your Mastra application. This helps you monitor and debug your application's behavior and performance.
 
-## Initialize Mastra Client
-
-```typescript
-import { MastraClient } from "@mastra/client-js";
-
-const client = new MastraClient();
-```
-
 ## Getting Traces
 
 Retrieve traces with optional filtering and pagination:
 
 ```typescript
-const telemetry = await client.getTelemetry({
+const telemetry = await mastraClient.getTelemetry({
   name: "trace-name", // Optional: Filter by trace name
   scope: "scope-name", // Optional: Filter by scope
   page: 1, // Optional: Page number for pagination

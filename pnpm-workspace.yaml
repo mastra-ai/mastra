@@ -12,3 +12,4 @@ packages:
   - "packages/*/integration-tests"
   - "packages/cloud"
   - "auth/*"
+  - "explorations/longmemeval"

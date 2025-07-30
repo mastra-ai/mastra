@@ -1,5 +1,270 @@
 # @mastra/inngest
 
+## 0.11.7
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+
+## 0.11.7-alpha.0
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+  - @mastra/core@0.12.0-alpha.5
+
+## 0.11.6
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+  - @mastra/core@0.11.1
+
+## 0.11.5
+
+### Patch Changes
+
+- a723d69: Pass workflowId through
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [7827943]
+- Updated dependencies [5889a31]
+- Updated dependencies [bf1e7e7]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [cbddd18]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0
+
+## 0.11.5-alpha.0
+
+### Patch Changes
+
+- a723d69: Pass workflowId through
+- Updated dependencies [f248d53]
+- Updated dependencies [2affc57]
+- Updated dependencies [66e13e3]
+- Updated dependencies [edd9482]
+- Updated dependencies [18344d7]
+- Updated dependencies [9d372c2]
+- Updated dependencies [40c2525]
+- Updated dependencies [e473f27]
+- Updated dependencies [032cb66]
+- Updated dependencies [703ac71]
+- Updated dependencies [a723d69]
+- Updated dependencies [5889a31]
+- Updated dependencies [65e3395]
+- Updated dependencies [4933192]
+- Updated dependencies [d1c77a4]
+- Updated dependencies [bea9dd1]
+- Updated dependencies [dcd4802]
+- Updated dependencies [7ba91fa]
+  - @mastra/core@0.11.0-alpha.2
+
+## 0.11.4
+
+### Patch Changes
+
+- 0b56518: Ensure removed runtimeContext values are not saved in snapshot
+- Updated dependencies [0b56518]
+- Updated dependencies [db5cc15]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [5237998]
+- Updated dependencies [c3a30de]
+- Updated dependencies [37c1acd]
+- Updated dependencies [1aa60b1]
+- Updated dependencies [89ec9d4]
+- Updated dependencies [cf3a184]
+- Updated dependencies [d6bfd60]
+- Updated dependencies [626b0f4]
+- Updated dependencies [c22a91f]
+- Updated dependencies [f7403ab]
+- Updated dependencies [6c89d7f]
+  - @mastra/core@0.10.15
+
+## 0.11.4-alpha.0
+
+### Patch Changes
+
+- 0b56518: Ensure removed runtimeContext values are not saved in snapshot
+- Updated dependencies [0b56518]
+- Updated dependencies [2ba5b76]
+- Updated dependencies [c3a30de]
+- Updated dependencies [cf3a184]
+- Updated dependencies [d6bfd60]
+  - @mastra/core@0.10.15-alpha.1
+
+## 0.11.3
+
+### Patch Changes
+
+- 515488a: dependencies updates:
+  - Updated dependency [`inngest@^3.39.2` ↗︎](https://www.npmjs.com/package/inngest/v/3.39.2) (from `^3.39.1`, in `dependencies`)
+- defb5ae: dependencies updates:
+  - Updated dependency [`inngest@^3.40.0` ↗︎](https://www.npmjs.com/package/inngest/v/3.40.0) (from `^3.39.2`, in `dependencies`)
+- b790fd1: Ability to pass a function to .sleep()/.sleepUntil()
+- c1cceea: Bump peerdeps of @matra/core
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [565cc0c]
+- Updated dependencies [b790fd1]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [cb16baf]
+- Updated dependencies [f36e4f1]
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11
+
+## 0.11.3-alpha.3
+
+### Patch Changes
+
+- c1cceea: Bump peerdeps of @matra/core
+  - @mastra/core@0.10.11-alpha.4
+
+## 0.11.3-alpha.2
+
+### Patch Changes
+
+- defb5ae: dependencies updates:
+  - Updated dependency [`inngest@^3.40.0` ↗︎](https://www.npmjs.com/package/inngest/v/3.40.0) (from `^3.39.2`, in `dependencies`)
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [cb16baf]
+  - @mastra/core@0.10.11-alpha.3
+
+## 0.11.3-alpha.1
+
+### Patch Changes
+
+- 515488a: dependencies updates:
+  - Updated dependency [`inngest@^3.39.2` ↗︎](https://www.npmjs.com/package/inngest/v/3.39.2) (from `^3.39.1`, in `dependencies`)
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11-alpha.1
+
+## 0.11.3-alpha.0
+
+### Patch Changes
+
+- b790fd1: Ability to pass a function to .sleep()/.sleepUntil()
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [b790fd1]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [f36e4f1]
+  - @mastra/core@0.10.11-alpha.0
+
+## 0.11.2
+
+### Patch Changes
+
+- 48d9738: Fix inngest sleep stream events
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10
+
+## 0.11.2-alpha.0
+
+### Patch Changes
+
+- 48d9738: Fix inngest sleep stream events
+- Updated dependencies [4d3fbdf]
+  - @mastra/core@0.10.10-alpha.0
+
+## 0.11.1
+
+### Patch Changes
+
+- e423a31: Fix bug where nested workflows would cause Inngest duplicate key error
+- 764f86a: Introduces the runCount property in the execution parameters for the steps execute function
+- 1760a1c: Use workflow stream in playground instead of watch
+- 038e5ae: Add cancel workflow run
+- 81a1b3b: Update peerdeps
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9
+
+## 0.11.1-alpha.0
+
+### Patch Changes
+
+- e423a31: Fix bug where nested workflows would cause Inngest duplicate key error
+- 764f86a: Introduces the runCount property in the execution parameters for the steps execute function
+- 1760a1c: Use workflow stream in playground instead of watch
+- 038e5ae: Add cancel workflow run
+- 81a1b3b: Update peerdeps
+- Updated dependencies [9dda1ac]
+- Updated dependencies [c984582]
+- Updated dependencies [7e801dd]
+- Updated dependencies [a606c75]
+- Updated dependencies [7aa70a4]
+- Updated dependencies [764f86a]
+- Updated dependencies [1760a1c]
+- Updated dependencies [038e5ae]
+- Updated dependencies [7dda16a]
+- Updated dependencies [5ebfcdd]
+- Updated dependencies [b2d0c91]
+- Updated dependencies [4e809ad]
+- Updated dependencies [57929df]
+- Updated dependencies [b7852ed]
+- Updated dependencies [6320a61]
+  - @mastra/core@0.10.9-alpha.0
+
 ## 0.11.0
 
 ### Minor Changes

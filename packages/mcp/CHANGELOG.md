@@ -1,5 +1,97 @@
 # @mastra/mcp
 
+## 0.10.8
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+
+## 0.10.8-alpha.0
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+  - @mastra/core@0.12.0-alpha.5
+
+## 0.10.7
+
+### Patch Changes
+
+- ce088f5: Update all peerdeps to latest core
+  - @mastra/core@0.11.1
+
+## 0.10.6
+
+### Patch Changes
+
+- f5ec3a4: Fix tool calling args for mcp server to ensure validatedArgs are not undefined
+- ab3bbff: Add support for extra arguments in mcp
+- c0ba5e2: Handle json schema with $defs and $ref property for MCP tool schemas.
+- cb16baf: Fix MCP tool output schema type and return value
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [f8ce2cc]
+- Updated dependencies [8c846b6]
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [565cc0c]
+- Updated dependencies [b790fd1]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [d7ed04d]
+- Updated dependencies [cb16baf]
+- Updated dependencies [f36e4f1]
+- Updated dependencies [7f6e403]
+  - @mastra/core@0.10.11
+
+## 0.10.6-alpha.1
+
+### Patch Changes
+
+- c0ba5e2: Handle json schema with $defs and $ref property for MCP tool schemas.
+- cb16baf: Fix MCP tool output schema type and return value
+- Updated dependencies [c7bbf1e]
+- Updated dependencies [8722d53]
+- Updated dependencies [132027f]
+- Updated dependencies [0c85311]
+- Updated dependencies [cb16baf]
+  - @mastra/core@0.10.11-alpha.3
+
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- f5ec3a4: Fix tool calling args for mcp server to ensure validatedArgs are not undefined
+- ab3bbff: Add support for extra arguments in mcp
+- Updated dependencies [2873c7f]
+- Updated dependencies [1c1c6a1]
+- Updated dependencies [565cc0c]
+  - @mastra/core@0.10.11-alpha.2
+
 ## 0.10.5
 
 ### Patch Changes
@@ -296,7 +388,6 @@
   Added a new `getResources()` method to the MCPClient class that allows clients to retrieve resources from connected MCP servers. Resources are data or content exposed by MCP servers that can be accessed by clients.
 
   The implementation includes:
-
   - Direct access to resources from all connected MCP servers, grouped by server name
   - Robust error handling that allows partial results when some servers fail
   - Comprehensive test coverage with real server implementation
@@ -375,7 +466,6 @@
   Added a new `getResources()` method to the MCPClient class that allows clients to retrieve resources from connected MCP servers. Resources are data or content exposed by MCP servers that can be accessed by clients.
 
   The implementation includes:
-
   - Direct access to resources from all connected MCP servers, grouped by server name
   - Robust error handling that allows partial results when some servers fail
   - Comprehensive test coverage with real server implementation

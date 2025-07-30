@@ -115,10 +115,10 @@ export class Workflow extends BaseResource {
     if (params?.toDate) {
       searchParams.set('toDate', params.toDate.toISOString());
     }
-    if (params?.limit) {
+    if (params?.limit !== null && params?.limit !== undefined && !isNaN(Number(params?.limit))) {
       searchParams.set('limit', String(params.limit));
     }
-    if (params?.offset) {
+    if (params?.offset !== null && params?.offset !== undefined && !isNaN(Number(params?.offset))) {
       searchParams.set('offset', String(params.offset));
     }
     if (params?.resourceId) {
@@ -151,6 +151,29 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * Cancels a specific workflow run by its ID
+   * @param runId - The ID of the workflow run to cancel
+   * @returns Promise containing a success message
+   */
+  cancelRun(runId: string): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Sends an event to a specific workflow run by its ID
+   * @param params - Object containing the runId, event and data
+   * @returns Promise containing a success message
+   */
+  sendRunEvent(params: { runId: string; event: string; data: unknown }): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${params.runId}/send-event`, {
+      method: 'POST',
+      body: { event: params.event, data: params.data },
+    });
+  }
+
+  /**
    * Creates a new workflow run
    * @param params - Optional object containing the optional runId
    * @returns Promise containing the runId of the created run
@@ -165,6 +188,15 @@ export class Workflow extends BaseResource {
     return this.request(`/api/workflows/${this.workflowId}/create-run?${searchParams.toString()}`, {
       method: 'POST',
     });
+  }
+
+  /**
+   * Creates a new workflow run (alias for createRun)
+   * @param params - Optional object containing the optional runId
+   * @returns Promise containing the runId of the created run
+   */
+  createRunAsync(params?: { runId?: string }): Promise<{ runId: string }> {
+    return this.createRun(params);
   }
 
   /**
@@ -266,6 +298,9 @@ export class Workflow extends BaseResource {
       throw new Error('Response body is null');
     }
 
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
     // Create a transform stream that processes the response body
     const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
       start() {},
@@ -280,11 +315,13 @@ export class Workflow extends BaseResource {
           // Process each chunk
           for (const chunk of chunks) {
             if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
               try {
-                const parsedChunk = JSON.parse(chunk);
+                const parsedChunk = JSON.parse(newChunk);
                 controller.enqueue(parsedChunk);
-              } catch {
-                // Silently ignore parsing errors
+                failedChunk = undefined;
+              } catch (error) {
+                failedChunk = newChunk;
               }
             }
           }
