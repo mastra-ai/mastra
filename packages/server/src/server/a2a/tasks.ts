@@ -1,19 +1,28 @@
-import type { Message, Task, TaskState, TaskStatus, Artifact, TaskContext } from '@mastra/core/a2a';
+import type {
+  Message,
+  Task,
+  TaskState,
+  TaskStatus,
+  TaskContext,
+  TaskArtifactUpdateEvent,
+  Artifact,
+} from '@mastra/core/a2a';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { InMemoryTaskStore } from './store';
-import { uuid } from 'zod/v4';
 
-function isTaskStatusUpdate(update: TaskStatus | Artifact): update is Omit<TaskStatus, 'timestamp'> {
+function isTaskStatusUpdate(update: TaskStatus | TaskArtifactUpdateEvent): update is Omit<TaskStatus, 'timestamp'> {
   return 'state' in update && !('parts' in update);
 }
 
-function isArtifactUpdate(update: TaskStatus | Artifact): update is Artifact {
-  return 'parts' in update;
+function isArtifactUpdate(update: TaskStatus | TaskArtifactUpdateEvent): update is TaskArtifactUpdateEvent {
+  return 'kind' in update && update.kind === 'artifact-update';
 }
 
-export function applyUpdateToTask(current: Task, update: Omit<TaskStatus, 'timestamp'> | Artifact): Task {
+export function applyUpdateToTask(
+  current: Task,
+  update: Omit<TaskStatus, 'timestamp'> | TaskArtifactUpdateEvent,
+): Task {
   let newTask = structuredClone(current);
-  let newHistory = structuredClone(current.history);
 
   if (isTaskStatusUpdate(update)) {
     // Merge status update
@@ -22,11 +31,6 @@ export function applyUpdateToTask(current: Task, update: Omit<TaskStatus, 'times
       ...update, // Apply updates
       timestamp: new Date().toISOString(),
     };
-
-    // If the update includes an agent message, add it to history
-    if (update.message?.role === 'agent') {
-      newHistory?.push(update.message);
-    }
   } else if (isArtifactUpdate(update)) {
     // Handle artifact update
     if (!newTask.artifacts) {
@@ -36,46 +40,30 @@ export function applyUpdateToTask(current: Task, update: Omit<TaskStatus, 'times
       newTask.artifacts = [...newTask.artifacts];
     }
 
-    // TODO: Figure out how to update artifact updates
-    //   const existingIndex = update.index ?? -1; // Use index if provided
-    //   let replaced = false;
+    const existingIndex = newTask.artifacts.findIndex(a => a.name === artifact.name);
+    const existingArtifact = newTask.artifacts[existingIndex];
+    const artifact = update.artifact;
 
-    //   if (existingIndex >= 0 && existingIndex < newTask.artifacts.length) {
-    //     const existingArtifact = newTask.artifacts[existingIndex];
-    //     if (update.append) {
-    //       // Create a deep copy for modification to avoid mutating original
-    //       const appendedArtifact = JSON.parse(JSON.stringify(existingArtifact));
-    //       appendedArtifact.parts.push(...update.parts);
-    //       if (update.metadata) {
-    //         appendedArtifact.metadata = {
-    //           ...(appendedArtifact.metadata || {}),
-    //           ...update.metadata,
-    //         };
-    //       }
-    //       if (update.lastChunk !== undefined) appendedArtifact.lastChunk = update.lastChunk;
-    //       if (update.description) appendedArtifact.description = update.description;
-    //       newTask.artifacts[existingIndex] = appendedArtifact; // Replace with appended version
-    //       replaced = true;
-    //     } else {
-    //       // Overwrite artifact at index (with a copy of the update)
-    //       newTask.artifacts[existingIndex] = { ...update };
-    //       replaced = true;
-    //     }
-    //   } else if (update.name) {
-    //     const namedIndex = newTask.artifacts.findIndex(a => a.name === update.name);
-    //     if (namedIndex >= 0) {
-    //       newTask.artifacts[namedIndex] = { ...update }; // Replace by name (with copy)
-    //       replaced = true;
-    //     }
-    //   }
-
-    //   if (!replaced) {
-    //     newTask.artifacts.push({ ...update }); // Add as a new artifact (copy)
-    //     // Sort if indices are present
-    //     if (newTask.artifacts.some(a => a.index !== undefined)) {
-    //       newTask.artifacts.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
-    //     }
-    //   }
+    if (existingArtifact) {
+      if (update.append) {
+        // Create a deep copy for modification to avoid mutating original
+        const appendedArtifact = JSON.parse(JSON.stringify(existingArtifact)) as Artifact;
+        appendedArtifact.parts.push(...artifact.parts);
+        if (artifact.metadata) {
+          appendedArtifact.metadata = {
+            ...(appendedArtifact.metadata || {}),
+            ...artifact.metadata,
+          };
+        }
+        if (artifact.description) appendedArtifact.description = artifact.description;
+        newTask.artifacts[existingIndex] = appendedArtifact; // Replace with appended version
+      } else {
+        // Overwrite artifact at index (with a copy of the update)
+        newTask.artifacts[existingIndex] = { ...artifact };
+      }
+    } else {
+      newTask.artifacts.push({ ...artifact });
+    }
   }
 
   return newTask;
