@@ -1,88 +1,110 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { OpenAIVoice } from '@mastra/voice-openai';
+
+const MAX_TEXT_LENGTH = 4000;
 
 export const generateAudioFromTextTool = createTool({
   id: 'generate-audio-from-text-tool',
-  description: 'Converts text content into high-quality audio using OpenAI text-to-speech',
+  description: 'Generates high-quality audio from text content using voice synthesis',
   inputSchema: z.object({
-    text: z.string().describe('Text content to convert to audio'),
-    voice: z
-      .string()
-      .optional()
-      .describe('Voice to use for speech synthesis (alloy, echo, fable, onyx, nova, shimmer)'),
-    speed: z.number().optional().describe('Speech speed (0.25-4.0, default: 1.0)'),
+    extractedText: z.string().describe('The extracted text to generate audio from'),
+    speaker: z.string().optional().describe('Voice speaker to use (default: nova)'),
+    speed: z.number().optional().describe('Speaking speed (0.25 to 4.0, default: 1.0)'),
   }),
   outputSchema: z.object({
-    audioStream: z.any().describe('Audio stream containing the generated speech'),
-    duration: z.number().optional().describe('Estimated duration of the audio in seconds'),
-    success: z.boolean().describe('Indicates if the audio generation was successful'),
-    voice: z.string().describe('Voice used for the audio generation'),
+    audioGenerated: z.boolean().describe('Whether audio generation was successful'),
+    textLength: z.number().describe('Length of text processed'),
+    estimatedDuration: z.number().describe('Estimated audio duration in seconds'),
+    audioInfo: z.object({
+      format: z.string().describe('Audio format (e.g., mp3)'),
+      quality: z.string().describe('Audio quality setting'),
+      speaker: z.string().describe('Voice speaker used'),
+    }),
+    success: z.boolean().describe('Whether audio generation was successful'),  
   }),
   execute: async ({ context, mastra }) => {
-    const { text, voice = 'alloy', speed = 1.0 } = context;
+    const { extractedText, speaker = 'nova', speed = 1.0 } = context;
 
-    console.log('🎙️ Generating audio from text...');
-    console.log(`📝 Text length: ${text.length} characters`);
-    console.log(`🗣️ Voice: ${voice}`);
-    console.log(`⚡ Speed: ${speed}x`);
+    console.log('🎙️ Generating audio from extracted text...');
+
+    if (!extractedText || extractedText.trim() === '') {
+      console.error('❌ No extracted text provided for audio generation');
+      return {
+        audioGenerated: false,
+        textLength: 0,
+        estimatedDuration: 0,
+        audioInfo: {
+          format: 'none',
+          quality: 'none',
+          speaker: 'none',
+        },
+        success: false,
+      };
+    }
+
+    // Simple check for very large documents
+    let processedText = extractedText;
+    if (extractedText.length > MAX_TEXT_LENGTH) {
+      console.warn('⚠️ Document is very large. Truncating to avoid processing limits.');
+      console.warn(`⚠️ Using first ${MAX_TEXT_LENGTH} characters only...`);
+      processedText = extractedText.substring(0, MAX_TEXT_LENGTH);
+    }
 
     try {
-      if (!text || text.trim().length === 0) {
-        throw new Error('Input text is empty');
+      const agent = mastra?.getAgent('textToAudioAgent');
+      if (!agent) {
+        throw new Error('Text-to-audio agent not found');
       }
 
-      // Get the audio generation agent or create a voice instance
-      const audioGenerationAgent = mastra?.getAgent('audioGenerationAgent');
-      let audioStream;
-
-      if (audioGenerationAgent && audioGenerationAgent.voice) {
-        // Use the agent's voice if available
-        console.log('🎯 Using audio generation agent voice...');
-        audioStream = await audioGenerationAgent.voice.speak(text, {
-          speaker: voice,
-          speed: speed,
-        });
-      } else {
-        // Fallback to creating a new OpenAI voice instance
-        console.log('🔄 Creating new OpenAI voice instance...');
-        const openAIVoice = new OpenAIVoice({
-          speechModel: { name: 'tts-1-hd', apiKey: process.env.OPENAI_API_KEY },
-          speaker: voice,
-        });
-
-        audioStream = await openAIVoice.speak(text, {
-          speaker: voice,
-          speed: speed,
-        });
+      // Check if agent has voice capabilities
+      if (!agent.voice) {
+        throw new Error('Agent does not have voice synthesis capabilities');
       }
 
-      if (!audioStream) {
-        throw new Error('Failed to generate audio stream');
-      }
+      console.log(`🎵 Converting text to audio using ${speaker} voice...`);
+      
+      // Generate audio using the agent's voice synthesis
+      const audioStream = await agent.voice.speak(processedText, {
+        speaker,
+        speed,
+      });
 
-      // Estimate duration (rough calculation: ~150 words per minute for average speech)
-      const wordCount = text.split(/\s+/).length;
-      const estimatedDuration = Math.ceil(((wordCount / 150) * 60) / speed);
+      // Estimate duration (roughly 150 words per minute average speaking rate)
+      const wordCount = processedText.split(/\s+/).length;
+      const estimatedDuration = Math.ceil((wordCount / 150) * 60); // Convert to seconds
 
-      console.log(`✅ Generated audio successfully`);
-      console.log(`⏱️ Estimated duration: ${estimatedDuration} seconds`);
+      console.log(`✅ Audio generation successful: ~${estimatedDuration} seconds duration`);
 
       return {
-        audioStream,
-        duration: estimatedDuration,
+        audioGenerated: true,
+        textLength: processedText.length,
+        estimatedDuration,
+        audioInfo: {
+          format: 'mp3',
+          quality: 'hd',
+          speaker,
+        },
         success: true,
-        voice: voice,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('❌ Audio generation failed:', errorMessage);
 
+      // Check if it's a text length error
+      if (errorMessage.includes('length') || errorMessage.includes('limit')) {
+        console.error('💡 Tip: Try using a smaller text input. Large texts may exceed processing limits.');
+      }
+
       return {
-        audioStream: null,
-        duration: 0,
+        audioGenerated: false,
+        textLength: processedText.length,
+        estimatedDuration: 0,
+        audioInfo: {
+          format: 'none',
+          quality: 'none',
+          speaker: 'none',
+        },
         success: false,
-        voice: voice,
       };
     }
   },
