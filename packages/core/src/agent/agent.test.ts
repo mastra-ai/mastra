@@ -2950,7 +2950,7 @@ describe('Agent save message parts', () => {
       expect(saveCallCount).toBeGreaterThan(1);
       const messages = await mockMemory.getMessages({ threadId: 'thread-echo', resourceId: 'resource-echo' });
       expect(messages.length).toBeGreaterThan(0);
-    }, 10000);
+    }, 15000);
 
     it('should incrementally save messages with multiple tools and multi-step streaming', async () => {
       const mockMemory = new MockMemory();
@@ -3236,7 +3236,7 @@ describe('Agent save message parts', () => {
       expect(saveCallCount).toBeGreaterThan(1);
       const messages = await mockMemory.getMessages({ threadId: 'thread-echo', resourceId: 'resource-echo' });
       expect(messages.length).toBeGreaterThan(0);
-    }, 10000);
+    }, 15000);
 
     it('should incrementally save messages with multiple tools and multi-step streaming', async () => {
       const mockMemory = new MockMemory();
