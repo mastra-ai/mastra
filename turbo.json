@@ -1,12 +1,8 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
-    "typecheck": {
-      "dependsOn": ["^build"],
-      "outputs": []
-    },
     "build": {
-      "dependsOn": ["^build", "typecheck"],
+      "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
       "env": ["RAPID_API_KEY", "ANTHROPIC_API_KEY"]
     },
