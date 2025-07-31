@@ -105,6 +105,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             (typeof error === 'string'
               ? error
               : (new Error('Unknown error: ' + error)?.stack ?? new Error('Unknown error: ' + error))));
+
+      console.log(base.error, base.error instanceof Error, 'ERROR TYPEZZZZ 2');
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
@@ -255,7 +257,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               );
 
         this.logger?.trackException(error);
-        this.logger?.error(`Error executing step: ${error?.stack}`);
+        this.logger?.error(`Error executing workflow: ${error?.stack}`);
+
         const result = (await this.fmtReturnValue(
           executionSpan,
           params.emitter,
@@ -263,6 +266,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           lastOutput.result,
           e as Error,
         )) as any;
+
         await this.persistStepUpdate({
           workflowId,
           runId,
@@ -713,7 +717,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         this.logger.error(`Error executing step ${step.id}: ` + error?.stack);
         execResults = {
           status: 'failed',
-          error: error?.stack,
+          error: error,
           endedAt: Date.now(),
         };
       }
@@ -1372,6 +1376,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runtimeContext.forEach((value, key) => {
       runtimeContextObj[key] = value;
     });
+
+    console.log(error, error instanceof Error, 'ERROR TYPEZZZZ');
 
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflowId,
