@@ -15,11 +15,21 @@ const result = await run.start({ inputData: { startValue: 0 } });
 
 if (result.status === "suspended") {
   const resumedResults = await run.resume({
-    step: result.suspended[0],
     resumeData: { newValue: 0 },
   });
 }
 ```
+
+
+For more advanced scenarios where you need to specify the exact step to resume:
+
+```typescript
+await run.resume({
+  step: result.suspended[0], // Explicitly choose which step to resume
+  resumeData: { newValue: 0 },
+});
+```
+> **Note**: When exactly one step is suspended, you can omit the `step` parameter and the workflow will automatically resume that step. For workflows with multiple suspended steps, you must explicitly specify which step to resume.
 
 ## Parameters
 
@@ -40,8 +50,8 @@ if (result.status === "suspended") {
         {
           name: "step",
           type: "Step | Step[] | string | string[]",
-          description: "The step(s) to resume execution from",
-          isOptional: false,
+          description: "The step(s) to resume execution from. When omitted, the workflow will automatically resume the suspended step if exactly one step is suspended. Throws an error if multiple steps are suspended and no step is specified.",
+          isOptional: true,
         },
         {
           name: "runtimeContext",

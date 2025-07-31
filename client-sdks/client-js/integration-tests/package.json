@@ -1,0 +1,18 @@
+{
+  "name": "@mastra/client-js-integration-tests",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@ag-ui/client": "^0.0.27",
+    "@mastra/client-js": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "ai": "^4.3.19"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

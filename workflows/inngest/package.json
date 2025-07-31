@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "0.11.7",
+  "version": "0.11.8-alpha.0",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -19,7 +19,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
+    "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",
     "test": "docker-compose up -d && vitest run --no-isolate --bail=1 --retry=1 && docker-compose down",
     "lint": "eslint ."
@@ -27,7 +27,7 @@
   "dependencies": {
     "@inngest/realtime": "^0.3.1",
     "@opentelemetry/api": "^1.9.0",
-    "inngest": "^3.40.0",
+    "inngest": "^3.40.1",
     "zod": "^3.25.67"
   },
   "devDependencies": {

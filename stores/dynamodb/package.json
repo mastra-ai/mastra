@@ -23,8 +23,8 @@
     "src"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
-    "dev": "tsup --watch",
+    "build": "tsup --silent --config tsup.config.ts",
+    "dev": "tsup --watch && tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "lint": "eslint .",
     "pretest": "docker compose up -d",
