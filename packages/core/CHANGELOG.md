@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.12.1-alpha.1
+
+### Patch Changes
+
+- d0d9500: Fixed an issue where AWS Bedrock is expecting a user message at the beginning of the message list
+
 ## 0.12.1-alpha.0
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # mastra
 
+## 0.10.17-alpha.1
+
+### Patch Changes
+
+- 9862477: Install specific ai v4 deps when scaffolding a project
+- Updated dependencies [d0d9500]
+  - @mastra/core@0.12.1-alpha.1
+  - @mastra/deployer@0.12.1-alpha.1
+
 ## 0.10.17-alpha.0
 
 ### Patch Changes
