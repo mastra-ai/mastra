@@ -1,8 +1,8 @@
-import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel, DeepPartial } from 'ai';
+import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
 
 import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
-import { MastraBase } from '../base';
+import { MastraBase, type RequireOnly, type Resolve } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -37,6 +37,14 @@ export abstract class MemoryProcessor extends MastraBase {
     return messages;
   }
 }
+
+export type MessageV2Update = Resolve<
+  RequireOnly<MastraMessageV2, 'id' | 'threadId'> & { content: RequireOnly<MastraMessageV2['content'], 'format'> }
+>;
+
+export type UpdateMessagesInput = {
+  messages: MessageV2Update[];
+};
 
 export const memoryDefaultOptions = {
   lastMessages: 10,
@@ -485,11 +493,7 @@ export abstract class MastraMemory extends MastraBase {
    * @param messages - The list of messages to update
    * @returns The list of updated messages
    */
-  abstract updateMessages({
-    messages,
-  }: {
-    messages: (DeepPartial<MastraMessageV2> & { id: string; threadId: string })[];
-  }): Promise<MastraMessageV2[]>;
+  abstract updateMessages({ messages }: UpdateMessagesInput): Promise<MastraMessageV2[]>;
 
   /**
    * Deletes multiple messages by their IDs
