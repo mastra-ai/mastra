@@ -248,9 +248,25 @@ export class MCPServer extends MCPServerBase {
           this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
             errors: validation.error,
           });
+
+          // Format validation errors for agent understanding
+          let errorMessages = 'Validation failed';
+          if ('errors' in validation.error && Array.isArray(validation.error.errors)) {
+            errorMessages = validation.error.errors
+              .map((e: any) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+              .join('\n');
+          } else if (validation.error instanceof Error) {
+            errorMessages = validation.error.message;
+          }
+
           return {
-            content: [{ type: 'text', text: `Invalid tool arguments: ${JSON.stringify(validation.error)}` }],
-            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(request.params.arguments, null, 2)}`,
+              },
+            ],
+            isError: false, // Set to false so agent sees this as a normal response
           };
         }
         if (!tool.execute) {
@@ -268,7 +284,7 @@ export class MCPServer extends MCPServerBase {
           },
         };
 
-        const result = await tool.execute(validation?.value, {
+        const result = await tool.execute(validation?.value ?? request.params.arguments ?? {}, {
           messages: [],
           toolCallId: '',
           elicitation: sessionElicitation,

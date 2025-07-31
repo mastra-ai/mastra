@@ -601,6 +601,22 @@ export class InternalMastraMCPClient extends MastraBase {
 
     return toolsRes;
   }
+
+  /**
+   * Call a tool on the MCP server
+   * @param params Tool call parameters
+   * @returns Tool call result
+   */
+  async callTool(params: { name: string; arguments: any }) {
+    const response = await this.client.callTool(
+      {
+        name: params.name,
+        arguments: params.arguments,
+      },
+      CallToolResultSchema,
+    );
+    return response;
+  }
 }
 
 /**

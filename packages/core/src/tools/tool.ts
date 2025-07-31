@@ -51,7 +51,8 @@ export function createTool<
   // Wrap execute with validation if inputSchema exists
   if (tool.inputSchema && tool.execute) {
     const originalExecute = tool.execute;
-    tool.execute = async (context: TContext, options?: any) => {
+    // Use any type to bypass type checking for validation errors
+    (tool as any).execute = async (context: TContext, options?: any) => {
       // Validate input if schema exists
       if (tool.inputSchema && 'safeParse' in tool.inputSchema) {
         const validation = tool.inputSchema.safeParse(context.context);
