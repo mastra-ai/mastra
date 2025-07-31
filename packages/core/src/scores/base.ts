@@ -145,7 +145,7 @@ type GenerateReasonStepDef<TAccumulated extends Record<string, any>> =
 
 class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
   constructor(
-    private config: ScorerConfig,
+    public config: ScorerConfig,
     private steps: Array<ScorerStepDefinition> = [],
     private originalPromptObjects: Map<
       string,

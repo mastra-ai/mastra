@@ -435,9 +435,10 @@ function ScoreDetails({
   };
 
   const prompts: Record<string, string | undefined> = {
-    extractPrompt: score?.extractPrompt,
+    preprocessPrompt: score?.preprocessPrompt,
     analyzePrompt: score?.analyzePrompt,
-    reasonPrompt: score?.reasonPrompt,
+    generateScorePrompt: score?.generateScorePrompt,
+    generateReasonPrompt: score?.generateReasonPrompt,
   };
 
   console.log('Score details:', JSON.stringify(score, null, 2));
