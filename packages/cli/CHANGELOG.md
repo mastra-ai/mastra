@@ -1,5 +1,28 @@
 # mastra
 
+## 0.10.17
+
+### Patch Changes
+
+- 9862477: Install specific ai v4 deps when scaffolding a project
+- 33dcb07: dependencies updates:
+  - Updated dependency [`@opentelemetry/instrumentation@^0.203.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/instrumentation/v/0.203.0) (from `^0.202.0`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/auto-instrumentations-node@^0.62.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/auto-instrumentations-node/v/0.62.0) (from `^0.60.1`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/exporter-trace-otlp-grpc@^0.203.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/exporter-trace-otlp-grpc/v/0.203.0) (from `^0.202.0`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/exporter-trace-otlp-http@^0.203.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/exporter-trace-otlp-http/v/0.203.0) (from `^0.202.0`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/sdk-node@^0.203.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/sdk-node/v/0.203.0) (from `^0.202.0`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/semantic-conventions@^1.36.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/semantic-conventions/v/1.36.0) (from `^1.34.0`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [f90797b]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [07fe7a2]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1
+  - @mastra/mcp@0.10.9
+  - @mastra/deployer@0.12.1
+
 ## 0.10.17-alpha.1
 
 ### Patch Changes
