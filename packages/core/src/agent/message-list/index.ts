@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { convertToCoreMessages } from 'ai';
-import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, ToolCallPart, ToolInvocation, UIMessage } from 'ai';
+import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, ToolInvocation, UIMessage } from 'ai';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { MastraMessageV1 } from '../../memory';
 import { isCoreMessage, isUiMessage } from '../../utils';
@@ -33,16 +33,6 @@ export type MastraMessageV2 = {
 export type UIMessageWithMetadata = UIMessage & {
   metadata?: Record<string, unknown>;
 };
-
-function isToolCallMessage(message: CoreMessage): boolean {
-  if (message.role === 'tool') {
-    return true;
-  }
-  if (message.role === 'assistant' && Array.isArray(message.content)) {
-    return message.content.some((part): part is ToolCallPart => part.type === 'tool-call');
-  }
-  return false;
-}
 
 export type MessageInput =
   | UIMessage
@@ -137,11 +127,20 @@ export class MessageList {
       const coreMessages = this.all.core();
 
       // Some LLM providers will throw an error if the first message is a tool call.
-      while (coreMessages[0] && isToolCallMessage(coreMessages[0])) {
-        coreMessages.shift();
-      }
 
       const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
+
+      const needsDefaultUserMessage = !messages.length || messages[0]?.role === 'assistant';
+
+      if (needsDefaultUserMessage) {
+        const defaultMessage: CoreMessage = {
+          role: 'user',
+          content: '.',
+        };
+
+        messages.unshift(defaultMessage);
+      }
+
       return messages;
     },
   };
