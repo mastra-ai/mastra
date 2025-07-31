@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-elevenlabs",
-  "version": "0.10.6-alpha.0",
+  "version": "0.10.6",
   "description": "Mastra ElevenLabs voice integration",
   "type": "module",
   "files": [
@@ -22,8 +22,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
-    "build:watch": "tsup build --watch",
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:watch": "tsup build --watch && tsc -p tsconfig.build.json",
     "test": "vitest run",
     "lint": "eslint ."
   },

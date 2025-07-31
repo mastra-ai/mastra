@@ -298,6 +298,73 @@ again because it has been stored in working memory.
 If your agent is not properly updating working memory when you expect it to, you can add system
 instructions on _how_ and _when_ to use this template in your agent's `instructions` setting.
 
+## Setting Initial Working Memory
+
+While agents typically update working memory through the `updateWorkingMemory` tool, you can also set initial working memory programmatically when creating or updating threads. This is useful for injecting user data (like their name, preferences, or other info) that you want available to the agent without passing it in every request.
+
+### Setting Working Memory via Thread Metadata
+
+When creating a thread, you can provide initial working memory through the metadata's `workingMemory` key:
+
+```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
+// Create a thread with initial working memory
+const thread = await memory.createThread({
+  threadId: "thread-123",
+  resourceId: "user-456",
+  title: "Medical Consultation",
+  metadata: {
+    workingMemory: `# Patient Profile
+- Name: John Doe
+- Blood Type: O+
+- Allergies: Penicillin
+- Current Medications: None
+- Medical History: Hypertension (controlled)
+`
+  }
+});
+
+// The agent will now have access to this information in all messages
+await agent.generate("What's my blood type?", {
+  threadId: thread.id,
+  resourceId: "user-456"
+});
+// Response: "Your blood type is O+."
+```
+
+### Updating Working Memory Programmatically
+
+You can also update an existing thread's working memory:
+
+```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
+// Update thread metadata to add/modify working memory
+await memory.updateThread({
+  id: "thread-123",
+  title: thread.title,
+  metadata: {
+    ...thread.metadata,
+    workingMemory: `# Patient Profile
+- Name: John Doe
+- Blood Type: O+
+- Allergies: Penicillin, Ibuprofen  // Updated
+- Current Medications: Lisinopril 10mg daily  // Added
+- Medical History: Hypertension (controlled)
+`
+  }
+});
+```
+
+### Direct Memory Update
+
+Alternatively, use the `updateWorkingMemory` method directly:
+
+```typescript filename="src/app/medical-consultation.ts" showLineNumbers copy
+await memory.updateWorkingMemory({
+  threadId: "thread-123",
+  resourceId: "user-456", // Required for resource-scoped memory
+  workingMemory: "Updated memory content..."
+});
+```
+
 ## Examples
 
 - [Streaming working memory](/examples/memory/streaming-working-memory)
