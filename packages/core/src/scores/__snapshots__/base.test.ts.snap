@@ -9,24 +9,22 @@ exports[`createScorer > Async scorer > with async createPrompt in analyze 1`] = 
   },
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": {
     "reformattedInput": "TEST INPUT",
     "reformattedOutput": "TEST OUTPUT",
   },
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -37,24 +35,22 @@ exports[`createScorer > Async scorer > with async createPrompt in generateReason
   "analyzeStepResult": undefined,
   "generateReasonPrompt": "Async reason prompt: Score 1 for TEST INPUT and TEST OUTPUT",
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": {
     "reformattedInput": "TEST INPUT",
     "reformattedOutput": "TEST OUTPUT",
   },
   "reason": "This is an async reason for the score",
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -65,24 +61,22 @@ exports[`createScorer > Async scorer > with async createPrompt in generateScore 
   "analyzeStepResult": undefined,
   "generateReasonPrompt": undefined,
   "generateScorePrompt": "Async score prompt: TEST INPUT and TEST OUTPUT",
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": {
     "reformattedInput": "TEST INPUT",
     "reformattedOutput": "TEST OUTPUT",
   },
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 0.85,
 }
 `;
@@ -93,24 +87,22 @@ exports[`createScorer > Async scorer > with async createPrompt in preprocess 1`]
   "analyzeStepResult": undefined,
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": "Async prompt: test input and test output",
   "preprocessStepResult": {
     "reformattedInput": "ASYNC TEST INPUT",
     "reformattedOutput": "ASYNC TEST OUTPUT",
   },
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -121,21 +113,19 @@ exports[`createScorer > Async scorer > with basic 1`] = `
   "analyzeStepResult": undefined,
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": undefined,
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -146,24 +136,22 @@ exports[`createScorer > Async scorer > with preprocess 1`] = `
   "analyzeStepResult": undefined,
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": {
     "reformattedInput": "TEST INPUT",
     "reformattedOutput": "TEST OUTPUT",
   },
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -177,24 +165,22 @@ exports[`createScorer > Async scorer > with preprocess function and analyze as p
   },
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": {
     "reformattedInput": "TEST INPUT",
     "reformattedOutput": "TEST OUTPUT",
   },
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -208,24 +194,22 @@ exports[`createScorer > Async scorer > with preprocess prompt object and analyze
   },
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": "Analyze the input and output: test input and test output",
   "preprocessStepResult": {
     "reformattedInput": "TEST INPUT",
     "reformattedOutput": "TEST OUTPUT",
   },
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -239,24 +223,22 @@ exports[`createScorer > Mixed scorer > with preprocess function and analyze prom
   },
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": {
     "reformattedInput": "TEST INPUT from preprocess function!",
     "reformattedOutput": "TEST OUTPUT from preprocess function!",
   },
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -270,24 +252,22 @@ exports[`createScorer > Mixed scorer > with preprocess prompt and analyze functi
   },
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": "Test Preprocess prompt",
   "preprocessStepResult": {
     "reformattedInput": "TEST INPUT from preprocess prompt!",
     "reformattedOutput": "TEST OUTPUT from preprocess prompt!",
   },
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -301,21 +281,19 @@ exports[`createScorer > Mixed scorer > with reason function and analyze prompt 1
   },
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": undefined,
   "reason": "the reason is because the input is 10 and the output is 11 from generateReason function",
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -329,21 +307,19 @@ exports[`createScorer > Mixed scorer > with reason prompt and analyze function 1
   },
   "generateReasonPrompt": "Test Generate Reason prompt",
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": undefined,
   "reason": "This is the reason.",
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -354,21 +330,19 @@ exports[`createScorer > Steps as functions scorer > should create a basic scorer
   "analyzeStepResult": undefined,
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": undefined,
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -382,21 +356,19 @@ exports[`createScorer > Steps as functions scorer > should create a scorer with 
   },
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": undefined,
   "reason": "the reason the score is 1 is because the input is test input! and the output is test output!",
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -410,21 +382,19 @@ exports[`createScorer > Steps as functions scorer > should create a scorer with 
   },
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": undefined,
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -438,24 +408,22 @@ exports[`createScorer > Steps as functions scorer > should create a scorer with 
   },
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": {
     "reformattedInput": "TEST INPUT",
     "reformattedOutput": "TEST OUTPUT",
   },
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -466,24 +434,22 @@ exports[`createScorer > Steps as functions scorer > should create a scorer with 
   "analyzeStepResult": undefined,
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": {
     "reformattedInput": "TEST INPUT",
     "reformattedOutput": "TEST OUTPUT",
   },
   "reason": "the reason the score is 1 is because the input is TEST INPUT and the output is TEST OUTPUT",
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -494,24 +460,22 @@ exports[`createScorer > Steps as functions scorer > should create a scorer with 
   "analyzeStepResult": undefined,
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": {
     "reformattedInput": "TEST INPUT",
     "reformattedOutput": "TEST OUTPUT",
   },
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -525,24 +489,22 @@ exports[`createScorer > Steps as functions scorer > should create a scorer with 
   },
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": {
     "reformattedInput": "TEST INPUT",
     "reformattedOutput": "TEST OUTPUT",
   },
   "reason": "the reason the score is 1 is because the input is TEST INPUT! and the output is TEST OUTPUT!",
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -553,21 +515,19 @@ exports[`createScorer > Steps as functions scorer > should create a scorer with 
   "analyzeStepResult": undefined,
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": undefined,
   "reason": "the reason the score is 1 is because the input is test input and the output is test output",
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -581,24 +541,22 @@ exports[`createScorer > Steps as prompt objects scorer > with all steps 1`] = `
   },
   "generateReasonPrompt": "Test Generate Reason prompt",
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": "Test Preprocess prompt",
   "preprocessStepResult": {
     "reformattedInput": "TEST INPUT",
     "reformattedOutput": "TEST OUTPUT",
   },
   "reason": "this is a reason.",
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -612,21 +570,19 @@ exports[`createScorer > Steps as prompt objects scorer > with analyze and reason
   },
   "generateReasonPrompt": "Test Generate Reason prompt",
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": undefined,
   "reason": "This is a test reason",
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -640,21 +596,19 @@ exports[`createScorer > Steps as prompt objects scorer > with analyze prompt obj
   },
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": undefined,
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -665,21 +619,19 @@ exports[`createScorer > Steps as prompt objects scorer > with generate score as 
   "analyzeStepResult": undefined,
   "generateReasonPrompt": undefined,
   "generateScorePrompt": "Test Generate Score prompt",
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": undefined,
   "preprocessStepResult": undefined,
   "reason": "the reason the score is 1 is because the input is [{"role":"user","content":"test input"}] and the output is {"role":"assistant","text":"test output"}",
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
@@ -693,24 +645,22 @@ exports[`createScorer > Steps as prompt objects scorer > with preprocess and ana
   },
   "generateReasonPrompt": undefined,
   "generateScorePrompt": undefined,
+  "input": [
+    {
+      "content": "test input",
+      "role": "user",
+    },
+  ],
+  "output": {
+    "role": "assistant",
+    "text": "test output",
+  },
   "preprocessPrompt": "Test Preprocess prompt",
   "preprocessStepResult": {
     "reformattedInput": "TEST INPUT",
     "reformattedOutput": "TEST OUTPUT",
   },
   "reason": undefined,
-  "run": {
-    "input": [
-      {
-        "content": "test input",
-        "role": "user",
-      },
-    ],
-    "output": {
-      "role": "assistant",
-      "text": "test output",
-    },
-  },
   "score": 1,
 }
 `;
