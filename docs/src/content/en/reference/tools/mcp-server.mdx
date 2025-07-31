@@ -848,9 +848,18 @@ When tools are executed within an MCP server context, they receive an additional
 ```typescript
 execute: async ({ context }, options) => {
   // context contains the tool's input parameters
-  // options contains server capabilities like elicitation
+  // options contains server capabilities like elicitation and authentication info
   
-  const result = await options.elicitation.sendRequest({
+  // Destructure the options to access both elicitation and extra
+  const { elicitation, extra } = options;
+  
+  // Access authentication information (when available)
+  if (extra?.authInfo) {
+    console.log('Authenticated request from:', extra.authInfo.clientId);
+  }
+  
+  // Use elicitation capabilities
+  const result = await elicitation.sendRequest({
     message: "Please provide information",
     requestedSchema: { /* schema */ }
   });
@@ -891,10 +900,14 @@ const server = new MCPServer({
       }),
       execute: async ({ context }, options) => {
         const { reason } = context;
+        
+        // Destructure to access both elicitation and extra
+        const { elicitation, extra } = options;
+        console.log('Request from session:', extra?.sessionId);
 
         try {
-          // Request user input via elicitation through the options parameter
-          const result = await options.elicitation.sendRequest({
+          // Request user input via elicitation
+          const result = await elicitation.sendRequest({
             message: reason 
               ? `Please provide your contact information. ${reason}`
               : 'Please provide your contact information',
@@ -1002,10 +1015,20 @@ The elicitation functionality is available through the `options` parameter in to
 
 ```typescript
 // Within a tool's execute function
-options.elicitation.sendRequest({
-  message: string,           // Message to display to user
-  requestedSchema: object    // JSON schema defining expected response structure
-}): Promise<ElicitResult>
+execute: async ({ context }, options) => {
+  const { elicitation, extra } = options;
+  
+  // Use elicitation for user input
+  const result = await elicitation.sendRequest({
+    message: string,           // Message to display to user
+    requestedSchema: object    // JSON schema defining expected response structure
+  }): Promise<ElicitResult>
+  
+  // Access authentication info if needed
+  if (extra?.authInfo) {
+    // Use extra.authInfo.token, extra.authInfo.clientId, etc.
+  }
+}
 ```
 
 Note that elicitation is **session-aware** when using HTTP-based transports (SSE or HTTP). This means that when multiple clients are connected to the same server, elicitation requests are routed to the correct client session that initiated the tool execution.
@@ -1018,6 +1041,122 @@ type ElicitResult = {
   content?: any; // Only present when action is 'accept'
 }
 ```
+
+## Accessing Authentication Information
+
+When MCP clients connect to your server using HTTP-based transports (SSE or HTTP), they can include authentication information in their requests. This authentication context is automatically passed to your tools through the `options.extra` parameter.
+
+> **Note on naming**: The property is called `extra` because it follows the MCP SDK's `RequestHandlerExtra` naming convention. While the name isn't particularly descriptive, it contains important request metadata including authentication information, session details, and communication utilities.
+
+### Authentication Context Structure
+
+The `extra` parameter provides access to request-specific information:
+
+```typescript
+type MCPRequestHandlerExtra = {
+  authInfo?: {
+    token?: string;      // Authentication token (e.g., Bearer token)
+    clientId?: string;   // Client identifier
+    scopes?: string[];   // Authorization scopes
+  };
+  sessionId?: string;      // Unique session identifier
+  requestId?: string;      // Request identifier for tracking
+  signal: AbortSignal;     // For request cancellation
+  sendNotification: Function;  // Send notifications to client
+  sendRequest: Function;       // Send requests to client
+};
+```
+
+### Example: Building an Authenticated Tool
+
+Here's an example of a tool that uses authentication information to make personalized API calls:
+
+```typescript
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const userDataTool = createTool({
+  id: "getUserData",
+  description: "Fetches personalized user data using the authenticated context",
+  inputSchema: z.object({
+    dataType: z.enum(["profile", "settings", "activity"]),
+  }),
+  execute: async ({ context }, options) => {
+    const { dataType } = context;
+    
+    // Destructure to access extra from options
+    const { extra } = options;
+    
+    // Check if authentication info is available
+    if (!extra?.authInfo?.token) {
+      return "Authentication required. Please provide credentials.";
+    }
+    
+    try {
+      // Use the authentication token for API calls
+      const response = await fetch(`https://api.example.com/user/${dataType}`, {
+        headers: {
+          'Authorization': `Bearer ${extra.authInfo.token}`,
+          'X-Client-ID': extra.authInfo.clientId || 'unknown',
+        },
+        signal: extra.signal, // Use the abort signal for cancellation
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      return `User ${dataType}: ${JSON.stringify(data, null, 2)}`;
+      
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        return 'Request was cancelled';
+      }
+      return `Error fetching user data: ${error.message}`;
+    }
+  },
+});
+```
+
+### Authentication Flow
+
+1. **Client Configuration**: MCP clients include authentication headers when connecting:
+   ```typescript
+   const mcp = new MCPClient({
+     servers: {
+       myServer: {
+         url: new URL("https://my-mcp-server.com/mcp"),
+         requestInit: {
+           headers: {
+             Authorization: "Bearer user-specific-token",
+           },
+         },
+       },
+     },
+   });
+   ```
+
+2. **Server Reception**: The server's HTTP transport layer extracts authentication information from request headers
+
+3. **Tool Access**: Tools receive this information via `options.extra.authInfo`
+
+### Best Practices
+
+- **Always validate authentication**: Check if `extra.authInfo` exists before using it
+- **Handle missing authentication gracefully**: Return appropriate messages when auth is required but missing
+- **Use the abort signal**: Respect `extra.signal` for proper request cancellation
+- **Session awareness**: Authentication is session-specific, ensuring multi-tenant safety
+- **Don't log sensitive data**: Avoid logging tokens or other sensitive authentication information
+
+### Use Cases
+
+Common scenarios for authenticated MCP tools:
+
+- **Multi-tenant SaaS applications**: Different users get different data based on their auth tokens
+- **Personalized integrations**: Tools that fetch user-specific data from external APIs
+- **Secure operations**: Tools that need to verify user permissions before performing actions
+- **Rate-limited APIs**: Using client-specific tokens to manage API quotas
 
 ## Related Information
 
