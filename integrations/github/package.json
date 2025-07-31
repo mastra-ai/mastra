@@ -22,8 +22,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "cross-env NODE_OPTIONS='--max-old-space-size=8192' tsup src/index.ts --format esm,cjs --dts --clean --treeshake=smallest --splitting",
-    "build:watch": "pnpm build --watch",
+    "build": "cross-env NODE_OPTIONS='--max-old-space-size=8192' tsup --silent --config tsup.config.ts",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "lint": "eslint .",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "clean": "rm -rf dist && rm -rf node_modules",

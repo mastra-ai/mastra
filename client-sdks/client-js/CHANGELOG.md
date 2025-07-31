@@ -1,5 +1,17 @@
 # @mastra/client-js
 
+## 0.10.18-alpha.0
+
+### Patch Changes
+
+- 6690a16: dependencies updates:
+  - Updated dependency [`@ag-ui/client@^0.0.35` ↗︎](https://www.npmjs.com/package/@ag-ui/client/v/0.0.35) (from `^0.0.27`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1-alpha.0
+
 ## 0.10.17
 
 ### Patch Changes
