@@ -1,14 +1,15 @@
 import { randomUUID } from 'crypto';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
-import type { MastraMessageV1, SharedMemoryConfig } from '@mastra/core';
+import { deepMerge } from '@mastra/core';
+import type { MastraMessageV1, MastraMessageV2, SharedMemoryConfig } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';
 import type { PostgresConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
 import type { ToolResultPart, TextPart, ToolCallPart } from 'ai';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const resourceId = 'resource';
 const NUMBER_OF_WORKERS = 2;
@@ -54,6 +55,53 @@ const createTestMessage = (
     type,
     createdAt: new Date(Date.now() + messageCounter * 1000), // Add 1 second per message to prevent messages having the same timestamp
     resourceId,
+  };
+};
+
+const createTestMessageV2 = (threadId: string, message: string, props?: Partial<MastraMessageV2>): MastraMessageV2 => {
+  messageCounter++;
+
+  const defaults: MastraMessageV2 = {
+    id: randomUUID(),
+    threadId,
+    resourceId,
+    createdAt: new Date(Date.now() - 10_000 + messageCounter * 1000),
+    role: 'user',
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: 'text',
+          text: message,
+        },
+      ],
+      content: message,
+    },
+  };
+
+  return deepMerge<MastraMessageV2>(defaults, props ?? {});
+};
+
+const createMessageV2Updates = (
+  messages: { id: string; text: string }[],
+  threadId: string,
+): Parameters<typeof Memory.prototype.updateMessages>[0] => {
+  return {
+    messages: messages.map(msg => ({
+      id: msg.id,
+      threadId,
+      resourceId,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'text',
+            text: msg.text,
+          },
+        ],
+        content: msg.text,
+      },
+    })),
   };
 };
 
@@ -593,6 +641,99 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           },
         });
         expect(result.messages[0].content).toEqual(complexMessage);
+      });
+    });
+
+    describe('Message Updates', () => {
+      it('should not update embeddings if message text is not passed', async () => {
+        if (!memory.vector) return;
+        const upsertVectorSpy = vi.spyOn(memory.vector, 'upsert');
+        const deleteVectorSpy = vi.spyOn(memory.vector, 'deleteVector');
+
+        const thread1 = await memory.saveThread({
+          thread: createTestThread('Message Updates Test Thread 1'),
+        });
+
+        const messagesThread1 = [createTestMessageV2(thread1.id, 'The sky is blue today')];
+
+        await memory.saveMessages({ messages: messagesThread1 });
+        expect(upsertVectorSpy).toHaveBeenCalled();
+
+        // update metadata
+        const updateResult = await memory.updateMessages({
+          messages: [
+            {
+              id: messagesThread1[0].id,
+              threadId: thread1.id,
+              content: {
+                format: 2,
+                metadata: {
+                  createdAt: Date.now(),
+                },
+              },
+            },
+          ],
+        });
+
+        expect(updateResult.length).toBe(1);
+        expect(deleteVectorSpy).not.toHaveBeenCalled();
+      });
+
+      it('should update embeddings when message content is updated', async () => {
+        const thread1 = await memory.saveThread({
+          thread: createTestThread('Message Updates Test Thread 1'),
+        });
+
+        // this thread to remain empty
+        const thread2 = await memory.saveThread({
+          thread: createTestThread('Message Updates Test Thread 2'),
+        });
+
+        const messagesThread1 = [
+          createTestMessageV2(thread1.id, 'The sky is blue today'),
+          createTestMessageV2(thread1.id, 'Message 2'),
+          createTestMessageV2(thread1.id, 'Message 3'),
+        ];
+
+        const messagesThread2 = [createTestMessageV2(thread2.id, 'Wide open waters')];
+
+        await memory.saveMessages({ messages: messagesThread1 });
+        await memory.saveMessages({ messages: messagesThread2 });
+
+        // Update some of the stored messages
+        const updates = [
+          {
+            id: messagesThread1[0].id,
+            text: 'Message 1',
+          },
+          {
+            id: messagesThread1[2].id,
+            text: 'Oceans are vast and blue',
+          },
+        ];
+
+        await memory.updateMessages(createMessageV2Updates(updates, thread1.id));
+
+        // the search should yield the final message instead of the first
+        const searchQuery = 'blue';
+
+        const threadScopeResult = await memory.rememberMessages({
+          threadId: thread1.id,
+          resourceId, // resourceId is defined globally in this file
+          vectorMessageSearch: searchQuery,
+          config: {
+            lastMessages: 0,
+            semanticRecall: {
+              topK: 1,
+              messageRange: 0,
+              // scope: 'thread' // Default
+            },
+          },
+        });
+
+        expect(threadScopeResult.messagesV2).toHaveLength(1);
+        expect(threadScopeResult.messagesV2[0].id).toBe(updates[1].id);
+        expect(threadScopeResult.messagesV2[0].content.content).toBe(updates[1].text);
       });
     });
 

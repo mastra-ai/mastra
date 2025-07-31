@@ -12,8 +12,11 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import dotenv from 'dotenv';
 import { memoryProcessorAgent, weatherAgent } from './mastra/agents/weather';
 import { weatherTool, weatherToolCity } from './mastra/tools/weather';
+
+dotenv.config({ path: '.env.test' });
 
 describe('Agent Memory Tests', () => {
   const dbFile = 'file:mastra-agent.db';
@@ -315,14 +318,14 @@ describe('Agent Memory Tests', () => {
       const secondMessage = uiMessages.find((m: any) => m.content === 'Another message with different metadata');
 
       expect(firstMessage).toBeDefined();
-      expect(firstMessage!.metadata).toEqual({
+      expect(firstMessage!.metadata).toMatchObject({
         source: 'web-ui',
         timestamp: expect.any(Number),
         customField: 'custom-value',
       });
 
       expect(secondMessage).toBeDefined();
-      expect(secondMessage!.metadata).toEqual({
+      expect(secondMessage!.metadata).toMatchObject({
         source: 'mobile-app',
         version: '1.0.0',
         userId: 'user-123',
@@ -332,13 +335,13 @@ describe('Agent Memory Tests', () => {
       const firstUIMessage = uiMessages.find((m: any) => m.content === 'Hello with metadata');
       const secondUIMessage = uiMessages.find((m: any) => m.content === 'Another message with different metadata');
 
-      expect(firstUIMessage?.metadata).toEqual({
+      expect(firstUIMessage?.metadata).toMatchObject({
         source: 'web-ui',
         timestamp: expect.any(Number),
         customField: 'custom-value',
       });
 
-      expect(secondUIMessage?.metadata).toEqual({
+      expect(secondUIMessage?.metadata).toMatchObject({
         source: 'mobile-app',
         version: '1.0.0',
         userId: 'user-123',

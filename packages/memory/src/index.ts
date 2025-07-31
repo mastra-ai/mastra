@@ -1,4 +1,4 @@
-import { generateEmptyFromSchema } from '@mastra/core';
+import { deepMerge, generateEmptyFromSchema } from '@mastra/core';
 import type { CoreTool, MastraMessageV1 } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
@@ -6,7 +6,7 @@ import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
 import { embedMany } from 'ai';
-import type { CoreMessage, TextPart } from 'ai';
+import type { CoreMessage, DeepPartial, TextPart } from 'ai';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 
@@ -236,7 +236,7 @@ export class Memory extends MastraMemory {
         last: threadConfig.lastMessages,
         vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
       },
-      threadConfig: config,
+      threadConfig,
       format: 'v2',
     });
     // Using MessageList here just to convert mixed input messages to single type output messages
@@ -573,46 +573,11 @@ export class Memory extends MastraMemory {
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    const result = this.storage.saveMessages({
-      messages: new MessageList().add(updatedMessages, 'memory').get.all.v2(),
-      format: 'v2',
-    });
-
     if (this.vector && config.semanticRecall) {
       let indexName: Promise<string>;
       await Promise.all(
         updatedMessages.map(async message => {
-          let textForEmbedding: string | null = null;
-
-          if (MessageList.isMastraMessageV2(message)) {
-            if (
-              message.content.content &&
-              typeof message.content.content === 'string' &&
-              message.content.content.trim() !== ''
-            ) {
-              textForEmbedding = message.content.content;
-            } else if (message.content.parts && message.content.parts.length > 0) {
-              // Extract text from all text parts, concatenate
-              const joined = message.content.parts
-                .filter(part => part.type === 'text')
-                .map(part => (part as TextPart).text)
-                .join(' ')
-                .trim();
-              if (joined) textForEmbedding = joined;
-            }
-          } else if (MessageList.isMastraMessageV1(message)) {
-            if (message.content && typeof message.content === 'string' && message.content.trim() !== '') {
-              textForEmbedding = message.content;
-            } else if (message.content && Array.isArray(message.content) && message.content.length > 0) {
-              // Extract text from all text parts, concatenate
-              const joined = message.content
-                .filter(part => part.type === 'text')
-                .map(part => part.text)
-                .join(' ')
-                .trim();
-              if (joined) textForEmbedding = joined;
-            }
-          }
+          const textForEmbedding: string | null = this.prepMessageForEmbedding(message);
 
           if (!textForEmbedding) return;
 
@@ -628,7 +593,7 @@ export class Memory extends MastraMemory {
             );
           }
 
-          await this.vector.upsert({
+          const vectorIds = await this.vector.upsert({
             indexName: await indexName,
             vectors: embeddings,
             metadata: chunks.map(() => ({
@@ -637,9 +602,22 @@ export class Memory extends MastraMemory {
               resource_id: message.resourceId,
             })),
           });
+
+          if (message.type === 'v2') {
+            if (!message.content.metadata) {
+              message.content.metadata = {};
+            }
+
+            message.content.metadata.vectorIds = vectorIds;
+          }
         }),
       );
     }
+
+    const result = this.storage.saveMessages({
+      messages: new MessageList().add(updatedMessages, 'memory').get.all.v2(),
+      format: 'v2',
+    });
 
     if (format === `v1`) return new MessageList().add(await result, 'memory').get.all.v1(); // for backwards compat convert to v1 message format
     return result;
@@ -969,13 +947,127 @@ ${
   public async updateMessages({
     messages,
   }: {
-    messages: Partial<MastraMessageV2> & { id: string }[];
+    messages: (DeepPartial<MastraMessageV2> & { id: string; threadId: string })[];
   }): Promise<MastraMessageV2[]> {
     if (messages.length === 0) return [];
 
+    const config = this.getMergedThreadConfig();
     // TODO: Possibly handle updating the vector db here when a message is updated.
+    try {
+      let updatedMessages = messages;
+      if (config.semanticRecall) {
+        // fetch vector IDs for all passed messages
+        const storedMessages: MastraMessageV2[] = (
+          await this.storage.getMessages({
+            format: 'v2',
+            threadId: '',
+            selectBy: {
+              include: [
+                ...messages.map(msg => ({
+                  id: msg.id,
+                  threadId: msg.threadId,
+                })),
+              ],
+            },
+          })
+        ).flat(1);
 
-    return this.storage.updateMessages({ messages });
+        const storedMessagesById = storedMessages.reduce(
+          (acc: Record<string, (typeof messages)[number]>, msg) => Object.assign(acc, { [msg.id]: msg }),
+          {},
+        );
+
+        // iterate over fetched messages to update embeddings
+        await Promise.all(
+          messages.map(async message => {
+            const storedMessage = storedMessagesById[message.id];
+            if (!storedMessage) {
+              throw new Error(`Message with id ${message.id} not retrieved from storage`);
+            }
+
+            if (!message.content) {
+              return;
+            }
+
+            const textForEmbedding = this.prepMessageForEmbedding(message as any); // TODO: improve `isMastraMessage` assertions or narrow message type first
+            if (!textForEmbedding) {
+              return;
+            }
+            const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
+            const indexName = await this.createEmbeddingIndex(dimension).then(result => result.indexName);
+            if (this.vector === undefined) {
+              throw new Error(
+                `Tried to update messages in index ${indexName} but this Memory instance doesn't have an attached vector db.`,
+              );
+            }
+
+            // delete preexisting vectors and upsert new ones, in case there's a different number of chunks
+            const vectorIds = storedMessage.content?.metadata?.vectorIds;
+            if (Array.isArray(vectorIds)) {
+              await Promise.all(vectorIds.map(id => this.vector?.deleteVector({ indexName, id })));
+            }
+
+            if (!message.content.metadata) {
+              message.content.metadata = {};
+            }
+
+            message.content.metadata.vectorIds = await this.vector.upsert({
+              indexName,
+              vectors: embeddings,
+              metadata: chunks.map(() => ({
+                message_id: message.id,
+                thread_id: message.threadId,
+                resource_id: storedMessage.resourceId,
+              })),
+            });
+          }),
+        );
+
+        updatedMessages = messages.map(message => deepMerge(storedMessagesById[message.id]!, message));
+      }
+
+      const updateResult = await this.storage.updateMessages({ messages: updatedMessages });
+      return updateResult;
+    } catch (error) {
+      this.logger.error(error instanceof Error ? error.stack || error.message : JSON.stringify(error));
+      throw error;
+    }
+  }
+
+  protected prepMessageForEmbedding(message: MastraMessageV1 | MastraMessageV2): string | null {
+    let textForEmbedding: string | null = null;
+
+    if (MessageList.isMastraMessageV2(message)) {
+      if (
+        message.content.content &&
+        typeof message.content.content === 'string' &&
+        message.content.content.trim() !== ''
+      ) {
+        textForEmbedding = message.content.content;
+      } else if (message.content.parts && message.content.parts.length > 0) {
+        // Extract text from all text parts, concatenate
+        const joined = message.content.parts
+          .filter(part => part.type === 'text')
+          .map(part => (part as TextPart).text)
+          .join(' ')
+          .trim();
+        if (joined) textForEmbedding = joined;
+      }
+    } else if (MessageList.isMastraMessageV1(message)) {
+      if (message.content && typeof message.content === 'string' && message.content.trim() !== '') {
+        textForEmbedding = message.content;
+      } else if (message.content && Array.isArray(message.content) && message.content.length > 0) {
+        // Extract text from all text parts, concatenate
+        const joined = message.content
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join(' ')
+          .trim();
+        if (joined) textForEmbedding = joined;
+      }
+    }
+
+    return textForEmbedding;
   }
 
   /**

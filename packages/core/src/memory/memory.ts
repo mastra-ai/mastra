@@ -1,4 +1,4 @@
-import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
+import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel, DeepPartial } from 'ai';
 
 import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
@@ -479,6 +479,17 @@ export abstract class MastraMemory extends MastraBase {
     searchString?: string;
     memoryConfig?: MemoryConfig;
   }): Promise<{ success: boolean; reason: string }>;
+
+  /**
+   * Updates the metadata of a list of messages
+   * @param messages - The list of messages to update
+   * @returns The list of updated messages
+   */
+  abstract updateMessages({
+    messages,
+  }: {
+    messages: (DeepPartial<MastraMessageV2> & { id: string; threadId: string })[];
+  }): Promise<MastraMessageV2[]>;
 
   /**
    * Deletes multiple messages by their IDs
