@@ -27,6 +27,7 @@ import type {
   StorageGetTracesPaginatedArg,
   StoragePagination,
   StorageResourceType,
+  ThreadSortOptions,
   WorkflowRun,
   WorkflowRuns,
 } from './types';
@@ -77,6 +78,16 @@ export class InMemoryStore extends MastraStorage {
       traces: tracesStorage,
       scores: scoresStorage,
       memory: memoryStorage,
+    };
+  }
+
+  public get supports() {
+    return {
+      selectByIncludeResourceScope: false,
+      resourceWorkingMemory: false,
+      hasColumn: false,
+      createTable: false,
+      deleteMessages: true,
     };
   }
 
@@ -148,8 +159,12 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.getThreadById({ threadId });
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    return this.stores.memory.getThreadsByResourceId({ resourceId });
+  async getThreadsByResourceId({
+    resourceId,
+    orderBy,
+    sortDirection,
+  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
+    return this.stores.memory.getThreadsByResourceId({ resourceId, orderBy, sortDirection });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
@@ -217,11 +232,17 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.updateMessages(args);
   }
 
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
+  }
+
+  async getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     return this.stores.memory.getThreadsByResourceIdPaginated(args);
   }
 

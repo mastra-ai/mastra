@@ -9,7 +9,12 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
-import type { StorageGetMessagesArg, PaginationInfo, StorageResourceType } from '@mastra/core/storage';
+import type {
+  StorageGetMessagesArg,
+  PaginationInfo,
+  StorageResourceType,
+  ThreadSortOptions,
+} from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName, getSchemaName } from '../utils';
@@ -73,15 +78,17 @@ export class MemoryPG extends MemoryStorage {
   /**
    * @deprecated use getThreadsByResourceIdPaginated instead
    */
-  public async getThreadsByResourceId(args: { resourceId: string }): Promise<StorageThreadType[]> {
-    const { resourceId } = args;
+  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
+    const resourceId = args.resourceId;
+    const orderBy = this.castThreadOrderBy(args.orderBy);
+    const sortDirection = this.castThreadSortDirection(args.sortDirection);
 
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
       const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;
       const queryParams: any[] = [resourceId];
 
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "createdAt" DESC`;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${orderBy}" ${sortDirection}`;
       const rows = await this.client.manyOrNone(dataQuery, queryParams);
       return (rows || []).map(thread => ({
         ...thread,
@@ -95,12 +102,16 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  public async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  public async getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+      page: number;
+      perPage: number;
+    } & ThreadSortOptions,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
     const { resourceId, page = 0, perPage: perPageInput } = args;
+    const orderBy = this.castThreadOrderBy(args.orderBy);
+    const sortDirection = this.castThreadSortDirection(args.sortDirection);
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
       const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;
@@ -122,7 +133,7 @@ export class MemoryPG extends MemoryStorage {
         };
       }
 
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "createdAt" DESC LIMIT $2 OFFSET $3`;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${orderBy}" ${sortDirection} LIMIT $2 OFFSET $3`;
       const rows = await this.client.manyOrNone(dataQuery, [...queryParams, perPage, currentOffset]);
 
       const threads = (rows || []).map(thread => ({
@@ -799,6 +810,51 @@ export class MemoryPG extends MemoryStorage {
       }
       return message;
     });
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
+    try {
+      const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+      const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+
+      await this.client.tx(async t => {
+        // Get thread IDs for all messages
+        const placeholders = messageIds.map((_, idx) => `$${idx + 1}`).join(',');
+        const messages = await t.manyOrNone(
+          `SELECT DISTINCT thread_id FROM ${messageTableName} WHERE id IN (${placeholders})`,
+          messageIds,
+        );
+
+        const threadIds = messages?.map(msg => msg.thread_id).filter(Boolean) || [];
+
+        // Delete all messages
+        await t.none(`DELETE FROM ${messageTableName} WHERE id IN (${placeholders})`, messageIds);
+
+        // Update thread timestamps
+        if (threadIds.length > 0) {
+          const updatePromises = threadIds.map(threadId =>
+            t.none(`UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $1`, [threadId]),
+          );
+          await Promise.all(updatePromises);
+        }
+      });
+
+      // TODO: Delete from vector store if semantic recall is enabled
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'PG_STORE_DELETE_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: messageIds.join(', ') },
+        },
+        error,
+      );
+    }
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

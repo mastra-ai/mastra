@@ -5,6 +5,7 @@ import nodeResolve from '@rollup/plugin-node-resolve';
 import { fileURLToPath } from 'node:url';
 import { rollup, type InputOptions, type OutputOptions } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
+import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 
 import type { analyzeBundle } from './analyze';
 import { removeDeployer } from './plugins/remove-deployer';
@@ -15,6 +16,7 @@ export async function getInputOptions(
   analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
   platform: 'node' | 'browser',
   env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
+  { sourcemap = false }: { sourcemap?: boolean } = {},
 ): Promise<InputOptions> {
   let nodeResolvePlugin =
     platform === 'node'
@@ -28,7 +30,6 @@ export async function getInputOptions(
         });
 
   const externalsCopy = new Set<string>();
-  debugger;
   // make all nested imports external from the same package
   for (const external of analyzedBundleInfo.externalDependencies) {
     if (external.startsWith('@')) {
@@ -93,6 +94,7 @@ export async function getInputOptions(
           { find: /^\#mastra$/, replacement: normalizedEntryFile },
         ],
       }),
+      optimizeLodashImports(),
       {
         name: 'tools-rewriter',
         resolveId(id: string) {
@@ -133,7 +135,7 @@ export async function getInputOptions(
       // },
       // },
       json(),
-      removeDeployer(entryFile),
+      removeDeployer(entryFile, { sourcemap }),
       // treeshake unused imports
       esbuild({
         include: entryFile,
