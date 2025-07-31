@@ -10,9 +10,9 @@ import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
+import dotenv from 'dotenv';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import dotenv from 'dotenv';
 import { memoryProcessorAgent, weatherAgent } from './mastra/agents/weather';
 import { weatherTool, weatherToolCity } from './mastra/tools/weather';
 

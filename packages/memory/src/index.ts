@@ -2,6 +2,7 @@ import { deepMerge, generateEmptyFromSchema } from '@mastra/core';
 import type { CoreTool, MastraMessageV1 } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
+import type { MessageInput } from '@mastra/core/agent/message-list';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
 import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
@@ -15,6 +16,26 @@ import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
+
+/**
+ * Makes all properties on T optional except the ones specified, which become required
+ */
+type RequireOnly<T, K extends keyof T> = DeepPartial<T> & Required<Pick<T, K>>;
+
+/**
+ * Provides clearer type hints for the passed type
+ */
+type Resolve<T> = T extends Function ? T : { [K in keyof T]: T[K] };
+
+// export type MessageV1Update = Resolve<RequireOnly<MastraMessageV1, 'id' | 'threadId' | 'content'>>;
+
+export type MessageV2Update = Resolve<
+  RequireOnly<MastraMessageV2, 'id' | 'threadId'> & { content: RequireOnly<MastraMessageV2['content'], 'format'> }
+>;
+
+export type UpdateMessagesInput = {
+  messages: MessageV2Update[];
+};
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];
@@ -944,11 +965,7 @@ ${
    * @param messages - The list of messages to update
    * @returns The list of updated messages
    */
-  public async updateMessages({
-    messages,
-  }: {
-    messages: (DeepPartial<MastraMessageV2> & { id: string; threadId: string })[];
-  }): Promise<MastraMessageV2[]> {
+  public async updateMessages({ messages }: UpdateMessagesInput): Promise<MastraMessageV2[]> {
     if (messages.length === 0) return [];
 
     const config = this.getMergedThreadConfig();
@@ -989,7 +1006,8 @@ ${
               return;
             }
 
-            const textForEmbedding = this.prepMessageForEmbedding(message as any); // TODO: improve `isMastraMessage` assertions or narrow message type first
+            // TODO: widen input type for `isMastraMessageV1/V2` assertions or narrow message type first
+            const textForEmbedding = this.prepMessageForEmbedding(message as any);
             if (!textForEmbedding) {
               return;
             }
@@ -1034,7 +1052,7 @@ ${
     }
   }
 
-  protected prepMessageForEmbedding(message: MastraMessageV1 | MastraMessageV2): string | null {
+  protected prepMessageForEmbedding(message: MessageInput): string | null {
     let textForEmbedding: string | null = null;
 
     if (MessageList.isMastraMessageV2(message)) {
