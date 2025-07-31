@@ -12,6 +12,7 @@ import {
   createComponentsDir,
   createMastraDir,
   getAISDKPackage,
+  getAISDKPackageVersion,
   getAPIKey,
   writeAPIKey,
   writeCodeSample,
@@ -88,10 +89,11 @@ export const init = async ({
     const key = await getAPIKey(llmProvider || 'openai');
 
     const aiSdkPackage = getAISDKPackage(llmProvider);
+    const aiSdkPackageVersion = getAISDKPackageVersion(llmProvider);
     const depsService = new DepsService();
     const pm = depsService.packageManager;
     const installCommand = getPackageManagerInstallCommand(pm);
-    await exec(`${pm} ${installCommand} ${aiSdkPackage}`);
+    await exec(`${pm} ${installCommand} ${aiSdkPackage}@${aiSdkPackageVersion}`);
 
     if (configureEditorWithDocsMCP) {
       await installMastraDocsMCPServer({
