@@ -197,6 +197,12 @@ const response = await agent.generate("instructions for LLM", {
       type: "boolean",
       isOptional: true,
       description: "Save messages incrementally after each stream step completes (default: false).",
+    },
+    {
+      name: "providerOptions",
+      type: "LanguageModelV1ProviderMetadata",
+      isOptional: true,
+      description: "Additional provider-specific options that are passed through to the underlying LLM provider. Enables provider-specific functionality that can be fully encapsulated in the provider.",
     }
   ]}
 />
