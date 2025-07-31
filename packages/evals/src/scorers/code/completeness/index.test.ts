@@ -14,10 +14,12 @@ describe('CompletenessMetric', () => {
     it('should return high score for identical text', async () => {
       const text = 'The quick brown fox jumps over the lazy dog';
       const run = createTestRun(text, text);
+      console.log(`scorer`, scorer);
       const result = await scorer.run(run);
 
+      console.log(result);
       expect(result.score).toBeCloseTo(1.0);
-      expect(result.extractStepResult?.elementCounts).toBeDefined();
+      expect(result.preprocessStepResult?.elementCounts).toBeDefined();
     });
 
     it('should return lower score for simplified text missing elements', async () => {
@@ -27,8 +29,9 @@ describe('CompletenessMetric', () => {
 
       expect(result.score).toBeLessThan(1.0);
       expect(result.score).toBeGreaterThan(0.5);
-      expect(result.extractStepResult?.missingElements).toContain('brown');
-      expect(result.extractStepResult?.missingElements).toContain('lazy');
+
+      expect(result.preprocessStepResult?.missingElements).toContain('brown');
+      expect(result.preprocessStepResult?.missingElements).toContain('lazy');
     });
 
     it('should handle completely different texts', async () => {
@@ -37,7 +40,7 @@ describe('CompletenessMetric', () => {
       const result = await scorer.run(createTestRun(original, simplified));
 
       expect(result.score).toBeLessThan(0.3);
-      const { input, output } = result.extractStepResult?.elementCounts as { input: number; output: number };
+      const { input, output } = result.preprocessStepResult?.elementCounts as { input: number; output: number };
       expect(input).toBeGreaterThan(0);
       expect(output).toBeGreaterThan(0);
     });
@@ -47,7 +50,7 @@ describe('CompletenessMetric', () => {
     it('should handle both empty strings', async () => {
       const result = await scorer.run(createTestRun('', ''));
       expect(result.score).toBe(1);
-      const { input, output } = result.extractStepResult?.elementCounts as { input: number; output: number };
+      const { input, output } = result.preprocessStepResult?.elementCounts as { input: number; output: number };
       expect(input).toBe(0);
       expect(output).toBe(0);
     });
@@ -60,7 +63,7 @@ describe('CompletenessMetric', () => {
     it('should handle whitespace-only strings', async () => {
       const result = await scorer.run(createTestRun('   \n  ', '  \n  '));
       expect(result.score).toBe(1);
-      const { input, output } = result.extractStepResult?.elementCounts as { input: number; output: number };
+      const { input, output } = result.preprocessStepResult?.elementCounts as { input: number; output: number };
       expect(input).toBe(0);
       expect(output).toBe(0);
     });
@@ -77,7 +80,7 @@ describe('CompletenessMetric', () => {
     it('should handle lists and enumerations', async () => {
       const result = await scorer.run(createTestRun('apples, oranges, and bananas', 'apples and bananas'));
       expect(result.score).toBeLessThan(0.8);
-      expect(result.extractStepResult?.missingElements).toContain('oranges');
+      expect(result.preprocessStepResult?.missingElements).toContain('oranges');
     });
 
     it('should handle repeated elements', async () => {
@@ -94,7 +97,7 @@ describe('CompletenessMetric', () => {
       const result = await scorer.run(createTestRun(original, simplified));
 
       expect(result.score).toBeGreaterThan(0.5);
-      expect(result.extractStepResult?.missingElements).toBeDefined();
+      expect(result.preprocessStepResult?.missingElements).toBeDefined();
     });
   });
 });

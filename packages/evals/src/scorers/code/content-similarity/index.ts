@@ -13,8 +13,9 @@ export function createContentSimilarityScorer(
     name: 'Completeness',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
-    extract: async run => {
-      let processedInput = run.input?.map(i => i.content).join(', ') || '';
+  })
+    .preprocess(async ({ run }) => {
+      let processedInput = run.input?.map((i: { content: string }) => i.content).join(', ') || '';
       let processedOutput = run.output.text;
 
       if (ignoreCase) {
@@ -28,24 +29,16 @@ export function createContentSimilarityScorer(
       }
 
       return {
-        result: {
-          processedInput,
-          processedOutput,
-        },
+        processedInput,
+        processedOutput,
       };
-    },
-    analyze: async run => {
+    })
+    .generateScore(({ results }) => {
       const similarity = stringSimilarity.compareTwoStrings(
-        run.extractStepResult?.processedInput,
-        run.extractStepResult?.processedOutput,
+        results.preprocessStepResult?.processedInput,
+        results.preprocessStepResult?.processedOutput,
       );
 
-      return {
-        score: similarity,
-        result: {
-          similarity,
-        },
-      };
-    },
-  });
+      return similarity;
+    });
 }

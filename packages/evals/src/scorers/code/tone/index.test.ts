@@ -12,12 +12,8 @@ describe('ToneConsistencyMetric', () => {
         createTestRun('I love this amazing product!', 'This product is wonderful and fantastic!'),
       );
 
-      const metrics = result.analyzeStepResult as {
-        responseSentiment: number;
-        referenceSentiment: number;
-        difference: number;
-      };
-
+      console.log(result);
+      const metrics = result.preprocessStepResult;
       expect(result.score).toBeGreaterThan(0.9);
       expect(metrics.responseSentiment).toBeGreaterThan(0);
       expect(metrics.referenceSentiment).toBeGreaterThan(0);
@@ -28,11 +24,7 @@ describe('ToneConsistencyMetric', () => {
       const result = await scorer.run(
         createTestRun('This is terrible and disappointing.', 'This is excellent and amazing!'),
       );
-      const metrics = result.analyzeStepResult as {
-        responseSentiment: number;
-        referenceSentiment: number;
-        difference: number;
-      };
+      const metrics = result.preprocessStepResult;
       expect(result.score).toBeLessThan(0.5);
       expect(metrics.responseSentiment).toBeLessThan(0);
       expect(metrics.referenceSentiment).toBeGreaterThan(0);
@@ -43,11 +35,7 @@ describe('ToneConsistencyMetric', () => {
       const result = await scorer.run(
         createTestRun('The sky is blue. The grass is green.', 'Trees are tall. Water is wet.'),
       );
-      const metrics = result.analyzeStepResult as {
-        responseSentiment: number;
-        referenceSentiment: number;
-        difference: number;
-      };
+      const metrics = result.preprocessStepResult;
       expect(result.score).toBeGreaterThan(0.9);
       expect(Math.abs(metrics.responseSentiment)).toBeLessThan(0.2);
       expect(Math.abs(metrics.referenceSentiment)).toBeLessThan(0.2);
@@ -61,11 +49,7 @@ describe('ToneConsistencyMetric', () => {
           'While the interface is beautiful, performance is poor.',
         ),
       );
-      const metrics = result.analyzeStepResult as {
-        responseSentiment: number;
-        referenceSentiment: number;
-        difference: number;
-      };
+      const metrics = result.preprocessStepResult;
       expect(result.score).toBeGreaterThan(0.7);
       expect(Math.abs(metrics.difference)).toBeLessThan(0.3);
     });
@@ -76,7 +60,7 @@ describe('ToneConsistencyMetric', () => {
       const result = await scorer.run(
         createTestRun('I love this product! It works amazingly well. The features are fantastic.', ''),
       );
-      const metrics = result.analyzeStepResult as { avgSentiment: number; sentimentVariance: number };
+      const metrics = result.preprocessStepResult;
       expect(result.score).toBeGreaterThan(0.8);
       expect(metrics.avgSentiment).toBeGreaterThan(0);
       expect(metrics.sentimentVariance).toBeLessThan(0.2);
@@ -86,7 +70,7 @@ describe('ToneConsistencyMetric', () => {
       const result = await scorer.run(
         createTestRun('This is terrible. It never works properly. The support is awful.', ''),
       );
-      const metrics = result.analyzeStepResult as { avgSentiment: number; sentimentVariance: number };
+      const metrics = result.preprocessStepResult;
       expect(result.score).toBeGreaterThan(0.8);
       expect(metrics.avgSentiment).toBeLessThan(0);
       expect(metrics.sentimentVariance).toBeLessThan(0.2);
@@ -99,21 +83,21 @@ describe('ToneConsistencyMetric', () => {
           '',
         ),
       );
-      const metrics = result.analyzeStepResult as { avgSentiment: number; sentimentVariance: number };
+      const metrics = result.preprocessStepResult;
       expect(result.score).toBeLessThan(0.7);
       expect(metrics.sentimentVariance).toBeGreaterThan(0.2);
     });
 
     it('should handle single sentence', async () => {
       const result = await scorer.run(createTestRun('This is a great product.', ''));
-      const metrics = result.analyzeStepResult as { avgSentiment: number; sentimentVariance: number };
+      const metrics = result.preprocessStepResult;
       expect(result.score).toBe(1);
       expect(metrics.sentimentVariance).toBe(0);
     });
 
     it('should handle empty input', async () => {
       const result = await scorer.run(createTestRun('', ''));
-      const metrics = result.analyzeStepResult as { avgSentiment: number; sentimentVariance: number };
+      const metrics = result.preprocessStepResult;
       expect(result.score).toBe(1);
       expect(metrics.avgSentiment).toBe(0);
       expect(metrics.sentimentVariance).toBe(0);
@@ -121,7 +105,7 @@ describe('ToneConsistencyMetric', () => {
 
     it('should handle neutral consistent tone', async () => {
       const result = await scorer.run(createTestRun('The sky is blue. The grass is green. The tree is tall.', ''));
-      const metrics = result.analyzeStepResult as { avgSentiment: number; sentimentVariance: number };
+      const metrics = result.preprocessStepResult;
       expect(result.score).toBeGreaterThan(0.9);
       expect(Math.abs(metrics.avgSentiment)).toBeLessThan(0.2);
       expect(metrics.sentimentVariance).toBeLessThan(0.1);

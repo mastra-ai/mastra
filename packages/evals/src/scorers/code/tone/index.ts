@@ -6,9 +6,10 @@ export function createToneScorer() {
     name: 'Completeness',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
-    analyze: async run => {
+  })
+    .preprocess(async ({ run }) => {
       const sentiment = new Sentiment();
-      const input = run.input?.map(i => i.content).join(', ') || '';
+      const input: string = run.input?.map((i: { content: string }) => i.content).join(', ') || '';
       const output = run.output.text;
       const responseSentiment = sentiment.analyze(input);
 
@@ -20,11 +21,9 @@ export function createToneScorer() {
 
         return {
           score: normalizedScore,
-          result: {
-            responseSentiment: responseSentiment.comparative,
-            referenceSentiment: referenceSentiment.comparative,
-            difference: sentimentDiff,
-          },
+          responseSentiment: responseSentiment.comparative,
+          referenceSentiment: referenceSentiment.comparative,
+          difference: sentimentDiff,
         };
       }
 
@@ -37,11 +36,11 @@ export function createToneScorer() {
 
       return {
         score: stability,
-        result: {
-          avgSentiment,
-          sentimentVariance: variance,
-        },
+        avgSentiment,
+        sentimentVariance: variance,
       };
-    },
-  });
+    })
+    .generateScore(({ results }) => {
+      return results.preprocessStepResult?.score;
+    });
 }
