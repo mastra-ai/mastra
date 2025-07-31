@@ -19,7 +19,7 @@ const response = await agent.stream("instructions for LLM");
   content={[
     {
       name: "messages",
-      type: "string | string[] | CoreMessage[] | Message[]",
+      type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
       description: "The messages to send to the agent. Can be a single string, array of strings, or structured message objects.",
     },
     {

@@ -19,8 +19,8 @@ const response = await agent.generate("instructions for LLM");
   content={[
     {
       name: "messages",
-      type: "string | string[] | CoreMessage[] | Message[]",
-      description: "The messages to send to the agent. Can be a single string, array of strings, or structured message objects.",
+      type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
+      description: "The messages to send to the agent. Can be a single string, array of strings, or structured message objects with multimodal content (text, images, etc.).",
     },
     {
       name: "options",
@@ -41,7 +41,12 @@ const response = await agent.generate("instructions for LLM", {
     thread: "user-123",
     resource: "test-app"
   },
-  toolChoice: "auto"
+  toolChoice: "auto",
+  providerOptions: {
+    openai: {
+      reasoningEffort: "high"
+    }
+  }
 });
 ```
 
