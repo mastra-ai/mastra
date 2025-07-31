@@ -15,21 +15,21 @@ Additionally, agents support dynamic configuration, allowing you to change their
 
 To create an agent in Mastra, you use the `Agent` class and define its properties:
 
-```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
-import { Agent } from "@mastra/core/agent";
+```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 
-export const myAgent = new Agent({
-  name: "My Agent",
+const testAgent = new Agent({
+  name: "test-agent",
   instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o-mini"),
+  model: openai("gpt-4o")
 });
 ```
 
 **Note:** Ensure that you have set the necessary environment variables, such as your OpenAI API key, in your `.env` file:
 
-```.env filename=".env" copy
-OPENAI_API_KEY=your_openai_api_key
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
 ```
 
 Also, make sure you have the `@mastra/core` package installed:
@@ -44,12 +44,13 @@ All agent properties (instructions, model, tools, memory) can be configured dyna
 
 Register your agent with Mastra to enable logging and access to configured tools and integrations:
 
-```ts showLineNumbers filename="src/mastra/index.ts" copy
+```typescript showLineNumbers filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
-import { myAgent } from "./agents";
+import { testAgent } from './agents/test-agent';
 
 export const mastra = new Mastra({
-  agents: { myAgent },
+  // ...
+  agents: { testAgent },
 });
 ```
 
@@ -59,8 +60,8 @@ export const mastra = new Mastra({
 
 Use the `.generate()` method to have your agent produce text responses:
 
-```ts showLineNumbers filename="src/mastra/index.ts" copy
-const response = await myAgent.generate([
+```typescript showLineNumbers copy
+const response = await testAgent.generate([
   { role: "user", content: "Hello, how can you assist me today?" },
 ]);
 
@@ -73,8 +74,8 @@ For more details about the generate method and its options, see the [generate re
 
 For more real-time responses, you can stream the agent's response:
 
-```ts showLineNumbers filename="src/mastra/index.ts" copy
-const stream = await myAgent.stream([
+```typescript showLineNumbers copy
+const stream = await testAgent.stream([
   { role: "user", content: "Tell me a story." },
 ]);
 
@@ -87,13 +88,35 @@ for await (const chunk of stream.textStream) {
 
 For more details about streaming responses, see the [stream reference documentation](/reference/agents/stream).
 
-## 3. Structured Output
+## 3. Describing images
+
+Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the content array. You can combine image content with text prompts to guide the agent's analysis.
+
+```typescript showLineNumbers copy
+await testAgent.generate([
+  {
+    role: 'user',
+    content: [
+      {
+        type: 'image',
+        image: "https://example.com/images/test-image.jpg",
+      },
+      {
+        type: 'text',
+        text: 'Describe the image in detail, and extract all the text in the image.',
+      },
+    ],
+  },
+]);
+```
+
+## 4. Structured Output
 
 Agents can return structured data by providing a JSON Schema or using a Zod schema.
 
 ### Using JSON Schema
 
-```typescript
+```typescript showLineNumbers copy
 const schema = {
   type: "object",
   properties: {
@@ -104,7 +127,7 @@ const schema = {
   required: ["summary", "keywords"],
 };
 
-const response = await myAgent.generate(
+const response = await testAgent.generate(
   [
     {
       role: "user",
@@ -132,7 +155,7 @@ npm install zod
 
 Then, define a Zod schema and use it with the agent:
 
-```ts showLineNumbers filename="src/mastra/index.ts" copy
+```typescript showLineNumbers copy
 import { z } from "zod";
 
 // Define the Zod schema
@@ -142,7 +165,7 @@ const schema = z.object({
 });
 
 // Use the schema with the agent
-const response = await myAgent.generate(
+const response = await testAgent.generate(
   [
     {
       role: "user",
@@ -162,13 +185,13 @@ console.log("Structured Output:", response.object);
 
 If you need to generate structured output alongside tool calls, you'll need to use the `experimental_output` property instead of `output`. Here's how:
 
-```typescript
+```typescript showLineNumbers copy
 const schema = z.object({
   summary: z.string(),
   keywords: z.array(z.string()),
 });
 
-const response = await myAgent.generate(
+const response = await testAgent.generate(
   [
     {
       role: "user",
@@ -189,7 +212,7 @@ console.log("Structured Output:", response.object);
 
 This allows you to have strong typing and validation for the structured data returned by the agent.
 
-## 4. Multi-step tool use
+## 5. Multi-step tool use
 
 Agents can be enhanced with tools - functions that extend their capabilities beyond text generation. Tools allow agents to perform calculations, access external systems, and process data. Agents not only decide whether to call tools they're given, they determine the parameters that should be given to that tool.
 
@@ -199,26 +222,8 @@ For a detailed guide to creating and configuring tools, see the [Adding Tools do
 
 The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make, particularly important when using tool calls. By default, it is set to 1 to prevent infinite loops in case of misconfigured tools. You can increase this limit based on your use case:
 
-```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import * as mathjs from "mathjs";
-import { z } from "zod";
-
-export const myAgent = new Agent({
-  name: "My Agent",
-  instructions: "You are a helpful assistant that can solve math problems.",
-  model: openai("gpt-4o-mini"),
-  tools: {
-    calculate: {
-      description: "Calculator for mathematical expressions",
-      schema: z.object({ expression: z.string() }),
-      execute: async ({ expression }) => mathjs.evaluate(expression),
-    },
-  },
-});
-
-const response = await myAgent.generate(
+```typescript showLineNumbers copy
+const response = await testAgent.generate(
   [
     {
       role: "user",
@@ -238,8 +243,8 @@ You can monitor the progress of multi-step operations using the `onStepFinish` c
 
 `onStepFinish` is only available when streaming or generating text without structured output.
 
-```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
-const response = await myAgent.generate(
+```typescript showLineNumbers copy
+const response = await testAgent.generate(
   [{ role: "user", content: "Calculate the taxi driver's daily earnings." }],
   {
     maxSteps: 5,
@@ -255,8 +260,8 @@ const response = await myAgent.generate(
 The `onFinish` callback is available when streaming responses and provides detailed information about the completed interaction. It is called after the LLM has finished generating its response and all tool executions have completed.
 This callback receives the final response text, execution steps, token usage statistics, and other metadata that can be useful for monitoring and logging:
 
-```ts showLineNumbers filename="src/mastra/agents/index.ts" copy
-const stream = await myAgent.stream(
+```typescript showLineNumbers copy
+const stream = await testAgent.stream(
   [{ role: "user", content: "Calculate the taxi driver's daily earnings." }],
   {
     maxSteps: 5,
@@ -277,7 +282,7 @@ const stream = await myAgent.stream(
 );
 ```
 
-## 5. Testing agents locally
+## 6. Testing agents locally
 
 Mastra provides a CLI command `mastra dev` to run your agents behind an API. By default, this looks for exported agents in files in the `src/mastra/agents` directory. It generates endpoints for testing your agent (eg `http://localhost:4111/api/agents/myAgent/generate`) and provides a visual playground where you can chat with an agent and view traces.
 
