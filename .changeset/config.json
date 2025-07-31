@@ -3,7 +3,7 @@
   "changelog": "@changesets/cli/changelog",
   "commit": false,
   "fixed": [["@mastra/core", "@mastra/server", "@mastra/deployer"]],
-  "linked": [],
+  "linked": [["mastra", "create-mastra"]],
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
