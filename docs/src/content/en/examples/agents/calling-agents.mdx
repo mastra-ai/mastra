@@ -1,0 +1,161 @@
+---
+title: "Calling Agents | Agents | Mastra Docs"
+description: Example for how to call agents.
+---
+
+# Calling Agents
+
+There are multiple ways to interact with agents created using Mastra. Below you will find examples of how to call agents using workflow steps, tools, the Mastra Client SDK, and command line approaches for quick local testing.
+
+## Creating an agent
+
+Create a simple agent that returns facts about a city.
+
+```typescript filename="src/mastra/agents/example-city-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const cityAgent = new Agent({
+  name: "city-agent",
+  description: "Create facts for a city",
+  instructions:
+    "You are an expert in geography and travel. When given the name of a city, respond with one interesting, lesser-known fact about that city. Keep the response concise and factual.",
+  model: openai("gpt-4o")
+});
+```
+
+> See [Agent](../../reference/agents/agent.mdx) for a full list of configuration options.
+
+## Call from a workflow step
+
+The `mastra` instance is passed as an argument to a workflow step’s `execute` function. It provides access to registered agents using `getAgent()`. Use this method to retrieve your agent, then call `generate()` with a prompt.
+
+```typescript filename="src/mastra/workflows/example-calling-agents-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  id: "step-1",
+  description: "passes city name to agent",
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  }),
+  execute: async ({ inputData, mastra }) => {
+    const { city } = inputData;
+
+    const agent = mastra.getAgent("cityAgent");
+    const response = await agent.generate(`Tell me an interesting fact about ${city}`);
+
+    return {
+      output: response.text
+    };
+  }
+});
+
+export const callingAgentsWorkflow = createWorkflow({
+  id: "calling-agents-workflow",
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  })
+})
+  .then(step1)
+  .commit();
+```
+
+## Call from a tool
+
+The `mastra` instance is available within a tool’s `execute` function. Use `getAgent()` to retrieve a registered agent and call `generate()` with a prompt.
+
+```typescript filename="src/mastra/tools/example-calling-agents-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const callingAgentsTool = createTool({
+  id: "calling-agents-tool",
+  description: "Get current weather for a location",
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  }),
+
+  execute: async ({ context, mastra }) => {
+    const { city } = context;
+
+    const agent = mastra?.getAgent("cityAgent");
+    const response = await agent?.generate(`Tell me an interesting fact about ${city}`);
+
+    return {
+      output: response!.text
+    };
+  }
+});
+```
+
+## Call from Mastra Client
+
+The `mastraClient` instance provides access to registered agents. Use `getAgent()` to retrieve an agent and call `generate()` with an object containing a `messages` array of role/content pairs.
+
+```typescript showLineNumbers copy
+import { mastraClient } from "../lib/mastra-client";
+
+const agent = mastraClient.getAgent("cityAgent");
+const response = await agent.generate({
+  messages: [
+    {
+      role: "user",
+      content: "Tell me an interesting fact about London"
+    }
+  ]
+});
+
+console.log(response.text);
+```
+
+> See [Mastra Client SDK](../../docs/server-db/mastra-client.mdx) for more information.
+
+## Call from the command line
+
+You can create a simple script to test your agent locally. The `mastra` instance provides access to registered agents using `getAgent()`.
+
+```typescript filename="src/test-city-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("cityAgent");
+
+const response = await agent.generate("Tell me an interesting fact about London");
+
+console.log(response.text);
+```
+
+Call this script from your command line using:
+
+```bash
+npx tsx src/test-city-agent.ts
+```
+
+## Call using curl
+
+You can interact with a registered agent by sending a `POST` request to your Mastra application's `/generate` endpoint. Include a `messages` array of role/content pairs.
+
+```bash
+curl -X POST http://localhost:4111/api/agents/cityAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "Tell me an interesting fact about London"
+      }
+    ]
+  }'| jq -r '.text'
+```
