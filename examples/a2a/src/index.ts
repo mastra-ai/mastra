@@ -107,8 +107,8 @@ async function main() {
     }
 
     const researchResult =
-      researchResponse.result.status.message?.parts[0]?.kind === 'text'
-        ? researchResponse.result.status.message.parts[0].text
+      researchResponse.result.status.message?.parts?.[0]?.kind === 'text'
+        ? researchResponse.result.status.message.parts?.[0]?.text
         : '';
     console.log('\nResearch Results:');
     console.log(researchResult.substring(0, 150) + '...');
