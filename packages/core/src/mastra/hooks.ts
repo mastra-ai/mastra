@@ -51,7 +51,7 @@ export function createOnScorerHook(mastra: Mastra) {
       output,
     });
 
-    const { structuredOutput, ...rest } = hookData;
+    const { structuredOutput, ...rest } = hookData as any; // temporary fix;
     await storage?.saveScore({
       ...rest,
       ...score,

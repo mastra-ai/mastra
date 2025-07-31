@@ -1,10 +1,10 @@
 import { MockLanguageModelV1 } from 'ai/test';
 import z from 'zod';
-import { createNewScorer } from './scorer';
+import { createScorer } from './base';
 
 // Function-based scorer builders
 export const FunctionBasedScorerBuilders = {
-  basic: createNewScorer({
+  basic: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   }).generateScore(({ run }) => {
@@ -14,7 +14,7 @@ export const FunctionBasedScorerBuilders = {
     return 0;
   }),
 
-  withPreprocess: createNewScorer({
+  withPreprocess: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -34,7 +34,7 @@ export const FunctionBasedScorerBuilders = {
       return 0;
     }),
 
-  withPreprocessAndAnalyze: createNewScorer({
+  withPreprocessAndAnalyze: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -60,7 +60,7 @@ export const FunctionBasedScorerBuilders = {
       return 0;
     }),
 
-  withPreprocessAndAnalyzeAndReason: createNewScorer({
+  withPreprocessAndAnalyzeAndReason: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -89,7 +89,7 @@ export const FunctionBasedScorerBuilders = {
       return `the reason the score is ${score} is because the input is ${results.analyzeStepResult?.inputFromAnalyze} and the output is ${results.analyzeStepResult?.outputFromAnalyze}`;
     }),
 
-  withPreprocessAndReason: createNewScorer({
+  withPreprocessAndReason: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -112,7 +112,7 @@ export const FunctionBasedScorerBuilders = {
       return `the reason the score is ${score} is because the input is ${results.preprocessStepResult?.reformattedInput} and the output is ${results.preprocessStepResult?.reformattedOutput}`;
     }),
 
-  withAnalyze: createNewScorer({
+  withAnalyze: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -132,7 +132,7 @@ export const FunctionBasedScorerBuilders = {
       return 0;
     }),
 
-  withAnalyzeAndReason: createNewScorer({
+  withAnalyzeAndReason: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -155,7 +155,7 @@ export const FunctionBasedScorerBuilders = {
       return `the reason the score is ${score} is because the input is ${results.analyzeStepResult?.inputFromAnalyze} and the output is ${results.analyzeStepResult?.outputFromAnalyze}`;
     }),
 
-  withReason: createNewScorer({
+  withReason: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -168,7 +168,7 @@ export const FunctionBasedScorerBuilders = {
 };
 
 export const PromptBasedScorerBuilders = {
-  withAnalyze: createNewScorer({
+  withAnalyze: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -203,7 +203,7 @@ export const PromptBasedScorerBuilders = {
       return inputLength !== undefined && outputLength !== undefined ? 1 : 0;
     }),
 
-  withPreprocessAndAnalyze: createNewScorer({
+  withPreprocessAndAnalyze: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -263,7 +263,7 @@ export const PromptBasedScorerBuilders = {
       return inputLength !== undefined && outputLength !== undefined ? 1 : 0;
     }),
 
-  withAnalyzeAndReason: createNewScorer({
+  withAnalyzeAndReason: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -315,7 +315,7 @@ export const PromptBasedScorerBuilders = {
       },
     }),
 
-  withGenerateScoreAsPromptObject: createNewScorer({
+  withGenerateScoreAsPromptObject: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -341,7 +341,7 @@ export const PromptBasedScorerBuilders = {
       return `the reason the score is ${score} is because the input is ${JSON.stringify(run.input)} and the output is ${JSON.stringify(run.output)}`;
     }),
 
-  withAllSteps: createNewScorer({
+  withAllSteps: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -421,7 +421,7 @@ export const PromptBasedScorerBuilders = {
 };
 
 export const MixedScorerBuilders = {
-  withPreprocessFunctionAnalyzePrompt: createNewScorer({
+  withPreprocessFunctionAnalyzePrompt: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -460,7 +460,7 @@ export const MixedScorerBuilders = {
       return inputLength !== undefined && outputLength !== undefined ? 1 : 0;
     }),
 
-  withPreprocessPromptAnalyzeFunction: createNewScorer({
+  withPreprocessPromptAnalyzeFunction: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -504,7 +504,7 @@ export const MixedScorerBuilders = {
       return lengths.every(len => len !== undefined) ? 1 : 0;
     }),
 
-  withReasonFunctionAnalyzePrompt: createNewScorer({
+  withReasonFunctionAnalyzePrompt: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -543,7 +543,7 @@ export const MixedScorerBuilders = {
         `the reason is because the input is ${results.analyzeStepResult?.inputLength} and the output is ${results.analyzeStepResult?.outputLength} from generateReason function`,
     ),
 
-  withReasonPromptAnalyzeFunction: createNewScorer({
+  withReasonPromptAnalyzeFunction: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -576,14 +576,14 @@ export const MixedScorerBuilders = {
 };
 
 export const AsyncFunctionBasedScorerBuilders = {
-  basic: createNewScorer({
+  basic: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   }).generateScore(async () => {
     return 1;
   }),
 
-  withPreprocess: createNewScorer({
+  withPreprocess: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -604,7 +604,7 @@ export const AsyncFunctionBasedScorerBuilders = {
       return 0;
     }),
 
-  withPreprocessFunctionAndAnalyzePromptObject: createNewScorer({
+  withPreprocessFunctionAndAnalyzePromptObject: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -649,7 +649,7 @@ export const AsyncFunctionBasedScorerBuilders = {
       return 0;
     }),
 
-  withPreprocessPromptObjectAndAnalyzeFunction: createNewScorer({
+  withPreprocessPromptObjectAndAnalyzeFunction: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -695,7 +695,7 @@ export const AsyncFunctionBasedScorerBuilders = {
     }),
 
   // Test async createPrompt in preprocess
-  withAsyncCreatePromptInPreprocess: createNewScorer({
+  withAsyncCreatePromptInPreprocess: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -737,7 +737,7 @@ export const AsyncFunctionBasedScorerBuilders = {
     }),
 
   // Test async createPrompt in analyze
-  withAsyncCreatePromptInAnalyze: createNewScorer({
+  withAsyncCreatePromptInAnalyze: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -789,7 +789,7 @@ export const AsyncFunctionBasedScorerBuilders = {
     }),
 
   // Test async createPrompt in generateScore
-  withAsyncCreatePromptInGenerateScore: createNewScorer({
+  withAsyncCreatePromptInGenerateScore: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
@@ -825,7 +825,7 @@ export const AsyncFunctionBasedScorerBuilders = {
     }),
 
   // Test async createPrompt in generateReason
-  withAsyncCreatePromptInGenerateReason: createNewScorer({
+  withAsyncCreatePromptInGenerateReason: createScorer({
     name: 'test-scorer',
     description: 'A test scorer',
   })
