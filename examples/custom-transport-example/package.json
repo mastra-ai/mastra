@@ -1,0 +1,24 @@
+{
+  "name": "custom-transport-example",
+  "version": "1.0.0",
+  "description": "Example demonstrating custom StreamableHTTPClientTransport usage",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "dev": "tsx --watch src/index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^0.0.0",
+    "@mastra/core": "^0.0.0",
+    "@mastra/mcp": "^0.0.0",
+    "@modelcontextprotocol/sdk": "^0.0.0",
+    "chalk": "^5.0.0",
+    "tsx": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

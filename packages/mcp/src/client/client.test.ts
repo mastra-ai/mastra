@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -515,5 +516,43 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     
     const elicitationResultText = result.content[0].text;
     expect(elicitationResultText).toContain('Elicitation response content does not match requested schema');
+  });
+});
+
+describe('MastraMCPClient with Custom Transport', () => {
+  let client: InternalMastraMCPClient;
+  let mockTransport: StreamableHTTPClientTransport;
+
+  beforeEach(() => {
+    // Create a mock transport
+    mockTransport = new StreamableHTTPClientTransport(new URL('http://localhost:8080'));
+    
+    client = new InternalMastraMCPClient({
+      name: 'test-custom-transport-client',
+      server: {
+        customTransport: mockTransport,
+      },
+    });
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+  });
+
+  it('should connect using custom transport', async () => {
+    // Mock the transport's connect method
+    const connectSpy = jest.spyOn(mockTransport, 'open').mockResolvedValue();
+    
+    await client.connect();
+    
+    expect(connectSpy).toHaveBeenCalled();
+    expect(client.sessionId).toBeDefined();
+  });
+
+  it('should handle custom transport errors', async () => {
+    // Mock the transport to throw an error
+    jest.spyOn(mockTransport, 'open').mockRejectedValue(new Error('Custom transport error'));
+    
+    await expect(client.connect()).rejects.toThrow('Custom transport error');
   });
 });

@@ -91,9 +91,27 @@ type HttpServerDefinition = BaseServerOptions & {
   eventSourceInit?: SSEClientTransportOptions['eventSourceInit'];
   reconnectionOptions?: StreamableHTTPClientTransportOptions['reconnectionOptions'];
   sessionId?: StreamableHTTPClientTransportOptions['sessionId'];
+  
+  // Custom transport option
+  customTransport?: never; // Exclude custom transport for standard HTTP
 };
 
-export type MastraMCPServerDefinition = StdioServerDefinition | HttpServerDefinition;
+// Custom Transport Server Definition
+type CustomTransportServerDefinition = BaseServerOptions & {
+  customTransport: StreamableHTTPClientTransport; // Custom transport is required
+  
+  // Exclude all other transport options when using custom transport
+  command?: never;
+  url?: never;
+  args?: never;
+  env?: never;
+  requestInit?: never;
+  eventSourceInit?: never;
+  reconnectionOptions?: never;
+  sessionId?: never;
+};
+
+export type MastraMCPServerDefinition = StdioServerDefinition | HttpServerDefinition | CustomTransportServerDefinition;
 
 /**
  * Convert an MCP LoggingLevel to a logger method name that exists in our logger
@@ -236,8 +254,27 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
+  private async connectCustomTransport(transport: StreamableHTTPClientTransport) {
+    this.log('debug', 'Connecting using custom StreamableHTTPClientTransport...');
+    try {
+      await this.client.connect(transport, {
+        timeout: this.serverConfig.timeout ?? this.timeout,
+      });
+      this.transport = transport;
+      this.log('debug', 'Successfully connected using custom StreamableHTTPClientTransport.');
+    } catch (error) {
+      this.log('error', `Failed to connect with custom transport: ${error}`);
+      throw error;
+    }
+  }
+
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit } = this.serverConfig;
+    // Type guard to ensure we have HTTP server config
+    if (!('requestInit' in this.serverConfig)) {
+      throw new Error('Invalid server configuration for HTTP transport');
+    }
+    
+    const { requestInit, eventSourceInit } = this.serverConfig as HttpServerDefinition;
 
     this.log('debug', `Attempting to connect to URL: ${url}`);
 
@@ -294,14 +331,15 @@ export class InternalMastraMCPClient extends MastraBase {
     // Start new connection attempt.
     this.isConnected = new Promise<boolean>(async (resolve, reject) => {
       try {
-        const { command, url } = this.serverConfig;
-
-        if (command) {
-          await this.connectStdio(command);
-        } else if (url) {
-          await this.connectHttp(url);
+        // Type guard to check if this is a custom transport configuration
+        if ('customTransport' in this.serverConfig && this.serverConfig.customTransport) {
+          await this.connectCustomTransport((this.serverConfig as CustomTransportServerDefinition).customTransport);
+        } else if ('command' in this.serverConfig && this.serverConfig.command) {
+          await this.connectStdio((this.serverConfig as StdioServerDefinition).command);
+        } else if ('url' in this.serverConfig && this.serverConfig.url) {
+          await this.connectHttp((this.serverConfig as HttpServerDefinition).url);
         } else {
-          throw new Error('Server configuration must include either a command or a url.');
+          throw new Error('Server configuration must include either a command, url, or customTransport.');
         }
 
         resolve(true);

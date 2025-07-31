@@ -450,16 +450,101 @@ The `server` parameter for both `MastraMCPClient` and `MCPConfiguration` uses th
 
 Here are the available options within `MastraMCPServerDefinition`:
 
-- **`command`**: (Optional, string) For Stdio servers: The command to execute.
-- **`args`**: (Optional, string[]) For Stdio servers: Arguments to pass to the command.
-- **`env`**: (Optional, Record<string, string>) For Stdio servers: Environment variables to set for the command.
-- **`url`**: (Optional, URL) For HTTP servers (Streamable HTTP or SSE): The URL of the server.
-- **`requestInit`**: (Optional, RequestInit) For HTTP servers: Request configuration for the fetch API. Used for the initial Streamable HTTP connection attempt and subsequent POST requests. Also used for the initial SSE connection attempt.
+### Stdio Transport Options
+
+- **`command`**: (Required for Stdio, string) The command to execute.
+- **`args`**: (Optional, string[]) Arguments to pass to the command.
+- **`env`**: (Optional, Record<string, string>) Environment variables to set for the command.
+
+### HTTP Transport Options
+
+- **`url`**: (Required for HTTP, URL) The URL of the server.
+- **`requestInit`**: (Optional, RequestInit) Request configuration for the fetch API. Used for the initial Streamable HTTP connection attempt and subsequent POST requests. Also used for the initial SSE connection attempt.
 - **`eventSourceInit`**: (Optional, EventSourceInit) **Only** for the legacy SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.
+- **`reconnectionOptions`**: (Optional) Reconnection options for Streamable HTTP transport.
+- **`sessionId`**: (Optional, string) Custom session ID for Streamable HTTP transport.
+
+### Custom Transport Options
+
+- **`customTransport`**: (Required for Custom Transport, StreamableHTTPClientTransport) Your own instance of `StreamableHTTPClientTransport` for full transport layer customization.
+
+### Common Options
+
 - **`logger`**: (Optional, LogHandler) Optional additional handler for logging.
 - **`timeout`**: (Optional, number) Server-specific timeout in milliseconds, overriding the global client/configuration timeout.
 - **`capabilities`**: (Optional, ClientCapabilities) Server-specific capabilities configuration.
 - **`enableServerLogs`**: (Optional, boolean, default: `true`) Whether to enable logging for this server.
+
+## Custom Transport Usage
+
+For advanced use cases where you need full control over the transport layer, you can provide your own `StreamableHTTPClientTransport` instance:
+
+```typescript
+import { MCPClient } from '@mastra/mcp';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+
+// Create a custom transport with your configuration
+const customTransport = new StreamableHTTPClientTransport(new URL('http://localhost:8080'), {
+  requestInit: {
+    headers: {
+      'X-Custom-Header': 'custom-value',
+      Authorization: 'Bearer your-token',
+    },
+  },
+  reconnectionOptions: {
+    maxRetries: 5,
+    retryDelay: 1000,
+  },
+  sessionId: 'my-custom-session',
+});
+
+// Use the custom transport in your MCP client
+const mcp = new MCPClient({
+  servers: {
+    myServer: {
+      customTransport,
+      logger: logMessage => {
+        console.log(`[${logMessage.serverName}] ${logMessage.message}`);
+      },
+    },
+  },
+});
+```
+
+You can also extend the transport class to add custom behavior:
+
+```typescript
+class CustomStreamableHTTPClientTransport extends StreamableHTTPClientTransport {
+  constructor(url: URL, options?: any) {
+    super(url, options);
+  }
+
+  // Override methods to add custom behavior
+  async open(): Promise<void> {
+    console.log('Custom transport: Opening connection...');
+    await super.open();
+    console.log('Custom transport: Connection opened successfully');
+  }
+
+  async close(): Promise<void> {
+    console.log('Custom transport: Closing connection...');
+    await super.close();
+    console.log('Custom transport: Connection closed successfully');
+  }
+}
+
+const advancedTransport = new CustomStreamableHTTPClientTransport(new URL('http://localhost:8080'), {
+  /* your options */
+});
+
+const mcp = new MCPClient({
+  servers: {
+    advancedServer: {
+      customTransport: advancedTransport,
+    },
+  },
+});
+```
 
 ## Features
 
@@ -469,6 +554,7 @@ Here are the available options within `MastraMCPServerDefinition`:
 - Multiple transport layers with automatic detection:
   - Stdio-based for local servers (`command`)
   - HTTP-based for remote servers (`url`): Tries Streamable HTTP first, falls back to legacy SSE.
+  - Custom transport for full control (`customTransport`): Use your own `StreamableHTTPClientTransport` instance.
 - Per-server logging capability using all standard MCP log levels
 - Automatic error handling and logging
 - Tool execution with context
