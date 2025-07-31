@@ -465,13 +465,13 @@ class MastraNewScorer<TAccumulatedResults extends Record<string, any> = {}> {
     return {
       run: originalInput,
       score: accumulatedResults.generateScoreStepResult,
-      reason: accumulatedResults.generateReasonStepResult,
-      preprocessPrompt: generatedPrompts.preprocessPrompt,
-      analyzePrompt: generatedPrompts.analyzePrompt,
       generateScorePrompt: generatedPrompts.generateScorePrompt,
+      reason: accumulatedResults.generateReasonStepResult,
       generateReasonPrompt: generatedPrompts.generateReasonPrompt,
-      preprocessResult: accumulatedResults.preprocessStepResult,
-      analyzeResult: accumulatedResults.analyzeStepResult,
+      preprocessStepResult: accumulatedResults.preprocessStepResult,
+      preprocessPrompt: generatedPrompts.preprocessPrompt,
+      analyzeStepResult: accumulatedResults.analyzeStepResult,
+      analyzePrompt: generatedPrompts.analyzePrompt,
     };
   }
 }
