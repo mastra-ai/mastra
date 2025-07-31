@@ -89,7 +89,7 @@ type GenerateScoreFunctionStep<TAccumulated extends Record<string, any>> =
 interface PromptObject<TOutput, TAccumulated extends Record<string, any>, TStepName extends string = string> {
   description: string;
   outputSchema: z.ZodSchema<TOutput>;
-  judge: {
+  judge?: {
     model: MastraLanguageModel;
     instructions: string;
   };
@@ -285,6 +285,10 @@ class MastraNewScorer<TAccumulatedResults extends Record<string, any> = {}> {
         run: input,
       },
     });
+
+    if (workflowResult.status === 'failed') {
+      throw new Error(`Scorer Run Failed: ${workflowResult.error}`);
+    }
 
     return this.transformToScorerResult(workflowResult, input);
   }
