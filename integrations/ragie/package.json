@@ -22,8 +22,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake=smallest --splitting",
-    "build:dev": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake=smallest --splitting --watch",
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:dev": "tsup src/index.ts --format esm,cjs --no-dts --clean --treeshake=smallest --splitting --watch && tsc -p tsconfig.build.json",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "clean": "rm -rf dist && rm -rf node_modules",
     "gen:zod:schema": "pnpx ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts"
