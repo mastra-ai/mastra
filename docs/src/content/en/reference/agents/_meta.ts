@@ -1,9 +1,9 @@
 const meta = {
   agent: "Agent",
+  getAgent: "getAgent()",
   generate: "generate()",
   stream: "stream()",
   streamVNext: "streamVNext()",
-  getAgent: "getAgent()",
   getWorkflows: "getWorkflows()",
   getTools: "getTools()",
   getScorers: "getScorers()",
