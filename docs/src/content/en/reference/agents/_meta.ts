@@ -1,15 +1,23 @@
 const meta = {
   agent: "Agent",
-  getAgent: "getAgent()",
   generate: "generate()",
   stream: "stream()",
+  streamVNext: "streamVNext()",
+  getAgent: "getAgent()",
   getWorkflows: "getWorkflows()",
   getTools: "getTools()",
-  getInstructions: "getInstructions()",
+  getScorers: "getScorers()",
   getModel: "getModel()",
   getMemory: "getMemory()",
   getVoice: "getVoice()",
-  streamVNext: "streamVNext()",
+  getDescription: "getDescription()",
+  getInstructions: "getInstructions()",
+  getLLM: "getLLM()",
+  hasOwnMemory: "hasOwnMemory()",
+  getDefaultGenerateOptions: "getDefaultGenerateOptions()",
+  getDefaultStreamOptions: "getDefaultStreamOptions()",
+  getDefaultVNextStreamOptions: "getDefaultVNextStreamOptions()",
+  generateTitleFromUserMessage: "generateTitleFromUserMessage()",
 };
 
 export default meta;
