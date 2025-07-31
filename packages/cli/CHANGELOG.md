@@ -1,5 +1,11 @@
 # mastra
 
+## 0.10.18
+
+### Patch Changes
+
+- ad04455: Missed changeset in last release, needed to include create-mastra
+
 ## 0.10.18-alpha.0
 
 ### Patch Changes
