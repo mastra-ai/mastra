@@ -266,7 +266,7 @@ export class MCPServer extends MCPServerBase {
                 text: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(request.params.arguments, null, 2)}`,
               },
             ],
-            isError: false, // Set to false so agent sees this as a normal response
+            isError: true, // Set to true so the LLM sees the error and can self-correct
           };
         }
         if (!tool.execute) {

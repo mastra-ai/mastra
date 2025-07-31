@@ -1967,7 +1967,7 @@ describe('MCPServer - Tool Input Validation', () => {
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(false); // Now returns false for graceful handling
+    expect(result.isError).toBe(true); // Returns true so LLM can see the error and self-correct
     expect(result.content[0].text).toContain('Tool validation failed');
     expect(result.content[0].text).toContain('Please fix the following errors');
   });
@@ -1981,7 +1981,7 @@ describe('MCPServer - Tool Input Validation', () => {
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Tool validation failed');
     expect(result.content[0].text).toContain('Message must be at least 3 characters');
   });
@@ -1995,7 +1995,7 @@ describe('MCPServer - Tool Input Validation', () => {
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Tool validation failed');
   });
 
@@ -2012,7 +2012,7 @@ describe('MCPServer - Tool Input Validation', () => {
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Tool validation failed');
     expect(result.content[0].text).toContain('Invalid email format');
   });
@@ -2030,7 +2030,7 @@ describe('MCPServer - Tool Input Validation', () => {
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Tool validation failed');
     expect(result.content[0].text).toContain('At least one tag required');
   });
@@ -2048,7 +2048,7 @@ describe('MCPServer - Tool Input Validation', () => {
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Tool validation failed');
   });
 
@@ -2065,7 +2065,7 @@ describe('MCPServer - Tool Input Validation', () => {
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(false);
+    expect(result.isError).toBe(true);
     const errorText = result.content[0].text;
     expect(errorText).toContain('Tool validation failed');
     // Should contain multiple validation errors
