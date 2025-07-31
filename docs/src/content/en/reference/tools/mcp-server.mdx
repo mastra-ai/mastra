@@ -1044,9 +1044,22 @@ type ElicitResult = {
 
 ## Authentication Context
 
-Tools can access authentication info from HTTP-based MCP clients via `options.extra`:
+Tools can access authentication info from HTTP-based MCP clients via `options.extra`. The auth info comes from headers sent by the MCP client:
 
 ```typescript
+// Client sends auth headers
+const mcp = new MCPClient({
+  servers: {
+    myServer: {
+      url: new URL("https://server.com/mcp"),
+      requestInit: {
+        headers: { Authorization: "Bearer token" }
+      }
+    }
+  }
+});
+
+// Tool receives auth info
 execute: async ({ context }, options) => {
   const { extra } = options;
   
@@ -1065,7 +1078,7 @@ execute: async ({ context }, options) => {
 ```
 
 The `extra` object contains:
-- `authInfo`: Token, client ID, and scopes from the MCP client
+- `authInfo`: Token, client ID, and scopes extracted from client headers
 - `sessionId`: Session identifier
 - `signal`: AbortSignal for cancellation
 - `sendNotification`/`sendRequest`: MCP protocol functions
