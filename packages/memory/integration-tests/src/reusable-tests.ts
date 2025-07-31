@@ -650,21 +650,21 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const upsertVectorSpy = vi.spyOn(memory.vector, 'upsert');
         const deleteVectorSpy = vi.spyOn(memory.vector, 'deleteVector');
 
-        const thread1 = await memory.saveThread({
+        const thread = await memory.saveThread({
           thread: createTestThread('Message Updates Test Thread 1'),
         });
 
-        const messagesThread1 = [createTestMessageV2(thread1.id, 'The sky is blue today')];
+        const messagesThread = [createTestMessageV2(thread.id, 'The sky is blue today')];
 
-        await memory.saveMessages({ messages: messagesThread1 });
+        await memory.saveMessages({ messages: messagesThread });
         expect(upsertVectorSpy).toHaveBeenCalled();
 
         // update metadata
         const updateResult = await memory.updateMessages({
           messages: [
             {
-              id: messagesThread1[0].id,
-              threadId: thread1.id,
+              id: messagesThread[0].id,
+              threadId: thread.id,
               content: {
                 format: 2,
                 metadata: {
@@ -680,45 +680,36 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       });
 
       it('should update embeddings when message content is updated', async () => {
-        const thread1 = await memory.saveThread({
+        const thread = await memory.saveThread({
           thread: createTestThread('Message Updates Test Thread 1'),
         });
 
-        // this thread to remain empty
-        const thread2 = await memory.saveThread({
-          thread: createTestThread('Message Updates Test Thread 2'),
-        });
-
-        const messagesThread1 = [
-          createTestMessageV2(thread1.id, 'The sky is blue today'),
-          createTestMessageV2(thread1.id, 'Message 2'),
-          createTestMessageV2(thread1.id, 'Message 3'),
+        const messagesThread = [
+          createTestMessageV2(thread.id, 'The sky is blue today'),
+          createTestMessageV2(thread.id, 'Message 2'),
+          createTestMessageV2(thread.id, 'Message 3'),
         ];
 
-        const messagesThread2 = [createTestMessageV2(thread2.id, 'Wide open waters')];
-
-        await memory.saveMessages({ messages: messagesThread1 });
-        await memory.saveMessages({ messages: messagesThread2 });
-
+        await memory.saveMessages({ messages: messagesThread });
         // Update some of the stored messages
         const updates = [
           {
-            id: messagesThread1[0].id,
+            id: messagesThread[0].id,
             text: 'Message 1',
           },
           {
-            id: messagesThread1[2].id,
+            id: messagesThread[2].id,
             text: 'Oceans are vast and blue',
           },
         ];
 
-        await memory.updateMessages(createMessageV2Updates(updates, thread1.id));
+        await memory.updateMessages(createMessageV2Updates(updates, thread.id));
 
         // the search should yield the final message instead of the first
         const searchQuery = 'blue';
 
         const threadScopeResult = await memory.rememberMessages({
-          threadId: thread1.id,
+          threadId: thread.id,
           resourceId, // resourceId is defined globally in this file
           vectorMessageSearch: searchQuery,
           config: {
