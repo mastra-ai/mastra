@@ -1701,7 +1701,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         }
       } catch (error) {
         // If snapshot loading fails, continue with existing runtime context
-        console.warn('Failed to load runtime context from snapshot:', error);
+        this.logger.warn('Failed to load runtime context from snapshot:', error);
       }
     }
 
