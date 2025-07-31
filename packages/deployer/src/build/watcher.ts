@@ -1,4 +1,4 @@
-import type { InputOptions, OutputOptions } from 'rollup';
+import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { watch } from 'rollup';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
@@ -22,6 +22,7 @@ export async function getInputOptions(
       noopLogger,
       {
         transpilePackages,
+        isDev: true,
       },
     );
 
@@ -51,16 +52,25 @@ export async function getInputOptions(
   if (Array.isArray(inputOptions.plugins)) {
     // filter out node-resolve plugin so all node_modules are external
     // and tsconfig-paths plugin as we are injection a custom one
-    inputOptions.plugins = inputOptions.plugins.filter(
-      // @ts-ignore
-      plugin => !plugin || !plugin?.name || (plugin.name !== 'node-resolve' && plugin.name !== 'tsconfig-paths'),
-    );
+    const plugins = [] as Plugin[];
+    inputOptions.plugins.forEach(plugin => {
+      if ((plugin as Plugin | undefined)?.name === 'node-resolve') {
+        return;
+      }
 
-    inputOptions.plugins.unshift(
-      tsConfigPaths({
-        localResolve: true,
-      }),
-    );
+      if ((plugin as Plugin | undefined)?.name === 'tsconfig-paths') {
+        plugins.push(
+          tsConfigPaths({
+            localResolve: true,
+          }),
+        );
+        return;
+      }
+
+      plugins.push(plugin as Plugin);
+    });
+
+    inputOptions.plugins = plugins;
     inputOptions.plugins.push(aliasHono());
     // fixes imports like lodash/fp/get
     inputOptions.plugins.push(nodeModulesExtensionResolver());

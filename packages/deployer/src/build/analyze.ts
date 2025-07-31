@@ -190,6 +190,7 @@ export async function bundleExternals(
   options?: {
     externals?: string[];
     transpilePackages?: string[];
+    isDev?: boolean;
   },
 ) {
   logger.info('Optimizing dependencies...');
@@ -263,6 +264,22 @@ export async function bundleExternals(
           {} as Record<string, string>,
         ),
       ),
+      options?.isDev
+        ? {
+            name: 'external-resolver',
+            resolveId(id: string, importer: string | undefined) {
+              const pathsToTranspile = [...transpilePackagesMap.values()];
+              if (importer && pathsToTranspile.some(p => importer?.startsWith(p))) {
+                return {
+                  id: resolveFrom(importer, id),
+                  external: true,
+                };
+              }
+
+              return null;
+            },
+          }
+        : null,
       transpilePackagesMap.size
         ? esbuild({
             target: 'node20',
