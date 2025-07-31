@@ -545,6 +545,23 @@ export class InngestWorkflow<
         };
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt);
+
+        // Create or restore runtime context from snapshot
+        let runtimeContextToUse = new RuntimeContext();
+
+        // Load existing snapshot to restore runtime context if available
+        const existingSnapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+          workflowName: this.id,
+          runId,
+        });
+
+        // Restore runtime context from snapshot if it exists
+        if (existingSnapshot?.runtimeContext) {
+          Object.entries(existingSnapshot.runtimeContext).forEach(([key, value]) => {
+            runtimeContextToUse.set(key, value);
+          });
+        }
+
         const result = await engine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
           workflowId: this.id,
           runId,
@@ -553,7 +570,7 @@ export class InngestWorkflow<
           input: inputData,
           emitter,
           retryConfig: this.retryConfig,
-          runtimeContext: new RuntimeContext(), // TODO
+          runtimeContext: runtimeContextToUse,
           resume,
           abortController: new AbortController(),
         });
@@ -1600,6 +1617,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     workflowStatus,
     result,
     error,
+    runtimeContext,
   }: {
     workflowId: string;
     runId: string;
@@ -1614,6 +1632,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     await this.inngestStep.run(
       `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate`,
       async () => {
+        // Serialize runtime context to plain object
+        const runtimeContextObj: Record<string, any> = {};
+        runtimeContext.forEach((value, key) => {
+          runtimeContextObj[key] = value;
+        });
+
         await this.mastra?.getStorage()?.persistWorkflowSnapshot({
           workflowName: workflowId,
           runId,
@@ -1621,6 +1645,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runId,
             value: {},
             context: stepResults as any,
+            runtimeContext: runtimeContextObj,
             activePaths: [],
             suspendedPaths: executionContext.suspendedPaths,
             serializedStepGraph,

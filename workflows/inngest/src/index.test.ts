@@ -6216,7 +6216,7 @@ describe('MastraInngestWorkflow', () => {
   });
 
   // TODO: can we support this on inngest?
-  describe.skip('Dependency Injection', () => {
+  describe('Dependency Injection', () => {
     it('should inject runtimeContext dependencies into steps during run', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
