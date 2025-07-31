@@ -22,7 +22,7 @@ describe('KeywordCoverageMetric', () => {
     expect(result.score).toBeGreaterThan(0.3);
     expect(result.score).toBeLessThan(0.7);
     const matched = result.analyzeStepResult?.matchedKeywordsLength;
-    const total = result.analyzeStepResult?.totalKeywordsLength;
+    const total = result.analyzeStepResult?.totalKeywordsLength!;
     expect(matched).toBeLessThan(total);
   });
 

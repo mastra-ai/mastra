@@ -1,5 +1,5 @@
 import type { LanguageModel } from '@mastra/core/llm';
-import { createLLMScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/scores';
 
 import { z } from 'zod';
 import { roundToTwoDecimals } from '../../utils';
@@ -22,35 +22,36 @@ export function createFaithfulnessScorer({
   model: LanguageModel;
   options?: FaithfulnessMetricOptions;
 }) {
-  return createLLMScorer({
+  return createScorer({
     name: 'Faithfulness Scorer',
     description: 'A scorer that evaluates the faithfulness of an LLM output to an input',
     judge: {
       model,
       instructions: FAITHFULNESS_AGENT_INSTRUCTIONS,
     },
-    extract: {
+  })
+    .preprocess({
       description: 'Extract relevant statements from the LLM output',
       outputSchema: z.array(z.string()),
       createPrompt: ({ run }) => {
         const prompt = createFaithfulnessExtractPrompt({ output: run.output.text });
         return prompt;
       },
-    },
-    analyze: {
+    })
+    .analyze({
       description: 'Score the relevance of the statements to the input',
       outputSchema: z.object({ verdicts: z.array(z.object({ verdict: z.string(), reason: z.string() })) }),
-      createPrompt: ({ run }) => {
+      createPrompt: ({ results }) => {
         const prompt = createFaithfulnessAnalyzePrompt({
-          claims: run.extractStepResult || [],
+          claims: results.preprocessStepResult || [],
           context: options?.context || [],
         });
         return prompt;
       },
-    },
-    calculateScore: ({ run }) => {
-      const totalClaims = run.analyzeStepResult.verdicts.length;
-      const supportedClaims = run.analyzeStepResult.verdicts.filter(v => v.verdict === 'yes').length;
+    })
+    .generateScore(({ results }) => {
+      const totalClaims = results.analyzeStepResult.verdicts.length;
+      const supportedClaims = results.analyzeStepResult.verdicts.filter(v => v.verdict === 'yes').length;
 
       if (totalClaims === 0) {
         return 0;
@@ -59,20 +60,19 @@ export function createFaithfulnessScorer({
       const score = (supportedClaims / totalClaims) * (options?.scale || 1);
 
       return roundToTwoDecimals(score);
-    },
-    reason: {
+    })
+    .generateReason({
       description: 'Reason about the results',
-      createPrompt: ({ run }) => {
+      createPrompt: ({ run, results, score }) => {
         const prompt = createFaithfulnessReasonPrompt({
-          input: run.input?.map(input => input.content).join(', ') || '',
+          input: run.input?.map((input: { content: string }) => input.content).join(', ') || '',
           output: run.output.text,
           context: options?.context || [],
-          score: run.score,
+          score,
           scale: options?.scale || 1,
-          verdicts: run.analyzeStepResult?.verdicts || [],
+          verdicts: results.analyzeStepResult?.verdicts || [],
         });
         return prompt;
       },
-    },
-  });
+    });
 }
