@@ -23,6 +23,14 @@ const exec = util.promisify(child_process.exec);
 export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google' | 'cerebras';
 export type Components = 'agents' | 'workflows' | 'tools';
 
+export const getAISDKPackageVersion = (llmProvider: LLMProvider) => {
+  switch (llmProvider) {
+    case 'cerebras':
+      return '^0.2.14';
+    default:
+      return '^1.0.0';
+  }
+};
 export const getAISDKPackage = (llmProvider: LLMProvider) => {
   switch (llmProvider) {
     case 'openai':
