@@ -14,10 +14,7 @@ describe('CompletenessMetric', () => {
     it('should return high score for identical text', async () => {
       const text = 'The quick brown fox jumps over the lazy dog';
       const run = createTestRun(text, text);
-      console.log(`scorer`, scorer);
       const result = await scorer.run(run);
-
-      console.log(result);
       expect(result.score).toBeCloseTo(1.0);
       expect(result.preprocessStepResult?.elementCounts).toBeDefined();
     });
