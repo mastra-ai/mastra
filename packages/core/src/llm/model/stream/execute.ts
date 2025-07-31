@@ -799,12 +799,12 @@ function createStreamExecutor({
 }
 
 export async function execute(
-  props: { system?: string; prompt?: string } & { resourceId?: string; threadId?: string } & Omit<
-      StreamExecutorProps,
-      'inputMessages'
-    >,
+  props: { type?: 'stream' | 'generate'; system?: string; prompt?: string } & {
+    resourceId?: string;
+    threadId?: string;
+  } & Omit<StreamExecutorProps, 'inputMessages'>,
 ) {
-  const { system, prompt, resourceId, threadId, runId, _internal, logger, ...rest } = props;
+  const { system, prompt, resourceId, threadId, runId, _internal, logger, type = 'stream', ...rest } = props;
 
   let loggerToUse =
     logger ||
@@ -844,6 +844,7 @@ export async function execute(
     _internalToUse.generateId?.();
   }
 
+  // Always use streaming approach with MastraModelOutput
   const streamExecutorProps: StreamExecutorProps = {
     runId,
     _internal: _internalToUse,
@@ -854,7 +855,7 @@ export async function execute(
 
   const executor = createStreamExecutor(streamExecutorProps);
 
-  return new MastraModelOutput({
+  const output = new MastraModelOutput({
     version: rest.model.specificationVersion,
     stream: executor,
     options: {
@@ -862,4 +863,12 @@ export async function execute(
       onFinish: rest.options?.onFinish,
     },
   });
+
+  if (type === 'stream') {
+    return output;
+  } else if (type === 'generate') {
+    return output._getGenerateOutput();
+  } else {
+    throw new Error(`Unsupported execution type: ${type}`);
+  }
 }
