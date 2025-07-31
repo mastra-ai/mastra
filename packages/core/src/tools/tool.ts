@@ -13,7 +13,7 @@ export class Tool<
   description: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
-  execute?: ToolAction<TSchemaIn, TSchemaOut, TContext>['execute'];
+  private _execute?: ToolAction<TSchemaIn, TSchemaOut, TContext>['execute'];
   mastra?: Mastra;
 
   constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TContext>) {
@@ -21,8 +21,36 @@ export class Tool<
     this.description = opts.description;
     this.inputSchema = opts.inputSchema;
     this.outputSchema = opts.outputSchema;
-    this.execute = opts.execute;
+    this._execute = opts.execute;
     this.mastra = opts.mastra;
+  }
+
+  async execute(context: TContext, options?: any): Promise<any> {
+    if (!this._execute) {
+      throw new Error(`Tool ${this.id} does not have an execute function`);
+    }
+
+    // Validate input if schema exists
+    if (this.inputSchema && 'safeParse' in this.inputSchema) {
+      const validation = this.inputSchema.safeParse(context.context);
+      if (!validation.success) {
+        // Format validation errors for agent understanding
+        const errorMessages = validation.error.errors
+          .map((e: any) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+          .join('\n');
+
+        // Return error as a result instead of throwing
+        return {
+          error: true,
+          message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(context.context, null, 2)}`,
+          validationErrors: validation.error.format(),
+        };
+      }
+      // Use validated data
+      context = { ...context, context: validation.data };
+    }
+
+    return this._execute(context, options);
   }
 }
 
@@ -46,35 +74,5 @@ export function createTool<
       execute: (context: TContext) => Promise<any>;
     }
   : Tool<TSchemaIn, TSchemaOut, TContext> {
-  const tool = new Tool(opts);
-
-  // Wrap execute with validation if inputSchema exists
-  if (tool.inputSchema && tool.execute) {
-    const originalExecute = tool.execute;
-    // Use any type to bypass type checking for validation errors
-    (tool as any).execute = async (context: TContext, options?: any) => {
-      // Validate input if schema exists
-      if (tool.inputSchema && 'safeParse' in tool.inputSchema) {
-        const validation = tool.inputSchema.safeParse(context.context);
-        if (!validation.success) {
-          // Format validation errors for agent understanding
-          const errorMessages = validation.error.errors
-            .map((e: any) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
-            .join('\n');
-
-          // Return error as a result instead of throwing
-          return {
-            error: true,
-            message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(context.context, null, 2)}`,
-            validationErrors: validation.error.format(),
-          };
-        }
-        // Use validated data
-        context = { ...context, context: validation.data };
-      }
-      return originalExecute(context, options);
-    };
-  }
-
-  return tool as any;
+  return new Tool(opts) as any;
 }
