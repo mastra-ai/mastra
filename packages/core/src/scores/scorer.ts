@@ -201,7 +201,7 @@ class MastraNewScorer<TAccumulatedResults extends Record<string, any> = {}> {
         ...this.steps,
         {
           name: 'analyze',
-          definition: stepDef as FunctionStep<any, ScorerRun, TAnalyzeOutput>,
+          definition: isPromptObj ? undefined : (stepDef as FunctionStep<any, ScorerRun, TAnalyzeOutput>),
           isPromptObject: isPromptObj,
         },
       ],
@@ -219,15 +219,13 @@ class MastraNewScorer<TAccumulatedResults extends Record<string, any> = {}> {
       this.originalPromptObjects.set('generateScore', promptObj);
     }
 
-    const executeFunction = stepDef as GenerateScoreFunctionStep<any>;
-
     return new MastraNewScorer(
       this.metadata,
       [
         ...this.steps,
         {
           name: 'generateScore',
-          definition: executeFunction,
+          definition: isPromptObj ? undefined : (stepDef as GenerateScoreFunctionStep<any>),
           isPromptObject: isPromptObj,
         },
       ],
@@ -249,15 +247,13 @@ class MastraNewScorer<TAccumulatedResults extends Record<string, any> = {}> {
       this.originalPromptObjects.set('generateReason', promptObj);
     }
 
-    const executeFunction = stepDef as GenerateReasonFunctionStep<any>;
-
     return new MastraNewScorer(
       this.metadata,
       [
         ...this.steps,
         {
           name: 'generateReason',
-          definition: executeFunction,
+          definition: isPromptObj ? undefined : (stepDef as GenerateReasonFunctionStep<any>),
           isPromptObject: isPromptObj,
         },
       ],

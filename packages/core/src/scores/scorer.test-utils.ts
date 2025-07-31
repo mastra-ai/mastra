@@ -574,3 +574,297 @@ export const MixedScorerBuilders = {
       },
     }),
 };
+
+export const AsyncFunctionBasedScorerBuilders = {
+  basic: createNewScorer({
+    name: 'test-scorer',
+    description: 'A test scorer',
+  }).generateScore(async () => {
+    return 1;
+  }),
+
+  withPreprocess: createNewScorer({
+    name: 'test-scorer',
+    description: 'A test scorer',
+  })
+    .preprocess(async ({ run }) => {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      return {
+        reformattedInput: run.input?.[0]?.content.toUpperCase(),
+        reformattedOutput: run.output.text.toUpperCase(),
+      };
+    })
+    .generateScore(async ({ results }) => {
+      if (
+        results.preprocessStepResult?.reformattedInput.length > 0 &&
+        results.preprocessStepResult?.reformattedOutput.length > 0
+      ) {
+        return 1;
+      }
+      return 0;
+    }),
+
+  withPreprocessFunctionAndAnalyzePromptObject: createNewScorer({
+    name: 'test-scorer',
+    description: 'A test scorer',
+  })
+    .preprocess(async ({ run }) => {
+      return {
+        reformattedInput: run.input?.[0]?.content.toUpperCase(),
+        reformattedOutput: run.output.text.toUpperCase(),
+      };
+    })
+    .analyze({
+      description: 'Analyze the input and output',
+      outputSchema: z.object({
+        inputFromAnalyze: z.string(),
+        outputFromAnalyze: z.string(),
+      }),
+      judge: {
+        model: new MockLanguageModelV1({
+          defaultObjectGenerationMode: 'json',
+          doGenerate: async () => ({
+            text: `{
+                "inputFromAnalyze": "TEST INPUT",
+                "outputFromAnalyze": "TEST OUTPUT"
+              }`,
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+        instructions: 'Analyze the input and output',
+      },
+      createPrompt: ({ run }) => {
+        return `Analyze the input and output: ${run.input?.[0]?.content} and ${run.output.text}`;
+      },
+    })
+    .generateScore(async ({ results }) => {
+      if (
+        results.analyzeStepResult?.inputFromAnalyze.length > 0 &&
+        results.analyzeStepResult?.outputFromAnalyze.length > 0
+      ) {
+        return 1;
+      }
+      return 0;
+    }),
+
+  withPreprocessPromptObjectAndAnalyzeFunction: createNewScorer({
+    name: 'test-scorer',
+    description: 'A test scorer',
+  })
+    .preprocess({
+      description: 'Preprocess the input and output',
+      outputSchema: z.object({
+        reformattedInput: z.string(),
+        reformattedOutput: z.string(),
+      }),
+      judge: {
+        model: new MockLanguageModelV1({
+          defaultObjectGenerationMode: 'json',
+          doGenerate: async () => ({
+            text: `{
+              "reformattedInput": "TEST INPUT",
+              "reformattedOutput": "TEST OUTPUT"
+            }`,
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+        instructions: 'Analyze the input and output',
+      },
+      createPrompt: ({ run }) => {
+        return `Analyze the input and output: ${run.input?.[0]?.content} and ${run.output.text}`;
+      },
+    })
+    .analyze(async ({ results }) => {
+      return {
+        inputFromAnalyze: results.preprocessStepResult?.reformattedInput.toUpperCase(),
+        outputFromAnalyze: results.preprocessStepResult?.reformattedOutput.toUpperCase(),
+      };
+    })
+    .generateScore(async ({ results }) => {
+      if (
+        results.analyzeStepResult?.inputFromAnalyze.length > 0 &&
+        results.analyzeStepResult?.outputFromAnalyze.length > 0
+      ) {
+        return 1;
+      }
+      return 0;
+    }),
+
+  // Test async createPrompt in preprocess
+  withAsyncCreatePromptInPreprocess: createNewScorer({
+    name: 'test-scorer',
+    description: 'A test scorer',
+  })
+    .preprocess({
+      description: 'Preprocess with async createPrompt',
+      outputSchema: z.object({
+        reformattedInput: z.string(),
+        reformattedOutput: z.string(),
+      }),
+      judge: {
+        model: new MockLanguageModelV1({
+          defaultObjectGenerationMode: 'json',
+          doGenerate: async () => ({
+            text: `{
+              "reformattedInput": "ASYNC TEST INPUT",
+              "reformattedOutput": "ASYNC TEST OUTPUT"
+            }`,
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+        instructions: 'Analyze the input and output',
+      },
+      createPrompt: async ({ run }) => {
+        // Simulate async operation
+        await new Promise(resolve => setTimeout(resolve, 5));
+        return `Async prompt: ${run.input?.[0]?.content} and ${run.output.text}`;
+      },
+    })
+    .generateScore(async ({ results }) => {
+      if (
+        results.preprocessStepResult?.reformattedInput.length > 0 &&
+        results.preprocessStepResult?.reformattedOutput.length > 0
+      ) {
+        return 1;
+      }
+      return 0;
+    }),
+
+  // Test async createPrompt in analyze
+  withAsyncCreatePromptInAnalyze: createNewScorer({
+    name: 'test-scorer',
+    description: 'A test scorer',
+  })
+    .preprocess(async ({ run }) => {
+      return {
+        reformattedInput: run.input?.[0]?.content.toUpperCase(),
+        reformattedOutput: run.output.text.toUpperCase(),
+      };
+    })
+    .analyze({
+      description: 'Analyze with async createPrompt',
+      outputSchema: z.object({
+        inputFromAnalyze: z.string(),
+        outputFromAnalyze: z.string(),
+      }),
+      judge: {
+        model: new MockLanguageModelV1({
+          defaultObjectGenerationMode: 'json',
+          doGenerate: async () => ({
+            text: `{
+              "inputFromAnalyze": "ASYNC ANALYZE INPUT",
+              "outputFromAnalyze": "ASYNC ANALYZE OUTPUT"
+            }`,
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+        instructions: 'Analyze the input and output',
+      },
+      createPrompt: async ({ results }) => {
+        // Simulate async operation
+        await new Promise(resolve => setTimeout(resolve, 5));
+        const preprocessResult = results.preprocessStepResult as {
+          reformattedInput: string;
+          reformattedOutput: string;
+        };
+        return `Async analyze prompt: ${preprocessResult?.reformattedInput} and ${preprocessResult?.reformattedOutput}`;
+      },
+    })
+    .generateScore(async ({ results }) => {
+      if (
+        results.analyzeStepResult?.inputFromAnalyze.length > 0 &&
+        results.analyzeStepResult?.outputFromAnalyze.length > 0
+      ) {
+        return 1;
+      }
+      return 0;
+    }),
+
+  // Test async createPrompt in generateScore
+  withAsyncCreatePromptInGenerateScore: createNewScorer({
+    name: 'test-scorer',
+    description: 'A test scorer',
+  })
+    .preprocess(async ({ run }) => {
+      return {
+        reformattedInput: run.input?.[0]?.content.toUpperCase(),
+        reformattedOutput: run.output.text.toUpperCase(),
+      };
+    })
+    .generateScore({
+      description: 'Generate score with async createPrompt',
+      judge: {
+        model: new MockLanguageModelV1({
+          defaultObjectGenerationMode: 'json',
+          doGenerate: async () => ({
+            text: `{"score": 0.85}`,
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+        instructions: 'Generate a score',
+      },
+      createPrompt: async ({ results }) => {
+        // Simulate async operation
+        await new Promise(resolve => setTimeout(resolve, 5));
+        const preprocessResult = results.preprocessStepResult as {
+          reformattedInput: string;
+          reformattedOutput: string;
+        };
+        return `Async score prompt: ${preprocessResult?.reformattedInput} and ${preprocessResult?.reformattedOutput}`;
+      },
+    }),
+
+  // Test async createPrompt in generateReason
+  withAsyncCreatePromptInGenerateReason: createNewScorer({
+    name: 'test-scorer',
+    description: 'A test scorer',
+  })
+    .preprocess(async ({ run }) => {
+      return {
+        reformattedInput: run.input?.[0]?.content.toUpperCase(),
+        reformattedOutput: run.output.text.toUpperCase(),
+      };
+    })
+    .generateScore(async ({ results }) => {
+      if (
+        results.preprocessStepResult?.reformattedInput.length > 0 &&
+        results.preprocessStepResult?.reformattedOutput.length > 0
+      ) {
+        return 1;
+      }
+      return 0;
+    })
+    .generateReason({
+      description: 'Generate reason with async createPrompt',
+      judge: {
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            text: 'This is an async reason for the score',
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+        instructions: 'Generate a reason',
+      },
+      createPrompt: async ({ results, score }) => {
+        // Simulate async operation
+        await new Promise(resolve => setTimeout(resolve, 5));
+        const preprocessResult = results.preprocessStepResult as {
+          reformattedInput: string;
+          reformattedOutput: string;
+        };
+        return `Async reason prompt: Score ${score} for ${preprocessResult?.reformattedInput} and ${preprocessResult?.reformattedOutput}`;
+      },
+    }),
+};
