@@ -114,6 +114,12 @@ const agent = new Agent({
       isOptional: true,
       description: "Voice settings for speech input and output.",
     },
+    {
+      name: "inputProcessors",
+      type: "InputProcessor[] | ({ runtimeContext: RuntimeContext }) => InputProcessor[] | Promise<InputProcessor[]>",
+      isOptional: true,
+      description: "Input processors that can modify or validate messages before they are processed by the agent.",
+    },
   ]}
 />
 
