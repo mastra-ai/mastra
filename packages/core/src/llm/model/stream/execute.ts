@@ -4,16 +4,16 @@ import { generateId } from 'ai';
 import { z } from 'zod';
 import { MessageList } from '../../../agent';
 import { ConsoleLogger } from '../../../logger';
+import type { MastraMessageV1 } from '../../../memory';
 import type { ChunkType } from '../../../stream/types';
 import { createStep, createWorkflow } from '../../../workflows';
 import { assembleOperationName, getBaseTelemetryAttributes, getTracer } from './ai-sdk/telemetry';
 import { convertFullStreamChunkToAISDKv4, executeV4 } from './ai-sdk/v4';
 import { executeV5 } from './ai-sdk/v5/execute';
+import { convertFullStreamChunkToAISDKv5 } from './ai-sdk/v5/transforms';
 import { MastraModelOutput } from './base';
 import { AgenticRunState } from './run-state';
 import type { AgentWorkflowProps, StreamExecutorProps } from './types';
-import type { MastraMessageV1 } from '../../../memory';
-import { convertFullStreamChunkToAISDKv5 } from './ai-sdk/v5/transforms';
 
 const toolCallInpuSchema = z.object({
   toolCallId: z.string(),
@@ -984,12 +984,12 @@ function createStreamExecutor({
 }
 
 export async function execute(
-  props: { system?: string; prompt?: string } & { resourceId?: string; threadId?: string } & Omit<
-      StreamExecutorProps,
-      'inputMessages' | 'startTimestamp'
-    >,
+  props: { type?: 'stream' | 'generate'; system?: string; prompt?: string } & {
+    resourceId?: string;
+    threadId?: string;
+  } & Omit<StreamExecutorProps, 'inputMessages' | 'startTimestamp'>,
 ) {
-  const { system, prompt, resourceId, threadId, runId, _internal, logger, ...rest } = props;
+  const { system, prompt, resourceId, threadId, runId, _internal, logger, type = 'stream', ...rest } = props;
 
   let loggerToUse =
     logger ||
@@ -1037,6 +1037,7 @@ export async function execute(
     _internalToUse.generateId?.();
   }
 
+  // Always use streaming approach with MastraModelOutput
   const streamExecutorProps: StreamExecutorProps = {
     runId,
     _internal: _internalToUse,
@@ -1079,7 +1080,7 @@ export async function execute(
     startTimestamp: startTimestamp!,
   });
 
-  return new MastraModelOutput({
+  const output = new MastraModelOutput({
     model: {
       modelId: rest.model.modelId,
       provider: rest.model.provider,
@@ -1094,4 +1095,12 @@ export async function execute(
       onStepFinish: rest.options?.onStepFinish,
     },
   });
+
+  if (type === 'stream') {
+    return output;
+  } else if (type === 'generate') {
+    return output._getGenerateOutput();
+  } else {
+    throw new Error(`Unsupported execution type: ${type}`);
+  }
 }
