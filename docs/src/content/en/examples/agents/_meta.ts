@@ -1,4 +1,5 @@
 const meta = {
+  "calling-agents": "Calling Agents",
   "system-prompt": "Giving a System Prompt",
   "workflow-as-tools": "Workflow as Tools",
   "using-a-tool": "Using a Tool",
