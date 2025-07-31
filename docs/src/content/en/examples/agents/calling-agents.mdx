@@ -7,7 +7,7 @@ description: Example for how to call agents.
 
 There are multiple ways to interact with agents created using Mastra. Below you will find examples of how to call agents using workflow steps, tools, the Mastra Client SDK, and command line approaches for quick local testing.
 
-## Call from a workflow step
+## From a workflow step
 
 The `mastra` instance is passed as an argument to a workflow step’s `execute` function. It provides access to registered agents using `getAgent()`. Use this method to retrieve your agent, then call `generate()` with a prompt.
 
@@ -33,7 +33,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-## Call from a tool
+## From a tool
 
 The `mastra` instance is available within a tool’s `execute` function. Use `getAgent()` to retrieve a registered agent and call `generate()` with a prompt.
 
@@ -53,7 +53,7 @@ export const testTool = createTool({
 });
 ```
 
-## Call from Mastra Client
+## From Mastra Client
 
 The `mastraClient` instance provides access to registered agents. Use `getAgent()` to retrieve an agent and call `generate()` with an object containing a `messages` array of role/content pairs.
 
@@ -75,7 +75,7 @@ console.log(response.text);
 
 > See [Mastra Client SDK](../../docs/server-db/mastra-client.mdx) for more information.
 
-## Call from the command line
+## From the command line
 
 You can create a simple script to test your agent locally. The `mastra` instance provides access to registered agents using `getAgent()`.
 
@@ -95,7 +95,7 @@ Call this script from your command line using:
 npx tsx src/test-agent.ts
 ```
 
-## Call using curl
+## From curl
 
 You can interact with a registered agent by sending a `POST` request to your Mastra application's `/generate` endpoint. Include a `messages` array of role/content pairs.
 
