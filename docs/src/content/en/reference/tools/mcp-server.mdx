@@ -850,16 +850,13 @@ execute: async ({ context }, options) => {
   // context contains the tool's input parameters
   // options contains server capabilities like elicitation and authentication info
   
-  // Destructure the options to access both elicitation and extra
-  const { elicitation, extra } = options;
-  
   // Access authentication information (when available)
-  if (extra?.authInfo) {
-    console.log('Authenticated request from:', extra.authInfo.clientId);
+  if (options.extra?.authInfo) {
+    console.log('Authenticated request from:', options.extra.authInfo.clientId);
   }
   
   // Use elicitation capabilities
-  const result = await elicitation.sendRequest({
+  const result = await options.elicitation.sendRequest({
     message: "Please provide information",
     requestedSchema: { /* schema */ }
   });
@@ -901,13 +898,12 @@ const server = new MCPServer({
       execute: async ({ context }, options) => {
         const { reason } = context;
         
-        // Destructure to access both elicitation and extra
-        const { elicitation, extra } = options;
-        console.log('Request from session:', extra?.sessionId);
+        // Log session info if available
+        console.log('Request from session:', options.extra?.sessionId);
 
         try {
           // Request user input via elicitation
-          const result = await elicitation.sendRequest({
+          const result = await options.elicitation.sendRequest({
             message: reason 
               ? `Please provide your contact information. ${reason}`
               : 'Please provide your contact information',
@@ -1016,17 +1012,15 @@ The elicitation functionality is available through the `options` parameter in to
 ```typescript
 // Within a tool's execute function
 execute: async ({ context }, options) => {
-  const { elicitation, extra } = options;
-  
   // Use elicitation for user input
-  const result = await elicitation.sendRequest({
+  const result = await options.elicitation.sendRequest({
     message: string,           // Message to display to user
     requestedSchema: object    // JSON schema defining expected response structure
   }): Promise<ElicitResult>
   
   // Access authentication info if needed
-  if (extra?.authInfo) {
-    // Use extra.authInfo.token, extra.authInfo.clientId, etc.
+  if (options.extra?.authInfo) {
+    // Use options.extra.authInfo.token, etc.
   }
 }
 ```
@@ -1048,16 +1042,14 @@ Tools can access request metadata via `options.extra` when using HTTP-based tran
 
 ```typescript
 execute: async ({ context }, options) => {
-  const { extra } = options;
-  
-  if (!extra?.authInfo?.token) {
+  if (!options.extra?.authInfo?.token) {
     return "Authentication required";
   }
   
   // Use the auth token
   const response = await fetch('/api/data', {
-    headers: { Authorization: `Bearer ${extra.authInfo.token}` },
-    signal: extra.signal,
+    headers: { Authorization: `Bearer ${options.extra.authInfo.token}` },
+    signal: options.extra.signal,
   });
   
   return response.json();
