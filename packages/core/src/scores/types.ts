@@ -78,6 +78,10 @@ export type ScoreRowData = ScoringInputWithExtractStepResultAndScoreAndReason &
     scorerId: string;
     createdAt: Date;
     updatedAt: Date;
+    preprocessStepResult?: Record<string, any>;
+    preprocessPrompt?: string;
+    generateScorePrompt?: string;
+    generateReasonPrompt?: string;
   };
 
 export type ExtractionStepFn = (input: ScoringInput) => Promise<Record<string, any>>;

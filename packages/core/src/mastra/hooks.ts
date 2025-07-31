@@ -44,18 +44,18 @@ export function createOnScorerHook(mastra: Mastra) {
     } else {
       output = { object: hookData.output };
     }
+    const { structuredOutput, ...rest } = hookData as any; // temporary fix;
 
     try {
-      const score = await scorerToUse.scorer.run({
-        ...hookData,
+      const { run, ...restRunResult } = await scorerToUse.scorer.run({
+        ...rest,
         input,
         output,
       });
 
-      const { structuredOutput, ...rest } = hookData as any; // temporary fix;
       const payload = {
         ...rest,
-        ...score,
+        ...restRunResult,
         entityId,
         scorerId: hookData.scorer.id,
         metadata: {
