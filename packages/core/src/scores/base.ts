@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { Agent } from '../agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { LanguageModel } from '../llm';
 import type { MastraLanguageModel } from '../memory';
 import { createWorkflow, createStep } from '../workflows';
@@ -63,23 +64,24 @@ type GenerateReasonContext<TAccumulated extends Record<string, any>> = StepConte
   score: TAccumulated extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
 };
 
-type ScorerRunResult<TAccumulatedResults extends Record<string, any>> = Promise<{
-  run: ScorerRun & { runId: string };
-  score: TAccumulatedResults extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
-  reason?: TAccumulatedResults extends Record<'generateReasonStepResult', infer TReason> ? TReason : undefined;
+type ScorerRunResult<TAccumulatedResults extends Record<string, any>> = Promise<
+  ScorerRun & {
+    score: TAccumulatedResults extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
+    reason?: TAccumulatedResults extends Record<'generateReasonStepResult', infer TReason> ? TReason : undefined;
 
-  // Prompts
-  preprocessPrompt?: string;
-  analyzePrompt?: string;
-  generateScorePrompt?: string;
-  generateReasonPrompt?: string;
+    // Prompts
+    preprocessPrompt?: string;
+    analyzePrompt?: string;
+    generateScorePrompt?: string;
+    generateReasonPrompt?: string;
 
-  // Results
-  preprocessStepResult?: TAccumulatedResults extends Record<'preprocessStepResult', infer TPreprocess>
-    ? TPreprocess
-    : undefined;
-  analyzeStepResult?: TAccumulatedResults extends Record<'analyzeStepResult', infer TAnalyze> ? TAnalyze : undefined;
-}>;
+    // Results
+    preprocessStepResult?: TAccumulatedResults extends Record<'preprocessStepResult', infer TPreprocess>
+      ? TPreprocess
+      : undefined;
+    analyzeStepResult?: TAccumulatedResults extends Record<'analyzeStepResult', infer TAnalyze> ? TAnalyze : undefined;
+  } & { runId: string }
+>;
 
 // Conditional type for PromptObject context
 type PromptObjectContext<
@@ -143,7 +145,7 @@ type GenerateReasonStepDef<TAccumulated extends Record<string, any>> =
 
 class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
   constructor(
-    private scorer: ScorerConfig,
+    private config: ScorerConfig,
     private steps: Array<ScorerStepDefinition> = [],
     private originalPromptObjects: Map<
       string,
@@ -152,15 +154,15 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
   ) {}
 
   get name(): string {
-    return this.scorer.name;
+    return this.config.name;
   }
 
   get description(): string {
-    return this.scorer.description;
+    return this.config.description;
   }
 
   get judge() {
-    return this.scorer.judge;
+    return this.config.judge;
   }
 
   preprocess<TPreprocessOutput>(
@@ -174,7 +176,7 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     }
 
     return new MastraScorer(
-      this.scorer,
+      this.config,
       [
         ...this.steps,
         {
@@ -198,7 +200,7 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     }
 
     return new MastraScorer(
-      this.scorer,
+      this.config,
       [
         ...this.steps,
         {
@@ -222,7 +224,7 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     }
 
     return new MastraScorer(
-      this.scorer,
+      this.config,
       [
         ...this.steps,
         {
@@ -238,10 +240,6 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
   generateReason<TReasonOutput = string>(
     stepDef: GenerateReasonStepDef<TAccumulatedResults>,
   ): MastraScorer<AccumulatedResults<TAccumulatedResults, 'generateReason', Awaited<TReasonOutput>>> {
-    if (!this.hasGenerateScore) {
-      throw new Error(`Pipeline "${this.scorer.name}": generateReason() can only be called after generateScore()`);
-    }
-
     const isPromptObj = this.isPromptObject(stepDef);
 
     if (isPromptObj) {
@@ -250,7 +248,7 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     }
 
     return new MastraScorer(
-      this.scorer,
+      this.config,
       [
         ...this.steps,
         {
@@ -270,10 +268,16 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
   async run(input: ScorerRun): ScorerRunResult<TAccumulatedResults> {
     // Runtime check: execute only allowed after generateScore
     if (!this.hasGenerateScore) {
-      throw new Error(
-        `Pipeline "${this.scorer.name}": Cannot execute pipeline without generateScore() step. ` +
-          `Current steps: [${this.steps.map(s => s.name).join(', ')}]`,
-      );
+      throw new MastraError({
+        id: 'MASTR_SCORER_FAILED_TO_RUN_MISSING_GENERATE_SCORE',
+        domain: ErrorDomain.SCORER,
+        category: ErrorCategory.USER,
+        text: `Cannot execute pipeline without generateScore() step`,
+        details: {
+          scorerId: this.config.name,
+          steps: this.steps.map(s => s.name).join(', '),
+        },
+      });
     }
 
     let runId = input.runId;
@@ -292,10 +296,19 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     });
 
     if (workflowResult.status === 'failed') {
-      throw new Error(`Scorer Run Failed: ${workflowResult.error}`);
+      throw new MastraError({
+        id: 'MASTR_SCORER_FAILED_TO_RUN_WORKFLOW_FAILED',
+        domain: ErrorDomain.SCORER,
+        category: ErrorCategory.USER,
+        text: `Scorer Run Failed: ${workflowResult.error}`,
+        details: {
+          scorerId: this.config.name,
+          steps: this.steps.map(s => s.name).join(', '),
+        },
+      });
     }
 
-    return this.transformToScorerResult(workflowResult, run);
+    return this.transformToScorerResult({ workflowResult, originalInput: run });
   }
 
   private isPromptObject(stepDef: any): boolean {
@@ -325,10 +338,6 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
   }
 
   private toMastraWorkflow() {
-    if (!this.hasGenerateScore) {
-      throw new Error(`Cannot execute pipeline without generateScore() step`);
-    }
-
     // Convert each scorer step to a workflow step
     const workflowSteps = this.steps.map(scorerStep => {
       return createStep({
@@ -370,8 +379,8 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     });
 
     const workflow = createWorkflow({
-      id: `scorer-${this.scorer.name}`,
-      description: this.scorer.description,
+      id: `scorer-${this.config.name}`,
+      description: this.config.description,
       inputSchema: z.object({
         run: z.any(), // ScorerRun
       }),
@@ -400,9 +409,6 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
   private createScorerContext(stepName: string, run: ScorerRun, accumulatedResults: Record<string, any>) {
     if (stepName === 'generateReason') {
       const score = accumulatedResults.generateScoreStepResult;
-      if (score === undefined) {
-        throw new Error(`generateReason step requires a score from generateScore step`);
-      }
       return { run, results: accumulatedResults, score };
     }
 
@@ -420,17 +426,26 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     }
 
     const prompt = await originalStep.createPrompt(context);
+    const model = originalStep.judge?.model ?? this.config.judge?.model;
+    const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
+
+    if (!model || !instructions) {
+      throw new MastraError({
+        id: 'MASTR_SCORER_FAILED_TO_RUN_MISSING_MODEL_OR_INSTRUCTIONS',
+        domain: ErrorDomain.SCORER,
+        category: ErrorCategory.USER,
+        text: `Step "${scorerStep.name}" requires a model and instructions`,
+        details: {
+          scorerId: this.config.name,
+          step: scorerStep.name,
+        },
+      });
+    }
+
+    const judge = new Agent({ name: 'judge', model, instructions });
 
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {
-      const model = originalStep.judge?.model ?? this.scorer.judge?.model;
-      const instructions = originalStep.judge?.instructions ?? this.scorer.judge?.instructions;
-
-      if (!model || !instructions) {
-        throw new Error(`generateScore step requires a model and instructions`);
-      }
-
-      const judge = new Agent({ name: 'judge', model, instructions });
       const result = await judge.generate(prompt, {
         output: z.object({ score: z.number() }),
       });
@@ -438,27 +453,10 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
-      const model = originalStep.judge?.model ?? this.scorer.judge?.model;
-      const instructions = originalStep.judge?.instructions ?? this.scorer.judge?.instructions;
-
-      if (!model || !instructions) {
-        throw new Error(`generateReason step requires a model and instructions`);
-      }
-
-      const judge = new Agent({ name: 'judge', model, instructions });
       const result = await judge.generate(prompt);
       return { result: result.text, prompt };
     } else {
       const promptStep = originalStep as PromptObject<any, any, any>;
-      const model = promptStep.judge?.model ?? this.scorer.judge?.model;
-      const instructions = promptStep.judge?.instructions ?? this.scorer.judge?.instructions;
-
-      if (!model || !instructions) {
-        throw new Error(`${scorerStep.name} step requires a model and instructions`);
-      }
-
-      const judge = new Agent({ name: 'judge', model, instructions });
-
       const result = await judge.generate(prompt, {
         output: promptStep.outputSchema,
       });
@@ -466,13 +464,19 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     }
   }
 
-  private transformToScorerResult(workflowResult: any, originalInput: ScorerRun & { runId: string }) {
+  private transformToScorerResult({
+    workflowResult,
+    originalInput,
+  }: {
+    workflowResult: any;
+    originalInput: ScorerRun & { runId: string };
+  }) {
     const finalStepResult = workflowResult.result;
     const accumulatedResults = finalStepResult?.accumulatedResults || {};
     const generatedPrompts = finalStepResult?.generatedPrompts || {};
 
     return {
-      run: originalInput,
+      ...originalInput,
       score: accumulatedResults.generateScoreStepResult,
       generateScorePrompt: generatedPrompts.generateScorePrompt,
       reason: accumulatedResults.generateReasonStepResult,
