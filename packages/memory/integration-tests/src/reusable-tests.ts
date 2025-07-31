@@ -65,7 +65,7 @@ const createTestMessageV2 = (threadId: string, message: string, props?: Partial<
     id: randomUUID(),
     threadId,
     resourceId,
-    createdAt: new Date(Date.now() - 10_000 + messageCounter * 1000),
+    createdAt: new Date(Date.now() + messageCounter * 1000),
     role: 'user',
     content: {
       format: 2,
@@ -105,7 +105,7 @@ const createMessageV2Updates = (
   };
 };
 
-export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
+export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
   beforeEach(async () => {
     messageCounter = 0;
     const threads = await memory.getThreadsByResourceId({ resourceId });
@@ -348,6 +348,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           result.messages.every((m, i) => i === 0 || (m as any).createdAt >= (result.messages[i - 1] as any).createdAt),
         ).toBe(true);
       });
+
       it('should embed and recall both string and TextPart messages', async () => {
         // Plain string messages (semantically unrelated)
         const stringWeather = createTestMessage(thread.id, 'The weather is rainy and cold.', 'user', 'text');
