@@ -489,7 +489,8 @@ export abstract class MastraMemory extends MastraBase {
   }): Promise<{ success: boolean; reason: string }>;
 
   /**
-   * Updates the metadata of a list of messages
+   * Updates content or other properties for a list of messages.
+   * Also updates embeddings if semantic recall is enabled.
    * @param messages - The list of messages to update
    * @returns The list of updated messages
    */
