@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Setup and Build
 
-- `pnpm setup` - Install dependencies and build CLI (required first step)
+- `pnpm run setup` - Install dependencies and build CLI (required first step)
 - `pnpm build` - Build all packages (excludes examples and docs)
 - `pnpm build:packages` - Build core packages only
 - `pnpm build:core` - Build core framework package
