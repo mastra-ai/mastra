@@ -1,5 +1,16 @@
 # @mastra/pg
 
+## 0.13.1-alpha.0
+
+### Patch Changes
+
+- bf6c955: fix: Fix schema support to PostgreSQL scores and workflows storage
+- Updated dependencies [33dcb07]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1-alpha.0
+
 ## 0.13.0
 
 ### Minor Changes
