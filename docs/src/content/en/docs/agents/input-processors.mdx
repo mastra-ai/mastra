@@ -273,4 +273,10 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-If any processor calls `abort()`, the request terminates immediately and subsequent processors are not executed. The agent returns a 200 response with details (`result.tripwireReason`) about why the request was blocked. 
+If any processor calls `abort()`, the request terminates immediately and subsequent processors are not executed. The agent returns a 200 response with details (`result.tripwireReason`) about why the request was blocked.
+
+## Output Processors
+
+While input processors handle user messages before they reach the language model, **output processors** handle the AI's responses after generation but before they're returned to the user. This is useful for response validation, content filtering, and safety controls on AI-generated content.
+
+See the [Output Processors documentation](/docs/agents/output-processors) for details on processing AI responses. 

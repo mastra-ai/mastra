@@ -26,6 +26,7 @@ import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { AgentVNextStreamOptions } from './agent.types';
 import type { InputProcessor } from './input-processor';
+import type { OutputProcessor } from './output-processor';
 
 export type {
   MastraMessageV2,
@@ -62,6 +63,7 @@ export interface AgentConfig<
   memory?: DynamicArgument<MastraMemory>;
   voice?: CompositeVoice;
   inputProcessors?: DynamicArgument<InputProcessor[]>;
+  outputProcessors?: DynamicArgument<OutputProcessor[]>;
 }
 
 export type AgentMemoryOption = {

@@ -17,6 +17,8 @@ import type { StorageGetMessagesArg } from '../storage';
 import { createTool } from '../tools';
 import { CompositeVoice, MastraVoice } from '../voice';
 import { MessageList } from './message-list/index';
+import type { OutputProcessor } from './output-processor';
+import { ModerationOutputProcessor } from './output-processor/processors';
 import type { MastraMessageV2 } from './types';
 import { Agent } from './index';
 
@@ -30,7 +32,7 @@ class MockMemory extends MastraMemory {
     super({ name: 'mock' });
     Object.defineProperty(this, 'storage', {
       get: () => ({
-        init: async () => {},
+        init: async () => { },
         getThreadById: this.getThreadById.bind(this),
         saveThread: async ({ thread }: { thread: StorageThreadType }) => {
           return this.saveThread({ thread });
@@ -107,6 +109,12 @@ class MockMemory extends MastraMemory {
   }
   async deleteThread(threadId: string) {
     delete this.threads[threadId];
+  }
+
+  async deleteMessages(args: { threadId: string; resourceId?: string; memoryConfig?: MemoryConfig }) {
+    // Simple implementation for testing - just clear messages for the thread
+    const threadMessages = Array.from(this.messages.entries()).filter(([key]) => key.startsWith(args.threadId));
+    threadMessages.forEach(([key]) => this.messages.delete(key));
   }
 
   // Add missing method implementations
@@ -475,7 +483,7 @@ describe('agent', () => {
           inputSchema: z.object({
             color: z.string(),
           }),
-          execute: async () => {},
+          execute: async () => { },
         },
       },
     });
@@ -526,7 +534,7 @@ describe('agent', () => {
           inputSchema: z.object({
             color: z.string(),
           }),
-          execute: async () => {},
+          execute: async () => { },
         },
       },
       onFinish: props => {
@@ -555,7 +563,7 @@ describe('agent', () => {
           inputSchema: z.object({
             color: z.string(),
           }),
-          execute: async () => {},
+          execute: async () => { },
         },
       },
       onFinish: props => {
@@ -4338,5 +4346,364 @@ describe('UIMessageWithMetadata support', () => {
 
     // Second message should not have metadata
     expect(secondUserMessage?.content.metadata).toBeUndefined();
+  });
+
+  describe.only('streamVNext output processors', () => {
+    it('should process text chunks through output processors in real-time', async () => {
+      class TestOutputProcessor implements OutputProcessor {
+        readonly name = 'test-output-processor';
+
+        process(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): MastraMessageV2[] {
+          const { messages } = args;
+          return messages.map(message => {
+            if (message.role !== 'assistant') {
+              return message;
+            }
+
+            const newParts = message.content.parts.map(part => {
+              if (part.type === 'text' && 'text' in part) {
+                // Replace "test" with "TEST" to verify processing
+                return {
+                  ...part,
+                  text: part.text.replace(/test/gi, 'TEST'),
+                };
+              }
+              return part;
+            });
+
+            return {
+              ...message,
+              content: {
+                ...message.content,
+                parts: newParts,
+              },
+            };
+          });
+        }
+      }
+
+      const agent = new Agent({
+        name: 'output-processor-test-agent',
+        instructions: 'You are a helpful assistant. Respond with exactly: "This is a test response"',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            text: 'This is a test response',
+            finishReason: 'stop',
+            usage: { completionTokens: 5, promptTokens: 10 },
+          }),
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [{ type: 'text-delta', textDelta: 'This is a test' }, { type: 'text-delta', textDelta: ' response okay. test' }],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+        outputProcessors: [new TestOutputProcessor()],
+      });
+
+      const stream = agent.streamVNext('Hello');
+
+      let collectedText = '';
+      for await (const chunk of stream) {
+        if (chunk.type === 'text-delta') {
+          collectedText += chunk.payload.text;
+        }
+      }
+
+      // The output processor should have replaced "test" with "TEST"
+      expect(collectedText).toBe('This is a TEST response okay. TEST');
+    });
+
+    it('should filter blocked content chunks', async () => {
+      class BlockingOutputProcessor implements OutputProcessor {
+        readonly name = 'filtering-output-processor';
+
+        process(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): MastraMessageV2[] {
+          const { messages } = args;
+          const newMessages: MastraMessageV2[] = [];
+
+          for (const message of messages) {
+            for (const part of message.content.parts) {
+              if (part.type === 'text' && 'text' in part && part.text.includes('blocked')) {
+                continue;
+              }
+              newMessages.push(message);
+            }
+          }
+
+          return newMessages;
+        }
+      }
+
+      const agent = new Agent({
+        name: 'blocking-processor-test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            text: 'This content should be blocked',
+            finishReason: 'stop',
+            usage: { completionTokens: 5, promptTokens: 10 },
+          }),
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [{ type: 'text-delta', textDelta: 'This content should be blocked. ' }, { type: 'text-delta', textDelta: 'But this should be allowed.' }],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+        outputProcessors: [new BlockingOutputProcessor()],
+      });
+
+      const stream = agent.streamVNext('Hello');
+
+      let collectedText = '';
+      for await (const chunk of stream) {
+        if (chunk.type === 'text-delta') {
+          collectedText += chunk.payload.text;
+        }
+      }
+
+      // The blocked content should be filtered out completely (not appear in stream)
+      expect(collectedText).toBe('But this should be allowed.');
+    });
+
+    it('should emit tripwire when output processor calls abort', async () => {
+      class AbortingOutputProcessor implements OutputProcessor {
+        readonly name = 'aborting-output-processor';
+
+        process(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): MastraMessageV2[] {
+          const { messages, abort } = args;
+          
+          for (const message of messages) {
+            for (const part of message.content.parts) {
+              if (part.type === 'text' && 'text' in part && part.text.includes('abort')) {
+                abort('Content triggered abort');
+              }
+            }
+          }
+
+          return messages;
+        }
+      }
+
+      const agent = new Agent({
+        name: 'aborting-processor-test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            text: 'This should trigger abort condition',
+            finishReason: 'stop',
+            usage: { completionTokens: 5, promptTokens: 10 },
+          }),
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'This should trigger ' },
+                { type: 'text-delta', textDelta: 'abort condition' },
+                { type: 'text-delta', textDelta: ', but this won\'t be sent.' }
+              ],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+        outputProcessors: [new AbortingOutputProcessor()],
+      });
+
+      const stream = agent.streamVNext('Hello');
+      const chunks: any[] = [];
+
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+
+      // Should have received a tripwire chunk
+      const tripwireChunk = chunks.find(chunk => chunk.type === 'tripwire');
+      expect(tripwireChunk).toBeDefined();
+      expect(tripwireChunk.payload.tripwireReason).toBe('Content triggered abort');
+
+      // Should not have received the text after the abort trigger
+      let collectedText = '';
+      chunks.forEach(chunk => {
+        if (chunk.type === 'text-delta') {
+          collectedText += chunk.payload.text;
+        }
+      });
+      expect(collectedText).toBe('This should trigger ');
+    });
+
+    it('should process chunks through multiple output processors in sequence', async () => {
+      class ReplaceProcessor implements OutputProcessor {
+        readonly name = 'replace-processor';
+
+        process(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): MastraMessageV2[] {
+          return args.messages.map(message => {
+            if (message.role !== 'assistant') return message;
+
+            const newParts = message.content.parts.map(part => {
+              if (part.type === 'text' && 'text' in part) {
+                return { ...part, text: part.text.replace(/hello/gi, 'HELLO') };
+              }
+              return part;
+            });
+
+            return { ...message, content: { ...message.content, parts: newParts } };
+          });
+        }
+      }
+
+      class AddPrefixProcessor implements OutputProcessor {
+        readonly name = 'prefix-processor';
+
+        process(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): MastraMessageV2[] {
+          return args.messages.map(message => {
+            if (message.role !== 'assistant') return message;
+
+            const newParts = message.content.parts.map(part => {
+              if (part.type === 'text' && 'text' in part) {
+                return { ...part, text: `[PROCESSED] ${part.text}` };
+              }
+              return part;
+            });
+
+            return { ...message, content: { ...message.content, parts: newParts } };
+          });
+        }
+      }
+
+      const agent = new Agent({
+        name: 'multi-processor-test-agent',
+        instructions: 'Respond with: "hello world"',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            text: 'hello world',
+            finishReason: 'stop',
+            usage: { completionTokens: 2, promptTokens: 5 },
+          }),
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [{ type: 'text-delta', textDelta: 'hello world' }],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+        outputProcessors: [new ReplaceProcessor(), new AddPrefixProcessor()],
+      });
+
+      const stream = agent.streamVNext('Test');
+
+      let collectedText = '';
+      for await (const chunk of stream) {
+        if (chunk.type === 'text-delta') {
+          collectedText += chunk.payload.text;
+        }
+      }
+
+      // Should be processed by both processors: replace "hello" -> "HELLO", then add prefix
+      expect(collectedText).toBe('[PROCESSED] HELLO world');
+    });
+
+    it('should use built-in ModerationOutputProcessor', async () => {
+      const agent = new Agent({
+        name: 'moderation-test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: new MockLanguageModelV1({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [{ type: 'text-delta', textDelta: 'This is a normal response' }],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+        outputProcessors: [
+          new ModerationOutputProcessor({
+            model: new MockLanguageModelV1({
+              doGenerate: async () => ({
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                text: '{}', // Empty moderation result = no violations
+                finishReason: 'stop',
+                usage: { completionTokens: 1, promptTokens: 5 },
+              }),
+            }),
+            strategy: 'warn',
+            threshold: 0.8,
+          }),
+        ],
+      });
+
+      const stream = agent.streamVNext('Hello');
+
+      let collectedText = '';
+      for await (const chunk of stream) {
+        if (chunk.type === 'text-delta') {
+          collectedText += chunk.payload.text;
+        }
+      }
+
+      // Should pass through since moderation finds no violations
+      expect(collectedText).toBe('This is a normal response');
+    });
+
+    it('should should abort if the output processor calls abort', async () => {
+      class BlockingOutputProcessor implements OutputProcessor {
+        readonly name = 'filtering-output-processor';
+
+        process(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): MastraMessageV2[] {
+          const { messages } = args;
+          const newMessages: MastraMessageV2[] = [];
+
+          for (const message of messages) {
+            for (const part of message.content.parts) {
+              if (part.type === 'text' && 'text' in part && part.text.includes('blocked')) {
+                args.abort('blocked content');
+              }
+              newMessages.push(message);
+            }
+          }
+
+          return newMessages;
+        }
+      }
+
+      const agent = new Agent({
+        name: 'blocking-processor-test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            text: 'This content should be blocked',
+            finishReason: 'stop',
+            usage: { completionTokens: 5, promptTokens: 10 },
+          }),
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [{ type: 'text-delta', textDelta: 'This content should be blocked. ' }, { type: 'text-delta', textDelta: 'But this should be allowed.' }],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }),
+        outputProcessors: [new BlockingOutputProcessor()],
+      });
+
+      const stream = agent.streamVNext('Hello');
+
+      let collectedText = '';
+      try {
+        for await (const chunk of stream) {
+          if (chunk.type === 'text-delta') {
+            collectedText += chunk.payload.text;
+          } else if (chunk.type === 'tripwire') {
+            expect(chunk.payload.tripwireReason).toBe('blocked content');
+          }
+        }
+      } catch (error) {
+        expect(error).toBe('blocked content');
+      }
+
+      expect(collectedText).toBe('');
+    });
   });
 });

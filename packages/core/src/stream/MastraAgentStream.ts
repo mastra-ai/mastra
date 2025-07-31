@@ -73,6 +73,15 @@ function convertFullStreamChunkToMastra(value: any, ctx: { runId: string }, writ
         providerMetadata: value.providerMetadata,
       },
     });
+  } else if (value.type === 'tripwire') {
+    write({
+      type: 'tripwire',
+      runId: ctx.runId,
+      from: 'AGENT',
+      payload: {
+        tripwireReason: value.tripwireReason,
+      },
+    });
   }
 }
 
