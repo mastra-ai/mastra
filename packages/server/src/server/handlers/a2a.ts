@@ -17,7 +17,6 @@ import { applyUpdateToTask, createTaskContext, loadOrCreateTask } from '../a2a/t
 import type { Context } from '../types';
 
 const messageSendParamsSchema = z.object({
-  // id: z.string().min(1, 'Invalid or missing task ID (params.id).'),
   message: z.object({
     role: z.enum(['user', 'agent']),
     parts: z.array(
@@ -28,6 +27,11 @@ const messageSendParamsSchema = z.object({
     ),
     kind: z.literal('message'),
     messageId: z.string(),
+    contextId: z.string().optional(),
+    taskId: z.string().optional(),
+    referenceTaskIds: z.array(z.string()).optional(),
+    extensions: z.array(z.string()).optional(),
+    metadata: z.record(z.any()).optional(),
   }),
 });
 
@@ -348,7 +352,7 @@ export async function getAgentExecutionHandler({
   try {
     // Attempt to get task ID early for error context. Cast params to any to access id.
     // Proper validation happens within specific handlers.
-    taskId = 'id' in params ? params.id : params.message.taskId || 'No task ID provided';
+    taskId = 'id' in params ? params.id : params.message?.taskId || 'No task ID provided';
 
     // 2. Route based on method
     switch (method) {

@@ -12,7 +12,7 @@ export class InMemoryTaskStore {
     }
 
     // Return copies to prevent external mutation
-    return entry;
+    return { ...entry };
   }
 
   async save({ agentId, data }: { agentId: string; data: Task }): Promise<void> {
@@ -21,6 +21,6 @@ export class InMemoryTaskStore {
     if (!data.id) {
       throw new Error('Task ID is required');
     }
-    this.store.set(key, data);
+    this.store.set(key, { ...data });
   }
 }

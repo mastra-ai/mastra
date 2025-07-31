@@ -53,7 +53,7 @@ export const chefAgent = new Agent({
     myWorkflow,
   },
   memory,
-  // voice: new OpenAIVoice(),
+  voice: new OpenAIVoice(),
 });
 
 export const dynamicAgent = new Agent({

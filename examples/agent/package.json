@@ -7,6 +7,7 @@
   "version": "0.0.1",
   "dependencies": {
     "@ai-sdk/openai": "latest",
+    "@ai-sdk/google": "latest",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/loggers": "latest",
@@ -28,8 +29,6 @@
       "@mastra/client-js": "link:../../client-sdks/client-js",
       "@mastra/mcp": "link:../../packages/mcp",
       "@mastra/libsql": "link:../../stores/libsql",
-      "@mastra/server": "link:../../packages/server",
-      "@mastra/deployer": "link:../../stores/deployer",
       "mastra": "link:../../packages/cli"
     }
   },

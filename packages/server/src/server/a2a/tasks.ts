@@ -40,9 +40,9 @@ export function applyUpdateToTask(
       newTask.artifacts = [...newTask.artifacts];
     }
 
+    const artifact = update.artifact;
     const existingIndex = newTask.artifacts.findIndex(a => a.name === artifact.name);
     const existingArtifact = newTask.artifacts[existingIndex];
-    const artifact = update.artifact;
 
     if (existingArtifact) {
       if (update.append) {

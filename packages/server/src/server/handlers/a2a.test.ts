@@ -230,32 +230,6 @@ describe('A2A Handler', () => {
           kind: 'task',
         },
       });
-
-      // expect(result).toMatchInlineSnapshot(`
-      //   {
-      //     "id": "test-request-id",
-      //     "jsonrpc": "2.0",
-      //     "result": {
-      //       "artifacts": [],
-      //       "id": "test-task-id",
-      //       "metadata": undefined,
-      //       "sessionId": "test-session-id",
-      //       "status": {
-      //         "message": {
-      //           "parts": [
-      //             {
-      //               "text": "Hello, user!",
-      //               "type": "text",
-      //             },
-      //           ],
-      //           "role": "agent",
-      //         },
-      //         "state": "completed",
-      //         "timestamp": "2025-05-08T11:47:38.458Z",
-      //       },
-      //     },
-      //   }
-      // `);
     });
 
     it('should handle errors from agent.generate and save failed state', async () => {
@@ -351,8 +325,6 @@ describe('A2A Handler', () => {
         metadata: undefined,
         kind: 'task',
       };
-
-      const existingHistory: Message[] = [];
 
       // Use real InMemoryTaskStore
       await mockTaskStore.save({ agentId, data: existingTask });

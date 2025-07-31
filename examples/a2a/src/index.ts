@@ -48,8 +48,7 @@ async function main() {
     if ('error' in response) {
       throw new Error(response.error.message);
     } else if ('messageId' in response.result) {
-      // TODO: Handle message response
-      // console.log(`MESSAGE: ${response.result.message}`);
+      // Mastra's current A2A implementation will always return a task, rather than a message
       return;
     }
 
@@ -103,8 +102,7 @@ async function main() {
     if ('error' in researchResponse) {
       throw new Error(researchResponse.error.message);
     } else if ('messageId' in researchResponse.result) {
-      // TODO: Handle message response
-      // console.log(`MESSAGE: ${response.result.message}`);
+      // Mastra's current A2A implementation will always return a task, rather than a message
       return;
     }
 
@@ -131,8 +129,7 @@ async function main() {
     if ('error' in contentResponse) {
       throw new Error(contentResponse.error.message);
     } else if ('messageId' in contentResponse.result) {
-      // TODO: Handle message response
-      // console.log(`MESSAGE: ${response.result.message}`);
+      // Mastra's current A2A implementation will always return a task, rather than a message
       return;
     }
 
