@@ -75,10 +75,10 @@ type ScorerRunResult<TAccumulatedResults extends Record<string, any>> = Promise<
   generateReasonPrompt?: string;
 
   // Results
-  preprocessResult?: TAccumulatedResults extends Record<'preprocessStepResult', infer TPreprocess>
+  preprocessStepResult?: TAccumulatedResults extends Record<'preprocessStepResult', infer TPreprocess>
     ? TPreprocess
     : undefined;
-  analyzeResult?: TAccumulatedResults extends Record<'analyzeStepResult', infer TAnalyze> ? TAnalyze : undefined;
+  analyzeStepResult?: TAccumulatedResults extends Record<'analyzeStepResult', infer TAnalyze> ? TAnalyze : undefined;
 }>;
 
 // Conditional type for PromptObject context
