@@ -1,8 +1,24 @@
 import { z } from 'zod';
 import type { ChunkStrategy } from './types';
 
+function handleDeprecatedSize<T extends { size?: number; maxSize?: number }>(data: T): Omit<T, 'size'> {
+  if (data.size !== undefined) {
+    console.warn(
+      '[DEPRECATION] `size` is deprecated. Use `maxSize` instead. This will be removed in the next major version.',
+    );
+
+    if (data.maxSize === undefined) {
+      data.maxSize = data.size;
+    }
+  }
+
+  const { size, ...rest } = data;
+  return rest;
+}
+
 // Base options that apply to all strategies
 const baseChunkOptionsSchema = z.object({
+  size: z.number().positive().optional(),
   maxSize: z.number().positive().optional(),
   overlap: z.number().min(0).optional(),
   lengthFunction: z.function().optional(),
@@ -96,14 +112,14 @@ const latexChunkOptionsSchema = baseChunkOptionsSchema.strict();
 
 // Strategy-specific validation schemas
 const validationSchemas = {
-  character: characterChunkOptionsSchema,
-  recursive: recursiveChunkOptionsSchema,
-  sentence: sentenceChunkOptionsSchema,
-  token: tokenChunkOptionsSchema,
-  json: jsonChunkOptionsSchema,
-  html: htmlChunkOptionsSchema,
-  markdown: markdownChunkOptionsSchema,
-  latex: latexChunkOptionsSchema,
+  character: characterChunkOptionsSchema.transform(handleDeprecatedSize),
+  recursive: recursiveChunkOptionsSchema.transform(handleDeprecatedSize),
+  sentence: sentenceChunkOptionsSchema.transform(handleDeprecatedSize),
+  token: tokenChunkOptionsSchema.transform(handleDeprecatedSize),
+  json: jsonChunkOptionsSchema.transform(handleDeprecatedSize),
+  html: htmlChunkOptionsSchema.transform(handleDeprecatedSize),
+  markdown: markdownChunkOptionsSchema.transform(handleDeprecatedSize),
+  latex: latexChunkOptionsSchema.transform(handleDeprecatedSize),
 } as const;
 
 export function validateChunkParams(strategy: ChunkStrategy, params: any): void {
@@ -115,15 +131,15 @@ export function validateChunkParams(strategy: ChunkStrategy, params: any): void 
   const result = schema.safeParse(params);
   if (!result.success) {
     // Extract unrecognized keys for cleaner error message
-    const unrecognizedError = result.error.errors.find(e => e.code === 'unrecognized_keys');
+    const unrecognizedError = result.error.errors.find((e: any) => e.code === 'unrecognized_keys');
     if (unrecognizedError && 'keys' in unrecognizedError) {
-      const keys = unrecognizedError.keys.join(', ');
+      const keys = (unrecognizedError as any).keys.join(', ');
       throw new Error(`Invalid parameters for ${strategy} strategy: '${keys}' not supported`);
     }
 
     // Fallback to general error message for other validation issues
     const errorMessage = result.error.errors
-      .map(e => `${e.path.length > 0 ? e.path.join('.') : 'parameter'}: ${e.message}`)
+      .map((e: any) => `${e.path.length > 0 ? e.path.join('.') : 'parameter'}: ${e.message}`)
       .join(', ');
 
     throw new Error(`Invalid parameters for ${strategy} strategy: ${errorMessage}`);
