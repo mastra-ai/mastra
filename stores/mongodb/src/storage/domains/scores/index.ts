@@ -24,6 +24,18 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     }
   }
 
+  let preprocessStepResultValue: any = null;
+  if (row.preprocessStepResult) {
+    try {
+      preprocessStepResultValue =
+        typeof row.preprocessStepResult === 'string'
+          ? safelyParseJSON(row.preprocessStepResult)
+          : row.preprocessStepResult;
+    } catch (e) {
+      console.warn('Failed to parse preprocessStepResult:', e);
+    }
+  }
+
   let analyzeStepResultValue: any = null;
   if (row.analyzeStepResult) {
     try {
@@ -80,6 +92,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     runId: row.runId as string,
     scorer: scorerValue,
     extractStepResult: extractStepResultValue,
+    preprocessStepResult: preprocessStepResultValue,
     analyzeStepResult: analyzeStepResultValue,
     score: row.score as number,
     reason: row.reason as string,
@@ -147,6 +160,10 @@ export class ScoresStorageMongoDB extends ScoresStorage {
           typeof score.extractStepResult === 'string'
             ? safelyParseJSON(score.extractStepResult)
             : score.extractStepResult,
+        preprocessStepResult:
+          typeof score.preprocessStepResult === 'string'
+            ? safelyParseJSON(score.preprocessStepResult)
+            : score.preprocessStepResult,
         analyzeStepResult:
           typeof score.analyzeStepResult === 'string'
             ? safelyParseJSON(score.analyzeStepResult)

@@ -17,6 +17,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
   private transformScoreRow(row: any): ScoreRowData {
     const scorer = safelyParseJSON(row.scorer);
     const extractStepResult = safelyParseJSON(row.extractStepResult);
+    const preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
     const analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
     const metadata = safelyParseJSON(row.metadata);
     const input = safelyParseJSON(row.input);
@@ -29,6 +30,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
       ...row,
       scorer,
       extractStepResult,
+      preprocessStepResult,
       analyzeStepResult,
       metadata,
       input,

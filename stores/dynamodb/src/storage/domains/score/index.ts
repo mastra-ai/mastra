@@ -60,6 +60,10 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
       scorer: typeof score.scorer === 'string' ? score.scorer : JSON.stringify(score.scorer),
       extractStepResult:
         typeof score.extractStepResult === 'string' ? score.extractStepResult : JSON.stringify(score.extractStepResult),
+      preprocessStepResult:
+        typeof score.preprocessStepResult === 'string'
+          ? score.preprocessStepResult
+          : JSON.stringify(score.preprocessStepResult),
       analyzeStepResult:
         typeof score.analyzeStepResult === 'string' ? score.analyzeStepResult : JSON.stringify(score.analyzeStepResult),
       score: score.score,

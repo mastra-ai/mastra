@@ -20,6 +20,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     ...row,
     scorer: parseField(row.scorer),
     extractStepResult: parseField(row.extractStepResult),
+    preprocessStepResult: parseField(row.preprocessStepResult),
     analyzeStepResult: parseField(row.analyzeStepResult),
     metadata: parseField(row.metadata),
     input: parseField(row.input),
