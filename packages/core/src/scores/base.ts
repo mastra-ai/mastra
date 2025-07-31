@@ -12,7 +12,7 @@ interface ScorerStepDefinition {
   isPromptObject: boolean;
 }
 
-// Pipeline metadata
+// Pipeline scorer
 interface ScorerConfig {
   name: string;
   description: string;
@@ -143,7 +143,7 @@ type GenerateReasonStepDef<TAccumulated extends Record<string, any>> =
 
 class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
   constructor(
-    private metadata: ScorerConfig,
+    private scorer: ScorerConfig,
     private steps: Array<ScorerStepDefinition> = [],
     private originalPromptObjects: Map<
       string,
@@ -152,15 +152,15 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
   ) {}
 
   get name(): string {
-    return this.metadata.name;
+    return this.scorer.name;
   }
 
   get description(): string {
-    return this.metadata.description;
+    return this.scorer.description;
   }
 
   get judge() {
-    return this.metadata.judge;
+    return this.scorer.judge;
   }
 
   preprocess<TPreprocessOutput>(
@@ -174,7 +174,7 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     }
 
     return new MastraScorer(
-      this.metadata,
+      this.scorer,
       [
         ...this.steps,
         {
@@ -198,7 +198,7 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     }
 
     return new MastraScorer(
-      this.metadata,
+      this.scorer,
       [
         ...this.steps,
         {
@@ -222,7 +222,7 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     }
 
     return new MastraScorer(
-      this.metadata,
+      this.scorer,
       [
         ...this.steps,
         {
@@ -239,7 +239,7 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     stepDef: GenerateReasonStepDef<TAccumulatedResults>,
   ): MastraScorer<AccumulatedResults<TAccumulatedResults, 'generateReason', Awaited<TReasonOutput>>> {
     if (!this.hasGenerateScore) {
-      throw new Error(`Pipeline "${this.metadata.name}": generateReason() can only be called after generateScore()`);
+      throw new Error(`Pipeline "${this.scorer.name}": generateReason() can only be called after generateScore()`);
     }
 
     const isPromptObj = this.isPromptObject(stepDef);
@@ -250,7 +250,7 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     }
 
     return new MastraScorer(
-      this.metadata,
+      this.scorer,
       [
         ...this.steps,
         {
@@ -271,7 +271,7 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     // Runtime check: execute only allowed after generateScore
     if (!this.hasGenerateScore) {
       throw new Error(
-        `Pipeline "${this.metadata.name}": Cannot execute pipeline without generateScore() step. ` +
+        `Pipeline "${this.scorer.name}": Cannot execute pipeline without generateScore() step. ` +
           `Current steps: [${this.steps.map(s => s.name).join(', ')}]`,
       );
     }
@@ -370,8 +370,8 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
     });
 
     const workflow = createWorkflow({
-      id: `scorer-${this.metadata.name}`,
-      description: this.metadata.description,
+      id: `scorer-${this.scorer.name}`,
+      description: this.scorer.description,
       inputSchema: z.object({
         run: z.any(), // ScorerRun
       }),
@@ -423,8 +423,8 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
 
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {
-      const model = originalStep.judge?.model ?? this.metadata.judge?.model;
-      const instructions = originalStep.judge?.instructions ?? this.metadata.judge?.instructions;
+      const model = originalStep.judge?.model ?? this.scorer.judge?.model;
+      const instructions = originalStep.judge?.instructions ?? this.scorer.judge?.instructions;
 
       if (!model || !instructions) {
         throw new Error(`generateScore step requires a model and instructions`);
@@ -438,8 +438,8 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
-      const model = originalStep.judge?.model ?? this.metadata.judge?.model;
-      const instructions = originalStep.judge?.instructions ?? this.metadata.judge?.instructions;
+      const model = originalStep.judge?.model ?? this.scorer.judge?.model;
+      const instructions = originalStep.judge?.instructions ?? this.scorer.judge?.instructions;
 
       if (!model || !instructions) {
         throw new Error(`generateReason step requires a model and instructions`);
@@ -450,8 +450,8 @@ class MastraScorer<TAccumulatedResults extends Record<string, any> = {}> {
       return { result: result.text, prompt };
     } else {
       const promptStep = originalStep as PromptObject<any, any, any>;
-      const model = promptStep.judge?.model ?? this.metadata.judge?.model;
-      const instructions = promptStep.judge?.instructions ?? this.metadata.judge?.instructions;
+      const model = promptStep.judge?.model ?? this.scorer.judge?.model;
+      const instructions = promptStep.judge?.instructions ?? this.scorer.judge?.instructions;
 
       if (!model || !instructions) {
         throw new Error(`${scorerStep.name} step requires a model and instructions`);

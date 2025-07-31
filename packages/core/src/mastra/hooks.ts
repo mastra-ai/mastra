@@ -45,21 +45,38 @@ export function createOnScorerHook(mastra: Mastra) {
       output = { object: hookData.output };
     }
 
-    const score = await scorerToUse.scorer.run({
-      ...hookData,
-      input,
-      output,
-    });
+    try {
+      const score = await scorerToUse.scorer.run({
+        ...hookData,
+        input,
+        output,
+      });
 
-    const { structuredOutput, ...rest } = hookData as any; // temporary fix;
-    await storage?.saveScore({
-      ...rest,
-      ...score,
-      entityId,
-      scorerId: hookData.scorer.id,
-      metadata: {
-        structuredOutput: !!structuredOutput,
-      },
-    });
+      const { structuredOutput, ...rest } = hookData as any; // temporary fix;
+      const payload = {
+        ...rest,
+        ...score,
+        entityId,
+        scorerId: hookData.scorer.id,
+        metadata: {
+          structuredOutput: !!structuredOutput,
+        },
+      };
+      await storage?.saveScore(payload);
+    } catch (error) {
+      const mastraError = new MastraError({
+        id: 'MASTR_SCORER_FAILED_TO_RUN_HOOK',
+        domain: ErrorDomain.SCORER,
+        category: ErrorCategory.USER,
+        details: {
+          scorerId: scorer.id,
+          entityId,
+          entityType,
+        },
+      });
+
+      mastra.getLogger()?.trackException(mastraError);
+      mastra.getLogger()?.error(mastraError.toString());
+    }
   };
 }
