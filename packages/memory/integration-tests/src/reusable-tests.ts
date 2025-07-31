@@ -785,7 +785,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
   describe('Thread Pagination', () => {
     it('should return paginated threads with correct metadata', async () => {
       // Create multiple test threads (25 threads)
-      const threads = await Promise.all(
+      await Promise.all(
         Array.from({ length: 25 }, (_, i) =>
           memory.saveThread({
             thread: createTestThread(`Paginated Thread ${i + 1}`, {}, i),
