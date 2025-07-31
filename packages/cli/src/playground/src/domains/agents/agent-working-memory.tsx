@@ -85,7 +85,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                     <>
                       <div className="bg-surface3 border border-border1 rounded-lg" style={{ height: '300px' }}>
                         <ScrollArea className="h-full">
-                          <div 
+                          <div
                             className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-[10px]"
                             onClick={handleCopy}
                           >
