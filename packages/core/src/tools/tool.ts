@@ -2,6 +2,7 @@ import type { z } from 'zod';
 
 import type { Mastra } from '../mastra';
 import type { ToolAction, ToolExecutionContext } from './types';
+import { validateToolInput } from './validation';
 
 export class Tool<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
@@ -31,25 +32,13 @@ export class Tool<
     }
 
     // Validate input if schema exists
-    if (this.inputSchema && 'safeParse' in this.inputSchema) {
-      const validation = this.inputSchema.safeParse(context.context);
-      if (!validation.success) {
-        // Format validation errors for agent understanding
-        const errorMessages = validation.error.errors
-          .map((e: any) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
-          .join('\n');
-
-        // Return error as a result instead of throwing
-        return {
-          error: true,
-          message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(context.context, null, 2)}`,
-          validationErrors: validation.error.format(),
-        };
-      }
-      // Use validated data
-      context = { ...context, context: validation.data };
+    const { data, error } = validateToolInput(this.inputSchema, context.context, this.id);
+    if (error) {
+      return error;
     }
 
+    // Use validated data
+    context = { ...context, context: data };
     return this._execute(context, options);
   }
 }

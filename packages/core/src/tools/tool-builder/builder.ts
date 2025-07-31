@@ -17,6 +17,7 @@ import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
 import type { CoreTool, ToolAction, VercelTool } from '../types';
+import { validateToolInput } from '../validation';
 
 export type ToolToConvert = VercelTool | ToolAction<any, any, any>;
 export type LogType = 'tool' | 'toolset' | 'client-tool';
@@ -154,29 +155,17 @@ export class CoreToolBuilder extends MastraBase {
 
         // Validate input parameters if schema exists
         const parameters = this.getParameters();
-        if (parameters && 'safeParse' in parameters) {
-          const validation = parameters.safeParse(args);
-          if (!validation.success) {
-            const errorMessages = validation.error.errors
-              .map((e: any) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
-              .join('\n');
-
-            logger.warn(`Tool input validation failed for '${options.name}': ${errorMessages}`, {
-              toolName: options.name,
-              errors: validation.error.format(),
-              args,
-            });
-
-            // Return error as a result instead of throwing
-            return {
-              error: true,
-              message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`,
-              validationErrors: validation.error.format(),
-            };
-          }
-          // Use validated/transformed data
-          args = validation.data;
+        const { data, error } = validateToolInput(parameters, args, options.name);
+        if (error) {
+          logger.warn(`Tool input validation failed for '${options.name}'`, {
+            toolName: options.name,
+            errors: error.validationErrors,
+            args,
+          });
+          return error;
         }
+        // Use validated/transformed data
+        args = data;
 
         // there is a small delay in stream output so we add an immediate to ensure the stream is ready
         return await new Promise((resolve, reject) => {
