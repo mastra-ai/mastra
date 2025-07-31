@@ -71,5 +71,23 @@
     "@mastra/voice-speechify": "0.10.6",
     "@mastra/inngest": "0.11.7"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_client-js-5885-dependencies",
+    "@mastra_cloud-6290-dependencies",
+    "@mastra_core-6290-dependencies",
+    "@mastra_inngest-6366-dependencies",
+    "@mastra_mcp-6276-dependencies",
+    "@mastra_playground-ui-6315-dependencies",
+    "@mastra_playground-ui-6385-dependencies",
+    "@mastra_rag-6399-dependencies",
+    "@mastra_voice-murf-6384-dependencies",
+    "@mastra_voice-openai-6400-dependencies",
+    "clever-dots-marry",
+    "mastra-6290-dependencies",
+    "salty-apples-yawn",
+    "shy-groups-nail",
+    "slow-bugs-tell",
+    "tidy-baths-hear",
+    "whole-corners-begin"
+  ]
 }
