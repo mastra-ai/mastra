@@ -104,7 +104,6 @@ describe('MastraInngestWorkflow', () => {
       const app = await createHonoServer(mastra);
 
       const srv = (globServer = serve({
-        hostname: '0.0.0.0',
         fetch: app.fetch,
         port: (ctx as any).handlerPort,
       }));
