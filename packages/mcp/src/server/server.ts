@@ -1372,12 +1372,17 @@ export class MCPServer extends MCPServerBase {
         const validation = tool.parameters.safeParse(args ?? {});
         if (!validation.success) {
           const errorMessages = validation.error.errors
-            .map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`)
-            .join(', ');
+            .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+            .join('\n');
           this.logger.warn(`ExecuteTool: Invalid tool arguments for '${toolId}': ${errorMessages}`, {
             errors: validation.error.format(),
           });
-          throw new z.ZodError(validation.error.issues);
+          // Return validation error as a result instead of throwing
+          return {
+            error: true,
+            message: `Tool validation failed. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`,
+            validationErrors: validation.error.format(),
+          };
         }
         validatedArgs = validation.data;
       } else {

@@ -1861,6 +1861,7 @@ describe('MCPServer - Tool Input Validation', () => {
   let validationServer: MCPServer;
   let validationClient: InternalMastraMCPClient;
   let httpValidationServer: ServerType;
+  let tools: Record<string, any>;
   const VALIDATION_PORT = 9700 + Math.floor(Math.random() * 100);
 
   const toolsWithValidation: ToolsInput = {
@@ -1940,6 +1941,7 @@ describe('MCPServer - Tool Input Validation', () => {
     });
 
     await validationClient.connect();
+    tools = await validationClient.tools();
   });
 
   afterAll(async () => {
@@ -1948,9 +1950,11 @@ describe('MCPServer - Tool Input Validation', () => {
   });
 
   it('should successfully execute tool with valid inputs', async () => {
-    const result = await validationClient.callTool({
-      name: 'stringTool',
-      arguments: {
+    const stringTool = tools['stringTool'];
+    expect(stringTool).toBeDefined();
+
+    const result = await stringTool.execute({
+      context: {
         message: 'Hello world',
         optional: 'optional value',
       },
@@ -1961,48 +1965,48 @@ describe('MCPServer - Tool Input Validation', () => {
   });
 
   it('should return validation error for missing required parameters', async () => {
-    const result = await validationClient.callTool({
-      name: 'stringTool',
-      arguments: {},
+    const stringTool = tools['stringTool'];
+    const result = await stringTool.execute({
+      context: {},
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(true); // Returns true so LLM can see the error and self-correct
-    expect(result.content[0].text).toContain('Tool validation failed');
-    expect(result.content[0].text).toContain('Please fix the following errors');
+    expect(result.error).toBe(true); // Client-side validation returns error: true
+    expect(result.message).toContain('Tool validation failed');
+    expect(result.message).toContain('Please fix the following errors');
   });
 
   it('should return validation error for invalid string length', async () => {
-    const result = await validationClient.callTool({
-      name: 'stringTool',
-      arguments: {
+    const stringTool = tools['stringTool'];
+    const result = await stringTool.execute({
+      context: {
         message: 'Hi', // Too short, min is 3
       },
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Tool validation failed');
-    expect(result.content[0].text).toContain('Message must be at least 3 characters');
+    expect(result.error).toBe(true);
+    expect(result.message).toContain('Tool validation failed');
+    expect(result.message).toContain('String must contain at least 3 character(s)');
   });
 
   it('should return validation error for invalid number range', async () => {
-    const result = await validationClient.callTool({
-      name: 'numberTool',
-      arguments: {
+    const numberTool = tools['numberTool'];
+    const result = await numberTool.execute({
+      context: {
         age: -5, // Negative age not allowed
       },
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Tool validation failed');
+    expect(result.error).toBe(true);
+    expect(result.message).toContain('Tool validation failed');
   });
 
   it('should return validation error for invalid email format', async () => {
-    const result = await validationClient.callTool({
-      name: 'complexTool',
-      arguments: {
+    const complexTool = tools['complexTool'];
+    const result = await complexTool.execute({
+      context: {
         email: 'not-an-email',
         tags: ['tag1'],
         metadata: {
@@ -2012,15 +2016,15 @@ describe('MCPServer - Tool Input Validation', () => {
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Tool validation failed');
-    expect(result.content[0].text).toContain('Invalid email format');
+    expect(result.error).toBe(true);
+    expect(result.message).toContain('Tool validation failed');
+    expect(result.message).toContain('Invalid email format');
   });
 
   it('should return validation error for empty array when minimum required', async () => {
-    const result = await validationClient.callTool({
-      name: 'complexTool',
-      arguments: {
+    const complexTool = tools['complexTool'];
+    const result = await complexTool.execute({
+      context: {
         email: 'test@example.com',
         tags: [], // Empty array, min 1 required
         metadata: {
@@ -2030,15 +2034,15 @@ describe('MCPServer - Tool Input Validation', () => {
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Tool validation failed');
-    expect(result.content[0].text).toContain('At least one tag required');
+    expect(result.error).toBe(true);
+    expect(result.message).toContain('Tool validation failed');
+    expect(result.message).toContain('At least one tag required');
   });
 
   it('should return validation error for invalid enum value', async () => {
-    const result = await validationClient.callTool({
-      name: 'complexTool',
-      arguments: {
+    const complexTool = tools['complexTool'];
+    const result = await complexTool.execute({
+      context: {
         email: 'test@example.com',
         tags: ['tag1'],
         metadata: {
@@ -2048,14 +2052,14 @@ describe('MCPServer - Tool Input Validation', () => {
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Tool validation failed');
+    expect(result.error).toBe(true);
+    expect(result.message).toContain('Tool validation failed');
   });
 
   it('should handle multiple validation errors', async () => {
-    const result = await validationClient.callTool({
-      name: 'complexTool',
-      arguments: {
+    const complexTool = tools['complexTool'];
+    const result = await complexTool.execute({
+      context: {
         email: 'invalid-email',
         tags: [],
         metadata: {
@@ -2065,8 +2069,8 @@ describe('MCPServer - Tool Input Validation', () => {
     });
 
     expect(result).toBeDefined();
-    expect(result.isError).toBe(true);
-    const errorText = result.content[0].text;
+    expect(result.error).toBe(true);
+    const errorText = result.message;
     expect(errorText).toContain('Tool validation failed');
     // Should contain multiple validation errors
     expect(errorText).toContain('- email:');
@@ -2087,6 +2091,6 @@ describe('MCPServer - Tool Input Validation', () => {
     });
     expect(invalidResult.error).toBe(true);
     expect(invalidResult.message).toContain('Tool validation failed');
-    expect(invalidResult.message).toContain('Message must be at least 3 characters');
+    expect(invalidResult.message).toContain('String must contain at least 3 character(s)');
   });
 });

@@ -599,29 +599,6 @@ export class InternalMastraMCPClient extends MastraBase {
 
     return toolsRes;
   }
-
-  /**
-   * Call a tool on the MCP server directly
-   * This method is used for testing server-side validation behavior.
-   * It bypasses the Tool instances returned by tools() which include client-side validation.
-   * @internal
-   * @param params Tool call parameters
-   * @returns Tool call result in MCP format
-   */
-  async callTool(params: { name: string; arguments: any }) {
-    this.log('debug', `Calling tool directly on MCP server: ${params.name}`, { args: params.arguments });
-    const response = await this.client.callTool(
-      {
-        name: params.name,
-        arguments: params.arguments,
-      },
-      CallToolResultSchema,
-      {
-        timeout: this.timeout,
-      },
-    );
-    return response;
-  }
 }
 
 /**
