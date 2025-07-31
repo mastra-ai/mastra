@@ -492,7 +492,7 @@ export abstract class MastraMemory extends MastraBase {
    * Updates content or other properties for a list of messages.
    * Also updates embeddings if semantic recall is enabled.
    * @param messages - The list of messages to update
-   * @returns The list of updated messages
+   * @returns Promise that resolves to the list of updated messages
    */
   abstract updateMessages({ messages }: UpdateMessagesInput): Promise<MastraMessageV2[]>;
 
