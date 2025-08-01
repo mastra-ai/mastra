@@ -826,6 +826,7 @@ export async function execute(
     runIdToUse = crypto.randomUUID();
   }
 
+  // todo : add messages
   const messageList = new MessageList({
     threadId,
     resourceId,
@@ -846,11 +847,6 @@ export async function execute(
     now: () => Date.now(),
     generateId,
   };
-
-  // We call this for no reason because of aisdk
-  if (rest.model.specificationVersion === 'v1') {
-    _internalToUse.generateId?.();
-  }
 
   // Always use streaming approach with MastraModelOutput
   const streamExecutorProps: StreamExecutorProps = {
