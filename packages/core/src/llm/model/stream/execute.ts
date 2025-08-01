@@ -39,6 +39,7 @@ function createAgentWorkflow({
   model,
   runId,
   providerMetadata,
+  providerOptions,
   tools,
   toolChoice,
   activeTools,
@@ -47,6 +48,7 @@ function createAgentWorkflow({
   experimental_generateMessageId,
   controller,
   options,
+  headers,
 }: AgentWorkflowProps) {
   function toolCallStep() {
     return createStep({
@@ -123,8 +125,10 @@ function createAgentWorkflow({
           case 'v1': {
             modelResult = executeV4({
               model,
+              headers,
               runId,
               providerMetadata,
+              providerOptions,
               inputMessages: messageList.get.all.core() as any,
               tools,
               toolChoice,
@@ -691,6 +695,7 @@ function createStreamExecutor({
   model,
   runId,
   providerMetadata,
+  providerOptions,
   tools,
   toolChoice,
   activeTools,
@@ -699,6 +704,7 @@ function createStreamExecutor({
   maxRetries = 2,
   maxSteps = 5,
   logger,
+  headers,
 }: StreamExecutorProps) {
   return new ReadableStream<ChunkType>({
     start: async controller => {
@@ -711,6 +717,7 @@ function createStreamExecutor({
         model,
         runId,
         providerMetadata,
+        providerOptions,
         tools,
         toolChoice,
         activeTools,
@@ -720,6 +727,7 @@ function createStreamExecutor({
         controller,
         options,
         logger,
+        headers,
       });
 
       const mainWorkflow = createWorkflow({
@@ -799,12 +807,12 @@ function createStreamExecutor({
 }
 
 export async function execute(
-  props: { type?: 'stream' | 'generate'; system?: string; prompt?: string } & {
+  props: { system?: string; prompt?: string } & {
     resourceId?: string;
     threadId?: string;
   } & Omit<StreamExecutorProps, 'inputMessages'>,
 ) {
-  const { system, prompt, resourceId, threadId, runId, _internal, logger, type = 'stream', ...rest } = props;
+  const { system, prompt, resourceId, threadId, runId, _internal, logger, ...rest } = props;
 
   let loggerToUse =
     logger ||
@@ -855,7 +863,7 @@ export async function execute(
 
   const executor = createStreamExecutor(streamExecutorProps);
 
-  const output = new MastraModelOutput({
+  return new MastraModelOutput({
     version: rest.model.specificationVersion,
     stream: executor,
     options: {
@@ -863,12 +871,4 @@ export async function execute(
       onFinish: rest.options?.onFinish,
     },
   });
-
-  if (type === 'stream') {
-    return output;
-  } else if (type === 'generate') {
-    return output._getFullOutput();
-  } else {
-    throw new Error(`Unsupported execution type: ${type}`);
-  }
 }
