@@ -11,7 +11,15 @@ AI agents can analyze and understand images by processing visual content alongsi
 
 ## Prerequisites
 
-- [Unsplash](https://unsplash.com/documentation#creating-a-developer-account) Developer Account, Application and API Key.
+- [Unsplash](https://unsplash.com/documentation#creating-a-developer-account) Developer Account, Application and API Key
+- OpenAI API Key
+
+This example uses the `openai` model. Add both an `OPENAI_API_KEY` and UNSPLASH_ACCESS_KEY to `.env`.
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+UNSPLASH_ACCESS_KEY=<your-unsplash-access-key>
+```
 
 ## Creating an agent
 
@@ -49,15 +57,12 @@ export const mastra = new Mastra({
 });
 ```
 
-## Example usage
+## Creating a function
 
-Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt. Provide a `content` array that includes the image `type`, `imageUrl`, `mimeType`, and clear instructions for how the agent should respond.
+This function retrieves a random image from Unsplash to pass to the agent for classification.
 
-```typescript filename="src/test-bird-checker.ts" showLineNumbers copy
-import "dotenv/config";
-import { mastra } from "./mastra";
-
-const getRandomImage = async () => {
+```typescript filename="src/mastra/functions/get-random-image.ts" showLineNumbers copy
+export const getRandomImage = async () => {
   const queries = ["wildlife", "feathers", "flying", "birds"];
   const query = queries[Math.floor(Math.random() * queries.length)];
   const page = Math.floor(Math.random() * 20);
@@ -74,6 +79,17 @@ const getRandomImage = async () => {
   const { results } = await response.json();
   return results[Math.floor(Math.random() * results.length)].urls.regular;
 };
+```
+
+## Example usage
+
+Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt. Provide a `content` array that includes the image `type`, `imageUrl`, `mimeType`, and clear instructions for how the agent should respond.
+
+```typescript filename="src/test-bird-checker.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+import { getRandomImage } from "./mastra/functions/get-random-image";
 
 const imageUrl = await getRandomImage();
 const agent = mastra.getAgent("birdCheckerAgent");
@@ -107,4 +123,4 @@ console.log(response.text);
 
 ## Related
 
-- [Calling Agents](./calling-agents.mdx)
+- [Calling Agents](./calling-agents.mdx#from-the-command-line)

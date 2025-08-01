@@ -9,6 +9,14 @@ import { GithubLink } from "@/components/github-link";
 
 When building AI agents, you often need to extend their capabilities with external data or functionality. Mastra lets you pass tools to an agent using the `tools` parameter. Tools give agents a way to call specific functions, such as fetching data or performing calculations, to help answer a user's query.
 
+## Prerequisites
+
+This example uses the `openai` model. Add `OPENAI_API_KEY` to `.env`.
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
 ## Creating a tool
 
 This tool provides historical weather data for London, returning arrays of daily temperature, precipitation, wind speed, snowfall, and weather conditions from January 1st of the current year up to today. This structure makes it easy for agents to access and reason about recent weather trends.
@@ -86,4 +94,4 @@ export const londonWeatherAgent = new Agent({
 
 ## Related
 
-- [Calling Agents](./calling-agents.mdx)
+- [Calling Agents](./calling-agents.mdx#from-the-command-line)

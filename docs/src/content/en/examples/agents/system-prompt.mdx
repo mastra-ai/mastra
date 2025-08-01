@@ -9,6 +9,14 @@ import { GithubLink } from "@/components/github-link";
 
 When building AI agents, you need to define their role, personality, and capabilities. A system prompt (provided via `instructions`) acts as the agent's foundational identity. It tells the agent *who* it is and how it should behave. Unlike user messages that ask *what* to do, the system prompt defines the agent's expertise, tone, and approach to all interactions.
 
+## Prerequisites
+
+This example uses the `openai` model. Add `OPENAI_API_KEY` to `.env`.
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
 ## Creating an agent
 
 Create a simple agent that returns facts about a city.
@@ -64,4 +72,4 @@ console.log(result.text);
 
 ## Related
 
-- [Calling Agents](./calling-agents.mdx)
+- [Calling Agents](./calling-agents.mdx#from-the-command-line)

@@ -15,6 +15,14 @@ In this example, this system consists of three agents:
 2. A [**Editor agent**](#editor-agent) that refines the content.
 3. A [**Publisher agent**](#publisher-agent) that supervises and coordinates the other agents.
 
+## Prerequisites
+
+This example uses the `openai` model. Add `OPENAI_API_KEY` to `.env`.
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
 ## Copywriter agent
 
 This `copywriterAgent` is responsible for writing the initial blog post content based on a given topic.
@@ -164,4 +172,4 @@ console.log(response.text);
 
 ## Related
 
-- [Calling Agents](./calling-agents.mdx)
+- [Calling Agents](./calling-agents.mdx#from-the-command-line)
