@@ -115,7 +115,8 @@ export class MessageList {
     return {
       remembered: this.rememberedPersisted,
       input: this.inputPersisted,
-      response: this.responsePersisted, // this can be output
+      taggedSystemMessages: this.taggedSystemMessages,
+      response: this.responsePersisted,
     };
   }
   public get clear() {
