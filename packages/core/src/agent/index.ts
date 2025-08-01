@@ -1859,14 +1859,16 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const scorers = await this.getScorers({ runtimeContext });
 
+    // const userInputMessages = messageList.getPersisted.input.ui().filter(m => m.role === 'user').at(-1);
+
     if (Object.keys(scorers || {}).length > 0) {
       for (const [id, scorerObject] of Object.entries(scorers)) {
         runScorer({
           scorerId: id,
           scorerObject: scorerObject,
           runId,
-          input: userInputMessages,
-          output,
+          input: messageList.getPersisted.input.ui(), //.filter(m => m.role === 'user'),
+          output: messageList.getPersisted.response.ui(),
           runtimeContext,
           entity: {
             id: this.id,
