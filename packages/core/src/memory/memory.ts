@@ -2,7 +2,7 @@ import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 
 
 import { MessageList } from '../agent/message-list';
 import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
-import { MastraBase } from '../base';
+import { MastraBase, type RequireOnly, type Resolve } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraStorage, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -37,6 +37,14 @@ export abstract class MemoryProcessor extends MastraBase {
     return messages;
   }
 }
+
+export type MessageV2Update = Resolve<
+  RequireOnly<MastraMessageV2, 'id' | 'threadId'> & { content: RequireOnly<MastraMessageV2['content'], 'format'> }
+>;
+
+export type UpdateMessagesInput = {
+  messages: MessageV2Update[];
+};
 
 export const memoryDefaultOptions = {
   lastMessages: 10,
@@ -471,6 +479,14 @@ export abstract class MastraMemory extends MastraBase {
     searchString?: string;
     memoryConfig?: MemoryConfig;
   }): Promise<{ success: boolean; reason: string }>;
+
+  /**
+   * Updates content or other properties for a list of messages.
+   * Also updates embeddings if semantic recall is enabled.
+   * @param messages - The list of messages to update
+   * @returns Promise that resolves to the list of updated messages
+   */
+  abstract updateMessages({ messages }: UpdateMessagesInput): Promise<MastraMessageV2[]>;
 
   /**
    * Deletes multiple messages by their IDs
