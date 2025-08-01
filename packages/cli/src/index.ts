@@ -183,6 +183,7 @@ program
   .option('-e, --env <env>', 'Custom env file to include in the dev server')
   .option('-i, --inspect', 'Start the dev server in inspect mode')
   .option('-b, --inspect-brk', 'Start the dev server in inspect mode and break at the beginning of the script')
+  .option('-s, --https', 'Enable HTTPS for the local development server')
   .option(
     '-c, --custom-args <args>',
     'Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-transform-types',
@@ -205,6 +206,7 @@ program
       env: args?.env,
       inspect: args?.inspect && !args?.inspectBrk,
       inspectBrk: args?.inspectBrk,
+      https: args?.https,
       customArgs: args?.customArgs ? args.customArgs.split(',') : [],
     }).catch(err => {
       logger.error(err.message);

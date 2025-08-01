@@ -14,6 +14,7 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute, openAPISpecs } from 'hono-openapi';
+import devcert from 'devcert';
 import { getAgentCardByIdHandler, getAgentExecutionHandler } from './handlers/a2a';
 import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
@@ -32,6 +33,7 @@ import { vectorRouter } from './handlers/routes/vector/router';
 import { workflowsRouter } from './handlers/routes/workflows/router';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
+import https from 'https';
 
 type Bindings = {};
 
@@ -497,20 +499,29 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
 
+  const host = serverOptions?.host ?? 'localhost';
   const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
+  const httpsEnabled = process.argv.includes('--https') ?? process.env.HTTPS?.toUpperCase() === 'TRUE';
+  const { key, cert } = httpsEnabled ? await devcert.certificateFor(host) : {};
 
   const server = serve(
     {
       fetch: app.fetch,
       port,
       hostname: serverOptions?.host,
+      createServer: httpsEnabled ? https.createServer : undefined,
+      serverOptions: httpsEnabled
+        ? {
+            key,
+            cert,
+          }
+        : undefined,
     },
     () => {
       const logger = mastra.getLogger();
-      const host = serverOptions?.host ?? 'localhost';
-      logger.info(` Mastra API running on port http://${host}:${port}/api`);
+      logger.info(` Mastra API running on port ${httpsEnabled ? 'https' : 'http'}://${host}:${port}/api`);
       if (options?.playground) {
-        const playgroundUrl = `http://${host}:${port}`;
+        const playgroundUrl = `${httpsEnabled ? 'https' : 'http'}://${host}:${port}`;
         logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
       }
 
