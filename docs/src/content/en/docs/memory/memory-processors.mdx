@@ -98,8 +98,8 @@ const memoryWithMultipleProcessors = new Memory({
 You can create custom logic by extending the base `MemoryProcessor` class.
 
 ```typescript copy showLineNumbers {4-19,23-26}
-import { Memory, CoreMessage } from "@mastra/memory";
-import { MemoryProcessor, MemoryProcessorOpts } from "@mastra/core/memory";
+import { Memory, CoreMessage, MemoryProcessorOpts } from "@mastra/core";
+import { MemoryProcessor } from "@mastra/core/memory";
 
 class ConversationOnlyFilter extends MemoryProcessor {
   constructor() {
