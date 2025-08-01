@@ -192,37 +192,6 @@ export class ProcessorRunner {
             const { done, value } = await reader.read();
 
             if (done) {
-              // Process any final chunks that processors might want to emit
-              // for (const processor of this.outputProcessors) {
-              //   if (processor.processOutputStream) {
-              //     const state = processorStates.get(processor.name);
-              //     if (state) {
-              //       try {
-              //         const result = await processor.processOutputStream({
-              //           chunk: { type: 'text-delta', textDelta: '' }, // Empty chunk to indicate stream end
-              //           allChunks: state.allChunks,
-              //           state: state.getState(),
-              //           abort: (reason?: string) => {
-              //             throw new TripWire(reason || `Stream finalization blocked by ${processor.name}`);
-              //           },
-              //         });
-
-              //         if (result.shouldEmit && result.chunk) {
-              //           controller.enqueue(result.chunk);
-              //         }
-              //       } catch (error) {
-              //         if (error instanceof TripWire) {
-              //           controller.enqueue({
-              //             type: 'tripwire',
-              //             tripwireReason: error.message,
-              //           });
-              //           controller.close();
-              //           return;
-              //         }
-              //       }
-              //     }
-              //   }
-              // }
               controller.close();
               return;
             }

@@ -2572,6 +2572,15 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               onResult(result.object as ResolvedOutput);
               try {
                 const outputText = JSON.stringify(result.object);
+
+                // Process final stream result
+                await this.__runOutputProcessors({
+                  runtimeContext: mergedStreamOptions.runtimeContext || new RuntimeContext(),
+                  messageList: new MessageList({
+                    threadId: llmOptions.threadId || '',
+                    resourceId: llmOptions.resourceId || '',
+                  }).add(outputText, 'response'),
+                });
                 await after({
                   result,
                   outputText,
@@ -2606,6 +2615,15 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               onResult(result.text as ResolvedOutput);
               try {
                 const outputText = result.text;
+
+                // Process final stream result
+                await this.__runOutputProcessors({
+                  runtimeContext: mergedStreamOptions.runtimeContext || new RuntimeContext(),
+                  messageList: new MessageList({
+                    threadId: llmOptions.threadId || '',
+                    resourceId: llmOptions.resourceId || '',
+                  }).add(outputText, 'response'),
+                });
                 await after({
                   result,
                   outputText,
