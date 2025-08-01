@@ -818,8 +818,6 @@ describe('convertToV1Messages', () => {
 
     const result = convertToV1Messages([testMessage]);
 
-    console.log('Rouen result:', JSON.stringify(result, null, 2));
-
     // Should have 2 messages: tool-call, tool-result
     expect(result.length).toBe(2);
 
@@ -909,8 +907,6 @@ describe('convertToV1Messages', () => {
     };
 
     const result = convertToV1Messages([testMessage]);
-
-    console.log('Rungis result:', JSON.stringify(result, null, 2));
 
     // Should have 3 messages: tool-call, tool-result, text
     expect(result.length).toBe(3);
@@ -1029,7 +1025,10 @@ describe('convertToV1Messages', () => {
     expect(fourthMessage.role).toBe('assistant');
     expect(fourthMessage.type).toBe('text');
     if (Array.isArray(fourthMessage.content)) {
-      expect(fourthMessage.content[0]?.text).toContain("It's 20°C");
+      const textPart = fourthMessage.content[0];
+      if (textPart && textPart.type === 'text') {
+        expect(textPart.text).toContain("It's 20°C");
+      }
     } else {
       expect(fourthMessage.content).toContain("It's 20°C");
     }
@@ -1038,7 +1037,10 @@ describe('convertToV1Messages', () => {
     expect(fifthMessage.role).toBe('assistant');
     expect(fifthMessage.type).toBe('text');
     if (Array.isArray(fifthMessage.content)) {
-      expect(fifthMessage.content[0]?.text).toContain('Would you like me');
+      const textPart2 = fifthMessage.content[0];
+      if (textPart2 && textPart2.type === 'text') {
+        expect(textPart2.text).toContain('Would you like me');
+      }
     } else {
       expect(fifthMessage.content).toContain('Would you like me');
     }
@@ -1230,8 +1232,6 @@ describe('convertToV1Messages', () => {
 
     const result = convertToV1Messages(messages);
 
-    console.log('Working structure result:', JSON.stringify(result, null, 2));
-
     // Should have 3 messages: text, tool-call, tool-result
     expect(result.length).toBe(3);
 
@@ -1303,19 +1303,6 @@ describe('convertToV1Messages', () => {
     ];
 
     const result = convertToV1Messages(messages);
-
-    console.log('User report structure result:', JSON.stringify(result, null, 2));
-
-    // Check if any message has undefined content
-    const hasUndefinedContent = result.some(msg => msg.content === undefined);
-    if (hasUndefinedContent) {
-      console.error('ERROR: Found message with undefined content!');
-      result.forEach((msg, i) => {
-        if (msg.content === undefined) {
-          console.error(`Message ${i} has undefined content:`, msg);
-        }
-      });
-    }
 
     // Should have 4 messages: text before, tool-call, tool-result, text after
     expect(result.length).toBe(4);
