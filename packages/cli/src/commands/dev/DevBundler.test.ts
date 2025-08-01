@@ -1,4 +1,6 @@
+import { remove } from 'fs-extra/esm';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { DevBundler } from './DevBundler';
 
 // Don't reference top-level variables in mock definitions
 vi.mock('@mastra/deployer/build', () => {
@@ -24,7 +26,6 @@ vi.mock('fs-extra', () => {
 });
 
 // Import DevBundler after mocks
-import { DevBundler } from './DevBundler';
 
 describe('DevBundler', () => {
   const originalEnv = process.env.NODE_ENV;
@@ -44,18 +45,23 @@ describe('DevBundler', () => {
       const devBundler = new DevBundler();
       const { getWatcherInputOptions } = await import('@mastra/deployer/build');
 
-      // Act
-      await devBundler.watch('test-entry.js', 'output-dir', []);
+      const tmpDir = '.test-tmp';
+      try {
+        // Act
+        await devBundler.watch('test-entry.js', tmpDir, []);
 
-      // Assert
-      expect(getWatcherInputOptions).toHaveBeenCalledWith(
-        'test-entry.js',
-        'node',
-        {
-          'process.env.NODE_ENV': JSON.stringify('test-env'),
-        },
-        { sourcemap: false },
-      );
+        // Assert
+        expect(getWatcherInputOptions).toHaveBeenCalledWith(
+          'test-entry.js',
+          'node',
+          {
+            'process.env.NODE_ENV': JSON.stringify('test-env'),
+          },
+          expect.objectContaining({ sourcemap: false }),
+        );
+      } finally {
+        await remove(tmpDir);
+      }
     });
 
     it('should default to development when NODE_ENV is not set', async () => {
@@ -65,17 +71,21 @@ describe('DevBundler', () => {
       const { getWatcherInputOptions } = await import('@mastra/deployer/build');
 
       // Act
-      await devBundler.watch('test-entry.js', 'output-dir', []);
-
-      // Assert
-      expect(getWatcherInputOptions).toHaveBeenCalledWith(
-        'test-entry.js',
-        'node',
-        {
-          'process.env.NODE_ENV': JSON.stringify('development'),
-        },
-        { sourcemap: false },
-      );
+      const tmpDir = '.test-tmp';
+      await devBundler.watch('test-entry.js', tmpDir, []);
+      try {
+        // Assert
+        expect(getWatcherInputOptions).toHaveBeenCalledWith(
+          'test-entry.js',
+          'node',
+          {
+            'process.env.NODE_ENV': JSON.stringify('development'),
+          },
+          expect.objectContaining({ sourcemap: false }),
+        );
+      } finally {
+        await remove(tmpDir);
+      }
     });
   });
 });

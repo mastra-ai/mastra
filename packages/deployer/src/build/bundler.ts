@@ -51,7 +51,6 @@ export async function getInputOptions(
     preserveSymlinks: true,
     external: externals,
     plugins: [
-      tsConfigPaths(),
       {
         name: 'alias-optimized-deps',
         // @ts-ignore
@@ -74,6 +73,7 @@ export async function getInputOptions(
           };
         },
       },
+      tsConfigPaths(),
       alias({
         entries: [
           {
