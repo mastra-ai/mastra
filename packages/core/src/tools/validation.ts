@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
-export interface ValidationError {
+export interface ValidationError<T = any> {
   error: true;
   message: string;
-  validationErrors: any;
+  validationErrors: z.ZodFormattedError<T>;
 }
 
 /**
@@ -13,11 +13,11 @@ export interface ValidationError {
  * @param toolId Optional tool ID for better error messages
  * @returns The validation error object if validation fails, undefined if successful
  */
-export function validateToolInput(
-  schema: z.ZodSchema | undefined,
-  input: any,
+export function validateToolInput<T = any>(
+  schema: z.ZodSchema<T> | undefined,
+  input: unknown,
   toolId?: string,
-): { data: any; error?: ValidationError } {
+): { data: T | unknown; error?: ValidationError<T> } {
   if (!schema || !('safeParse' in schema)) {
     return { data: input };
   }
@@ -28,7 +28,7 @@ export function validateToolInput(
       .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
       .join('\n');
 
-    const error: ValidationError = {
+    const error: ValidationError<T> = {
       error: true,
       message: `Tool validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(input, null, 2)}`,
       validationErrors: validation.error.format(),

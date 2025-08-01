@@ -118,7 +118,7 @@ export class CoreToolBuilder extends MastraBase {
       type: logType,
     });
 
-    const execFunction = async (args: any, execOptions: ToolExecutionOptions) => {
+    const execFunction = async (args: unknown, execOptions: ToolExecutionOptions) => {
       if (isVercelTool(tool)) {
         return tool?.execute?.(args, execOptions) ?? undefined;
       }
@@ -148,7 +148,7 @@ export class CoreToolBuilder extends MastraBase {
       );
     };
 
-    return async (args: any, execOptions?: any) => {
+    return async (args: unknown, execOptions?: ToolExecutionOptions) => {
       let logger = options.logger || this.logger;
       try {
         logger.debug(start, { ...rest, args });
@@ -162,7 +162,7 @@ export class CoreToolBuilder extends MastraBase {
             errors: error.validationErrors,
             args,
           });
-          return error;
+          return error as any;
         }
         // Use validated/transformed data
         args = data;
@@ -171,7 +171,7 @@ export class CoreToolBuilder extends MastraBase {
         return await new Promise((resolve, reject) => {
           setImmediate(async () => {
             try {
-              const result = await execFunction(args, execOptions);
+              const result = await execFunction(args, execOptions!);
               resolve(result);
             } catch (err) {
               reject(err);
