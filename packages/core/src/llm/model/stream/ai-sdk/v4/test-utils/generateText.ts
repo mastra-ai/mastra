@@ -1,39 +1,131 @@
 import assert from 'node:assert';
+import type { LanguageModelV1CallWarning } from '@ai-sdk/provider';
 import { jsonSchema } from '@ai-sdk/ui-utils';
-import { tool } from 'ai';
+import type { LanguageModelV1, LanguageModelV1StreamPart } from 'ai';
 import { convertArrayToReadableStream, MockLanguageModelV1, mockId } from 'ai/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { execute } from '../../../execute';
 import type { StreamExecutorProps } from '../../../types';
-import { createTestModel, modelWithFiles, modelWithReasoning, modelWithSources } from './generateText/test-utils';
+
+function createTestModel({
+  stream = convertArrayToReadableStream([
+    {
+      type: 'response-metadata',
+      id: 'id-0',
+      modelId: 'mock-model-id',
+      timestamp: new Date(0),
+    },
+    { type: 'text-delta', textDelta: 'Hello' },
+    { type: 'text-delta', textDelta: ', ' },
+    { type: 'text-delta', textDelta: `world!` },
+    {
+      type: 'finish',
+      finishReason: 'stop',
+      logprobs: undefined,
+      usage: { completionTokens: 10, promptTokens: 3 },
+    },
+  ]),
+  rawCall = { rawPrompt: 'prompt', rawSettings: {} },
+  rawResponse = undefined,
+  request = undefined,
+  warnings,
+}: {
+  stream?: ReadableStream<LanguageModelV1StreamPart>;
+  rawResponse?: { headers: Record<string, string> };
+  rawCall?: { rawPrompt: string; rawSettings: Record<string, unknown> };
+  request?: { body: string };
+  warnings?: LanguageModelV1CallWarning[];
+} = {}): LanguageModelV1 {
+  return new MockLanguageModelV1({
+    doStream: async () => ({ stream, rawCall, rawResponse, request, warnings }),
+  });
+}
+
+const createMockModelWithReasoning = () =>
+  createTestModel({
+    stream: convertArrayToReadableStream([
+      {
+        type: 'response-metadata',
+        id: 'id-0',
+        modelId: 'mock-model-id',
+        timestamp: new Date(0),
+      },
+      { type: 'reasoning', textDelta: 'I will open the conversation' },
+      { type: 'reasoning', textDelta: ' with witty banter.' },
+      { type: 'reasoning-signature', signature: 'signature' },
+      { type: 'redacted-reasoning', data: 'redacted-reasoning-data' },
+      { type: 'reasoning-signature', signature: '1234567890' },
+      { type: 'text-delta', textDelta: 'Hello, ' },
+      { type: 'text-delta', textDelta: 'world!' },
+      {
+        type: 'finish',
+        finishReason: 'stop',
+        logprobs: undefined,
+        usage: { completionTokens: 20, promptTokens: 10 },
+      },
+    ]),
+  });
+
+const createMockModelWithSources = () =>
+  createTestModel({
+    stream: convertArrayToReadableStream([
+      {
+        type: 'source',
+        source: {
+          sourceType: 'url' as const,
+          id: '123',
+          url: 'https://example.com',
+          title: 'Example',
+          providerMetadata: { provider: { custom: 'value' } },
+        },
+      },
+      { type: 'text-delta', textDelta: 'Hello, world!' },
+      {
+        type: 'source',
+        source: {
+          sourceType: 'url' as const,
+          id: '456',
+          url: 'https://example.com/2',
+          title: 'Example 2',
+          providerMetadata: { provider: { custom: 'value2' } },
+        },
+      },
+      {
+        type: 'finish',
+        finishReason: 'stop',
+        logprobs: undefined,
+        usage: { completionTokens: 20, promptTokens: 10 },
+        // providerMetadata: { testprovider: { testkey: 'testvalue' } },
+      },
+    ]),
+  });
+
+const createMockModelWithFiles = () =>
+  createTestModel({
+    stream: convertArrayToReadableStream([
+      {
+        type: 'file',
+        data: new Uint8Array([1, 2, 3]),
+        mimeType: 'image/png',
+      },
+      {
+        type: 'file',
+        data: 'QkFVRw==',
+        mimeType: 'image/jpeg',
+      },
+      { type: 'text-delta', textDelta: 'Hello, world!' },
+      {
+        type: 'finish',
+        finishReason: 'stop',
+        logprobs: undefined,
+        usage: { completionTokens: 20, promptTokens: 10 },
+      },
+    ]),
+  });
+
 // Simple type assertion utility for testing type inference
 function assertType<_T>(_value: _T): void {}
-
-// Mock types for compatibility
-type GenerateTextResult<TToolResults, TSteps> = {
-  text: string;
-  toolCalls: any[];
-  toolResults: TToolResults;
-  usage: any;
-  steps: TSteps;
-  finishReason: string;
-  reasoning: string;
-  sources: any[];
-  files: any[];
-  warnings: any[];
-  providerMetadata: any;
-  response: any;
-  request: any;
-};
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type StepResult<T> = {
-  stepResult: any;
-  metadata: any;
-  output: any;
-  messages: any;
-};
 
 // Mock error types
 class ToolExecutionError extends Error {
@@ -66,7 +158,7 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
     return output.aisdk.v4.getFullOutput();
   };
 
-  describe.only('generateText', () => {
+  describe('generateText', () => {
     describe('result.text', () => {
       it('should generate text', async () => {
         const result = await generateText({
@@ -111,45 +203,41 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
         expect(result.text).toStrictEqual('Hello, world!');
       });
     });
-
     describe('result.reasoning', () => {
       it('should contain reasoning string from model response', async () => {
         const result = await generateText({
-          model: modelWithReasoning,
+          model: createMockModelWithReasoning(),
           prompt: 'prompt',
         });
 
         expect(result.reasoning).toStrictEqual('I will open the conversation with witty banter.');
       });
     });
-
     describe('result.sources', () => {
       it('should contain sources', async () => {
         const result = await generateText({
-          model: modelWithSources,
+          model: createMockModelWithSources(),
           prompt: 'prompt',
         });
 
         expect(result.sources).toMatchSnapshot();
       });
     });
-
-    // TODO: file types are slightly different DefaultGeneratedFile vs DefaultGeneratedFileWithType
-    describe.skip('result.files', () => {
+    describe('result.files', () => {
       it('should contain files', async () => {
         const result = await generateText({
-          model: modelWithFiles,
+          model: createMockModelWithFiles(),
           prompt: 'prompt',
         });
 
         expect(result.files).toMatchSnapshot();
       });
     });
-    // TODO: file types are slightly different + id mismatch "id-0" / "id-1"
-    describe.skip('result.steps', () => {
+
+    describe('result.steps', () => {
       it('should add the reasoning from the model response to the step result', async () => {
         const result = await generateText({
-          model: modelWithReasoning,
+          model: createMockModelWithReasoning(),
           prompt: 'prompt',
           experimental_generateMessageId: mockId({
             prefix: 'msg',
@@ -165,7 +253,7 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
 
       it('should contain sources', async () => {
         const result = await generateText({
-          model: modelWithSources,
+          model: createMockModelWithSources(),
           prompt: 'prompt',
           experimental_generateMessageId: mockId({ prefix: 'msg' }),
           _internal: {
@@ -179,7 +267,7 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
 
       it('should contain files', async () => {
         const result = await generateText({
-          model: modelWithFiles,
+          model: createMockModelWithFiles(),
           prompt: 'prompt',
           experimental_generateMessageId: mockId({ prefix: 'msg' }),
           _internal: {
@@ -422,27 +510,25 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
     describe('result.response.messages', () => {
       it('should contain assistant response message when there are no tool calls', async () => {
         const result = await generateText({
-          model: new MockLanguageModelV1({
-            doStream: async () => ({
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-delta', textDelta: 'Hello, ' },
-                { type: 'text-delta', textDelta: 'world!' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ]),
-              rawCall: { rawPrompt: 'prompt', rawSettings: {} },
-            }),
+          model: createTestModel({
+            stream: convertArrayToReadableStream([
+              {
+                type: 'response-metadata',
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-delta', textDelta: 'Hello, ' },
+              { type: 'text-delta', textDelta: 'world!' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { completionTokens: 10, promptTokens: 3 },
+              },
+            ]),
           }),
+
           prompt: 'test-input',
           experimental_generateMessageId: mockId({ prefix: 'msg' }),
         });
@@ -450,38 +536,32 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
         expect(result.response.messages).toMatchSnapshot();
       });
 
-      // TODO: mismatch message id
-      // - "id": "msg-1",
-      // + "id": "msg-0",
-      it.skip('should contain assistant response message and tool message when there are tool calls with results', async () => {
+      it.only('should contain assistant response message and tool message when there are tool calls with results', async () => {
         const result = await generateText({
-          model: new MockLanguageModelV1({
-            doStream: async () => ({
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                { type: 'text-delta', textDelta: 'Hello, ' },
-                { type: 'text-delta', textDelta: 'world!' },
-                {
-                  type: 'tool-call',
-                  toolCallType: 'function',
-                  toolCallId: 'call-1',
-                  toolName: 'tool1',
-                  args: `{ "value": "value" }`,
-                },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  logprobs: undefined,
-                  usage: { completionTokens: 10, promptTokens: 3 },
-                },
-              ]),
-              rawCall: { rawPrompt: 'prompt', rawSettings: {} },
-            }),
+          model: createTestModel({
+            stream: convertArrayToReadableStream([
+              {
+                type: 'response-metadata',
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-delta', textDelta: 'Hello, ' },
+              { type: 'text-delta', textDelta: 'world!' },
+              {
+                type: 'tool-call',
+                toolCallType: 'function',
+                toolCallId: 'call-1',
+                toolName: 'tool1',
+                args: `{ "value": "value" }`,
+              },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { completionTokens: 10, promptTokens: 3 },
+              },
+            ]),
           }),
           tools: {
             tool1: {
@@ -497,12 +577,13 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
           experimental_generateMessageId: mockId({ prefix: 'msg' }),
         });
 
+        expect(result.response.messages).toEqual('asd');
         expect(result.response.messages).toMatchSnapshot();
       });
 
       it('should contain reasoning', async () => {
         const result = await generateText({
-          model: modelWithReasoning,
+          model: createMockModelWithReasoning(),
           prompt: 'test-input',
           experimental_generateMessageId: mockId({ prefix: 'msg' }),
         });
@@ -526,7 +607,7 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
       });
     });
 
-    // TODO: does not populate body on a streaming response
+    // TODO: does not populate body on a streaming response -- we can track body ourselves
     describe.skip('result.response', () => {
       it('should contain response body and headers', async () => {
         const result = await generateText({
@@ -564,765 +645,6 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
 
         expect(result.steps[0].response).toMatchSnapshot();
         expect(result.response).toMatchSnapshot();
-      });
-    });
-
-    // TODO
-    describe.skip('options.maxSteps', () => {
-      describe('2 steps: initial, tool-result', () => {
-        let result: any; // GenerateTextResult<any, any>;
-        let onStepFinishResults: StepResult<any>[];
-
-        beforeEach(async () => {
-          onStepFinishResults = [];
-
-          let responseCount = 0;
-          result = await generateText({
-            model: new MockLanguageModelV1({
-              //   doGenerate: async ({ prompt, mode }) => {
-              //     switch (responseCount++) {
-              //       case 0:
-              //         expect(mode).toStrictEqual({
-              //           type: 'regular',
-              //           toolChoice: { type: 'auto' },
-              //           tools: [
-              //             {
-              //               type: 'function',
-              //               name: 'tool1',
-              //               description: undefined,
-              //               parameters: {
-              //                 $schema: 'http://json-schema.org/draft-07/schema#',
-              //                 additionalProperties: false,
-              //                 properties: { value: { type: 'string' } },
-              //                 required: ['value'],
-              //                 type: 'object',
-              //               },
-              //             },
-              //           ],
-              //         });
-
-              //         expect(prompt).toStrictEqual([
-              //           {
-              //             role: 'user',
-              //             content: [{ type: 'text', text: 'test-input' }],
-              //             providerMetadata: undefined,
-              //           },
-              //         ]);
-
-              //         return {
-              //           ...dummyResponseValues,
-              //           toolCalls: [
-              //             {
-              //               toolCallType: 'function',
-              //               toolCallId: 'call-1',
-              //               toolName: 'tool1',
-              //               args: `{ "value": "value" }`,
-              //             },
-              //           ],
-              //           toolResults: [
-              //             {
-              //               toolCallId: 'call-1',
-              //               toolName: 'tool1',
-              //               args: { value: 'value' },
-              //               result: 'result1',
-              //             },
-              //           ],
-              //           finishReason: 'tool-calls',
-              //           usage: { completionTokens: 5, promptTokens: 10 },
-              //           response: {
-              //             id: 'test-id-1-from-model',
-              //             timestamp: new Date(0),
-              //             modelId: 'test-response-model-id',
-              //           },
-              //         };
-              //       case 1:
-              //         expect(mode).toStrictEqual({
-              //           type: 'regular',
-              //           toolChoice: { type: 'auto' },
-              //           tools: [
-              //             {
-              //               type: 'function',
-              //               name: 'tool1',
-              //               description: undefined,
-              //               parameters: {
-              //                 $schema: 'http://json-schema.org/draft-07/schema#',
-              //                 additionalProperties: false,
-              //                 properties: { value: { type: 'string' } },
-              //                 required: ['value'],
-              //                 type: 'object',
-              //               },
-              //             },
-              //           ],
-              //         });
-
-              //         expect(prompt).toStrictEqual([
-              //           {
-              //             role: 'user',
-              //             content: [{ type: 'text', text: 'test-input' }],
-              //             providerMetadata: undefined,
-              //           },
-              //           {
-              //             role: 'assistant',
-              //             content: [
-              //               {
-              //                 type: 'tool-call',
-              //                 toolCallId: 'call-1',
-              //                 toolName: 'tool1',
-              //                 args: { value: 'value' },
-              //                 providerMetadata: undefined,
-              //               },
-              //             ],
-              //             providerMetadata: undefined,
-              //           },
-              //           {
-              //             role: 'tool',
-              //             content: [
-              //               {
-              //                 type: 'tool-result',
-              //                 toolCallId: 'call-1',
-              //                 toolName: 'tool1',
-              //                 result: 'result1',
-              //                 content: undefined,
-              //                 isError: undefined,
-              //                 providerMetadata: undefined,
-              //               },
-              //             ],
-              //             providerMetadata: undefined,
-              //           },
-              //         ]);
-              //         return {
-              //           ...dummyResponseValues,
-              //           text: 'Hello, world!',
-              //           response: {
-              //             id: 'test-id-2-from-model',
-              //             timestamp: new Date(10000),
-              //             modelId: 'test-response-model-id',
-              //           },
-              //           rawResponse: {
-              //             headers: {
-              //               'custom-response-header': 'response-header-value',
-              //             },
-              //           },
-              //         };
-              //       default:
-              //         throw new Error(`Unexpected response count: ${responseCount}`);
-              //     }
-              //   },
-
-              doStream: async ({ prompt, mode }) => {
-                switch (responseCount++) {
-                  case 0: {
-                    expect(mode).toStrictEqual({
-                      type: 'regular',
-                      toolChoice: { type: 'auto' },
-                      tools: [
-                        {
-                          type: 'function',
-                          name: 'tool1',
-                          description: undefined,
-                          parameters: {
-                            $schema: 'http://json-schema.org/draft-07/schema#',
-                            additionalProperties: false,
-                            properties: { value: { type: 'string' } },
-                            required: ['value'],
-                            type: 'object',
-                          },
-                        },
-                      ],
-                    });
-
-                    expect(prompt).toStrictEqual([
-                      {
-                        role: 'user',
-                        content: [{ type: 'text', text: 'test-input' }],
-                        providerMetadata: undefined,
-                      },
-                    ]);
-                    return {
-                      stream: convertArrayToReadableStream([
-                        {
-                          type: 'response-metadata',
-                          id: 'id-0',
-                          modelId: 'mock-model-id',
-                          timestamp: new Date(0),
-                        },
-                        { type: 'text-delta', textDelta: 'Hello, ' },
-                        { type: 'text-delta', textDelta: 'world!' },
-                        {
-                          type: 'finish',
-                          finishReason: 'stop',
-                          logprobs: undefined,
-                          usage: { completionTokens: 10, promptTokens: 3 },
-                        },
-                      ]),
-                      rawCall: { rawPrompt: 'prompt', rawSettings: {} },
-                    };
-                  }
-                  case 1: {
-                    return {
-                      stream: convertArrayToReadableStream([
-                        {
-                          type: 'response-metadata',
-                          id: 'id-1',
-                          modelId: 'mock-model-id',
-                          timestamp: new Date(1000),
-                        },
-                        { type: 'text-delta', textDelta: 'Hello, ' },
-                        { type: 'text-delta', textDelta: `world!` },
-                        {
-                          type: 'finish',
-                          finishReason: 'stop',
-                          logprobs: undefined,
-                          usage: { completionTokens: 5, promptTokens: 1 },
-                        },
-                      ]),
-                      rawCall: { rawPrompt: 'prompt', rawSettings: {} },
-                    };
-                  }
-                }
-              },
-            }),
-            tools: {
-              tool1: tool({
-                parameters: z.object({ value: z.string() }),
-                execute: async (args, options) => {
-                  expect(args).toStrictEqual({ value: 'value' });
-                  expect(options.messages).toStrictEqual([{ role: 'user', content: 'test-input' }]);
-                  return 'result1';
-                },
-              }),
-            },
-            prompt: 'test-input',
-            maxSteps: 3,
-            // TODO: ? onStepFinish does not exist
-            // onStepFinish: async event => {
-            //   onStepFinishResults.push(event);
-            // },
-            experimental_generateMessageId: mockId({ prefix: 'msg' }),
-          });
-        });
-
-        it('result.text should return text from last step', async () => {
-          assert.deepStrictEqual(result.text, 'Hello, world!');
-        });
-
-        it('result.toolCalls should return empty tool calls from last step', async () => {
-          assert.deepStrictEqual(result.toolCalls, []);
-        });
-
-        it('result.toolResults should return empty tool results from last step', async () => {
-          assert.deepStrictEqual(result.toolResults, []);
-        });
-
-        it('result.response.messages should contain response messages from all steps', () => {
-          expect(result.response.messages).toMatchSnapshot();
-        });
-
-        it('result.usage should sum token usage', () => {
-          assert.deepStrictEqual(result.usage, {
-            completionTokens: 25,
-            promptTokens: 20,
-            totalTokens: 45,
-          });
-        });
-
-        it('result.steps should contain all steps', () => {
-          expect(result.steps).toMatchSnapshot();
-        });
-
-        it('onStepFinish should be called for each step', () => {
-          expect(onStepFinishResults).toMatchSnapshot();
-        });
-      });
-
-      describe('2 steps: initial, tool-result with prepareStep', () => {
-        let result: GenerateTextResult<any, any>;
-        let onStepFinishResults: StepResult<any>[];
-
-        beforeEach(async () => {
-          onStepFinishResults = [];
-
-          let responseCount = 0;
-
-          const trueModel = new MockLanguageModelV1({
-            doGenerate: async ({ prompt, mode }) => {
-              switch (responseCount++) {
-                case 0:
-                  expect(mode).toStrictEqual({
-                    type: 'regular',
-                    toolChoice: { type: 'tool', toolName: 'tool1' },
-                    tools: [
-                      {
-                        type: 'function',
-                        name: 'tool1',
-                        description: undefined,
-                        parameters: {
-                          $schema: 'http://json-schema.org/draft-07/schema#',
-                          additionalProperties: false,
-                          properties: { value: { type: 'string' } },
-                          required: ['value'],
-                          type: 'object',
-                        },
-                      },
-                    ],
-                  });
-
-                  expect(prompt).toStrictEqual([
-                    {
-                      role: 'user',
-                      content: [{ type: 'text', text: 'test-input' }],
-                      providerMetadata: undefined,
-                    },
-                  ]);
-
-                  return {
-                    ...dummyResponseValues,
-                    toolCalls: [
-                      {
-                        toolCallType: 'function',
-                        toolCallId: 'call-1',
-                        toolName: 'tool1',
-                        args: `{ "value": "value" }`,
-                      },
-                    ],
-                    toolResults: [
-                      {
-                        toolCallId: 'call-1',
-                        toolName: 'tool1',
-                        args: { value: 'value' },
-                        result: 'result1',
-                      },
-                    ],
-                    finishReason: 'tool-calls',
-                    usage: { completionTokens: 5, promptTokens: 10 },
-                    response: {
-                      id: 'test-id-1-from-model',
-                      timestamp: new Date(0),
-                      modelId: 'test-response-model-id',
-                    },
-                  };
-                case 1:
-                  expect(mode).toStrictEqual({
-                    type: 'regular',
-                    toolChoice: { type: 'auto' },
-                    tools: [],
-                  });
-
-                  expect(prompt).toStrictEqual([
-                    {
-                      role: 'user',
-                      content: [{ type: 'text', text: 'test-input' }],
-                      providerMetadata: undefined,
-                    },
-                    {
-                      role: 'assistant',
-                      content: [
-                        {
-                          type: 'tool-call',
-                          toolCallId: 'call-1',
-                          toolName: 'tool1',
-                          args: { value: 'value' },
-                          providerMetadata: undefined,
-                        },
-                      ],
-                      providerMetadata: undefined,
-                    },
-                    {
-                      role: 'tool',
-                      content: [
-                        {
-                          type: 'tool-result',
-                          toolCallId: 'call-1',
-                          toolName: 'tool1',
-                          result: 'result1',
-                          content: undefined,
-                          isError: undefined,
-                          providerMetadata: undefined,
-                        },
-                      ],
-                      providerMetadata: undefined,
-                    },
-                  ]);
-                  return {
-                    ...dummyResponseValues,
-                    text: 'Hello, world!',
-                    response: {
-                      id: 'test-id-2-from-model',
-                      timestamp: new Date(10000),
-                      modelId: 'test-response-model-id',
-                    },
-                    rawResponse: {
-                      headers: {
-                        'custom-response-header': 'response-header-value',
-                      },
-                    },
-                  };
-                default:
-                  throw new Error(`Unexpected response count: ${responseCount}`);
-              }
-            },
-          });
-
-          result = await generateText({
-            model: modelWithFiles,
-            tools: {
-              tool1: tool({
-                parameters: z.object({ value: z.string() }),
-                execute: async (args, options) => {
-                  expect(args).toStrictEqual({ value: 'value' });
-                  expect(options.messages).toStrictEqual([{ role: 'user', content: 'test-input' }]);
-                  return 'result1';
-                },
-              }),
-            },
-            prompt: 'test-input',
-            maxSteps: 3,
-            onStepFinish: async event => {
-              onStepFinishResults.push(event);
-            },
-            experimental_prepareStep: async ({ model, stepNumber, steps }) => {
-              expect(model).toStrictEqual(modelWithFiles);
-
-              if (stepNumber === 0) {
-                expect(steps).toStrictEqual([]);
-                return {
-                  model: trueModel,
-                  toolChoice: {
-                    type: 'tool',
-                    toolName: 'tool1' as const,
-                  },
-                };
-              }
-
-              if (stepNumber === 1) {
-                expect(steps.length).toStrictEqual(1);
-                return { model: trueModel, experimental_activeTools: [] };
-              }
-            },
-            experimental_generateMessageId: mockId({ prefix: 'msg' }),
-          });
-        });
-
-        it('result.text should return text from last step', async () => {
-          assert.deepStrictEqual(result.text, 'Hello, world!');
-        });
-
-        it('result.toolCalls should return empty tool calls from last step', async () => {
-          assert.deepStrictEqual(result.toolCalls, []);
-        });
-
-        it('result.toolResults should return empty tool results from last step', async () => {
-          assert.deepStrictEqual(result.toolResults, []);
-        });
-
-        it('result.response.messages should contain response messages from all steps', () => {
-          expect(result.response.messages).toMatchSnapshot();
-        });
-
-        it('result.usage should sum token usage', () => {
-          assert.deepStrictEqual(result.usage, {
-            completionTokens: 25,
-            promptTokens: 20,
-            totalTokens: 45,
-          });
-        });
-
-        it('result.steps should contain all steps', () => {
-          expect(result.steps).toMatchSnapshot();
-        });
-
-        it('onStepFinish should be called for each step', () => {
-          expect(onStepFinishResults).toMatchSnapshot();
-        });
-      });
-
-      describe('4 steps: initial, continue, continue, continue', () => {
-        let result: GenerateTextResult<any, any>;
-        let onStepFinishResults: StepResult<any>[];
-
-        beforeEach(async () => {
-          onStepFinishResults = [];
-
-          let responseCount = 0;
-          result = await generateText({
-            model: new MockLanguageModelV1({
-              doGenerate: async ({ prompt, mode }) => {
-                switch (responseCount++) {
-                  case 0: {
-                    expect(mode).toStrictEqual({
-                      type: 'regular',
-                      toolChoice: undefined,
-                      tools: undefined,
-                    });
-
-                    expect(prompt).toStrictEqual([
-                      {
-                        role: 'user',
-                        content: [{ type: 'text', text: 'test-input' }],
-                        providerMetadata: undefined,
-                      },
-                    ]);
-
-                    return {
-                      ...dummyResponseValues,
-                      // trailing text is to be discarded, trailing whitespace is to be kept:
-                      text: 'part 1 \n to-be-discarded',
-                      finishReason: 'length', // trigger continue
-                      usage: { completionTokens: 20, promptTokens: 10 },
-                      response: {
-                        id: 'test-id-1-from-model',
-                        timestamp: new Date(0),
-                        modelId: 'test-response-model-id',
-                      },
-                    };
-                  }
-                  case 1: {
-                    expect(mode).toStrictEqual({
-                      type: 'regular',
-                      toolChoice: undefined,
-                      tools: undefined,
-                    });
-
-                    expect(prompt).toStrictEqual([
-                      {
-                        role: 'user',
-                        content: [{ type: 'text', text: 'test-input' }],
-                        providerMetadata: undefined,
-                      },
-                      {
-                        role: 'assistant',
-                        content: [
-                          {
-                            type: 'text',
-                            text: 'part 1 \n ',
-                            providerMetadata: undefined,
-                          },
-                        ],
-                        providerMetadata: undefined,
-                      },
-                    ]);
-
-                    return {
-                      ...dummyResponseValues,
-                      // case where there is no leading nor trailing whitespace:
-                      text: 'no-whitespace',
-                      finishReason: 'length',
-                      response: {
-                        id: 'test-id-2-from-model',
-                        timestamp: new Date(10000),
-                        modelId: 'test-response-model-id',
-                      },
-                      sources: [
-                        {
-                          sourceType: 'url' as const,
-                          id: '123',
-                          url: 'https://example.com',
-                          title: 'Example',
-                          providerMetadata: { provider: { custom: 'value' } },
-                        },
-                      ],
-                      files: [
-                        {
-                          data: new Uint8Array([1, 2, 3]),
-                          mimeType: 'image/png',
-                          filename: 'test.png',
-                        },
-                      ],
-                      usage: { completionTokens: 5, promptTokens: 30 },
-                      // test handling of custom response headers:
-                      rawResponse: {
-                        headers: {
-                          'custom-response-header': 'response-header-value',
-                        },
-                      },
-                    };
-                  }
-                  case 2: {
-                    expect(mode).toStrictEqual({
-                      type: 'regular',
-                      toolChoice: undefined,
-                      tools: undefined,
-                    });
-                    expect(prompt).toStrictEqual([
-                      {
-                        role: 'user',
-                        content: [{ type: 'text', text: 'test-input' }],
-                        providerMetadata: undefined,
-                      },
-                      {
-                        role: 'assistant',
-                        content: [
-                          {
-                            type: 'text',
-                            text: 'part 1 \n ',
-                            providerMetadata: undefined,
-                          },
-                          {
-                            type: 'text',
-                            text: 'no-whitespace',
-                            providerMetadata: undefined,
-                          },
-                        ],
-                        providerMetadata: undefined,
-                      },
-                    ]);
-
-                    return {
-                      ...dummyResponseValues,
-                      // set up trailing whitespace for next step:
-                      text: 'immediatefollow  ',
-                      finishReason: 'length',
-                      sources: [
-                        {
-                          sourceType: 'url' as const,
-                          id: '456',
-                          url: 'https://example.com/2',
-                          title: 'Example 2',
-                          providerMetadata: { provider: { custom: 'value2' } },
-                        },
-                        {
-                          sourceType: 'url' as const,
-                          id: '789',
-                          url: 'https://example.com/3',
-                          title: 'Example 3',
-                          providerMetadata: { provider: { custom: 'value3' } },
-                        },
-                      ],
-                      response: {
-                        id: 'test-id-3-from-model',
-                        timestamp: new Date(20000),
-                        modelId: 'test-response-model-id',
-                      },
-                      usage: { completionTokens: 2, promptTokens: 3 },
-                    };
-                  }
-                  case 3: {
-                    expect(mode).toStrictEqual({
-                      type: 'regular',
-                      toolChoice: undefined,
-                      tools: undefined,
-                    });
-                    expect(prompt).toStrictEqual([
-                      {
-                        role: 'user',
-                        content: [{ type: 'text', text: 'test-input' }],
-                        providerMetadata: undefined,
-                      },
-                      {
-                        role: 'assistant',
-                        content: [
-                          {
-                            type: 'text',
-                            text: 'part 1 \n ',
-                            providerMetadata: undefined,
-                          },
-                          {
-                            type: 'text',
-                            text: 'no-whitespace',
-                            providerMetadata: undefined,
-                          },
-                          {
-                            type: 'text',
-                            text: 'immediatefollow  ',
-                            providerMetadata: undefined,
-                          },
-                        ],
-                        providerMetadata: undefined,
-                      },
-                    ]);
-
-                    return {
-                      ...dummyResponseValues,
-                      // leading whitespace is to be discarded when there is whitespace from previous step
-                      // (for models such as Anthropic that trim trailing whitespace in their inputs):
-                      text: '  final value keep all whitespace\n end',
-                      finishReason: 'stop',
-                      files: [
-                        {
-                          data: 'QkFVRw==',
-                          mimeType: 'image/jpeg',
-                          filename: 'test.jpeg',
-                        },
-                      ],
-                      response: {
-                        id: 'test-id-4-from-model',
-                        timestamp: new Date(20000),
-                        modelId: 'test-response-model-id',
-                      },
-                      usage: { completionTokens: 2, promptTokens: 3 },
-                    };
-                  }
-                  default:
-                    throw new Error(`Unexpected response count: ${responseCount}`);
-                }
-              },
-            }),
-            prompt: 'test-input',
-            maxSteps: 5,
-            experimental_continueSteps: true,
-            onStepFinish: async event => {
-              onStepFinishResults.push(event);
-            },
-            experimental_generateMessageId: mockId({ prefix: 'msg' }),
-          });
-        });
-
-        it('result.text should return text from both steps separated by space', async () => {
-          expect(result.text).toStrictEqual(
-            'part 1 \n no-whitespaceimmediatefollow  final value keep all whitespace\n end',
-          );
-        });
-
-        it('result.response.messages should contain an assistant message with the combined text', () => {
-          expect(result.response.messages).toStrictEqual([
-            {
-              role: 'assistant',
-              id: 'msg-0',
-              content: [
-                {
-                  text: 'part 1 \n ',
-                  type: 'text',
-                },
-                {
-                  text: 'no-whitespace',
-                  type: 'text',
-                },
-                {
-                  text: 'immediatefollow  ',
-                  type: 'text',
-                },
-                {
-                  text: 'final value keep all whitespace\n end',
-                  type: 'text',
-                },
-              ],
-            },
-          ]);
-        });
-
-        it('result.usage should sum token usage', () => {
-          expect(result.usage).toStrictEqual({
-            completionTokens: 29,
-            promptTokens: 46,
-            totalTokens: 75,
-          });
-        });
-
-        it('result.steps should contain all steps', () => {
-          expect(result.steps).toMatchSnapshot();
-        });
-
-        it('onStepFinish should be called for each step', () => {
-          expect(onStepFinishResults).toMatchSnapshot();
-        });
-
-        it('result.sources should contain sources from all steps', () => {
-          expect(result.sources).toMatchSnapshot();
-        });
-
-        it('result.files should contain files from last step', () => {
-          expect(result.files).toMatchSnapshot();
-        });
       });
     });
 
@@ -1465,7 +787,7 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
       });
     });
 
-    // todo
+    // todo -- telemetry options?
     describe.skip('telemetry', () => {
       let tracer: MockTracer;
 
@@ -1769,6 +1091,7 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
         ]);
       });
     });
+
     // todo input messages
     describe.skip('options.messages', () => {
       it('should detect and convert ui messages', async () => {
@@ -2137,5 +1460,762 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
         );
       });
     });
+
+    // TODO -- options.maxSteps
+    // describe.skip('options.maxSteps', () => {
+    //   describe('2 steps: initial, tool-result', () => {
+    //     let result: any; // GenerateTextResult<any, any>;
+    //     let onStepFinishResults: StepResult<any>[];
+
+    //     beforeEach(async () => {
+    //       onStepFinishResults = [];
+
+    //       let responseCount = 0;
+    //       result = await generateText({
+    //         model: new MockLanguageModelV1({
+    //           doStream: async ({ prompt, mode }) => {
+    //             switch (responseCount++) {
+    //               case 0: {
+    //                 // expect(mode).toStrictEqual({
+    //                 //   type: 'regular',
+    //                 //   toolChoice: { type: 'auto' },
+    //                 //   tools: [
+    //                 //     {
+    //                 //       type: 'function',
+    //                 //       name: 'tool1',
+    //                 //     //   description: undefined,
+    //                 //       parameters: {
+    //                 //         $schema: 'http://json-schema.org/draft-07/schema#',
+    //                 //         additionalProperties: false,
+    //                 //         properties: { value: { type: 'string' } },
+    //                 //         required: ['value'],
+    //                 //         type: 'object',
+    //                 //       },
+    //                 //     },
+    //                 //   ],
+    //                 // });
+
+    //                 expect(prompt).toStrictEqual([
+    //                   {
+    //                     role: 'user',
+    //                     content: [{ type: 'text', text: 'test-input' }],
+    //                     // providerMetadata: undefined,
+    //                   },
+    //                 ]);
+    //                 return {
+    //                   stream: convertArrayToReadableStream([
+    //                     {
+    //                       type: 'response-metadata',
+    //                       id: 'id-0',
+    //                       modelId: 'mock-model-id',
+    //                       timestamp: new Date(0),
+    //                     },
+    //                     { type: 'text-delta', textDelta: 'Hello, ' },
+    //                     { type: 'text-delta', textDelta: 'world!' },
+    //                     {
+    //                       type: 'finish',
+    //                       finishReason: 'stop',
+    //                       logprobs: undefined,
+    //                       usage: { completionTokens: 10, promptTokens: 3 },
+    //                     },
+    //                   ]),
+    //                   rawCall: { rawPrompt: 'prompt', rawSettings: {} },
+    //                 };
+    //               }
+    //               case 1: {
+    //                 return {
+    //                   stream: convertArrayToReadableStream([
+    //                     {
+    //                       type: 'response-metadata',
+    //                       id: 'id-1',
+    //                       modelId: 'mock-model-id',
+    //                       timestamp: new Date(1000),
+    //                     },
+    //                     { type: 'text-delta', textDelta: 'Hello, ' },
+    //                     { type: 'text-delta', textDelta: `world!` },
+    //                     {
+    //                       type: 'finish',
+    //                       finishReason: 'stop',
+    //                       logprobs: undefined,
+    //                       usage: { completionTokens: 5, promptTokens: 1 },
+    //                     },
+    //                   ]),
+    //                   rawCall: { rawPrompt: 'prompt', rawSettings: {} },
+    //                 };
+    //               }
+    //             }
+    //           },
+    //           //   doGenerate: async ({ prompt, mode }) => {
+    //           //     switch (responseCount++) {
+    //           //       case 0:
+    //           //         expect(mode).toStrictEqual({
+    //           //           type: 'regular',
+    //           //           toolChoice: { type: 'auto' },
+    //           //           tools: [
+    //           //             {
+    //           //               type: 'function',
+    //           //               name: 'tool1',
+    //           //               description: undefined,
+    //           //               parameters: {
+    //           //                 $schema: 'http://json-schema.org/draft-07/schema#',
+    //           //                 additionalProperties: false,
+    //           //                 properties: { value: { type: 'string' } },
+    //           //                 required: ['value'],
+    //           //                 type: 'object',
+    //           //               },
+    //           //             },
+    //           //           ],
+    //           //         });
+
+    //           //         expect(prompt).toStrictEqual([
+    //           //           {
+    //           //             role: 'user',
+    //           //             content: [{ type: 'text', text: 'test-input' }],
+    //           //             providerMetadata: undefined,
+    //           //           },
+    //           //         ]);
+
+    //           //         return {
+    //           //           ...dummyResponseValues,
+    //           //           toolCalls: [
+    //           //             {
+    //           //               toolCallType: 'function',
+    //           //               toolCallId: 'call-1',
+    //           //               toolName: 'tool1',
+    //           //               args: `{ "value": "value" }`,
+    //           //             },
+    //           //           ],
+    //           //           toolResults: [
+    //           //             {
+    //           //               toolCallId: 'call-1',
+    //           //               toolName: 'tool1',
+    //           //               args: { value: 'value' },
+    //           //               result: 'result1',
+    //           //             },
+    //           //           ],
+    //           //           finishReason: 'tool-calls',
+    //           //           usage: { completionTokens: 5, promptTokens: 10 },
+    //           //           response: {
+    //           //             id: 'test-id-1-from-model',
+    //           //             timestamp: new Date(0),
+    //           //             modelId: 'test-response-model-id',
+    //           //           },
+    //           //         };
+    //           //       case 1:
+    //           //         expect(mode).toStrictEqual({
+    //           //           type: 'regular',
+    //           //           toolChoice: { type: 'auto' },
+    //           //           tools: [
+    //           //             {
+    //           //               type: 'function',
+    //           //               name: 'tool1',
+    //           //               description: undefined,
+    //           //               parameters: {
+    //           //                 $schema: 'http://json-schema.org/draft-07/schema#',
+    //           //                 additionalProperties: false,
+    //           //                 properties: { value: { type: 'string' } },
+    //           //                 required: ['value'],
+    //           //                 type: 'object',
+    //           //               },
+    //           //             },
+    //           //           ],
+    //           //         });
+
+    //           //         expect(prompt).toStrictEqual([
+    //           //           {
+    //           //             role: 'user',
+    //           //             content: [{ type: 'text', text: 'test-input' }],
+    //           //             providerMetadata: undefined,
+    //           //           },
+    //           //           {
+    //           //             role: 'assistant',
+    //           //             content: [
+    //           //               {
+    //           //                 type: 'tool-call',
+    //           //                 toolCallId: 'call-1',
+    //           //                 toolName: 'tool1',
+    //           //                 args: { value: 'value' },
+    //           //                 providerMetadata: undefined,
+    //           //               },
+    //           //             ],
+    //           //             providerMetadata: undefined,
+    //           //           },
+    //           //           {
+    //           //             role: 'tool',
+    //           //             content: [
+    //           //               {
+    //           //                 type: 'tool-result',
+    //           //                 toolCallId: 'call-1',
+    //           //                 toolName: 'tool1',
+    //           //                 result: 'result1',
+    //           //                 content: undefined,
+    //           //                 isError: undefined,
+    //           //                 providerMetadata: undefined,
+    //           //               },
+    //           //             ],
+    //           //             providerMetadata: undefined,
+    //           //           },
+    //           //         ]);
+    //           //         return {
+    //           //           ...dummyResponseValues,
+    //           //           text: 'Hello, world!',
+    //           //           response: {
+    //           //             id: 'test-id-2-from-model',
+    //           //             timestamp: new Date(10000),
+    //           //             modelId: 'test-response-model-id',
+    //           //           },
+    //           //           rawResponse: {
+    //           //             headers: {
+    //           //               'custom-response-header': 'response-header-value',
+    //           //             },
+    //           //           },
+    //           //         };
+    //           //       default:
+    //           //         throw new Error(`Unexpected response count: ${responseCount}`);
+    //           //     }
+    //           //   },
+    //         }),
+    //         tools: {
+    //           tool1: tool({
+    //             parameters: z.object({ value: z.string() }),
+    //             execute: async (args, options) => {
+    //               expect(args).toStrictEqual({ value: 'value' });
+    //               expect(options.messages).toStrictEqual([{ role: 'user', content: 'test-input' }]);
+    //               return 'result1';
+    //             },
+    //           }),
+    //         },
+    //         prompt: 'test-input',
+    //         maxSteps: 3,
+    //         // TODO: ? onStepFinish does not exist
+    //         // onStepFinish: async event => {
+    //         //   onStepFinishResults.push(event);
+    //         // },
+    //         experimental_generateMessageId: mockId({ prefix: 'msg' }),
+    //       });
+    //     });
+
+    //     it('result.text should return text from last step', async () => {
+    //       assert.deepStrictEqual(result.text, 'Hello, world!');
+    //     });
+
+    //     it('result.toolCalls should return empty tool calls from last step', async () => {
+    //       assert.deepStrictEqual(result.toolCalls, []);
+    //     });
+
+    //     it('result.toolResults should return empty tool results from last step', async () => {
+    //       assert.deepStrictEqual(result.toolResults, []);
+    //     });
+
+    //     it('result.response.messages should contain response messages from all steps', () => {
+    //       expect(result.response.messages).toMatchSnapshot();
+    //     });
+
+    //     it('result.usage should sum token usage', () => {
+    //       assert.deepStrictEqual(result.usage, {
+    //         completionTokens: 25,
+    //         promptTokens: 20,
+    //         totalTokens: 45,
+    //       });
+    //     });
+
+    //     it('result.steps should contain all steps', () => {
+    //       expect(result.steps).toMatchSnapshot();
+    //     });
+
+    //     it('onStepFinish should be called for each step', () => {
+    //       expect(onStepFinishResults).toMatchSnapshot();
+    //     });
+    //   });
+
+    //   describe('2 steps: initial, tool-result with prepareStep', () => {
+    //     let result: GenerateTextResult<any, any>;
+    //     let onStepFinishResults: StepResult<any>[];
+
+    //     beforeEach(async () => {
+    //       onStepFinishResults = [];
+
+    //       let responseCount = 0;
+
+    //       const trueModel = new MockLanguageModelV1({
+    //         // doGenerate: async ({ prompt, mode }) => {
+    //         //   switch (responseCount++) {
+    //         //     case 0:
+    //         //       expect(mode).toStrictEqual({
+    //         //         type: 'regular',
+    //         //         toolChoice: { type: 'tool', toolName: 'tool1' },
+    //         //         tools: [
+    //         //           {
+    //         //             type: 'function',
+    //         //             name: 'tool1',
+    //         //             description: undefined,
+    //         //             parameters: {
+    //         //               $schema: 'http://json-schema.org/draft-07/schema#',
+    //         //               additionalProperties: false,
+    //         //               properties: { value: { type: 'string' } },
+    //         //               required: ['value'],
+    //         //               type: 'object',
+    //         //             },
+    //         //           },
+    //         //         ],
+    //         //       });
+    //         //       expect(prompt).toStrictEqual([
+    //         //         {
+    //         //           role: 'user',
+    //         //           content: [{ type: 'text', text: 'test-input' }],
+    //         //           providerMetadata: undefined,
+    //         //         },
+    //         //       ]);
+    //         //       return {
+    //         //         ...dummyResponseValues,
+    //         //         toolCalls: [
+    //         //           {
+    //         //             toolCallType: 'function',
+    //         //             toolCallId: 'call-1',
+    //         //             toolName: 'tool1',
+    //         //             args: `{ "value": "value" }`,
+    //         //           },
+    //         //         ],
+    //         //         toolResults: [
+    //         //           {
+    //         //             toolCallId: 'call-1',
+    //         //             toolName: 'tool1',
+    //         //             args: { value: 'value' },
+    //         //             result: 'result1',
+    //         //           },
+    //         //         ],
+    //         //         finishReason: 'tool-calls',
+    //         //         usage: { completionTokens: 5, promptTokens: 10 },
+    //         //         response: {
+    //         //           id: 'test-id-1-from-model',
+    //         //           timestamp: new Date(0),
+    //         //           modelId: 'test-response-model-id',
+    //         //         },
+    //         //       };
+    //         //     case 1:
+    //         //       expect(mode).toStrictEqual({
+    //         //         type: 'regular',
+    //         //         toolChoice: { type: 'auto' },
+    //         //         tools: [],
+    //         //       });
+    //         //       expect(prompt).toStrictEqual([
+    //         //         {
+    //         //           role: 'user',
+    //         //           content: [{ type: 'text', text: 'test-input' }],
+    //         //           providerMetadata: undefined,
+    //         //         },
+    //         //         {
+    //         //           role: 'assistant',
+    //         //           content: [
+    //         //             {
+    //         //               type: 'tool-call',
+    //         //               toolCallId: 'call-1',
+    //         //               toolName: 'tool1',
+    //         //               args: { value: 'value' },
+    //         //               providerMetadata: undefined,
+    //         //             },
+    //         //           ],
+    //         //           providerMetadata: undefined,
+    //         //         },
+    //         //         {
+    //         //           role: 'tool',
+    //         //           content: [
+    //         //             {
+    //         //               type: 'tool-result',
+    //         //               toolCallId: 'call-1',
+    //         //               toolName: 'tool1',
+    //         //               result: 'result1',
+    //         //               content: undefined,
+    //         //               isError: undefined,
+    //         //               providerMetadata: undefined,
+    //         //             },
+    //         //           ],
+    //         //           providerMetadata: undefined,
+    //         //         },
+    //         //       ]);
+    //         //       return {
+    //         //         ...dummyResponseValues,
+    //         //         text: 'Hello, world!',
+    //         //         response: {
+    //         //           id: 'test-id-2-from-model',
+    //         //           timestamp: new Date(10000),
+    //         //           modelId: 'test-response-model-id',
+    //         //         },
+    //         //         rawResponse: {
+    //         //           headers: {
+    //         //             'custom-response-header': 'response-header-value',
+    //         //           },
+    //         //         },
+    //         //       };
+    //         //     default:
+    //         //       throw new Error(`Unexpected response count: ${responseCount}`);
+    //         //   }
+    //         // },
+    //       });
+
+    //       result = await generateText({
+    //         model: modelWithFiles,
+    //         tools: {
+    //           tool1: tool({
+    //             parameters: z.object({ value: z.string() }),
+    //             execute: async (args, options) => {
+    //               expect(args).toStrictEqual({ value: 'value' });
+    //               expect(options.messages).toStrictEqual([{ role: 'user', content: 'test-input' }]);
+    //               return 'result1';
+    //             },
+    //           }),
+    //         },
+    //         prompt: 'test-input',
+    //         maxSteps: 3,
+    //         // TODO: onStepFinish not implemented
+    //         // onStepFinish: async event => {
+    //         //   onStepFinishResults.push(event);
+    //         // },
+    //         // TODO: experimental_prepareStep not implemented
+    //         // experimental_prepareStep: async ({ model, stepNumber, steps }) => {
+    //         //   expect(model).toStrictEqual(modelWithFiles);
+
+    //         //   if (stepNumber === 0) {
+    //         //     expect(steps).toStrictEqual([]);
+    //         //     return {
+    //         //       model: trueModel,
+    //         //       toolChoice: {
+    //         //         type: 'tool',
+    //         //         toolName: 'tool1' as const,
+    //         //       },
+    //         //     };
+    //         //   }
+
+    //         //   if (stepNumber === 1) {
+    //         //     expect(steps.length).toStrictEqual(1);
+    //         //     return { model: trueModel, experimental_activeTools: [] };
+    //         //   }
+    //         // },
+    //         experimental_generateMessageId: mockId({ prefix: 'msg' }),
+    //       });
+    //     });
+
+    //     it('result.text should return text from last step', async () => {
+    //       assert.deepStrictEqual(result.text, 'Hello, world!');
+    //     });
+
+    //     it('result.toolCalls should return empty tool calls from last step', async () => {
+    //       assert.deepStrictEqual(result.toolCalls, []);
+    //     });
+
+    //     it('result.toolResults should return empty tool results from last step', async () => {
+    //       assert.deepStrictEqual(result.toolResults, []);
+    //     });
+
+    //     it('result.response.messages should contain response messages from all steps', () => {
+    //       expect(result.response.messages).toMatchSnapshot();
+    //     });
+
+    //     it('result.usage should sum token usage', () => {
+    //       assert.deepStrictEqual(result.usage, {
+    //         completionTokens: 25,
+    //         promptTokens: 20,
+    //         totalTokens: 45,
+    //       });
+    //     });
+
+    //     it('result.steps should contain all steps', () => {
+    //       expect(result.steps).toMatchSnapshot();
+    //     });
+
+    //     it('onStepFinish should be called for each step', () => {
+    //       expect(onStepFinishResults).toMatchSnapshot();
+    //     });
+    //   });
+
+    //   describe('4 steps: initial, continue, continue, continue', () => {
+    //     let result: GenerateTextResult<any, any>;
+    //     let onStepFinishResults: StepResult<any>[];
+
+    //     beforeEach(async () => {
+    //       onStepFinishResults = [];
+
+    //       let responseCount = 0;
+    //       result = await generateText({
+    //         model: new MockLanguageModelV1({
+    //           doGenerate: async ({ prompt, mode }) => {
+    //             switch (responseCount++) {
+    //               case 0: {
+    //                 expect(mode).toStrictEqual({
+    //                   type: 'regular',
+    //                   toolChoice: undefined,
+    //                   tools: undefined,
+    //                 });
+
+    //                 expect(prompt).toStrictEqual([
+    //                   {
+    //                     role: 'user',
+    //                     content: [{ type: 'text', text: 'test-input' }],
+    //                     providerMetadata: undefined,
+    //                   },
+    //                 ]);
+
+    //                 return {
+    //                   ...dummyResponseValues,
+    //                   // trailing text is to be discarded, trailing whitespace is to be kept:
+    //                   text: 'part 1 \n to-be-discarded',
+    //                   finishReason: 'length', // trigger continue
+    //                   usage: { completionTokens: 20, promptTokens: 10 },
+    //                   response: {
+    //                     id: 'test-id-1-from-model',
+    //                     timestamp: new Date(0),
+    //                     modelId: 'test-response-model-id',
+    //                   },
+    //                 };
+    //               }
+    //               case 1: {
+    //                 expect(mode).toStrictEqual({
+    //                   type: 'regular',
+    //                   toolChoice: undefined,
+    //                   tools: undefined,
+    //                 });
+
+    //                 expect(prompt).toStrictEqual([
+    //                   {
+    //                     role: 'user',
+    //                     content: [{ type: 'text', text: 'test-input' }],
+    //                     providerMetadata: undefined,
+    //                   },
+    //                   {
+    //                     role: 'assistant',
+    //                     content: [
+    //                       {
+    //                         type: 'text',
+    //                         text: 'part 1 \n ',
+    //                         providerMetadata: undefined,
+    //                       },
+    //                     ],
+    //                     providerMetadata: undefined,
+    //                   },
+    //                 ]);
+
+    //                 return {
+    //                   ...dummyResponseValues,
+    //                   // case where there is no leading nor trailing whitespace:
+    //                   text: 'no-whitespace',
+    //                   finishReason: 'length',
+    //                   response: {
+    //                     id: 'test-id-2-from-model',
+    //                     timestamp: new Date(10000),
+    //                     modelId: 'test-response-model-id',
+    //                   },
+    //                   sources: [
+    //                     {
+    //                       sourceType: 'url' as const,
+    //                       id: '123',
+    //                       url: 'https://example.com',
+    //                       title: 'Example',
+    //                       providerMetadata: { provider: { custom: 'value' } },
+    //                     },
+    //                   ],
+    //                   files: [
+    //                     {
+    //                       data: new Uint8Array([1, 2, 3]),
+    //                       mimeType: 'image/png',
+    //                       filename: 'test.png',
+    //                     },
+    //                   ],
+    //                   usage: { completionTokens: 5, promptTokens: 30 },
+    //                   // test handling of custom response headers:
+    //                   rawResponse: {
+    //                     headers: {
+    //                       'custom-response-header': 'response-header-value',
+    //                     },
+    //                   },
+    //                 };
+    //               }
+    //               case 2: {
+    //                 expect(mode).toStrictEqual({
+    //                   type: 'regular',
+    //                   toolChoice: undefined,
+    //                   tools: undefined,
+    //                 });
+    //                 expect(prompt).toStrictEqual([
+    //                   {
+    //                     role: 'user',
+    //                     content: [{ type: 'text', text: 'test-input' }],
+    //                     providerMetadata: undefined,
+    //                   },
+    //                   {
+    //                     role: 'assistant',
+    //                     content: [
+    //                       {
+    //                         type: 'text',
+    //                         text: 'part 1 \n ',
+    //                         providerMetadata: undefined,
+    //                       },
+    //                       {
+    //                         type: 'text',
+    //                         text: 'no-whitespace',
+    //                         providerMetadata: undefined,
+    //                       },
+    //                     ],
+    //                     providerMetadata: undefined,
+    //                   },
+    //                 ]);
+
+    //                 return {
+    //                   ...dummyResponseValues,
+    //                   // set up trailing whitespace for next step:
+    //                   text: 'immediatefollow  ',
+    //                   finishReason: 'length',
+    //                   sources: [
+    //                     {
+    //                       sourceType: 'url' as const,
+    //                       id: '456',
+    //                       url: 'https://example.com/2',
+    //                       title: 'Example 2',
+    //                       providerMetadata: { provider: { custom: 'value2' } },
+    //                     },
+    //                     {
+    //                       sourceType: 'url' as const,
+    //                       id: '789',
+    //                       url: 'https://example.com/3',
+    //                       title: 'Example 3',
+    //                       providerMetadata: { provider: { custom: 'value3' } },
+    //                     },
+    //                   ],
+    //                   response: {
+    //                     id: 'test-id-3-from-model',
+    //                     timestamp: new Date(20000),
+    //                     modelId: 'test-response-model-id',
+    //                   },
+    //                   usage: { completionTokens: 2, promptTokens: 3 },
+    //                 };
+    //               }
+    //               case 3: {
+    //                 expect(mode).toStrictEqual({
+    //                   type: 'regular',
+    //                   toolChoice: undefined,
+    //                   tools: undefined,
+    //                 });
+    //                 expect(prompt).toStrictEqual([
+    //                   {
+    //                     role: 'user',
+    //                     content: [{ type: 'text', text: 'test-input' }],
+    //                     providerMetadata: undefined,
+    //                   },
+    //                   {
+    //                     role: 'assistant',
+    //                     content: [
+    //                       {
+    //                         type: 'text',
+    //                         text: 'part 1 \n ',
+    //                         providerMetadata: undefined,
+    //                       },
+    //                       {
+    //                         type: 'text',
+    //                         text: 'no-whitespace',
+    //                         providerMetadata: undefined,
+    //                       },
+    //                       {
+    //                         type: 'text',
+    //                         text: 'immediatefollow  ',
+    //                         providerMetadata: undefined,
+    //                       },
+    //                     ],
+    //                     providerMetadata: undefined,
+    //                   },
+    //                 ]);
+
+    //                 return {
+    //                   ...dummyResponseValues,
+    //                   // leading whitespace is to be discarded when there is whitespace from previous step
+    //                   // (for models such as Anthropic that trim trailing whitespace in their inputs):
+    //                   text: '  final value keep all whitespace\n end',
+    //                   finishReason: 'stop',
+    //                   files: [
+    //                     {
+    //                       data: 'QkFVRw==',
+    //                       mimeType: 'image/jpeg',
+    //                       filename: 'test.jpeg',
+    //                     },
+    //                   ],
+    //                   response: {
+    //                     id: 'test-id-4-from-model',
+    //                     timestamp: new Date(20000),
+    //                     modelId: 'test-response-model-id',
+    //                   },
+    //                   usage: { completionTokens: 2, promptTokens: 3 },
+    //                 };
+    //               }
+    //               default:
+    //                 throw new Error(`Unexpected response count: ${responseCount}`);
+    //             }
+    //           },
+    //         }),
+    //         prompt: 'test-input',
+    //         maxSteps: 5,
+    //         experimental_continueSteps: true,
+    //         onStepFinish: async event => {
+    //           onStepFinishResults.push(event);
+    //         },
+    //         experimental_generateMessageId: mockId({ prefix: 'msg' }),
+    //       });
+    //     });
+
+    //     it('result.text should return text from both steps separated by space', async () => {
+    //       expect(result.text).toStrictEqual(
+    //         'part 1 \n no-whitespaceimmediatefollow  final value keep all whitespace\n end',
+    //       );
+    //     });
+
+    //     it('result.response.messages should contain an assistant message with the combined text', () => {
+    //       expect(result.response.messages).toStrictEqual([
+    //         {
+    //           role: 'assistant',
+    //           id: 'msg-0',
+    //           content: [
+    //             {
+    //               text: 'part 1 \n ',
+    //               type: 'text',
+    //             },
+    //             {
+    //               text: 'no-whitespace',
+    //               type: 'text',
+    //             },
+    //             {
+    //               text: 'immediatefollow  ',
+    //               type: 'text',
+    //             },
+    //             {
+    //               text: 'final value keep all whitespace\n end',
+    //               type: 'text',
+    //             },
+    //           ],
+    //         },
+    //       ]);
+    //     });
+
+    //     it('result.usage should sum token usage', () => {
+    //       expect(result.usage).toStrictEqual({
+    //         completionTokens: 29,
+    //         promptTokens: 46,
+    //         totalTokens: 75,
+    //       });
+    //     });
+
+    //     it('result.steps should contain all steps', () => {
+    //       expect(result.steps).toMatchSnapshot();
+    //     });
+
+    //     it('onStepFinish should be called for each step', () => {
+    //       expect(onStepFinishResults).toMatchSnapshot();
+    //     });
+
+    //     it('result.sources should contain sources from all steps', () => {
+    //       expect(result.sources).toMatchSnapshot();
+    //     });
+
+    //     it('result.files should contain files from last step', () => {
+    //       expect(result.files).toMatchSnapshot();
+    //     });
+    //   });
+    // });
   });
 }
