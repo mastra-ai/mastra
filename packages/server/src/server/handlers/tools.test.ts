@@ -9,10 +9,11 @@ import { HTTPException } from '../http-exception';
 import { getToolsHandler, getToolByIdHandler, executeToolHandler, executeAgentToolHandler } from './tools';
 
 describe('Tools Handlers', () => {
+  const mockExecute = vi.fn();
   const mockTool: ToolAction = createTool({
     id: 'test-tool',
     description: 'A test tool',
-    execute: vi.fn(),
+    execute: mockExecute,
   });
 
   const mockVercelTool: VercelTool = {
@@ -111,7 +112,7 @@ describe('Tools Handlers', () => {
       const mockResult = { success: true };
       const mockMastra = new Mastra();
       const executeTool = executeToolHandler(mockTools);
-      (mockTool.execute as Mock<() => any>).mockResolvedValue(mockResult);
+      mockExecute.mockResolvedValue(mockResult);
       const context = { test: 'data' };
 
       const runtimeContext = new RuntimeContext();
@@ -124,12 +125,15 @@ describe('Tools Handlers', () => {
       });
 
       expect(result).toEqual(mockResult);
-      expect(mockTool.execute).toHaveBeenCalledWith({
-        context,
-        mastra: mockMastra,
-        runId: 'test-run',
-        runtimeContext: runtimeContext,
-      });
+      expect(mockExecute).toHaveBeenCalledWith(
+        {
+          context,
+          mastra: mockMastra,
+          runId: 'test-run',
+          runtimeContext: runtimeContext,
+        },
+        undefined,
+      );
     });
 
     it.skip('should execute Vercel tool successfully', async () => {
@@ -215,7 +219,7 @@ describe('Tools Handlers', () => {
           'test-agent': mockAgent as any,
         },
       });
-      (mockTool?.execute as Mock<() => any>).mockResolvedValue(mockResult);
+      mockExecute.mockResolvedValue(mockResult);
 
       const context = {
         test: 'data',
@@ -230,12 +234,15 @@ describe('Tools Handlers', () => {
       });
 
       expect(result).toEqual(mockResult);
-      expect(mockTool.execute).toHaveBeenCalledWith({
-        context,
-        mastra: mockMastra,
-        runId: 'test-agent',
-        runtimeContext: runtimeContext,
-      });
+      expect(mockExecute).toHaveBeenCalledWith(
+        {
+          context,
+          mastra: mockMastra,
+          runId: 'test-agent',
+          runtimeContext: runtimeContext,
+        },
+        undefined,
+      );
     });
 
     it.skip('should execute Vercel tool successfully', async () => {
