@@ -77,15 +77,17 @@ export function createCompletenessScorer() {
     name: 'Completeness',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
-    extract: async run => {
-      const isInputInvalid = !run.input || run.input.some(i => i.content === null || i.content === undefined);
+  })
+    .preprocess(async ({ run }) => {
+      const isInputInvalid =
+        !run.input || run.input.some((i: { content: string }) => i.content === null || i.content === undefined);
       const isOutputInvalid = !run.output || run.output.text === null || run.output.text === undefined;
 
       if (isInputInvalid || isOutputInvalid) {
         throw new Error('Inputs cannot be null or undefined');
       }
 
-      const input = run.input?.map(i => i.content).join(', ') || '';
+      const input = run.input?.map((i: { content: string }) => i.content).join(', ') || '';
       const output = run.output.text;
 
       const inputToProcess = input;
@@ -99,27 +101,22 @@ export function createCompletenessScorer() {
       const outputElements = extractElements(outputDoc);
 
       return {
-        result: {
-          inputElements,
-          outputElements,
-          missingElements: inputElements.filter(e => !outputElements.includes(e)),
-          elementCounts: {
-            input: inputElements.length,
-            output: outputElements.length,
-          },
+        inputElements,
+        outputElements,
+        missingElements: inputElements.filter(e => !outputElements.includes(e)),
+        elementCounts: {
+          input: inputElements.length,
+          output: outputElements.length,
         },
       };
-    },
-    analyze: async run => {
-      const inputElements = run.extractStepResult?.inputElements;
-      const outputElements = run.extractStepResult?.outputElements;
+    })
+    .generateScore(({ results }) => {
+      const inputElements = results.preprocessStepResult?.inputElements;
+      const outputElements = results.preprocessStepResult?.outputElements;
 
-      return {
-        score: calculateCoverage({
-          original: inputElements,
-          simplified: outputElements,
-        }),
-      };
-    },
-  });
+      return calculateCoverage({
+        original: inputElements,
+        simplified: outputElements,
+      });
+    });
 }

@@ -9,7 +9,6 @@ describe('ContentSimilarityMetric', () => {
   it('should return perfect similarity for identical strings', async () => {
     const result = await scorer.run(createTestRun('The quick brown fox', 'The quick brown fox'));
     expect(result.score).toBe(1);
-    expect(result.analyzeStepResult?.similarity).toBe(1);
   });
 
   it('should handle case differences with default options', async () => {
@@ -68,10 +67,5 @@ describe('ContentSimilarityMetric', () => {
   it('should handle one empty string', async () => {
     const result = await scorer.run(createTestRun('The quick brown fox', ''));
     expect(result.score).toBe(0);
-  });
-
-  it('should include similarity details in result', async () => {
-    const result = await scorer.run(createTestRun('The quick brown fox', 'The quick brown fox'));
-    expect(result.analyzeStepResult).toMatchObject({ similarity: 1 });
   });
 });
