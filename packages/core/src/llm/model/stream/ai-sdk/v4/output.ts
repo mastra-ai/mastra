@@ -182,6 +182,29 @@ export class AISDKV4OutputStream {
     );
   }
 
+  async getFullOutput() {
+    // Consume the full stream to trigger data buffering in the model output
+    for await (const _chunk of this.#modelOutput.fullStream) {
+      // Stream consumption to trigger data buffering
+    }
+
+    return {
+      text: this.#modelOutput.text,
+      usage: this.#modelOutput.usage,
+      steps: this.#modelOutput.steps,
+      finishReason: this.#modelOutput.finishReason,
+      reasoning: this.#modelOutput.reasoning,
+      warnings: this.#modelOutput.warnings,
+      providerMetadata: this.#modelOutput.providerMetadata,
+      request: this.#modelOutput.request,
+      toolCalls: this.toolCalls,
+      toolResults: this.toolResults,
+      sources: this.sources,
+      files: this.files,
+      response: this.response,
+    };
+  }
+
   get sources() {
     return this.#modelOutput.sources.map(chunk => {
       return convertFullStreamChunkToAISDKv4({

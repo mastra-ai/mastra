@@ -1,4 +1,5 @@
 import { TransformStream } from 'stream/web';
+import type { DataStreamOptions, DataStreamWriter, StreamData } from 'ai';
 import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
 import type { TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions, StepResult } from 'ai-v5';
 
@@ -401,5 +402,29 @@ export class AISDKV5OutputStream {
         },
       }),
     );
+  }
+
+  async getFullOutput() {
+    // Consume the full stream to trigger data buffering in the model output
+    for await (const _chunk of this.#modelOutput.fullStream) {
+      // Stream consumption to trigger data buffering
+    }
+
+    return {
+      text: this.#modelOutput.text,
+      usage: this.#modelOutput.usage,
+      steps: this.#modelOutput.steps,
+      finishReason: this.#modelOutput.finishReason,
+      warnings: this.#modelOutput.warnings,
+      providerMetadata: this.#modelOutput.providerMetadata,
+      request: this.#modelOutput.request,
+      reasoning: this.reasoning,
+      reasoningText: this.reasoningText,
+      toolCalls: this.toolCalls,
+      toolResults: this.toolResults,
+      sources: this.sources,
+      files: this.files,
+      response: this.response,
+    };
   }
 }
