@@ -1,4 +1,6 @@
+import type { CoreMessage } from 'ai';
 import { z } from 'zod';
+import type { UIMessageWithMetadata } from '../agent';
 
 export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
@@ -101,3 +103,11 @@ export type ScorerOptions = {
   metadata?: Record<string, any>;
   isLLMScorer?: boolean;
 };
+
+export type ScorerInputForAgent = {
+  inputMessages: UIMessageWithMetadata[];
+  rememberedMessages: UIMessageWithMetadata[];
+  systemMessages: CoreMessage[];
+};
+
+export type ScorerOutputForAgent = UIMessageWithMetadata[];

@@ -14,39 +14,38 @@ export function createOnScorerHook(mastra: Mastra) {
     const scorer = hookData.scorer;
 
     let scorerToUse;
-
-    if (entityType === 'AGENT') {
-      const agent = mastra.getAgentById(entityId);
-      const scorers = await agent.getScorers();
-      scorerToUse = scorers[scorer.id];
-    } else if (entityType === 'WORKFLOW') {
-      const workflow = mastra.getWorkflowById(entityId);
-      const scorers = await workflow.getScorers();
-      scorerToUse = scorers[scorer.id];
-    } else {
-      return;
-    }
-
-    if (!scorerToUse) {
-      throw new MastraError({
-        id: 'MASTRA_SCORER_NOT_FOUND',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `Scorer with ID ${hookData.scorer.id} not found`,
-      });
-    }
-
-    let input = hookData.input;
-    let output = hookData.output;
-
-    if (entityType === 'AGENT') {
-      input = hookData.input.filter(m => m.role === 'user');
-    } else {
-      output = { object: hookData.output };
-    }
-    const { structuredOutput, ...rest } = hookData as any; // temporary fix;
-
     try {
+      if (entityType === 'AGENT') {
+        const agent = mastra.getAgentById(entityId);
+        const scorers = await agent.getScorers();
+        scorerToUse = scorers[scorer.id];
+      } else if (entityType === 'WORKFLOW') {
+        const workflow = mastra.getWorkflowById(entityId);
+        const scorers = await workflow.getScorers();
+        scorerToUse = scorers[scorer.id];
+      } else {
+        return;
+      }
+
+      if (!scorerToUse) {
+        throw new MastraError({
+          id: 'MASTRA_SCORER_NOT_FOUND',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: `Scorer with ID ${hookData.scorer.id} not found`,
+        });
+      }
+
+      let input = hookData.input;
+      let output = hookData.output;
+
+      if (entityType === 'AGENT') {
+        input = hookData.input.filter(m => m.role === 'user');
+      } else {
+        output = { object: hookData.output };
+      }
+      const { structuredOutput, ...rest } = hookData as any; // temporary fix;
+
       const runResult = await scorerToUse.scorer.run({
         ...rest,
         input,
