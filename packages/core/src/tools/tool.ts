@@ -36,14 +36,12 @@ export class Tool<
     }
 
     // Validate input if schema exists
-    const { data, error } = validateToolInput(this.inputSchema, context.context, this.id);
+    const { data, error } = validateToolInput(this.inputSchema, context, this.id);
     if (error) {
       return error as any;
     }
 
-    // Use validated data
-    context = { ...context, context: data };
-    return this._execute(context, options);
+    return this._execute(data as TContext, options);
   }
 }
 
