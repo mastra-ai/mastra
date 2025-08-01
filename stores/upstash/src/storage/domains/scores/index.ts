@@ -19,7 +19,9 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
   return {
     ...row,
     scorer: parseField(row.scorer),
-    extractStepResult: parseField(row.extractStepResult),
+    preprocessStepResult: parseField(row.preprocessStepResult),
+    generateScorePrompt: row.generateScorePrompt,
+    generateReasonPrompt: row.generateReasonPrompt,
     analyzeStepResult: parseField(row.analyzeStepResult),
     metadata: parseField(row.metadata),
     input: parseField(row.input),

@@ -113,7 +113,7 @@ export class ScoresLibSQL extends ScoresStorage {
     const runtimeContextValue = row.runtimeContext ? JSON.parse(row.runtimeContext) : null;
     const metadataValue = row.metadata ? JSON.parse(row.metadata) : null;
     const entityValue = row.entity ? JSON.parse(row.entity) : null;
-    const extractStepResultValue = row.extractStepResult ? JSON.parse(row.extractStepResult) : null;
+    const preprocessStepResultValue = row.preprocessStepResult ? JSON.parse(row.preprocessStepResult) : null;
     const analyzeStepResultValue = row.analyzeStepResult ? JSON.parse(row.analyzeStepResult) : null;
 
     return {
@@ -123,10 +123,12 @@ export class ScoresLibSQL extends ScoresStorage {
       scorer: scorerValue,
       score: row.score,
       reason: row.reason,
-      extractStepResult: extractStepResultValue,
+      preprocessStepResult: preprocessStepResultValue,
       analyzeStepResult: analyzeStepResultValue,
       analyzePrompt: row.analyzePrompt,
-      extractPrompt: row.extractPrompt,
+      preprocessPrompt: row.preprocessPrompt,
+      generateScorePrompt: row.generateScorePrompt,
+      generateReasonPrompt: row.generateReasonPrompt,
       metadata: metadataValue,
       input: inputValue,
       output: outputValue,
