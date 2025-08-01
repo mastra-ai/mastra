@@ -69,6 +69,11 @@ export async function callTool(tool: any, args: any) {
     return response;
   }
 
+  // Handle validation error responses
+  if (response?.error === true && response?.message) {
+    return response.message;
+  }
+
   // Handle content array responses
   if (response?.content) {
     let text = ``;
