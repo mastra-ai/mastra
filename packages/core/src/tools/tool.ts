@@ -1,8 +1,8 @@
+import type { ToolExecutionOptions } from 'ai';
 import type { z } from 'zod';
 
 import type { Mastra } from '../mastra';
 import type { ToolAction, ToolExecutionContext } from './types';
-import type { ToolExecutionOptions } from 'ai';
 import { validateToolInput } from './validation';
 
 export class Tool<

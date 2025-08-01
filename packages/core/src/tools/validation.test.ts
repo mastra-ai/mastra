@@ -206,7 +206,7 @@ describe('Tool Input Validation Integration Tests', () => {
         inputSchema: z.object({
           username: z.string().min(3),
         }),
-        execute: async ({ context }) => {
+        execute: async () => {
           return { registered: true };
         },
       });
