@@ -7,8 +7,8 @@ export default function Scorers() {
 
   const scorerListData = Object.entries(scorers || {}).map(([key, scorer]) => ({
     id: key,
-    name: scorer.scorer.name,
-    description: scorer.scorer.description,
+    name: scorer.scorer.config.name,
+    description: scorer.scorer.config.description,
   }));
 
   return (

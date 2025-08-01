@@ -126,6 +126,7 @@ export const createAgentTestRun = ({
       inputMessages,
       rememberedMessages,
       systemMessages,
+      taggedSystemMessages: {},
     },
     output,
     runtimeContext,
