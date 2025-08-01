@@ -104,10 +104,10 @@ export type ScorerOptions = {
   isLLMScorer?: boolean;
 };
 
-export type ScorerInputForAgent = {
+export type ScorerRunInputForAgent = {
   inputMessages: UIMessageWithMetadata[];
   rememberedMessages: UIMessageWithMetadata[];
   systemMessages: CoreMessage[];
 };
 
-export type ScorerOutputForAgent = UIMessageWithMetadata[];
+export type ScorerRunOutputForAgent = UIMessageWithMetadata[];

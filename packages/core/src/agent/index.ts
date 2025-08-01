@@ -30,7 +30,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { RuntimeContext } from '../runtime-context';
-import type { ScorerInputForAgent, ScorerOutputForAgent, MastraScorers } from '../scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
 import { MastraAgentStream } from '../stream/MastraAgentStream';
 import type { ChunkType } from '../stream/MastraAgentStream';
@@ -1865,13 +1865,13 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const scorers = await this.getScorers({ runtimeContext });
 
-    const scorerInput: ScorerInputForAgent = {
+    const scorerInput: ScorerRunInputForAgent = {
       inputMessages: messageList.getPersisted.input.ui(),
       rememberedMessages: messageList.getPersisted.remembered.ui(),
       systemMessages: messageList.getSystemMessages(),
     };
 
-    const scorerOutput: ScorerOutputForAgent = messageList.getPersisted.response.ui();
+    const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.ui();
 
     if (Object.keys(scorers || {}).length > 0) {
       for (const [id, scorerObject] of Object.entries(scorers)) {
