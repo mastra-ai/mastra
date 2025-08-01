@@ -43,6 +43,12 @@ export type MessageInput = UIMessage | Message | MastraMessageV1 | CoreMessage |
 type MessageSource = 'memory' | 'response' | 'user' | 'system' | 'context';
 type MemoryInfo = { threadId: string; resourceId?: string };
 
+type MessageListOptions = {
+  threadId?: string;
+  resourceId?: string;
+  generateMessageId?: IDGenerator;
+};
+
 export class MessageList {
   private messages: MastraMessageV2[] = [];
 
@@ -68,7 +74,7 @@ export class MessageList {
     generateMessageId,
     // @ts-ignore Flag for agent network messages
     _agentNetworkAppend,
-  }: { threadId?: string; resourceId?: string; generateMessageId?: IDGenerator } = {}) {
+  }: MessageListOptions = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
       this.generateMessageId = generateMessageId;
@@ -978,8 +984,8 @@ export class MessageList {
     return true;
   }
 
-  static fromArray(messages: MessageInput[]) {
-    const messageList = new MessageList();
+  static fromArray(messages: MessageInput[], options: MessageListOptions = {}) {
+    const messageList = new MessageList(options);
 
     for (const message of messages) {
       let role: MessageSource;
