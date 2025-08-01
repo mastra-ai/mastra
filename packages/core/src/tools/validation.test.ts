@@ -220,6 +220,37 @@ describe('Tool Input Validation Integration Tests', () => {
     });
   });
 
+  describe('Workflow context', () => {
+    it('should validate StepExecutionContext format', async () => {
+      const tool = createTool({
+        id: 'test-tool',
+        description: 'Test tool',
+        inputSchema: z.object({
+          name: z.string(),
+        }),
+        execute: async ({ context }) => {
+          // In workflow context, the data comes as inputData
+          const data = context.inputData || context;
+          return { result: data.name };
+        },
+      });
+
+      const stepContext = {
+        context: {
+          inputData: {
+            name: 'test',
+          },
+        },
+        runId: 'test-run',
+        runtimeContext: {},
+      };
+
+      const result = await tool.execute(stepContext as any);
+
+      expect(result).toEqual({ result: 'test' });
+    });
+  });
+
   describe('Edge cases', () => {
     it('should handle tools without input schema', async () => {
       const tool = createTool({
