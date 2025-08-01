@@ -437,7 +437,7 @@ export class MastraModelOutput extends MastraBase {
     };
   }
 
-  async _getGenerateOutput() {
+  async _getFullOutput() {
     for await (const _chunk of this.fullStream) {
       // Stream consumption to trigger data buffering
     }

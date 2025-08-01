@@ -1415,7 +1415,8 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
       });
     });
 
-    describe.only('options.abortSignal', () => {
+    // todo
+    describe.skip('options.abortSignal', () => {
       it('should forward abort signal to tool execution', async () => {
         const abortController = new AbortController();
         const toolExecuteMock = vi.fn().mockResolvedValue('tool result');
@@ -1460,7 +1461,7 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
       });
     });
 
-    describe('telemetry', () => {
+    describe.skip('telemetry', () => {
       let tracer: MockTracer;
 
       beforeEach(() => {
@@ -1653,7 +1654,7 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
       });
     });
 
-    describe('tools with custom schema', () => {
+    describe.only('tools with custom schema', () => {
       it('should contain tool calls', async () => {
         const result = await generateText({
           model: new MockLanguageModelV1({

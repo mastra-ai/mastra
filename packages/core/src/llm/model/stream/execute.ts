@@ -1099,7 +1099,7 @@ export async function execute(
   if (type === 'stream') {
     return output;
   } else if (type === 'generate') {
-    return output._getGenerateOutput();
+    return output._getFullOutput();
   } else {
     throw new Error(`Unsupported execution type: ${type}`);
   }
