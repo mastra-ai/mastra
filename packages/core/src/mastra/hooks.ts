@@ -39,9 +39,7 @@ export function createOnScorerHook(mastra: Mastra) {
       let input = hookData.input;
       let output = hookData.output;
 
-      if (entityType === 'AGENT') {
-        input = hookData.input.filter(m => m.role === 'user');
-      } else {
+      if (entityType !== 'AGENT') {
         output = { object: hookData.output };
       }
       const { structuredOutput, ...rest } = hookData as any; // temporary fix;
