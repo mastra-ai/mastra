@@ -1082,6 +1082,15 @@ export class Workflow<
 
     this.mastra?.getLogger().warn('createRun() is deprecated. Use createRunAsync() instead.');
 
+    // Bind methods to ensure they work when destructured
+    run.start = run.start.bind(run);
+    run.resume = run.resume.bind(run);
+    run.stream = run.stream.bind(run);
+    run.cancel = run.cancel.bind(run);
+    run.sendEvent = run.sendEvent.bind(run);
+    run.watch = run.watch.bind(run);
+    run.getState = run.getState.bind(run);
+
     return run;
   }
 
@@ -1138,6 +1147,15 @@ export class Workflow<
         },
       });
     }
+
+    // Bind methods to ensure they work when destructured
+    run.start = run.start.bind(run);
+    run.resume = run.resume.bind(run);
+    run.stream = run.stream.bind(run);
+    run.cancel = run.cancel.bind(run);
+    run.sendEvent = run.sendEvent.bind(run);
+    run.watch = run.watch.bind(run);
+    run.getState = run.getState.bind(run);
 
     return run;
   }
