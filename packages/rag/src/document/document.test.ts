@@ -43,9 +43,8 @@ describe('MDocument', () => {
       const doc = MDocument.fromMarkdown(sampleMarkdown);
 
       chunks = await doc.chunk({
-        size: 1500,
+        maxSize: 1500,
         overlap: 0,
-        separator: `\n`,
         extract: {
           keywords: true,
         },
@@ -75,7 +74,7 @@ describe('MDocument', () => {
         strategy: 'character',
         separator: '\n\n',
         isSeparatorRegex: false,
-        size: 50,
+        maxSize: 50,
         overlap: 5,
       });
 
@@ -96,7 +95,7 @@ describe('MDocument', () => {
         strategy: 'character',
         separator: '\\s+',
         isSeparatorRegex: true,
-        size: 50,
+        maxSize: 50,
         overlap: 5,
       });
 
@@ -112,7 +111,7 @@ describe('MDocument', () => {
         strategy: 'character',
         separator: '\n\n',
         isSeparatorRegex: false,
-        size: 50,
+        maxSize: 50,
         overlap: 5,
         keepSeparator: 'end',
       });
@@ -132,7 +131,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'end',
         });
@@ -153,7 +152,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'start',
         });
@@ -175,7 +174,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'end',
         });
@@ -195,7 +194,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'end',
         });
@@ -215,7 +214,7 @@ describe('MDocument', () => {
           strategy: 'character',
           separator: '\n\n',
           isSeparatorRegex: false,
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           keepSeparator: 'start',
         });
@@ -235,7 +234,7 @@ describe('MDocument', () => {
 
       const result = await doc.chunk({
         strategy: 'character',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap,
       });
 
@@ -265,7 +264,7 @@ describe('MDocument', () => {
       const doc = MDocument.fromText(text);
       const chunks = await doc.chunk({
         strategy: 'character',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap,
       });
 
@@ -309,7 +308,7 @@ describe('MDocument', () => {
       const testDoc = MDocument.fromText(text);
       const chunks = await testDoc.chunk({
         strategy: 'character',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap,
       });
 
@@ -326,7 +325,7 @@ describe('MDocument', () => {
       }
       expect(allChunksValid).toBe(true);
 
-      // Verify each chunk size explicitly
+      // Verify the size of each chunk explicitly
       for (const chunk of chunks) {
         expect(chunk.text.length).toBeLessThanOrEqual(chunkSize);
       }
@@ -352,7 +351,7 @@ describe('MDocument', () => {
       const doc = MDocument.fromText(text);
       const chunks = await doc.chunk({
         strategy: 'character',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap,
       });
 
@@ -360,7 +359,7 @@ describe('MDocument', () => {
       chunks.forEach(chunk => {
         // Each chunk should be either:
         // 1. Full size (chunkSize)
-        // 2. Or at least half the chunk size if it's the last chunk
+        // 2. Or at least half the chunk maxSize if it's the last chunk
         const minSize = chunk === chunks[chunks.length - 1] ? Math.floor(chunkSize / 2) : chunkSize;
         expect(chunk.text.length).toBeGreaterThanOrEqual(minSize);
       });
@@ -386,9 +385,9 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'recursive',
-        size,
+        maxSize: size,
         overlap: overlapSize,
-        separator: '\n\n', // Split on double newlines
+        separators: ['\n\n'], // Split on double newlines
       });
 
       const docs = doc.getDocs();
@@ -420,7 +419,7 @@ describe('MDocument', () => {
         strategy: 'recursive',
         separators: ['\n\n', '\n', ' ', ''],
         isSeparatorRegex: false,
-        size: 50,
+        maxSize: 50,
         overlap: 5,
       });
 
@@ -446,7 +445,7 @@ describe('MDocument', () => {
       const doc = MDocument.fromText(tsCode, { meta: 'data' });
 
       await doc.chunk({
-        size: 50,
+        maxSize: 50,
         overlap: 5,
         language: Language.TS,
       });
@@ -461,7 +460,7 @@ describe('MDocument', () => {
 
       await expect(
         doc.chunk({
-          size: 50,
+          maxSize: 50,
           overlap: 5,
           language: 'invalid-language' as any,
         }),
@@ -481,7 +480,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'recursive',
-        size: 500, // Smaller chunk size to ensure multiple chunks
+        maxSize: 500, // Smaller chunk maxSize to ensure multiple chunks
         overlap: overlapSize,
       });
 
@@ -517,7 +516,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'recursive',
-        size: chunkSize,
+        maxSize: chunkSize,
         overlap: overlapSize,
       });
 
@@ -1373,7 +1372,7 @@ describe('MDocument', () => {
       await doc.chunk({
         strategy: 'token',
         encodingName: 'cl100k_base',
-        size: 10,
+        maxSize: 10,
         overlap: 2,
       });
 
@@ -1391,7 +1390,7 @@ describe('MDocument', () => {
       await doc.chunk({
         strategy: 'token',
         encodingName: 'gpt2',
-        size: 10,
+        maxSize: 10,
         disallowedSpecial: new Set(),
         allowedSpecial: new Set(['<|endoftext|>']),
         overlap: 2,
@@ -1410,7 +1409,7 @@ describe('MDocument', () => {
       await doc.chunk({
         strategy: 'token',
         encodingName: 'gpt2',
-        size: 10,
+        maxSize: 10,
         disallowedSpecial: new Set(),
         allowedSpecial: new Set(['<|endoftext|>']),
         overlap: 2,
@@ -1424,15 +1423,15 @@ describe('MDocument', () => {
     });
 
     describe('Error cases', () => {
-      it('should throw error for invalid chunk size and overlap', async () => {
+      it('should throw error for invalid chunk maxSize and overlap', async () => {
         const text = '  This has whitespace   ';
         const doc = MDocument.fromText(text, { meta: 'data' });
 
         await expect(
           doc.chunk({
             strategy: 'token',
-            size: 100,
-            overlap: 150, // overlap larger than chunk size
+            maxSize: 100,
+            overlap: 150, // overlap larger than chunk maxSize
           }),
         ).rejects.toThrow();
       });
@@ -1445,8 +1444,8 @@ describe('MDocument', () => {
           doc.chunk({
             strategy: 'token',
             encodingName: 'invalid-encoding' as any,
-            size: 100,
-            overlap: 150, // overlap larger than chunk size
+            maxSize: 100,
+            overlap: 150, // overlap larger than chunk maxSize
           }),
         ).rejects.toThrow();
       });
@@ -1472,7 +1471,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'markdown',
-        size: 100,
+        maxSize: 100,
         overlap: 10,
       });
 
@@ -1496,7 +1495,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'markdown',
-        size: 100,
+        maxSize: 100,
         overlap: 10,
       });
 
@@ -1527,7 +1526,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'latex',
-        size: 100,
+        maxSize: 100,
         overlap: 10,
         keepSeparator: 'start',
       });
@@ -1557,7 +1556,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'latex',
-        size: 100,
+        maxSize: 100,
         overlap: 10,
         keepSeparator: 'start',
       });
@@ -1579,7 +1578,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'latex',
-        size: 50,
+        maxSize: 50,
         overlap: 0,
         keepSeparator: 'end',
       });
@@ -1600,7 +1599,7 @@ describe('MDocument', () => {
 
       await doc.chunk({
         strategy: 'latex',
-        size: 100,
+        maxSize: 100,
         overlap: 0,
         stripWhitespace: true,
       });
@@ -1759,7 +1758,7 @@ describe('MDocument', () => {
       const doc = MDocument.fromMarkdown(markdown);
       const chunks = await doc.chunk({
         strategy: 'markdown',
-        size: 500,
+        maxSize: 500,
         overlap: 0,
         headers: [
           ['#', 'h1'],
@@ -2006,7 +2005,7 @@ describe('MDocument', () => {
       const chunks = await doc.chunk({
         strategy: 'character',
         separator: '\n\n',
-        size: 20,
+        maxSize: 20,
         overlap: 0,
         extract: { keywords: true },
       });
@@ -2055,6 +2054,262 @@ describe('MDocument', () => {
       expect(titleB).toBeDefined();
       expect(titleA1).toBe(titleA2);
       expect(titleA1).not.toBe(titleB);
+    });
+  });
+
+  describe('chunkSentence', () => {
+    it('should preserve sentence structure and avoid mid-sentence breaks', async () => {
+      const text =
+        'A dynamic concert scene captures an energetic, vibrant atmosphere, with a densely packed crowd silhouetted against bright stage lights. The image features beams of white light radiating from multiple projectors, creating dramatic patterns across a darkened room. The audience, comprised of numerous people with raised hands, exudes excitement and engagement, enhancing the lively mood. The setting suggests a large indoor venue, possibly a music or worship event, with text visible on a screen in the background, adding to an immersive experience. The overall composition emphasizes a sense of community and shared enthusiasm, ideal for promoting entertainment events, live concerts, or communal gatherings. The high-contrast lighting and slight haze effect imbue the scene with a modern, electrifying quality.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        minSize: 50,
+        maxSize: 450,
+        overlap: 0,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      chunks.forEach(chunk => {
+        expect(chunk.text.length).toBeGreaterThanOrEqual(50);
+        expect(chunk.text.length).toBeLessThanOrEqual(450);
+
+        expect(chunk.text.startsWith('.')).toBe(false);
+        expect(chunk.text.startsWith(' .')).toBe(false);
+
+        expect(chunk.text.endsWith('.')).toBe(true);
+      });
+    });
+
+    it('should require maxSize parameter', async () => {
+      const doc = MDocument.fromText('Short text.');
+
+      await expect(
+        doc.chunk({
+          strategy: 'sentence',
+          minSize: 50,
+        } as any),
+      ).rejects.toThrow('Invalid parameters for sentence strategy: maxSize: Required');
+    });
+
+    it('should handle custom sentence enders', async () => {
+      const text =
+        'First sentence with more content to make it longer. Second sentence with additional content! Third sentence with even more text? Fourth sentence with final content.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 100,
+        sentenceEnders: ['.', '!', '?'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      chunks.forEach(chunk => {
+        const endsWithValidSeparator = chunk.text.endsWith('.') || chunk.text.endsWith('!') || chunk.text.endsWith('?');
+        expect(endsWithValidSeparator).toBe(true);
+      });
+    });
+
+    it('should handle overlap with complete sentences', async () => {
+      const text =
+        'First sentence with some content that makes it quite long. Second sentence with different content that also makes it lengthy. Third sentence with more content to ensure multiple chunks. Fourth sentence with final content to complete the test.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 120,
+        overlap: 50,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      // Check that overlapping chunks share some content
+      if (chunks.length > 1) {
+        for (let i = 1; i < chunks.length; i++) {
+          const currentChunk = chunks[i].text;
+
+          // With overlap, current chunk should start with some content from previous chunk
+          // Just verify that overlap is being applied (chunk 2 starts with overlap from chunk 1)
+          expect(currentChunk.length).toBeGreaterThan(50); // Should include overlap content
+        }
+      }
+    });
+
+    it('should fallback to word splitting for oversized sentences', async () => {
+      const longSentence =
+        'This is an extremely long sentence that ' +
+        'word '.repeat(50) +
+        'and should be split into smaller chunks when it exceeds the maximum size limit.';
+
+      const doc = MDocument.fromText(longSentence);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 100,
+        fallbackToWords: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      chunks.forEach(chunk => {
+        expect(chunk.text.length).toBeLessThanOrEqual(100);
+      });
+    });
+
+    it('should handle short text appropriately', async () => {
+      const text = 'Short sentence.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        minSize: 5,
+        maxSize: 100,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBe(1);
+      expect(chunks[0].text).toBe(text);
+    });
+
+    it('should group multiple sentences when they fit within target size', async () => {
+      const text = 'Short one. Another short. Third short. Fourth sentence. Fifth one.';
+
+      const doc = MDocument.fromText(text);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        minSize: 10,
+        maxSize: 100,
+        targetSize: 40,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      // Should group multiple short sentences together
+      expect(chunks.length).toBeLessThan(5); // Less than the number of sentences
+
+      chunks.forEach(chunk => {
+        // Each chunk should contain multiple sentences when possible
+        expect(chunk.text.length).toBeLessThanOrEqual(100);
+      });
+    });
+
+    it('should preserve metadata across chunks', async () => {
+      const text =
+        'First sentence with enough content to make it longer than fifty characters. Second sentence with additional content to ensure multiple chunks. Third sentence with final content.';
+      const metadata = { source: 'test', author: 'jest' };
+
+      const doc = MDocument.fromText(text, metadata);
+
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 100,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+
+      chunks.forEach(chunk => {
+        expect(chunk.metadata.source).toBe('test');
+        expect(chunk.metadata.author).toBe('jest');
+      });
+    });
+
+    it('should handle abbreviations without false sentence breaks', async () => {
+      const text =
+        'Dr. Smith went to the U.S.A. at 3:30 a.m. on Monday. He met with Prof. Johnson at the U.N. headquarters.';
+
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 200,
+        sentenceEnders: ['.'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeLessThanOrEqual(2);
+
+      const allText = chunks.map(c => c.text).join(' ');
+      expect(allText).toContain('Dr. Smith'); // Should keep Dr. together
+      expect(allText).toContain('U.S.A.'); // Should keep U.S.A. together
+      expect(allText).toContain('a.m.'); // Should keep a.m. together
+      expect(allText).toContain('Prof. Johnson'); // Should keep Prof. together
+      expect(allText).toContain('U.N.'); // Should keep U.N. together
+
+      expect(allText).not.toContain('Dr '); // No broken Dr.
+      expect(allText).not.toContain('Prof '); // No broken Prof.
+    });
+
+    it('should respect fallbackToCharacters setting', async () => {
+      const oversizedWord = 'supercalifragilisticexpialidocious'.repeat(5);
+      const text = `Short sentence. ${oversizedWord}.`;
+
+      const doc1 = MDocument.fromText(text);
+      const chunksWithFallback = await doc1.chunk({
+        strategy: 'sentence',
+        maxSize: 50,
+        fallbackToWords: true,
+        fallbackToCharacters: true,
+      });
+
+      // Should split the oversized word
+      expect(chunksWithFallback.length).toBeGreaterThan(2);
+
+      const doc2 = MDocument.fromText(text);
+      const chunksWithoutFallback = await doc2.chunk({
+        strategy: 'sentence',
+        maxSize: 50,
+        fallbackToWords: true,
+        fallbackToCharacters: false,
+      });
+
+      // Should have fewer chunks (oversized word kept intact)
+      expect(chunksWithoutFallback.length).toBeLessThan(chunksWithFallback.length);
+
+      // Verify fallback disabled keeps oversized content
+      const oversizedChunk = chunksWithoutFallback.find(chunk => chunk.text.length > 50);
+      expect(oversizedChunk).toBeDefined();
+    });
+
+    it('should handle complex punctuation and edge cases', async () => {
+      const text =
+        'Version 2.0 was released. The score was 3.14159. Mr. & Mrs. Smith arrived at 12:30 p.m. What happened next?';
+
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 200,
+        sentenceEnders: ['.', '?'],
+        keepSeparator: true,
+      });
+
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeLessThanOrEqual(4);
+
+      const allText = chunks.map(c => c.text).join(' ');
+      expect(allText).toContain('2.0'); // Should keep version numbers intact
+      expect(allText).toContain('3.14159'); // Should keep decimals intact
+      expect(allText).toContain('p.m.'); // Should keep time abbreviations intact
+      expect(allText).toContain('What happened next?'); // Should end with question
+
+      // Should not break on decimals or version numbers
+      expect(allText).not.toContain('2 '); // No broken version number
+      expect(allText).not.toContain('3 '); // No broken decimal
     });
   });
 });

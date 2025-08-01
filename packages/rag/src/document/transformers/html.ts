@@ -1,5 +1,6 @@
 import { parse } from 'node-html-better-parser';
 import { Document } from '../schema';
+import type { HTMLChunkOptions } from '../types';
 
 import { RecursiveCharacterTransformer } from './character';
 
@@ -14,9 +15,9 @@ export class HTMLHeaderTransformer {
   private headersToSplitOn: [string, string][];
   private returnEachElement: boolean;
 
-  constructor(headersToSplitOn: [string, string][], returnEachElement: boolean = false) {
-    this.returnEachElement = returnEachElement;
-    this.headersToSplitOn = [...headersToSplitOn].sort();
+  constructor(options: HTMLChunkOptions & { headers: [string, string][] }) {
+    this.returnEachElement = options.returnEachLine ?? false;
+    this.headersToSplitOn = [...options.headers].sort();
   }
 
   splitText({ text }: { text: string }): Document[] {
@@ -195,11 +196,11 @@ export class HTMLHeaderTransformer {
 
 export class HTMLSectionTransformer {
   private headersToSplitOn: Record<string, string>;
-  private options: Record<string, any>;
+  private textSplitter: RecursiveCharacterTransformer;
 
-  constructor(headersToSplitOn: [string, string][], options: Record<string, any> = {}) {
-    this.headersToSplitOn = Object.fromEntries(headersToSplitOn.map(([tag, name]) => [tag.toLowerCase(), name]));
-    this.options = options;
+  constructor(options: HTMLChunkOptions & { sections: [string, string][] }) {
+    this.headersToSplitOn = Object.fromEntries(options.sections.map(([tag, name]) => [tag.toLowerCase(), name]));
+    this.textSplitter = new RecursiveCharacterTransformer(options);
   }
 
   splitText(text: string): Document[] {
@@ -296,9 +297,8 @@ export class HTMLSectionTransformer {
       metadatas.push(doc.metadata);
     }
     const results = await this.createDocuments(texts, metadatas);
-    const textSplitter = new RecursiveCharacterTransformer({ options: this.options });
 
-    return textSplitter.splitDocuments(results);
+    return this.textSplitter.splitDocuments(results);
   }
 
   createDocuments(texts: string[], metadatas?: Record<string, any>[]): Document[] {

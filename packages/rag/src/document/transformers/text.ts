@@ -1,11 +1,11 @@
 import { Document } from '../schema';
 
-import type { ChunkOptions } from '../types';
+import type { BaseChunkOptions } from '../types';
 
 import type { Transformer } from './transformer';
 
 export abstract class TextTransformer implements Transformer {
-  protected size: number;
+  protected maxSize: number;
   protected overlap: number;
   protected lengthFunction: (text: string) => number;
   protected keepSeparator: boolean | 'start' | 'end';
@@ -13,17 +13,17 @@ export abstract class TextTransformer implements Transformer {
   protected stripWhitespace: boolean;
 
   constructor({
-    size = 4000,
+    maxSize = 4000,
     overlap = 200,
     lengthFunction = (text: string) => text.length,
     keepSeparator = false,
     addStartIndex = false,
     stripWhitespace = true,
-  }: ChunkOptions) {
-    if (overlap > size) {
-      throw new Error(`Got a larger chunk overlap (${overlap}) than chunk size ` + `(${size}), should be smaller.`);
+  }: BaseChunkOptions) {
+    if (overlap > maxSize) {
+      throw new Error(`Got a larger chunk overlap (${overlap}) than chunk size ` + `(${maxSize}), should be smaller.`);
     }
-    this.size = size;
+    this.maxSize = maxSize;
     this.overlap = overlap;
     this.lengthFunction = lengthFunction;
     this.keepSeparator = keepSeparator;
@@ -104,9 +104,9 @@ export abstract class TextTransformer implements Transformer {
       const len = this.lengthFunction(d);
       const separatorLen = separator ? this.lengthFunction(separator) : 0;
 
-      if (total + len + (currentDoc.length > 0 ? separatorLen : 0) > this.size) {
-        if (total > this.size) {
-          console.warn(`Created a chunk of size ${total}, which is longer than the specified ${this.size}`);
+      if (total + len + (currentDoc.length > 0 ? separatorLen : 0) > this.maxSize) {
+        if (total > this.maxSize) {
+          console.warn(`Created a chunk of size ${total}, which is longer than the specified ${this.maxSize}`);
         }
 
         if (currentDoc.length > 0) {
