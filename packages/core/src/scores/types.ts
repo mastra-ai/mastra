@@ -1,4 +1,4 @@
-import type { CoreMessage } from 'ai';
+import type { CoreMessage, CoreSystemMessage } from 'ai';
 import { z } from 'zod';
 import type { UIMessageWithMetadata } from '../agent';
 
@@ -108,6 +108,7 @@ export type ScorerRunInputForAgent = {
   inputMessages: UIMessageWithMetadata[];
   rememberedMessages: UIMessageWithMetadata[];
   systemMessages: CoreMessage[];
+  taggedSystemMessages: Record<string, CoreSystemMessage[]>;
 };
 
 export type ScorerRunOutputForAgent = UIMessageWithMetadata[];
