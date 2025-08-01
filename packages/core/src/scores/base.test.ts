@@ -1,25 +1,34 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MastraScorer } from './base';
-import type { ScorerOptions, ScoringInput, ExtractionStepFn, AnalyzeStepFn, ReasonStepFn } from './types';
+import type {
+  ScorerOptions,
+  ScoringInput,
+  PreprocessStepFn,
+  InternalAnalyzeStepFn,
+  InternalReasonStepFn,
+  GenerateScoreStepFn,
+} from './types';
 
 describe('MastraScorer', () => {
-  let mockExtractFn: ExtractionStepFn;
-  let mockAnalyzeFn: AnalyzeStepFn;
-  let mockReasonFn: ReasonStepFn;
+  let mockPreprocessFn: PreprocessStepFn;
+  let mockAnalyzeFn: InternalAnalyzeStepFn;
+  let mockGenerateScoreFn: GenerateScoreStepFn;
+  let mockReasonFn: InternalReasonStepFn;
   let baseScoringInput: ScoringInput;
 
   beforeEach(() => {
     vi.resetAllMocks();
 
     // Mock functions
-    mockExtractFn = vi.fn().mockResolvedValue({ result: { extractedData: 'test' } });
+    mockPreprocessFn = vi.fn().mockResolvedValue({ result: { extractedData: 'test' } });
     mockAnalyzeFn = vi.fn().mockResolvedValue({
-      score: 0.8,
       result: { results: [{ result: 'good', reason: 'quality analysis' }] },
+      prompt: 'Analyze this content',
     });
+    mockGenerateScoreFn = vi.fn().mockResolvedValue(0.8);
     mockReasonFn = vi.fn().mockResolvedValue({
       reason: 'test reasoning',
-      reasonPrompt: 'Why did you score this way?',
+      prompt: 'Why did you score this way?',
     });
 
     // Base scoring input for tests
@@ -38,6 +47,7 @@ describe('MastraScorer', () => {
         name: 'test-scorer',
         description: 'A test scorer',
         analyze: mockAnalyzeFn,
+        generateScore: mockGenerateScoreFn,
       };
 
       const scorer = new MastraScorer(options);
@@ -45,18 +55,19 @@ describe('MastraScorer', () => {
       expect(scorer.name).toBe('test-scorer');
       expect(scorer.description).toBe('A test scorer');
       expect(scorer.analyze).toBe(mockAnalyzeFn);
-      expect(scorer.extract).toBeUndefined();
+      expect(scorer.generateScore).toBe(mockGenerateScoreFn);
+      expect(scorer.preprocess).toBeUndefined();
       expect(scorer.reason).toBeUndefined();
       expect(scorer.metadata).toEqual({});
-      expect(scorer.isLLMScorer).toBeUndefined();
     });
 
     it('should initialize with all optional properties', () => {
       const options: ScorerOptions = {
         name: 'test-scorer',
         description: 'A test scorer',
-        extract: mockExtractFn,
+        preprocess: mockPreprocessFn,
         analyze: mockAnalyzeFn,
+        generateScore: mockGenerateScoreFn,
         reason: mockReasonFn,
         metadata: { custom: 'data' },
         isLLMScorer: true,
@@ -66,11 +77,11 @@ describe('MastraScorer', () => {
 
       expect(scorer.name).toBe('test-scorer');
       expect(scorer.description).toBe('A test scorer');
-      expect(scorer.extract).toBe(mockExtractFn);
+      expect(scorer.preprocess).toBe(mockPreprocessFn);
       expect(scorer.analyze).toBe(mockAnalyzeFn);
+      expect(scorer.generateScore).toBe(mockGenerateScoreFn);
       expect(scorer.reason).toBe(mockReasonFn);
       expect(scorer.metadata).toEqual({ custom: 'data' });
-      expect(scorer.isLLMScorer).toBe(true);
     });
 
     it('should initialize metadata as empty object when not provided', () => {
@@ -78,6 +89,7 @@ describe('MastraScorer', () => {
         name: 'test-scorer',
         description: 'A test scorer',
         analyze: mockAnalyzeFn,
+        generateScore: mockGenerateScoreFn,
       };
 
       const scorer = new MastraScorer(options);
@@ -87,45 +99,73 @@ describe('MastraScorer', () => {
   });
 
   describe('run method', () => {
-    it('should execute workflow without extract function', async () => {
+    it('should execute workflow without preprocess function', async () => {
       const scorer = new MastraScorer({
         name: 'test-scorer',
         description: 'A test scorer',
         analyze: mockAnalyzeFn,
+        generateScore: mockGenerateScoreFn,
       });
 
       const result = await scorer.run(baseScoringInput);
 
       expect(mockAnalyzeFn).toHaveBeenCalledWith({
-        ...baseScoringInput,
-        extractStepResult: undefined,
+        run: {
+          ...baseScoringInput,
+          preprocessStepResult: undefined,
+        },
+      });
+      expect(mockGenerateScoreFn).toHaveBeenCalledWith({
+        run: {
+          ...baseScoringInput,
+          preprocessStepResult: undefined,
+          analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
+          analyzePrompt: 'Analyze this content',
+        },
       });
       expect(result).toMatchObject({
-        extractStepResult: undefined,
+        runId: baseScoringInput.runId,
+        preprocessStepResult: undefined,
         score: 0.8,
         analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
+        analyzePrompt: 'Analyze this content',
       });
     });
 
-    it('should execute workflow with extract function', async () => {
+    it('should execute workflow with preprocess function', async () => {
       const scorer = new MastraScorer({
         name: 'test-scorer',
         description: 'A test scorer',
-        extract: mockExtractFn,
+        preprocess: mockPreprocessFn,
         analyze: mockAnalyzeFn,
+        generateScore: mockGenerateScoreFn,
       });
 
       const result = await scorer.run(baseScoringInput);
 
-      expect(mockExtractFn).toHaveBeenCalledWith(baseScoringInput);
+      expect(mockPreprocessFn).toHaveBeenCalledWith({
+        run: baseScoringInput,
+      });
       expect(mockAnalyzeFn).toHaveBeenCalledWith({
-        ...baseScoringInput,
-        extractStepResult: { extractedData: 'test' },
+        run: {
+          ...baseScoringInput,
+          preprocessStepResult: { extractedData: 'test' },
+        },
+      });
+      expect(mockGenerateScoreFn).toHaveBeenCalledWith({
+        run: {
+          ...baseScoringInput,
+          preprocessStepResult: { extractedData: 'test' },
+          analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
+          analyzePrompt: 'Analyze this content',
+        },
       });
       expect(result).toMatchObject({
-        extractStepResult: { extractedData: 'test' },
+        runId: baseScoringInput.runId,
+        preprocessStepResult: { extractedData: 'test' },
         score: 0.8,
         analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
+        analyzePrompt: 'Analyze this content',
       });
     });
 
@@ -133,25 +173,43 @@ describe('MastraScorer', () => {
       const scorer = new MastraScorer({
         name: 'test-scorer',
         description: 'A test scorer',
-        extract: mockExtractFn,
+        preprocess: mockPreprocessFn,
         analyze: mockAnalyzeFn,
+        generateScore: mockGenerateScoreFn,
         reason: mockReasonFn,
       });
 
       const result = await scorer.run(baseScoringInput);
 
-      expect(mockExtractFn).toHaveBeenCalledWith(baseScoringInput);
+      expect(mockPreprocessFn).toHaveBeenCalledWith({
+        run: baseScoringInput,
+      });
       expect(mockAnalyzeFn).toHaveBeenCalledWith({
-        ...baseScoringInput,
-        extractStepResult: { extractedData: 'test' },
+        run: {
+          ...baseScoringInput,
+          preprocessStepResult: { extractedData: 'test' },
+        },
+      });
+      expect(mockGenerateScoreFn).toHaveBeenCalledWith({
+        run: {
+          ...baseScoringInput,
+          preprocessStepResult: { extractedData: 'test' },
+          analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
+          analyzePrompt: 'Analyze this content',
+        },
       });
       expect(mockReasonFn).toHaveBeenCalledWith({
-        ...baseScoringInput,
-        analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
-        score: 0.8,
+        run: {
+          ...baseScoringInput,
+          preprocessStepResult: { extractedData: 'test' },
+          analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
+          score: 0.8,
+        },
       });
+
       expect(result).toMatchObject({
-        extractStepResult: { extractedData: 'test' },
+        runId: baseScoringInput.runId,
+        preprocessStepResult: { extractedData: 'test' },
         score: 0.8,
         analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
         reason: 'test reasoning',
@@ -161,7 +219,6 @@ describe('MastraScorer', () => {
 
     it('should handle LLM scorer properly', async () => {
       const llmAnalyzeFn = vi.fn().mockResolvedValue({
-        score: 0.9,
         result: { analysis: 'detailed analysis' },
         prompt: 'Analyze this content',
       });
@@ -170,19 +227,23 @@ describe('MastraScorer', () => {
         name: 'llm-scorer',
         description: 'An LLM scorer',
         analyze: llmAnalyzeFn,
+        generateScore: mockGenerateScoreFn,
         isLLMScorer: true,
       });
 
       const result = await scorer.run(baseScoringInput);
 
       expect(llmAnalyzeFn).toHaveBeenCalledWith({
-        ...baseScoringInput,
-        extractStepResult: undefined,
+        run: {
+          ...baseScoringInput,
+          preprocessStepResult: undefined,
+        },
       });
 
       expect(result).toMatchObject({
-        extractStepResult: undefined,
-        score: 0.9,
+        runId: baseScoringInput.runId,
+        preprocessStepResult: undefined,
+        score: 0.8,
         analyzeStepResult: { analysis: 'detailed analysis' },
         analyzePrompt: 'Analyze this content',
       });
@@ -191,27 +252,29 @@ describe('MastraScorer', () => {
     it('should handle non-LLM scorer properly', async () => {
       const nonLlmAnalyzeFn = vi.fn().mockResolvedValue({
         result: { additionalInfo: 'some info' },
-        score: 0.7,
-        additionalInfo: 'some info',
       });
 
       const scorer = new MastraScorer({
         name: 'non-llm-scorer',
         description: 'A non-LLM scorer',
         analyze: nonLlmAnalyzeFn,
+        generateScore: mockGenerateScoreFn,
         isLLMScorer: false,
       });
 
       const result = await scorer.run(baseScoringInput);
 
       expect(nonLlmAnalyzeFn).toHaveBeenCalledWith({
-        ...baseScoringInput,
-        extractStepResult: undefined,
+        run: {
+          ...baseScoringInput,
+          preprocessStepResult: undefined,
+        },
       });
 
       expect(result).toMatchObject({
-        extractStepResult: undefined,
-        score: 0.7,
+        runId: baseScoringInput.runId,
+        preprocessStepResult: undefined,
+        score: 0.8,
         analyzeStepResult: { additionalInfo: 'some info' },
       });
     });
@@ -223,20 +286,26 @@ describe('MastraScorer', () => {
         name: 'test-scorer',
         description: 'A test scorer',
         analyze: mockAnalyzeFn,
+        generateScore: mockGenerateScoreFn,
         reason: nullReasonFn,
       });
 
       const result = await scorer.run(baseScoringInput);
 
       expect(nullReasonFn).toHaveBeenCalledWith({
-        ...baseScoringInput,
-        analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
-        score: 0.8,
+        run: {
+          ...baseScoringInput,
+          preprocessStepResult: undefined,
+          analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
+          score: 0.8,
+        },
       });
       expect(result).toMatchObject({
-        extractStepResult: undefined,
+        runId: baseScoringInput.runId,
+        preprocessStepResult: undefined,
         score: 0.8,
         analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
+        analyzePrompt: 'Analyze this content',
       });
     });
 
@@ -247,19 +316,21 @@ describe('MastraScorer', () => {
         name: 'failing-scorer',
         description: 'A failing scorer',
         analyze: failingAnalyzeFn,
+        generateScore: mockGenerateScoreFn,
       });
 
       await expect(scorer.run(baseScoringInput)).rejects.toThrow('Scoring pipeline failed: failed');
     });
 
-    it('should handle extract function throwing error', async () => {
-      const failingExtractFn = vi.fn().mockRejectedValue(new Error('Extract failed'));
+    it('should handle preprocess function throwing error', async () => {
+      const failingPreprocessFn = vi.fn().mockRejectedValue(new Error('Preprocess failed'));
 
       const scorer = new MastraScorer({
-        name: 'failing-extract-scorer',
-        description: 'A scorer with failing extract',
-        extract: failingExtractFn,
+        name: 'failing-preprocess-scorer',
+        description: 'A scorer with failing preprocess',
+        preprocess: failingPreprocessFn,
         analyze: mockAnalyzeFn,
+        generateScore: mockGenerateScoreFn,
       });
 
       await expect(scorer.run(baseScoringInput)).rejects.toThrow('Scoring pipeline failed: failed');
@@ -272,6 +343,7 @@ describe('MastraScorer', () => {
         name: 'failing-reason-scorer',
         description: 'A scorer with failing reason',
         analyze: mockAnalyzeFn,
+        generateScore: mockGenerateScoreFn,
         reason: failingReasonFn,
       });
 
@@ -283,12 +355,14 @@ describe('MastraScorer', () => {
         name: 'scorer-1',
         description: 'First scorer',
         analyze: mockAnalyzeFn,
+        generateScore: mockGenerateScoreFn,
       });
 
       const scorer2 = new MastraScorer({
         name: 'scorer-2',
         description: 'Second scorer',
         analyze: mockAnalyzeFn,
+        generateScore: mockGenerateScoreFn,
       });
 
       const result1 = await scorer1.run(baseScoringInput);
@@ -296,6 +370,7 @@ describe('MastraScorer', () => {
 
       expect(result1).toEqual(result2);
       expect(mockAnalyzeFn).toHaveBeenCalledTimes(2);
+      expect(mockGenerateScoreFn).toHaveBeenCalledTimes(2);
     });
   });
 });

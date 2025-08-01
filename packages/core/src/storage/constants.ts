@@ -32,7 +32,12 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   scorer: {
     type: 'jsonb',
   },
+  preprocessStepResult: {
+    type: 'jsonb',
+    nullable: true,
+  },
   extractStepResult: {
+    // Deprecated
     type: 'jsonb',
     nullable: true,
   },
@@ -51,7 +56,12 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
     type: 'jsonb',
     nullable: true,
   },
+  preprocessPrompt: {
+    type: 'text',
+    nullable: true,
+  },
   extractPrompt: {
+    // Deprecated
     type: 'text',
     nullable: true,
   },

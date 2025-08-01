@@ -1,0 +1,269 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`createScorer > Steps as functions scorer > should create a scorer with all steps 1`] = `
+{
+  "analyzePrompt": undefined,
+  "analyzeStepResult": {
+    "inputFromAnalyze": "TEST INPUT!",
+    "outputFromAnalyze": "TEST OUTPUT!",
+  },
+  "preprocessPrompt": undefined,
+  "preprocessStepResult": {
+    "reformattedInput": "TEST INPUT",
+    "reformattedOutput": "TEST OUTPUT",
+  },
+  "reason": "the reason the score is 1 is because the input is TEST INPUT! and the output is TEST OUTPUT!",
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > Steps as functions scorer > should create a scorer with generateScore and generateReason, no analyze 1`] = `
+{
+  "analyzePrompt": undefined,
+  "analyzeStepResult": undefined,
+  "preprocessPrompt": undefined,
+  "preprocessStepResult": undefined,
+  "reason": "Scored 21 characters total",
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > Steps as functions scorer > should create a scorer with minimum steps required (analyze and generateScore) as functions 1`] = `
+{
+  "analyzePrompt": undefined,
+  "analyzeStepResult": {
+    "input": "test input",
+    "output": "test output",
+  },
+  "preprocessPrompt": undefined,
+  "preprocessStepResult": undefined,
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > Steps as functions scorer > should create a scorer with mixed sync/async functions 1`] = `
+{
+  "analyzePrompt": undefined,
+  "analyzeStepResult": {
+    "inputFromAnalyze": "TEST INPUT!",
+    "outputFromAnalyze": "TEST OUTPUT!",
+  },
+  "preprocessPrompt": undefined,
+  "preprocessStepResult": {
+    "reformattedInput": "TEST INPUT",
+    "reformattedOutput": "TEST OUTPUT",
+  },
+  "reason": "the reason the score is 1 is because the input is TEST INPUT! and the output is TEST OUTPUT!",
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > Steps as functions scorer > should create a scorer with preprocess and generateScore, no analyze 1`] = `
+{
+  "analyzePrompt": undefined,
+  "analyzeStepResult": undefined,
+  "preprocessPrompt": undefined,
+  "preprocessStepResult": {
+    "cleanedInput": "test input",
+    "cleanedOutput": "test output",
+  },
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > Steps as functions scorer > should create a scorer with preprocess step 1`] = `
+{
+  "analyzePrompt": undefined,
+  "analyzeStepResult": {
+    "inputFromAnalyze": "TEST INPUT!",
+    "outputFromAnalyze": "TEST OUTPUT!",
+  },
+  "preprocessPrompt": undefined,
+  "preprocessStepResult": {
+    "reformattedInput": "TEST INPUT",
+    "reformattedOutput": "TEST OUTPUT",
+  },
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > Steps as functions scorer > should create a scorer with preprocess, generateScore, and generateReason, no analyze 1`] = `
+{
+  "analyzePrompt": undefined,
+  "analyzeStepResult": undefined,
+  "preprocessPrompt": undefined,
+  "preprocessStepResult": {
+    "charCount": 11,
+    "wordCount": 2,
+  },
+  "reason": "Input has 2 words, output has 11 characters",
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > Steps as functions scorer > should create a scorer with reason step 1`] = `
+{
+  "analyzePrompt": undefined,
+  "analyzeStepResult": {
+    "input": "test input",
+    "output": "test output",
+  },
+  "preprocessPrompt": undefined,
+  "preprocessStepResult": undefined,
+  "reason": "the reason is because the input is test input and the output is test output",
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > Steps as functions scorer > should create a scorer with synchronous functions 1`] = `
+{
+  "analyzePrompt": undefined,
+  "analyzeStepResult": {
+    "input": "test input",
+    "output": "test output",
+  },
+  "preprocessPrompt": undefined,
+  "preprocessStepResult": undefined,
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > Steps as prompt objects scorer > should create a scorer with all steps 1`] = `
+{
+  "analyzePrompt": "Test Analyze prompt",
+  "analyzeStepResult": {
+    "inputLength": 10,
+    "outputLength": 11,
+  },
+  "preprocessPrompt": "Test Preprocess prompt",
+  "preprocessStepResult": {
+    "reformattedInput": "TEST INPUT",
+    "reformattedOutput": "TEST OUTPUT",
+  },
+  "reason": "TEST REASON",
+  "reasonPrompt": "Test Generate Reason prompt",
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > Steps as prompt objects scorer > should create a scorer with minimum steps required 1`] = `
+{
+  "analyzePrompt": "Test Analyze prompt",
+  "analyzeStepResult": {
+    "inputLength": 10,
+    "outputLength": 11,
+  },
+  "preprocessPrompt": undefined,
+  "preprocessStepResult": undefined,
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > Steps as prompt objects scorer > should create a scorer with preprocess step 1`] = `
+{
+  "analyzePrompt": "Test Analyze prompt",
+  "analyzeStepResult": {
+    "inputLength": 10,
+    "outputLength": 11,
+  },
+  "preprocessPrompt": "Test Preprocess prompt",
+  "preprocessStepResult": {
+    "reformattedInput": "TEST INPUT",
+    "reformattedOutput": "TEST OUTPUT",
+  },
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > Steps as prompt objects scorer > should create a scorer with reason step 1`] = `
+{
+  "analyzePrompt": "Test Analyze prompt",
+  "analyzeStepResult": {
+    "inputLength": 10,
+    "outputLength": 11,
+  },
+  "preprocessPrompt": undefined,
+  "preprocessStepResult": undefined,
+  "reason": "TEST REASON",
+  "reasonPrompt": "Test Generate Reason prompt",
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > scorers with both function and prompt objects steps > should create a scorer with preprocess function and analyze prompt object 1`] = `
+{
+  "analyzePrompt": "Test Analyze prompt",
+  "analyzeStepResult": {
+    "inputLength": 10,
+    "outputLength": 11,
+  },
+  "preprocessPrompt": undefined,
+  "preprocessStepResult": {
+    "reformattedInput": "TEST INPUT from preprocess function!",
+    "reformattedOutput": "TEST OUTPUT from preprocess function!",
+  },
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > scorers with both function and prompt objects steps > should create a scorer with preprocess prompt and analyze function 1`] = `
+{
+  "analyzePrompt": undefined,
+  "analyzeStepResult": {
+    "inputFromAnalyze": "TEST INPUT from preprocess prompt!!",
+    "outputFromAnalyze": "TEST OUTPUT from preprocess prompt!!",
+  },
+  "preprocessPrompt": "Test Preprocess prompt",
+  "preprocessStepResult": {
+    "reformattedInput": "TEST INPUT from preprocess prompt!",
+    "reformattedOutput": "TEST OUTPUT from preprocess prompt!",
+  },
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > scorers with both function and prompt objects steps > should create a scorer with reason function and analyze prompt object 1`] = `
+{
+  "analyzePrompt": "Test Analyze prompt",
+  "analyzeStepResult": {
+    "inputLength": 10,
+    "outputLength": 11,
+  },
+  "preprocessPrompt": undefined,
+  "preprocessStepResult": undefined,
+  "reason": "the reason is because the input is 10 and the output is 11 from generateReason function",
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
+
+exports[`createScorer > scorers with both function and prompt objects steps > should create a scorer with reason prompt and analyze function 1`] = `
+{
+  "analyzePrompt": undefined,
+  "analyzeStepResult": {
+    "inputFromAnalyze": "test input from analyze function!",
+    "outputFromAnalyze": "test output from analyze function!",
+  },
+  "preprocessPrompt": undefined,
+  "preprocessStepResult": undefined,
+  "reason": "TEST REASON",
+  "reasonPrompt": "Test Generate Reason prompt",
+  "runId": "test-uuid",
+  "score": 1,
+}
+`;
