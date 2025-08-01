@@ -131,7 +131,7 @@ export default function Scorer() {
           </Crumb>
 
           <Crumb as={Link} to={`/scorers/${scorerId}`} isCurrent>
-            {isLoading ? <Skeleton className="w-20 h-4" /> : scorer?.scorer.name || 'Not found'}
+            {isLoading ? <Skeleton className="w-20 h-4" /> : scorer?.scorer.config.name || 'Not found'}
           </Crumb>
         </Breadcrumb>
       </Header>

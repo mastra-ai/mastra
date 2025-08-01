@@ -81,10 +81,10 @@ const ScorerEntity = ({ scorer }: ScorerEntityProps) => {
       <EntityContent>
         <EntityName>
           <Link ref={linkRef} href={`/scorers/${scorer.id}`}>
-            {scorer.scorer.name}
+            {scorer.scorer.config.name}
           </Link>
         </EntityName>
-        <EntityDescription>{scorer.scorer.description}</EntityDescription>
+        <EntityDescription>{scorer.scorer.config.description}</EntityDescription>
 
         {scorer.sampling?.type === 'ratio' && (
           <Badge>
