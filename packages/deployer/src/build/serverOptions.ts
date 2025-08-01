@@ -7,6 +7,7 @@ import commonjs from '@rollup/plugin-commonjs';
 import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 import type { Config, Mastra } from '@mastra/core';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
+import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 
 export function getServerOptionsBundler(
   entryFile: string,
@@ -28,6 +29,7 @@ export function getServerOptionsBundler(
         platform: 'node',
         minify: false,
       }),
+      optimizeLodashImports(),
       commonjs({
         extensions: ['.js', '.ts'],
         strictRequires: 'strict',

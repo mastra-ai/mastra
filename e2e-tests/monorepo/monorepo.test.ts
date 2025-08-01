@@ -58,7 +58,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const res = await fetch(`http://localhost:${port}/test`);
       const body = await res.json();
       expect(res.status).toBe(200);
-      expect(body).toEqual({ message: 'Hello, world!' });
+      expect(body).toEqual({ message: 'Hello, world!', a: 'b' });
     });
     it('should resolve api ALL routes', async () => {
       let res = await fetch(`http://localhost:${port}/all`);

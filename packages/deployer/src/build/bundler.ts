@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 import { rollup, type InputOptions, type OutputOptions } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
-
 import type { analyzeBundle } from './analyze';
 import { removeDeployer } from './plugins/remove-deployer';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
@@ -94,7 +93,6 @@ export async function getInputOptions(
           { find: /^\#mastra$/, replacement: normalizedEntryFile },
         ],
       }),
-      optimizeLodashImports(),
       {
         name: 'tools-rewriter',
         resolveId(id: string) {
@@ -112,6 +110,7 @@ export async function getInputOptions(
         minify: false,
         define: env,
       }),
+      optimizeLodashImports(),
       commonjs({
         extensions: ['.js', '.ts'],
         transformMixedEsModules: true,
