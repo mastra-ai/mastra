@@ -488,7 +488,7 @@ describe('Mastra ID Generator', () => {
         memory: memory2,
       });
 
-      const mastra = new Mastra({
+      const _mastra = new Mastra({
         idGenerator: customIdGenerator,
         logger: false,
         agents: { agent1, agent2 },
@@ -591,7 +591,7 @@ describe('Mastra ID Generator', () => {
         },
       });
 
-      const mastra = new Mastra({
+      const _mastra = new Mastra({
         idGenerator: customIdGenerator,
         logger: false,
         agents: { testAgent: agent },
@@ -639,7 +639,7 @@ describe('Mastra ID Generator', () => {
         },
       });
 
-      const mastra = new Mastra({
+      const _mastra = new Mastra({
         idGenerator: customIdGenerator,
         logger: false,
         agents: { testAgent: agent },
@@ -692,7 +692,7 @@ describe('Mastra ID Generator', () => {
         },
       });
 
-      const mastra = new Mastra({
+      const _mastra = new Mastra({
         idGenerator: customIdGenerator,
         logger: false,
         agents: { testAgent: agent },
@@ -811,7 +811,7 @@ describe('Mastra ID Generator', () => {
         memory,
       });
 
-      const mastra = new Mastra({
+      const _mastra = new Mastra({
         idGenerator: customIdGenerator,
         logger: false,
         agents: { multiUserAgent: agent },
@@ -853,7 +853,7 @@ describe('Mastra ID Generator', () => {
         memory,
       });
 
-      const mastra = new Mastra({
+      const _mastra = new Mastra({
         idGenerator: customIdGenerator,
         logger: false,
         agents: { workflowAgent: agent },
@@ -900,7 +900,7 @@ describe('Mastra ID Generator', () => {
         memory,
       });
 
-      const mastra = new Mastra({
+      const _mastra = new Mastra({
         idGenerator: customIdGenerator,
         logger: false,
         agents: { streamingAgent: agent },

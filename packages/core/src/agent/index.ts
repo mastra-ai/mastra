@@ -1392,7 +1392,6 @@ export class Agent<
     toolsets,
     clientTools,
     runtimeContext,
-    generateMessageId,
     saveQueueManager,
     writableStream,
   }: {
