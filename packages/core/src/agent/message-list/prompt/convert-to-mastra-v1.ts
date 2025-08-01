@@ -194,18 +194,6 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
 
           for (const part of message.content.parts) {
             switch (part.type) {
-              case 'text': {
-                if (blockHasToolInvocations) {
-                  processBlock(); // text must come after tool invocations
-                }
-                block.push(part);
-                break;
-              }
-              case 'file':
-              case 'reasoning': {
-                block.push(part);
-                break;
-              }
               case 'tool-invocation': {
                 // If we have non-tool content (text/file/reasoning) in the block, process it first
                 const hasNonToolContent = block.some(
@@ -216,6 +204,18 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
                 }
                 block.push(part);
                 blockHasToolInvocations = true;
+                break;
+              }
+              case 'text': {
+                if (blockHasToolInvocations) {
+                  processBlock(); // text must come after tool invocations
+                }
+                block.push(part);
+                break;
+              }
+              case 'file':
+              case 'reasoning': {
+                block.push(part);
                 break;
               }
             }
