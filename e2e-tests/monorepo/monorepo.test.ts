@@ -6,6 +6,7 @@ import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
+// Trigger E2E tests
 
 const timeout = 5 * 60 * 1000;
 

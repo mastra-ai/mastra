@@ -69,8 +69,9 @@ export class SummaryExtractor extends BaseExtractor {
     });
 
     const result = await this.llm.doGenerate({
-      inputFormat: 'messages',
-      mode: { type: 'regular' },
+      // TODO: these don't exist anymore. What do we need to do?
+      // inputFormat: 'messages',
+      // mode: { type: 'regular' },
       prompt: [
         {
           role: 'user',
@@ -80,10 +81,8 @@ export class SummaryExtractor extends BaseExtractor {
     });
 
     let summary = '';
-    if (typeof result.text === 'string') {
-      summary = result.text.trim();
-    } else {
-      console.warn('Summary extraction LLM output was not a string:', result.text);
+    for (const part of result.content) {
+      if (part.type === `text`) summary += part.text.trim();
     }
 
     return summary.replace(STRIP_REGEX, '');

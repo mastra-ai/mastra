@@ -70,8 +70,9 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
     });
 
     const questions = await this.llm.doGenerate({
-      inputFormat: 'messages',
-      mode: { type: 'regular' },
+      // TODO: these don't exist anymore. What do we need to do?
+      // inputFormat: 'messages',
+      // mode: { type: 'regular' },
       prompt: [
         {
           role: 'user',
@@ -81,15 +82,12 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
     });
 
     let result = '';
-    try {
-      if (typeof questions.text === 'string') {
-        result = questions.text.replace(STRIP_REGEX, '').trim();
-      } else {
-        console.warn('Question extraction LLM output was not a string:', questions.text);
+    for (const part of questions.content) {
+      if (part.type === `text`) {
+        result += part.text.replace(STRIP_REGEX, '').trim();
       }
-    } catch (err) {
-      console.warn('Question extraction failed:', err);
     }
+
     return {
       questionsThisExcerptCanAnswer: result,
     };

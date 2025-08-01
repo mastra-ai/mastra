@@ -1,15 +1,15 @@
-import { createHash } from 'crypto';
-import type { CoreMessage, LanguageModelV1 } from 'ai';
-import jsonSchemaToZod from 'json-schema-to-zod';
+import type { Tool } from 'ai';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
-import type { ToolsInput } from './agent';
+import type { MastraLanguageModel, ToolsInput } from './agent';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
-import type { AiMessageType, MastraMemory } from './memory';
+import type { MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
 import type { ChunkType } from './stream/MastraAgentStream';
-import type { CoreTool, ToolAction, VercelTool } from './tools';
+import type { CoreTool, ToolAction, ToolParameters, VercelTool } from './tools';
+import { isVercelV5Tool, createCompatibleToolSet } from './tools/ai-sdk-v5-compat';
+import type { CompatibleTool, CompatibleToolSet } from './tools/ai-sdk-v5-compat';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
 
@@ -223,11 +223,14 @@ export interface ToolOptions {
   runtimeContext: RuntimeContext;
   memory?: MastraMemory;
   agentName?: string;
-  model?: LanguageModelV1;
+  model?: MastraLanguageModel;
   writableStream?: WritableStream<ChunkType>;
 }
 
-type ToolToConvert = VercelTool | ToolAction<any, any, any>;
+type ToolToConvert = Omit<VercelTool | ToolAction<any, any, any>, 'id'> & { id?: string };
+
+// Enhanced type for tools that can be either Mastra or Vercel format
+type EnhancedToolToConvert = ToolToConvert | CompatibleTool;
 
 /**
  * Checks if a value is a Zod type
@@ -247,28 +250,14 @@ export function isZodType(value: unknown): value is z.ZodType {
   );
 }
 
-// Helper function to create a deterministic hash
-function createDeterministicId(input: string): string {
-  return createHash('sha256').update(input).digest('hex').slice(0, 8); // Take first 8 characters for a shorter but still unique ID
-}
-
 /**
- * Sets the properties for a Vercel Tool, including an ID and inputSchema
- * @param tool - The tool to set the properties for
- * @returns The tool with the properties set
+ * Enhanced version that handles both Mastra and Vercel v5 tools
+ * @param tool - The tool to set properties for (can be Mastra or Vercel format)
+ * @returns The tool with proper properties set
  */
-function setVercelToolProperties(tool: VercelTool) {
-  const inputSchema = convertVercelToolParameters(tool);
-  const toolId = !('id' in tool)
-    ? tool.description
-      ? `tool-${createDeterministicId(tool.description)}`
-      : `tool-${Math.random().toString(36).substring(2, 9)}`
-    : tool.id;
-  return {
-    ...tool,
-    id: toolId,
-    inputSchema,
-  };
+function setCompatibleToolProperties(tool: CompatibleTool): CompatibleTool {
+  // For Mastra tools and most cases, return as-is (they have their own property structure)
+  return tool;
 }
 
 /**
@@ -280,8 +269,8 @@ export function ensureToolProperties(tools: ToolsInput): ToolsInput {
   const toolsWithProperties = Object.keys(tools).reduce<ToolsInput>((acc, key) => {
     const tool = tools?.[key];
     if (tool) {
-      if (isVercelTool(tool)) {
-        acc[key] = setVercelToolProperties(tool) as VercelTool;
+      if (isVercelV5Tool(tool) || isVercelTool(tool)) {
+        acc[key] = setCompatibleToolProperties(tool as CompatibleTool) as VercelTool;
       } else {
         acc[key] = tool;
       }
@@ -292,11 +281,21 @@ export function ensureToolProperties(tools: ToolsInput): ToolsInput {
   return toolsWithProperties;
 }
 
-function convertVercelToolParameters(tool: VercelTool): z.ZodType {
-  // If the tool is a Vercel Tool, check if the parameters are already a zod object
-  // If not, convert the parameters to a zod object using jsonSchemaToZod
-  const schema = tool.parameters ?? z.object({});
-  return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
+/**
+ * Enhanced version that supports compatible tool sets with both Mastra and Vercel tools
+ * @param tools - The tool set to ensure has proper properties
+ * @returns The tool set with proper properties
+ */
+export function ensureCompatibleToolProperties(tools: CompatibleToolSet): CompatibleToolSet {
+  const toolsWithProperties = Object.keys(tools).reduce<CompatibleToolSet>((acc, key) => {
+    const tool = tools?.[key];
+    if (tool) {
+      acc[key] = setCompatibleToolProperties(tool);
+    }
+    return acc;
+  }, {});
+
+  return toolsWithProperties;
 }
 
 /**
@@ -306,12 +305,36 @@ function convertVercelToolParameters(tool: VercelTool): z.ZodType {
  * @param logType - Type of tool to log (tool or toolset)
  * @returns A CoreTool that can be used by the system
  */
-export function makeCoreTool(
+export function makeCoreTool<Parameters = ToolParameters>(
   originalTool: ToolToConvert,
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
-): CoreTool {
-  return new CoreToolBuilder({ originalTool, options, logType }).build();
+): CoreTool<Parameters> {
+  return new CoreToolBuilder({ originalTool, options, logType }).build<Parameters>();
+}
+
+/**
+ * Enhanced version that supports both Mastra and Vercel v5 tools
+ * @param originalTool - The tool to convert (Mastra, legacy Vercel, or v5 Vercel)
+ * @param options - Tool options including Mastra-specific settings
+ * @param logType - Type of tool to log
+ * @returns A CoreTool that can be used by the system
+ */
+export function makeCompatibleCoreTool<Parameters = ToolParameters>(
+  originalTool: EnhancedToolToConvert,
+  options: ToolOptions,
+  logType?: 'tool' | 'toolset' | 'client-tool',
+): CoreTool<Parameters> {
+  return new CoreToolBuilder({ originalTool: originalTool as any, options, logType }).build<Parameters>();
+}
+
+/**
+ * Utility to convert a tool set to AI SDK v5 compatible format
+ * @param tools - The tool set to convert
+ * @returns A tool set compatible with AI SDK v5
+ */
+export function makeAISDKCompatibleToolSet<T extends Record<string, any>>(tools: T): Record<keyof T, Tool<any, any>> {
+  return createCompatibleToolSet(tools);
 }
 
 /**
@@ -402,50 +425,6 @@ export function checkEvalStorageFields(traceObject: any, logger?: IMastraLogger)
   }
 
   return true;
-}
-
-// lifted from https://github.com/vercel/ai/blob/main/packages/ai/core/prompt/detect-prompt-type.ts#L27
-function detectSingleMessageCharacteristics(
-  message: any,
-): 'has-ui-specific-parts' | 'has-core-specific-parts' | 'message' | 'other' {
-  if (
-    typeof message === 'object' &&
-    message !== null &&
-    (message.role === 'function' || // UI-only role
-      message.role === 'data' || // UI-only role
-      'toolInvocations' in message || // UI-specific field
-      'parts' in message || // UI-specific field
-      'experimental_attachments' in message)
-  ) {
-    return 'has-ui-specific-parts';
-  } else if (
-    typeof message === 'object' &&
-    message !== null &&
-    'content' in message &&
-    (Array.isArray(message.content) || // Core messages can have array content
-      'experimental_providerMetadata' in message ||
-      'providerOptions' in message)
-  ) {
-    return 'has-core-specific-parts';
-  } else if (
-    typeof message === 'object' &&
-    message !== null &&
-    'role' in message &&
-    'content' in message &&
-    typeof message.content === 'string' &&
-    ['system', 'user', 'assistant', 'tool'].includes(message.role)
-  ) {
-    return 'message';
-  } else {
-    return 'other';
-  }
-}
-
-export function isUiMessage(message: CoreMessage | AiMessageType): message is AiMessageType {
-  return detectSingleMessageCharacteristics(message) === `has-ui-specific-parts`;
-}
-export function isCoreMessage(message: CoreMessage | AiMessageType): message is CoreMessage {
-  return [`has-core-specific-parts`, `message`].includes(detectSingleMessageCharacteristics(message));
 }
 
 /** Represents a validated SQL identifier (e.g., table or column name). */

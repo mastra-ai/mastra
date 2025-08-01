@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { logger } from '../logger';
 import { fromPackageRoot } from '../utils';
@@ -64,24 +65,24 @@ export const changesInputSchema = z.object({
 
 export type ChangesInput = z.infer<typeof changesInputSchema>;
 
-export const changesTool = {
-  name: 'mastraChanges',
+export const changesTool = createTool({
+  id: 'mastraChanges',
   description: `Get changelog information for Mastra.ai packages. ${packagesListing}`,
-  parameters: changesInputSchema,
-  execute: async (args: ChangesInput) => {
-    void logger.debug('Executing mastraChanges tool', { package: args.package });
+  inputSchema: changesInputSchema,
+  execute: async ({ context }: { context: ChangesInput }) => {
+    void logger.debug('Executing mastraChanges tool', { package: context.package });
     try {
-      if (!args.package) {
+      if (!context.package) {
         const packages = await listPackageChangelogs();
         const content = ['Available package changelogs:', '', ...packages.map(pkg => `- ${pkg.name}`)].join('\n');
         return content;
       }
 
-      const content = await readPackageChangelog(args.package);
+      const content = await readPackageChangelog(context.package);
       return content;
     } catch (error) {
       void logger.error('Failed to execute mastraChanges tool', error);
       throw error;
     }
   },
-};
+});

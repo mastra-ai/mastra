@@ -1,14 +1,4 @@
-import {
-  parsePartialJson,
-  processDataStream,
-  type JSONValue,
-  type ReasoningUIPart,
-  type TextUIPart,
-  type ToolInvocation,
-  type ToolInvocationUIPart,
-  type UIMessage,
-  type UseChatOptions,
-} from '@ai-sdk/ui-utils';
+import { processDataStream, type JSONValue, type ToolInvocation, type UIMessage } from 'ai';
 import { Tool, type CoreMessage } from '@mastra/core';
 import { type GenerateReturn } from '@mastra/core/llm';
 import type { JSONSchema7 } from 'json-schema';
@@ -213,7 +203,7 @@ export class Agent extends BaseResource {
   }: {
     stream: ReadableStream<Uint8Array>;
     update: (options: { message: UIMessage; data: JSONValue[] | undefined; replaceLastMessage: boolean }) => void;
-    onToolCall?: UseChatOptions['onToolCall'];
+    onToolCall?: any;
     onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: string }) => void;
     generateId?: () => string;
     getCurrentDate?: () => Date;
@@ -238,14 +228,14 @@ export class Agent extends BaseResource {
           parts: [],
         };
 
-    let currentTextPart: TextUIPart | undefined = undefined;
-    let currentReasoningPart: ReasoningUIPart | undefined = undefined;
+    let currentTextPart: any | undefined = undefined;
+    let currentReasoningPart: any | undefined = undefined;
     let currentReasoningTextDetail: { type: 'text'; text: string; signature?: string } | undefined = undefined;
 
     function updateToolInvocationPart(toolCallId: string, invocation: ToolInvocation) {
       const part = message.parts.find(
         part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
-      ) as ToolInvocationUIPart | undefined;
+      ) as any | undefined;
 
       if (part != null) {
         part.toolInvocation = invocation;
@@ -415,7 +405,13 @@ export class Agent extends BaseResource {
 
         partialToolCall!.text += value.argsTextDelta;
 
-        const { value: partialArgs } = parsePartialJson(partialToolCall!.text);
+        // In v4, we don't have parsePartialJson, so we'll try to parse it directly
+        let partialArgs;
+        try {
+          partialArgs = JSON.parse(partialToolCall!.text);
+        } catch {
+          partialArgs = undefined;
+        }
 
         const invocation = {
           state: 'partial-call',
@@ -671,7 +667,7 @@ export class Agent extends BaseResource {
 
                 const toolInvocationPart = lastMessage?.parts?.find(
                   part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocationUIPart | undefined;
+                ) as any | undefined;
 
                 if (toolInvocationPart) {
                   toolInvocationPart.toolInvocation = {

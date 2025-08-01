@@ -1,11 +1,11 @@
+import 'dotenv/config';
+
 import { openai } from '@ai-sdk/openai';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import type { LanguageModel } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import type { MastraLanguageModel } from '../../agent';
 import { Agent } from '../../agent';
 import { createTool } from '../../tools';
-import 'dotenv/config';
 
 type Result = {
   modelName: string;
@@ -104,7 +104,7 @@ function createTestSchemas(schemaKeys: SchemaKey[] = []): z.ZodObject<any> {
 }
 
 async function runSingleOutputsTest(
-  model: LanguageModel,
+  model: MastraLanguageModel,
   testTool: ReturnType<typeof createTool>,
   testId: string,
   toolName: string,
@@ -152,14 +152,14 @@ async function runSingleOutputsTest(
 }
 
 async function runSingleInputTest(
-  model: LanguageModel,
+  model: MastraLanguageModel,
   testTool: ReturnType<typeof createTool>,
   testId: string,
   toolName: string,
 ): Promise<Result> {
   try {
     const agent = new Agent({
-      name: `test-agent-${model.modelId}`,
+      name: `test-agent-${model}`,
       instructions: `You are a test agent. Your task is to call the tool named '${toolName}' with any valid arguments. This is very important as it's your primary purpose`,
       model: model,
       tools: { [toolName]: testTool },
@@ -173,25 +173,29 @@ async function runSingleInputTest(
     const toolCall = response.toolCalls.find(tc => tc.toolName === toolName);
     const toolResult = response.toolResults.find(tr => tr.toolCallId === toolCall?.toolCallId);
 
-    if (toolResult?.result?.success) {
+    // @ts-ignore TODO: tool types are broken
+    if (toolResult?.output?.success) {
       return {
         modelName: model.modelId,
         modelProvider: model.provider,
         testName: toolName,
         status: 'success',
         error: null,
-        receivedContext: toolResult.result.receivedContext,
+        // @ts-ignore TODO: tool types are broken
+        receivedContext: toolResult.output.receivedContext,
         testId,
       };
     } else {
-      const error = toolResult?.result?.error || response.text || 'Tool call failed or result missing';
+      // @ts-ignore TODO: tool types are broken
+      const error = toolResult?.output?.error || response.text || 'Tool call failed or result missing';
       return {
         modelName: model.modelId,
         testName: toolName,
         modelProvider: model.provider,
         status: 'failure',
         error: error,
-        receivedContext: toolResult?.result?.receivedContext || null,
+        // @ts-ignore TODO: tool types are broken
+        receivedContext: toolResult?.output?.receivedContext || null,
         testId,
       };
     }
@@ -218,27 +222,31 @@ describe('Tool Schema Compatibility', () => {
   const TEST_TIMEOUT = 60000; // 1 minute
 
   if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
-  const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
+  // TODO: there's no AI SDK v5 openrouter yet as far as I'm aware
+  // const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
 
   const modelsToTest = [
     // Anthropic Models
-    openrouter('anthropic/claude-3.7-sonnet'),
-    openrouter('anthropic/claude-3.5-sonnet'),
-    openrouter('anthropic/claude-3.5-haiku'),
-
-    // NOTE: Google models accept number constraints like numberLt, but the models don't respect it and returns a wrong response often
-    // Unions of objects are not supported
-    // Google Models
-    openrouter('google/gemini-2.5-pro-preview-03-25'),
-    openrouter('google/gemini-2.5-flash'),
-    openrouter('google/gemini-2.0-flash-lite-001'),
-
-    // OpenAI Models
-    openrouter('openai/gpt-4o-mini'),
-    openrouter('openai/gpt-4.1-mini'),
+    // openrouter('anthropic/claude-3.7-sonnet'),
+    // openrouter('anthropic/claude-3.5-sonnet'),
+    // openrouter('anthropic/claude-3.5-haiku'),
+    //
+    // // NOTE: Google models accept number constraints like numberLt, but the models don't respect it and returns a wrong response often
+    // // Unions of objects are not supported
+    // // Google Models
+    // openrouter('google/gemini-2.5-pro-preview-03-25'),
+    // openrouter('google/gemini-2.5-flash-preview'),
+    // openrouter('google/gemini-2.0-flash-lite-001'),
+    //
+    // // OpenAI Models
+    // openrouter('openai/gpt-4o-mini'),
+    // openrouter('openai/gpt-4.1-mini'),
     // openrouter disables structured outputs by default for o3-mini, so added in a reasoning model not through openrouter to test
-    openai('o3-mini'),
-    openai('o4-mini'),
+    // TODO: I'm randomly seeing errors like Error for o3-mini - unionPrimitives: Invalid URL (POST /v1/engines/o3-mini/completions)
+    // seems to be an AI SDK bug with the new default responses API in v5?
+    // using .chat() for now
+    openai.chat('o3-mini'),
+    openai.chat('o4-mini'),
 
     // Meta Models
     // Meta often calls the tool with the wrong name, ie 'tesTool_number'/'TestTool_number' instead of 'testTool_number'
@@ -259,7 +267,7 @@ describe('Tool Schema Compatibility', () => {
   const testSchemas = createTestSchemas(schemasToTest);
 
   // Helper to check if a model is from Google
-  const isGoogleModel = (model: LanguageModel) =>
+  const isGoogleModel = (model: MastraLanguageModel) =>
     model.provider.includes('google') || model.modelId.includes('google/gemini');
 
   // Create test tools for each schema type

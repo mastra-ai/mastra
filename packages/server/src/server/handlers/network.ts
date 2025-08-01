@@ -1,3 +1,4 @@
+import { createV4CompatibleResponse } from '@mastra/core/agent';
 import type { AgentStreamOptions } from '@mastra/core/agent';
 import type { GenerateReturn } from '@mastra/core/llm';
 import type { AgentNetwork } from '@mastra/core/network';
@@ -107,7 +108,7 @@ export async function generateHandler({
 }: NetworkContext & {
   runtimeContext: RuntimeContext;
   body: { messages?: Parameters<AgentNetwork['generate']>[0] } & Parameters<AgentNetwork['generate']>[1];
-}): Promise<GenerateReturn<any, any, any>> {
+}): Promise<GenerateReturn<any>> {
   try {
     const network = mastra.getNetwork(networkId!);
 
@@ -131,9 +132,11 @@ export async function streamGenerateHandler({
   networkId,
   body,
   runtimeContext,
+  clientSdkCompat,
 }: NetworkContext & {
   runtimeContext: RuntimeContext;
   body: { messages?: Parameters<AgentNetwork['stream']>[0] } & Parameters<AgentNetwork['stream']>[1];
+  clientSdkCompat?: string;
 }) {
   try {
     const network = mastra.getNetwork(networkId!);
@@ -151,17 +154,22 @@ export async function streamGenerateHandler({
       runtimeContext,
     } as AgentStreamOptions<any, any>);
 
+    // Determine compatibility mode
+    // Check for client header override first, then fall back to Mastra config
+    const useV4Compat = clientSdkCompat === 'v4' || mastra.getAiSdkCompatMode() === 'v4';
+
     const streamResponse = output
       ? streamResult.toTextStreamResponse()
-      : streamResult.toDataStreamResponse({
-          sendUsage: true,
-          sendReasoning: true,
-          getErrorMessage: (error: any) => {
+      : streamResult.toUIMessageStreamResponse({
+          onError: (error: any) => {
             return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
           },
+          sendReasoning: true,
+          sendSources: true,
         });
 
-    return streamResponse;
+    // Apply v4 compatibility transformation if needed
+    return useV4Compat && !output ? createV4CompatibleResponse(streamResponse.body!) : streamResponse;
   } catch (error) {
     return handleError(error, 'Error streaming from network');
   }

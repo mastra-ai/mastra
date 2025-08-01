@@ -3,7 +3,7 @@ import { afterEach } from 'node:test';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { openai } from '@ai-sdk/openai';
-import type { CoreMessage, MemoryProcessorOpts } from '@mastra/core';
+import type { MemoryProcessorOpts } from '@mastra/core';
 import { MemoryProcessor } from '@mastra/core';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import { Agent, MessageList } from '@mastra/core/agent';
@@ -12,13 +12,13 @@ import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter, ToolCallFilter } from '@mastra/memory/processors';
-import type { UIMessage } from 'ai';
+import type { ModelMessage, UIMessage } from 'ai';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { filterToolCallsByName, filterToolResultsByName, generateConversationHistory } from './test-utils';
 
-function v2ToCoreMessages(messages: MastraMessageV2[] | UIMessage[]): CoreMessage[] {
-  return new MessageList().add(messages, 'memory').get.all.core();
+function v2ToCoreMessages(messages: MastraMessageV2[] | UIMessage[]): ModelMessage[] {
+  return new MessageList().add(messages, 'memory').get.all.aiV5.model();
 }
 
 let memory: Memory;
@@ -84,7 +84,7 @@ describe('Memory with Processors', () => {
     const result = memory.processMessages({
       messages: new MessageList({ threadId: thread.id, resourceId })
         .add(queryResult.uiMessages, 'memory')
-        .get.all.core(),
+        .get.all.aiV5.model(),
       processors: [new TokenLimiter(250)], // Limit to 250 tokens
     });
 
@@ -99,7 +99,10 @@ describe('Memory with Processors', () => {
           type: 'tool-result',
           toolCallId: 'tool-9',
           toolName: 'weather',
-          result: 'Pretty hot',
+          output: {
+            type: 'text',
+            value: 'Pretty hot',
+          },
         },
       ],
     });
@@ -114,7 +117,7 @@ describe('Memory with Processors', () => {
     const allMessagesResult = memory.processMessages({
       messages: new MessageList({ threadId: thread.id, resourceId })
         .add(allMessagesQuery.uiMessages, 'memory')
-        .get.all.core(),
+        .get.all.aiV5.model(),
       processors: [new TokenLimiter(3000)], // High limit that should exceed total tokens
     });
 
@@ -253,7 +256,7 @@ describe('Memory with Processors', () => {
         super({ name: 'ConversationOnlyFilter' });
       }
 
-      process(messages: CoreMessage[], _opts: MemoryProcessorOpts = {}): CoreMessage[] {
+      process(messages: ModelMessage[], _opts: MemoryProcessorOpts = {}): ModelMessage[] {
         return messages.filter(msg => msg.role === 'user' || msg.role === 'assistant');
       }
     }
@@ -297,13 +300,19 @@ describe('Memory with Processors', () => {
       },
     );
 
-    const responseMessages = JSON.parse(res.request.body || '')?.messages;
+    // AI SDK v5 with Responses API has a different structure - access via steps array
+    const responseMessages = (res as any).steps[0].request.body.input;
     if (!Array.isArray(responseMessages)) {
       throw new Error(`responseMessages should be an array`);
     }
 
-    const userMessagesByContent = responseMessages.filter(m => m.content === userMessage);
-    expect(userMessagesByContent).toEqual([expect.objectContaining({ role: 'user', content: userMessage })]); // should only be one
+    // In AI SDK v5, user message content is an array with input_text objects
+    const userMessagesByContent = responseMessages.filter(
+      m =>
+        m.role === 'user' &&
+        Array.isArray(m.content) &&
+        m.content.some(part => part.type === 'input_text' && part.text === userMessage),
+    );
     expect(userMessagesByContent.length).toBe(1); // if there's more than one we have duplicate messages
 
     const userMessage2 = 'Tell me something else interesting about space';
@@ -321,17 +330,23 @@ describe('Memory with Processors', () => {
       },
     );
 
-    const responseMessages2 = JSON.parse(res2.request.body || '')?.messages;
-    if (!Array.isArray(responseMessages)) {
-      throw new Error(`responseMessages should be an array`);
+    // AI SDK v5 with Responses API has a different structure - access via steps array
+    const responseMessages2 = (res2 as any).steps[0].request.body.input;
+    if (!Array.isArray(responseMessages2)) {
+      throw new Error(`responseMessages2 should be an array`);
     }
 
-    const userMessagesByContent2 = responseMessages2.filter((m: CoreMessage) => m.content === userMessage2);
-    expect(userMessagesByContent2).toEqual([expect.objectContaining({ role: 'user', content: userMessage2 })]); // should only be one
+    // In AI SDK v5, user message content is an array with input_text objects
+    const userMessagesByContent2 = responseMessages2.filter(
+      (m: any) =>
+        m.role === 'user' &&
+        Array.isArray(m.content) &&
+        m.content.some((part: any) => part.type === 'input_text' && part.text === userMessage2),
+    );
     expect(userMessagesByContent2.length).toBe(1); // if there's more than one we have duplicate messages
 
     // make sure all user messages are there
-    const allUserMessages = responseMessages2.filter((m: CoreMessage) => m.role === 'user');
+    const allUserMessages = responseMessages2.filter((m: any) => m.role === 'user');
     expect(allUserMessages.length).toBe(2);
 
     const remembered = await memory.query({
@@ -416,8 +431,8 @@ describe('Memory with Processors', () => {
     const list = new MessageList({ threadId }).add(queryResult.messagesV2, 'memory');
 
     const baselineResult = memory.processMessages({
-      messages: list.get.remembered.core(),
-      newMessages: list.get.input.core(),
+      messages: list.get.remembered.aiV5.model(),
+      newMessages: list.get.input.aiV5.model(),
       processors: [],
     });
 
@@ -437,7 +452,7 @@ describe('Memory with Processors', () => {
     });
     const list2 = new MessageList({ threadId }).add(weatherQueryResult.messagesV2, 'memory');
     const weatherFilteredResult = memory.processMessages({
-      messages: list2.get.all.core(),
+      messages: list2.get.all.aiV5.model(),
       processors: [new ToolCallFilter({ exclude: ['get_weather'] })],
     });
 
@@ -458,7 +473,7 @@ describe('Memory with Processors', () => {
     });
     const list3 = new MessageList({ threadId }).add(tokenLimitQuery.messages, 'memory');
     const tokenLimitedResult = memory.processMessages({
-      messages: list3.get.all.core(),
+      messages: list3.get.all.aiV5.model(),
       processors: [new TokenLimiter(100)], // Small limit to only get a subset
     });
 
@@ -472,7 +487,7 @@ describe('Memory with Processors', () => {
     });
     const list4 = new MessageList({ threadId }).add(combinedQuery.messages, 'memory');
     const combinedResult = memory.processMessages({
-      messages: list4.get.all.core(),
+      messages: list4.get.all.aiV5.model(),
       processors: [new ToolCallFilter({ exclude: ['get_weather', 'calculator'] }), new TokenLimiter(500)],
     });
 

@@ -149,11 +149,12 @@ export class MastraAgentStream<Output> extends ReadableStream<ChunkType> {
           payload: {},
         });
 
-        const updateUsageCount = (usage: {
+        const updateUsageCount = (usage?: {
           promptTokens?: `${number}` | number;
           completionTokens?: `${number}` | number;
           totalTokens?: `${number}` | number;
         }) => {
+          if (!usage) return;
           this.#usageCount.promptTokens += parseInt(usage.promptTokens?.toString() ?? '0', 10);
           this.#usageCount.completionTokens += parseInt(usage.completionTokens?.toString() ?? '0', 10);
           this.#usageCount.totalTokens += parseInt(usage.totalTokens?.toString() ?? '0', 10);

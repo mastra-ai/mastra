@@ -37,4 +37,4 @@ export type TitleExtractorsArgs = {
 export const STRIP_REGEX = /(\r\n|\n|\r)/gm;
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-export const baseLLM: MastraLanguageModel = openai('gpt-4o');
+export const baseLLM: MastraLanguageModel = openai.chat('gpt-4o');

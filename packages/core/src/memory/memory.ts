@@ -1,7 +1,6 @@
-import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
+import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel, UIMessage } from 'ai';
 
-import { MessageList } from '../agent/message-list';
-import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
+import type { MastraMessageV2, MastraMessageV3 } from '../agent/message-list';
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
@@ -9,6 +8,12 @@ import { augmentWithInit } from '../storage/storageWithInit';
 import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
+
+export type AllMastraMessageTypesList =
+  | (MastraMessageV1 | MastraMessageV2 | MastraMessageV3)[]
+  | MastraMessageV1[]
+  | MastraMessageV2[]
+  | MastraMessageV3[];
 
 import type {
   SharedMemoryConfig,
@@ -299,31 +304,54 @@ export abstract class MastraMemory extends MastraBase {
    * @returns Promise resolving to the saved messages
    */
   abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    messages:
+      | (MastraMessageV1 | MastraMessageV2 | MastraMessageV3)[]
+      | MastraMessageV1[]
+      | MastraMessageV2[]
+      | MastraMessageV3[];
     memoryConfig?: MemoryConfig | undefined;
     format?: 'v1';
   }): Promise<MastraMessageV1[]>;
   abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    messages:
+      | (MastraMessageV1 | MastraMessageV2 | MastraMessageV3)[]
+      | MastraMessageV1[]
+      | MastraMessageV2[]
+      | MastraMessageV3[];
     memoryConfig?: MemoryConfig | undefined;
     format: 'v2';
   }): Promise<MastraMessageV2[]>;
+  // TODO: this should be the only signature, no v1 or v2
   abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    messages:
+      | (MastraMessageV1 | MastraMessageV2 | MastraMessageV3)[]
+      | MastraMessageV1[]
+      | MastraMessageV2[]
+      | MastraMessageV3[];
+    memoryConfig?: MemoryConfig | undefined;
+    format: 'v3';
+  }): Promise<MastraMessageV3[]>;
+  abstract saveMessages(args: {
+    messages:
+      | (MastraMessageV1 | MastraMessageV2 | MastraMessageV3)[]
+      | MastraMessageV1[]
+      | MastraMessageV2[]
+      | MastraMessageV3[];
     memoryConfig?: MemoryConfig | undefined;
     format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV2[] | MastraMessageV1[]>;
+  }): Promise<MastraMessageV2[] | MastraMessageV1[] | MastraMessageV3[]>;
 
   /**
    * Retrieves all messages for a specific thread
    * @param threadId - The unique identifier of the thread
    * @returns Promise resolving to array of messages and uiMessages
    */
-  abstract query({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: UIMessageWithMetadata[] }>;
+  abstract query({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<{
+    messages: CoreMessage[];
+    uiMessages: UIMessage[];
+    uiMessagesV4: any[];
+    messagesV2: MastraMessageV2[];
+  }>;
 
   /**
    * Helper method to create a new thread
@@ -376,17 +404,7 @@ export abstract class MastraMemory extends MastraBase {
    * @returns Promise resolving to the saved message
    * @deprecated use saveMessages instead
    */
-  async addMessage({
-    threadId,
-    resourceId,
-    config,
-    content,
-    role,
-    type,
-    toolNames,
-    toolCallArgs,
-    toolCallIds,
-  }: {
+  async addMessage(_: {
     threadId: string;
     resourceId: string;
     config?: MemoryConfig;
@@ -397,22 +415,7 @@ export abstract class MastraMemory extends MastraBase {
     toolCallArgs?: Record<string, unknown>[];
     toolCallIds?: string[];
   }): Promise<MastraMessageV1> {
-    const message: MastraMessageV1 = {
-      id: this.generateId(),
-      content,
-      role,
-      createdAt: new Date(),
-      threadId,
-      resourceId,
-      type,
-      toolNames,
-      toolCallArgs,
-      toolCallIds,
-    };
-
-    const savedMessages = await this.saveMessages({ messages: [message], memoryConfig: config });
-    const list = new MessageList({ threadId, resourceId }).add(savedMessages[0]!, 'memory');
-    return list.get.all.v1()[0]!;
+    throw new Error(`Deprecated. Use saveMessages Instead`);
   }
 
   /**

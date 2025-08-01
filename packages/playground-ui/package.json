@@ -42,7 +42,8 @@
   "author": "Mastra",
   "license": "Apache-2.0",
   "dependencies": {
-    "@ai-sdk/ui-utils": "^1.2.11",
+    "@ai-sdk/provider-utils": "latest",
+    "@ai-sdk/ui-utils": "latest",
     "@assistant-ui/react": "^0.7.91",
     "@assistant-ui/react-markdown": "^0.7.21",
     "@assistant-ui/react-syntax-highlighter": "^0.7.10",
@@ -77,6 +78,7 @@
     "@uiw/codemirror-theme-dracula": "^4.23.14",
     "@uiw/react-codemirror": "^4.23.14",
     "@xyflow/react": "^12.8.2",
+    "ai": "latest",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "json-schema-to-zod": "^2.6.1",

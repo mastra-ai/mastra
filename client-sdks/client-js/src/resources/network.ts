@@ -1,4 +1,4 @@
-import { processDataStream } from '@ai-sdk/ui-utils';
+import { processDataStream } from 'ai';
 import type { GenerateReturn } from '@mastra/core';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';

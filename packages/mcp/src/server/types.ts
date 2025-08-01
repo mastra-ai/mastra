@@ -45,7 +45,7 @@ export type MCPRequestHandlerExtra = RequestHandlerExtra<any, any>;
 export type MCPTool = {
   id?: InternalCoreTool['id'];
   description?: InternalCoreTool['description'];
-  parameters: InternalCoreTool['parameters'];
+  inputSchema: InternalCoreTool['inputSchema'];
   outputSchema?: InternalCoreTool['outputSchema'];
   execute: (
     params: any,

@@ -65,8 +65,9 @@ export class KeywordExtractor extends BaseExtractor {
     let keywords = '';
     try {
       const completion = await this.llm.doGenerate({
-        inputFormat: 'messages',
-        mode: { type: 'regular' },
+        // TODO: these don't exist anymore. What do we need to do?
+        // inputFormat: 'messages',
+        // mode: { type: 'regular' },
         prompt: [
           {
             role: 'user',
@@ -82,10 +83,8 @@ export class KeywordExtractor extends BaseExtractor {
           },
         ],
       });
-      if (typeof completion.text === 'string') {
-        keywords = completion.text.trim();
-      } else {
-        console.warn('Keyword extraction LLM output was not a string:', completion.text);
+      for (const part of completion.content) {
+        if (part.type === `text`) keywords += part.text.trim();
       }
     } catch (err) {
       console.warn('Keyword extraction failed:', err);

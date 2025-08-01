@@ -794,6 +794,201 @@ describe('Memory Handlers', () => {
       const result = await getMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' });
       expect(result).toEqual(expectedResult);
     });
+
+    it('should return v4 format messages when format is aiv4', async () => {
+      const mockMessages: CoreMessage[] = [{ role: 'user', content: 'Test message' }];
+      const mockUIMessagesV4 = [{ id: '1', role: 'user', content: 'Test message', parts: [], createdAt: new Date() }];
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+      });
+      const queryResult = {
+        messages: mockMessages,
+        uiMessages: [],
+        uiMessagesV4: mockUIMessagesV4,
+      };
+      mockMemory.getThreadById.mockResolvedValue(createThread({}));
+      mockMemory.query.mockResolvedValue(queryResult);
+
+      const result = await getMessagesHandler({
+        mastra,
+        threadId: 'test-thread',
+        agentId: 'test-agent',
+        format: 'aiv4',
+      });
+
+      expect(result).toEqual({ messages: mockMessages, uiMessages: mockUIMessagesV4 });
+      expect(result.uiMessages).toBe(mockUIMessagesV4);
+    });
+
+    it('should return v5 format messages when format is aiv5', async () => {
+      const mockMessages: CoreMessage[] = [{ role: 'user', content: 'Test message' }];
+      const mockUIMessagesV5 = [{ id: '1', role: 'user', content: 'Test message' }];
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+      });
+      const queryResult = {
+        messages: mockMessages,
+        uiMessages: mockUIMessagesV5,
+        uiMessagesV4: [],
+      };
+      mockMemory.getThreadById.mockResolvedValue(createThread({}));
+      mockMemory.query.mockResolvedValue(queryResult);
+
+      const result = await getMessagesHandler({
+        mastra,
+        threadId: 'test-thread',
+        agentId: 'test-agent',
+        format: 'aiv5',
+      });
+
+      expect(result).toEqual({ messages: mockMessages, uiMessages: mockUIMessagesV5 });
+      expect(result.uiMessages).toBe(mockUIMessagesV5);
+    });
+
+    it('should default to v5 format when no format is specified', async () => {
+      const mockMessages: CoreMessage[] = [{ role: 'user', content: 'Test message' }];
+      const mockUIMessagesV5 = [{ id: '1', role: 'user', content: 'Test message' }];
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+      });
+      const queryResult = {
+        messages: mockMessages,
+        uiMessages: mockUIMessagesV5,
+        uiMessagesV4: [],
+      };
+      mockMemory.getThreadById.mockResolvedValue(createThread({}));
+      mockMemory.query.mockResolvedValue(queryResult);
+
+      const result = await getMessagesHandler({
+        mastra,
+        threadId: 'test-thread',
+        agentId: 'test-agent',
+      });
+
+      expect(result).toEqual({ messages: mockMessages, uiMessages: mockUIMessagesV5 });
+      expect(result.uiMessages).toBe(mockUIMessagesV5);
+    });
+
+    it('should throw error for invalid limit values', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+      });
+
+      await expect(
+        getMessagesHandler({
+          mastra,
+          threadId: 'test-thread',
+          agentId: 'test-agent',
+          limit: 0,
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Invalid limit: must be a positive integer' }));
+
+      await expect(
+        getMessagesHandler({
+          mastra,
+          threadId: 'test-thread',
+          agentId: 'test-agent',
+          limit: -1,
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Invalid limit: must be a positive integer' }));
+
+      await expect(
+        getMessagesHandler({
+          mastra,
+          threadId: 'test-thread',
+          agentId: 'test-agent',
+          limit: 1.5,
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Invalid limit: must be a positive integer' }));
+    });
+  });
+
+  describe('getMessagesPaginatedHandler', () => {
+    it('should throw error when threadId is not provided', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+      });
+      await expect(getMessagesPaginatedHandler({ mastra, threadId: undefined as any })).rejects.toThrow(
+        new HTTPException(400, { message: 'Argument "threadId" is required' }),
+      );
+    });
+
+    it('should throw error when storage is not initialized', async () => {
+      const mastra = new Mastra({
+        logger: false,
+      });
+      await expect(getMessagesPaginatedHandler({ mastra, threadId: 'test-thread' })).rejects.toThrow(
+        new HTTPException(400, { message: 'Storage is not initialized' }),
+      );
+    });
+
+    it('should throw 404 when thread is not found', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+      });
+      storage.getThreadById = vi.fn().mockResolvedValue(null);
+      await expect(getMessagesPaginatedHandler({ mastra, threadId: 'non-existent' })).rejects.toThrow(
+        new HTTPException(404, { message: 'Thread not found' }),
+      );
+    });
+
+    it('should return paginated messages for valid thread', async () => {
+      const mockResult = {
+        messages: [
+          {
+            id: 'msg-1',
+            content: 'Test message',
+            role: 'user',
+            type: 'text',
+            threadId: 'test-thread',
+            resourceId: 'test-resource',
+            createdAt: new Date(),
+          },
+        ],
+        total: 1,
+        page: 0,
+        perPage: 10,
+        hasMore: false,
+      };
+
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+      });
+
+      storage.getThreadById = vi.fn().mockResolvedValue(createThread({}));
+      storage.getMessagesPaginated = vi.fn().mockResolvedValue(mockResult);
+
+      const result = await getMessagesPaginatedHandler({
+        mastra,
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        format: 'v1',
+      });
+
+      expect(result).toEqual(mockResult);
+      expect(storage.getThreadById).toHaveBeenCalledWith({ threadId: 'test-thread' });
+      expect(storage.getMessagesPaginated).toHaveBeenCalledWith({
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        selectBy: undefined,
+        format: 'v1',
+      });
+    });
   });
 
   describe('getMessagesPaginatedHandler', () => {
