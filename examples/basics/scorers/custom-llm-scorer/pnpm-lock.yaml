@@ -27,7 +27,7 @@ importers:
         specifier: link:../../../../stores/libsql
         version: link:../../../../stores/libsql
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       dotenv:

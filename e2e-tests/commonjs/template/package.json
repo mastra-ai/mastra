@@ -16,7 +16,7 @@
     "@ai-sdk/openai": "^1.3.23",
     "@mastra/core": "commonjs-e2e-test",
     "@mastra/loggers": "commonjs-e2e-test",
-    "zod": "^3.25.67"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.15.29",

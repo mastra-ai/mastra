@@ -214,10 +214,10 @@ importers:
         specifier: 7.8.1
         version: 7.8.1
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@babel/preset-env':
@@ -269,7 +269,7 @@ importers:
         specifier: ~4.44.2
         version: 4.44.2
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -315,7 +315,7 @@ importers:
         specifier: ^11.3.0
         version: 11.3.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -461,7 +461,7 @@ importers:
         specifier: ^5.8.3
         version: 5.8.3
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@types/node':
@@ -502,13 +502,13 @@ importers:
         version: link:../../packages/memory
       '@mastra/rag':
         specifier: ^1.0.2
-        version: 1.0.2(@mastra/core@packages+core)(ai@4.3.18(react@19.1.0)(zod@3.25.76))(encoding@0.1.13)
+        version: 1.0.2(@mastra/core@packages+core)(ai@4.3.19(react@19.1.0)(zod@3.25.76))(encoding@0.1.13)
       '@node-rs/xxhash':
         specifier: ^1.7.6
         version: 1.7.6
       ai:
         specifier: ^4.3.17
-        version: 4.3.18(react@19.1.0)(zod@3.25.76)
+        version: 4.3.19(react@19.1.0)(zod@3.25.76)
       async-mutex:
         specifier: ^0.5.0
         version: 0.5.0
@@ -562,7 +562,7 @@ importers:
         specifier: ^3.15.0
         version: 3.15.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -614,7 +614,7 @@ importers:
         specifier: ^3.15.0
         version: 3.15.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -694,7 +694,7 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
 
   integrations/ragie:
@@ -706,7 +706,7 @@ importers:
         specifier: ^3.15.0
         version: 3.15.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@jest/globals':
@@ -903,10 +903,10 @@ importers:
         specifier: ^0.2.3
         version: 0.2.3
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@internal/lint':
@@ -1240,7 +1240,7 @@ importers:
         version: 2.2.1
       ai:
         specifier: ^4.3.16
-        version: 4.3.18(react@19.1.0)(zod@3.25.76)
+        version: 4.3.19(react@19.1.0)(zod@3.25.76)
       date-fns:
         specifier: ^3.6.0
         version: 3.6.0
@@ -1275,7 +1275,7 @@ importers:
         specifier: ^5.20.1
         version: 5.20.1
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@ai-sdk/openai':
@@ -1333,7 +1333,7 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
 
   packages/create-mastra:
@@ -1478,7 +1478,7 @@ importers:
         specifier: ^1.5.1
         version: 1.5.1(typescript@5.8.3)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@hono/node-server':
@@ -1560,7 +1560,7 @@ importers:
         specifier: ^4.0.4
         version: 4.0.4
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@ai-sdk/openai':
@@ -1589,7 +1589,7 @@ importers:
         version: 4.0.2
       ai:
         specifier: ^4.3.16
-        version: 4.3.18(react@19.1.0)(zod@3.25.76)
+        version: 4.3.19(react@19.1.0)(zod@3.25.76)
       dotenv:
         specifier: ^17.0.0
         version: 17.0.1
@@ -1610,7 +1610,7 @@ importers:
     dependencies:
       ai:
         specifier: ^4.3.16
-        version: 4.3.18(react@19.1.0)(zod@3.25.76)
+        version: 4.3.19(react@19.1.0)(zod@3.25.76)
       fastembed:
         specifier: ^1.14.4
         version: 1.14.4
@@ -1738,10 +1738,10 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
 
   packages/mcp-docs-server:
@@ -1771,10 +1771,10 @@ importers:
         specifier: ^11.1.0
         version: 11.1.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@hono/node-server':
@@ -1826,10 +1826,10 @@ importers:
         specifier: ^11.1.0
         version: 11.1.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@hono/node-server':
@@ -1890,7 +1890,7 @@ importers:
         specifier: ^16.6.1
         version: 16.6.1
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@mastra/core':
@@ -1922,7 +1922,7 @@ importers:
         version: 1.35.1
       ai:
         specifier: ^4.3.16
-        version: 4.3.18(react@19.1.0)(zod@3.25.76)
+        version: 4.3.19(react@19.1.0)(zod@3.25.76)
       async-mutex:
         specifier: ^0.5.0
         version: 0.5.0
@@ -1948,10 +1948,10 @@ importers:
         specifier: ^1.1.0
         version: 1.1.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@ai-sdk/openai':
@@ -2044,7 +2044,7 @@ importers:
         version: 20.19.9
       ai:
         specifier: ^4.2.2
-        version: 4.3.18(react@19.1.0)(zod@3.25.76)
+        version: 4.3.19(react@19.1.0)(zod@3.25.76)
       jsdom:
         specifier: ^26.0.0
         version: 26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3)
@@ -2253,7 +2253,7 @@ importers:
         specifier: ^10.0.5
         version: 10.0.5(react@19.1.0)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zustand:
         specifier: ^5.0.6
@@ -2329,7 +2329,7 @@ importers:
         specifier: 0.1.0-alpha.6
         version: 0.1.0-alpha.6(encoding@0.1.13)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@ai-sdk/cohere':
@@ -2355,7 +2355,7 @@ importers:
         version: 20.19.9
       ai:
         specifier: ^4.3.16
-        version: 4.3.18(react@19.1.0)(zod@3.25.76)
+        version: 4.3.19(react@19.1.0)(zod@3.25.76)
       dotenv:
         specifier: ^17.0.0
         version: 17.0.1
@@ -2381,7 +2381,7 @@ importers:
         specifier: ^0.0.5
         version: 0.0.5
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@internal/lint':
@@ -2409,7 +2409,7 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
 
   packages/server:
@@ -2448,10 +2448,10 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
 
   stores/_test-utils:
@@ -3173,7 +3173,7 @@ importers:
         specifier: ^4.5.0
         version: 4.5.0(encoding@0.1.13)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@cloudflare/workers-types':
@@ -3210,7 +3210,7 @@ importers:
         specifier: ^3.13.0
         version: 3.13.0(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.3)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3244,7 +3244,7 @@ importers:
         specifier: ^1.59.0
         version: 1.59.0(encoding@0.1.13)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3275,7 +3275,7 @@ importers:
   voice/gladia:
     dependencies:
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3315,7 +3315,7 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3346,7 +3346,7 @@ importers:
         specifier: ^1.8.2
         version: 1.8.2
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3380,7 +3380,7 @@ importers:
         specifier: ^5.10.2
         version: 5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3417,7 +3417,7 @@ importers:
         specifier: ^8.18.3
         version: 8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3)
       zod-to-json-schema:
-        specifier: ^3.24.5
+        specifier: ^3.24.6
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@internal/lint':
@@ -3448,13 +3448,13 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.9)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.3))(terser@5.43.1)(tsx@4.20.3)(yaml@2.8.0)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
 
   voice/playai:
     dependencies:
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3485,7 +3485,7 @@ importers:
   voice/sarvam:
     dependencies:
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3519,7 +3519,7 @@ importers:
         specifier: ^2.5.4
         version: 2.5.4
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@internal/lint':
@@ -3559,7 +3559,7 @@ importers:
         specifier: ^3.40.1
         version: 3.40.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.9)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
       zod:
-        specifier: ^3.25.67
+        specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
       '@ai-sdk/openai':
@@ -3588,7 +3588,7 @@ importers:
         version: 20.19.9
       ai:
         specifier: ^4.3.16
-        version: 4.3.18(react@19.1.0)(zod@3.25.76)
+        version: 4.3.19(react@19.1.0)(zod@3.25.76)
       eslint:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
@@ -9682,16 +9682,6 @@ packages:
       react:
         optional: true
 
-  ai@4.3.18:
-    resolution: {integrity: sha512-Mn6JdNGB56GOyrfGJ746zzK6e0f6Ozr7lwfEYkQZjhf261wj1aAJgCvUsgML5/7pSiBJq3ytNEBVcR1oUKTCZw==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      react: ^18 || ^19 || ^19.0.0-rc
-      zod: ^3.23.8
-    peerDependenciesMeta:
-      react:
-        optional: true
-
   ai@4.3.19:
     resolution: {integrity: sha512-dIE2bfNpqHN3r6IINp9znguYdhIOheKW2LDigAMrgt/upT3B8eBGPSCblENvaZGoq+hxaN9fSMzjWpbqloP+7Q==}
     engines: {node: '>=18'}
@@ -13449,9 +13439,6 @@ packages:
     engines: {node: '>= 10.12.0'}
     hasBin: true
 
-  node-html-better-parser@1.5.1:
-    resolution: {integrity: sha512-K3OUfP3UvIgoxlcoj6e9zeszeEk4MfhmiG7aiRRFEdoNqnfILCtL/AoLJ8UWFvDlRJOgKPRIECqWxbr25btnyQ==}
-
   node-html-better-parser@1.5.2:
     resolution: {integrity: sha512-ytjqwEgBQeNt//M19gukAzqvcSEn2EJPk+3svNs3f2lc+K50eZdokBSyAqlL9pMXK2Z3rMOLe18iZKrnEJKqtQ==}
 
@@ -14874,6 +14861,7 @@ packages:
   source-map@0.8.0-beta.0:
     resolution: {integrity: sha512-2ymg6oRBpebeZi9UUNsgQ89bhx01TcTkmNTGnNO88imTmbSgy4nfujrgVEFKWpMTEGA11EDkTt7mqObTPdigIA==}
     engines: {node: '>= 8'}
+    deprecated: The work that was done in this beta branch won't be included in future versions
 
   space-separated-tokens@1.1.5:
     resolution: {integrity: sha512-q/JSVd1Lptzhf5bkYm4ob4iWPjx0KiRe3sRFBNrVqbJkFaBm5vbbowy1mymoPNLRa52+oadOhJ+K49wsSeSjTA==}
@@ -19874,15 +19862,15 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mastra/rag@1.0.2(@mastra/core@packages+core)(ai@4.3.18(react@19.1.0)(zod@3.25.76))(encoding@0.1.13)':
+  '@mastra/rag@1.0.2(@mastra/core@packages+core)(ai@4.3.19(react@19.1.0)(zod@3.25.76))(encoding@0.1.13)':
     dependencies:
       '@mastra/core': link:packages/core
       '@paralleldrive/cuid2': 2.2.2
-      ai: 4.3.18(react@19.1.0)(zod@3.25.76)
+      ai: 4.3.19(react@19.1.0)(zod@3.25.76)
       big.js: 7.0.1
       cohere-ai: 7.17.1(encoding@0.1.13)
       js-tiktoken: 1.0.20
-      node-html-better-parser: 1.5.1
+      node-html-better-parser: 1.5.2
       pathe: 2.0.3
       zeroentropy: 0.1.0-alpha.6(encoding@0.1.13)
       zod: 3.25.76
@@ -23795,18 +23783,6 @@ snapshots:
       indent-string: 5.0.0
 
   ai@4.3.16(react@19.1.0)(zod@3.25.76):
-    dependencies:
-      '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
-      '@ai-sdk/react': 1.2.12(react@19.1.0)(zod@3.25.76)
-      '@ai-sdk/ui-utils': 1.2.11(zod@3.25.76)
-      '@opentelemetry/api': 1.9.0
-      jsondiffpatch: 0.6.0
-      zod: 3.25.76
-    optionalDependencies:
-      react: 19.1.0
-
-  ai@4.3.18(react@19.1.0)(zod@3.25.76):
     dependencies:
       '@ai-sdk/provider': 1.1.3
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
@@ -28438,10 +28414,6 @@ snapshots:
       - bluebird
       - supports-color
     optional: true
-
-  node-html-better-parser@1.5.1:
-    dependencies:
-      html-entities: 2.6.0
 
   node-html-better-parser@1.5.2:
     dependencies:
