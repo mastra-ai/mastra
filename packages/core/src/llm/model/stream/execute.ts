@@ -852,7 +852,6 @@ export async function execute(props: ExecuteParams) {
     generateId,
   };
 
-  // Always use streaming approach with MastraModelOutput
   const streamExecutorProps: StreamExecutorProps = {
     runId,
     _internal: _internalToUse,
