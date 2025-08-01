@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 
-import { createTestRun } from '../../utils';
+import { createAgentTestRun, createTestRun, createUIMessage } from '../../utils';
 import type { TestCase } from '../../utils';
 
 import { createToxicityScorer } from './index';
