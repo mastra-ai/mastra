@@ -250,6 +250,7 @@ describe('Tool Input Validation Integration Tests', () => {
         },
       });
 
+      // Test with undefined context - this represents a case where context is missing
       const result = await tool.execute({ context: undefined as any });
       expect(result.error).toBe(true);
       expect(result.message).toContain('Tool validation failed');

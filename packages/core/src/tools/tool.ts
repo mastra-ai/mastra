@@ -2,6 +2,7 @@ import type { z } from 'zod';
 
 import type { Mastra } from '../mastra';
 import type { ToolAction, ToolExecutionContext } from './types';
+import type { ToolExecutionOptions } from 'ai';
 import { validateToolInput } from './validation';
 
 export class Tool<
@@ -26,7 +27,10 @@ export class Tool<
     this.mastra = opts.mastra;
   }
 
-  async execute(context: TContext, options?: any): Promise<any> {
+  async execute(
+    context: TContext,
+    options?: ToolExecutionOptions,
+  ): Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown> {
     if (!this._execute) {
       throw new Error(`Tool ${this.id} does not have an execute function`);
     }
@@ -34,7 +38,7 @@ export class Tool<
     // Validate input if schema exists
     const { data, error } = validateToolInput(this.inputSchema, context.context, this.id);
     if (error) {
-      return error;
+      return error as any;
     }
 
     // Use validated data
