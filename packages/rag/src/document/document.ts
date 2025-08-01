@@ -21,6 +21,7 @@ import type {
   JsonChunkOptions,
   LatexChunkOptions,
   SentenceChunkOptions,
+  StrategyOptions,
 } from './types';
 import { validateChunkParams } from './validation';
 
@@ -149,34 +150,23 @@ export class MDocument {
     }
   }
 
-  private async chunkBy(strategy: ChunkStrategy, options?: any): Promise<void> {
-    switch (strategy) {
-      case 'recursive':
-        await this.chunkRecursive(options);
-        break;
-      case 'character':
-        await this.chunkCharacter(options);
-        break;
-      case 'token':
-        await this.chunkToken(options);
-        break;
-      case 'markdown':
-        await this.chunkMarkdown(options);
-        break;
-      case 'html':
-        await this.chunkHTML(options);
-        break;
-      case 'json':
-        await this.chunkJSON(options);
-        break;
-      case 'latex':
-        await this.chunkLatex(options);
-        break;
-      case 'sentence':
-        await this.chunkSentence(options);
-        break;
-      default:
-        throw new Error(`Unknown strategy: ${strategy}`);
+  private async chunkBy<K extends ChunkStrategy>(strategy: K, options?: StrategyOptions[K]): Promise<void> {
+    const strategyMap: { [S in ChunkStrategy]: (options?: StrategyOptions[S]) => Promise<void> } = {
+      recursive: options => this.chunkRecursive(options),
+      character: options => this.chunkCharacter(options),
+      token: options => this.chunkToken(options),
+      markdown: options => this.chunkMarkdown(options),
+      html: options => this.chunkHTML(options),
+      json: options => this.chunkJSON(options),
+      latex: options => this.chunkLatex(options),
+      sentence: options => this.chunkSentence(options),
+    };
+
+    const chunkingFunc = strategyMap[strategy];
+    if (chunkingFunc) {
+      await chunkingFunc(options);
+    } else {
+      throw new Error(`Unknown strategy: ${strategy}`);
     }
   }
 

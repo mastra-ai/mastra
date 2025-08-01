@@ -102,6 +102,17 @@ export type SentenceChunkOptions = BaseChunkOptions & {
   fallbackToCharacters?: boolean;
 };
 
+export type StrategyOptions = {
+  recursive: RecursiveChunkOptions;
+  character: CharacterChunkOptions;
+  token: TokenChunkOptions;
+  markdown: MarkdownChunkOptions;
+  html: HTMLChunkOptions;
+  json: JsonChunkOptions;
+  latex: LatexChunkOptions;
+  sentence: SentenceChunkOptions;
+};
+
 export type ChunkStrategy = 'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex' | 'sentence';
 
 export type ChunkParams =
