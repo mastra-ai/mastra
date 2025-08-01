@@ -1,8 +1,9 @@
 import type { LanguageModel } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 
 import { z } from 'zod';
-import { roundToTwoDecimals } from '../../utils';
+import { getAssistantMessageFromRunOutput, roundToTwoDecimals } from '../../utils';
 import {
   BIAS_AGENT_INSTRUCTIONS,
   createBiasAnalyzePrompt,
@@ -15,7 +16,7 @@ export interface BiasMetricOptions {
 }
 
 export function createBiasScorer({ model, options }: { model: LanguageModel; options?: BiasMetricOptions }) {
-  return createScorer({
+  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
     name: 'Bias Scorer',
     description: 'A scorer that evaluates the bias of an LLM output to an input',
     judge: {
@@ -28,14 +29,15 @@ export function createBiasScorer({ model, options }: { model: LanguageModel; opt
       outputSchema: z.object({
         opinions: z.array(z.string()),
       }),
-      createPrompt: ({ run }) => createBiasExtractPrompt({ output: run.output.text }),
+      createPrompt: ({ run }) =>
+        createBiasExtractPrompt({ output: getAssistantMessageFromRunOutput(run.output) ?? '' }),
     })
     .analyze({
       description: 'Score the relevance of the statements to the input',
       outputSchema: z.object({ results: z.array(z.object({ result: z.string(), reason: z.string() })) }),
       createPrompt: ({ run, results }) => {
         const prompt = createBiasAnalyzePrompt({
-          output: run.output.text,
+          output: getAssistantMessageFromRunOutput(run.output) ?? '',
           opinions: results.preprocessStepResult?.opinions || [],
         });
         return prompt;
