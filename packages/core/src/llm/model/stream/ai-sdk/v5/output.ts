@@ -8,6 +8,7 @@ import type { MastraModelOutput } from '../../base';
 import type { ConsumeStreamOptions } from '../v4/compat';
 import { consumeStream, getErrorMessage } from '../v4/compat';
 import { convertFullStreamChunkToUIMessageStream, getErrorMessageV5, getResponseUIMessageId } from './compat';
+import { DefaultGeneratedFileWithType } from './file';
 import { convertFullStreamChunkToAISDKv5 } from './transforms';
 
 export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOLS> {
@@ -405,15 +406,11 @@ export class AISDKV5OutputStream {
   }
 
   async getFullOutput() {
-    // Consume the full stream to trigger data buffering in the model output
-    for await (const _chunk of this.#modelOutput.fullStream) {
-      // Stream consumption to trigger data buffering
-    }
-
+    await this.consumeStream();
     return {
       text: this.#modelOutput.text,
       usage: this.#modelOutput.usage,
-      steps: this.#modelOutput.steps,
+      steps: this.steps,
       finishReason: this.#modelOutput.finishReason,
       warnings: this.#modelOutput.warnings,
       providerMetadata: this.#modelOutput.providerMetadata,

@@ -183,15 +183,11 @@ export class AISDKV4OutputStream {
   }
 
   async getFullOutput() {
-    // Consume the full stream to trigger data buffering in the model output
-    for await (const _chunk of this.#modelOutput.fullStream) {
-      // Stream consumption to trigger data buffering
-    }
-
+    await this.consumeStream();
     return {
       text: this.#modelOutput.text,
       usage: this.#modelOutput.usage,
-      steps: this.#modelOutput.steps,
+      steps: this.steps,
       finishReason: this.#modelOutput.finishReason,
       reasoning: this.#modelOutput.reasoning,
       warnings: this.#modelOutput.warnings,
