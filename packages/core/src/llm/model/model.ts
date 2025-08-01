@@ -212,7 +212,24 @@ export class MastraLLM extends MastraLLMBase {
     };
 
     try {
-      const result: GenerateTextResult<Tools, Z> = await generateText(argsForExecute);
+      // const result: GenerateTextResult<Tools, Z> = await generateText(argsForExecute);
+      const output = await execute({
+        runId: runId!,
+        model: argsForExecute.model,
+        prompt: argsForExecute.messages as any,
+        tools: argsForExecute.tools,
+        toolChoice: argsForExecute.toolChoice as any,
+        maxSteps: argsForExecute.maxSteps,
+        // messages: argsForExecute.messages as any,
+        // onStepFinish: argsForExecute.onStepFinish,
+      });
+
+      // TODO: missing return values:
+      // experimental_providerMetadata
+      // reasoningDetails
+      // logprobs
+      // @ts-expect-error
+      const result: GenerateTextResult<Tools, Z> = await output.aisdk.v4.getFullOutput();
 
       if (schema && result.finishReason === 'stop') {
         result.object = (result as any).experimental_output;
