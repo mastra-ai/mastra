@@ -2293,17 +2293,33 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const { experimental_output, output, ...llmOptions } = beforeResult;
 
+    const outputProcessorRunner = await this.getProcessorRunner({
+      runtimeContext: mergedGenerateOptions.runtimeContext || new RuntimeContext(),
+    });
+
     if (!output || experimental_output) {
       const result = await llm.__text({
         ...llmOptions,
         experimental_output,
       });
 
+      const outputProcessorResult = await outputProcessorRunner.runOutputProcessors(
+        new MessageList({ threadId: llmOptions.threadId || '', resourceId: llmOptions.resourceId || '' }).add(
+          result.text,
+          'response',
+        ),
+      );
+
+      const newText = outputProcessorResult.get.response
+        .v2()
+        .map(msg => msg.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''))
+        .join('');
+
       await after({
         result: result as unknown as OUTPUT extends undefined
           ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
           : GenerateObjectResult<OUTPUT>,
-        outputText: result.text,
+        outputText: newText,
       });
 
       return result as unknown as OUTPUT extends undefined
@@ -2318,11 +2334,23 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const outputText = JSON.stringify(result.object);
 
+    const outputProcessorResult = await outputProcessorRunner.runOutputProcessors(
+      new MessageList({ threadId: llmOptions.threadId || '', resourceId: llmOptions.resourceId || '' }).add(
+        outputText,
+        'response',
+      ),
+    );
+
+    const newText = outputProcessorResult.get.response
+      .v2()
+      .map(msg => msg.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''))
+      .join('');
+
     await after({
       result: result as unknown as OUTPUT extends undefined
         ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
         : GenerateObjectResult<OUTPUT>,
-      outputText,
+      outputText: newText,
       structuredOutput: true,
     });
 
