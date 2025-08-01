@@ -1,7 +1,7 @@
 import type { ReadableStream } from 'stream/web';
 import type { RegisteredLogger } from '../../../../../logger';
 import type { ChunkType } from '../../../../../stream/types';
-import { MastraModelInput } from '../../base';
+import { MastraModelInput } from '../../base/input';
 import { convertFullStreamChunkToMastra } from './transforms';
 
 export class AISDKV4InputStream extends MastraModelInput {
