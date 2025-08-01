@@ -1,5 +1,15 @@
 # @mastra/pg
 
+## 0.13.2-alpha.0
+
+### Patch Changes
+
+- a780fcd: ensure score id is generated for postgres store
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+  - @mastra/core@0.12.2-alpha.0
+
 ## 0.13.1
 
 ### Patch Changes
