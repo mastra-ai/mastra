@@ -6,7 +6,9 @@ import { prepareToolsAndToolChoice } from './prepare-tools';
 export function executeV4({
   runId,
   model,
+  headers,
   providerMetadata,
+  providerOptions,
   inputMessages,
   tools,
   activeTools,
@@ -38,8 +40,9 @@ export function executeV4({
             type: 'regular',
             ...preparedTools,
           },
-          providerMetadata,
+          providerMetadata: providerOptions ? { ...(providerMetadata ?? {}), ...providerOptions } : providerMetadata,
           prompt: inputMessages,
+          headers,
         });
 
         return stream as any;

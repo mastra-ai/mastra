@@ -43,6 +43,7 @@ function createAgentWorkflow({
   model,
   runId,
   providerMetadata,
+  providerOptions,
   tools,
   toolChoice,
   experimental_telemetry,
@@ -52,6 +53,7 @@ function createAgentWorkflow({
   controller,
   options,
   doStreamSpan,
+  headers,
 }: AgentWorkflowProps) {
   function toolCallStep() {
     return createStep({
@@ -161,8 +163,10 @@ function createAgentWorkflow({
           case 'v1': {
             modelResult = executeV4({
               model,
+              headers,
               runId,
               providerMetadata,
+              providerOptions,
               inputMessages: messageList.get.all.core() as any,
               tools,
               toolChoice,
@@ -782,6 +786,7 @@ function createStreamExecutor({
   model,
   runId,
   providerMetadata,
+  providerOptions,
   tools,
   toolChoice = 'auto',
   inputMessages,
@@ -833,6 +838,7 @@ function createStreamExecutor({
         model,
         runId,
         providerMetadata,
+        providerOptions,
         tools,
         toolChoice,
         inputMessages,
@@ -843,6 +849,7 @@ function createStreamExecutor({
         options,
         logger,
         doStreamSpan: rootSpan,
+        headers,
       });
 
       const mainWorkflow = createWorkflow({
@@ -984,12 +991,12 @@ function createStreamExecutor({
 }
 
 export async function execute(
-  props: { type?: 'stream' | 'generate'; system?: string; prompt?: string } & {
+  props: { system?: string; prompt?: string } & {
     resourceId?: string;
     threadId?: string;
   } & Omit<StreamExecutorProps, 'inputMessages' | 'startTimestamp'>,
 ) {
-  const { system, prompt, resourceId, threadId, runId, _internal, logger, type = 'stream', ...rest } = props;
+  const { system, prompt, resourceId, threadId, runId, _internal, logger, ...rest } = props;
 
   let loggerToUse =
     logger ||
@@ -1080,7 +1087,7 @@ export async function execute(
     startTimestamp: startTimestamp!,
   });
 
-  const output = new MastraModelOutput({
+  return new MastraModelOutput({
     model: {
       modelId: rest.model.modelId,
       provider: rest.model.provider,
@@ -1095,12 +1102,4 @@ export async function execute(
       onStepFinish: rest.options?.onStepFinish,
     },
   });
-
-  if (type === 'stream') {
-    return output;
-  } else if (type === 'generate') {
-    return output._getFullOutput();
-  } else {
-    throw new Error(`Unsupported execution type: ${type}`);
-  }
 }

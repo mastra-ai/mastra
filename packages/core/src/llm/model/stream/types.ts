@@ -1,10 +1,10 @@
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { Span } from '@opentelemetry/api';
 import type { IDGenerator, LanguageModelV1, LanguageModelV1Prompt, streamText, ToolChoice, ToolSet } from 'ai';
 import type { CallSettings, TelemetrySettings, ToolSet as ToolSetV5, StopCondition } from 'ai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { MastraLogger } from '../../../logger';
 import type { ChunkType } from '../../../stream/types';
 import type { CoreTool, CoreToolV2 } from '../../../tools';
-import type { Span } from '@opentelemetry/api';
 
 export type OnResult = (result: { warnings: any; request: any; rawResponse: any }) => void;
 
@@ -37,6 +37,7 @@ export type ExecutionProps = {
   inputMessages: LanguageModelV1Prompt;
   runId: string;
   providerMetadata?: Record<string, any>;
+  providerOptions?: Record<string, any>;
   tools?: Record<string, CoreTool | CoreToolV2>;
   toolChoice?: ToolChoice<ToolSet> | undefined;
   _internal?: StreamInternal;
@@ -47,7 +48,10 @@ export type ExecutionProps = {
   toolCallStreaming?: boolean;
   options?: ExecuteOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal' | 'headers'>;
-  headers?: Record<string, string | undefined>;
+  /**
+   * HTTP headers to include in the model request
+   */
+  headers?: Record<string, string | undefined> | undefined;
   logger?: MastraLogger;
   experimental_telemetry?: TelemetrySettings;
   doStreamSpan?: Span;
