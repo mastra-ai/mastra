@@ -15,7 +15,7 @@ export class Tool<
   description: string;
   inputSchema?: TSchemaIn;
   outputSchema?: TSchemaOut;
-  private _execute?: ToolAction<TSchemaIn, TSchemaOut, TContext>['execute'];
+  execute?: ToolAction<TSchemaIn, TSchemaOut, TContext>['execute'];
   mastra?: Mastra;
 
   constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TContext>) {
@@ -23,25 +23,21 @@ export class Tool<
     this.description = opts.description;
     this.inputSchema = opts.inputSchema;
     this.outputSchema = opts.outputSchema;
-    this._execute = opts.execute;
     this.mastra = opts.mastra;
-  }
 
-  async execute(
-    context: TContext,
-    options?: ToolExecutionOptions,
-  ): Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown> {
-    if (!this._execute) {
-      throw new Error(`Tool ${this.id} does not have an execute function`);
+    // Wrap the execute function with validation if it exists
+    if (opts.execute) {
+      const originalExecute = opts.execute;
+      this.execute = async (context: TContext, options?: ToolExecutionOptions) => {
+        // Validate input if schema exists
+        const { data, error } = validateToolInput(this.inputSchema, context, this.id);
+        if (error) {
+          return error as any;
+        }
+
+        return originalExecute(data as TContext, options);
+      };
     }
-
-    // Validate input if schema exists
-    const { data, error } = validateToolInput(this.inputSchema, context, this.id);
-    if (error) {
-      return error as any;
-    }
-
-    return this._execute(data as TContext, options);
   }
 }
 
