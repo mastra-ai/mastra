@@ -108,7 +108,7 @@ async function analyze(
           }
 
           // Tools is generated dependency, we don't want it to be handled by the bundler but instead read from disk at runtime
-          if (id === '#tools') {
+          if (id === '#tools' || id === '#telemetry-config') {
             return {
               id: '#tools',
               external: true,

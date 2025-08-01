@@ -43,6 +43,8 @@
   "dependencies": {
     "@babel/core": "^7.28.0",
     "@mastra/deployer": "workspace:^",
+    "@microlabs/otel-cf-workers": "^1.0.0-rc.49",
+    "@opentelemetry/api": "^1.9.0",
     "@rollup/plugin-virtual": "^3.0.2",
     "cloudflare": "^4.5.0",
     "rollup": "~4.44.2",

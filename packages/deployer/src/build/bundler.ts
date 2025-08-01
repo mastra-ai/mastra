@@ -106,6 +106,17 @@ export async function getInputOptions(
           }
         },
       },
+      {
+        name: 'telemetry-rewriter',
+        resolveId(id: string) {
+          if (id === '#telemetry-config') {
+            return {
+              id: './telemetry-config.mjs',
+              external: true,
+            };
+          }
+        },
+      },
       esbuild({
         target: 'node20',
         platform,
