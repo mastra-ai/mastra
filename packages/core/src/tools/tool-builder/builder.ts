@@ -185,8 +185,8 @@ export class CoreToolBuilder extends MastraBase {
             domain: ErrorDomain.TOOL,
             category: ErrorCategory.USER,
             details: {
-              error,
-              args,
+              errorMessage: String(error),
+              argsJson: JSON.stringify(args),
               model: rest.model?.modelId ?? '',
             },
           },

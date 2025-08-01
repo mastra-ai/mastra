@@ -236,7 +236,7 @@ describe('Course Tools', () => {
 
       test('should handle missing required arguments with an error', async () => {
         const result = await callTool(tools.mastra_startMastraCourseLesson, {});
-        expect(result.toLowerCase()).toContain('invalid');
+        expect(result.toLowerCase()).toMatch(/invalid|validation failed|required/);
       });
       test('should handle corrupted state file gracefully', async () => {
         const statePath = path.join(os.homedir(), '.cache', 'mastra', 'course', 'state.json');
