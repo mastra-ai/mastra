@@ -730,9 +730,10 @@ exports[`V4 tests > generateText > options.maxSteps > 4 steps: initial, continue
   {
     "experimental_providerMetadata": undefined,
     "files": [
-      DefaultGeneratedFile {
+      DefaultGeneratedFileWithType {
         "base64Data": undefined,
         "mimeType": "image/png",
+        "type": "file",
         "uint8ArrayData": Uint8Array [
           1,
           2,
@@ -873,7 +874,7 @@ exports[`V4 tests > generateText > options.maxSteps > 4 steps: initial, continue
   {
     "experimental_providerMetadata": undefined,
     "files": [
-      DefaultGeneratedFile {
+      DefaultGeneratedFileWithType {
         "base64Data": "QkFVRw==",
         "mimeType": "image/jpeg",
         "uint8ArrayData": undefined,
@@ -937,7 +938,7 @@ exports[`V4 tests > generateText > options.maxSteps > 4 steps: initial, continue
 
 exports[`V4 tests > generateText > options.maxSteps > 4 steps: initial, continue, continue, continue > result.files should contain files from last step 1`] = `
 [
-  DefaultGeneratedFile {
+  DefaultGeneratedFileWithType {
     "base64Data": "QkFVRw==",
     "mimeType": "image/jpeg",
     "uint8ArrayData": undefined,
@@ -1031,9 +1032,10 @@ exports[`V4 tests > generateText > options.maxSteps > 4 steps: initial, continue
   {
     "experimental_providerMetadata": undefined,
     "files": [
-      DefaultGeneratedFile {
+      DefaultGeneratedFileWithType {
         "base64Data": undefined,
         "mimeType": "image/png",
+        "type": "file",
         "uint8ArrayData": Uint8Array [
           1,
           2,
@@ -1174,9 +1176,10 @@ exports[`V4 tests > generateText > options.maxSteps > 4 steps: initial, continue
   {
     "experimental_providerMetadata": undefined,
     "files": [
-      DefaultGeneratedFile {
+      DefaultGeneratedFileWithType {
         "base64Data": "QkFVRw==",
         "mimeType": "image/jpeg",
+        "type": "file",
         "uint8ArrayData": undefined,
       },
     ],
@@ -1238,18 +1241,20 @@ exports[`V4 tests > generateText > options.maxSteps > 4 steps: initial, continue
 
 exports[`V4 tests > generateText > result.files > should contain files 1`] = `
 [
-  DefaultGeneratedFile {
+  DefaultGeneratedFileWithType {
     "base64Data": undefined,
     "mimeType": "image/png",
+    "type": "file",
     "uint8ArrayData": Uint8Array [
       1,
       2,
       3,
     ],
   },
-  DefaultGeneratedFile {
+  DefaultGeneratedFileWithType {
     "base64Data": "QkFVRw==",
     "mimeType": "image/jpeg",
+    "type": "file",
     "uint8ArrayData": undefined,
   },
 ]
@@ -1473,18 +1478,20 @@ exports[`V4 tests > generateText > result.steps > should contain files 1`] = `
   {
     "experimental_providerMetadata": undefined,
     "files": [
-      DefaultGeneratedFile {
+      DefaultGeneratedFileWithType {
         "base64Data": undefined,
         "mimeType": "image/png",
+        "type": "file",
         "uint8ArrayData": Uint8Array [
           1,
           2,
           3,
         ],
       },
-      DefaultGeneratedFile {
+      DefaultGeneratedFileWithType {
         "base64Data": "QkFVRw==",
         "mimeType": "image/jpeg",
+        "type": "file",
         "uint8ArrayData": undefined,
       },
     ],
@@ -1496,7 +1503,6 @@ exports[`V4 tests > generateText > result.steps > should contain files 1`] = `
     "reasoningDetails": [],
     "request": {},
     "response": {
-      "body": undefined,
       "headers": undefined,
       "id": "id-0",
       "messages": [
@@ -1552,7 +1558,6 @@ exports[`V4 tests > generateText > result.steps > should contain sources 1`] = `
     "reasoningDetails": [],
     "request": {},
     "response": {
-      "body": undefined,
       "headers": undefined,
       "id": "id-0",
       "messages": [
@@ -1920,7 +1925,7 @@ exports[`V4 tests > options.maxSteps > 2 steps: initial, tool-result > callbacks
     "headers": {
       "call": "2",
     },
-    "id": "id-1",
+    "id": "id-0",
     "messages": [
       {
         "content": [
@@ -2068,7 +2073,7 @@ exports[`V4 tests > options.maxSteps > 2 steps: initial, tool-result > callbacks
         "headers": {
           "call": "2",
         },
-        "id": "id-1",
+        "id": "id-0",
         "messages": [
           {
             "content": [
@@ -2241,7 +2246,7 @@ exports[`V4 tests > options.maxSteps > 2 steps: initial, tool-result > callbacks
       "headers": {
         "call": "2",
       },
-      "id": "id-1",
+      "id": "id-0",
       "messages": [
         {
           "content": [
@@ -2381,7 +2386,7 @@ exports[`V4 tests > options.maxSteps > 2 steps: initial, tool-result > should co
       "headers": {
         "call": "2",
       },
-      "id": "id-1",
+      "id": "id-0",
       "modelId": "mock-model-id",
       "timestamp": 1970-01-01T00:00:01.000Z,
     },
@@ -2402,7 +2407,7 @@ exports[`V4 tests > options.maxSteps > 2 steps: initial, tool-result > should co
       "headers": {
         "call": "2",
       },
-      "id": "id-1",
+      "id": "id-0",
       "modelId": "mock-model-id",
       "timestamp": 1970-01-01T00:00:01.000Z,
     },
@@ -2499,7 +2504,7 @@ exports[`V4 tests > options.maxSteps > 2 steps: initial, tool-result > should re
       ],
       "ai.response.avgCompletionTokensPerSecond": 12.5,
       "ai.response.finishReason": "stop",
-      "ai.response.id": "id-1",
+      "ai.response.id": "id-0",
       "ai.response.model": "mock-model-id",
       "ai.response.msToFinish": 400,
       "ai.response.msToFirstChunk": 400,
@@ -2674,7 +2679,7 @@ exports[`V4 tests > options.maxSteps > 2 steps: initial, tool-result > value pro
       "headers": {
         "call": "2",
       },
-      "id": "id-1",
+      "id": "id-0",
       "messages": [
         {
           "content": [
@@ -2823,7 +2828,7 @@ exports[`V4 tests > options.maxSteps > 4 steps: initial, continue, continue, con
       "request": {},
       "response": {
         "headers": undefined,
-        "id": "id-1",
+        "id": "id-0",
         "messages": [
           {
             "content": [
@@ -3046,7 +3051,7 @@ exports[`V4 tests > options.maxSteps > 4 steps: initial, continue, continue, con
     "request": {},
     "response": {
       "headers": undefined,
-      "id": "id-1",
+      "id": "id-0",
       "messages": [
         {
           "content": [
@@ -3316,7 +3321,7 @@ exports[`V4 tests > options.maxSteps > 4 steps: initial, continue, continue, con
     "request": {},
     "response": {
       "headers": undefined,
-      "id": "id-1",
+      "id": "id-0",
       "modelId": "mock-model-id",
       "timestamp": 1970-01-01T00:00:01.000Z,
     },
@@ -3566,7 +3571,7 @@ exports[`V4 tests > options.maxSteps > 4 steps: initial, continue, continue, con
       "ai.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]},{"role":"assistant","content":[{"type":"text","text":"part 1 \\n "}]}]",
       "ai.response.avgCompletionTokensPerSecond": 12.5,
       "ai.response.finishReason": "length",
-      "ai.response.id": "id-1",
+      "ai.response.id": "id-0",
       "ai.response.model": "mock-model-id",
       "ai.response.msToFinish": 400,
       "ai.response.msToFirstChunk": 400,
@@ -3719,7 +3724,7 @@ exports[`V4 tests > options.maxSteps > 4 steps: initial, continue, continue, con
     "request": {},
     "response": {
       "headers": undefined,
-      "id": "id-1",
+      "id": "id-0",
       "messages": [
         {
           "content": [
@@ -4425,7 +4430,7 @@ exports[`V4 tests > options.onFinish > should send files 1`] = `
   "request": {},
   "response": {
     "headers": undefined,
-    "id": "id-1",
+    "id": "id-0",
     "messages": [
       {
         "content": [
@@ -4478,7 +4483,7 @@ exports[`V4 tests > options.onFinish > should send files 1`] = `
       "request": {},
       "response": {
         "headers": undefined,
-        "id": "id-1",
+        "id": "id-0",
         "messages": [
           {
             "content": [
@@ -4549,7 +4554,7 @@ exports[`V4 tests > options.onFinish > should send sources 1`] = `
   "request": {},
   "response": {
     "headers": undefined,
-    "id": "id-1",
+    "id": "id-0",
     "messages": [
       {
         "content": [
@@ -4610,7 +4615,7 @@ exports[`V4 tests > options.onFinish > should send sources 1`] = `
       "request": {},
       "response": {
         "headers": undefined,
-        "id": "id-1",
+        "id": "id-0",
         "messages": [
           {
             "content": [
@@ -4686,7 +4691,7 @@ exports[`V4 tests > options.output > object output > should call onFinish with t
   "request": {},
   "response": {
     "headers": undefined,
-    "id": "id-1",
+    "id": "id-0",
     "messages": [
       {
         "content": [
@@ -4716,7 +4721,7 @@ exports[`V4 tests > options.output > object output > should call onFinish with t
       "request": {},
       "response": {
         "headers": undefined,
-        "id": "id-1",
+        "id": "id-0",
         "messages": [
           {
             "content": [
@@ -5473,7 +5478,7 @@ exports[`V4 tests > result.fullStream > should send files 1`] = `
     "request": {},
     "response": {
       "headers": undefined,
-      "id": "id-1",
+      "id": "id-0",
       "modelId": "mock-model-id",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
@@ -5492,7 +5497,7 @@ exports[`V4 tests > result.fullStream > should send files 1`] = `
     "providerMetadata": undefined,
     "response": {
       "headers": undefined,
-      "id": "id-1",
+      "id": "id-0",
       "modelId": "mock-model-id",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
@@ -5651,7 +5656,7 @@ exports[`V4 tests > result.fullStream > should send sources 1`] = `
     "request": {},
     "response": {
       "headers": undefined,
-      "id": "id-1",
+      "id": "id-0",
       "modelId": "mock-model-id",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
@@ -5678,7 +5683,7 @@ exports[`V4 tests > result.fullStream > should send sources 1`] = `
     },
     "response": {
       "headers": undefined,
-      "id": "id-1",
+      "id": "id-0",
       "modelId": "mock-model-id",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
@@ -6424,7 +6429,7 @@ exports[`V4 tests > result.steps > should add the files from the model response 
     "request": {},
     "response": {
       "headers": undefined,
-      "id": "id-1",
+      "id": "id-0",
       "messages": [
         {
           "content": [
@@ -6561,7 +6566,7 @@ exports[`V4 tests > result.steps > should add the sources from the model respons
     "request": {},
     "response": {
       "headers": undefined,
-      "id": "id-1",
+      "id": "id-0",
       "messages": [
         {
           "content": [
@@ -7275,7 +7280,7 @@ exports[`V5 tests > options.stopWhen > 2 steps: initial, tool-result > should re
       ],
       "ai.response.avgOutputTokensPerSecond": 25,
       "ai.response.finishReason": "stop",
-      "ai.response.id": "id-1",
+      "ai.response.id": "id-0",
       "ai.response.model": "mock-model-id",
       "ai.response.msToFinish": 400,
       "ai.response.msToFirstChunk": 400,
