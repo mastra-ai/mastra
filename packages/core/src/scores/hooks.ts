@@ -17,8 +17,8 @@ export function runScorer({
   scorerId: string;
   scorerObject: MastraScorerEntry;
   runId: string;
-  input: Record<string, any>[];
-  output: Record<string, any>;
+  input: any;
+  output: any;
   runtimeContext: Record<string, any>;
   entity: Record<string, any>;
   structuredOutput: boolean;

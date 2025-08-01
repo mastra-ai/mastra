@@ -60,6 +60,11 @@ export class MessageList {
   private newResponseMessages = new Set<MastraMessageV2>();
   private userContextMessages = new Set<MastraMessageV2>();
 
+  private memoryMessagesPersisted = new Set<MastraMessageV2>();
+  private newUserMessagesPersisted = new Set<MastraMessageV2>();
+  private newResponseMessagesPersisted = new Set<MastraMessageV2>();
+  private userContextMessagesPersisted = new Set<MastraMessageV2>();
+
   private generateMessageId?: IDGenerator;
   private _agentNetworkAppend = false;
 
@@ -106,6 +111,14 @@ export class MessageList {
       response: this.response,
     };
   }
+  public get getPersisted() {
+    return {
+      remembered: this.rememberedPersisted,
+      input: this.inputPersisted,
+      taggedSystemMessages: this.taggedSystemMessages,
+      response: this.responsePersisted,
+    };
+  }
   public get clear() {
     return {
       input: {
@@ -150,14 +163,30 @@ export class MessageList {
     ui: () => this.remembered.v2().map(MessageList.toUIMessage),
     core: () => this.convertToCoreMessages(this.remembered.ui()),
   };
+  private rememberedPersisted = {
+    v2: () => this.messages.filter(m => this.memoryMessagesPersisted.has(m)),
+    v1: () => convertToV1Messages(this.rememberedPersisted.v2()),
+    ui: () => this.rememberedPersisted.v2().map(MessageList.toUIMessage),
+    core: () => this.convertToCoreMessages(this.rememberedPersisted.ui()),
+  };
   private input = {
     v2: () => this.messages.filter(m => this.newUserMessages.has(m)),
     v1: () => convertToV1Messages(this.input.v2()),
     ui: () => this.input.v2().map(MessageList.toUIMessage),
     core: () => this.convertToCoreMessages(this.input.ui()),
   };
+  private inputPersisted = {
+    v2: () => this.messages.filter(m => this.newUserMessagesPersisted.has(m)),
+    v1: () => convertToV1Messages(this.inputPersisted.v2()),
+    ui: () => this.inputPersisted.v2().map(MessageList.toUIMessage),
+    core: () => this.convertToCoreMessages(this.inputPersisted.ui()),
+  };
   private response = {
     v2: () => this.messages.filter(m => this.newResponseMessages.has(m)),
+  };
+  private responsePersisted = {
+    v2: () => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
+    ui: () => this.responsePersisted.v2().map(MessageList.toUIMessage),
   };
   public drainUnsavedMessages(): MastraMessageV2[] {
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
@@ -507,12 +536,16 @@ export class MessageList {
   private pushMessageToSource(messageV2: MastraMessageV2, messageSource: MessageSource) {
     if (messageSource === `memory`) {
       this.memoryMessages.add(messageV2);
+      this.memoryMessagesPersisted.add(messageV2);
     } else if (messageSource === `response`) {
       this.newResponseMessages.add(messageV2);
+      this.newResponseMessagesPersisted.add(messageV2);
     } else if (messageSource === `user`) {
       this.newUserMessages.add(messageV2);
+      this.newUserMessagesPersisted.add(messageV2);
     } else if (messageSource === `context`) {
       this.userContextMessages.add(messageV2);
+      this.userContextMessagesPersisted.add(messageV2);
     } else {
       throw new Error(`Missing message source for message ${messageV2}`);
     }

@@ -1,4 +1,6 @@
+import type { CoreMessage, CoreSystemMessage } from 'ai';
 import { z } from 'zod';
+import type { UIMessageWithMetadata } from '../agent';
 
 export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
@@ -78,6 +80,10 @@ export type ScoreRowData = ScoringInputWithExtractStepResultAndScoreAndReason &
     scorerId: string;
     createdAt: Date;
     updatedAt: Date;
+    preprocessStepResult?: Record<string, any>;
+    preprocessPrompt?: string;
+    generateScorePrompt?: string;
+    generateReasonPrompt?: string;
   };
 
 export type ExtractionStepFn = (input: ScoringInput) => Promise<Record<string, any>>;
@@ -97,3 +103,12 @@ export type ScorerOptions = {
   metadata?: Record<string, any>;
   isLLMScorer?: boolean;
 };
+
+export type ScorerRunInputForAgent = {
+  inputMessages: UIMessageWithMetadata[];
+  rememberedMessages: UIMessageWithMetadata[];
+  systemMessages: CoreMessage[];
+  taggedSystemMessages: Record<string, CoreSystemMessage[]>;
+};
+
+export type ScorerRunOutputForAgent = UIMessageWithMetadata[];

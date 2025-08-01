@@ -1,301 +1,239 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MastraScorer } from './base';
-import type { ScorerOptions, ScoringInput, ExtractionStepFn, AnalyzeStepFn, ReasonStepFn } from './types';
+import { describe, it, expect, beforeEach } from 'vitest';
+import {
+  AsyncFunctionBasedScorerBuilders,
+  FunctionBasedScorerBuilders,
+  MixedScorerBuilders,
+  PromptBasedScorerBuilders,
+} from './base.test-utils';
 
-describe('MastraScorer', () => {
-  let mockExtractFn: ExtractionStepFn;
-  let mockAnalyzeFn: AnalyzeStepFn;
-  let mockReasonFn: ReasonStepFn;
-  let baseScoringInput: ScoringInput;
+const createTestData = () => ({
+  inputText: 'test input',
+  outputText: 'test output',
+  get userInput() {
+    return [{ role: 'user', content: this.inputText }];
+  },
+  get agentOutput() {
+    return { role: 'assistant', text: this.outputText };
+  },
+  get scoringInput() {
+    return { input: this.userInput, output: this.agentOutput };
+  },
+});
+
+describe('createScorer', () => {
+  let testData: ReturnType<typeof createTestData>;
 
   beforeEach(() => {
-    vi.resetAllMocks();
-
-    // Mock functions
-    mockExtractFn = vi.fn().mockResolvedValue({ result: { extractedData: 'test' } });
-    mockAnalyzeFn = vi.fn().mockResolvedValue({
-      score: 0.8,
-      result: { results: [{ result: 'good', reason: 'quality analysis' }] },
-    });
-    mockReasonFn = vi.fn().mockResolvedValue({
-      reason: 'test reasoning',
-      reasonPrompt: 'Why did you score this way?',
-    });
-
-    // Base scoring input for tests
-    baseScoringInput = {
-      runId: 'test-run-id',
-      input: [{ message: 'test input' }],
-      output: { response: 'test output' },
-      additionalContext: { context: 'test' },
-      runtimeContext: { runtime: 'test' },
-    };
+    testData = createTestData();
   });
 
-  describe('constructor', () => {
-    it('should initialize with required properties', () => {
-      const options: ScorerOptions = {
-        name: 'test-scorer',
-        description: 'A test scorer',
-        analyze: mockAnalyzeFn,
-      };
+  describe('Steps as functions scorer', () => {
+    it('should create a basic scorer with functions', async () => {
+      const scorer = FunctionBasedScorerBuilders.basic;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      const scorer = new MastraScorer(options);
-
-      expect(scorer.name).toBe('test-scorer');
-      expect(scorer.description).toBe('A test scorer');
-      expect(scorer.analyze).toBe(mockAnalyzeFn);
-      expect(scorer.extract).toBeUndefined();
-      expect(scorer.reason).toBeUndefined();
-      expect(scorer.metadata).toEqual({});
-      expect(scorer.isLLMScorer).toBeUndefined();
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
     });
 
-    it('should initialize with all optional properties', () => {
-      const options: ScorerOptions = {
-        name: 'test-scorer',
-        description: 'A test scorer',
-        extract: mockExtractFn,
-        analyze: mockAnalyzeFn,
-        reason: mockReasonFn,
-        metadata: { custom: 'data' },
-        isLLMScorer: true,
-      };
+    it('should create a scorer with reason', async () => {
+      const scorer = FunctionBasedScorerBuilders.withReason;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      const scorer = new MastraScorer(options);
-
-      expect(scorer.name).toBe('test-scorer');
-      expect(scorer.description).toBe('A test scorer');
-      expect(scorer.extract).toBe(mockExtractFn);
-      expect(scorer.analyze).toBe(mockAnalyzeFn);
-      expect(scorer.reason).toBe(mockReasonFn);
-      expect(scorer.metadata).toEqual({ custom: 'data' });
-      expect(scorer.isLLMScorer).toBe(true);
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
     });
 
-    it('should initialize metadata as empty object when not provided', () => {
-      const options: ScorerOptions = {
-        name: 'test-scorer',
-        description: 'A test scorer',
-        analyze: mockAnalyzeFn,
-      };
+    it('should create a scorer with preprocess and reason', async () => {
+      const scorer = FunctionBasedScorerBuilders.withPreprocessAndReason;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      const scorer = new MastraScorer(options);
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
+    });
 
-      expect(scorer.metadata).toEqual({});
+    it('should create a scorer with preprocess and analyze', async () => {
+      const scorer = FunctionBasedScorerBuilders.withPreprocessAndAnalyze;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
+
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
+    });
+
+    it('should create a scorer with preprocess only', async () => {
+      const scorer = FunctionBasedScorerBuilders.withPreprocess;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
+
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
+    });
+
+    it('should create a scorer with preprocess, analyze, and reason', async () => {
+      const scorer = FunctionBasedScorerBuilders.withPreprocessAndAnalyzeAndReason;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
+
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
+    });
+
+    it('should create a scorer with analyze only', async () => {
+      const scorer = FunctionBasedScorerBuilders.withAnalyze;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
+
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
+    });
+
+    it('should create a scorer with analyze and reason', async () => {
+      const scorer = FunctionBasedScorerBuilders.withAnalyzeAndReason;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
+
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
     });
   });
 
-  describe('run method', () => {
-    it('should execute workflow without extract function', async () => {
-      const scorer = new MastraScorer({
-        name: 'test-scorer',
-        description: 'A test scorer',
-        analyze: mockAnalyzeFn,
-      });
+  describe('Steps as prompt objects scorer', () => {
+    it('with analyze prompt object', async () => {
+      const scorer = PromptBasedScorerBuilders.withAnalyze;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      const result = await scorer.run(baseScoringInput);
-
-      expect(mockAnalyzeFn).toHaveBeenCalledWith({
-        ...baseScoringInput,
-        extractStepResult: undefined,
-      });
-      expect(result).toMatchObject({
-        extractStepResult: undefined,
-        score: 0.8,
-        analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
-      });
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
     });
 
-    it('should execute workflow with extract function', async () => {
-      const scorer = new MastraScorer({
-        name: 'test-scorer',
-        description: 'A test scorer',
-        extract: mockExtractFn,
-        analyze: mockAnalyzeFn,
-      });
+    it('with preprocess and analyze prompt object', async () => {
+      const scorer = PromptBasedScorerBuilders.withPreprocessAndAnalyze;
 
-      const result = await scorer.run(baseScoringInput);
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      expect(mockExtractFn).toHaveBeenCalledWith(baseScoringInput);
-      expect(mockAnalyzeFn).toHaveBeenCalledWith({
-        ...baseScoringInput,
-        extractStepResult: { extractedData: 'test' },
-      });
-      expect(result).toMatchObject({
-        extractStepResult: { extractedData: 'test' },
-        score: 0.8,
-        analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
-      });
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
     });
 
-    it('should execute workflow with reason function', async () => {
-      const scorer = new MastraScorer({
-        name: 'test-scorer',
-        description: 'A test scorer',
-        extract: mockExtractFn,
-        analyze: mockAnalyzeFn,
-        reason: mockReasonFn,
-      });
+    it('with analyze and reason prompt object', async () => {
+      const scorer = PromptBasedScorerBuilders.withAnalyzeAndReason;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      const result = await scorer.run(baseScoringInput);
-
-      expect(mockExtractFn).toHaveBeenCalledWith(baseScoringInput);
-      expect(mockAnalyzeFn).toHaveBeenCalledWith({
-        ...baseScoringInput,
-        extractStepResult: { extractedData: 'test' },
-      });
-      expect(mockReasonFn).toHaveBeenCalledWith({
-        ...baseScoringInput,
-        analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
-        score: 0.8,
-      });
-      expect(result).toMatchObject({
-        extractStepResult: { extractedData: 'test' },
-        score: 0.8,
-        analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
-        reason: 'test reasoning',
-        reasonPrompt: 'Why did you score this way?',
-      });
+      expect(runId).toBeDefined();
+      expect(typeof result.reason).toBe('string');
+      expect(result).toMatchSnapshot();
     });
 
-    it('should handle LLM scorer properly', async () => {
-      const llmAnalyzeFn = vi.fn().mockResolvedValue({
-        score: 0.9,
-        result: { analysis: 'detailed analysis' },
-        prompt: 'Analyze this content',
-      });
+    it('with generate score as prompt object', async () => {
+      const scorer = PromptBasedScorerBuilders.withGenerateScoreAsPromptObject;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      const scorer = new MastraScorer({
-        name: 'llm-scorer',
-        description: 'An LLM scorer',
-        analyze: llmAnalyzeFn,
-        isLLMScorer: true,
-      });
-
-      const result = await scorer.run(baseScoringInput);
-
-      expect(llmAnalyzeFn).toHaveBeenCalledWith({
-        ...baseScoringInput,
-        extractStepResult: undefined,
-      });
-
-      expect(result).toMatchObject({
-        extractStepResult: undefined,
-        score: 0.9,
-        analyzeStepResult: { analysis: 'detailed analysis' },
-        analyzePrompt: 'Analyze this content',
-      });
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
     });
 
-    it('should handle non-LLM scorer properly', async () => {
-      const nonLlmAnalyzeFn = vi.fn().mockResolvedValue({
-        result: { additionalInfo: 'some info' },
-        score: 0.7,
-        additionalInfo: 'some info',
-      });
+    it('with all steps', async () => {
+      const scorer = PromptBasedScorerBuilders.withAllSteps;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      const scorer = new MastraScorer({
-        name: 'non-llm-scorer',
-        description: 'A non-LLM scorer',
-        analyze: nonLlmAnalyzeFn,
-        isLLMScorer: false,
-      });
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
+    });
+  });
 
-      const result = await scorer.run(baseScoringInput);
+  describe('Mixed scorer', () => {
+    it('with preprocess function and analyze prompt object', async () => {
+      const scorer = MixedScorerBuilders.withPreprocessFunctionAnalyzePrompt;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      expect(nonLlmAnalyzeFn).toHaveBeenCalledWith({
-        ...baseScoringInput,
-        extractStepResult: undefined,
-      });
-
-      expect(result).toMatchObject({
-        extractStepResult: undefined,
-        score: 0.7,
-        analyzeStepResult: { additionalInfo: 'some info' },
-      });
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
     });
 
-    it('should handle reason function returning null', async () => {
-      const nullReasonFn = vi.fn().mockResolvedValue(null);
+    it('with preprocess prompt and analyze function', async () => {
+      const scorer = MixedScorerBuilders.withPreprocessPromptAnalyzeFunction;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      const scorer = new MastraScorer({
-        name: 'test-scorer',
-        description: 'A test scorer',
-        analyze: mockAnalyzeFn,
-        reason: nullReasonFn,
-      });
-
-      const result = await scorer.run(baseScoringInput);
-
-      expect(nullReasonFn).toHaveBeenCalledWith({
-        ...baseScoringInput,
-        analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
-        score: 0.8,
-      });
-      expect(result).toMatchObject({
-        extractStepResult: undefined,
-        score: 0.8,
-        analyzeStepResult: { results: [{ result: 'good', reason: 'quality analysis' }] },
-      });
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
     });
 
-    it('should throw error when workflow execution fails', async () => {
-      const failingAnalyzeFn = vi.fn().mockRejectedValue(new Error('Analysis failed'));
+    it('with reason function and analyze prompt', async () => {
+      const scorer = MixedScorerBuilders.withReasonFunctionAnalyzePrompt;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      const scorer = new MastraScorer({
-        name: 'failing-scorer',
-        description: 'A failing scorer',
-        analyze: failingAnalyzeFn,
-      });
-
-      await expect(scorer.run(baseScoringInput)).rejects.toThrow('Scoring pipeline failed: failed');
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
     });
 
-    it('should handle extract function throwing error', async () => {
-      const failingExtractFn = vi.fn().mockRejectedValue(new Error('Extract failed'));
+    it('with reason prompt and analyze function', async () => {
+      const scorer = MixedScorerBuilders.withReasonPromptAnalyzeFunction;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      const scorer = new MastraScorer({
-        name: 'failing-extract-scorer',
-        description: 'A scorer with failing extract',
-        extract: failingExtractFn,
-        analyze: mockAnalyzeFn,
-      });
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
+    });
+  });
 
-      await expect(scorer.run(baseScoringInput)).rejects.toThrow('Scoring pipeline failed: failed');
+  describe('Async scorer', () => {
+    it('with basic', async () => {
+      const scorer = AsyncFunctionBasedScorerBuilders.basic;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
+
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
     });
 
-    it('should handle reason function throwing error', async () => {
-      const failingReasonFn = vi.fn().mockRejectedValue(new Error('Reason failed'));
+    it('with preprocess', async () => {
+      const scorer = AsyncFunctionBasedScorerBuilders.withPreprocess;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      const scorer = new MastraScorer({
-        name: 'failing-reason-scorer',
-        description: 'A scorer with failing reason',
-        analyze: mockAnalyzeFn,
-        reason: failingReasonFn,
-      });
-
-      await expect(scorer.run(baseScoringInput)).rejects.toThrow('Scoring pipeline failed: failed');
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
     });
 
-    it('should create unique workflow pipeline for each scorer', async () => {
-      const scorer1 = new MastraScorer({
-        name: 'scorer-1',
-        description: 'First scorer',
-        analyze: mockAnalyzeFn,
-      });
+    it('with preprocess function and analyze as prompt object', async () => {
+      const scorer = AsyncFunctionBasedScorerBuilders.withPreprocessFunctionAndAnalyzePromptObject;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      const scorer2 = new MastraScorer({
-        name: 'scorer-2',
-        description: 'Second scorer',
-        analyze: mockAnalyzeFn,
-      });
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
+    });
 
-      const result1 = await scorer1.run(baseScoringInput);
-      const result2 = await scorer2.run(baseScoringInput);
+    it('with preprocess prompt object and analyze function', async () => {
+      const scorer = AsyncFunctionBasedScorerBuilders.withPreprocessPromptObjectAndAnalyzeFunction;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
 
-      expect(result1).toEqual(result2);
-      expect(mockAnalyzeFn).toHaveBeenCalledTimes(2);
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
+    });
+
+    it('with async createPrompt in preprocess', async () => {
+      const scorer = AsyncFunctionBasedScorerBuilders.withAsyncCreatePromptInPreprocess;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
+
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
+    });
+
+    it('with async createPrompt in analyze', async () => {
+      const scorer = AsyncFunctionBasedScorerBuilders.withAsyncCreatePromptInAnalyze;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
+
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
+    });
+
+    it('with async createPrompt in generateScore', async () => {
+      const scorer = AsyncFunctionBasedScorerBuilders.withAsyncCreatePromptInGenerateScore;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
+
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
+    });
+
+    it('with async createPrompt in generateReason', async () => {
+      const scorer = AsyncFunctionBasedScorerBuilders.withAsyncCreatePromptInGenerateReason;
+      const { runId, ...result } = await scorer.run(testData.scoringInput);
+
+      expect(runId).toBeDefined();
+      expect(result).toMatchSnapshot();
     });
   });
 });
