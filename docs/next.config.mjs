@@ -735,11 +735,6 @@ export default withGT(
         destination: "/examples/tools/workflow-as-tools",
         permanent: true,
       },
-      {
-        source: "/examples/agents/using-a-tool",
-        destination: "/examples/tools/using-a-tool",
-        permanent: true,
-      },
     ],
     trailingSlash: false,
   }),

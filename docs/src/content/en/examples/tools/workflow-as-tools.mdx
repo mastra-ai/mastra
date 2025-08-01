@@ -5,16 +5,16 @@ description: Example of using workflows as tools, demonstrating how to create re
 
 import { GithubLink } from "@/components/github-link";
 
-# Workflows as Tools
+# Tools with Workflows
 
-You can use workflows as tools to create reusable, multi-step processes that behave like standard tools. This is useful when you want to encapsulate complex logic behind a simple interface.
+You can use workflows with tools to create reusable, multi-step processes that behave like standard tools. This is useful when you want to encapsulate complex logic behind a simple interface.
 
 ## Creating a workflow
 
 This example defines a two-step workflow:
 
-1. **getCityCoordinates** – Looks up geolocation data for a given city.
-2. **getCityTemperature** – Uses the coordinates to fetch the current temperature.
+1. **getCityCoordinates**: Looks up geolocation data for a given city.
+2. **getCityTemperature**: Uses the coordinates to fetch the current temperature.
 
 The workflow takes a `city` as input and outputs the `temperature`.
 
@@ -84,7 +84,7 @@ export const temperatureWorkflow = createWorkflow({
   .commit();
 ```
 
-## Running a workflow
+## Using a workflow in a tool
 
 This tool wraps the workflow and exposes it through a standard tool interface. It takes a `city` as input, runs the underlying workflow, and returns the resulting `temperature`.
 

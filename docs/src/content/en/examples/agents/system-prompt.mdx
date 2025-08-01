@@ -5,9 +5,9 @@ description: Example of creating an AI agent in Mastra with a system prompt to d
 
 import { GithubLink } from "@/components/github-link";
 
-# Giving an Agent a System Prompt
+# Agent System Prompt
 
-When building AI agents, you need to define their role, personality, and capabilities. A system prompt (provided via the `instructions` field) acts as the agent's foundational identity - it tells the agent "who" it is and how it should behave. Unlike user messages that ask "what" to do, the system prompt defines the agent's expertise, tone, and approach to all interactions.
+When building AI agents, you need to define their role, personality, and capabilities. A system prompt (provided via `instructions`) acts as the agent's foundational identity. It tells the agent *who* it is and how it should behave. Unlike user messages that ask *what* to do, the system prompt defines the agent's expertise, tone, and approach to all interactions.
 
 ## Creating an agent
 
@@ -45,20 +45,15 @@ export const mastra = new Mastra({
 
 ## Example usage
 
-Use `getAgent()` to retrieve a reference to your agent, then call `generate()` with a prompt.
+Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt.
 
 ```typescript showLineNumbers copy
+import "dotenv/config";
 const agent = mastra.getAgent("cityAgent");
 
 const result = await agent.generate("Create an interesting fact about London");
 
 console.log(result.text);
-```
-
-### Example output
-
-```text
-Beneath the streets of London lies the world's first underground railway, the Metropolitan Railway, which opened in 1863.
 ```
 
 <GithubLink
