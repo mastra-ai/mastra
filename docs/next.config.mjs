@@ -735,6 +735,11 @@ export default withGT(
         destination: "/examples/tools/workflow-as-tools",
         permanent: true,
       },
+      {
+        source: "/examples/agents/multi-agent-workflow",
+        destination: "/examples/agents/hierarchical-multi-agent",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),

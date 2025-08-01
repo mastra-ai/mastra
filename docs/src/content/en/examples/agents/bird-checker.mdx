@@ -1,146 +1,110 @@
 ---
-title: "Example: Categorizing Birds | Agents | Mastra Docs"
-description: Example of using a Mastra AI Agent to determine if an image from Unsplash depicts a bird.
+title: "Example: Using an Agent to Classify Bird Images | Agents | Mastra Docs"
+description: Example of using a Mastra AI Agent to analyze images from Unsplash to identify birds, determine species, and describe locations.
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# Example: Categorizing Birds with an AI Agent
+# Using an Agent to Classify Bird Images
 
-We will get a random image from [Unsplash](https://unsplash.com/) that matches a selected query and uses a [Mastra AI Agent](/docs/agents/overview.md) to determine if it is a bird or not.
+AI agents can analyze and understand images by processing visual content alongside text instructions. This capability allows agents to identify objects, describe scenes, answer questions about images, and perform complex visual reasoning tasks.
 
-```ts showLineNumbers copy
-import { anthropic } from "@ai-sdk/anthropic";
+## Prerequisites
+
+- [Unsplash](https://unsplash.com/documentation#creating-a-developer-account) Developer Account, Application and API Key.
+
+## Creating an agent
+
+Create a simple agent that identifies bird species from images.
+
+```typescript filename="src/mastra/agents/example-bird-checker-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
-import { z } from "zod";
-
-export type Image = {
-  alt_description: string;
-  urls: {
-    regular: string;
-    raw: string;
-  };
-  user: {
-    first_name: string;
-    links: {
-      html: string;
-    };
-  };
-};
-
-export type ImageResponse<T, K> =
-  | {
-      ok: true;
-      data: T;
-    }
-  | {
-      ok: false;
-      error: K;
-    };
-
-const getRandomImage = async ({
-  query,
-}: {
-  query: string;
-}): Promise<ImageResponse<Image, string>> => {
-  const page = Math.floor(Math.random() * 20);
-  const order_by = Math.random() < 0.5 ? "relevant" : "latest";
-  try {
-    const res = await fetch(
-      `https://api.unsplash.com/search/photos?query=${query}&page=${page}&order_by=${order_by}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}`,
-          "Accept-Version": "v1",
-        },
-        cache: "no-store",
-      },
-    );
-
-    if (!res.ok) {
-      return {
-        ok: false,
-        error: "Failed to fetch image",
-      };
-    }
-
-    const data = (await res.json()) as {
-      results: Array<Image>;
-    };
-    const randomNo = Math.floor(Math.random() * data.results.length);
-
-    return {
-      ok: true,
-      data: data.results[randomNo] as Image,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      error: "Error fetching image",
-    };
-  }
-};
-
-const instructions = `
-  You can view an image and figure out if it is a bird or not. 
-  You can also figure out the species of the bird and where the picture was taken.
-`;
 
 export const birdCheckerAgent = new Agent({
   name: "Bird checker",
-  instructions,
-  model: anthropic("claude-3-haiku-20240307"),
+  description: "identifies birds and their species from images",
+  instructions: `
+    You can view an image and figure out if it is a bird or not.
+    You can also figure out the species of the bird and where the picture was taken.
+   `,
+  model: openai("gpt-4o")
 });
-
-const queries: string[] = ["wildlife", "feathers", "flying", "birds"];
-const randomQuery = queries[Math.floor(Math.random() * queries.length)];
-
-// Get the image url from Unsplash with random type
-const imageResponse = await getRandomImage({ query: randomQuery });
-
-if (!imageResponse.ok) {
-  console.log("Error fetching image", imageResponse.error);
-  process.exit(1);
-}
-
-console.log("Image URL: ", imageResponse.data.urls.regular);
-const response = await birdCheckerAgent.generate(
-  [
-    {
-      role: "user",
-      content: [
-        {
-          type: "image",
-          image: new URL(imageResponse.data.urls.regular),
-        },
-        {
-          type: "text",
-          text: "view this image and let me know if it's a bird or not, and the scientific name of the bird without any explanation. Also summarize the location for this picture in one or two short sentences understandable by a high school student",
-        },
-      ],
-    },
-  ],
-  {
-    output: z.object({
-      bird: z.boolean(),
-      species: z.string(),
-      location: z.string(),
-    }),
-  },
-);
-
-console.log(response.object);
 ```
 
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
+> See [Agent](../../reference/agents/agent.mdx) for a full list of configuration options.
+
+## Registering an agent
+
+To use an agent, register it in your main Mastra instance.
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+import { birdCheckerAgent } from "./agents/example-bird-checker-agent";
+
+export const mastra = new Mastra({
+  // ...
+  agents: { birdCheckerAgent }
+});
+```
+
+## Example usage
+
+Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt. Provide a `content` array that includes the image `type`, `imageUrl`, `mimeType`, and clear instructions for how the agent should respond.
+
+```typescript filename="src/test-bird-checker.ts" showLineNumbers copy
+import "dotenv/config";
+import { mastra } from "./mastra";
+
+const getRandomImage = async () => {
+  const queries = ["wildlife", "feathers", "flying", "birds"];
+  const query = queries[Math.floor(Math.random() * queries.length)];
+  const page = Math.floor(Math.random() * 20);
+  const order_by = Math.random() < 0.5 ? "relevant" : "latest";
+
+  const response = await fetch(`https://api.unsplash.com/search/photos?query=${query}&page=${page}&order_by=${order_by}`, {
+    headers: {
+      Authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}`,
+      "Accept-Version": "v1"
+    },
+    cache: "no-store"
+  });
+
+  const { results } = await response.json();
+  return results[Math.floor(Math.random() * results.length)].urls.regular;
+};
+
+const imageUrl = await getRandomImage();
+const agent = mastra.getAgent("birdCheckerAgent");
+
+const response = await agent.generate([
+  {
+    role: "user",
+    content: [
+      {
+        type: "image",
+        image: imageUrl,
+        mimeType: "image/jpeg"
+      },
+      {
+        type: "text",
+        text: `View this image and let me know if it's a bird or not, and the scientific name of the bird without any explanation.
+        Also summarize the location for this picture in one or two short sentences understandable by a high school student"`
+      }
+    ]
+  }
+]);
+
+console.log(response.text);
+```
 
 <GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/bird-checker"
-  }
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/bird-checker"
 />
+
+
+## Related
+
+- [Calling Agents](./calling-agents.mdx)
