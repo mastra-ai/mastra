@@ -55,6 +55,7 @@ export default defineConfig({
     'src/vector/filter/index.ts',
     'src/telemetry/otel-vendor.ts',
     'src/test-utils/llm-mock.ts',
+    'src/processors/index.ts',
   ],
   format: ['esm', 'cjs'],
   clean: true,

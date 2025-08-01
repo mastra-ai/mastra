@@ -1,9 +1,9 @@
 import z from 'zod';
-import type { MastraLanguageModel } from '../../index';
-import { Agent } from '../../index';
-import type { MastraMessageV2 } from '../../message-list';
-import { TripWire } from '../../trip-wire';
-import type { InputProcessor } from '../index';
+import { Agent } from '../../agent';
+import type { MastraMessageV2 } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
+import type { MastraLanguageModel } from '../../agent/types';
+import type { Processor } from '../index';
 
 /**
  * Confidence scores for each detection category (0-1)
@@ -75,7 +75,7 @@ export interface PromptInjectionOptions {
  * Provides multiple response strategies including content rewriting to neutralize
  * attacks while preserving legitimate user intent.
  */
-export class PromptInjectionDetector implements InputProcessor {
+export class PromptInjectionDetector implements Processor {
   readonly name = 'prompt-injection-detector';
 
   private detectionAgent: Agent;
@@ -107,7 +107,10 @@ export class PromptInjectionDetector implements InputProcessor {
     });
   }
 
-  async process(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): Promise<MastraMessageV2[]> {
+  async processInput(args: {
+    messages: MastraMessageV2[];
+    abort: (reason?: string) => never;
+  }): Promise<MastraMessageV2[]> {
     try {
       const { messages, abort } = args;
 

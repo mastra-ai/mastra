@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
-import { ReadableStream } from 'stream/web';
-import type { WritableStream } from 'stream/web';
-import type { CoreMessage, StreamObjectResult, StreamTextResult, TextPart, Tool, UIMessage } from 'ai';
+import type { ReadableStream, WritableStream } from 'stream/web';
+import type { CoreMessage, StreamObjectResult, TextPart, Tool, UIMessage } from 'ai';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, z } from 'zod';
@@ -25,11 +24,14 @@ import type {
   OriginalStreamTextOnFinishEventArg,
   OriginalStreamObjectOnFinishEventArg,
   TripwireProperties,
+  StreamTextResult,
 } from '../llm/model/base.types';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { InputProcessor, OutputProcessor } from '../processors/index';
+import { ProcessorRunner } from '../processors/runner';
 import { RuntimeContext } from '../runtime-context';
 import type { MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
@@ -45,12 +47,8 @@ import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import type { AgentVNextStreamOptions } from './agent.types';
-import type { InputProcessor } from './input-processor';
-import { runInputProcessors } from './input-processor/runner';
 import { MessageList } from './message-list';
-import type { MastraMessageV2, MessageInput, UIMessageWithMetadata } from './message-list';
-import type { OutputProcessor } from './output-processor';
-import { runOutputProcessors } from './output-processor/runner';
+import type { MessageInput, UIMessageWithMetadata } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
 import type {
@@ -64,8 +62,6 @@ import type {
   AgentMemoryOption,
 } from './types';
 export type { ChunkType, MastraAgentStream } from '../stream/MastraAgentStream';
-export * from './input-processor';
-export * from './output-processor';
 export { TripWire };
 export { MessageList };
 export * from './types';
@@ -102,6 +98,7 @@ function resolveThreadIdFromArgs(args: {
     '__registerPrimitives',
     '__runInputProcessors',
     '__runOutputProcessors',
+    'getProcessorRunner',
     '__setTools',
     '__setLogger',
     '__setTelemetry',
@@ -220,6 +217,29 @@ export class Agent<
 
     // @ts-ignore Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
+  }
+
+  private async getProcessorRunner({ runtimeContext }: { runtimeContext: RuntimeContext }): Promise<ProcessorRunner> {
+    const inputProcessors = this.#inputProcessors
+      ? typeof this.#inputProcessors === 'function'
+        ? await this.#inputProcessors({ runtimeContext })
+        : this.#inputProcessors
+      : [];
+
+    const outputProcessors = this.#outputProcessors
+      ? typeof this.#outputProcessors === 'function'
+        ? await this.#outputProcessors({ runtimeContext })
+        : this.#outputProcessors
+      : [];
+
+    this.logger.debug('outputProcessors', outputProcessors);
+
+    return new ProcessorRunner({
+      inputProcessors,
+      outputProcessors,
+      logger: this.logger,
+      agentName: this.name,
+    });
   }
 
   public hasOwnMemory(): boolean {
@@ -967,36 +987,32 @@ export class Agent<
     let tripwireTriggered = false;
     let tripwireReason = '';
 
-    if (this.#inputProcessors) {
-      const processors =
-        typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ runtimeContext })
-          : this.#inputProcessors;
-
+    if (this.#inputProcessors?.length) {
+      const runner = await this.getProcessorRunner({ runtimeContext });
       // Create traced version of runInputProcessors similar to workflow _runStep pattern
-      const tracedRunInputProcessors = (processors: any[], messageList: MessageList) => {
+      const tracedRunInputProcessors = (messageList: MessageList) => {
         const telemetry = this.#mastra?.getTelemetry();
         if (!telemetry) {
-          return runInputProcessors(processors, messageList, undefined);
+          return runner.runInputProcessors(messageList, undefined);
         }
 
         return telemetry.traceMethod(
-          async (data: { processors: any[]; messageList: MessageList }) => {
-            return runInputProcessors(data.processors, data.messageList, telemetry);
+          async (data: { messageList: MessageList }) => {
+            return runner.runInputProcessors(data.messageList, telemetry);
           },
           {
             spanName: `agent.${this.name}.inputProcessors`,
             attributes: {
               'agent.name': this.name,
-              'inputProcessors.count': processors.length.toString(),
-              'inputProcessors.names': processors.map(p => p.name).join(','),
+              'inputProcessors.count': runner.inputProcessors.length.toString(),
+              'inputProcessors.names': runner.inputProcessors.map(p => p.name).join(','),
             },
           },
-        )({ processors, messageList });
+        )({ messageList });
       };
 
       try {
-        messageList = await tracedRunInputProcessors(processors, messageList);
+        messageList = await tracedRunInputProcessors(messageList);
       } catch (error) {
         if (error instanceof TripWire) {
           tripwireTriggered = true;
@@ -1037,35 +1053,32 @@ export class Agent<
     let tripwireReason = '';
 
     if (this.#outputProcessors) {
-      const processors =
-        typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ runtimeContext })
-          : this.#outputProcessors;
+      const runner = await this.getProcessorRunner({ runtimeContext });
 
       // Create traced version of runOutputProcessors similar to workflow _runStep pattern
-      const tracedRunOutputProcessors = (processors: any[], messageList: MessageList) => {
+      const tracedRunOutputProcessors = (messageList: MessageList) => {
         const telemetry = this.#mastra?.getTelemetry();
         if (!telemetry) {
-          return runOutputProcessors(processors, messageList, undefined);
+          return runner.runOutputProcessors(messageList, undefined);
         }
 
         return telemetry.traceMethod(
-          async (data: { processors: any[]; messageList: MessageList }) => {
-            return runOutputProcessors(data.processors, data.messageList, telemetry);
+          async (data: { messageList: MessageList }) => {
+            return runner.runOutputProcessors(data.messageList, telemetry);
           },
           {
             spanName: `agent.${this.name}.outputProcessors`,
             attributes: {
               'agent.name': this.name,
-              'outputProcessors.count': processors.length.toString(),
-              'outputProcessors.names': processors.map(p => p.name).join(','),
+              'outputProcessors.count': runner.outputProcessors.length.toString(),
+              'outputProcessors.names': runner.outputProcessors.map(p => p.name).join(','),
             },
           },
-        )({ processors, messageList });
+        )({ messageList });
       };
 
       try {
-        messageList = await tracedRunOutputProcessors(processors, messageList);
+        messageList = await tracedRunOutputProcessors(messageList);
       } catch (e) {
         if (e instanceof TripWire) {
           tripwireTriggered = true;
@@ -1082,86 +1095,6 @@ export class Agent<
       tripwireTriggered,
       tripwireReason,
     };
-  }
-
-  private async processTextChunk({
-    text,
-    runtimeContext,
-  }: {
-    text: string;
-    runtimeContext: RuntimeContext;
-  }): Promise<{ text: string; blocked: boolean; reason?: string; shouldAbort?: boolean }> {
-    if (!this.#outputProcessors) {
-      return { text, blocked: false };
-    }
-
-    try {
-      const processors =
-        typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ runtimeContext })
-          : this.#outputProcessors;
-
-      // Create a temporary message for the chunk
-      const chunkMessage: MastraMessageV2 = {
-        id: `chunk-${Date.now()}-${Math.random()}`,
-        role: 'assistant',
-        content: {
-          format: 2,
-          parts: [
-            {
-              type: 'text',
-              text,
-            },
-          ],
-        },
-        createdAt: new Date(),
-      };
-
-      let processedText = text;
-      for (const processor of processors) {
-        try {
-          const processedMessages = await processor.process({
-            messages: [chunkMessage],
-            abort: (reason?: string) => {
-              throw new TripWire(reason || `Text chunk blocked by ${processor.name}`);
-            },
-          });
-
-          if (processedMessages.length === 0) {
-            // Message was filtered out (don't abort, just filter)
-            return { text: '', blocked: true, reason: `Text chunk filtered by ${processor.name}`, shouldAbort: false };
-          }
-
-          // Extract processed text
-          const processedMessage = processedMessages[0];
-          if (processedMessage?.content?.parts && processedMessage.content.parts.length > 0) {
-            const textPart = processedMessage.content.parts.find(part => part.type === 'text');
-            if (textPart && 'text' in textPart) {
-              processedText = textPart.text;
-            }
-          }
-
-          // Update the chunk message for the next processor
-          chunkMessage.content.parts = [
-            {
-              type: 'text',
-              text: processedText,
-            },
-          ];
-        } catch (error) {
-          if (error instanceof TripWire) {
-            return { text: '', blocked: true, reason: error.message, shouldAbort: true };
-          }
-          // Log error but continue with original text
-          this.logger.error(`[Agent:${this.name}] - Output processor ${processor.name} failed:`, error);
-        }
-      }
-
-      return { text: processedText, blocked: false };
-    } catch (error) {
-      this.logger.error(`[Agent:${this.name}] - Text chunk processing failed:`, error);
-      return { text, blocked: false };
-    }
   }
 
   private async getMemoryMessages({
@@ -1880,8 +1813,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             if (responseMessages) {
               messageList.add(responseMessages, 'response');
             }
-
-
 
             if (!threadExists) {
               await memory.createThread({
@@ -2610,7 +2541,10 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           runId: defaultStreamOptions.runId!,
         };
       },
-      createStream: async (writer: WritableStream<ChunkType>, onResult: (result: ResolvedOutput) => void) => {
+      createStream: async (
+        writer: WritableStream<ChunkType>,
+        onResult: (result: ResolvedOutput) => void,
+      ): Promise<ReadableStream<any>> => {
         const defaultStreamOptions = await defaultStreamOptionsPromise;
         const mergedStreamOptions: AgentVNextStreamOptions<Output, StructuredOutput> & {
           writableStream: WritableStream<ChunkType>;
@@ -2622,6 +2556,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
         const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions);
         const { onFinish, runId, output, experimental_output, ...llmOptions } = await before();
+
+        const outputProcessors = this.#outputProcessors
+          ? typeof this.#outputProcessors === 'function'
+            ? await this.#outputProcessors({
+                runtimeContext: mergedStreamOptions.runtimeContext || new RuntimeContext(),
+              })
+            : this.#outputProcessors
+          : undefined;
 
         if (output) {
           const streamResult = llm.__streamObject({
@@ -2649,75 +2591,14 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           });
 
           // If output processors are configured, transform the stream to process text chunks for structured output too
-          if (this.#outputProcessors) {
-            const runtimeContext = mergedStreamOptions.runtimeContext || new RuntimeContext();
-            const agent = this; // Capture reference for use inside ReadableStream
-            
-            return new ReadableStream({
-              start(controller) {
-                const reader = streamResult.fullStream.getReader();
-                
-                const processChunk = async () => {
-                  try {
-                    const { done, value } = await reader.read();
-                    
-                    if (done) {
-                      controller.close();
-                      return;
-                    }
-
-                    // Process text-delta chunks through output processors even for structured output
-                    if (value.type === 'text-delta' && value.textDelta) {
-                      const { text: processedText, blocked, reason, shouldAbort } = await agent.processTextChunk({
-                        text: value.textDelta,
-                        runtimeContext,
-                      });
-
-                      if (blocked) {
-                        // Log that chunk was blocked
-                        void agent.logger.debug(`[Agent:${agent.name}] - Text chunk blocked by output processor (structured)`, {
-                          runId,
-                          reason,
-                          originalText: value.textDelta,
-                          shouldAbort,
-                        });
-                        
-                        if (shouldAbort) {
-                          // Send tripwire chunk and close stream for abort
-                          controller.enqueue({
-                            type: 'tripwire',
-                            tripwireReason: reason || 'Output processor blocked content',
-                          });
-                          controller.close();
-                        } else {
-                          // For filtering, just skip this chunk entirely (don't enqueue anything)
-                          // Continue to the next iteration
-                        }
-                      } else {
-                        // Send processed chunk
-                        controller.enqueue({
-                          ...value,
-                          textDelta: processedText,
-                        });
-                      }
-                    } else {
-                      // Pass through non-text chunks unchanged
-                      controller.enqueue(value);
-                    }
-
-                    // Continue processing next chunk
-                    void processChunk();
-                  } catch (error) {
-                    controller.error(error);
-                  }
-                };
-
-                void processChunk();
-              },
-            }) as unknown as ReadableStream<any>;
+          if (outputProcessors) {
+            const runner = await this.getProcessorRunner({
+              runtimeContext: mergedStreamOptions.runtimeContext || new RuntimeContext(),
+            });
+            return runner.runOutputProcessorsForStream(streamResult) as unknown as ReadableStream<any>;
           }
 
-          return streamResult.fullStream as unknown as ReadableStream<any>;
+          return Promise.resolve(streamResult.fullStream as unknown as ReadableStream<any>);
         } else {
           const streamResult = llm.__stream({
             ...llmOptions,
@@ -2742,75 +2623,17 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           });
 
           // If output processors are configured, transform the stream to process text chunks
-          if (this.#outputProcessors) {
-            const runtimeContext = mergedStreamOptions.runtimeContext || new RuntimeContext();
-            const agent = this; // Capture reference for use inside ReadableStream
-            
-            return new ReadableStream({
-              start(controller) {
-                const reader = streamResult.fullStream.getReader();
-                
-                const processChunk = async () => {
-                  try {
-                    const { done, value } = await reader.read();
-                    
-                    if (done) {
-                      controller.close();
-                      return;
-                    }
-
-                    // Process text-delta chunks through output processors
-                    if (value.type === 'text-delta' && value.textDelta) {
-                      const { text: processedText, blocked, reason, shouldAbort } = await agent.processTextChunk({
-                        text: value.textDelta,
-                        runtimeContext,
-                      });
-
-                      if (blocked) {
-                        // Log that chunk was blocked
-                        void agent.logger.debug(`[Agent:${agent.name}] - Text chunk blocked by output processor`, {
-                          runId,
-                          reason,
-                          originalText: value.textDelta,
-                          shouldAbort,
-                        });
-                        
-                        if (shouldAbort) {
-                          // Send tripwire chunk and close stream for abort
-                          controller.enqueue({
-                            type: 'tripwire',
-                            tripwireReason: reason || 'Output processor blocked content',
-                          });
-                          controller.close();
-                        } else {
-                          // For filtering, just skip this chunk entirely (don't enqueue anything)
-                          // Continue to the next iteration
-                        }
-                      } else {
-                        // Send processed chunk
-                        controller.enqueue({
-                          ...value,
-                          textDelta: processedText,
-                        });
-                      }
-                    } else {
-                      // Pass through non-text chunks unchanged
-                      controller.enqueue(value);
-                    }
-
-                    // Continue processing next chunk
-                    void processChunk();
-                  } catch (error) {
-                    controller.error(error);
-                  }
-                };
-
-                void processChunk();
-              },
-            }) as unknown as ReadableStream<any>;
+          if (outputProcessors) {
+            this.logger.debug('running output processors for stream');
+            const runner = await this.getProcessorRunner({
+              runtimeContext: mergedStreamOptions.runtimeContext || new RuntimeContext(),
+            });
+            return runner.runOutputProcessorsForStream(streamResult) as unknown as ReadableStream<any>;
           }
 
-          return streamResult.fullStream as unknown as ReadableStream<any>;
+          this.logger.debug('no output processors for stream');
+
+          return Promise.resolve(streamResult.fullStream as unknown as ReadableStream<any>);
         }
       },
     });

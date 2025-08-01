@@ -18,6 +18,7 @@ import type {
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { InputProcessor, OutputProcessor } from '../processors/index';
 import type { RuntimeContext } from '../runtime-context';
 import type { MastraScorers } from '../scores';
 import type { ToolAction, VercelTool } from '../tools';
@@ -25,8 +26,6 @@ import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { AgentVNextStreamOptions } from './agent.types';
-import type { InputProcessor } from './input-processor';
-import type { OutputProcessor } from './output-processor';
 
 export type {
   MastraMessageV2,

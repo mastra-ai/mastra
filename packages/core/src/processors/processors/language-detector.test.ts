@@ -1,7 +1,7 @@
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraMessageV2 } from '../../message-list';
-import { TripWire } from '../../trip-wire';
+import type { MastraMessageV2 } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
 import type { LanguageDetectionResult, TranslationResult } from './language-detector';
 import { LanguageDetector } from './language-detector';
 
@@ -66,6 +66,7 @@ describe('LanguageDetector', () => {
       const model = setupMockModel(createMockLanguageResult('English', 'en', 0.95, true));
       const detector = new LanguageDetector({
         model,
+        targetLanguages: ['English'],
       });
 
       expect(detector.name).toBe('language-detector');
@@ -75,6 +76,7 @@ describe('LanguageDetector', () => {
       const model = setupMockModel(createMockLanguageResult('English', 'en', 0.95, true));
       const detector = new LanguageDetector({
         model,
+        targetLanguages: ['English'],
       });
 
       expect(detector.name).toBe('language-detector');
@@ -202,6 +204,7 @@ describe('LanguageDetector', () => {
       const detector = new LanguageDetector({
         model,
         strategy: 'detect',
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -224,6 +227,7 @@ describe('LanguageDetector', () => {
       const detector = new LanguageDetector({
         model,
         strategy: 'warn',
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -249,6 +253,7 @@ describe('LanguageDetector', () => {
       const detector = new LanguageDetector({
         model,
         strategy: 'block',
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn().mockImplementation(() => {
@@ -269,6 +274,7 @@ describe('LanguageDetector', () => {
       const detector = new LanguageDetector({
         model,
         strategy: 'block',
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -295,6 +301,7 @@ describe('LanguageDetector', () => {
         model,
         strategy: 'translate',
         preserveOriginal: true,
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -325,6 +332,7 @@ describe('LanguageDetector', () => {
       const detector = new LanguageDetector({
         model,
         strategy: 'translate',
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -361,6 +369,7 @@ describe('LanguageDetector', () => {
       const detector = new LanguageDetector({
         model,
         strategy: 'translate',
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -386,6 +395,7 @@ describe('LanguageDetector', () => {
       const detector = new LanguageDetector({
         model,
         threshold: 0.95, // High threshold to ensure processing is skipped
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -403,6 +413,7 @@ describe('LanguageDetector', () => {
       const detector = new LanguageDetector({
         model,
         threshold: 0.7,
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -421,6 +432,7 @@ describe('LanguageDetector', () => {
       const detector = new LanguageDetector({
         model,
         minTextLength: 15,
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -438,6 +450,7 @@ describe('LanguageDetector', () => {
       const detector = new LanguageDetector({
         model,
         minTextLength: 10,
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -456,6 +469,7 @@ describe('LanguageDetector', () => {
       const model = setupMockModel(createMockLanguageResult('English', 'en', 0.94, true));
       const detector = new LanguageDetector({
         model,
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -479,6 +493,7 @@ describe('LanguageDetector', () => {
       const model = setupMockModel(createMockLanguageResult('English', 'en', 0.94, true));
       const detector = new LanguageDetector({
         model,
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -541,6 +556,7 @@ describe('LanguageDetector', () => {
       const model = setupMockModel(createMockLanguageResult('English', 'en', 0.95, true));
       const detector = new LanguageDetector({
         model,
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -553,6 +569,7 @@ describe('LanguageDetector', () => {
       const model = setupMockModel(createMockLanguageResult('English', 'en', 0.95, true));
       const detector = new LanguageDetector({
         model,
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn().mockImplementation(() => {
@@ -584,6 +601,7 @@ describe('LanguageDetector', () => {
         model,
         strategy: 'translate',
         preserveOriginal: false,
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -617,6 +635,7 @@ describe('LanguageDetector', () => {
       const detector = new LanguageDetector({
         model,
         instructions: customInstructions,
+        targetLanguages: ['English'],
       });
 
       expect(detector.name).toBe('language-detector');
@@ -630,6 +649,7 @@ describe('LanguageDetector', () => {
         model,
         strategy: 'translate',
         translationQuality: 'speed',
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -659,6 +679,7 @@ describe('LanguageDetector', () => {
         model,
         includeDetectionDetails: true,
         threshold: 0.4, // Low threshold to ensure processing
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();
@@ -685,6 +706,7 @@ describe('LanguageDetector', () => {
       const model = setupMockModel(createMockLanguageResult('English', 'en', 0.96, true));
       const detector = new LanguageDetector({
         model,
+        targetLanguages: ['English'],
       });
 
       const mockAbort = vi.fn();

@@ -1,10 +1,10 @@
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 import z from 'zod';
-import type { MastraLanguageModel } from '../../index';
-import { Agent } from '../../index';
-import type { MastraMessageV2 } from '../../message-list';
-import { TripWire } from '../../trip-wire';
-import type { InputProcessor } from '../index';
+import { Agent } from '../../agent';
+import type { MastraMessageV2 } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
+import type { MastraLanguageModel } from '../../agent/types';
+import type { Processor } from '../index';
 
 /**
  * PII categories for detection and redaction
@@ -130,7 +130,7 @@ export interface PIIDetectorOptions {
  * Supports multiple redaction strategies and maintains audit trails
  * for compliance with GDPR, CCPA, HIPAA, and other privacy regulations.
  */
-export class PIIDetector implements InputProcessor {
+export class PIIDetector implements Processor {
   readonly name = 'pii-detector';
 
   private detectionAgent: Agent;
@@ -174,7 +174,10 @@ export class PIIDetector implements InputProcessor {
     });
   }
 
-  async process(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): Promise<MastraMessageV2[]> {
+  async processInput(args: {
+    messages: MastraMessageV2[];
+    abort: (reason?: string) => never;
+  }): Promise<MastraMessageV2[]> {
     try {
       const { messages, abort } = args;
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { MastraMessageV2 } from '../../message-list';
+import type { MastraMessageV2 } from '../../agent/message-list';
 import { UnicodeNormalizer } from './unicode-normalizer';
 
 function createTestMessage(text: string, id = 'test-id'): MastraMessageV2 {

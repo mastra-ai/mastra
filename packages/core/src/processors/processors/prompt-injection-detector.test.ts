@@ -1,7 +1,7 @@
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraMessageV2 } from '../../message-list';
-import { TripWire } from '../../trip-wire';
+import type { MastraMessageV2 } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
 import { PromptInjectionDetector } from './prompt-injection-detector';
 import type { PromptInjectionResult } from './prompt-injection-detector';
 

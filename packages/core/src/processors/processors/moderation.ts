@@ -1,9 +1,10 @@
+import type { TextStreamPart, ObjectStreamPart } from 'ai';
 import z from 'zod';
-import type { MastraLanguageModel } from '../../index';
-import { Agent } from '../../index';
-import type { MastraMessageV2 } from '../../message-list';
-import { TripWire } from '../../trip-wire';
-import type { InputProcessor } from '../index';
+import { Agent } from '../../agent';
+import type { MastraMessageV2 } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
+import type { MastraLanguageModel } from '../../agent/types';
+import type { Processor } from '../index';
 
 /**
  * Confidence scores for each moderation category (0-1)
@@ -69,6 +70,13 @@ export interface ModerationOptions {
    * Useful for tuning thresholds and debugging
    */
   includeScores?: boolean;
+
+  /**
+   * Number of previous chunks to include for context when moderating stream chunks.
+   * If set to 1, includes the previous chunk. If set to 2, includes the two previous chunks, etc.
+   * Default: 0 (no context window)
+   */
+  chunkWindow?: number;
 }
 
 /**
@@ -78,7 +86,7 @@ export interface ModerationOptions {
  * Provides flexible moderation with custom categories, thresholds, and strategies
  * while maintaining compatibility with OpenAI's moderation API structure.
  */
-export class ModerationInputProcessor implements InputProcessor {
+export class ModerationProcessor implements Processor {
   readonly name = 'moderation';
 
   private moderationAgent: Agent;
@@ -86,6 +94,7 @@ export class ModerationInputProcessor implements InputProcessor {
   private threshold: number;
   private strategy: 'block' | 'warn' | 'filter';
   private includeScores: boolean;
+  private chunkWindow: number;
 
   // Default OpenAI moderation categories
   private static readonly DEFAULT_CATEGORIES = [
@@ -103,10 +112,11 @@ export class ModerationInputProcessor implements InputProcessor {
   ];
 
   constructor(options: ModerationOptions) {
-    this.categories = options.categories || ModerationInputProcessor.DEFAULT_CATEGORIES;
+    this.categories = options.categories || ModerationProcessor.DEFAULT_CATEGORIES;
     this.threshold = options.threshold ?? 0.5;
     this.strategy = options.strategy || 'block';
     this.includeScores = options.includeScores ?? false;
+    this.chunkWindow = options.chunkWindow ?? 0;
 
     // Create internal moderation agent
     this.moderationAgent = new Agent({
@@ -116,7 +126,10 @@ export class ModerationInputProcessor implements InputProcessor {
     });
   }
 
-  async process(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): Promise<MastraMessageV2[]> {
+  async processInput(args: {
+    messages: MastraMessageV2[];
+    abort: (reason?: string) => never;
+  }): Promise<MastraMessageV2[]> {
     try {
       const { messages, abort } = args;
 
@@ -160,11 +173,67 @@ export class ModerationInputProcessor implements InputProcessor {
     }
   }
 
+  async processOutputResult(args: {
+    messages: MastraMessageV2[];
+    abort: (reason?: string) => never;
+  }): Promise<MastraMessageV2[]> {
+    return this.processInput(args);
+  }
+
+  async processOutputStream(args: {
+    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
+    allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[];
+    state: Record<string, any>;
+    abort: (reason?: string) => never;
+  }): Promise<{
+    chunk: TextStreamPart<any> | ObjectStreamPart<any>;
+    shouldEmit: boolean;
+  }> {
+    try {
+      const { chunk, allChunks, abort } = args;
+
+      // Only process text-delta chunks for moderation
+      if (chunk.type !== 'text-delta') {
+        return { chunk, shouldEmit: true };
+      }
+
+      // Build context from previous chunks based on chunkWindow
+      const contentToModerate = this.buildContextFromChunks(allChunks);
+
+      console.log('contentToModerate', contentToModerate);
+
+      // Skip moderation if no content to moderate
+      if (!contentToModerate.trim()) {
+        return { chunk, shouldEmit: true };
+      }
+
+      const moderationResult = await this.moderateContent(contentToModerate, true);
+
+      if (this.isModerationFlagged(moderationResult)) {
+        this.handleFlaggedContent(moderationResult, this.strategy, abort);
+
+        // If we reach here, strategy is 'warn' or 'filter'
+        if (this.strategy === 'filter') {
+          return { chunk: { type: 'text-delta', textDelta: '' }, shouldEmit: false };
+        }
+      }
+
+      return { chunk, shouldEmit: true };
+    } catch (error) {
+      if (error instanceof TripWire) {
+        throw error; // Re-throw tripwire errors
+      }
+      // Log error but don't block the stream
+      console.warn('[ModerationProcessor] Stream moderation failed:', error);
+      return { chunk: args.chunk, shouldEmit: true };
+    }
+  }
+
   /**
    * Moderate content using the internal agent
    */
-  private async moderateContent(content: string): Promise<ModerationResult> {
-    const prompt = this.createModerationPrompt(content);
+  private async moderateContent(content: string, isStream = false): Promise<ModerationResult> {
+    const prompt = this.createModerationPrompt(content, isStream);
 
     try {
       const response = await this.moderationAgent.generate(prompt, {
@@ -189,7 +258,7 @@ export class ModerationInputProcessor implements InputProcessor {
 
       return result;
     } catch (error) {
-      console.warn('[ModerationInputProcessor] Agent moderation failed, allowing content:', error);
+      console.warn('[ModerationProcessor] Agent moderation failed, allowing content:', error);
       // Fail open - return empty result if moderation agent fails (no moderation needed)
       return {};
     }
@@ -231,10 +300,10 @@ export class ModerationInputProcessor implements InputProcessor {
         abort(message);
         break;
       case 'warn':
-        console.warn(`[ModerationInputProcessor] ${message}`);
+        console.warn(`[ModerationProcessor] ${message}`);
         break;
       case 'filter':
-        console.info(`[ModerationInputProcessor] Filtered message: ${message}`);
+        console.info(`[ModerationProcessor] Filtered message: ${message}`);
         break;
     }
   }
@@ -282,9 +351,34 @@ Guidelines:
   /**
    * Create moderation prompt for the agent
    */
-  private createModerationPrompt(content: string): string {
-    return `Please evaluate the following content for moderation:
+  private createModerationPrompt(content: string, isStream: boolean): string {
+    return `Please evaluate the following content for moderation, ${isStream ? `this is a stream, so keep in mind you only have the context of the last ${this.chunkWindow} chunks. Make your best judgement on the content.` : ''}:
 
 Content: "${content}"`;
+  }
+
+  /**
+   * Build context string from previous chunks based on chunkWindow
+   */
+  private buildContextFromChunks(allChunks: (TextStreamPart<any> | ObjectStreamPart<any>)[]): string {
+    if (this.chunkWindow === 0) {
+      return '';
+    }
+
+    // Get the last N chunks (excluding the current one which is not in allChunks yet)
+    const contextChunks = allChunks.slice(-this.chunkWindow);
+
+    // Extract text content from text-delta chunks
+    const textContent = contextChunks
+      .filter(chunk => chunk.type === 'text-delta')
+      .map(chunk => {
+        if (chunk.type === 'text-delta') {
+          return chunk.textDelta;
+        }
+        return '';
+      })
+      .join('');
+
+    return textContent;
   }
 }

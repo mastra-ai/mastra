@@ -1,6 +1,6 @@
 export { UnicodeNormalizer, type UnicodeNormalizerOptions } from './unicode-normalizer';
 export {
-  ModerationInputProcessor,
+  ModerationProcessor,
   type ModerationOptions,
   type ModerationResult,
   type ModerationCategoryScores,

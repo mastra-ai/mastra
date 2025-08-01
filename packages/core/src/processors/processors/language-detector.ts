@@ -1,9 +1,9 @@
 import z from 'zod';
-import type { MastraLanguageModel } from '../../index';
-import { Agent } from '../../index';
-import type { MastraMessageV2 } from '../../message-list';
-import { TripWire } from '../../trip-wire';
-import type { InputProcessor } from '../index';
+import { Agent } from '../../agent';
+import type { MastraMessageV2 } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
+import type { MastraLanguageModel } from '../../agent/types';
+import type { Processor } from '../index';
 
 /**
  * Language detection result for a single text
@@ -102,7 +102,7 @@ export interface LanguageDetectorOptions {
  * Supports 100+ languages via internal agent-based detection and translation,
  * making it ideal for multilingual AI applications and global deployment.
  */
-export class LanguageDetector implements InputProcessor {
+export class LanguageDetector implements Processor {
   readonly name = 'language-detector';
 
   private detectionAgent: Agent;
@@ -175,7 +175,10 @@ export class LanguageDetector implements InputProcessor {
     });
   }
 
-  async process(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): Promise<MastraMessageV2[]> {
+  async processInput(args: {
+    messages: MastraMessageV2[];
+    abort: (reason?: string) => never;
+  }): Promise<MastraMessageV2[]> {
     try {
       const { messages, abort } = args;
 

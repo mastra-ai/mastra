@@ -1,5 +1,5 @@
-import type { MastraMessageV2 } from '../../message-list';
-import type { InputProcessor } from '../index';
+import type { MastraMessageV2 } from '../../agent/message-list';
+import type { Processor } from '../index';
 
 export interface UnicodeNormalizerOptions {
   /**
@@ -26,7 +26,7 @@ export interface UnicodeNormalizerOptions {
   trim?: boolean;
 }
 
-export class UnicodeNormalizer implements InputProcessor {
+export class UnicodeNormalizer implements Processor {
   readonly name = 'unicode-normalizer';
 
   private options: Required<UnicodeNormalizerOptions>;
@@ -40,7 +40,7 @@ export class UnicodeNormalizer implements InputProcessor {
     };
   }
 
-  process(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): MastraMessageV2[] {
+  processInput(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }): MastraMessageV2[] {
     try {
       return args.messages.map(message => ({
         ...message,
