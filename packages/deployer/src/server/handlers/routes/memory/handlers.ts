@@ -9,6 +9,7 @@ import {
   getMemoryStatusHandler as getOriginalMemoryStatusHandler,
   getMemoryConfigHandler as getOriginalMemoryConfigHandler,
   getThreadsHandler as getOriginalThreadsHandler,
+  getThreadsPaginatedHandler as getOriginalGetThreadsPaginatedHandler,
   getThreadByIdHandler as getOriginalThreadByIdHandler,
   saveMessagesHandler as getOriginalSaveMessagesHandler,
   createThreadHandler as getOriginalCreateThreadHandler,
@@ -84,6 +85,34 @@ export async function getThreadsHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error getting threads');
+  }
+}
+
+export async function getThreadsPaginatedHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.query('agentId');
+    const resourceId = c.req.query('resourceId');
+    const networkId = c.req.query('networkId');
+    const page = parseInt(c.req.query('page') || '0', 10);
+    const perPage = parseInt(c.req.query('perPage') || '100', 10);
+    const orderBy = c.req.query('orderBy') as ThreadOrderBy | undefined;
+    const sortDirection = c.req.query('sortDirection') as ThreadSortDirection | undefined;
+
+    const result = await getOriginalGetThreadsPaginatedHandler({
+      mastra,
+      agentId,
+      resourceId,
+      networkId,
+      page,
+      perPage,
+      orderBy,
+      sortDirection,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error getting paginated threads');
   }
 }
 
