@@ -1044,7 +1044,6 @@ export async function execute(props: ExecuteParams) {
 
   let startTimestamp = _internalToUse?.now?.();
 
-  // Always use streaming approach with MastraModelOutput
   const streamExecutorProps: StreamExecutorProps = {
     runId,
     _internal: _internalToUse,
