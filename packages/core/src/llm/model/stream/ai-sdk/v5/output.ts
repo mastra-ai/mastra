@@ -1,5 +1,4 @@
 import { TransformStream } from 'stream/web';
-import type { DataStreamOptions, DataStreamWriter, StreamData } from 'ai';
 import { createTextStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from 'ai-v5';
 import type { TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions, StepResult } from 'ai-v5';
 
@@ -8,7 +7,6 @@ import type { MastraModelOutput } from '../../base';
 import type { ConsumeStreamOptions } from '../v4/compat';
 import { consumeStream, getErrorMessage } from '../v4/compat';
 import { convertFullStreamChunkToUIMessageStream, getErrorMessageV5, getResponseUIMessageId } from './compat';
-import { DefaultGeneratedFileWithType } from './file';
 import { convertFullStreamChunkToAISDKv5 } from './transforms';
 
 export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOLS> {
