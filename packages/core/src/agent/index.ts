@@ -1869,6 +1869,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       inputMessages: messageList.getPersisted.input.ui(),
       rememberedMessages: messageList.getPersisted.remembered.ui(),
       systemMessages: messageList.getSystemMessages(),
+      taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
     };
 
     const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.ui();

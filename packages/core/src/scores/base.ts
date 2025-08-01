@@ -14,6 +14,9 @@ interface ScorerStepDefinition {
 }
 
 // Pipeline scorer
+// TInput and TRunOutput establish the type contract for the entire scorer pipeline,
+// ensuring type safety flows through all steps and contexts
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface ScorerConfig<TInput = any, TRunOutput = any> {
   name: string;
   description: string;
