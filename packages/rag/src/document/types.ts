@@ -79,11 +79,11 @@ export type MarkdownChunkOptions = BaseChunkOptions & {
   stripHeaders?: boolean;
 };
 
-export type HTMLChunkOptions = BaseChunkOptions & {
-  headers?: [string, string][];
-  sections?: [string, string][];
-  returnEachLine?: boolean;
-};
+export type HTMLChunkOptions = BaseChunkOptions &
+  (
+    | { headers: [string, string][]; sections?: never; returnEachLine?: boolean }
+    | { sections: [string, string][]; headers?: never }
+  ) & { returnEachLine?: boolean };
 
 export type JsonChunkOptions = BaseChunkOptions & {
   minSize?: number;
