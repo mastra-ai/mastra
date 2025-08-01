@@ -1452,7 +1452,7 @@ export class Agent<
         const messageList = new MessageList({
           threadId,
           resourceId,
-          generateMessageId,
+          generateMessageId: this.#mastra?.generateId.bind(this.#mastra),
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
