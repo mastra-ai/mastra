@@ -11,7 +11,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@mastra/client-js": "^0.10.11",
+    "@mastra/client-js": "^0.10.18",
     "@mastra/mcp": "^0.10.6",
     "octokit": "^5.0.3"
   },
