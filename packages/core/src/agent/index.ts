@@ -1656,7 +1656,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         runId,
         messageList,
         threadExists,
-        toolCallsCollection,
         structuredOutput = false,
       }: {
         runId: string;
@@ -1667,7 +1666,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText: string;
         messageList: MessageList;
         threadExists: boolean;
-        toolCallsCollection: Map<string, any>;
         structuredOutput?: boolean;
       }) => {
         const resToLog = {
@@ -1817,13 +1815,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             messageList.add(responseMessages, 'response');
           }
         }
-
-        const outputForScoring = {
-          text: result?.text,
-          object: result?.object,
-          usage: result?.usage,
-          toolCalls: Array.from(toolCallsCollection.values()),
-        };
 
         await this.#runScorers({
           messageList,
@@ -2078,7 +2069,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     let thread: StorageThreadType | null | undefined;
     let threadExists: boolean;
 
-    const toolCallsCollection = new Map();
     return {
       llm,
       before: async () => {
@@ -2124,12 +2114,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               });
             }
 
-            if (props.finishReason === 'tool-calls') {
-              for (const toolCall of props.toolCalls) {
-                toolCallsCollection.set(toolCall.toolCallId, toolCall);
-              }
-            }
-
             return onStepFinish?.({ ...props, runId });
           },
           ...(beforeResult.tripwire && {
@@ -2160,7 +2144,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           memoryConfig,
           runId,
           messageList,
-          toolCallsCollection,
           structuredOutput,
           threadExists,
         });
