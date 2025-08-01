@@ -5,21 +5,23 @@ This document compares the tool execution interfaces between the `main` branch a
 ## 1. Tool Class Execute Method
 
 ### On Main Branch
+
 ```typescript
 // packages/core/src/tools/tool.ts
 export class Tool<...> {
   execute?: ToolAction<TSchemaIn, TSchemaOut, TContext>['execute'];
-  
+
   // No execute method implementation - just a property
 }
 ```
 
 ### On This Branch
+
 ```typescript
 // packages/core/src/tools/tool.ts
 export class Tool<...> {
   private _execute?: ToolAction<TSchemaIn, TSchemaOut, TContext>['execute'];
-  
+
   async execute(
     context: TContext,
     options?: ToolExecutionOptions,
@@ -44,6 +46,7 @@ export class Tool<...> {
 ## 2. MCP Server Tool Validation
 
 ### On Main Branch
+
 ```typescript
 // packages/mcp/src/server/server.ts
 if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse === 'function') {
@@ -55,13 +58,14 @@ if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse ===
     this.logger.warn(`ExecuteTool: Invalid tool arguments for '${toolId}': ${errorMessages}`, {
       errors: validation.error.format(),
     });
-    throw new z.ZodError(validation.error.issues);  // THROWS ERROR
+    throw new z.ZodError(validation.error.issues); // THROWS ERROR
   }
   validatedArgs = validation.data;
 }
 ```
 
 ### On This Branch
+
 ```typescript
 // packages/mcp/src/server/server.ts
 if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse === 'function') {
@@ -74,7 +78,7 @@ if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse ===
       errors: validation.error.format(),
       args,
     });
-    
+
     // Return graceful error instead of throwing
     return {
       content: [
@@ -83,7 +87,7 @@ if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse ===
           text: `Tool validation failed for ${toolId}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${JSON.stringify(args, null, 2)}`,
         },
       ],
-      isError: true,  // MCP spec: indicates error should be shown to LLM
+      isError: true, // MCP spec: indicates error should be shown to LLM
     };
   }
   validatedArgs = validation.data;
@@ -95,6 +99,7 @@ if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse ===
 ## 3. CoreToolBuilder Validation
 
 ### On Main Branch
+
 ```typescript
 // packages/core/src/tools/tool-builder/builder.ts
 // No validation in createExecute - just passes args through
@@ -104,16 +109,20 @@ const execFunction = async (args: any, execOptions: ToolExecutionOptions) => {
   }
 
   return (
-    tool?.execute?.({
-      context: args,
-      threadId: options.threadId,
-      // ... other properties
-    }, execOptions) ?? undefined
+    tool?.execute?.(
+      {
+        context: args,
+        threadId: options.threadId,
+        // ... other properties
+      },
+      execOptions,
+    ) ?? undefined
   );
 };
 ```
 
 ### On This Branch
+
 ```typescript
 // packages/core/src/tools/tool-builder/builder.ts
 return async (args: unknown, execOptions?: ToolExecutionOptions) => {
@@ -130,7 +139,7 @@ return async (args: unknown, execOptions?: ToolExecutionOptions) => {
         errors: error.validationErrors,
         args,
       });
-      return error as any;  // Return error instead of throwing
+      return error as any; // Return error instead of throwing
     }
     // Use validated/transformed data
     args = data;
@@ -147,6 +156,7 @@ return async (args: unknown, execOptions?: ToolExecutionOptions) => {
 ## 4. Tool Execution Context
 
 ### Tool Context Structure
+
 ```typescript
 // When called from agents/normal usage:
 {
@@ -180,6 +190,7 @@ return async (args: unknown, execOptions?: ToolExecutionOptions) => {
 ## 5. Validation Function
 
 ### validateToolInput Implementation
+
 ```typescript
 export function validateToolInput<T = any>(
   schema: z.ZodSchema<T> | undefined,
@@ -192,12 +203,12 @@ export function validateToolInput<T = any>(
 
   // Extract the actual input data from various context formats
   let actualInput = input;
-  
+
   // Handle ToolExecutionContext format { context: data, ... }
   if (input && typeof input === 'object' && 'context' in input) {
     actualInput = (input as any).context;
   }
-  
+
   // Handle StepExecutionContext format { context: { inputData: data, ... }, ... }
   if (actualInput && typeof actualInput === 'object' && 'inputData' in actualInput) {
     actualInput = (actualInput as any).inputData;
@@ -224,17 +235,20 @@ export function validateToolInput<T = any>(
 ## Issues and Recommendations
 
 ### 1. Tool Class Execute Method - RESOLVED
+
 **Initial Issue**: On main, tools don't have an execute method - `execute` is just a public property that tools/workflows access directly:
+
 ```typescript
 // On main - workflow.ts
 const { payload = {}, execute = async () => {} } = targetStep.step;
 ```
 
 **Solution Implemented**: We wrap the execute function in the Tool constructor:
+
 ```typescript
 constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TContext>) {
   // ... other properties
-  
+
   // Wrap the execute function with validation if it exists
   if (opts.execute) {
     const originalExecute = opts.execute;
@@ -252,19 +266,23 @@ constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TContext>) {
 ```
 
 **Why This Works**:
+
 1. `tool.execute` remains a property (not a method), preserving API compatibility
 2. Workflows can still destructure `execute` and call it directly
 3. Our wrapper adds validation transparently
 4. Tests that mock execute need to mock the original function passed to createTool, not the wrapped version
 
 ### 2. Workflow Integration
+
 **Current Behavior**: Our validation handles the workflow context structure correctly, extracting data from `context.inputData`.
 
 **Verification Needed**: Need to ensure tools work correctly in both:
+
 - Direct usage (agents, etc): `tool.execute({ context: data, ... })`
 - Workflow usage: `tool.execute({ context: { inputData: data, ... }, ... })`
 
 ### 3. Error Handling Consistency
+
 **Good**: We're consistently returning errors instead of throwing across all implementations.
 
 **Consider**: Should we use a consistent error format across MCP and regular tools?
