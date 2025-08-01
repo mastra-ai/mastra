@@ -42,7 +42,8 @@ const chunksWithMetadata = await doc.chunk({
 
 ## Parameters
 
-The following parameters are available for all chunking strategies:
+The following parameters are available for all chunking strategies.
+**Important:** Each strategy will only utilize a subset of these parameters relevant to its specific use case.
 
 <PropertiesTable
   content={[
@@ -118,7 +119,7 @@ Strategy-specific options are passed as top-level parameters alongside the strat
 // Character strategy example
 const chunks = await doc.chunk({
   strategy: "character",
-  separator: ".",
+  separator: ".", // Character-specific option
   isSeparatorRegex: false, // Character-specific option
   maxSize: 300, // general option
 });
@@ -148,8 +149,6 @@ const chunks = await doc.chunk({
     ["h1", "title"],
     ["h2", "subtitle"],
   ], // HTML-specific option
-  sections: [["div.content", "main"]], // HTML-specific option
-  maxSize: 500, // general option
 });
 
 // Markdown strategy example
@@ -291,9 +290,7 @@ The options documented below are passed directly at the top level of the configu
   ]}
 />
 
-**Important:** The HTML strategy has different behavior depending on which option you use:
-- When using `headers`: Content is split based on HTML structure only, ignoring `maxSize` and `overlap` parameters
-- When using `sections`: Content respects `maxSize` and `overlap` parameters for further chunking
+**Important:** When using the HTML strategy, all general options are ignored. Use `headers` for header-based splitting or `sections` for section-based splitting. If used together, `sections` will be ignored.
 
 ### Markdown
 
@@ -302,6 +299,7 @@ The options documented below are passed directly at the top level of the configu
     {
       name: "headers",
       type: "Array<[string, string]>",
+      isOptional: true,
       description: "Array of [header level, metadata key] pairs",
     },
     {
@@ -319,7 +317,7 @@ The options documented below are passed directly at the top level of the configu
   ]}
 />
 
-**Important:** When using the `headers` option, the markdown strategy ignores `maxSize` and `overlap` parameters. Content is split based on the markdown header structure. To use size-based chunking with markdown, omit the `headers` parameter.
+**Important:** When using the `headers` option, the markdown strategy ignores all general options and content is split based on the markdown header structure. To use size-based chunking with markdown, omit the `headers` parameter.
 
 ### Token
 
@@ -384,7 +382,7 @@ The options documented below are passed directly at the top level of the configu
 
 ### Latex
 
-The Latex strategy uses only the base chunking parameters listed above. It provides LaTeX-aware splitting optimized for mathematical and academic documents.
+The Latex strategy uses only the general chunking options listed above. It provides LaTeX-aware splitting optimized for mathematical and academic documents.
 
 ## Return Value
 
