@@ -436,26 +436,4 @@ export class MastraModelOutput extends MastraBase {
       v5: this.#aisdkv5,
     };
   }
-
-  async _getFullOutput() {
-    for await (const _chunk of this.fullStream) {
-      // Stream consumption to trigger data buffering
-    }
-
-    return {
-      text: this.text,
-      toolCalls: this.toolCalls,
-      toolResults: this.toolResults,
-      usage: this.usage,
-      steps: this.steps,
-      finishReason: this.finishReason,
-      reasoning: this.reasoning,
-      sources: this.sources,
-      files: this.files,
-      warnings: this.warnings,
-      providerMetadata: this.providerMetadata,
-      response: this.response,
-      request: this.request,
-    };
-  }
 }
