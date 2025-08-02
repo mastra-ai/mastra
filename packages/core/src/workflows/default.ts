@@ -969,8 +969,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     ).filter((index): index is number => index !== null);
 
     const stepsToRun = entry.steps.filter((_, index) => truthyIndexes.includes(index));
+
+    // During resume, avoid re-executing steps that are already successfully completed
+    const stepsToExecute = stepsToRun.filter(step => {
+      if (resume && step.type === 'step') {
+        const existingResult = stepResults[step.step.id];
+        // Only re-execute if step is suspended, failed, or not yet executed
+        return !existingResult || existingResult.status === 'suspended' || existingResult.status === 'failed';
+      }
+      return true; // Always execute during initial run
+    });
+
     const results: { result: StepResult<any, any, any, any> }[] = await Promise.all(
-      stepsToRun.map((step, index) =>
+      stepsToExecute.map((step, _index) =>
         this.executeEntry({
           workflowId,
           runId,
@@ -982,7 +993,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           executionContext: {
             workflowId,
             runId,
-            executionPath: [...executionContext.executionPath, index],
+            executionPath: [...executionContext.executionPath, stepsToRun.indexOf(step)],
             suspendedPaths: executionContext.suspendedPaths,
             retryConfig: executionContext.retryConfig,
             executionSpan: executionContext.executionSpan,
@@ -994,10 +1005,33 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         }),
       ),
     );
-    const hasFailed = results.find(result => result.result.status === 'failed') as {
+
+    // For conditional blocks, merge executed results with preserved existing results
+    const mergedStepResults: Record<string, StepResult<any, any, any, any>> = { ...stepResults };
+
+    // Update with newly executed results
+    results.forEach(result => {
+      if ('stepResults' in result && result.stepResults) {
+        Object.assign(mergedStepResults, result.stepResults);
+      }
+    });
+
+    // Build allResults based on the merged step results for stepsToRun
+    const allResults = stepsToRun
+      .map(step => {
+        if (step.type === 'step') {
+          const stepResult = mergedStepResults[step.step.id];
+          if (stepResult) {
+            return { result: stepResult };
+          }
+        }
+        return { result: { status: 'success', output: {} } };
+      })
+      .filter(Boolean) as { result: StepResult<any, any, any, any> }[];
+    const hasFailed = allResults.find(result => result.result.status === 'failed') as {
       result: StepFailure<any, any, any>;
     };
-    const hasSuspended = results.find(result => result.result.status === 'suspended');
+    const hasSuspended = allResults.find(result => result.result.status === 'suspended');
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.result.error };
     } else if (hasSuspended) {
@@ -1007,7 +1041,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } else {
       execResults = {
         status: 'success',
-        output: results.reduce((acc: Record<string, any>, result, index) => {
+        output: allResults.reduce((acc: Record<string, any>, result, index) => {
           if (result.result.status === 'success') {
             // @ts-ignore
             acc[stepsToRun[index]!.step.id] = result.result.output;
