@@ -220,7 +220,7 @@ export class MastraLLM extends MastraLLMBase {
         tools: argsForExecute.tools,
         toolChoice: argsForExecute.toolChoice as any,
         maxSteps: argsForExecute.maxSteps,
-        // messages: argsForExecute.messages as any,
+        messages: argsForExecute.messages as any,
         // onStepFinish: argsForExecute.onStepFinish,
       });
 
