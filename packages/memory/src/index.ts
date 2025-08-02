@@ -4,7 +4,7 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
-import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
+import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
 import { embedMany } from 'ai';
 import type { CoreMessage, TextPart } from 'ai';
 import { Mutex } from 'async-mutex';
@@ -256,6 +256,30 @@ export class Memory extends MastraMemory {
     sortDirection,
   }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
     return this.storage.getThreadsByResourceId({ resourceId, orderBy, sortDirection });
+  }
+
+  async getThreadsByResourceIdPaginated({
+    resourceId,
+    page,
+    perPage,
+    orderBy,
+    sortDirection,
+  }: {
+    resourceId: string;
+    page: number;
+    perPage: number;
+  } & ThreadSortOptions): Promise<
+    PaginationInfo & {
+      threads: StorageThreadType[];
+    }
+  > {
+    return this.storage.getThreadsByResourceIdPaginated({
+      resourceId,
+      page,
+      perPage,
+      orderBy,
+      sortDirection,
+    });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
