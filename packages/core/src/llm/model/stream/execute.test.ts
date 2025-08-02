@@ -1,5 +1,6 @@
 import { describe } from 'vitest';
 import { fullStreamTests as fullStreamTestsV4 } from './ai-sdk/v4/test-utils/fullStream';
+import { generateTextTests } from './ai-sdk/v4/test-utils/generateText';
 import { mergeIntoDataStreamTests } from './ai-sdk/v4/test-utils/mergeIntoDataStream';
 import { optionsTests } from './ai-sdk/v4/test-utils/options';
 import { resultObjectTests as resultObjectTestsV4 } from './ai-sdk/v4/test-utils/result-object';
@@ -34,6 +35,8 @@ describe('V4 tests', () => {
     executeFn: execute,
     runId,
   });
+
+  generateTextTests({ executeFn: execute, runId });
 });
 
 describe('V5 tests', () => {

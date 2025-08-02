@@ -186,6 +186,25 @@ export class AISDKV4OutputStream {
     );
   }
 
+  async getFullOutput() {
+    await this.consumeStream();
+    return {
+      text: this.#modelOutput.text,
+      usage: this.#modelOutput.usage,
+      steps: this.steps,
+      finishReason: this.#modelOutput.finishReason,
+      reasoning: this.#modelOutput.reasoning,
+      warnings: this.#modelOutput.warnings,
+      providerMetadata: this.#modelOutput.providerMetadata,
+      request: this.#modelOutput.request,
+      toolCalls: this.toolCalls,
+      toolResults: this.toolResults,
+      sources: this.sources,
+      files: this.files,
+      response: this.response,
+    };
+  }
+
   get sources() {
     return this.#modelOutput.sources.map(chunk => {
       return convertFullStreamChunkToAISDKv4({

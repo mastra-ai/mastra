@@ -1,6 +1,6 @@
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { IDGenerator, LanguageModelV1, LanguageModelV1Prompt, streamText, ToolChoice, ToolSet } from 'ai';
 import type { ToolSet as ToolSetV5 } from 'ai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { MastraLogger } from '../../../logger';
 import type { ChunkType } from '../../../stream/types';
 import type { CoreTool, CoreToolV2 } from '../../../tools';
@@ -33,6 +33,7 @@ export type ExecutionProps = {
   inputMessages: LanguageModelV1Prompt;
   runId: string;
   providerMetadata?: Record<string, any>;
+  providerOptions?: Record<string, any>;
   tools?: Record<string, CoreTool | CoreToolV2>;
   toolChoice?: ToolChoice<ToolSet> | undefined;
   activeTools?: Array<keyof ToolSet> | undefined;
@@ -44,6 +45,10 @@ export type ExecutionProps = {
   toolCallStreaming?: boolean;
   options?: ExecuteOptions;
   logger?: MastraLogger;
+  /**
+   * HTTP headers to include in the model request
+   */
+  headers?: Record<string, string | undefined> | undefined;
 };
 
 export type AgentWorkflowProps = {
