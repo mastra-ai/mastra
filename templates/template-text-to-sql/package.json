@@ -22,7 +22,7 @@
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
-    "ai": "^4.3.17",
+    "ai": "^4.3.19",
     "csv-parse": "^5.6.0",
     "dotenv": "^17.0.1",
     "pg": "^8.16.3",
