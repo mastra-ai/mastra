@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
+import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import { convertToCoreMessages } from 'ai';
-import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, ToolInvocation, UIMessage } from 'ai';
+import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, ToolCallPart, ToolInvocation, UIMessage } from 'ai';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { MastraMessageV1 } from '../../memory';
 import { isCoreMessage, isUiMessage } from '../../utils';
@@ -67,6 +68,9 @@ export class MessageList {
 
   private generateMessageId?: IDGenerator;
   private _agentNetworkAppend = false;
+  
+  // Global cache to preserve args between messages
+  private toolCallArgsCache = new Map<string, Record<string, unknown>>();
 
   constructor({
     threadId,
@@ -131,10 +135,16 @@ export class MessageList {
       },
     };
   }
+
+  private getUIMessages(messages: MastraMessageV2[]): UIMessage[] {
+    const uiMessages = messages.map(MessageList.toUIMessage);
+    return this.deduplicateToolInvocationsByCallId(uiMessages);
+  }
+
   private all = {
     v2: () => this.messages,
     v1: () => convertToV1Messages(this.messages),
-    ui: () => this.messages.map(MessageList.toUIMessage),
+    ui: () => this.getUIMessages(this.messages),
     core: () => this.convertToCoreMessages(this.all.ui()),
     prompt: () => {
       const coreMessages = this.all.core();
@@ -160,7 +170,7 @@ export class MessageList {
   private remembered = {
     v2: () => this.messages.filter(m => this.memoryMessages.has(m)),
     v1: () => convertToV1Messages(this.remembered.v2()),
-    ui: () => this.remembered.v2().map(MessageList.toUIMessage),
+    ui: () => this.getUIMessages(this.remembered.v2()),
     core: () => this.convertToCoreMessages(this.remembered.ui()),
   };
   private rememberedPersisted = {
@@ -172,7 +182,7 @@ export class MessageList {
   private input = {
     v2: () => this.messages.filter(m => this.newUserMessages.has(m)),
     v1: () => convertToV1Messages(this.input.v2()),
-    ui: () => this.input.v2().map(MessageList.toUIMessage),
+    ui: () => this.getUIMessages(this.input.v2()),
     core: () => this.convertToCoreMessages(this.input.ui()),
   };
   private inputPersisted = {
@@ -216,7 +226,27 @@ export class MessageList {
   }
 
   private convertToCoreMessages(messages: UIMessage[]): CoreMessage[] {
-    return convertToCoreMessages(this.sanitizeUIMessages(messages));
+    const sanitized = this.sanitizeUIMessages(messages);
+    const coreMessages = convertToCoreMessages(sanitized);
+    
+    // The AI SDK overwrites the args of tool-calls, let's restore them from the UI messages
+    for (let i = 0; i < coreMessages.length; i++) {
+      const coreMessage = coreMessages[i];
+      const uiMessage = sanitized[i];
+      
+      if (Array.isArray(coreMessage?.content) && uiMessage?.toolInvocations) {
+        for (const part of coreMessage.content) {
+          if (part.type === 'tool-call') {
+            const uiToolInvocation = uiMessage.toolInvocations.find(ti => ti.toolCallId === part.toolCallId);
+            if (uiToolInvocation?.args && Object.keys(uiToolInvocation.args).length > 0) {
+              part.args = uiToolInvocation.args;
+            }
+          }
+        }
+      }
+    }
+    
+    return coreMessages;
   }
   private sanitizeUIMessages(messages: UIMessage[]): UIMessage[] {
     const msgs = messages
@@ -230,6 +260,14 @@ export class MessageList {
             (p.toolInvocation.state !== `call` && p.toolInvocation.state !== `partial-call`),
         );
 
+        // Before filtering, extract args from tool-call parts to preserve them
+        const toolCallArgsMap = new Map<string, Record<string, unknown>>();
+        for (const part of m.parts) {
+          if (part.type === 'tool-invocation' && part.toolInvocation.state === 'call') {
+            toolCallArgsMap.set(part.toolInvocation.toolCallId, part.toolInvocation.args || {});
+          }
+        }
+
         // fully remove this message if it has an empty parts array after stripping out incomplete tool calls.
         if (!safeParts.length) return false;
 
@@ -239,14 +277,66 @@ export class MessageList {
         };
 
         // ensure toolInvocations are also updated to only show results
+        // IMPORTANT: Use the toolInvocations from the UI message (which has corrected args from toUIMessage)
+        // instead of filtering the original toolInvocations which may have empty args
         if (`toolInvocations` in m && m.toolInvocations) {
-          sanitized.toolInvocations = m.toolInvocations.filter(t => t.state === `result`);
+          const filteredToolInvocations = m.toolInvocations.filter(t => t.state === `result`).map(ti => {
+            // Restore args from tool-call parts if they're empty
+            let args = ti.args || {};
+            if (Object.keys(args).length === 0 && toolCallArgsMap.has(ti.toolCallId)) {
+              args = toolCallArgsMap.get(ti.toolCallId)!;
+            }
+            return { ...ti, args };
+          });
+          
+          sanitized.toolInvocations = filteredToolInvocations;
         }
 
         return sanitized;
       })
       .filter((m): m is UIMessage => Boolean(m));
     return msgs;
+  }
+  
+  /**
+   * Deduplicates tool invocations across messages by harmonizing arguments.
+   *
+   * This method addresses the problem where the same tool call ID can appear in multiple messages
+   * with different argument states (some with complete args, some with empty {} args).
+   * This happens when:
+   * - Tool-calls and tool-results arrive in separate CoreMessage objects from the AI SDK
+   * - Database storage/retrieval processes create message duplicates
+   * - Memory restoration creates inconsistent argument states across message copies
+   *
+   * The function ensures that all instances of the same toolCallId across all messages
+   * use the most complete/latest arguments available, providing consistency for LLM context.
+   */
+  private deduplicateToolInvocationsByCallId(messages: UIMessage[]): UIMessage[] {
+    const toolInvocationsWithArgs = new Map<string, ToolInvocation>();
+
+    for (const message of messages) {
+      if (message.toolInvocations) {
+        for (const ti of message.toolInvocations) {
+          if (ti.args && Object.keys(ti.args).length > 0) {
+            toolInvocationsWithArgs.set(ti.toolCallId, ti);
+          }
+        }
+      }
+    }
+
+    return messages.map(message => {
+      if (!message.toolInvocations) return message;
+
+      const updatedToolInvocations = message.toolInvocations.map(ti => {
+        const invocationWithArgs = toolInvocationsWithArgs.get(ti.toolCallId);
+        if (invocationWithArgs && (!ti.args || Object.keys(ti.args).length === 0)) {
+          return { ...ti, args: invocationWithArgs.args };
+        }
+        return ti;
+      });
+
+      return { ...message, toolInvocations: updatedToolInvocations };
+    });
   }
   private addOneSystem(message: CoreSystemMessage | string, tag?: string) {
     if (typeof message === `string`) message = { role: 'system', content: message };
@@ -331,7 +421,28 @@ export class MessageList {
         parts,
         reasoning: undefined,
         toolInvocations:
-          `toolInvocations` in m.content ? m.content.toolInvocations?.filter(t => t.state === 'result') : undefined,
+          `toolInvocations` in m.content
+            ? m.content.toolInvocations?.filter(t => t.state === 'result').map(ti => {
+                // Use args from toolInvocations first (they should be correct from DB hydration)
+                let argsToUse = ti.args;
+                
+                if (!argsToUse || Object.keys(argsToUse).length === 0) {
+                  const partWithArgs = m.content.parts?.find(part =>
+                    part.type === 'tool-invocation' &&
+                    part.toolInvocation.toolCallId === ti.toolCallId &&
+                    part.toolInvocation.state === 'result' &&
+                    part.toolInvocation.args &&
+                    Object.keys(part.toolInvocation.args).length > 0
+                  );
+                  
+                  if (partWithArgs && partWithArgs.type === 'tool-invocation') {
+                    argsToUse = partWithArgs.toolInvocation.args;
+                  }
+                }
+                
+                return { ...ti, args: argsToUse };
+              })
+            : undefined,
       };
       // Preserve metadata if present
       if (m.content.metadata) {
@@ -460,7 +571,10 @@ export class MessageList {
                 result: part.toolInvocation.result,
                 args: {
                   ...existingCallPart.toolInvocation.args,
-                  ...part.toolInvocation.args,
+                  // Only merge args from part if they are not empty
+                  ...(part.toolInvocation.args && Object.keys(part.toolInvocation.args).length > 0
+                      ? part.toolInvocation.args
+                      : {}),
                 },
               };
               if (!latestMessage.content.toolInvocations) {
@@ -761,6 +875,7 @@ export class MessageList {
   }
   private hydrateMastraMessageV2Fields(message: MastraMessageV2): MastraMessageV2 {
     if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
+    
     return message;
   }
   private vercelUIMessageToMastraMessageV2(
@@ -816,6 +931,11 @@ export class MessageList {
             break;
 
           case 'tool-call':
+            // SOLUTION: Sauvegarder les args dans le cache global
+            if (part.args && Object.keys(part.args).length > 0) {
+              this.toolCallArgsCache.set(part.toolCallId, part.args as Record<string, unknown>);
+            }
+            
             parts.push({
               type: 'tool-invocation',
               toolInvocation: {
@@ -828,12 +948,27 @@ export class MessageList {
             break;
 
           case 'tool-result':
+            let toolCallArgs: Record<string, unknown> = {};
+            
+            const toolCallPart = coreMessage.content.find(p =>
+              p.type === 'tool-call' && p.toolCallId === part.toolCallId
+            ) as ToolCallPart | undefined;
+
+            if (toolCallPart) {
+              toolCallArgs = toolCallPart.args as Record<string, unknown>;
+            }
+            
+            // If not found locally, use the global cache
+            if (Object.keys(toolCallArgs).length === 0 && this.toolCallArgsCache.has(part.toolCallId)) {
+              toolCallArgs = this.toolCallArgsCache.get(part.toolCallId)!;
+            }
+            
             const invocation = {
               state: 'result' as const,
               toolCallId: part.toolCallId,
               toolName: part.toolName,
               result: part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
-              args: {}, // when we combine this invocation onto the existing tool-call part it will have args already
+              args: toolCallArgs, // Preserve args from the corresponding tool-call
             };
             parts.push({
               type: 'tool-invocation',
