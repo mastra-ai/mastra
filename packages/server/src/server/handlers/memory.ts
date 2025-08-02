@@ -118,6 +118,42 @@ export async function getThreadsHandler({
   }
 }
 
+export async function getThreadsPaginatedHandler({
+  mastra,
+  agentId,
+  resourceId,
+  networkId,
+  runtimeContext,
+  page,
+  perPage,
+  orderBy,
+  sortDirection,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'networkId' | 'runtimeContext'> & {
+  page: number;
+  perPage: number;
+} & ThreadSortOptions) {
+  try {
+    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+
+    if (!memory) {
+      throw new HTTPException(400, { message: 'Memory is not initialized' });
+    }
+
+    validateBody({ resourceId });
+
+    const result = await memory.getThreadsByResourceIdPaginated({
+      resourceId: resourceId!,
+      page,
+      perPage,
+      orderBy,
+      sortDirection,
+    });
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error getting paginated threads');
+  }
+}
+
 export async function getThreadByIdHandler({
   mastra,
   agentId,
