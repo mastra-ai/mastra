@@ -1449,7 +1449,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
     } else if (resume?.resumePath?.length && entry.type === 'parallel') {
       const idx = resume.resumePath.shift();
-      return this.executeEntry({
+      const resumedStepResult = await this.executeEntry({
         workflowId,
         runId,
         entry: entry.steps[idx!]!,
@@ -1470,6 +1470,83 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runtimeContext,
         writableStream,
       });
+
+      // After resuming one parallel step, check if ALL parallel steps are complete
+      // Update stepResults with the resumed step's result
+      if (resumedStepResult.stepResults) {
+        Object.assign(stepResults, resumedStepResult.stepResults);
+      }
+
+      // Check the status of all parallel steps in this block
+      const allParallelStepsComplete = entry.steps.every(parallelStep => {
+        if (parallelStep.type === 'step') {
+          const stepResult = stepResults[parallelStep.step.id];
+          return stepResult && stepResult.status === 'success';
+        }
+        return true; // Non-step entries are considered complete
+      });
+
+      if (allParallelStepsComplete) {
+        // All parallel steps are complete, return success for the parallel block
+        execResults = {
+          status: 'success',
+          output: entry.steps.reduce((acc: Record<string, any>, parallelStep) => {
+            if (parallelStep.type === 'step') {
+              const stepResult = stepResults[parallelStep.step.id];
+              if (stepResult && stepResult.status === 'success') {
+                acc[parallelStep.step.id] = stepResult.output;
+              }
+            }
+            return acc;
+          }, {}),
+        };
+      } else {
+        // Some parallel steps are still suspended, keep the parallel block suspended
+        const stillSuspended = entry.steps.find(parallelStep => {
+          if (parallelStep.type === 'step') {
+            const stepResult = stepResults[parallelStep.step.id];
+            return stepResult && stepResult.status === 'suspended';
+          }
+          return false;
+        });
+        execResults = {
+          status: 'suspended',
+          payload:
+            stillSuspended && stillSuspended.type === 'step' ? stepResults[stillSuspended.step.id]?.suspendPayload : {},
+        };
+      }
+
+      // Ensure execution context includes suspended paths for non-resumed steps
+      const updatedExecutionContext: ExecutionContext = {
+        ...executionContext,
+        ...resumedStepResult.executionContext,
+        suspendedPaths: {
+          ...executionContext.suspendedPaths,
+          ...resumedStepResult.executionContext?.suspendedPaths,
+        },
+      };
+
+      // For suspended parallel blocks, maintain suspended paths for non-resumed steps
+      if (execResults.status === 'suspended') {
+        entry.steps.forEach((parallelStep, stepIndex) => {
+          if (parallelStep.type === 'step') {
+            const stepResult = stepResults[parallelStep.step.id];
+            if (stepResult && stepResult.status === 'suspended') {
+              // Ensure this step remains in suspendedPaths
+              updatedExecutionContext.suspendedPaths[parallelStep.step.id] = [
+                ...executionContext.executionPath,
+                stepIndex,
+              ];
+            }
+          }
+        });
+      }
+
+      return {
+        result: execResults,
+        stepResults: resumedStepResult.stepResults,
+        executionContext: updatedExecutionContext,
+      };
     } else if (entry.type === 'parallel') {
       execResults = await this.executeParallel({
         workflowId,
