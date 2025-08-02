@@ -898,7 +898,6 @@ export class MessageList {
             break;
 
           case 'tool-call':
-            // SOLUTION: Sauvegarder les args dans le cache global
             if (part.args && Object.keys(part.args).length > 0) {
               this.toolCallArgsCache.set(part.toolCallId, part.args as Record<string, unknown>);
             }
