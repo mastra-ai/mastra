@@ -502,9 +502,8 @@ describe('convertToV1Messages', () => {
     // 1. text
     // 2. tool-call (from parts)
     // 3. tool-result (from parts)
-    // 4. tool-call (both array invocations grouped together since same step)
-    // 5. tool-result (both array results grouped together)
-    // Total: 5 messages
+    // Only 3 deduplicated messages are received
+    // Total: 3 messages
     expect(result.length).toBe(3);
 
     // Verify no duplicate tool calls
