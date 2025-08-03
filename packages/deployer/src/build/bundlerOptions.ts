@@ -6,6 +6,7 @@ import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { removeAllOptionsExceptBundler } from './babel/remove-all-options-bundler';
 import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 import type { Config } from '@mastra/core';
+import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 
 export function getBundlerOptionsBundler(
   entryFile: string,
@@ -27,6 +28,7 @@ export function getBundlerOptionsBundler(
         platform: 'node',
         minify: false,
       }),
+      optimizeLodashImports(),
       commonjs({
         extensions: ['.js', '.ts'],
         strictRequires: 'strict',
