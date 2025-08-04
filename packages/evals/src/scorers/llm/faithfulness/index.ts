@@ -12,6 +12,7 @@ import {
 
 export interface FaithfulnessMetricOptions {
   scale?: number;
+  context?: string[];
 }
 
 export function createFaithfulnessScorer({
@@ -41,10 +42,13 @@ export function createFaithfulnessScorer({
       description: 'Score the relevance of the statements to the input',
       outputSchema: z.object({ verdicts: z.array(z.object({ verdict: z.string(), reason: z.string() })) }),
       createPrompt: ({ results, run }) => {
+        // Use the context provided by the user, or the context from the tool invocations
         const context =
+          options?.context ??
           run.output
             .find(({ role }) => role === 'assistant')
-            ?.toolInvocations?.map(toolCall => JSON.stringify(toolCall)) || [];
+            ?.toolInvocations?.map(toolCall => (toolCall.state === 'result' ? JSON.stringify(toolCall.result) : '')) ??
+          [];
         const prompt = createFaithfulnessAnalyzePrompt({
           claims: results.preprocessStepResult || [],
           context,

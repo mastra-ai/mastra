@@ -1,5 +1,6 @@
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, ScoringInput } from '@mastra/core/scores';
+import type { ToolInvocation, UIMessage } from 'ai';
 
 export const roundToTwoDecimals = (num: number) => {
   return Math.round((num + Number.EPSILON) * 100) / 100;
@@ -50,7 +51,7 @@ export const createToolInvocation = ({
   toolName: string;
   args: Record<string, any>;
   result: Record<string, any>;
-  state?: 'result' | 'error';
+  state?: ToolInvocation['state'];
 }): { toolCallId: string; toolName: string; args: Record<string, any>; result: Record<string, any>; state: string } => {
   return {
     toolCallId,
@@ -65,54 +66,42 @@ export const createUIMessage = ({
   content,
   role,
   id = 'test-message',
-  type = 'text',
   toolInvocations = [],
 }: {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
-  type?: string;
   toolInvocations?: Array<{
     toolCallId: string;
     toolName: string;
     args: Record<string, any>;
     result: Record<string, any>;
-    state: string;
+    state: any;
   }>;
-}): {
-  id: string;
-  role: string;
-  content: string;
-  parts: Array<{ type: string; text: string }>;
-  toolInvocations: Array<{
-    toolCallId: string;
-    toolName: string;
-    args: Record<string, any>;
-    result: Record<string, any>;
-    state: string;
-  }>;
-} => {
+}): UIMessage => {
   return {
     id,
     role,
     content,
-    parts: [{ type, text: content }],
+    parts: [{ type: 'text', text: content }],
     toolInvocations,
   };
 };
 
 export const createAgentTestRun = ({
-  inputMessages,
+  inputMessages = [],
   output,
   rememberedMessages = [],
   systemMessages = [],
+  taggedSystemMessages = {},
   runtimeContext = new RuntimeContext(),
   runId = crypto.randomUUID(),
 }: {
-  inputMessages: ScorerRunInputForAgent['inputMessages'];
+  inputMessages?: ScorerRunInputForAgent['inputMessages'];
   output: ScorerRunOutputForAgent;
   rememberedMessages?: ScorerRunInputForAgent['rememberedMessages'];
   systemMessages?: ScorerRunInputForAgent['systemMessages'];
+  taggedSystemMessages?: ScorerRunInputForAgent['taggedSystemMessages'];
   runtimeContext?: RuntimeContext;
   runId?: string;
 }): {

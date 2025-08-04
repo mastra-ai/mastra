@@ -1,4 +1,5 @@
 import { createScorer } from '@mastra/core/scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import nlp from 'compromise';
 
 function normalizeString(str: string): string {
@@ -73,22 +74,25 @@ function calculateCoverage({ original, simplified }: { original: string[]; simpl
 }
 
 export function createCompletenessScorer() {
-  return createScorer({
+  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
     name: 'Completeness',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
   })
     .preprocess(async ({ run }) => {
       const isInputInvalid =
-        !run.input || run.input.some((i: { content: string }) => i.content === null || i.content === undefined);
-      const isOutputInvalid = !run.output || run.output.text === null || run.output.text === undefined;
+        !run.input ||
+        run.input.inputMessages.some((i: { content: string }) => i.content === null || i.content === undefined);
+
+      const isOutputInvalid =
+        !run.output || run.output.some((i: { content: string }) => i.content === null || i.content === undefined);
 
       if (isInputInvalid || isOutputInvalid) {
         throw new Error('Inputs cannot be null or undefined');
       }
 
-      const input = run.input?.map((i: { content: string }) => i.content).join(', ') || '';
-      const output = run.output.text;
+      const input = run.input?.inputMessages.map((i: { content: string }) => i.content).join(', ') || '';
+      const output = run.output?.map(({ content }: { content: string }) => content).join(', ') || '';
 
       const inputToProcess = input;
       const outputToProcess = output;
