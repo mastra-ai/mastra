@@ -4,7 +4,7 @@ import { Mem0AIClient } from './client';
 import type { Mem0Config } from './types';
 
 
-export class Mem0Integration extends Integration<void, Mem0AIClient> {
+export class Mem0Integration extends Integration {
   readonly name = 'MEM0';
   readonly logoUrl = '';
   config: Mem0Config;

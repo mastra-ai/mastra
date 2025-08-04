@@ -3,7 +3,11 @@ title: "Reference: Faithfulness | Metrics | Evals | Mastra Docs"
 description: Documentation for the Faithfulness Metric in Mastra, which evaluates the factual accuracy of LLM outputs compared to the provided context.
 ---
 
+import { ScorerCallout } from '@/components/scorer-callout'
+
 # FaithfulnessMetric Reference
+
+<ScorerCallout />
 
 The `FaithfulnessMetric` in Mastra evaluates how factually accurate an LLM's output is compared to the provided context. It extracts claims from the output and verifies them against the context, making it essential to measure RAG pipeline responses' reliability.
 

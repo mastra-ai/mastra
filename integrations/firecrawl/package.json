@@ -1,6 +1,6 @@
 {
   "name": "@mastra/firecrawl",
-  "version": "1.2.9-alpha.0",
+  "version": "1.2.10",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -21,8 +21,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake=smallest --splitting",
-    "build:watch": "pnpm build --watch",
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "clean": "rm -rf dist && rm -rf node_modules",
     "gen:zod:schema": "pnpx ts-to-zod  src/client/types.gen.ts src/client/zodSchema.ts"
@@ -55,6 +55,6 @@
     "zod": "^3.25.67"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.12.0-0"
+    "@mastra/core": ">=0.10.7-0 <0.13.0-0"
   }
 }

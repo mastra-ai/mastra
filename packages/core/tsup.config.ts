@@ -55,14 +55,17 @@ export default defineConfig({
     'src/vector/filter/index.ts',
     'src/telemetry/otel-vendor.ts',
     'src/test-utils/llm-mock.ts',
+    'src/agent/input-processor/processors/index.ts',
   ],
   format: ['esm', 'cjs'],
   clean: true,
+  dts: false,
   splitting: true,
   treeshake: {
     preset: 'smallest',
   },
   plugins: [treeshakeDecorators],
+  sourcemap: true,
   onSuccess: async () => {
     await exec('pnpm', ['tsc', '-p', 'tsconfig.build.json'], {
       stdio: 'inherit',

@@ -11,6 +11,7 @@ import {
   getMessagesPaginatedHandler,
   getThreadByIdHandler,
   getThreadsHandler,
+  getThreadsPaginatedHandler,
   getWorkingMemoryHandler,
   saveMessagesHandler,
   searchMemoryHandler,
@@ -293,7 +294,57 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 messages: {
                   type: 'array',
-                  items: { type: 'object' },
+                  description: 'Array of messages in either v1 or v2 format',
+                  items: {
+                    oneOf: [
+                      {
+                        type: 'object',
+                        description: 'Mastra Message v1 format',
+                        properties: {
+                          id: { type: 'string' },
+                          content: { type: 'string' },
+                          role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
+                          type: { type: 'string', enum: ['text', 'tool-call', 'tool-result'] },
+                          createdAt: { type: 'string', format: 'date-time' },
+                          threadId: { type: 'string' },
+                          resourceId: { type: 'string' },
+                        },
+                        required: ['content', 'role', 'type', 'threadId', 'resourceId'],
+                      },
+                      {
+                        type: 'object',
+                        description: 'Mastra Message v2 format',
+                        properties: {
+                          id: { type: 'string' },
+                          role: { type: 'string', enum: ['user', 'assistant'] },
+                          createdAt: { type: 'string', format: 'date-time' },
+                          threadId: { type: 'string' },
+                          resourceId: { type: 'string' },
+                          content: {
+                            type: 'object',
+                            properties: {
+                              format: { type: 'number', enum: [2] },
+                              parts: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                              content: { type: 'string' },
+                              toolInvocations: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                              experimental_attachments: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                            },
+                            required: ['format', 'parts'],
+                          },
+                        },
+                        required: ['role', 'content', 'threadId', 'resourceId'],
+                      },
+                    ],
+                  },
                 },
               },
               required: ['messages'],
@@ -529,6 +580,68 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getThreadsHandler,
+  );
+
+  router.get(
+    '/threads/paginated',
+    describeRoute({
+      description: 'Get paginated threads',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'resourceId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number', default: 0 },
+          description: 'Page number',
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number', default: 100 },
+          description: 'Number of threads per page',
+        },
+        {
+          name: 'orderBy',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'string',
+            enum: ['createdAt', 'updatedAt'],
+            default: 'createdAt',
+          },
+        },
+        {
+          name: 'sortDirection',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'string',
+            enum: ['ASC', 'DESC'],
+            default: 'DESC',
+          },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Paginated list of threads',
+        },
+      },
+    }),
+    getThreadsPaginatedHandler,
   );
 
   router.get(
@@ -969,7 +1082,57 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 messages: {
                   type: 'array',
-                  items: { type: 'object' },
+                  description: 'Array of messages in either v1 or v2 format',
+                  items: {
+                    oneOf: [
+                      {
+                        type: 'object',
+                        description: 'Mastra Message v1 format',
+                        properties: {
+                          id: { type: 'string' },
+                          content: { type: 'string' },
+                          role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
+                          type: { type: 'string', enum: ['text', 'tool-call', 'tool-result'] },
+                          createdAt: { type: 'string', format: 'date-time' },
+                          threadId: { type: 'string' },
+                          resourceId: { type: 'string' },
+                        },
+                        required: ['content', 'role', 'type', 'threadId', 'resourceId'],
+                      },
+                      {
+                        type: 'object',
+                        description: 'Mastra Message v2 format',
+                        properties: {
+                          id: { type: 'string' },
+                          role: { type: 'string', enum: ['user', 'assistant'] },
+                          createdAt: { type: 'string', format: 'date-time' },
+                          threadId: { type: 'string' },
+                          resourceId: { type: 'string' },
+                          content: {
+                            type: 'object',
+                            properties: {
+                              format: { type: 'number', enum: [2] },
+                              parts: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                              content: { type: 'string' },
+                              toolInvocations: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                              experimental_attachments: {
+                                type: 'array',
+                                items: { type: 'object' },
+                              },
+                            },
+                            required: ['format', 'parts'],
+                          },
+                        },
+                        required: ['role', 'content', 'threadId', 'resourceId'],
+                      },
+                    ],
+                  },
                 },
               },
               required: ['messages'],

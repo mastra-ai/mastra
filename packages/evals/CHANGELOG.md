@@ -1,5 +1,50 @@
 # @mastra/evals
 
+## 0.11.0
+
+### Minor Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+
+### Patch Changes
+
+- 7a7754f: Fast follow scorers fixing input types, improve llm scorer reliability, fix ui to display scores that are 0
+- e0f73c6: Make input optional for scorer run
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+
+## 0.11.0-alpha.2
+
+### Minor Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+
+### Patch Changes
+
+- @mastra/core@0.12.0-alpha.5
+
 ## 0.10.8-alpha.1
 
 ### Patch Changes

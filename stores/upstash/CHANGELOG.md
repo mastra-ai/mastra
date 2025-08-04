@@ -1,5 +1,91 @@
 # @mastra/upstash
 
+## 0.13.0
+
+### Minor Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+
+### Patch Changes
+
+- 674a348: dependencies updates:
+  - Updated dependency [`@upstash/redis@^1.35.1` ↗︎](https://www.npmjs.com/package/@upstash/redis/v/1.35.1) (from `^1.35.0`, in `dependencies`)
+- b92bc89: Added hybrid search support to @mastra/upstash vector store. Supports sparse vectors, fusion algorithm, and query mode.
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+
+## 0.13.0-alpha.2
+
+### Minor Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+
+### Patch Changes
+
+- @mastra/core@0.12.0-alpha.5
+
+## 0.12.4-alpha.1
+
+### Patch Changes
+
+- b92bc89: Added hybrid search support to @mastra/upstash vector store. Supports sparse vectors, fusion algorithm, and query mode.
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- Updated dependencies [27cc97a]
+- Updated dependencies [41daa63]
+- Updated dependencies [254a36b]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [ff9c125]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0-alpha.2
+
 ## 0.12.4-alpha.0
 
 ### Patch Changes

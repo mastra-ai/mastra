@@ -4,8 +4,11 @@ description: Example of using the Context Relevancy metric to evaluate how relev
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
 # Context Relevancy Evaluation
+
+<ScorerCallout />
 
 Use `ContextRelevancyMetric` to evaluate how well the retrieved context aligns with the original query. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 

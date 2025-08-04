@@ -4,6 +4,7 @@ import type { ScoreRowData } from '@mastra/core/scores';
 import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
+import { getTableName } from '../utils';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
   let input = undefined;
@@ -26,16 +27,29 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 export class ScoresPG extends ScoresStorage {
   public client: IDatabase<{}>;
   private operations: StoreOperationsPG;
+  private schema?: string;
 
-  constructor({ client, operations }: { client: IDatabase<{}>; operations: StoreOperationsPG }) {
+  constructor({
+    client,
+    operations,
+    schema,
+  }: {
+    client: IDatabase<{}>;
+    operations: StoreOperationsPG;
+    schema?: string;
+  }) {
     super();
     this.client = client;
     this.operations = operations;
+    this.schema = schema;
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const result = await this.client.oneOrNone<ScoreRowData>(`SELECT * FROM ${TABLE_SCORERS} WHERE id = $1`, [id]);
+      const result = await this.client.oneOrNone<ScoreRowData>(
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE id = $1`,
+        [id],
+      );
 
       return transformScoreRow(result!);
     } catch (error) {
@@ -59,7 +73,7 @@ export class ScoresPG extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${TABLE_SCORERS} WHERE "scorerId" = $1`,
+        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "scorerId" = $1`,
         [scorerId],
       );
       if (total?.count === '0' || !total?.count) {
@@ -75,7 +89,7 @@ export class ScoresPG extends ScoresStorage {
       }
 
       const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${TABLE_SCORERS} WHERE "scorerId" = $1 LIMIT $2 OFFSET $3`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "scorerId" = $1 LIMIT $2 OFFSET $3`,
         [scorerId, pagination.perPage, pagination.page * pagination.perPage],
       );
       return {
@@ -99,12 +113,16 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
     try {
+      // Generate ID like other storage implementations
+      const scoreId = crypto.randomUUID();
+
       const { input, ...rest } = score;
       await this.operations.insert({
         tableName: TABLE_SCORERS,
         record: {
+          id: scoreId,
           ...rest,
           input: JSON.stringify(input),
           createdAt: new Date().toISOString(),
@@ -112,7 +130,7 @@ export class ScoresPG extends ScoresStorage {
         },
       });
 
-      const scoreFromDb = await this.getScoreById({ id: score.id });
+      const scoreFromDb = await this.getScoreById({ id: scoreId });
       return { score: scoreFromDb! };
     } catch (error) {
       throw new MastraError(
@@ -135,11 +153,9 @@ export class ScoresPG extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${TABLE_SCORERS} WHERE "runId" = $1`,
+        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1`,
         [runId],
       );
-      console.log(`total: ${total?.count}`);
-      console.log(`typeof total: ${typeof total?.count}`);
       if (total?.count === '0' || !total?.count) {
         return {
           pagination: {
@@ -153,7 +169,7 @@ export class ScoresPG extends ScoresStorage {
       }
 
       const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${TABLE_SCORERS} WHERE "runId" = $1 LIMIT $2 OFFSET $3`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1 LIMIT $2 OFFSET $3`,
         [runId, pagination.perPage, pagination.page * pagination.perPage],
       );
       return {
@@ -188,7 +204,7 @@ export class ScoresPG extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${TABLE_SCORERS} WHERE "entityId" = $1 AND "entityType" = $2`,
+        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "entityId" = $1 AND "entityType" = $2`,
         [entityId, entityType],
       );
 
@@ -205,7 +221,7 @@ export class ScoresPG extends ScoresStorage {
       }
 
       const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${TABLE_SCORERS} WHERE "entityId" = $1 AND "entityType" = $2 LIMIT $3 OFFSET $4`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "entityId" = $1 AND "entityType" = $2 LIMIT $3 OFFSET $4`,
         [entityId, entityType, pagination.perPage, pagination.page * pagination.perPage],
       );
       return {

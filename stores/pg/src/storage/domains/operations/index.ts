@@ -43,7 +43,7 @@ export class StoreOperationsPG extends StoreOperations {
           const schemaExists = await this.client.oneOrNone(
             `
                 SELECT EXISTS (
-                  SELECT 1 FROM information_schema.schemata 
+                  SELECT 1 FROM information_schema.schemata
                   WHERE schema_name = $1
                 )
               `,
@@ -183,6 +183,8 @@ export class StoreOperationsPG extends StoreOperations {
 
       const finalColumns = [...columns, ...timeZColumns].join(',\n');
 
+      // Constraints are global to a database, ensure schemas do not conflict with each other
+      const constraintPrefix = this.schemaName ? `${this.schemaName}_` : '';
       const sql = `
             CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} (
               ${finalColumns}
@@ -192,10 +194,10 @@ export class StoreOperationsPG extends StoreOperations {
                 ? `
             DO $$ BEGIN
               IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = 'mastra_workflow_snapshot_workflow_name_run_id_key'
+                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
               ) THEN
                 ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })}
-                ADD CONSTRAINT mastra_workflow_snapshot_workflow_name_run_id_key
+                ADD CONSTRAINT ${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key
                 UNIQUE (workflow_name, run_id);
               END IF;
             END $$;
@@ -206,8 +208,6 @@ export class StoreOperationsPG extends StoreOperations {
 
       await this.client.none(sql);
 
-      console.log('Alter Table SQL', tableName);
-      console.log('timeZColumnNames', timeZColumnNames);
       await this.alterTable({
         tableName,
         schema,

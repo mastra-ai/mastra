@@ -210,7 +210,7 @@ async function updatePeerDependency(packageJsonPath, newVersion) {
 
   // Parse the current constraint to determine the pattern
   if (currentConstraint.includes('>=') && currentConstraint.includes('<')) {
-    // Pattern like ">=0.10.4-0 <0.12.0-0" - update the minimum version
+    // Pattern like ">=0.10.4-0 <0.13.0-0" - update the minimum version
     const match = currentConstraint.match(/>=([^\s]+)\s+<([^\s]+)/);
     if (match) {
       const maxVersionBase = match[2].split('-')[0]; // Get base version without prerelease

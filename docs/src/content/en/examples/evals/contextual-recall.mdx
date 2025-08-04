@@ -4,8 +4,11 @@ description: Example of using the Contextual Recall metric to evaluate how well 
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
 # Contextual Recall Evaluation
+
+<ScorerCallout />
 
 Use `ContextualRecallMetric` to evaluate how well the response incorporates relevant information from the provided context. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 

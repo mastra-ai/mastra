@@ -31,14 +31,6 @@ function createMockDetectionResult(
     'role-manipulation',
   ];
 
-  const categoryFlags = allTypes.reduce(
-    (flags, type) => {
-      flags[type] = attackTypes.includes(type);
-      return flags;
-    },
-    {} as Record<string, boolean>,
-  );
-
   const categoryScores = allTypes.reduce(
     (scores, type) => {
       scores[type] = attackTypes.includes(type) ? 0.8 : 0.1;
@@ -48,9 +40,7 @@ function createMockDetectionResult(
   );
 
   return {
-    flagged,
-    categories: categoryFlags,
-    category_scores: categoryScores,
+    categories: categoryScores,
     reason: flagged ? `Attack detected: ${attackTypes.join(', ')}` : undefined,
     rewritten_content: rewrittenContent,
   };
@@ -398,7 +388,7 @@ describe('PromptInjectionDetector', () => {
     it('should flag content when any score exceeds threshold', async () => {
       const mockResult = createMockDetectionResult(false, []);
       // Override with high injection score to exceed threshold
-      mockResult.category_scores.injection = 0.75; // Above threshold (0.6)
+      mockResult.categories!.injection = 0.75; // Above threshold (0.6)
       mockResult.reason = 'High injection score';
       const model = setupMockModel(mockResult);
       const detector = new PromptInjectionDetector({
@@ -421,7 +411,7 @@ describe('PromptInjectionDetector', () => {
     it('should not flag content when scores are below threshold', async () => {
       const mockResult = createMockDetectionResult(false, []);
       // Set injection score below threshold
-      mockResult.category_scores.injection = 0.8; // Below threshold (0.9)
+      mockResult.categories!.injection = 0.8; // Below threshold (0.9)
       const model = setupMockModel(mockResult);
       const detector = new PromptInjectionDetector({
         model,
@@ -442,9 +432,7 @@ describe('PromptInjectionDetector', () => {
   describe('custom detection types', () => {
     it('should work with custom detection types', async () => {
       const mockResult = {
-        flagged: true,
-        categories: { 'custom-attack': true, 'social-engineering': false },
-        category_scores: { 'custom-attack': 0.9, 'social-engineering': 0.1 },
+        categories: { 'custom-attack': 0.9, 'social-engineering': 0.1 },
         reason: 'Detected custom attack pattern',
       };
       const model = setupMockModel(mockResult);
@@ -562,7 +550,7 @@ describe('PromptInjectionDetector', () => {
       expect(mockAbort).not.toHaveBeenCalled();
     });
 
-    it('should abort on non-tripwire errors during processing', async () => {
+    it('should not abort on non-tripwire errors during processing', async () => {
       const model = setupMockModel(createMockDetectionResult(false));
       const detector = new PromptInjectionDetector({
         model,
@@ -579,7 +567,7 @@ describe('PromptInjectionDetector', () => {
         await detector.process({ messages: [invalidMessage], abort: mockAbort as any });
       }).rejects.toThrow();
 
-      expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('Prompt injection detection failed'));
+      expect(mockAbort).not.toHaveBeenCalled();
     });
   });
 
