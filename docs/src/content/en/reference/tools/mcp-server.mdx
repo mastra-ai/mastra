@@ -848,8 +848,14 @@ When tools are executed within an MCP server context, they receive an additional
 ```typescript
 execute: async ({ context }, options) => {
   // context contains the tool's input parameters
-  // options contains server capabilities like elicitation
+  // options contains server capabilities like elicitation and authentication info
   
+  // Access authentication information (when available)
+  if (options.extra?.authInfo) {
+    console.log('Authenticated request from:', options.extra.authInfo.clientId);
+  }
+  
+  // Use elicitation capabilities
   const result = await options.elicitation.sendRequest({
     message: "Please provide information",
     requestedSchema: { /* schema */ }
@@ -891,9 +897,12 @@ const server = new MCPServer({
       }),
       execute: async ({ context }, options) => {
         const { reason } = context;
+        
+        // Log session info if available
+        console.log('Request from session:', options.extra?.sessionId);
 
         try {
-          // Request user input via elicitation through the options parameter
+          // Request user input via elicitation
           const result = await options.elicitation.sendRequest({
             message: reason 
               ? `Please provide your contact information. ${reason}`
@@ -1002,10 +1011,18 @@ The elicitation functionality is available through the `options` parameter in to
 
 ```typescript
 // Within a tool's execute function
-options.elicitation.sendRequest({
-  message: string,           // Message to display to user
-  requestedSchema: object    // JSON schema defining expected response structure
-}): Promise<ElicitResult>
+execute: async ({ context }, options) => {
+  // Use elicitation for user input
+  const result = await options.elicitation.sendRequest({
+    message: string,           // Message to display to user
+    requestedSchema: object    // JSON schema defining expected response structure
+  }): Promise<ElicitResult>
+  
+  // Access authentication info if needed
+  if (options.extra?.authInfo) {
+    // Use options.extra.authInfo.token, etc.
+  }
+}
 ```
 
 Note that elicitation is **session-aware** when using HTTP-based transports (SSE or HTTP). This means that when multiple clients are connected to the same server, elicitation requests are routed to the correct client session that initiated the tool execution.
@@ -1018,6 +1035,43 @@ type ElicitResult = {
   content?: any; // Only present when action is 'accept'
 }
 ```
+
+## Authentication Context
+
+Tools can access request metadata via `options.extra` when using HTTP-based transports:
+
+```typescript
+execute: async ({ context }, options) => {
+  if (!options.extra?.authInfo?.token) {
+    return "Authentication required";
+  }
+  
+  // Use the auth token
+  const response = await fetch('/api/data', {
+    headers: { Authorization: `Bearer ${options.extra.authInfo.token}` },
+    signal: options.extra.signal,
+  });
+  
+  return response.json();
+}
+```
+
+The `extra` object contains:
+- `authInfo`: Authentication info (when provided by server middleware)
+- `sessionId`: Session identifier  
+- `signal`: AbortSignal for cancellation
+- `sendNotification`/`sendRequest`: MCP protocol functions
+
+> Note: To enable authentication, your HTTP server needs middleware that populates `req.auth` before calling `server.startHTTP()`. For example:
+> ```typescript
+> httpServer.createServer((req, res) => {
+>   // Add auth middleware
+>   req.auth = validateAuthToken(req.headers.authorization);
+>   
+>   // Then pass to MCP server
+>   await server.startHTTP({ url, httpPath, req, res });
+> });
+> ```
 
 ## Related Information
 

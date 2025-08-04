@@ -1,5 +1,38 @@
 # @mastra/pg
 
+## 0.13.2-alpha.0
+
+### Patch Changes
+
+- a780fcd: ensure score id is generated for postgres store
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+  - @mastra/core@0.12.2-alpha.0
+
+## 0.13.1
+
+### Patch Changes
+
+- bf6c955: fix: Fix schema support to PostgreSQL scores and workflows storage
+- Updated dependencies [33dcb07]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1
+
+## 0.13.1-alpha.0
+
+### Patch Changes
+
+- bf6c955: fix: Fix schema support to PostgreSQL scores and workflows storage
+- Updated dependencies [33dcb07]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1-alpha.0
+
 ## 0.13.0
 
 ### Minor Changes

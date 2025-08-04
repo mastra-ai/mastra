@@ -1,5 +1,30 @@
 # @mastra/inngest
 
+## 0.11.8
+
+### Patch Changes
+
+- 7257912: dependencies updates:
+  - Updated dependency [`inngest@^3.40.1` ↗︎](https://www.npmjs.com/package/inngest/v/3.40.1) (from `^3.40.0`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1
+
+## 0.11.8-alpha.0
+
+### Patch Changes
+
+- 7257912: dependencies updates:
+  - Updated dependency [`inngest@^3.40.1` ↗︎](https://www.npmjs.com/package/inngest/v/3.40.1) (from `^3.40.0`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1-alpha.0
+
 ## 0.11.7
 
 ### Patch Changes

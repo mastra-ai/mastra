@@ -1,5 +1,18 @@
 # @internal/lint
 
+## 0.0.22
+
+## 0.0.21
+
+### Patch Changes
+
+- Updated dependencies [33dcb07]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1
+
 ## 0.0.20
 
 ### Patch Changes

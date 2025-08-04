@@ -1,5 +1,48 @@
 # @mastra/playground-ui
 
+## 5.1.18-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+  - @mastra/core@0.12.2-alpha.0
+  - @mastra/client-js@0.10.19-alpha.0
+
+## 5.1.17
+
+### Patch Changes
+
+- d8e8349: dependencies updates:
+  - Updated dependency [`@xyflow/react@^12.8.2` ↗︎](https://www.npmjs.com/package/@xyflow/react/v/12.8.2) (from `^12.8.1`, in `dependencies`)
+- c8924b6: dependencies updates:
+  - Updated dependency [`motion@^12.23.9` ↗︎](https://www.npmjs.com/package/motion/v/12.23.9) (from `^12.23.0`, in `dependencies`)
+- Updated dependencies [6690a16]
+- Updated dependencies [33dcb07]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/client-js@0.10.18
+  - @mastra/core@0.12.1
+
+## 5.1.17-alpha.0
+
+### Patch Changes
+
+- d8e8349: dependencies updates:
+  - Updated dependency [`@xyflow/react@^12.8.2` ↗︎](https://www.npmjs.com/package/@xyflow/react/v/12.8.2) (from `^12.8.1`, in `dependencies`)
+- c8924b6: dependencies updates:
+  - Updated dependency [`motion@^12.23.9` ↗︎](https://www.npmjs.com/package/motion/v/12.23.9) (from `^12.23.0`, in `dependencies`)
+- Updated dependencies [6690a16]
+- Updated dependencies [33dcb07]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/client-js@0.10.18-alpha.0
+  - @mastra/core@0.12.1-alpha.0
+
 ## 5.1.16
 
 ### Patch Changes

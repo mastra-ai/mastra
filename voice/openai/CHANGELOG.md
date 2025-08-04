@@ -1,5 +1,30 @@
 # @mastra/voice-openai
 
+## 0.10.7
+
+### Patch Changes
+
+- df0bf51: dependencies updates:
+  - Updated dependency [`openai@^5.10.2` ↗︎](https://www.npmjs.com/package/openai/v/5.10.2) (from `^5.10.1`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1
+
+## 0.10.7-alpha.0
+
+### Patch Changes
+
+- df0bf51: dependencies updates:
+  - Updated dependency [`openai@^5.10.2` ↗︎](https://www.npmjs.com/package/openai/v/5.10.2) (from `^5.10.1`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1-alpha.0
+
 ## 0.10.6
 
 ### Patch Changes

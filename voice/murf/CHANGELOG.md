@@ -1,5 +1,30 @@
 # @mastra/voice-murf
 
+## 0.10.7
+
+### Patch Changes
+
+- dcbfcb5: dependencies updates:
+  - Updated dependency [`ky@^1.8.2` ↗︎](https://www.npmjs.com/package/ky/v/1.8.2) (from `^1.8.1`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1
+
+## 0.10.7-alpha.0
+
+### Patch Changes
+
+- dcbfcb5: dependencies updates:
+  - Updated dependency [`ky@^1.8.2` ↗︎](https://www.npmjs.com/package/ky/v/1.8.2) (from `^1.8.1`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1-alpha.0
+
 ## 0.10.6
 
 ### Patch Changes

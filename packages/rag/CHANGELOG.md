@@ -1,5 +1,30 @@
 # @mastra/rag
 
+## 1.0.6
+
+### Patch Changes
+
+- 613eec3: dependencies updates:
+  - Updated dependency [`node-html-better-parser@^1.5.2` ↗︎](https://www.npmjs.com/package/node-html-better-parser/v/1.5.2) (from `^1.5.1`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1
+
+## 1.0.6-alpha.0
+
+### Patch Changes
+
+- 613eec3: dependencies updates:
+  - Updated dependency [`node-html-better-parser@^1.5.2` ↗︎](https://www.npmjs.com/package/node-html-better-parser/v/1.5.2) (from `^1.5.1`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1-alpha.0
+
 ## 1.0.5
 
 ### Patch Changes
