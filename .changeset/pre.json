@@ -72,10 +72,12 @@
     "@mastra/inngest": "0.11.8"
   },
   "changesets": [
+    "@mastra_clickhouse-6433-dependencies",
     "@mastra_deployer-6436-dependencies",
     "@mastra_deployer-cloudflare-6436-dependencies",
     "@mastra_memory-6429-dependencies",
     "angry-regions-mix",
+    "beige-trees-sleep",
     "bright-foxes-smile",
     "clever-parents-listen",
     "cuddly-snails-wonder",

@@ -1,5 +1,11 @@
 # @mastra/mongodb
 
+## 0.13.0-alpha.1
+
+### Patch Changes
+
+- 494ceac: fix: trace mongo safeparse
+
 ## 0.13.0-alpha.0
 
 ### Minor Changes
