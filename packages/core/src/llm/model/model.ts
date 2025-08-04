@@ -12,15 +12,16 @@ import type { CoreMessage, LanguageModel, Schema, StreamObjectOnFinishCallback, 
 import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
-import { z } from 'zod';
+import { json, z } from 'zod';
 
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { MastraPrimitives } from '../../action';
 import { AISpanType } from '../../ai-tracing';
 import type { AISpan, AnyAISpan } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
-import { delay } from '../../utils';
+import { delay, isZodType } from '../../utils';
 
 import type {
   GenerateObjectWithMessagesArgs,
@@ -264,11 +265,25 @@ export class MastraLLMV1 extends MastraBase {
       this.logger.debug('[LLM] - Using experimental output', {
         runId,
       });
-      if (typeof (experimental_output as any).parse === 'function') {
+
+      if (isZodType(experimental_output)) {
         schema = experimental_output as z.ZodType<inferOutput<Z>>;
         if (schema instanceof z.ZodArray) {
           schema = schema._def.type as z.ZodType<inferOutput<Z>>;
         }
+
+        let jsonSchemaToUse;
+        if ('toJSONSchema' in z) {
+          // @ts-ignore
+          jsonSchemaToUse = z.toJSONSchema(schema) as JSONSchema7;
+        } else {
+          jsonSchemaToUse = zodToJsonSchema(schema, {
+            $refStrategy: 'none',
+            target: 'jsonSchema7',
+          }) as JSONSchema7;
+        }
+
+        schema = jsonSchema(jsonSchemaToUse) as Schema<inferOutput<Z>>;
       } else {
         schema = jsonSchema(experimental_output as JSONSchema7) as Schema<inferOutput<Z>>;
       }
@@ -337,8 +352,10 @@ export class MastraLLMV1 extends MastraBase {
           })
         : undefined,
     };
+    debugger;
 
     try {
+      console.log(argsForExecute);
       const result: GenerateTextResult<Tools, Z> = await generateText(argsForExecute);
 
       if (schema && result.finishReason === 'stop') {
@@ -389,6 +406,7 @@ export class MastraLLMV1 extends MastraBase {
       }
 
       const processedSchema = this._applySchemaCompat(structuredOutput!);
+      debugger;
 
       const argsForExecute: OriginalGenerateObjectOptions<Z> = {
         ...rest,
