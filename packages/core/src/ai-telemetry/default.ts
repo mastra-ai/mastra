@@ -17,7 +17,7 @@ import type {
   AISpanProcessor,
   AnyAISpan,
 } from './types';
-import { SamplingStrategyType } from './types';
+import { SamplingStrategyType, AITelemetryEventType } from './types';
 
 // ============================================================================
 // Default AISpan Implementation
@@ -260,7 +260,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
     };
 
     switch (event.type) {
-      case 'span_started':
+      case AITelemetryEventType.SPAN_STARTED:
         this.logger.info(`🚀 SPAN_STARTED`);
         this.logger.info(`   Type: ${span.type}`);
         this.logger.info(`   Name: ${span.name}`);
@@ -270,7 +270,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
         this.logger.info('─'.repeat(80));
         break;
 
-      case 'span_ended':
+      case AITelemetryEventType.SPAN_ENDED:
         const duration = formatDuration(span.startTime, span.endTime);
         this.logger.info(`✅ SPAN_ENDED`);
         this.logger.info(`   Type: ${span.type}`);
@@ -282,7 +282,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
         this.logger.info('─'.repeat(80));
         break;
 
-      case 'span_updated':
+      case AITelemetryEventType.SPAN_UPDATED:
         this.logger.info(`📝 SPAN_UPDATED`);
         this.logger.info(`   Type: ${span.type}`);
         this.logger.info(`   Name: ${span.name}`);
@@ -293,8 +293,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
         break;
 
       default:
-        this.logger.warn(`❓ UNKNOWN_EVENT: ${JSON.stringify(event)}`);
-        this.logger.info('─'.repeat(80));
+        throw new Error(`Telemetry event type not implemented: ${(event as any).type}`);
     }
   }
 
@@ -309,7 +308,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
 
 export const aiTelemetryDefaultConfig: AITelemetryConfig = {
   serviceName: 'mastra-ai-service',
-  sampling: { type: SamplingStrategyType.ALWAYS_ON },
+  sampling: { type: SamplingStrategyType.ALWAYS },
   exporters: [new DefaultConsoleExporter()], // Uses its own fallback logger
   processors: [new SensitiveDataFilter()],
 };

@@ -18,7 +18,7 @@ import type {
   AISpanTypeMap,
   AnyAISpan,
 } from './types';
-import { AISpanType } from './types';
+import { AISpanType, SamplingStrategyType, AITelemetryEventType } from './types';
 
 // ============================================================================
 // Abstract Base Class
@@ -37,9 +37,7 @@ export abstract class MastraAITelemetry extends MastraBase {
 
     this.config = config;
 
-    this.logger.debug(
-      `AI Telemetry initialized [service=${serviceName}] [sampling=${this.config.sampling?.type || 'always_on'}]`,
-    );
+    this.logger.debug(`AI Telemetry initialized [service=${serviceName}] [sampling=${this.config.sampling.type}]`);
   }
 
   // ============================================================================
@@ -199,16 +197,13 @@ export abstract class MastraAITelemetry extends MastraBase {
 
     // Check built-in sampling strategy
     const { sampling } = this.config;
-    if (!sampling) {
-      return true;
-    }
 
     switch (sampling.type) {
-      case 'always_on':
+      case SamplingStrategyType.ALWAYS:
         return true;
-      case 'always_off':
+      case SamplingStrategyType.NEVER:
         return false;
-      case 'ratio':
+      case SamplingStrategyType.RATIO:
         if (sampling.probability === undefined || sampling.probability < 0 || sampling.probability > 1) {
           this.logger.warn(
             `Invalid sampling probability: ${sampling.probability}. Expected value between 0 and 1. Defaulting to no sampling.`,
@@ -216,10 +211,10 @@ export abstract class MastraAITelemetry extends MastraBase {
           return false;
         }
         return Math.random() < sampling.probability;
-      case 'custom':
+      case SamplingStrategyType.CUSTOM:
         return sampling.sampler(traceContext);
       default:
-        return true;
+        throw new Error(`Sampling strategy type not implemented: ${(sampling as any).type}`);
     }
   }
 
@@ -256,7 +251,7 @@ export abstract class MastraAITelemetry extends MastraBase {
     // Process the span before emitting
     const processedSpan = this.processSpan(span);
     if (processedSpan) {
-      this.exportEvent({ type: 'span_started', span: processedSpan }).catch(error => {
+      this.exportEvent({ type: AITelemetryEventType.SPAN_STARTED, span: processedSpan }).catch(error => {
         this.logger.error('Failed to export span_started event', error);
       });
     }
@@ -269,7 +264,7 @@ export abstract class MastraAITelemetry extends MastraBase {
     // Process the span through all processors
     const processedSpan = this.processSpan(span);
     if (processedSpan) {
-      this.exportEvent({ type: 'span_ended', span: processedSpan }).catch(error => {
+      this.exportEvent({ type: AITelemetryEventType.SPAN_ENDED, span: processedSpan }).catch(error => {
         this.logger.error('Failed to export span_ended event', error);
       });
     }
@@ -282,7 +277,7 @@ export abstract class MastraAITelemetry extends MastraBase {
     // Process the span before emitting
     const processedSpan = this.processSpan(span);
     if (processedSpan) {
-      this.exportEvent({ type: 'span_updated', span: processedSpan }).catch(error => {
+      this.exportEvent({ type: AITelemetryEventType.SPAN_UPDATED, span: processedSpan }).catch(error => {
         this.logger.error('Failed to export span_updated event', error);
       });
     }

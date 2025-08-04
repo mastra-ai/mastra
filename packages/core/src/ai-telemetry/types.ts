@@ -235,18 +235,27 @@ export type AnyAISpan = AISpan<keyof AISpanTypeMap>;
  * Sampling strategy types
  */
 export enum SamplingStrategyType {
-  ALWAYS_ON = 'always_on',
-  ALWAYS_OFF = 'always_off',
+  ALWAYS = 'always',
+  NEVER = 'never',
   RATIO = 'ratio',
   CUSTOM = 'custom',
+}
+
+/**
+ * AI Telemetry event types
+ */
+export enum AITelemetryEventType {
+  SPAN_STARTED = 'span_started',
+  SPAN_UPDATED = 'span_updated',
+  SPAN_ENDED = 'span_ended',
 }
 
 /**
  * Sampling strategy configuration
  */
 export type SamplingStrategy =
-  | { type: SamplingStrategyType.ALWAYS_ON }
-  | { type: SamplingStrategyType.ALWAYS_OFF }
+  | { type: SamplingStrategyType.ALWAYS }
+  | { type: SamplingStrategyType.NEVER }
   | { type: SamplingStrategyType.RATIO; probability: number }
   | { type: SamplingStrategyType.CUSTOM; sampler: (traceContext: AITraceContext) => boolean };
 
@@ -257,7 +266,7 @@ export interface AITelemetryConfig {
   /** Service name for telemetry */
   serviceName: string;
   /** Sampling strategy - controls whether telemetry is collected */
-  sampling?: SamplingStrategy;
+  sampling: SamplingStrategy;
   /** Custom exporters */
   exporters?: AITelemetryExporter[];
   /** Custom processors */
@@ -274,9 +283,9 @@ export interface AITelemetryConfig {
  * Telemetry events that can be exported
  */
 export type AITelemetryEvent =
-  | { type: 'span_started'; span: AnyAISpan }
-  | { type: 'span_updated'; span: AnyAISpan }
-  | { type: 'span_ended'; span: AnyAISpan };
+  | { type: AITelemetryEventType.SPAN_STARTED; span: AnyAISpan }
+  | { type: AITelemetryEventType.SPAN_UPDATED; span: AnyAISpan }
+  | { type: AITelemetryEventType.SPAN_ENDED; span: AnyAISpan };
 
 /**
  * Interface for telemetry exporters

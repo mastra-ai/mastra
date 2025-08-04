@@ -112,6 +112,5 @@ export function hasAITelemetry(name?: string): boolean {
   const sampling = config.sampling;
 
   // Check if sampling allows telemetry
-  if (!sampling) return true; // Default to enabled when no sampling config
-  return sampling.type !== 'always_off';
+  return sampling.type !== 'never';
 }

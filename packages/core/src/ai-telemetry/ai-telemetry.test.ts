@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraError } from '../error';
 import { DefaultAITelemetry, DefaultConsoleExporter, SensitiveDataFilter, aiTelemetryDefaultConfig } from './default';
-import { clearAITelemetryRegistry, getAITelemetry, registerAITelemetry } from './registry';
+import {
+  clearAITelemetryRegistry,
+  getAITelemetry,
+  registerAITelemetry,
+  unregisterAITelemetry,
+  hasAITelemetry,
+} from './registry';
 import type {
   AITelemetryEvent,
   AITelemetryExporter,
@@ -12,7 +18,7 @@ import type {
   LLMGenerationMetadata,
   ToolCallMetadata,
 } from './types';
-import { AISpanType, SamplingStrategyType } from './types';
+import { AISpanType, SamplingStrategyType, AITelemetryEventType } from './types';
 
 // No crypto mocking needed since we use custom generateId function
 
@@ -73,6 +79,7 @@ describe('AI Telemetry', () => {
     it('should create and start spans with type safety', () => {
       const telemetry = new DefaultAITelemetry({
         serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
@@ -96,6 +103,7 @@ describe('AI Telemetry', () => {
     it('should create child spans with different types', () => {
       const telemetry = new DefaultAITelemetry({
         serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
@@ -116,6 +124,7 @@ describe('AI Telemetry', () => {
     it('should maintain consistent traceId across span hierarchy', () => {
       const telemetry = new DefaultAITelemetry({
         serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
@@ -147,6 +156,7 @@ describe('AI Telemetry', () => {
     it('should emit events throughout span lifecycle', () => {
       const telemetry = new DefaultAITelemetry({
         serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
@@ -154,7 +164,7 @@ describe('AI Telemetry', () => {
 
       // Should emit span_started
       expect(testExporter.events).toHaveLength(1);
-      expect(testExporter.events[0].type).toBe('span_started');
+      expect(testExporter.events[0].type).toBe(AITelemetryEventType.SPAN_STARTED);
       expect(testExporter.events[0].span.id).toBe(span.id);
 
       // Update span - cast to LLM metadata type for usage field
@@ -162,7 +172,7 @@ describe('AI Telemetry', () => {
 
       // Should emit span_updated
       expect(testExporter.events).toHaveLength(2);
-      expect(testExporter.events[1].type).toBe('span_updated');
+      expect(testExporter.events[1].type).toBe(AITelemetryEventType.SPAN_UPDATED);
       expect((testExporter.events[1].span.metadata as LLMGenerationMetadata).usage?.totalTokens).toBe(100);
 
       // End span
@@ -170,7 +180,7 @@ describe('AI Telemetry', () => {
 
       // Should emit span_ended
       expect(testExporter.events).toHaveLength(3);
-      expect(testExporter.events[2].type).toBe('span_ended');
+      expect(testExporter.events[2].type).toBe(AITelemetryEventType.SPAN_ENDED);
       expect(testExporter.events[2].span.endTime).toBeInstanceOf(Date);
       expect((testExporter.events[2].span.metadata as LLMGenerationMetadata).usage?.totalTokens).toBe(150);
     });
@@ -178,6 +188,7 @@ describe('AI Telemetry', () => {
     it('should handle errors with default endSpan=true', () => {
       const telemetry = new DefaultAITelemetry({
         serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
@@ -201,12 +212,13 @@ describe('AI Telemetry', () => {
 
       // Should emit span_ended
       expect(testExporter.events).toHaveLength(2); // start + end
-      expect(testExporter.events[1].type).toBe('span_ended');
+      expect(testExporter.events[1].type).toBe(AITelemetryEventType.SPAN_ENDED);
     });
 
     it('should handle errors with explicit endSpan=false', () => {
       const telemetry = new DefaultAITelemetry({
         serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
@@ -222,7 +234,7 @@ describe('AI Telemetry', () => {
 
       // Should emit span_updated (not ended)
       expect(testExporter.events).toHaveLength(2); // start + update
-      expect(testExporter.events[1].type).toBe('span_updated');
+      expect(testExporter.events[1].type).toBe(AITelemetryEventType.SPAN_UPDATED);
     });
   });
 
@@ -230,7 +242,7 @@ describe('AI Telemetry', () => {
     it('should always sample with always_on strategy', () => {
       const telemetry = new DefaultAITelemetry({
         serviceName: 'test-telemetry',
-        sampling: { type: SamplingStrategyType.ALWAYS_ON },
+        sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
@@ -243,7 +255,7 @@ describe('AI Telemetry', () => {
     it('should never sample with always_off strategy', () => {
       const telemetry = new DefaultAITelemetry({
         serviceName: 'test-telemetry',
-        sampling: { type: SamplingStrategyType.ALWAYS_OFF },
+        sampling: { type: SamplingStrategyType.NEVER },
         exporters: [testExporter],
       });
 
@@ -282,6 +294,7 @@ describe('AI Telemetry', () => {
 
       const telemetry = new DefaultAITelemetry({
         serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.ALWAYS },
         samplers: [customSampler],
         exporters: [testExporter],
       });
@@ -323,6 +336,7 @@ describe('AI Telemetry', () => {
 
       const telemetry = new DefaultAITelemetry({
         serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [failingExporter, testExporter], // One fails, one succeeds
       });
 
@@ -356,6 +370,7 @@ describe('AI Telemetry', () => {
 
       const telemetry = new DefaultAITelemetry({
         serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [mockExporter],
       });
 
@@ -369,20 +384,20 @@ describe('AI Telemetry', () => {
     it('should merge with default configuration', () => {
       const telemetry = new DefaultAITelemetry({
         serviceName: 'test-telemetry',
-        sampling: { type: SamplingStrategyType.ALWAYS_OFF },
+        sampling: { type: SamplingStrategyType.NEVER },
         // Other settings should use defaults
       });
 
       const config = telemetry.getConfig();
 
-      expect(config.sampling?.type).toBe(SamplingStrategyType.ALWAYS_OFF);
+      expect(config.sampling?.type).toBe(SamplingStrategyType.NEVER);
       expect(config.serviceName).toBe('test-telemetry');
     });
 
     it('should be disabled when sampling is always_off', () => {
       const telemetry = new DefaultAITelemetry({
         serviceName: 'test-telemetry',
-        sampling: { type: SamplingStrategyType.ALWAYS_OFF },
+        sampling: { type: SamplingStrategyType.NEVER },
         exporters: [testExporter],
       });
 
@@ -395,7 +410,10 @@ describe('AI Telemetry', () => {
 
   describe('Registry', () => {
     it('should register and retrieve telemetry instances', () => {
-      const telemetry = new DefaultAITelemetry({ serviceName: 'registry-test' });
+      const telemetry = new DefaultAITelemetry({
+        serviceName: 'registry-test',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
 
       registerAITelemetry('my-telemetry', telemetry, true);
 
@@ -404,12 +422,87 @@ describe('AI Telemetry', () => {
     });
 
     it('should clear registry', () => {
-      const telemetry = new DefaultAITelemetry({ serviceName: 'registry-test' });
+      const telemetry = new DefaultAITelemetry({
+        serviceName: 'registry-test',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
       registerAITelemetry('test', telemetry);
 
       clearAITelemetryRegistry();
 
       expect(getAITelemetry('test')).toBeUndefined();
+    });
+
+    it('should handle multiple instances and default selection', () => {
+      const telemetry1 = new DefaultAITelemetry({
+        serviceName: 'test-1',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
+      const telemetry2 = new DefaultAITelemetry({
+        serviceName: 'test-2',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
+
+      registerAITelemetry('first', telemetry1, true);
+      registerAITelemetry('second', telemetry2);
+
+      expect(getAITelemetry('first')).toBe(telemetry1);
+      expect(getAITelemetry('second')).toBe(telemetry2);
+      expect(getAITelemetry()).toBe(telemetry1); // First one marked as default
+    });
+
+    it('should unregister instances correctly', () => {
+      const telemetry1 = new DefaultAITelemetry({
+        serviceName: 'test-1',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
+      const telemetry2 = new DefaultAITelemetry({
+        serviceName: 'test-2',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
+
+      registerAITelemetry('first', telemetry1, true);
+      registerAITelemetry('second', telemetry2);
+
+      expect(unregisterAITelemetry('first')).toBe(true);
+      expect(getAITelemetry('first')).toBeUndefined();
+      expect(getAITelemetry()).toBe(telemetry2); // Should switch default to remaining instance
+    });
+
+    it('should return false when unregistering non-existent instance', () => {
+      expect(unregisterAITelemetry('non-existent')).toBe(false);
+    });
+
+    it('should handle hasAITelemetry checks correctly', () => {
+      const enabledTelemetry = new DefaultAITelemetry({
+        serviceName: 'enabled-test',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+      });
+      const disabledTelemetry = new DefaultAITelemetry({
+        serviceName: 'disabled-test',
+        sampling: { type: SamplingStrategyType.NEVER },
+      });
+
+      registerAITelemetry('enabled', enabledTelemetry);
+      registerAITelemetry('disabled', disabledTelemetry);
+
+      expect(hasAITelemetry('enabled')).toBe(true);
+      expect(hasAITelemetry('disabled')).toBe(false);
+      expect(hasAITelemetry('non-existent')).toBe(false);
+    });
+
+    it('should access telemetry config through registry', () => {
+      const telemetry = new DefaultAITelemetry({
+        serviceName: 'config-test',
+        sampling: { type: SamplingStrategyType.RATIO, probability: 0.5 },
+      });
+
+      registerAITelemetry('config-test', telemetry);
+      const retrieved = getAITelemetry('config-test');
+
+      expect(retrieved).toBeDefined();
+      expect(retrieved!.getConfig().serviceName).toBe('config-test');
+      expect(retrieved!.getConfig().sampling?.type).toBe(SamplingStrategyType.RATIO);
     });
   });
 
@@ -417,6 +510,7 @@ describe('AI Telemetry', () => {
     it('should enforce correct metadata types for different span types', () => {
       const telemetry = new DefaultAITelemetry({
         serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
@@ -474,7 +568,7 @@ describe('AI Telemetry', () => {
       };
 
       await exporter.exportEvent({
-        type: 'span_started',
+        type: AITelemetryEventType.SPAN_STARTED,
         span: mockSpan as any,
       });
 
@@ -491,7 +585,7 @@ describe('AI Telemetry', () => {
       expect(metadataCall![0]).toContain('visible-data');
     });
 
-    it('should handle unknown events', async () => {
+    it('should throw error for unknown events', async () => {
       const logger = {
         info: vi.fn(),
         warn: vi.fn(),
@@ -501,12 +595,12 @@ describe('AI Telemetry', () => {
 
       const exporter = new DefaultConsoleExporter(logger as any);
 
-      await exporter.exportEvent({
-        type: 'unknown_event' as any,
-        span: {} as any,
-      });
-
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('❓ UNKNOWN_EVENT:'));
+      await expect(
+        exporter.exportEvent({
+          type: 'unknown_event' as any,
+          span: {} as any,
+        }),
+      ).rejects.toThrow('Telemetry event type not implemented: unknown_event');
     });
   });
 
