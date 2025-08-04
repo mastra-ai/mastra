@@ -65,7 +65,6 @@ export * from './input-processor';
 export { TripWire };
 export { MessageList };
 export * from './types';
-type IDGenerator = () => string;
 
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
   if (value instanceof Promise) {
@@ -1621,7 +1620,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const processedList = new MessageList({
           threadId: threadObject.id,
           resourceId,
-          generateMessageId: this.#mastra?.generateId.bind(this.#mastra),
+          generateMessageId: this.#mastra?.generateId?.bind(this.#mastra),
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
@@ -1693,6 +1692,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const messageListResponses = new MessageList({
           threadId,
           resourceId,
+          generateMessageId: this.#mastra?.generateId?.bind(this.#mastra),
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
@@ -1728,7 +1728,12 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               ];
             }
             if (responseMessages) {
-              messageList.add(responseMessages, 'response');
+              // Remove IDs from response messages to ensure the custom ID generator is used
+              const messagesWithoutIds = responseMessages.map((m: any) => {
+                const { id, ...messageWithoutId } = m;
+                return messageWithoutId;
+              });
+              messageList.add(messagesWithoutIds, 'response');
             }
 
             if (!threadExists) {
@@ -1987,10 +1992,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       ...args
     } = options;
 
-    const generateMessageId =
-      `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
-        ? (args.experimental_generateMessageId as IDGenerator)
-        : undefined;
+    // Currently not being used, but should be kept around for now in case it's needed later
+    // const generateMessageId =
+    //   `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
+    //     ? (args.experimental_generateMessageId as IDGenerator)
+    //     : undefined;
 
     const threadFromArgs = resolveThreadIdFromArgs({ threadId: args.threadId, memory: args.memory });
     const resourceId = args.memory?.resource || resourceIdFromArgs;
