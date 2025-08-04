@@ -1,12 +1,6 @@
 ---
-'@mastra/playground-ui': minor
-'@mastra/clickhouse': minor
-'@mastra/dynamodb': minor
-'@mastra/evals': minor
-'@mastra/mongodb': minor
-'@mastra/upstash': minor
-'@mastra/core': minor
-'@mastra/libsql': minor
+'@mastra/playground-ui': patch
+'mastra': patch
 ---
 
-Update scorer api
+Update to support new scorer api
