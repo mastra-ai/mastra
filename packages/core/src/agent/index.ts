@@ -1405,7 +1405,6 @@ export class Agent<
     runId?: string;
     messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
     runtimeContext: RuntimeContext;
-    generateMessageId: undefined | IDGenerator;
     saveQueueManager: SaveQueueManager;
     writableStream?: WritableStream<ChunkType>;
   }) {
@@ -1451,7 +1450,7 @@ export class Agent<
         const messageList = new MessageList({
           threadId,
           resourceId,
-          generateMessageId: this.#mastra?.generateId.bind(this.#mastra),
+          generateMessageId: this.#mastra?.generateId?.bind(this.#mastra),
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
@@ -2045,7 +2044,6 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       toolsets,
       clientTools,
       runtimeContext,
-      generateMessageId,
       saveQueueManager,
       writableStream,
     });
