@@ -3,7 +3,7 @@ const meta = {
   "system-prompt": "Agent System Prompt",
   "using-a-tool": "Agents with Tools",
   "hierarchical-multi-agent": "Hierarchical Multi-Agent System",
-  "bird-checker": "Bird Checker",
+  "image-analysis": "Image Analysis Agent",
   "adding-voice-capabilities": "Give your Agent a voice",
   "dynamic-agents": "Dynamic Agents",
   "deploying-mcp-server": "Deploying an MCPServer",

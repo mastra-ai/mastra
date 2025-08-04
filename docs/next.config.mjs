@@ -740,6 +740,11 @@ export default withGT(
         destination: "/examples/agents/hierarchical-multi-agent",
         permanent: true,
       },
+      {
+        source: "/examples/agents/bird-checker",
+        destination: "/examples/agents/image-analysis",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),

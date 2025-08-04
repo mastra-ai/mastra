@@ -39,7 +39,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 import { openai } from "@ai-sdk/openai";
 
 export const hybridVoiceAgent = new Agent({
-  name: "hybridVoiceAgent",
+  name: "hybrid-voice-agent",
   model: openai("gpt-4o"),
   instructions: "You can speak and listen using different providers.",
   voice: new CompositeVoice({
@@ -61,8 +61,8 @@ import { Agent } from "@mastra/core/agent";
 import { OpenAIVoice } from "@mastra/voice-openai";
 
 export const unifiedVoiceAgent = new Agent({
-  name: "Agent2",
-  instructions: `You are an agent with both STT and TTS capabilities.`,
+  name: "unified-voice-agent",
+  instructions: "You are an agent with both STT and TTS capabilities.",
   model: openai("gpt-4o"),
   voice: new OpenAIVoice()
 });

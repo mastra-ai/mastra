@@ -1,11 +1,11 @@
 ---
-title: "Example: Using an Agent to Classify Bird Images | Agents | Mastra Docs"
-description: Example of using a Mastra AI Agent to analyze images from Unsplash to identify birds, determine species, and describe locations.
+title: "Example: Image Analysis Agent | Agents | Mastra Docs"
+description: Example of using a Mastra AI Agent to analyze images from Unsplash to identify objects, determine species, and describe locations.
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# Using an Agent to Classify Bird Images
+# Image Analysis Agent
 
 AI agents can analyze and understand images by processing visual content alongside text instructions. This capability allows agents to identify objects, describe scenes, answer questions about images, and perform complex visual reasoning tasks.
 
@@ -23,18 +23,18 @@ UNSPLASH_ACCESS_KEY=<your-unsplash-access-key>
 
 ## Creating an agent
 
-Create a simple agent that identifies bird species from images.
+Create a simple agent that analyzes images to identify objects, describe scenes, and answer questions about visual content.
 
-```typescript filename="src/mastra/agents/example-bird-checker-agent.ts" showLineNumbers copy
+```typescript filename="src/mastra/agents/example-image-analysis-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
-export const birdCheckerAgent = new Agent({
-  name: "Bird checker",
-  description: "identifies birds and their species from images",
+export const imageAnalysisAgent = new Agent({
+  name: "image-analysis",
+  description: "analyzes images to identify objects and describe scenes",
   instructions: `
-    You can view an image and figure out if it is a bird or not.
-    You can also figure out the species of the bird and where the picture was taken.
+    You can view an image and identify objects, describe scenes, and answer questions about the content.
+    You can also determine species of animals and describe locations in the image.
    `,
   model: openai("gpt-4o")
 });
@@ -49,17 +49,17 @@ To use an agent, register it in your main Mastra instance.
 ```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 
-import { birdCheckerAgent } from "./agents/example-bird-checker-agent";
+import { imageAnalysisAgent } from "./agents/example-image-analysis-agent";
 
 export const mastra = new Mastra({
   // ...
-  agents: { birdCheckerAgent }
+  agents: { imageAnalysisAgent }
 });
 ```
 
 ## Creating a function
 
-This function retrieves a random image from Unsplash to pass to the agent for classification.
+This function retrieves a random image from Unsplash to pass to the agent for analysis.
 
 ```typescript filename="src/mastra/utils/get-random-image.ts" showLineNumbers copy
 export const getRandomImage = async (): Promise<string> => {
@@ -85,14 +85,14 @@ export const getRandomImage = async (): Promise<string> => {
 
 Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt. Provide a `content` array that includes the image `type`, `imageUrl`, `mimeType`, and clear instructions for how the agent should respond.
 
-```typescript filename="src/test-bird-checker.ts" showLineNumbers copy
+```typescript filename="src/test-image-analysis.ts" showLineNumbers copy
 import "dotenv/config";
 
 import { mastra } from "./mastra";
 import { getRandomImage } from "./mastra/utils/get-random-image";
 
 const imageUrl = await getRandomImage();
-const agent = mastra.getAgent("birdCheckerAgent");
+const agent = mastra.getAgent("imageAnalysisAgent");
 
 const response = await agent.generate([
   {
@@ -105,8 +105,7 @@ const response = await agent.generate([
       },
       {
         type: "text",
-        text: `View this image and let me know if it's a bird or not, and the scientific name of the bird without any explanation.
-        Also summarize the location for this picture in one or two short sentences understandable by a high school student"`
+        text: `Analyze this image and identify the main objects or subjects. If there are animals, provide their common name and scientific name. Also describe the location or setting in one or two short sentences.`
       }
     ]
   }
@@ -119,7 +118,6 @@ console.log(response.text);
   marginTop='mt-16'
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/bird-checker"
 />
-
 
 ## Related
 
