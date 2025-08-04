@@ -5,7 +5,6 @@
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger/constants';
 import type { RuntimeContext } from '../runtime-context';
-import { deepMerge } from '../utils';
 import { NoOpAISpan } from './no-op';
 import type {
   AITelemetryConfig,
@@ -22,16 +21,6 @@ import type {
 import { AISpanType } from './types';
 
 // ============================================================================
-// Default Configuration
-// ============================================================================
-
-export const aiTelemetryDefaultConfig: AITelemetryConfig = {
-  serviceName: 'mastra-service',
-  enabled: true,
-  sampling: { type: 'always_on' },
-};
-
-// ============================================================================
 // Abstract Base Class
 // ============================================================================
 
@@ -41,28 +30,32 @@ export const aiTelemetryDefaultConfig: AITelemetryConfig = {
  */
 export abstract class MastraAITelemetry extends MastraBase {
   protected config: AITelemetryConfig;
-  protected exporters: AITelemetryExporter[] = [];
-  protected processors: AISpanProcessor[] = [];
-  protected samplers: AITelemetrySampler[] = [];
 
-  constructor(config: { name: string } & AITelemetryConfig) {
-    super({ component: RegisteredLogger.AI_TELEMETRY, name: config.name });
+  constructor(config: AITelemetryConfig) {
+    const serviceName = config.serviceName || 'mastra-ai-telemetry';
+    super({ component: RegisteredLogger.AI_TELEMETRY, name: serviceName });
 
-    this.config = this.getMergedTelemetryConfig(config);
+    this.config = config;
 
-    if (config.exporters) {
-      this.exporters = [...config.exporters];
-    }
+    this.logger.debug(
+      `AI Telemetry initialized [service=${serviceName}] [sampling=${this.config.sampling?.type || 'always_on'}]`,
+    );
+  }
 
-    if (config.processors) {
-      this.processors = [...config.processors];
-    }
+  // ============================================================================
+  // Protected getters for clean config access
+  // ============================================================================
 
-    if (config.samplers) {
-      this.samplers = [...config.samplers];
-    }
+  protected get exporters(): AITelemetryExporter[] {
+    return this.config.exporters || [];
+  }
 
-    this.logger.debug(`AI Telemetry initialized [name=${this.name}] [enabled=${this.config.enabled}]`);
+  protected get processors(): AISpanProcessor[] {
+    return this.config.processors || [];
+  }
+
+  protected get samplers(): AITelemetrySampler[] {
+    return this.config.samplers || [];
   }
 
   // ============================================================================
@@ -80,10 +73,6 @@ export abstract class MastraAITelemetry extends MastraBase {
     runtimeContext?: RuntimeContext,
     attributes?: Record<string, any>,
   ): AISpan<TType> {
-    if (!this.isEnabled()) {
-      return new NoOpAISpan<TType>({ type, name, metadata, parent }, this);
-    }
-
     if (!this.shouldSample({ runtimeContext, attributes })) {
       return new NoOpAISpan<TType>({ type, name, metadata, parent }, this);
     }
@@ -128,13 +117,6 @@ export abstract class MastraAITelemetry extends MastraBase {
   // ============================================================================
   // Configuration Management - Following Mastra patterns
   // ============================================================================
-
-  /**
-   * Merge user configuration with defaults
-   */
-  protected getMergedTelemetryConfig(config?: AITelemetryConfig): AITelemetryConfig {
-    return deepMerge(aiTelemetryDefaultConfig, config || {});
-  }
 
   /**
    * Get current configuration
@@ -205,20 +187,9 @@ export abstract class MastraAITelemetry extends MastraBase {
   // ============================================================================
 
   /**
-   * Check if telemetry is enabled
-   */
-  isEnabled(): boolean {
-    return this.config.enabled ?? true;
-  }
-
-  /**
    * Check if a trace should be sampled
    */
   protected shouldSample(traceContext: AITraceContext): boolean {
-    if (!this.isEnabled()) {
-      return false;
-    }
-
     // Check custom samplers first
     for (const sampler of this.samplers) {
       if (!sampler.shouldSample(traceContext)) {

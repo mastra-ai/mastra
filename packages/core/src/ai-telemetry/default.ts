@@ -17,6 +17,7 @@ import type {
   AISpanProcessor,
   AnyAISpan,
 } from './types';
+import { SamplingStrategyType } from './types';
 
 // ============================================================================
 // Default AISpan Implementation
@@ -303,22 +304,23 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
 }
 
 // ============================================================================
+// Default Configuration (defined after classes to avoid circular dependencies)
+// ============================================================================
+
+export const aiTelemetryDefaultConfig: AITelemetryConfig = {
+  serviceName: 'mastra-ai-service',
+  sampling: { type: SamplingStrategyType.ALWAYS_ON },
+  exporters: [new DefaultConsoleExporter()], // Uses its own fallback logger
+  processors: [new SensitiveDataFilter()],
+};
+
+// ============================================================================
 // Default AI Telemetry Implementation
 // ============================================================================
 
 export class DefaultAITelemetry extends MastraAITelemetry {
-  constructor(config: { name: string } & AITelemetryConfig = { name: 'default-telemetry' }) {
+  constructor(config: AITelemetryConfig = aiTelemetryDefaultConfig) {
     super(config);
-
-    // Add console exporter by default if none provided, passing this telemetry's logger
-    if (!config.exporters || config.exporters.length === 0) {
-      this.exporters = [new DefaultConsoleExporter(this.getLogger())];
-    }
-
-    // Add sensitive data filter processor by default if none provided
-    if (!config.processors || config.processors.length === 0) {
-      this.processors = [new SensitiveDataFilter()];
-    }
   }
 
   // ============================================================================

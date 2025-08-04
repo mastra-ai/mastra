@@ -232,23 +232,31 @@ export type AnyAISpan = AISpan<keyof AISpanTypeMap>;
 // ============================================================================
 
 /**
+ * Sampling strategy types
+ */
+export enum SamplingStrategyType {
+  ALWAYS_ON = 'always_on',
+  ALWAYS_OFF = 'always_off',
+  RATIO = 'ratio',
+  CUSTOM = 'custom',
+}
+
+/**
  * Sampling strategy configuration
  */
 export type SamplingStrategy =
-  | { type: 'always_on' }
-  | { type: 'always_off' }
-  | { type: 'ratio'; probability: number }
-  | { type: 'custom'; sampler: (traceContext: AITraceContext) => boolean };
+  | { type: SamplingStrategyType.ALWAYS_ON }
+  | { type: SamplingStrategyType.ALWAYS_OFF }
+  | { type: SamplingStrategyType.RATIO; probability: number }
+  | { type: SamplingStrategyType.CUSTOM; sampler: (traceContext: AITraceContext) => boolean };
 
 /**
  * Complete AI Telemetry configuration that combines all options
  */
 export interface AITelemetryConfig {
   /** Service name for telemetry */
-  serviceName?: string;
-  /** Whether telemetry is enabled */
-  enabled?: boolean;
-  /** Sampling strategy */
+  serviceName: string;
+  /** Sampling strategy - controls whether telemetry is collected */
   sampling?: SamplingStrategy;
   /** Custom exporters */
   exporters?: AITelemetryExporter[];

@@ -8,4 +8,4 @@ export * from './types';
 export * from './registry';
 
 // Abstract base class
-export { MastraAITelemetry, aiTelemetryDefaultConfig } from './base';
+export { MastraAITelemetry } from './base';

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraError } from '../error';
-import { DefaultAITelemetry, DefaultConsoleExporter, SensitiveDataFilter } from './default';
+import { DefaultAITelemetry, DefaultConsoleExporter, SensitiveDataFilter, aiTelemetryDefaultConfig } from './default';
 import { clearAITelemetryRegistry, getAITelemetry, registerAITelemetry } from './registry';
 import type {
   AITelemetryEvent,
@@ -12,7 +12,7 @@ import type {
   LLMGenerationMetadata,
   ToolCallMetadata,
 } from './types';
-import { AISpanType } from './types';
+import { AISpanType, SamplingStrategyType } from './types';
 
 // No crypto mocking needed since we use custom generateId function
 
@@ -72,7 +72,7 @@ describe('AI Telemetry', () => {
   describe('DefaultAITelemetry', () => {
     it('should create and start spans with type safety', () => {
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
+        serviceName: 'test-telemetry',
         exporters: [testExporter],
       });
 
@@ -95,7 +95,7 @@ describe('AI Telemetry', () => {
 
     it('should create child spans with different types', () => {
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
+        serviceName: 'test-telemetry',
         exporters: [testExporter],
       });
 
@@ -115,7 +115,7 @@ describe('AI Telemetry', () => {
 
     it('should maintain consistent traceId across span hierarchy', () => {
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
+        serviceName: 'test-telemetry',
         exporters: [testExporter],
       });
 
@@ -146,7 +146,7 @@ describe('AI Telemetry', () => {
 
     it('should emit events throughout span lifecycle', () => {
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
+        serviceName: 'test-telemetry',
         exporters: [testExporter],
       });
 
@@ -177,7 +177,7 @@ describe('AI Telemetry', () => {
 
     it('should handle errors with default endSpan=true', () => {
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
+        serviceName: 'test-telemetry',
         exporters: [testExporter],
       });
 
@@ -206,7 +206,7 @@ describe('AI Telemetry', () => {
 
     it('should handle errors with explicit endSpan=false', () => {
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
+        serviceName: 'test-telemetry',
         exporters: [testExporter],
       });
 
@@ -229,8 +229,8 @@ describe('AI Telemetry', () => {
   describe('Sampling Strategies', () => {
     it('should always sample with always_on strategy', () => {
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
-        sampling: { type: 'always_on' },
+        serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.ALWAYS_ON },
         exporters: [testExporter],
       });
 
@@ -242,8 +242,8 @@ describe('AI Telemetry', () => {
 
     it('should never sample with always_off strategy', () => {
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
-        sampling: { type: 'always_off' },
+        serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.ALWAYS_OFF },
         exporters: [testExporter],
       });
 
@@ -259,8 +259,8 @@ describe('AI Telemetry', () => {
 
       // Test probability = 0.5
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
-        sampling: { type: 'ratio', probability: 0.5 },
+        serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.RATIO, probability: 0.5 },
         exporters: [testExporter],
       });
 
@@ -281,7 +281,7 @@ describe('AI Telemetry', () => {
       const customSampler = new TestSampler(false); // Always reject
 
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
+        serviceName: 'test-telemetry',
         samplers: [customSampler],
         exporters: [testExporter],
       });
@@ -301,8 +301,8 @@ describe('AI Telemetry', () => {
 
     it('should handle invalid ratio probability', () => {
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
-        sampling: { type: 'ratio', probability: 1.5 }, // Invalid > 1
+        serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.RATIO, probability: 1.5 }, // Invalid > 1
         exporters: [testExporter],
       });
 
@@ -322,7 +322,7 @@ describe('AI Telemetry', () => {
       };
 
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
+        serviceName: 'test-telemetry',
         exporters: [failingExporter, testExporter], // One fails, one succeeds
       });
 
@@ -338,8 +338,9 @@ describe('AI Telemetry', () => {
 
     it('should use default console exporter when none provided', () => {
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
-        // No exporters provided
+        ...aiTelemetryDefaultConfig,
+        serviceName: 'test-telemetry',
+        // Uses default exporters from aiTelemetryDefaultConfig
       });
 
       expect(telemetry.getExporters()).toHaveLength(1);
@@ -354,7 +355,7 @@ describe('AI Telemetry', () => {
       };
 
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
+        serviceName: 'test-telemetry',
         exporters: [mockExporter],
       });
 
@@ -367,22 +368,21 @@ describe('AI Telemetry', () => {
   describe('Configuration', () => {
     it('should merge with default configuration', () => {
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
-        enabled: false,
+        serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.ALWAYS_OFF },
         // Other settings should use defaults
       });
 
       const config = telemetry.getConfig();
 
-      expect(config.enabled).toBe(false);
-      expect(config.serviceName).toBe('mastra-service'); // Default
-      expect(config.sampling?.type).toBe('always_on'); // Default
+      expect(config.sampling?.type).toBe(SamplingStrategyType.ALWAYS_OFF);
+      expect(config.serviceName).toBe('test-telemetry');
     });
 
-    it('should be disabled when enabled=false', () => {
+    it('should be disabled when sampling is always_off', () => {
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
-        enabled: false,
+        serviceName: 'test-telemetry',
+        sampling: { type: SamplingStrategyType.ALWAYS_OFF },
         exporters: [testExporter],
       });
 
@@ -395,7 +395,7 @@ describe('AI Telemetry', () => {
 
   describe('Registry', () => {
     it('should register and retrieve telemetry instances', () => {
-      const telemetry = new DefaultAITelemetry({ name: 'registry-test' });
+      const telemetry = new DefaultAITelemetry({ serviceName: 'registry-test' });
 
       registerAITelemetry('my-telemetry', telemetry, true);
 
@@ -404,7 +404,7 @@ describe('AI Telemetry', () => {
     });
 
     it('should clear registry', () => {
-      const telemetry = new DefaultAITelemetry({ name: 'registry-test' });
+      const telemetry = new DefaultAITelemetry({ serviceName: 'registry-test' });
       registerAITelemetry('test', telemetry);
 
       clearAITelemetryRegistry();
@@ -416,7 +416,7 @@ describe('AI Telemetry', () => {
   describe('Type Safety', () => {
     it('should enforce correct metadata types for different span types', () => {
       const telemetry = new DefaultAITelemetry({
-        name: 'test-telemetry',
+        serviceName: 'test-telemetry',
         exporters: [testExporter],
       });
 
@@ -689,7 +689,8 @@ describe('AI Telemetry', () => {
     describe('Integration Tests', () => {
       it('should automatically filter sensitive data in default telemetry', () => {
         const telemetry = new DefaultAITelemetry({
-          name: 'test-telemetry',
+          ...aiTelemetryDefaultConfig,
+          serviceName: 'test-telemetry',
           exporters: [testExporter],
         });
 

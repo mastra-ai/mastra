@@ -106,5 +106,12 @@ export function clearAITelemetryRegistry(): void {
  */
 export function hasAITelemetry(name?: string): boolean {
   const telemetry = getAITelemetry(name);
-  return telemetry?.isEnabled() ?? false;
+  if (!telemetry) return false;
+
+  const config = telemetry.getConfig();
+  const sampling = config.sampling;
+
+  // Check if sampling allows telemetry
+  if (!sampling) return true; // Default to enabled when no sampling config
+  return sampling.type !== 'always_off';
 }
