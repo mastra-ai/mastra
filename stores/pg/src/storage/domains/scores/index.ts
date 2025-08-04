@@ -113,12 +113,16 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
     try {
+      // Generate ID like other storage implementations
+      const scoreId = crypto.randomUUID();
+
       const { input, ...rest } = score;
       await this.operations.insert({
         tableName: TABLE_SCORERS,
         record: {
+          id: scoreId,
           ...rest,
           input: JSON.stringify(input),
           createdAt: new Date().toISOString(),
@@ -126,7 +130,7 @@ export class ScoresPG extends ScoresStorage {
         },
       });
 
-      const scoreFromDb = await this.getScoreById({ id: score.id });
+      const scoreFromDb = await this.getScoreById({ id: scoreId });
       return { score: scoreFromDb! };
     } catch (error) {
       throw new MastraError(
@@ -152,8 +156,6 @@ export class ScoresPG extends ScoresStorage {
         `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1`,
         [runId],
       );
-      console.log(`total: ${total?.count}`);
-      console.log(`typeof total: ${typeof total?.count}`);
       if (total?.count === '0' || !total?.count) {
         return {
           pagination: {

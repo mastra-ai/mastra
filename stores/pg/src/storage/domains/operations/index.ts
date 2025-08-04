@@ -208,8 +208,6 @@ export class StoreOperationsPG extends StoreOperations {
 
       await this.client.none(sql);
 
-      console.log('Alter Table SQL', tableName);
-      console.log('timeZColumnNames', timeZColumnNames);
       await this.alterTable({
         tableName,
         schema,

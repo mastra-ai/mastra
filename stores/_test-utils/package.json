@@ -1,6 +1,6 @@
 {
   "name": "@internal/storage-test-utils",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "description": "",
   "type": "module",
   "main": "src/index.ts",
