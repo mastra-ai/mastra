@@ -5,8 +5,8 @@ const meta = {
   "hierarchical-multi-agent": "Hierarchical Multi-Agent System",
   "bird-checker": "Bird Checker",
   "adding-voice-capabilities": "Give your Agent a voice",
-  "deploying-mcp-server": "Deploying an MCPServer",
   "dynamic-agents": "Dynamic Agents",
+  "deploying-mcp-server": "Deploying an MCPServer",
   "ai-sdk-v5-integration": "AI SDK v5 Integration",
 };
 
