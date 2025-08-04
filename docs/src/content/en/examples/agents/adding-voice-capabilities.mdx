@@ -93,7 +93,7 @@ These helper functions handle audio file operations and text conversion for the 
 
 This function saves an audio stream to a file in the audio directory, creating the directory if it doesn't exist.
 
-```typescript filename="src/mastra/functions/save-audio-to-file.ts" showLineNumbers copy
+```typescript filename="src/mastra/utils/save-audio-to-file.ts" showLineNumbers copy
 import fs, { createWriteStream } from "fs";
 import path from "path";
 
@@ -101,7 +101,6 @@ export const saveAudioToFile = async (audio: NodeJS.ReadableStream, filename: st
   const audioDir = path.join(process.cwd(), "audio");
   const filePath = path.join(audioDir, filename);
 
-  // Create the audio directory if it doesn't exist
   await fs.promises.mkdir(audioDir, { recursive: true });
 
   const writer = createWriteStream(filePath);
@@ -117,7 +116,7 @@ export const saveAudioToFile = async (audio: NodeJS.ReadableStream, filename: st
 
 This function converts either a string or a readable stream to text, handling both input types for voice processing.
 
-```typescript filename="src/mastra/functions/convert-to-text.ts" showLineNumbers copy
+```typescript filename="src/mastra/utils/convert-to-text.ts" showLineNumbers copy
 export const convertToText = async (input: string | NodeJS.ReadableStream): Promise<string> => {
   if (typeof input === "string") {
     return input;
@@ -149,8 +148,8 @@ import path from "path";
 import { createReadStream } from "fs";
 import { mastra } from "./mastra";
 
-import { saveAudioToFile } from "./mastra/functions/save-audio-to-file";
-import { convertToText } from "./mastra/functions/convert-to-text";
+import { saveAudioToFile } from "./mastra/utils/save-audio-to-file";
+import { convertToText } from "./mastra/utils/convert-to-text";
 
 const hybridVoiceAgent = mastra.getAgent("hybridVoiceAgent");
 const unifiedVoiceAgent = mastra.getAgent("unifiedVoiceAgent");

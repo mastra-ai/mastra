@@ -61,8 +61,8 @@ export const mastra = new Mastra({
 
 This function retrieves a random image from Unsplash to pass to the agent for classification.
 
-```typescript filename="src/mastra/functions/get-random-image.ts" showLineNumbers copy
-export const getRandomImage = async () => {
+```typescript filename="src/mastra/utils/get-random-image.ts" showLineNumbers copy
+export const getRandomImage = async (): Promise<string> => {
   const queries = ["wildlife", "feathers", "flying", "birds"];
   const query = queries[Math.floor(Math.random() * queries.length)];
   const page = Math.floor(Math.random() * 20);
@@ -89,7 +89,7 @@ Use `getAgent()` to retrieve a reference to the agent, then call `generate()` wi
 import "dotenv/config";
 
 import { mastra } from "./mastra";
-import { getRandomImage } from "./mastra/functions/get-random-image";
+import { getRandomImage } from "./mastra/utils/get-random-image";
 
 const imageUrl = await getRandomImage();
 const agent = mastra.getAgent("birdCheckerAgent");
