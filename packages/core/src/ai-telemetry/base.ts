@@ -14,13 +14,10 @@ import type {
   AITelemetryExporter,
   AISpanProcessor,
   AITelemetrySampler,
-  AISpanMetadata,
   AITelemetryEvent,
-  AgentRunMetadata,
-  WorkflowRunMetadata,
-  WorkflowStepMetadata,
-  AIBaseMetadata,
   AITraceContext,
+  AISpanTypeMap,
+  AnyAISpan,
 } from './types';
 import { AISpanType } from './types';
 
@@ -73,75 +70,46 @@ export abstract class MastraAITelemetry extends MastraBase {
   }
 
   // ============================================================================
-  // Public API - Handles sampling before calling abstract methods
+  // Public API - Single type-safe span creation method
   // ============================================================================
 
-  startWorkflowRunSpan({
-    name,
-    metadata,
-    parent,
-  }: {
-    name: string;
-    metadata: WorkflowRunMetadata;
-    parent?: AISpan;
-  }): AISpan<AISpanMetadata> {
-    return this.startSpan<WorkflowRunMetadata>({
-      name,
-      type: AISpanType.WORKFLOW_RUN,
-      metadata,
-      parent,
-    });
-  }
+  /**
+   * Start a new span with full type safety
+   */
+  startSpan<TType extends AISpanType>(
+    type: TType,
+    name: string,
+    metadata: AISpanTypeMap[TType],
+    parent?: AnyAISpan,
+    runtimeContext?: RuntimeContext,
+    attributes?: Record<string, any>,
+  ): AISpan<TType> {
+    if (!this.isEnabled()) {
+      return new NoOpAISpan<TType>({ type, name, metadata, parent }, this);
+    }
 
-  startWorkflowStepSpan({
-    name,
-    metadata,
-    parent,
-  }: {
-    name: string;
-    metadata: WorkflowStepMetadata;
-    parent?: AISpan;
-  }): AISpan<AISpanMetadata> {
-    return this.startSpan<WorkflowStepMetadata>({
-      name,
-      type: AISpanType.WORKFLOW_STEP,
-      metadata,
-      parent,
-    });
-  }
+    if ((runtimeContext || attributes) && !this.shouldSample({ runtimeContext, attributes })) {
+      return new NoOpAISpan<TType>({ type, name, metadata, parent }, this);
+    }
 
-  startAgentRunSpan({
-    name,
-    metadata,
-    parent,
-  }: {
-    name: string;
-    metadata: AgentRunMetadata;
-    parent?: AISpan;
-  }): AISpan<AISpanMetadata> {
-    return this.startSpan<AgentRunMetadata>({
+    const options: AISpanOptions<TType> = {
+      type,
       name,
-      type: AISpanType.AGENT_RUN,
       metadata,
       parent,
-    });
-  }
+      _callbacks: {
+        onEnd: (span: AnyAISpan) => this.emitSpanEnded(span),
+        onUpdate: (span: AnyAISpan) => this.emitSpanUpdated(span),
+      },
+    };
 
-  startGenericSpan({
-    name,
-    metadata,
-    parent,
-  }: {
-    name: string;
-    metadata: AIBaseMetadata;
-    parent?: AISpan;
-  }): AISpan<AISpanMetadata> {
-    return this.startSpan<AIBaseMetadata>({
-      name,
-      type: AISpanType.GENERIC,
-      metadata,
-      parent,
-    });
+    const span = this._startSpan(options);
+    span.trace = parent ? parent.trace : span;
+
+    // Emit span started event
+    this.emitSpanStarted(span);
+
+    return span;
   }
 
   // ============================================================================
@@ -153,43 +121,13 @@ export abstract class MastraAITelemetry extends MastraBase {
    *
    * Implementations should:
    * 1. Create a span with the provided metadata
-   * 2. Set span.trace to span.parent.trace if options.parent, else to self.
-   * 3. Use createSpanWithCallbacks() helper to automatically wire up lifecycle callbacks
+   * 2. Use createSpanWithCallbacks() helper to automatically wire up lifecycle callbacks
    *
    * The base class will automatically:
+   * - Set trace relationships
    * - Emit span_started event
    */
-  protected abstract _startSpan(options: AISpanOptions): AISpan;
-
-  /**
-   * Start a new span (handles sampling)
-   */
-  startSpan<T extends AISpanMetadata>(
-    options: AISpanOptions<T>,
-    runtimeContext?: RuntimeContext,
-    attributes?: Record<string, any>,
-  ): AISpan {
-    if (!this.isEnabled()) {
-      return new NoOpAISpan(options, this);
-    }
-
-    if ((runtimeContext || attributes) && !this.shouldSample({ runtimeContext, attributes })) {
-      return new NoOpAISpan(options, this);
-    }
-
-    options._callbacks = {
-      onEnd: (span: AISpan) => this.emitSpanEnded(span),
-      onUpdate: (span: AISpan) => this.emitSpanUpdated(span),
-    };
-    const span = this._startSpan(options);
-
-    span.trace = options.parent ? options.parent.trace : span;
-
-    // Emit span started event
-    this.emitSpanStarted(span);
-
-    return span as AISpan<T>;
-  }
+  protected abstract _startSpan<TType extends AISpanType>(options: AISpanOptions<TType>): AISpan<TType>;
 
   // ============================================================================
   // Configuration Management - Following Mastra patterns
@@ -234,6 +172,13 @@ export abstract class MastraAITelemetry extends MastraBase {
     return [...this.samplers];
   }
 
+  /**
+   * Get the logger instance (for exporters and other components)
+   */
+  getLogger() {
+    return this.logger;
+  }
+
   // ============================================================================
   // Span Creation Helpers
   // ============================================================================
@@ -242,7 +187,10 @@ export abstract class MastraAITelemetry extends MastraBase {
    * Create a span that automatically calls lifecycle callbacks
    * This is a helper for concrete implementations to wire up callbacks correctly
    */
-  protected createSpanWithCallbacks(options: AISpanOptions, createSpanFn: (opts: AISpanOptions) => AISpan): AISpan {
+  protected createSpanWithCallbacks<TType extends AISpanType>(
+    options: AISpanOptions<TType>,
+    createSpanFn: (opts: AISpanOptions<TType>) => AISpan<TType>,
+  ): AISpan<TType> {
     const span = createSpanFn(options);
 
     // Store original methods
@@ -250,12 +198,12 @@ export abstract class MastraAITelemetry extends MastraBase {
     const originalUpdate = span.update.bind(span);
 
     // Wrap methods to call callbacks
-    span.end = (endOptions?: any) => {
+    span.end = (endOptions?: Partial<AISpanTypeMap[TType]>) => {
       originalEnd(endOptions);
       options._callbacks?.onEnd?.(span);
     };
 
-    span.update = (metadata: any) => {
+    span.update = (metadata: Partial<AISpanTypeMap[TType]>) => {
       originalUpdate(metadata);
       options._callbacks?.onUpdate?.(span);
     };
@@ -319,8 +267,8 @@ export abstract class MastraAITelemetry extends MastraBase {
   /**
    * Process a span through all processors
    */
-  private processSpan(span: AISpan): AISpan | null {
-    let processedSpan: AISpan | null = span;
+  private processSpan(span: AnyAISpan): AnyAISpan | null {
+    let processedSpan: AnyAISpan | null = span;
 
     for (const processor of this.processors) {
       if (!processedSpan) {
@@ -345,7 +293,7 @@ export abstract class MastraAITelemetry extends MastraBase {
   /**
    * Emit a span started event
    */
-  protected emitSpanStarted(span: AISpan): void {
+  protected emitSpanStarted(span: AnyAISpan): void {
     // Process the span before emitting
     const processedSpan = this.processSpan(span);
     if (processedSpan) {
@@ -358,7 +306,7 @@ export abstract class MastraAITelemetry extends MastraBase {
   /**
    * Emit a span ended event (called automatically when spans end)
    */
-  protected emitSpanEnded(span: AISpan): void {
+  protected emitSpanEnded(span: AnyAISpan): void {
     // Process the span through all processors
     const processedSpan = this.processSpan(span);
     if (processedSpan) {
@@ -371,7 +319,7 @@ export abstract class MastraAITelemetry extends MastraBase {
   /**
    * Emit a span updated event
    */
-  protected emitSpanUpdated(span: AISpan): void {
+  protected emitSpanUpdated(span: AnyAISpan): void {
     // Process the span before emitting
     const processedSpan = this.processSpan(span);
     if (processedSpan) {

@@ -3,38 +3,36 @@
  */
 
 import type { MastraAITelemetry } from './base';
-import type { AISpanType, AISpan, AISpanOptions, AISpanMetadata } from './types';
+import type { AISpanType, AISpan, AISpanOptions, AISpanTypeMap } from './types';
 
-export class NoOpAISpan implements AISpan<AISpanMetadata> {
+export class NoOpAISpan<TType extends AISpanType = any> implements AISpan<TType> {
   public id: string;
   public name: string;
-  public type: AISpanType;
-  public metadata: AISpanMetadata;
-  public children: AISpan<AISpanMetadata>[] = [];
-  public parent?: AISpan<AISpanMetadata>;
-  public trace: AISpan<AISpanMetadata>;
+  public type: TType;
+  public metadata: AISpanTypeMap[TType];
+  public trace: AISpan<any>;
   public startTime: Date;
   public endTime?: Date;
   public aiTelemetry: MastraAITelemetry;
 
-  constructor(options: AISpanOptions, aiTelemetry: MastraAITelemetry) {
+  constructor(options: AISpanOptions<TType>, aiTelemetry: MastraAITelemetry) {
     this.id = 'no-op';
     this.name = options.name;
     this.type = options.type;
     this.metadata = options.metadata;
-    this.parent = options.parent;
-    this.trace = options.parent ? options.parent.trace : this;
+    this.trace = options.parent ? options.parent.trace : (this as any);
     this.startTime = new Date();
     this.aiTelemetry = aiTelemetry;
   }
 
   end(): void {}
   error(): void {}
-  createChildSpan(): AISpan {
-    return this;
+  createChildSpan<TChildType extends AISpanType>(
+    type: TChildType,
+    name: string,
+    metadata: AISpanTypeMap[TChildType],
+  ): AISpan<TChildType> {
+    return new NoOpAISpan<TChildType>({ type, name, metadata, parent: this }, this.aiTelemetry);
   }
   update(): void {}
-  async export(): Promise<string> {
-    return '';
-  }
 }

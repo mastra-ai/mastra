@@ -160,55 +160,70 @@ export interface WorkflowStepMetadata extends AIBaseMetadata {
 }
 
 /**
- * Complete span metadata (system + user provided)
+ * AI-specific span types mapped to their metadata
  */
-export type AISpanMetadata =
-  | AgentRunMetadata
-  | WorkflowRunMetadata
-  | LLMGenerationMetadata
-  | ToolCallMetadata
-  | MCPToolCallMetadata
-  | WorkflowStepMetadata
-  | AIBaseMetadata; // For generic spans
+export interface AISpanTypeMap {
+  [AISpanType.AGENT_RUN]: AgentRunMetadata;
+  [AISpanType.WORKFLOW_RUN]: WorkflowRunMetadata;
+  [AISpanType.LLM_GENERATION]: LLMGenerationMetadata;
+  [AISpanType.TOOL_CALL]: ToolCallMetadata;
+  [AISpanType.MCP_TOOL_CALL]: MCPToolCallMetadata;
+  [AISpanType.WORKFLOW_STEP]: WorkflowStepMetadata;
+  [AISpanType.GENERIC]: AIBaseMetadata;
+}
+
+/**
+ * Union type for cases that need to handle any span type
+ */
+export type AnyAISpanMetadata = AISpanTypeMap[keyof AISpanTypeMap];
 
 // ============================================================================
 // Span Interfaces
 // ============================================================================
 
 /**
- * AI Span interface
+ * AI Span interface with type safety
  */
-export interface AISpan<TMetadata extends AISpanMetadata = AISpanMetadata> {
+export interface AISpan<TType extends AISpanType> {
   /** Unique span identifier */
   id: string;
   /** Name of the span */
   name: string;
   /** Type of the span */
-  type: AISpanType;
+  type: TType;
   /** When span started */
   startTime: Date;
   /** When span ended */
   endTime?: Date;
-  /** AI-specific metadata */
-  metadata: TMetadata;
-  /** The top-level span */
-  trace: AISpan;
+  /** AI-specific metadata - strongly typed based on span type */
+  metadata: AISpanTypeMap[TType];
+  /** The top-level span - can be any type */
+  trace: AISpan<any>;
   /** Pointer to the AITelemetry instance */
   aiTelemetry: MastraAITelemetry;
 
   // Methods for span lifecycle
   /** End the span */
-  end(metadata?: Partial<TMetadata>): void;
+  end(metadata?: Partial<AISpanTypeMap[TType]>): void;
 
   /** Record an error for the span, optionally end the span as well */
-  error(error: MastraError | Error, endSpan: boolean): void;
+  error(error: MastraError | Error, endSpan?: boolean): void;
 
   /** Update span metadata */
-  update(metadata: Partial<TMetadata>): void;
+  update(metadata: Partial<AISpanTypeMap[TType]>): void;
 
-  /** Create child span */
-  createChildSpan(options: AISpanOptions<TMetadata>): AISpan;
+  /** Create child span - can be any span type independent of parent */
+  createChildSpan<TChildType extends AISpanType>(
+    type: TChildType,
+    name: string,
+    metadata: AISpanTypeMap[TChildType],
+  ): AISpan<TChildType>;
 }
+
+/**
+ * Union type for cases that need to handle any span
+ */
+export type AnyAISpan = AISpan<keyof AISpanTypeMap>;
 
 // ============================================================================
 // Configuration Types
@@ -256,9 +271,9 @@ export interface AITelemetryConfig {
  * Telemetry events that can be exported
  */
 export type AITelemetryEvent =
-  | { type: 'span_started'; span: AISpan }
-  | { type: 'span_updated'; span: AISpan }
-  | { type: 'span_ended'; span: AISpan };
+  | { type: 'span_started'; span: AnyAISpan }
+  | { type: 'span_updated'; span: AnyAISpan }
+  | { type: 'span_ended'; span: AnyAISpan };
 
 /**
  * Interface for telemetry exporters
@@ -281,7 +296,7 @@ export interface AISpanProcessor {
   /** Processor name */
   name: string;
   /** Process span before export */
-  process(span: AISpan): AISpan | null;
+  process(span: AnyAISpan): AnyAISpan | null;
   /** Shutdown processor */
   shutdown(): Promise<void>;
 }
@@ -299,19 +314,19 @@ export interface AITelemetrySampler {
 /**
  * Options for span creation (internal - used by telemetry system)
  */
-export interface AISpanOptions<TMetadata extends AISpanMetadata = AISpanMetadata> {
+export interface AISpanOptions<TType extends AISpanType> {
   /** Span name */
   name: string;
   /** Span type */
-  type: AISpanType;
-  /** Span metadata (partial - system fields will be filled in) */
-  metadata: Partial<TMetadata>;
+  type: TType;
+  /** Span metadata */
+  metadata: AISpanTypeMap[TType];
   /** Parent span */
-  parent?: AISpan;
+  parent?: AISpan<any>;
   /** Internal callback for span lifecycle events (set by telemetry instance) */
   _callbacks?: {
-    onEnd?: (span: AISpan) => void;
-    onUpdate?: (span: AISpan) => void;
+    onEnd?: (span: AISpan<any>) => void;
+    onUpdate?: (span: AISpan<any>) => void;
   };
 }
 
