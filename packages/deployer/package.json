@@ -111,6 +111,7 @@
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
     "hono": "^4.8.9",
+    "package-directory": "^8.1.0",
     "resolve-from": "^5.0.0",
     "rollup": "~4.46.2",
     "rollup-plugin-esbuild": "^6.2.1",
