@@ -105,6 +105,7 @@
     "@sindresorhus/slugify": "^2.2.1",
     "builtins": "^5.1.0",
     "detect-libc": "^2.0.4",
+    "devcert": "^1.2.2",
     "dotenv": "^16.6.1",
     "esbuild": "^0.25.8",
     "find-workspaces": "^0.3.1",

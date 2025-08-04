@@ -19,7 +19,7 @@ const startServer = async (
   dotMastraPath: string,
   port: number,
   env: Map<string, string>,
-  startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[] } = {},
+  startOptions: { inspect?: boolean; inspectBrk?: boolean; customArgs?: string[]; https?: boolean } = {},
   errorRestartCount = 0,
 ) => {
   let serverIsReady = false;
@@ -50,6 +50,10 @@ const startServer = async (
       );
     }
     commands.push('index.mjs');
+
+    if (startOptions.https) {
+      commands.push('--https');
+    }
 
     currentServerProcess = execa(process.execPath, commands, {
       cwd: dotMastraPath,
@@ -162,6 +166,7 @@ export async function dev({
   env,
   inspect,
   inspectBrk,
+  https,
   customArgs,
 }: {
   dir?: string;
@@ -171,6 +176,7 @@ export async function dev({
   env?: string;
   inspect?: boolean;
   inspectBrk?: boolean;
+  https?: boolean;
   customArgs?: string[];
 }) {
   const rootDir = root || process.cwd();
@@ -179,7 +185,7 @@ export async function dev({
 
   const defaultToolsPath = join(mastraDir, 'tools/**/*.{js,ts}');
   const discoveredTools = [defaultToolsPath, ...(tools || [])];
-  const startOptions = { inspect, inspectBrk, customArgs };
+  const startOptions = { inspect, inspectBrk, https, customArgs };
 
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
