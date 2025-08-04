@@ -1,15 +1,16 @@
 import { createScorer } from '@mastra/core/scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import { SequenceMatcher } from 'difflib';
 
 export function createTextualDifferenceScorer() {
-  return createScorer({
+  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
     name: 'Completeness',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
   })
     .preprocess(async ({ run }) => {
-      const input = run.input?.map((i: { content: string }) => i.content).join(', ') || '';
-      const output = run.output.text;
+      const input = run.input?.inputMessages?.map((i: { content: string }) => i.content).join(', ') || '';
+      const output = run.output?.map((i: { content: string }) => i.content).join(', ') || '';
       const matcher = new SequenceMatcher(null, input, output);
       const ratio = matcher.ratio();
 
