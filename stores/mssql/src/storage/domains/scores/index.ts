@@ -6,19 +6,42 @@ import type { ConnectionPool } from 'mssql';
 import type { StoreOperationsMSSQL } from '../operations';
 import { getSchemaName, getTableName } from '../utils';
 
+function parseJSON(jsonString: string): any {
+  try {
+    return JSON.parse(jsonString);
+  } catch {
+    return jsonString;
+  }
+}
+
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
   let input = undefined;
+  let output = undefined;
+  let preprocessStepResult = undefined;
+  let analyzeStepResult = undefined;
 
   if (row.input) {
-    try {
-      input = JSON.parse(row.input);
-    } catch {
-      input = row.input;
-    }
+    input = parseJSON(row.input);
   }
+
+  if (row.output) {
+    output = parseJSON(row.output);
+  }
+
+  if (row.preprocessStepResult) {
+    preprocessStepResult = parseJSON(row.preprocessStepResult);
+  }
+
+  if (row.analyzeStepResult) {
+    analyzeStepResult = parseJSON(row.analyzeStepResult);
+  }
+
   return {
     ...row,
     input,
+    output,
+    preprocessStepResult,
+    analyzeStepResult,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   } as ScoreRowData;
@@ -75,13 +98,16 @@ export class ScoresMSSQL extends ScoresStorage {
       // Generate ID like other storage implementations
       const scoreId = crypto.randomUUID();
 
-      const { input, ...rest } = score;
+      const { input, output, preprocessStepResult, analyzeStepResult, ...rest } = score;
       await this.operations.insert({
         tableName: TABLE_SCORERS,
         record: {
           id: scoreId,
           ...rest,
           input: JSON.stringify(input),
+          output: JSON.stringify(output),
+          preprocessStepResult: preprocessStepResult ? JSON.stringify(preprocessStepResult) : null,
+          analyzeStepResult: analyzeStepResult ? JSON.stringify(analyzeStepResult) : null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
