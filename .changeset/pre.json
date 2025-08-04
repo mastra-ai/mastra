@@ -17,13 +17,13 @@
     "@mastra/github": "1.2.6",
     "@mastra/mem0": "0.1.6",
     "@mastra/ragie": "1.2.6",
-    "@internal/lint": "0.0.25",
+    "@internal/lint": "0.0.26",
     "@mastra/auth": "0.1.0",
-    "mastra": "0.10.17",
-    "@mastra/playground": "0.0.3",
+    "mastra": "0.10.18",
+    "@mastra/playground": "0.0.4",
     "@mastra/cloud": "0.1.6",
     "@mastra/core": "0.12.1",
-    "create-mastra": "0.10.14",
+    "create-mastra": "0.10.15",
     "@mastra/deployer": "0.12.1",
     "@mastra/evals": "0.11.0",
     "@mastra/fastembed": "0.10.1",
@@ -38,7 +38,7 @@
     "@mastra/rag": "1.0.6",
     "@mastra/schema-compat": "0.10.5",
     "@mastra/server": "0.12.1",
-    "@internal/storage-test-utils": "0.0.21",
+    "@internal/storage-test-utils": "0.0.22",
     "@mastra/astra": "0.11.2",
     "@mastra/chroma": "0.11.2",
     "@mastra/clickhouse": "0.12.3",
@@ -71,5 +71,10 @@
     "@mastra/voice-speechify": "0.10.6",
     "@mastra/inngest": "0.11.8"
   },
-  "changesets": []
+  "changesets": [
+    "bright-foxes-smile",
+    "many-parts-design",
+    "plain-gifts-relax",
+    "plenty-baths-learn"
+  ]
 }
