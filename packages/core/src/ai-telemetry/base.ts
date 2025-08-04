@@ -29,10 +29,6 @@ export const aiTelemetryDefaultConfig: AITelemetryConfig = {
   serviceName: 'mastra-service',
   enabled: true,
   sampling: { type: 'always_on' },
-  settings: {
-    includeIO: true,
-    excludeFields: ['password', 'token', 'secret', 'key'],
-  },
 };
 
 // ============================================================================

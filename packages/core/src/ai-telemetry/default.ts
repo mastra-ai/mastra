@@ -14,14 +14,46 @@ import type {
   AITelemetryConfig,
   AITelemetryEvent,
   AISpanTypeMap,
+  AISpanProcessor,
+  AnyAISpan,
 } from './types';
 
 // ============================================================================
 // Default AISpan Implementation
 // ============================================================================
 
-function generateId(): string {
-  return `span-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+/**
+ * Generate OpenTelemetry-compatible span ID (64-bit, 16 hex chars)
+ */
+function generateSpanId(): string {
+  // Generate 8 random bytes (64 bits) in hex format
+  const bytes = new Uint8Array(8);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    // Fallback for environments without crypto.getRandomValues
+    for (let i = 0; i < 8; i++) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Generate OpenTelemetry-compatible trace ID (128-bit, 32 hex chars)
+ */
+function generateTraceId(): string {
+  // Generate 16 random bytes (128 bits) in hex format
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    // Fallback for environments without crypto.getRandomValues
+    for (let i = 0; i < 16; i++) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
 class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
@@ -30,18 +62,28 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
   public type: TType;
   public metadata: AISpanTypeMap[TType];
   public trace: AISpan<any>;
+  public traceId: string;
   public startTime: Date;
   public endTime?: Date;
   public aiTelemetry: MastraAITelemetry;
 
   constructor(options: AISpanOptions<TType>, aiTelemetry: MastraAITelemetry) {
-    this.id = generateId();
+    this.id = generateSpanId();
     this.name = options.name;
     this.type = options.type;
     this.metadata = options.metadata;
     this.trace = options.parent ? options.parent.trace : (this as any);
     this.startTime = new Date();
     this.aiTelemetry = aiTelemetry;
+
+    // Set trace ID: generate new for root spans, inherit for child spans
+    if (!options.parent) {
+      // This is a root span, so it becomes its own trace with a new trace ID
+      this.traceId = generateTraceId();
+    } else {
+      // Child span inherits trace ID from root span
+      this.traceId = options.parent.trace.traceId;
+    }
   }
 
   end(metadata?: Partial<AISpanTypeMap[TType]>): void {
@@ -96,8 +138,85 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
       metadata: this.metadata,
       startTime: this.startTime,
       endTime: this.endTime,
-      traceId: this.trace.id,
+      traceId: this.traceId, // OpenTelemetry trace ID
     });
+  }
+}
+
+// ============================================================================
+// Sensitive Data Filter Processor
+// ============================================================================
+
+export class SensitiveDataFilter implements AISpanProcessor {
+  name = 'sensitive-data-filter';
+  private sensitiveFields: string[];
+
+  constructor(sensitiveFields?: string[]) {
+    // Default sensitive fields with case-insensitive matching
+    this.sensitiveFields = (
+      sensitiveFields || [
+        'password',
+        'token',
+        'secret',
+        'key',
+        'apiKey',
+        'auth',
+        'authorization',
+        'bearer',
+        'jwt',
+        'credential',
+        'sessionId',
+      ]
+    ).map(field => field.toLowerCase());
+  }
+
+  process(span: AnyAISpan): AnyAISpan | null {
+    // Deep filter function to recursively handle nested objects
+    const deepFilter = (obj: any, seen = new WeakSet()): any => {
+      if (obj === null || typeof obj !== 'object') {
+        return obj;
+      }
+
+      // Handle circular references
+      if (seen.has(obj)) {
+        return '[Circular Reference]';
+      }
+      seen.add(obj);
+
+      if (Array.isArray(obj)) {
+        return obj.map(item => deepFilter(item, seen));
+      }
+
+      const filtered: any = {};
+      Object.keys(obj).forEach(key => {
+        if (this.sensitiveFields.includes(key.toLowerCase())) {
+          // Only redact primitive values, recurse into objects/arrays
+          if (obj[key] && typeof obj[key] === 'object') {
+            filtered[key] = deepFilter(obj[key], seen);
+          } else {
+            filtered[key] = '[REDACTED]';
+          }
+        } else {
+          filtered[key] = deepFilter(obj[key], seen);
+        }
+      });
+
+      return filtered;
+    };
+
+    try {
+      // Create a copy of the span with filtered metadata
+      const filteredSpan = { ...span };
+      filteredSpan.metadata = deepFilter(span.metadata);
+      return filteredSpan;
+    } catch (error) {
+      // If filtering fails, return original span - better than losing data
+      return span;
+    }
+  }
+
+  async shutdown(): Promise<void> {
+    // No cleanup needed
   }
 }
 
@@ -123,20 +242,10 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
   async exportEvent(event: AITelemetryEvent): Promise<void> {
     const span = event.span;
 
-    // Helper to safely stringify metadata with sensitive field filtering
+    // Helper to safely stringify metadata (filtering already done by processor)
     const formatMetadata = (metadata: any) => {
       try {
-        // Create a copy and filter out sensitive fields
-        const filtered = { ...metadata };
-        const sensitiveFields = ['password', 'token', 'secret', 'key', 'apiKey', 'auth'];
-
-        sensitiveFields.forEach(field => {
-          if (field in filtered) {
-            filtered[field] = '[REDACTED]';
-          }
-        });
-
-        return JSON.stringify(filtered, null, 2);
+        return JSON.stringify(metadata, null, 2);
       } catch (error) {
         return '[Unable to serialize metadata]';
       }
@@ -155,7 +264,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
         this.logger.info(`   Type: ${span.type}`);
         this.logger.info(`   Name: ${span.name}`);
         this.logger.info(`   ID: ${span.id}`);
-        this.logger.info(`   Trace ID: ${span.trace.id}`);
+        this.logger.info(`   Trace ID: ${span.traceId}`);
         this.logger.info(`   Metadata: ${formatMetadata(span.metadata)}`);
         this.logger.info('─'.repeat(80));
         break;
@@ -167,7 +276,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
         this.logger.info(`   Name: ${span.name}`);
         this.logger.info(`   ID: ${span.id}`);
         this.logger.info(`   Duration: ${duration}`);
-        this.logger.info(`   Trace ID: ${span.trace.id}`);
+        this.logger.info(`   Trace ID: ${span.traceId}`);
         this.logger.info(`   Final Metadata: ${formatMetadata(span.metadata)}`);
         this.logger.info('─'.repeat(80));
         break;
@@ -177,7 +286,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
         this.logger.info(`   Type: ${span.type}`);
         this.logger.info(`   Name: ${span.name}`);
         this.logger.info(`   ID: ${span.id}`);
-        this.logger.info(`   Trace ID: ${span.trace.id}`);
+        this.logger.info(`   Trace ID: ${span.traceId}`);
         this.logger.info(`   Updated Metadata: ${formatMetadata(span.metadata)}`);
         this.logger.info('─'.repeat(80));
         break;
@@ -204,6 +313,11 @@ export class DefaultAITelemetry extends MastraAITelemetry {
     // Add console exporter by default if none provided, passing this telemetry's logger
     if (!config.exporters || config.exporters.length === 0) {
       this.exporters = [new DefaultConsoleExporter(this.getLogger())];
+    }
+
+    // Add sensitive data filter processor by default if none provided
+    if (!config.processors || config.processors.length === 0) {
+      this.processors = [new SensitiveDataFilter()];
     }
   }
 

@@ -198,7 +198,9 @@ export interface AISpan<TType extends AISpanType> {
   /** AI-specific metadata - strongly typed based on span type */
   metadata: AISpanTypeMap[TType];
   /** The top-level span - can be any type */
-  trace: AISpan<any>;
+  trace: AnyAISpan;
+  /** OpenTelemetry-compatible trace ID (32 hex chars) - present on all spans */
+  traceId: string;
   /** Pointer to the AITelemetry instance */
   aiTelemetry: MastraAITelemetry;
 
@@ -248,13 +250,6 @@ export interface AITelemetryConfig {
   enabled?: boolean;
   /** Sampling strategy */
   sampling?: SamplingStrategy;
-  /** Output settings */
-  settings?: {
-    /** Whether to include input/output in spans */
-    includeIO?: boolean;
-    /** Fields to exclude from serialization */
-    excludeFields?: string[];
-  };
   /** Custom exporters */
   exporters?: AITelemetryExporter[];
   /** Custom processors */
