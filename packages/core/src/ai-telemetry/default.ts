@@ -49,7 +49,7 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     if (metadata) {
       this.metadata = { ...this.metadata, ...metadata };
     }
-    // Callback will be set up by base class createSpanWithCallbacks
+    // Telemetry events automatically handled by base class
   }
 
   error(error: MastraError | Error, endSpan: boolean = true): void {
@@ -87,7 +87,7 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
 
   update(metadata: Partial<AISpanTypeMap[TType]>): void {
     this.metadata = { ...this.metadata, ...metadata };
-    // Callback will be set up by base class createSpanWithCallbacks
+    // Telemetry events automatically handled by base class
   }
 
   async export(): Promise<string> {
@@ -211,10 +211,8 @@ export class DefaultAITelemetry extends MastraAITelemetry {
   // Abstract Method Implementations
   // ============================================================================
 
-  protected _startSpan<TType extends AISpanType>(options: AISpanOptions<TType>): AISpan<TType> {
-    // Use the createSpanWithCallbacks helper to wire up lifecycle callbacks
-    return this.createSpanWithCallbacks(options, () => {
-      return new DefaultAISpan<TType>(options, this);
-    });
+  protected createSpan<TType extends AISpanType>(options: AISpanOptions<TType>): AISpan<TType> {
+    // Simple span creation - base class handles all telemetry lifecycle automatically
+    return new DefaultAISpan<TType>(options, this);
   }
 }

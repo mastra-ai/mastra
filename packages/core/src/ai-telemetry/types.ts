@@ -312,7 +312,7 @@ export interface AITelemetrySampler {
 }
 
 /**
- * Options for span creation (internal - used by telemetry system)
+ * Options for span creation
  */
 export interface AISpanOptions<TType extends AISpanType> {
   /** Span name */
@@ -323,11 +323,6 @@ export interface AISpanOptions<TType extends AISpanType> {
   metadata: AISpanTypeMap[TType];
   /** Parent span */
   parent?: AISpan<any>;
-  /** Internal callback for span lifecycle events (set by telemetry instance) */
-  _callbacks?: {
-    onEnd?: (span: AISpan<any>) => void;
-    onUpdate?: (span: AISpan<any>) => void;
-  };
 }
 
 /**

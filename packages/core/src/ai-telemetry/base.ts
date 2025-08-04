@@ -97,14 +97,13 @@ export abstract class MastraAITelemetry extends MastraBase {
       name,
       metadata,
       parent,
-      _callbacks: {
-        onEnd: (span: AnyAISpan) => this.emitSpanEnded(span),
-        onUpdate: (span: AnyAISpan) => this.emitSpanUpdated(span),
-      },
     };
 
-    const span = this._startSpan(options);
+    const span = this.createSpan(options);
     span.trace = parent ? parent.trace : span;
+
+    // Automatically wire up telemetry lifecycle
+    this.wireSpanLifecycle(span);
 
     // Emit span started event
     this.emitSpanStarted(span);
@@ -117,17 +116,18 @@ export abstract class MastraAITelemetry extends MastraBase {
   // ============================================================================
 
   /**
-   * Start a new span (called after sampling)
+   * Create a new span (called after sampling)
    *
    * Implementations should:
-   * 1. Create a span with the provided metadata
-   * 2. Use createSpanWithCallbacks() helper to automatically wire up lifecycle callbacks
+   * 1. Create a plain span with the provided metadata
+   * 2. Return the span - base class handles all telemetry lifecycle automatically
    *
    * The base class will automatically:
    * - Set trace relationships
+   * - Wire span lifecycle callbacks
    * - Emit span_started event
    */
-  protected abstract _startSpan<TType extends AISpanType>(options: AISpanOptions<TType>): AISpan<TType>;
+  protected abstract createSpan<TType extends AISpanType>(options: AISpanOptions<TType>): AISpan<TType>;
 
   // ============================================================================
   // Configuration Management - Following Mastra patterns
@@ -180,35 +180,28 @@ export abstract class MastraAITelemetry extends MastraBase {
   }
 
   // ============================================================================
-  // Span Creation Helpers
+  // Span Lifecycle Management
   // ============================================================================
 
   /**
-   * Create a span that automatically calls lifecycle callbacks
-   * This is a helper for concrete implementations to wire up callbacks correctly
+   * Automatically wire up telemetry lifecycle for any span
+   * This ensures all spans emit events regardless of implementation
    */
-  protected createSpanWithCallbacks<TType extends AISpanType>(
-    options: AISpanOptions<TType>,
-    createSpanFn: (opts: AISpanOptions<TType>) => AISpan<TType>,
-  ): AISpan<TType> {
-    const span = createSpanFn(options);
-
+  private wireSpanLifecycle<TType extends AISpanType>(span: AISpan<TType>): void {
     // Store original methods
     const originalEnd = span.end.bind(span);
     const originalUpdate = span.update.bind(span);
 
-    // Wrap methods to call callbacks
-    span.end = (endOptions?: Partial<AISpanTypeMap[TType]>) => {
-      originalEnd(endOptions);
-      options._callbacks?.onEnd?.(span);
+    // Wrap methods to automatically emit telemetry events
+    span.end = (metadata?: Partial<AISpanTypeMap[TType]>) => {
+      originalEnd(metadata);
+      this.emitSpanEnded(span);
     };
 
     span.update = (metadata: Partial<AISpanTypeMap[TType]>) => {
       originalUpdate(metadata);
-      options._callbacks?.onUpdate?.(span);
+      this.emitSpanUpdated(span);
     };
-
-    return span;
   }
 
   // ============================================================================
