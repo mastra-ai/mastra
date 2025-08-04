@@ -8383,6 +8383,93 @@ describe('Workflow', () => {
         date: new Date('2024-12-31'),
       });
     });
+
+    it('should maintain correct step status after resuming in branching workflows - #6419', async () => {
+      const branchStep1 = createStep({
+        id: 'branch-step-1',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        resumeSchema: z.object({ multiplier: z.number() }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            await suspend({});
+            return { result: 0 };
+          }
+          return { result: inputData.value * resumeData.multiplier };
+        },
+      });
+
+      const branchStep2 = createStep({
+        id: 'branch-step-2',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.number() }),
+        resumeSchema: z.object({ multiplier: z.number() }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            await suspend({});
+            return { result: 0 };
+          }
+          return { result: inputData.value * resumeData.multiplier };
+        },
+      });
+
+      const testWorkflow = createWorkflow({
+        id: 'branching-state-bug-test',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          'branch-step-1': z.object({ result: z.number() }),
+          'branch-step-2': z.object({ result: z.number() }),
+        }),
+        mastra: new Mastra({ logger: false, storage: testStorage }),
+      })
+        .branch([
+          [async () => true, branchStep1], // First branch will execute and suspend
+          [async () => true, branchStep2], // Second branch will execute and suspend
+        ])
+        .commit();
+
+      const run = await testWorkflow.createRunAsync();
+
+      // Start workflow - both steps should suspend
+      const initialResult = await run.start({ inputData: { value: 10 } });
+
+      expect(initialResult.status).toBe('suspended');
+      expect(initialResult.steps['branch-step-1'].status).toBe('suspended');
+      expect(initialResult.steps['branch-step-2'].status).toBe('suspended');
+      if (initialResult.status === 'suspended') {
+        expect(initialResult.suspended).toHaveLength(2);
+        expect(initialResult.suspended[0]).toContain('branch-step-1');
+        expect(initialResult.suspended[1]).toContain('branch-step-2');
+      }
+
+      const resumedResult1 = await run.resume({
+        step: 'branch-step-1',
+        resumeData: { multiplier: 2 },
+      });
+      // Workflow should still be suspended (branch-step-2 not resumed yet)
+      expect(resumedResult1.status).toBe('suspended');
+      expect(resumedResult1.steps['branch-step-1'].status).toBe('success');
+      expect(resumedResult1.steps['branch-step-2'].status).toBe('suspended');
+      if (resumedResult1.status === 'suspended') {
+        expect(resumedResult1.suspended).toHaveLength(1);
+        expect(resumedResult1.suspended[0]).toContain('branch-step-2');
+      }
+
+      const finalResult = await run.resume({
+        step: 'branch-step-2',
+        resumeData: { multiplier: 3 },
+      });
+
+      expect(finalResult.status).toBe('success');
+      expect(finalResult.steps['branch-step-1'].status).toBe('success');
+      expect(finalResult.steps['branch-step-2'].status).toBe('success');
+      if (finalResult.status === 'success') {
+        expect(finalResult.result).toEqual({
+          'branch-step-1': { result: 20 }, // 10 * 2
+          'branch-step-2': { result: 30 }, // 10 * 3
+        });
+      }
+    });
   });
 
   describe('Dependency Injection', () => {
