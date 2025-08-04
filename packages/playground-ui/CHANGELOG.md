@@ -1,5 +1,17 @@
 # @mastra/playground-ui
 
+## 5.1.18-alpha.1
+
+### Patch Changes
+
+- ea0c5f2: Update to support new scorer api
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+  - @mastra/client-js@0.10.19-alpha.1
+
 ## 5.1.18-alpha.0
 
 ### Patch Changes
