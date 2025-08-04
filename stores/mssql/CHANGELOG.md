@@ -1,5 +1,32 @@
 # @mastra/mssql
 
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- 8c5a2b0: feat(mssql): implement comprehensive scoring system, enhance storage operations & format storage into domains
+  - Add full CRUD operations for scoring system (getScoreById, saveScore, getScoresByScorerId, etc.)
+  - Implement message deletion functionality with thread timestamp updates
+  - Enhance thread management with sorting options and improved pagination
+  - Add batch trace insertion for improved performance
+  - Implement proper storage domain initialization with all operation bindings
+  - Enhance message parsing and formatting with better v1/v2 support
+  - Improve table operations with better foreign key handling
+  - Add float data type support in schema creation
+  - Enhance timestamp handling with proper SQL DateTime2 usage
+  - Update core dependency to latest version
+  - Format storage into domains and separate these into different files
+
+  BREAKING CHANGE: deleteMessages support is now enabled (was previously false)
+
+### Patch Changes
+
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+
 ## 0.2.3
 
 ### Patch Changes

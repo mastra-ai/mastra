@@ -1,5 +1,17 @@
 # @mastra/memory
 
+## 0.12.1-alpha.1
+
+### Patch Changes
+
+- 7d53af4: dependencies updates:
+  - Updated dependency [`redis@^5.7.0` ↗︎](https://www.npmjs.com/package/redis/v/5.7.0) (from `^5.6.0`, in `dependencies`)
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+
 ## 0.12.1-alpha.0
 
 ### Patch Changes
