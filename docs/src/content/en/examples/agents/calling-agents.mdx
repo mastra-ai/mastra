@@ -5,7 +5,9 @@ description: Example for how to call agents.
 
 # Calling Agents
 
-There are multiple ways to interact with agents created using Mastra. Below you will find examples of how to call agents using workflow steps, tools, the Mastra Client SDK, and the command line for quick local testing.
+There are multiple ways to interact with agents created using Mastra. Below you will find examples of how to call agents using workflow steps, tools, the [Mastra Client SDK](../../docs/server-db/mastra-client.mdx), and the command line for quick local testing.
+
+This page demonstrates how to call the `cityAgent` described in the [Agent System Prompt](./system-prompt.mdx) example.
 
 ## From a workflow step
 
@@ -92,7 +94,7 @@ const response = await agent.generate("Tell me an interesting fact about London"
 console.log(response.text);
 ```
 
-Call this script from your command line using:
+Run this script from your command line using:
 
 ```bash
 npx tsx src/test-agent.ts

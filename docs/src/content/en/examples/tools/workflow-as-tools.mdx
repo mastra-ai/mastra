@@ -84,7 +84,7 @@ export const temperatureWorkflow = createWorkflow({
   .commit();
 ```
 
-## Using a workflow in a tool
+## Running a workflow from a tool
 
 This tool wraps the workflow and exposes it through a standard tool interface. It takes a `city` as input, runs the underlying workflow, and returns the resulting `temperature`.
 
@@ -125,3 +125,7 @@ export const getTemperatureTool = createTool({
   marginTop='mt-16'
   link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/workflow-as-tools"
 />
+
+## Related
+
+- [Calling Tools](./calling-tools.mdx#from-the-command-line)
