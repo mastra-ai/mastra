@@ -156,7 +156,7 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
     return output.aisdk.v4.getFullOutput();
   };
 
-  describe.only('generateText', () => {
+  describe('generateText', () => {
     describe('result.text', () => {
       it('should generate text', async () => {
         const result = await generateText({
@@ -610,7 +610,7 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
     });
 
     // TODO: does not populate body on a streaming response -- we can track body ourselves
-    describe.skip('result.response', () => {
+    describe.todo('result.response', () => {
       it('should contain response body and headers', async () => {
         const result = await generateText({
           model: new MockLanguageModelV1({
@@ -731,7 +731,7 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
     });
 
     // todo abortSignal is not passed to execute
-    describe.skip('options.abortSignal', () => {
+    describe.todo('options.abortSignal', () => {
       it('should forward abort signal to tool execution', async () => {
         const abortController = new AbortController();
         const toolExecuteMock = vi.fn().mockResolvedValue('tool result');
@@ -1094,7 +1094,7 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
       });
     });
 
-    // todo input messages
+    // todo options
     describe.skip('options.messages', () => {
       it('should detect and convert ui messages', async () => {
         const result = await generateText({
@@ -1240,7 +1240,8 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
       });
     });
 
-    describe('options.output', () => {
+    // todo options
+    describe.skip('options.output', () => {
       describe('no output', () => {
         it.todo('should throw error when accessing output', async () => {
           const result = await generateText({
@@ -1526,7 +1527,7 @@ export function generateTextTests({ executeFn, runId }: { executeFn: typeof exec
     });
 
     // todo
-    describe.skip('tool execution errors', () => {
+    describe.todo('tool execution errors', () => {
       it('should throw a ToolExecutionError when a tool execution throws an error', async () => {
         await expect(async () => {
           await generateText({
