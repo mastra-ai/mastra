@@ -88,7 +88,7 @@ export abstract class MastraAITelemetry extends MastraBase {
       return new NoOpAISpan<TType>({ type, name, metadata, parent }, this);
     }
 
-    if ((runtimeContext || attributes) && !this.shouldSample({ runtimeContext, attributes })) {
+    if (!this.shouldSample({ runtimeContext, attributes })) {
       return new NoOpAISpan<TType>({ type, name, metadata, parent }, this);
     }
 
@@ -241,7 +241,6 @@ export abstract class MastraAITelemetry extends MastraBase {
         return true;
       case 'always_off':
         return false;
-      case 'ratio':
       case 'ratio':
         if (sampling.probability === undefined || sampling.probability < 0 || sampling.probability > 1) {
           this.logger.warn(
