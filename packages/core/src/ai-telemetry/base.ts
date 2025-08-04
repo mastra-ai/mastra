@@ -10,6 +10,7 @@ import type {
   AITelemetryConfig,
   AISpan,
   AISpanOptions,
+  AISpanType,
   AITelemetryExporter,
   AISpanProcessor,
   AITelemetrySampler,
@@ -18,7 +19,7 @@ import type {
   AISpanTypeMap,
   AnyAISpan,
 } from './types';
-import { AISpanType, SamplingStrategyType, AITelemetryEventType } from './types';
+import { SamplingStrategyType, AITelemetryEventType } from './types';
 
 // ============================================================================
 // Abstract Base Class

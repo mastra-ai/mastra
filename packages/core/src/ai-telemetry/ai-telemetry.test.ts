@@ -778,6 +778,51 @@ describe('AI Telemetry', () => {
         expect(metadata['self']).toBe('[Circular Reference]');
         expect(metadata['name']).toBe('test');
       });
+
+      it('should return heavily redacted metadata on filtering error', () => {
+        const processor = new SensitiveDataFilter();
+
+        // Create a problematic object that will cause JSON serialization issues
+        // This can trigger errors in the deepFilter process
+        const problematic: any = {};
+        Object.defineProperty(problematic, 'badProp', {
+          get() {
+            throw new Error('Property access error');
+          },
+          enumerable: true,
+        });
+
+        const mockSpan = {
+          id: 'test-span-1',
+          name: 'test-span',
+          type: AISpanType.AGENT_RUN,
+          startTime: new Date(),
+          traceId: 'trace-123',
+          trace: { traceId: 'trace-123' } as any,
+          metadata: {
+            agentId: 'agent-123',
+            sensitiveData: 'this-should-not-be-visible',
+            problematicObject: problematic,
+          },
+          aiTelemetry: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+        expect(filtered).not.toBeNull();
+
+        const metadata = filtered!.metadata;
+        expect(metadata['[FILTERING_ERROR]']).toBe('Metadata was completely redacted due to filtering error');
+        expect(metadata['[ERROR_MESSAGE]']).toBe('Property access error');
+
+        // Should NOT contain the original sensitive data
+        expect(metadata['sensitiveData']).toBeUndefined();
+        expect(metadata['agentId']).toBeUndefined();
+        expect(metadata['problematicObject']).toBeUndefined();
+      });
     });
 
     describe('Integration Tests', () => {

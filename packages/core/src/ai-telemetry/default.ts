@@ -211,8 +211,13 @@ export class SensitiveDataFilter implements AISpanProcessor {
       filteredSpan.metadata = deepFilter(span.metadata);
       return filteredSpan;
     } catch (error) {
-      // If filtering fails, return original span - better than losing data
-      return span;
+      // If filtering fails, return heavily redacted span for security
+      const safeSpan = { ...span };
+      safeSpan.metadata = {
+        '[FILTERING_ERROR]': 'Metadata was completely redacted due to filtering error',
+        '[ERROR_MESSAGE]': error instanceof Error ? error.message : 'Unknown filtering error',
+      } as any;
+      return safeSpan;
     }
   }
 
@@ -248,7 +253,8 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
       try {
         return JSON.stringify(metadata, null, 2);
       } catch (error) {
-        return '[Unable to serialize metadata]';
+        const errMsg = error instanceof Error ? error.message : 'Unknown formatting error';
+        return `[Unable to serialize metadata: ${errMsg}]`;
       }
     };
 
