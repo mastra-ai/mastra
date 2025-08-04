@@ -24,7 +24,7 @@ import { z } from "zod";
 
 const getCityCoordinates = createStep({
   id: "get-city-coordinates",
-  description: "get geocoding details for a city",
+  description: "Get geocoding details for a city",
   inputSchema: z.object({
     city: z.string()
   }),
@@ -49,7 +49,7 @@ const getCityCoordinates = createStep({
 
 const getCityTemperature = createStep({
   id: "get-city-temperature",
-  description: "get temperature for latitude/longitude",
+  description: "Get temperature for latitude/longitude",
   inputSchema: z.object({
     latitude: z.number(),
     longitude: z.number()

@@ -25,7 +25,7 @@ import { Agent } from "@mastra/core/agent";
 
 export const supportAgent = new Agent({
   name: "support-agent",
-  description: "returns technical support for mastra cloud based on runtime context",
+  description: "Returns technical support for mastra cloud based on runtime context",
   instructions: async ({ runtimeContext }) => {
     const userTier = runtimeContext.get("user-tier");
     const language = runtimeContext.get("language");

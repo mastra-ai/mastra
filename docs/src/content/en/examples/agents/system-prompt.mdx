@@ -27,7 +27,7 @@ import { Agent } from "@mastra/core/agent";
 
 export const cityAgent = new Agent({
   name: "city-agent",
-  description: "create facts for a city",
+  description: "Create facts for a city",
   instructions:
     "You are an expert in geography and travel. When given the name of a city, respond with one interesting, lesser-known fact about that city. Keep the response concise and factual.",
   model: openai("gpt-4o")

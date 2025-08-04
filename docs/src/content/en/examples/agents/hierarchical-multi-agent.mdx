@@ -48,7 +48,7 @@ import { z } from "zod";
 
 export const copywriterTool = createTool({
   id: "copywriter-agent",
-  description: "calls the copywriter agent to write blog post copy.",
+  description: "Calls the copywriter agent to write blog post copy.",
   inputSchema: z.object({
     topic: z.string()
   }),
@@ -93,7 +93,7 @@ import { z } from "zod";
 
 export const editorTool = createTool({
   id: "editor-agent",
-  description: "calls the editor agent to edit blog post copy.",
+  description: "Calls the editor agent to edit blog post copy.",
   inputSchema: z.object({
     copy: z.string()
   }),
