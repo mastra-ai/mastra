@@ -11,6 +11,7 @@ import {
   getMessagesPaginatedHandler,
   getThreadByIdHandler,
   getThreadsHandler,
+  getThreadsPaginatedHandler,
   getWorkingMemoryHandler,
   saveMessagesHandler,
   searchMemoryHandler,
@@ -579,6 +580,68 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getThreadsHandler,
+  );
+
+  router.get(
+    '/threads/paginated',
+    describeRoute({
+      description: 'Get paginated threads',
+      tags: ['memory'],
+      parameters: [
+        {
+          name: 'resourceId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number', default: 0 },
+          description: 'Page number',
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number', default: 100 },
+          description: 'Number of threads per page',
+        },
+        {
+          name: 'orderBy',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'string',
+            enum: ['createdAt', 'updatedAt'],
+            default: 'createdAt',
+          },
+        },
+        {
+          name: 'sortDirection',
+          in: 'query',
+          required: false,
+          schema: {
+            type: 'string',
+            enum: ['ASC', 'DESC'],
+            default: 'DESC',
+          },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Paginated list of threads',
+        },
+      },
+    }),
+    getThreadsPaginatedHandler,
   );
 
   router.get(

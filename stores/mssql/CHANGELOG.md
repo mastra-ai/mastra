@@ -1,4 +1,4 @@
-# Changelog for mastra-mssql
+# @mastra/mssql
 
 ## 0.2.3
 
