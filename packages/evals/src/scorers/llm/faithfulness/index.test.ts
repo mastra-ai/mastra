@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 
-import { createAgentTestRun, createToolInvocation, createUIMessage } from '../../utils';
+import { createAgentTestRun, createUIMessage } from '../../utils';
 import { createFaithfulnessScorer } from './index';
 
 const testCases = [
@@ -154,9 +154,8 @@ describe(
     it('should handle perfect faithfulness', async () => {
       const testCase = testCases[0]!;
       const scorer = createFaithfulnessScorer({ model, options: { context: testCase.context } });
-      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input })];
-      const toolInvocations = [createToolInvocation({ result: { context: testCase.context } })];
-      const output = [createUIMessage({ role: 'assistant', content: testCase.output, toolInvocations })];
+      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
 
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
 
@@ -166,9 +165,8 @@ describe(
     it('should handle mixed faithfulness with contradictions', async () => {
       const testCase = testCases[1]!;
       const scorer = createFaithfulnessScorer({ model, options: { context: testCase.context } });
-      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input })];
-      const toolInvocations = [createToolInvocation({ result: { context: testCase.context } })];
-      const output = [createUIMessage({ role: 'assistant', content: testCase.output, toolInvocations })];
+      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
@@ -177,9 +175,8 @@ describe(
     it('should handle claims with speculative language', async () => {
       const testCase = testCases[2]!;
       const scorer = createFaithfulnessScorer({ model, options: { context: testCase.context } });
-      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input })];
-      const toolInvocations = [createToolInvocation({ result: { context: testCase.context } })];
-      const output = [createUIMessage({ role: 'assistant', content: testCase.output, toolInvocations })];
+      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
@@ -188,9 +185,8 @@ describe(
     it('should handle empty output', async () => {
       const testCase = testCases[3]!;
       const scorer = createFaithfulnessScorer({ model, options: { context: testCase.context } });
-      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input })];
-      const toolInvocations = [createToolInvocation({ result: { context: testCase.context } })];
-      const output = [createUIMessage({ role: 'assistant', content: testCase.output, toolInvocations })];
+      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
 
       expect(result.score).toBe(testCase.expectedResult.score);
@@ -199,9 +195,8 @@ describe(
     it('should handle empty context', async () => {
       const testCase = testCases[4]!;
       const scorer = createFaithfulnessScorer({ model, options: { context: testCase.context } });
-      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input })];
-      const toolInvocations = [createToolInvocation({ result: { context: testCase.context } })];
-      const output = [createUIMessage({ role: 'assistant', content: testCase.output, toolInvocations })];
+      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
 
       expect(result.score).toBe(testCase.expectedResult.score);
@@ -210,9 +205,8 @@ describe(
     it('should handle subjective claims', async () => {
       const testCase = testCases[5]!;
       const scorer = createFaithfulnessScorer({ model, options: { context: testCase.context } });
-      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input })];
-      const toolInvocations = [createToolInvocation({ result: { context: testCase.context } })];
-      const output = [createUIMessage({ role: 'assistant', content: testCase.output, toolInvocations })];
+      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
 
       expect(result.score).toBe(testCase.expectedResult.score);
@@ -221,9 +215,8 @@ describe(
     it('should handle claims with speculative language appropriately', async () => {
       const testCase = testCases[6]!;
       const scorer = createFaithfulnessScorer({ model, options: { context: testCase.context } });
-      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input })];
-      const toolInvocations = [createToolInvocation({ result: { context: testCase.context } })];
-      const output = [createUIMessage({ role: 'assistant', content: testCase.output, toolInvocations })];
+      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
@@ -232,9 +225,8 @@ describe(
     it('should handle compound statements correctly', async () => {
       const testCase = testCases[7]!;
       const scorer = createFaithfulnessScorer({ model, options: { context: testCase.context } });
-      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input })];
-      const toolInvocations = [createToolInvocation({ result: { context: testCase.context } })];
-      const output = [createUIMessage({ role: 'assistant', content: testCase.output, toolInvocations })];
+      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
@@ -243,9 +235,8 @@ describe(
     it('should handle precise numerical claims', async () => {
       const testCase = testCases[8]!;
       const scorer = createFaithfulnessScorer({ model, options: { context: testCase.context } });
-      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input })];
-      const toolInvocations = [createToolInvocation({ result: { context: testCase.context } })];
-      const output = [createUIMessage({ role: 'assistant', content: testCase.output, toolInvocations })];
+      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
 
       expect(result.score).toBe(testCase.expectedResult.score);
@@ -254,9 +245,8 @@ describe(
     it('should handle partially supported claims', async () => {
       const testCase = testCases[9]!;
       const scorer = createFaithfulnessScorer({ model, options: { context: testCase.context } });
-      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input })];
-      const toolInvocations = [createToolInvocation({ result: { context: testCase.context } })];
-      const output = [createUIMessage({ role: 'assistant', content: testCase.output, toolInvocations })];
+      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
@@ -265,9 +255,8 @@ describe(
     it('should handle mixed factual and speculative claims', async () => {
       const testCase = testCases[10]!;
       const scorer = createFaithfulnessScorer({ model, options: { context: testCase.context } });
-      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input })];
-      const toolInvocations = [createToolInvocation({ result: { context: testCase.context } })];
-      const output = [createUIMessage({ role: 'assistant', content: testCase.output, toolInvocations })];
+      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
@@ -276,9 +265,8 @@ describe(
     it('should handle implicit information appropriately', async () => {
       const testCase = testCases[11]!;
       const scorer = createFaithfulnessScorer({ model, options: { context: testCase.context } });
-      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input })];
-      const toolInvocations = [createToolInvocation({ result: { context: testCase.context } })];
-      const output = [createUIMessage({ role: 'assistant', content: testCase.output, toolInvocations })];
+      const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);

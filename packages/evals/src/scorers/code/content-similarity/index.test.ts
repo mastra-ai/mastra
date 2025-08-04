@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { createAgentTestRun, createTestRun, createToolInvocation, createUIMessage } from '../../utils';
+import { createAgentTestRun, createUIMessage } from '../../utils';
 import { createContentSimilarityScorer } from './index';
 
 describe('ContentSimilarityMetric', () => {

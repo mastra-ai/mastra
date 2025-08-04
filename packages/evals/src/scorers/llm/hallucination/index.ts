@@ -1,8 +1,9 @@
 import type { LanguageModel } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 
 import { z } from 'zod';
-import { roundToTwoDecimals } from '../../utils';
+import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput, roundToTwoDecimals } from '../../utils';
 import {
   createHallucinationAnalyzePrompt,
   createHallucinationExtractPrompt,
@@ -22,7 +23,7 @@ export function createHallucinationScorer({
   model: LanguageModel;
   options?: HallucinationMetricOptions;
 }) {
-  return createScorer({
+  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
     name: 'Hallucination Scorer',
     description: 'A scorer that evaluates the hallucination of an LLM output to an input',
     judge: {
@@ -36,7 +37,7 @@ export function createHallucinationScorer({
         claims: z.array(z.string()),
       }),
       createPrompt: ({ run }) => {
-        const prompt = createHallucinationExtractPrompt({ output: run.output.text });
+        const prompt = createHallucinationExtractPrompt({ output: getAssistantMessageFromRunOutput(run.output) ?? '' });
         return prompt;
       },
     })
@@ -69,8 +70,8 @@ export function createHallucinationScorer({
       description: 'Reason about the results',
       createPrompt: ({ run, results, score }) => {
         const prompt = createHallucinationReasonPrompt({
-          input: run.input?.map((input: { content: string }) => input.content).join(', ') || '',
-          output: run.output.text,
+          input: getUserMessageFromRunInput(run.input) ?? '',
+          output: getAssistantMessageFromRunOutput(run.output) ?? '',
           context: options?.context || [],
           score,
           scale: options?.scale || 1,

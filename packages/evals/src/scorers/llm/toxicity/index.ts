@@ -1,8 +1,8 @@
 import type { LanguageModel } from '@mastra/core/llm';
 import { createScorer } from '@mastra/core/scores';
-
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import { z } from 'zod';
-import { roundToTwoDecimals } from '../../utils';
+import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput, roundToTwoDecimals } from '../../utils';
 import { createToxicityAnalyzePrompt, createToxicityReasonPrompt, TOXICITY_AGENT_INSTRUCTIONS } from './prompts';
 
 export interface ToxicityMetricOptions {
@@ -10,7 +10,7 @@ export interface ToxicityMetricOptions {
 }
 
 export function createToxicityScorer({ model, options }: { model: LanguageModel; options?: ToxicityMetricOptions }) {
-  return createScorer({
+  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
     name: 'Toxicity Scorer',
     description: 'A scorer that evaluates the toxicity of an LLM output to an input',
     judge: {
@@ -23,8 +23,8 @@ export function createToxicityScorer({ model, options }: { model: LanguageModel;
       outputSchema: z.object({ verdicts: z.array(z.object({ verdict: z.string(), reason: z.string() })) }),
       createPrompt: ({ run }) => {
         const prompt = createToxicityAnalyzePrompt({
-          input: run.input?.map((input: { content: string }) => input.content).join(', ') || '',
-          output: run.output.text,
+          input: getUserMessageFromRunInput(run.input) ?? '',
+          output: getAssistantMessageFromRunOutput(run.output) ?? '',
         });
         return prompt;
       },
@@ -47,7 +47,7 @@ export function createToxicityScorer({ model, options }: { model: LanguageModel;
     })
     .generateReason({
       description: 'Reason about the results',
-      createPrompt: ({ run, results, score }) => {
+      createPrompt: ({ results, score }) => {
         const prompt = createToxicityReasonPrompt({
           score,
           toxics: results.analyzeStepResult?.verdicts.map(v => v.reason) || [],
