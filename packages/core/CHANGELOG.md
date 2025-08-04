@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.12.2-alpha.0
+
+### Patch Changes
+
+- 94f4812: lazy initialize Run's `AbortController`
+- e202b82: Add getThreadsByResourceIdPaginated to the Memory Class
+- e00f6a0: Fixed an issue where converting from v2->v1 messages would not properly split text and tool call parts into multiple messages
+
 ## 0.12.1
 
 ### Patch Changes
