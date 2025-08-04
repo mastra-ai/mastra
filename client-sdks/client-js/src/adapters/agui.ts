@@ -219,12 +219,14 @@ export function convertMessagesToMastraMessages(messages: Message[]): CoreMessag
           if (!toolCallsWithResults.has(toolCall.id)) {
             result.push({
               role: 'tool',
-              content: [{
-                type: 'tool-result',
-                toolCallId: toolCall.id,
-                toolName: toolCall.function.name,
-                result: JSON.parse(toolCall.function.arguments), // This is still wrong but matches test expectations
-              }],
+              content: [
+                {
+                  type: 'tool-result',
+                  toolCallId: toolCall.id,
+                  toolName: toolCall.function.name,
+                  result: JSON.parse(toolCall.function.arguments), // This is still wrong but matches test expectations
+                },
+              ],
             });
           }
         }
