@@ -1,5 +1,5 @@
-import { defineConfig } from 'tsup';
 import { generateTypes } from '@internal/types-builder';
+import { defineConfig } from 'tsup';
 
 export default defineConfig({
   entry: ['src/index.ts', 'src/server/handlers.ts', 'src/server/handlers/*.ts', '!src/server/handlers/*.test.ts'],
