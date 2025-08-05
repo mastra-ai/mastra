@@ -61,7 +61,7 @@ describe('MDocument', () => {
       });
 
       expect(embeddings).toBeDefined();
-    });
+    }, 15000);
   });
 
   describe('chunkCharacter', () => {
