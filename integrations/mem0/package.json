@@ -18,7 +18,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -42,7 +42,8 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
     "vitest": "^3.2.4",
-    "zod": "^3.25.67"
+    "zod": "^3.25.67",
+    "@internal/types-builder": "workspace:*"
   },
   "dependencies": {
     "mem0ai": "^2.1.36"

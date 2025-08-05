@@ -15,7 +15,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -25,7 +25,7 @@
         "default": "./dist/server/handlers.js"
       },
       "require": {
-        "types": "./dist/server/handlers.d.cts",
+        "types": "./dist/server/handlers.d.ts",
         "default": "./dist/server/handlers.cjs"
       }
     },
@@ -35,7 +35,7 @@
         "default": "./dist/server/handlers/*.js"
       },
       "require": {
-        "types": "./dist/server/handlers/*.d.cts",
+        "types": "./dist/server/handlers/*.d.ts",
         "default": "./dist/server/handlers/*.cjs"
       }
     },
@@ -68,6 +68,7 @@
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "zod": "^3.25.67",
-    "zod-to-json-schema": "^3.24.5"
+    "zod-to-json-schema": "^3.24.5",
+    "@internal/types-builder": "workspace:*"
   }
 }

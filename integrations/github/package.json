@@ -15,7 +15,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -46,7 +46,8 @@
     "jest": "^29.7.0",
     "ts-jest": "^29.3.4",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@internal/types-builder": "workspace:*"
   },
   "keywords": [],
   "author": "",
