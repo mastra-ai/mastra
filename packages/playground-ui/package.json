@@ -80,7 +80,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "json-schema-to-zod": "^2.6.1",
-    "motion": "^12.23.9",
+    "motion": "^12.23.12",
     "prettier": "^3.6.2",
     "prism-react-renderer": "^2.4.1",
     "react-code-block": "1.1.3",
