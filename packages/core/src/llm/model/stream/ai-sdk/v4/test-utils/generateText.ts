@@ -6,9 +6,7 @@ import type { LanguageModelV1, LanguageModelV1StreamPart } from 'ai';
 import { convertArrayToReadableStream, MockLanguageModelV1, mockId } from 'ai/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import type { MessageInput } from '../../../../../../agent/message-list';
 import type { execute, ExecuteParams } from '../../../execute';
-import type { StreamExecutorProps } from '../../../types';
 
 function createTestModel({
   stream = convertArrayToReadableStream([
@@ -147,7 +145,7 @@ const dummyResponseValues = {
   usage: { promptTokens: 10, completionTokens: 20 },
 };
 
-export function generateTextTests({ executeFn, runId }: { executeFn: typeof execute; runId: string }) {
+export function generateTextTestsV4({ executeFn, runId }: { executeFn: typeof execute; runId: string }) {
   const generateText = async (args: Omit<ExecuteParams, 'runId'>) => {
     const output = await executeFn({
       runId,
