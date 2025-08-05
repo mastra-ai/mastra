@@ -12,7 +12,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -22,7 +22,7 @@
         "default": "./dist/processors/index.js"
       },
       "require": {
-        "types": "./dist/processors/index.d.cts",
+        "types": "./dist/processors/index.d.ts",
         "default": "./dist/processors/index.cjs"
       }
     },
@@ -66,7 +66,8 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.13.0-0 <0.14.0-0"

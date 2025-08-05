@@ -1,8 +1,5 @@
-import { spawn } from 'child_process';
-import { promisify } from 'util';
+import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
-
-const exec = promisify(spawn);
 
 export default defineConfig({
   entry: [
@@ -22,8 +19,6 @@ export default defineConfig({
   },
   sourcemap: true,
   onSuccess: async () => {
-    await exec('pnpm', ['tsc', '-p', 'tsconfig.build.json'], {
-      stdio: 'inherit',
-    });
+    await generateTypes(process.cwd());
   },
 });
