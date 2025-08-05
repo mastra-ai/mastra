@@ -38,14 +38,6 @@ export abstract class MemoryProcessor extends MastraBase {
   }
 }
 
-export type MessageV2Update = Resolve<
-  RequireOnly<MastraMessageV2, 'id' | 'threadId'> & { content: RequireOnly<MastraMessageV2['content'], 'format'> }
->;
-
-export type UpdateMessagesInput = {
-  messages: MessageV2Update[];
-};
-
 export const memoryDefaultOptions = {
   lastMessages: 10,
   semanticRecall: false,
@@ -494,7 +486,11 @@ export abstract class MastraMemory extends MastraBase {
    * @param messages - The list of messages to update
    * @returns Promise that resolves to the list of updated messages
    */
-  abstract updateMessages({ messages }: UpdateMessagesInput): Promise<MastraMessageV2[]>;
+  abstract updateMessages({
+    messages,
+  }: {
+    messages: Resolve<RequireOnly<MastraMessageV2, 'id'>>[];
+  }): Promise<MastraMessageV2[]>;
 
   /**
    * Deletes multiple messages by their IDs
