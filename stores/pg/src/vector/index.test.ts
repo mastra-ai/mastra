@@ -2716,6 +2716,7 @@ describe('PgVector Metadata Filtering', () => {
   createVectorTestSuite({
     vector: metadataVectorDB,
     createIndex: async (indexName: string) => {
+      // Using dimension 4 as required by the metadata filtering test vectors
       await metadataVectorDB.createIndex({ indexName, dimension: 4 });
     },
     deleteIndex: async (indexName: string) => {
@@ -2723,7 +2724,6 @@ describe('PgVector Metadata Filtering', () => {
     },
     waitForIndexing: async () => {
       // PG doesn't need to wait for indexing
-      await new Promise(resolve => setTimeout(resolve, 100));
     },
   });
 });
