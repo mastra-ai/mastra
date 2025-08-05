@@ -420,7 +420,7 @@ export class AISDKV5OutputStream {
       sources: this.sources,
       files: this.files,
       response: this.response,
-      content: this.content,
+      content: this.content, // TODO: wrong shape / missing 'sources' (filtered out in transformResponse) etc
       totalUsage: this.#modelOutput.totalUsage,
       // experimental_output: // TODO
     };
