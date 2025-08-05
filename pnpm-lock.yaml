@@ -1708,8 +1708,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@mendable/firecrawl-js':
-        specifier: ^1.29.2
-        version: 1.29.2
+        specifier: ^1.29.3
+        version: 1.29.3
       '@microsoft/api-extractor':
         specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.9)
@@ -6490,8 +6490,8 @@ packages:
       '@mastra/core': ^0.10.0-alpha.0
       ai: ^4.0.0
 
-  '@mendable/firecrawl-js@1.29.2':
-    resolution: {integrity: sha512-Yv3lyCbGTm8hRSrRzRi2eqJFXZNyTuL1y34tABSSxNPqlvL7HJV+f1zPnhksZ48gPcn/OJm/E68MDnSfTYXKzA==}
+  '@mendable/firecrawl-js@1.29.3':
+    resolution: {integrity: sha512-+uvDktesJmVtiwxMtimq+3f5bKlsan4T7TokxOI7DbxFkApwrRNss5GYEXbInveMTz8LpGth/9Ch5BTwCqrpfA==}
     engines: {node: '>=22.0.0'}
 
   '@microsoft/api-extractor-model@7.30.6':
@@ -19784,7 +19784,7 @@ snapshots:
       - aws-crt
       - encoding
 
-  '@mendable/firecrawl-js@1.29.2':
+  '@mendable/firecrawl-js@1.29.3':
     dependencies:
       axios: 1.11.0(debug@4.4.1)
       typescript-event-target: 1.1.1
