@@ -109,6 +109,8 @@ function resolveThreadIdFromArgs(args: {
     'getDefaultGenerateOptions',
     'getDefaultStreamOptions',
     'getDescription',
+    'getScorers',
+    'getVoice',
   ],
 })
 export class Agent<
