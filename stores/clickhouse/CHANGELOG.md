@@ -1,5 +1,12 @@
 # @mastra/clickhouse
 
+## 0.13.0-alpha.1
+
+### Patch Changes
+
+- 3e9c2ff: dependencies updates:
+  - Updated dependency [`@clickhouse/client@^1.12.0` ↗︎](https://www.npmjs.com/package/@clickhouse/client/v/1.12.0) (from `^1.11.2`, in `dependencies`)
+
 ## 0.13.0-alpha.0
 
 ### Minor Changes
