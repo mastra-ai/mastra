@@ -1,0 +1,148 @@
+export const useTemplates = () => {
+  return {
+    ok: true,
+    data: [
+      {
+        title: 'Weather Agent',
+        slug: 'weather-agent',
+        githubUrl: 'https://github.com/mastra-ai/weather-agent',
+        description: 'Get weather information of any city.',
+        longDescription: 'One Agent, one Workflow and one Tool to bring you the weather in your city.',
+        imageURL: '',
+        tags: ['agent', 'workflow', 'tool'],
+        useCase: '',
+        supportedProviders: ['openai', 'anthropic', 'google', 'groq'],
+      },
+      {
+        slug: 'pdf-questions',
+        title: 'Chat with PDF',
+        description: 'Upload a PDF and ask questions about its content',
+        longDescription:
+          'Upload a PDF and ask questions about its content.\n\nRequires a URL to a PDF file.\n\nThis template provides an example on fetching and parsing a file, extracting text, and using it to answer questions.',
+        githubUrl: 'https://github.com/mastra-ai/template-pdf-questions',
+        tags: ['Starter apps', 'RAG', 'Workflow', 'Agent', 'Document processing'],
+        useCase: 'Document processing',
+        imageURL:
+          'https://res.cloudinary.com/mastra-assets/image/upload/v1753190658/template-pdf-assistant_vzttkz.avif',
+        agents: ['questionGeneratorAgent'],
+        tools: ['simpleOCR'],
+        workflows: ['pdfToQuestionsWorkflow'],
+        mcp: [],
+        networks: [],
+        videoURL:
+          'https://res.cloudinary.com/mastra-assets/video/upload/v1753271214/template_video_pdf_compressed_tto54l.mp4',
+        supportedProviders: ['openai', 'anthropic', 'google', 'groq'],
+      },
+      {
+        slug: 'text-to-sql',
+        title: 'Text-to-SQL',
+        description: 'Ask questions in natural language, get SQL queries',
+        longDescription:
+          'Ask questions in natural language, get SQL queries.\n\n  Supports PostgreSQL. Requires a connection string.\n\n  This template provides a Mastra workflow for database introspection and natural language to SQL conversion. It includes tools for analyzing database schemas, generating SQL queries from natural language descriptions, and executing queries safely.',
+        githubUrl: 'https://github.com/mastra-ai/template-text-to-sql',
+        tags: ['Workflow', 'Agent', 'Data analysis'],
+        useCase: 'Data analysis',
+        imageURL: 'https://res.cloudinary.com/mastra-assets/image/upload/v1753190656/template-text-to-sql_adpxdd.avif',
+        agents: ['sqlAgent'],
+        tools: ['databaseIntrospectionTool', 'databaseSeedingTool', 'sqlExecutionTool', 'sqlGenerationTool'],
+        workflows: ['databaseQueryWorkflow'],
+        mcp: [],
+        networks: [],
+        videoURL:
+          'https://res.cloudinary.com/mastra-assets/video/upload/v1753293268/template_video_text_to_sql_compressed_euyxjc.mp4',
+        supportedProviders: ['openai', 'anthropic', 'google', 'groq'],
+      },
+      {
+        slug: 'deep-research',
+        title: 'Deep research',
+        description: 'Browse the web and summarize findings',
+        longDescription:
+          "Browse the web and summarize findings.\n\n  Requires an Exa (https://exa.ai) API key.\n\nThis template implements an advanced AI deep research assistant using Mastra's workflows and agent capabilities. It creates an interactive, human-in-the-loop research system that allows users to explore topics, evaluate results, and generate comprehensive reports.\n  ",
+        githubUrl: 'https://github.com/mastra-ai/template-deep-research',
+        tags: ['Agent', 'RAG', 'Workflow', 'Starter apps', 'Web browsing'],
+        useCase: 'Web browsing',
+        imageURL:
+          'https://res.cloudinary.com/mastra-assets/image/upload/v1753190655/template-deep-research_ogy3g6.avif',
+        agents: ['evaluationAgent', 'learningExtractionAgent', 'reportAgent', 'researchAgent'],
+        tools: ['evaluateResultTool', 'extractLearningTool', 'webSearchTool'],
+        workflows: ['generateReportWorkflow', 'researchWorkflow'],
+        mcp: [],
+        networks: [],
+        videoURL:
+          'https://res.cloudinary.com/mastra-assets/video/upload/v1753271216/template_video_deep_research_template_compressed_gcpzod.mp4',
+        supportedProviders: ['openai', 'anthropic', 'google', 'groq'],
+      },
+      {
+        slug: 'csv-to-questions',
+        title: 'Chat with CSV',
+        description: 'Interactively query tabular data with natural language',
+        longDescription:
+          'Interactively query tabular data with natural language.\n\nRequires an URL to a CSV file and an OpenAI API key.\n\nThis template provides an example on fetching and parsing a CSV file and using it to answer questions.',
+        githubUrl: 'https://github.com/mastra-ai/template-csv-to-questions',
+        tags: ['Starter apps', 'RAG', 'Agent', 'Workflow', 'Data analysis'],
+        useCase: 'Data analysis',
+        imageURL: 'https://res.cloudinary.com/mastra-assets/image/upload/v1753190659/template-csv_flc5wa.avif',
+        agents: ['csvQuestionAgent'],
+        tools: ['csvTool'],
+        workflows: ['csvToQuestionsWorkflow'],
+        mcp: [],
+        networks: [],
+        videoURL:
+          'https://res.cloudinary.com/mastra-assets/video/upload/v1753271214/template_video_csv_compressed_b7m6mc.mp4',
+        supportedProviders: ['openai', 'anthropic', 'google', 'groq'],
+      },
+      {
+        slug: 'browsing-agent',
+        title: 'Browser agent',
+        description: 'Automate browser actions like navigation and scraping',
+        longDescription:
+          "Automate browser actions like navigation and scraping.\n\n  Requires a Browserbase and OpenAI API keys.\n\n  This template enables AI agents to interact with web pages through Mastra using the Browserbase Stagehand framework's browser automation capabilities. It provides tools for web navigation, data extraction, and action execution, all orchestrated through Mastra agents.",
+        githubUrl: 'https://github.com/mastra-ai/template-browsing-agent',
+        tags: ['Agent', 'Workflow', 'Web browsing'],
+        useCase: 'Web browsing',
+        codeExample:
+          '# .env file,\n\nBROWSERBASE_PROJECT_ID=your_project_id\nBROWSERBASE_API_KEY=your_api_key\nOPENAI_API_KEY=your_openai_key',
+        imageURL: 'https://res.cloudinary.com/mastra-assets/image/upload/v1753190655/template-browser-use_rljt5u.avif',
+        agents: ['web-agent'],
+        tools: ['page-act-tool', 'page-extract-tool', 'page-navigate-tool', 'page-observe-tool'],
+        workflows: [],
+        mcp: [],
+        networks: [],
+        videoURL:
+          'https://res.cloudinary.com/mastra-assets/video/upload/v1753271214/template_video_browser_agent_compressed_tn0vxw.mp4',
+        supportedProviders: ['openai', 'anthropic', 'google', 'groq'],
+      },
+      {
+        slug: 'docs-chatbot',
+        title: 'Docs chatbot',
+        description: 'Deploy a chatbot that lets users talk to your docs',
+        longDescription:
+          'Deploy a chatbot that lets users talk to your docs.\n\n  This template demonstrates how to build a documentation chatbot using MCP (Model Control Protocol) servers with Mastra. It shows how to define and consume an MCP server that provides tools for interacting with your documentation.  ',
+        githubUrl: 'https://github.com/mastra-ai/template-docs-chatbot',
+        tags: ['RAG', 'Workflow', 'Agent', 'MCP', 'Developer tools'],
+        imageURL: 'https://res.cloudinary.com/mastra-assets/image/upload/v1753190656/template-docs-chatbot_ea3ntp.avif',
+        useCase: 'Developer tools',
+        agents: ['planetsAgent'],
+        tools: ['planetsInfoTool'],
+        workflows: [],
+        mcp: ['mcpServer'],
+        networks: [],
+        videoURL:
+          'https://res.cloudinary.com/mastra-assets/video/upload/v1753271213/template_video_docs_AI_agent_compressed_oeaauu.mp4',
+        supportedProviders: ['openai', 'anthropic', 'google', 'groq'],
+      },
+    ],
+    providers: ['openai', 'anthropic', 'google', 'groq'],
+    tags: [
+      'RAG',
+      'Workflow',
+      'Agent',
+      'Starter apps',
+      'Web browsing',
+      'Data analysis',
+      'Developer tools',
+      'MCP',
+      'Document processing',
+    ],
+  };
+};
