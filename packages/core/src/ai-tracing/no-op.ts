@@ -1,8 +1,8 @@
 /**
- * No Op Implementation for MastraAITelemetry
+ * No Op Implementation for MastraAITracing
  */
 
-import type { MastraAITelemetry } from './base';
+import type { MastraAITracing } from './base';
 import type { AISpanType, AISpan, AISpanOptions, AISpanTypeMap } from './types';
 
 export class NoOpAISpan<TType extends AISpanType = any> implements AISpan<TType> {
@@ -14,9 +14,9 @@ export class NoOpAISpan<TType extends AISpanType = any> implements AISpan<TType>
   public traceId: string;
   public startTime: Date;
   public endTime?: Date;
-  public aiTelemetry: MastraAITelemetry;
+  public aiTracing: MastraAITracing;
 
-  constructor(options: AISpanOptions<TType>, aiTelemetry: MastraAITelemetry) {
+  constructor(options: AISpanOptions<TType>, aiTracing: MastraAITracing) {
     this.id = 'no-op';
     this.name = options.name;
     this.type = options.type;
@@ -24,7 +24,7 @@ export class NoOpAISpan<TType extends AISpanType = any> implements AISpan<TType>
     this.trace = options.parent ? options.parent.trace : (this as any);
     this.traceId = options.parent ? options.parent.trace.traceId : 'no-op-trace';
     this.startTime = new Date();
-    this.aiTelemetry = aiTelemetry;
+    this.aiTracing = aiTracing;
   }
 
   end(): void {}
@@ -34,7 +34,7 @@ export class NoOpAISpan<TType extends AISpanType = any> implements AISpan<TType>
     name: string,
     metadata: AISpanTypeMap[TChildType],
   ): AISpan<TChildType> {
-    return new NoOpAISpan<TChildType>({ type, name, metadata, parent: this }, this.aiTelemetry);
+    return new NoOpAISpan<TChildType>({ type, name, metadata, parent: this }, this.aiTracing);
   }
   update(): void {}
 }

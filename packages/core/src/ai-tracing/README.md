@@ -1,15 +1,15 @@
-# AI Telemetry
+# AI Tracing
 
-A comprehensive telemetry system for AI operations in Mastra, providing type-safe span tracking, event-driven exports, and OpenTelemetry-compatible tracing.
+A comprehensive tracing system for AI operations in Mastra, providing type-safe span tracking, event-driven exports, and OpenTelemetry-compatible tracing.
 
 ## Overview
 
-The AI Telemetry system enables detailed observability for AI-driven applications by tracking operations through spans that capture metadata, timing, and context. It's designed to work seamlessly with Mastra's architecture while providing flexible configuration and export options.
+The AI Tracing system enables detailed observability for AI-driven applications by tracking operations through spans that capture metadata, timing, and context. It's designed to work seamlessly with Mastra's architecture while providing flexible configuration and export options.
 
 ## Key Features
 
 - **Type-Safe Spans**: Strongly typed metadata based on span type prevents runtime errors
-- **Event-Driven Architecture**: Real-time telemetry events for immediate observability
+- **Event-Driven Architecture**: Real-time tracing events for immediate observability
 - **OpenTelemetry Compatible**: Uses standard trace and span ID formats for integration
 - **Flexible Sampling**: Multiple sampling strategies with custom sampler support
 - **Configurable Security**: Customizable sensitive field filtering with case-insensitive matching
@@ -19,16 +19,16 @@ The AI Telemetry system enables detailed observability for AI-driven application
 ## Quick Start
 
 ```typescript
-import { DefaultAITelemetry } from './ai-telemetry';
+import { DefaultAITracing } from './ai-tracing';
 
-// Create telemetry instance
-const telemetry = new DefaultAITelemetry({
-  name: 'my-app-telemetry',
-  enabled: true,
+// Create tracing instance
+const tracing = new DefaultAITracing({
+  serviceName: 'my-app',
+  sampling: { type: 'always' },
 });
 
 // Start an agent span
-const agentSpan = telemetry.startSpan('agent_run', 'customer-support-agent', {
+const agentSpan = tracing.startSpan('agent_run', 'customer-support-agent', {
   agentId: 'agent-123',
   instructions: 'Help with customer support',
   maxSteps: 10,
@@ -54,7 +54,7 @@ The current implementation prioritizes correctness and ease of use:
 
 - **Automatic Lifecycle Management**: All spans automatically emit events through method wrapping
 - **Real-time Export**: Events are exported immediately when they occur
-- **Memory Overhead**: Each span maintains references to telemetry instance and root trace span
+- **Memory Overhead**: Each span maintains references to tracing instance and root trace span
 
 ### Future Optimization Opportunities
 

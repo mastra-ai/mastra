@@ -1,24 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraError } from '../error';
-import { DefaultAITelemetry, DefaultConsoleExporter, SensitiveDataFilter, aiTelemetryDefaultConfig } from './default';
-import {
-  clearAITelemetryRegistry,
-  getAITelemetry,
-  registerAITelemetry,
-  unregisterAITelemetry,
-  hasAITelemetry,
-} from './registry';
+import { DefaultAITracing, DefaultConsoleExporter, SensitiveDataFilter, aiTracingDefaultConfig } from './default';
+import { clearAITracingRegistry, getAITracing, registerAITracing, unregisterAITracing, hasAITracing } from './registry';
 import type {
-  AITelemetryEvent,
-  AITelemetryExporter,
-  AITelemetrySampler,
+  AITracingEvent,
+  AITracingExporter,
+  AITracingSampler,
   AITraceContext,
   AgentRunMetadata,
   LLMGenerationMetadata,
   ToolCallMetadata,
 } from './types';
-import { AISpanType, SamplingStrategyType, AITelemetryEventType } from './types';
+import { AISpanType, SamplingStrategyType, AITracingEventType } from './types';
 
 // No crypto mocking needed since we use custom generateId function
 
@@ -31,11 +25,11 @@ const mockConsole = {
 vi.stubGlobal('console', mockConsole);
 
 // Test exporter for capturing events
-class TestExporter implements AITelemetryExporter {
+class TestExporter implements AITracingExporter {
   name = 'test-exporter';
-  events: AITelemetryEvent[] = [];
+  events: AITracingEvent[] = [];
 
-  async exportEvent(event: AITelemetryEvent): Promise<void> {
+  async exportEvent(event: AITracingEvent): Promise<void> {
     this.events.push(event);
   }
 
@@ -49,7 +43,7 @@ class TestExporter implements AITelemetryExporter {
 }
 
 // Test sampler
-class TestSampler implements AITelemetrySampler {
+class TestSampler implements AITracingSampler {
   name = 'test-sampler';
   private shouldSampleResult: boolean;
 
@@ -62,29 +56,29 @@ class TestSampler implements AITelemetrySampler {
   }
 }
 
-describe('AI Telemetry', () => {
+describe('AI Tracing', () => {
   let testExporter: TestExporter;
 
   beforeEach(() => {
     vi.resetAllMocks();
 
     // Clear registry
-    clearAITelemetryRegistry();
+    clearAITracingRegistry();
 
     // Reset test exporter
     testExporter = new TestExporter();
   });
 
-  describe('DefaultAITelemetry', () => {
+  describe('DefaultAITracing', () => {
     it('should create and start spans with type safety', () => {
-      const telemetry = new DefaultAITelemetry({
-        serviceName: 'test-telemetry',
+      const tracing = new DefaultAITracing({
+        serviceName: 'test-tracing',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
       // Agent span
-      const agentSpan = telemetry.startSpan(AISpanType.AGENT_RUN, 'test-agent', {
+      const agentSpan = tracing.startSpan(AISpanType.AGENT_RUN, 'test-agent', {
         agentId: 'agent-123',
         instructions: 'Test instructions',
         maxSteps: 5,
@@ -101,13 +95,13 @@ describe('AI Telemetry', () => {
     });
 
     it('should create child spans with different types', () => {
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
-      const agentSpan = telemetry.startSpan(AISpanType.AGENT_RUN, 'parent-agent', { agentId: 'agent-123' });
+      const agentSpan = tracing.startSpan(AISpanType.AGENT_RUN, 'parent-agent', { agentId: 'agent-123' });
 
       const toolSpan = agentSpan.createChildSpan(AISpanType.TOOL_CALL, 'child-tool', {
         toolId: 'tool-456',
@@ -122,14 +116,14 @@ describe('AI Telemetry', () => {
     });
 
     it('should maintain consistent traceId across span hierarchy', () => {
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
       // Create root span
-      const rootSpan = telemetry.startSpan(AISpanType.AGENT_RUN, 'root-agent', { agentId: 'agent-123' });
+      const rootSpan = tracing.startSpan(AISpanType.AGENT_RUN, 'root-agent', { agentId: 'agent-123' });
 
       // Create child span
       const childSpan = rootSpan.createChildSpan(AISpanType.LLM_GENERATION, 'child-llm', {
@@ -154,17 +148,17 @@ describe('AI Telemetry', () => {
     });
 
     it('should emit events throughout span lifecycle', () => {
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
-      const span = telemetry.startSpan(AISpanType.LLM_GENERATION, 'test-llm', { model: 'gpt-4', provider: 'openai' });
+      const span = tracing.startSpan(AISpanType.LLM_GENERATION, 'test-llm', { model: 'gpt-4', provider: 'openai' });
 
       // Should emit span_started
       expect(testExporter.events).toHaveLength(1);
-      expect(testExporter.events[0].type).toBe(AITelemetryEventType.SPAN_STARTED);
+      expect(testExporter.events[0].type).toBe(AITracingEventType.SPAN_STARTED);
       expect(testExporter.events[0].span.id).toBe(span.id);
 
       // Update span - cast to LLM metadata type for usage field
@@ -172,7 +166,7 @@ describe('AI Telemetry', () => {
 
       // Should emit span_updated
       expect(testExporter.events).toHaveLength(2);
-      expect(testExporter.events[1].type).toBe(AITelemetryEventType.SPAN_UPDATED);
+      expect(testExporter.events[1].type).toBe(AITracingEventType.SPAN_UPDATED);
       expect((testExporter.events[1].span.metadata as LLMGenerationMetadata).usage?.totalTokens).toBe(100);
 
       // End span
@@ -180,19 +174,19 @@ describe('AI Telemetry', () => {
 
       // Should emit span_ended
       expect(testExporter.events).toHaveLength(3);
-      expect(testExporter.events[2].type).toBe(AITelemetryEventType.SPAN_ENDED);
+      expect(testExporter.events[2].type).toBe(AITracingEventType.SPAN_ENDED);
       expect(testExporter.events[2].span.endTime).toBeInstanceOf(Date);
       expect((testExporter.events[2].span.metadata as LLMGenerationMetadata).usage?.totalTokens).toBe(150);
     });
 
     it('should handle errors with default endSpan=true', () => {
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
-      const span = telemetry.startSpan(AISpanType.TOOL_CALL, 'error-tool', { toolId: 'failing-tool' });
+      const span = tracing.startSpan(AISpanType.TOOL_CALL, 'error-tool', { toolId: 'failing-tool' });
 
       const error = new MastraError({
         id: 'TOOL_ERROR',
@@ -212,17 +206,17 @@ describe('AI Telemetry', () => {
 
       // Should emit span_ended
       expect(testExporter.events).toHaveLength(2); // start + end
-      expect(testExporter.events[1].type).toBe(AITelemetryEventType.SPAN_ENDED);
+      expect(testExporter.events[1].type).toBe(AITracingEventType.SPAN_ENDED);
     });
 
     it('should handle errors with explicit endSpan=false', () => {
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
-      const span = telemetry.startSpan(AISpanType.TOOL_CALL, 'recoverable-tool', { toolId: 'retry-tool' });
+      const span = tracing.startSpan(AISpanType.TOOL_CALL, 'recoverable-tool', { toolId: 'retry-tool' });
 
       const error = new Error('Recoverable error');
 
@@ -234,32 +228,32 @@ describe('AI Telemetry', () => {
 
       // Should emit span_updated (not ended)
       expect(testExporter.events).toHaveLength(2); // start + update
-      expect(testExporter.events[1].type).toBe(AITelemetryEventType.SPAN_UPDATED);
+      expect(testExporter.events[1].type).toBe(AITracingEventType.SPAN_UPDATED);
     });
   });
 
   describe('Sampling Strategies', () => {
     it('should always sample with always_on strategy', () => {
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
-      const span = telemetry.startSpan(AISpanType.GENERIC, 'test-span', {});
+      const span = tracing.startSpan(AISpanType.GENERIC, 'test-span', {});
 
       expect(span.id).toMatch(/^[a-f0-9]{16}$/); // OpenTelemetry span ID format
       expect(testExporter.events).toHaveLength(1);
     });
 
     it('should never sample with always_off strategy', () => {
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.NEVER },
         exporters: [testExporter],
       });
 
-      const span = telemetry.startSpan(AISpanType.GENERIC, 'test-span', {});
+      const span = tracing.startSpan(AISpanType.GENERIC, 'test-span', {});
 
       expect(span.id).toBe('no-op'); // No-op span created
       expect(testExporter.events).toHaveLength(0);
@@ -270,7 +264,7 @@ describe('AI Telemetry', () => {
       const mockRandom = vi.spyOn(Math, 'random');
 
       // Test probability = 0.5
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.RATIO, probability: 0.5 },
         exporters: [testExporter],
@@ -278,12 +272,12 @@ describe('AI Telemetry', () => {
 
       // First call: random = 0.3 < 0.5 -> should sample
       mockRandom.mockReturnValueOnce(0.3);
-      const span1 = telemetry.startSpan(AISpanType.GENERIC, 'test-1', {});
+      const span1 = tracing.startSpan(AISpanType.GENERIC, 'test-1', {});
       expect(span1.id).toMatch(/^[a-f0-9]{16}$/); // OpenTelemetry span ID format
 
       // Second call: random = 0.8 > 0.5 -> should not sample
       mockRandom.mockReturnValueOnce(0.8);
-      const span2 = telemetry.startSpan(AISpanType.GENERIC, 'test-2', {});
+      const span2 = tracing.startSpan(AISpanType.GENERIC, 'test-2', {});
       expect(span2.id).toBe('no-op');
 
       mockRandom.mockRestore();
@@ -292,14 +286,14 @@ describe('AI Telemetry', () => {
     it('should use custom sampler', () => {
       const customSampler = new TestSampler(false); // Always reject
 
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.ALWAYS },
         samplers: [customSampler],
         exporters: [testExporter],
       });
 
-      const span = telemetry.startSpan(
+      const span = tracing.startSpan(
         AISpanType.GENERIC,
         'test-span',
         {},
@@ -313,13 +307,13 @@ describe('AI Telemetry', () => {
     });
 
     it('should handle invalid ratio probability', () => {
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.RATIO, probability: 1.5 }, // Invalid > 1
         exporters: [testExporter],
       });
 
-      const span = telemetry.startSpan(AISpanType.GENERIC, 'test-span', {});
+      const span = tracing.startSpan(AISpanType.GENERIC, 'test-span', {});
 
       // Should default to no sampling for invalid probability
       expect(span.id).toBe('no-op');
@@ -328,19 +322,19 @@ describe('AI Telemetry', () => {
 
   describe('Exporter Behavior', () => {
     it('should handle exporter errors gracefully', async () => {
-      const failingExporter: AITelemetryExporter = {
+      const failingExporter: AITracingExporter = {
         name: 'failing-exporter',
         exportEvent: vi.fn().mockRejectedValue(new Error('Export failed')),
         shutdown: vi.fn().mockResolvedValue(undefined),
       };
 
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [failingExporter, testExporter], // One fails, one succeeds
       });
 
-      telemetry.startSpan(AISpanType.GENERIC, 'test-span', {});
+      tracing.startSpan(AISpanType.GENERIC, 'test-span', {});
 
       // Wait for async export to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -351,10 +345,10 @@ describe('AI Telemetry', () => {
     });
 
     it('should use default console exporter when none provided', () => {
-      const telemetry = new DefaultAITelemetry({
-        ...aiTelemetryDefaultConfig,
+      const telemetry = new DefaultAITracing({
+        ...aiTracingDefaultConfig,
         serviceName: 'test-telemetry',
-        // Uses default exporters from aiTelemetryDefaultConfig
+        // Uses default exporters from aiTracingDefaultConfig
       });
 
       expect(telemetry.getExporters()).toHaveLength(1);
@@ -368,7 +362,7 @@ describe('AI Telemetry', () => {
         shutdown: vi.fn().mockResolvedValue(undefined),
       };
 
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [mockExporter],
@@ -382,7 +376,7 @@ describe('AI Telemetry', () => {
 
   describe('Configuration', () => {
     it('should merge with default configuration', () => {
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.NEVER },
         // Other settings should use defaults
@@ -395,13 +389,13 @@ describe('AI Telemetry', () => {
     });
 
     it('should be disabled when sampling is always_off', () => {
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.NEVER },
         exporters: [testExporter],
       });
 
-      const span = telemetry.startSpan(AISpanType.GENERIC, 'test-span', {});
+      const span = tracing.startSpan(AISpanType.GENERIC, 'test-span', {});
 
       expect(span.id).toBe('no-op');
       expect(testExporter.events).toHaveLength(0);
@@ -410,95 +404,95 @@ describe('AI Telemetry', () => {
 
   describe('Registry', () => {
     it('should register and retrieve telemetry instances', () => {
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'registry-test',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      registerAITelemetry('my-telemetry', telemetry, true);
+      registerAITracing('my-telemetry', telemetry, true);
 
-      expect(getAITelemetry('my-telemetry')).toBe(telemetry);
-      expect(getAITelemetry()).toBe(telemetry); // Default instance
+      expect(getAITracing('my-telemetry')).toBe(telemetry);
+      expect(getAITracing()).toBe(telemetry); // Default instance
     });
 
     it('should clear registry', () => {
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'registry-test',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
-      registerAITelemetry('test', telemetry);
+      registerAITracing('test', telemetry);
 
-      clearAITelemetryRegistry();
+      clearAITracingRegistry();
 
-      expect(getAITelemetry('test')).toBeUndefined();
+      expect(getAITracing('test')).toBeUndefined();
     });
 
     it('should handle multiple instances and default selection', () => {
-      const telemetry1 = new DefaultAITelemetry({
+      const telemetry1 = new DefaultAITracing({
         serviceName: 'test-1',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
-      const telemetry2 = new DefaultAITelemetry({
+      const telemetry2 = new DefaultAITracing({
         serviceName: 'test-2',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      registerAITelemetry('first', telemetry1, true);
-      registerAITelemetry('second', telemetry2);
+      registerAITracing('first', telemetry1, true);
+      registerAITracing('second', telemetry2);
 
-      expect(getAITelemetry('first')).toBe(telemetry1);
-      expect(getAITelemetry('second')).toBe(telemetry2);
-      expect(getAITelemetry()).toBe(telemetry1); // First one marked as default
+      expect(getAITracing('first')).toBe(telemetry1);
+      expect(getAITracing('second')).toBe(telemetry2);
+      expect(getAITracing()).toBe(telemetry1); // First one marked as default
     });
 
     it('should unregister instances correctly', () => {
-      const telemetry1 = new DefaultAITelemetry({
+      const telemetry1 = new DefaultAITracing({
         serviceName: 'test-1',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
-      const telemetry2 = new DefaultAITelemetry({
+      const telemetry2 = new DefaultAITracing({
         serviceName: 'test-2',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      registerAITelemetry('first', telemetry1, true);
-      registerAITelemetry('second', telemetry2);
+      registerAITracing('first', telemetry1, true);
+      registerAITracing('second', telemetry2);
 
-      expect(unregisterAITelemetry('first')).toBe(true);
-      expect(getAITelemetry('first')).toBeUndefined();
-      expect(getAITelemetry()).toBe(telemetry2); // Should switch default to remaining instance
+      expect(unregisterAITracing('first')).toBe(true);
+      expect(getAITracing('first')).toBeUndefined();
+      expect(getAITracing()).toBe(telemetry2); // Should switch default to remaining instance
     });
 
     it('should return false when unregistering non-existent instance', () => {
-      expect(unregisterAITelemetry('non-existent')).toBe(false);
+      expect(unregisterAITracing('non-existent')).toBe(false);
     });
 
-    it('should handle hasAITelemetry checks correctly', () => {
-      const enabledTelemetry = new DefaultAITelemetry({
+    it('should handle hasAITracing checks correctly', () => {
+      const enabledTelemetry = new DefaultAITracing({
         serviceName: 'enabled-test',
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
-      const disabledTelemetry = new DefaultAITelemetry({
+      const disabledTelemetry = new DefaultAITracing({
         serviceName: 'disabled-test',
         sampling: { type: SamplingStrategyType.NEVER },
       });
 
-      registerAITelemetry('enabled', enabledTelemetry);
-      registerAITelemetry('disabled', disabledTelemetry);
+      registerAITracing('enabled', enabledTelemetry);
+      registerAITracing('disabled', disabledTelemetry);
 
-      expect(hasAITelemetry('enabled')).toBe(true);
-      expect(hasAITelemetry('disabled')).toBe(false);
-      expect(hasAITelemetry('non-existent')).toBe(false);
+      expect(hasAITracing('enabled')).toBe(true);
+      expect(hasAITracing('disabled')).toBe(false);
+      expect(hasAITracing('non-existent')).toBe(false);
     });
 
     it('should access telemetry config through registry', () => {
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'config-test',
         sampling: { type: SamplingStrategyType.RATIO, probability: 0.5 },
       });
 
-      registerAITelemetry('config-test', telemetry);
-      const retrieved = getAITelemetry('config-test');
+      registerAITracing('config-test', telemetry);
+      const retrieved = getAITracing('config-test');
 
       expect(retrieved).toBeDefined();
       expect(retrieved!.getConfig().serviceName).toBe('config-test');
@@ -508,14 +502,14 @@ describe('AI Telemetry', () => {
 
   describe('Type Safety', () => {
     it('should enforce correct metadata types for different span types', () => {
-      const telemetry = new DefaultAITelemetry({
+      const telemetry = new DefaultAITracing({
         serviceName: 'test-telemetry',
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [testExporter],
       });
 
       // Agent metadata
-      const agentSpan = telemetry.startSpan(AISpanType.AGENT_RUN, 'agent-test', {
+      const agentSpan = tracing.startSpan(AISpanType.AGENT_RUN, 'agent-test', {
         agentId: 'agent-123',
         instructions: 'Test agent',
         maxSteps: 10,
@@ -525,7 +519,7 @@ describe('AI Telemetry', () => {
       expect(agentSpan.metadata.agentId).toBe('agent-123');
 
       // LLM metadata
-      const llmSpan = telemetry.startSpan(AISpanType.LLM_GENERATION, 'llm-test', {
+      const llmSpan = tracing.startSpan(AISpanType.LLM_GENERATION, 'llm-test', {
         model: 'gpt-4',
         provider: 'openai',
         usage: { totalTokens: 100 },
@@ -535,7 +529,7 @@ describe('AI Telemetry', () => {
       expect(llmSpan.metadata.model).toBe('gpt-4');
 
       // Tool metadata
-      const toolSpan = telemetry.startSpan(AISpanType.TOOL_CALL, 'tool-test', {
+      const toolSpan = tracing.startSpan(AISpanType.TOOL_CALL, 'tool-test', {
         toolId: 'calculator',
         toolType: 'math',
         success: true,
@@ -568,7 +562,7 @@ describe('AI Telemetry', () => {
       };
 
       await exporter.exportEvent({
-        type: AITelemetryEventType.SPAN_STARTED,
+        type: AITracingEventType.SPAN_STARTED,
         span: mockSpan as any,
       });
 
@@ -827,13 +821,13 @@ describe('AI Telemetry', () => {
 
     describe('Integration Tests', () => {
       it('should automatically filter sensitive data in default telemetry', () => {
-        const telemetry = new DefaultAITelemetry({
-          ...aiTelemetryDefaultConfig,
+        const telemetry = new DefaultAITracing({
+          ...aiTracingDefaultConfig,
           serviceName: 'test-telemetry',
           exporters: [testExporter],
         });
 
-        const span = telemetry.startSpan(AISpanType.AGENT_RUN, 'test-agent', {
+        const span = tracing.startSpan(AISpanType.AGENT_RUN, 'test-agent', {
           agentId: 'agent-123',
           instructions: 'Test agent',
         } as any);

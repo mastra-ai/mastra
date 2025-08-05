@@ -1,5 +1,5 @@
 /**
- * Mastra AI Telemetry
+ * Mastra AI Tracing
  */
 
 // Core types and interfaces
@@ -8,4 +8,4 @@ export * from './types';
 export * from './registry';
 
 // Abstract base class
-export { MastraAITelemetry } from './base';
+export { MastraAITracing } from './base';

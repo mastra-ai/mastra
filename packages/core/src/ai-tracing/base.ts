@@ -1,5 +1,5 @@
 /**
- * MastraAITelemetry - Abstract base class for AI Telemetry implementations
+ * MastraAITracing - Abstract base class for AI Tracing implementations
  */
 
 import { MastraBase } from '../base';
@@ -7,45 +7,45 @@ import { RegisteredLogger } from '../logger/constants';
 import type { RuntimeContext } from '../runtime-context';
 import { NoOpAISpan } from './no-op';
 import type {
-  AITelemetryConfig,
+  AITracingConfig,
   AISpan,
   AISpanOptions,
   AISpanType,
-  AITelemetryExporter,
+  AITracingExporter,
   AISpanProcessor,
-  AITelemetrySampler,
-  AITelemetryEvent,
+  AITracingSampler,
+  AITracingEvent,
   AITraceContext,
   AISpanTypeMap,
   AnyAISpan,
 } from './types';
-import { SamplingStrategyType, AITelemetryEventType } from './types';
+import { SamplingStrategyType, AITracingEventType } from './types';
 
 // ============================================================================
 // Abstract Base Class
 // ============================================================================
 
 /**
- * Abstract base class for all AI Telemetry implementations in Mastra.
+ * Abstract base class for all AI Tracing implementations in Mastra.
  *
  */
-export abstract class MastraAITelemetry extends MastraBase {
-  protected config: AITelemetryConfig;
+export abstract class MastraAITracing extends MastraBase {
+  protected config: AITracingConfig;
 
-  constructor(config: AITelemetryConfig) {
-    const serviceName = config.serviceName || 'mastra-ai-telemetry';
+  constructor(config: AITracingConfig) {
+    const serviceName = config.serviceName || 'mastra-ai-tracing';
     super({ component: RegisteredLogger.AI_TELEMETRY, name: serviceName });
 
     this.config = config;
 
-    this.logger.debug(`AI Telemetry initialized [service=${serviceName}] [sampling=${this.config.sampling.type}]`);
+    this.logger.debug(`AI Tracing initialized [service=${serviceName}] [sampling=${this.config.sampling.type}]`);
   }
 
   // ============================================================================
   // Protected getters for clean config access
   // ============================================================================
 
-  protected get exporters(): AITelemetryExporter[] {
+  protected get exporters(): AITracingExporter[] {
     return this.config.exporters || [];
   }
 
@@ -53,7 +53,7 @@ export abstract class MastraAITelemetry extends MastraBase {
     return this.config.processors || [];
   }
 
-  protected get samplers(): AITelemetrySampler[] {
+  protected get samplers(): AITracingSampler[] {
     return this.config.samplers || [];
   }
 
@@ -86,7 +86,7 @@ export abstract class MastraAITelemetry extends MastraBase {
     const span = this.createSpan(options);
     span.trace = parent ? parent.trace : span;
 
-    // Automatically wire up telemetry lifecycle
+    // Automatically wire up tracing lifecycle
     this.wireSpanLifecycle(span);
 
     // Emit span started event
@@ -104,7 +104,7 @@ export abstract class MastraAITelemetry extends MastraBase {
    *
    * Implementations should:
    * 1. Create a plain span with the provided metadata
-   * 2. Return the span - base class handles all telemetry lifecycle automatically
+   * 2. Return the span - base class handles all tracing lifecycle automatically
    *
    * The base class will automatically:
    * - Set trace relationships
@@ -120,7 +120,7 @@ export abstract class MastraAITelemetry extends MastraBase {
   /**
    * Get current configuration
    */
-  getConfig(): Readonly<AITelemetryConfig> {
+  getConfig(): Readonly<AITracingConfig> {
     return { ...this.config };
   }
 
@@ -131,7 +131,7 @@ export abstract class MastraAITelemetry extends MastraBase {
   /**
    * Get all exporters
    */
-  getExporters(): readonly AITelemetryExporter[] {
+  getExporters(): readonly AITracingExporter[] {
     return [...this.exporters];
   }
 
@@ -145,7 +145,7 @@ export abstract class MastraAITelemetry extends MastraBase {
   /**
    * Get all samplers
    */
-  getSamplers(): readonly AITelemetrySampler[] {
+  getSamplers(): readonly AITracingSampler[] {
     return [...this.samplers];
   }
 
@@ -161,7 +161,7 @@ export abstract class MastraAITelemetry extends MastraBase {
   // ============================================================================
 
   /**
-   * Automatically wire up telemetry lifecycle for any span
+   * Automatically wire up tracing lifecycle for any span
    * This ensures all spans emit events regardless of implementation
    */
   private wireSpanLifecycle<TType extends AISpanType>(span: AISpan<TType>): void {
@@ -169,7 +169,7 @@ export abstract class MastraAITelemetry extends MastraBase {
     const originalEnd = span.end.bind(span);
     const originalUpdate = span.update.bind(span);
 
-    // Wrap methods to automatically emit telemetry events
+    // Wrap methods to automatically emit tracing events
     span.end = (metadata?: Partial<AISpanTypeMap[TType]>) => {
       originalEnd(metadata);
       this.emitSpanEnded(span);
@@ -252,7 +252,7 @@ export abstract class MastraAITelemetry extends MastraBase {
     // Process the span before emitting
     const processedSpan = this.processSpan(span);
     if (processedSpan) {
-      this.exportEvent({ type: AITelemetryEventType.SPAN_STARTED, span: processedSpan }).catch(error => {
+      this.exportEvent({ type: AITracingEventType.SPAN_STARTED, span: processedSpan }).catch(error => {
         this.logger.error('Failed to export span_started event', error);
       });
     }
@@ -265,7 +265,7 @@ export abstract class MastraAITelemetry extends MastraBase {
     // Process the span through all processors
     const processedSpan = this.processSpan(span);
     if (processedSpan) {
-      this.exportEvent({ type: AITelemetryEventType.SPAN_ENDED, span: processedSpan }).catch(error => {
+      this.exportEvent({ type: AITracingEventType.SPAN_ENDED, span: processedSpan }).catch(error => {
         this.logger.error('Failed to export span_ended event', error);
       });
     }
@@ -278,16 +278,16 @@ export abstract class MastraAITelemetry extends MastraBase {
     // Process the span before emitting
     const processedSpan = this.processSpan(span);
     if (processedSpan) {
-      this.exportEvent({ type: AITelemetryEventType.SPAN_UPDATED, span: processedSpan }).catch(error => {
+      this.exportEvent({ type: AITracingEventType.SPAN_UPDATED, span: processedSpan }).catch(error => {
         this.logger.error('Failed to export span_updated event', error);
       });
     }
   }
 
   /**
-   * Export telemetry event through all exporters (realtime mode)
+   * Export tracing event through all exporters (realtime mode)
    */
-  protected async exportEvent(event: AITelemetryEvent): Promise<void> {
+  protected async exportEvent(event: AITracingEvent): Promise<void> {
     const exportPromises = this.exporters.map(async exporter => {
       try {
         if (exporter.exportEvent) {
@@ -308,28 +308,28 @@ export abstract class MastraAITelemetry extends MastraBase {
   // ============================================================================
 
   /**
-   * Initialize telemetry (called by Mastra during component registration)
+   * Initialize tracing (called by Mastra during component registration)
    */
   async init(): Promise<void> {
-    this.logger.debug(`Telemetry initialization started [name=${this.name}]`);
+    this.logger.debug(`Tracing initialization started [name=${this.name}]`);
 
-    // Any initialization logic for the telemetry system
+    // Any initialization logic for the tracing system
     // This could include setting up queues, starting background processes, etc.
 
-    this.logger.info(`Telemetry initialized successfully [name=${this.name}]`);
+    this.logger.info(`Tracing initialized successfully [name=${this.name}]`);
   }
 
   /**
-   * Shutdown telemetry and clean up resources
+   * Shutdown tracing and clean up resources
    */
   async shutdown(): Promise<void> {
-    this.logger.debug(`Telemetry shutdown started [name=${this.name}]`);
+    this.logger.debug(`Tracing shutdown started [name=${this.name}]`);
 
     // Shutdown all components
     const shutdownPromises = [...this.exporters.map(e => e.shutdown()), ...this.processors.map(p => p.shutdown())];
 
     await Promise.allSettled(shutdownPromises);
 
-    this.logger.info(`Telemetry shutdown completed [name=${this.name}]`);
+    this.logger.info(`Tracing shutdown completed [name=${this.name}]`);
   }
 }

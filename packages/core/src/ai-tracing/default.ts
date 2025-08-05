@@ -1,23 +1,23 @@
 /**
- * Default Implementation for MastraAITelemetry
+ * Default Implementation for MastraAITracing
  */
 
 import { MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
 import { ConsoleLogger } from '../logger';
-import { MastraAITelemetry } from './base';
+import { MastraAITracing } from './base';
 import type {
   AISpanType,
   AISpan,
   AISpanOptions,
-  AITelemetryExporter,
-  AITelemetryConfig,
-  AITelemetryEvent,
+  AITracingExporter,
+  AITracingConfig,
+  AITracingEvent,
   AISpanTypeMap,
   AISpanProcessor,
   AnyAISpan,
 } from './types';
-import { SamplingStrategyType, AITelemetryEventType } from './types';
+import { SamplingStrategyType, AITracingEventType } from './types';
 
 // ============================================================================
 // Default AISpan Implementation
@@ -66,16 +66,16 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
   public traceId: string;
   public startTime: Date;
   public endTime?: Date;
-  public aiTelemetry: MastraAITelemetry;
+  public aiTracing: MastraAITracing;
 
-  constructor(options: AISpanOptions<TType>, aiTelemetry: MastraAITelemetry) {
+  constructor(options: AISpanOptions<TType>, aiTracing: MastraAITracing) {
     this.id = generateSpanId();
     this.name = options.name;
     this.type = options.type;
     this.metadata = options.metadata;
     this.trace = options.parent ? options.parent.trace : (this as any);
     this.startTime = new Date();
-    this.aiTelemetry = aiTelemetry;
+    this.aiTracing = aiTracing;
 
     // Set trace ID: generate new for root spans, inherit for child spans
     if (!options.parent) {
@@ -92,7 +92,7 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     if (metadata) {
       this.metadata = { ...this.metadata, ...metadata };
     }
-    // Telemetry events automatically handled by base class
+    // Tracing events automatically handled by base class
   }
 
   error(error: MastraError | Error, endSpan: boolean = true): void {
@@ -125,12 +125,12 @@ class DefaultAISpan<TType extends AISpanType> implements AISpan<TType> {
     name: string,
     metadata: AISpanTypeMap[TChildType],
   ): AISpan<TChildType> {
-    return this.aiTelemetry.startSpan(type, name, metadata, this);
+    return this.aiTracing.startSpan(type, name, metadata, this);
   }
 
   update(metadata: Partial<AISpanTypeMap[TType]>): void {
     this.metadata = { ...this.metadata, ...metadata };
-    // Telemetry events automatically handled by base class
+    // Tracing events automatically handled by base class
   }
 
   async export(): Promise<string> {
@@ -230,7 +230,7 @@ export class SensitiveDataFilter implements AISpanProcessor {
 // Default Console Exporter
 // ============================================================================
 
-export class DefaultConsoleExporter implements AITelemetryExporter {
+export class DefaultConsoleExporter implements AITracingExporter {
   name = 'default-console';
   private logger: IMastraLogger;
 
@@ -245,7 +245,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
     }
   }
 
-  async exportEvent(event: AITelemetryEvent): Promise<void> {
+  async exportEvent(event: AITracingEvent): Promise<void> {
     const span = event.span;
 
     // Helper to safely stringify metadata (filtering already done by processor)
@@ -266,7 +266,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
     };
 
     switch (event.type) {
-      case AITelemetryEventType.SPAN_STARTED:
+      case AITracingEventType.SPAN_STARTED:
         this.logger.info(`🚀 SPAN_STARTED`);
         this.logger.info(`   Type: ${span.type}`);
         this.logger.info(`   Name: ${span.name}`);
@@ -276,7 +276,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
         this.logger.info('─'.repeat(80));
         break;
 
-      case AITelemetryEventType.SPAN_ENDED:
+      case AITracingEventType.SPAN_ENDED:
         const duration = formatDuration(span.startTime, span.endTime);
         this.logger.info(`✅ SPAN_ENDED`);
         this.logger.info(`   Type: ${span.type}`);
@@ -288,7 +288,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
         this.logger.info('─'.repeat(80));
         break;
 
-      case AITelemetryEventType.SPAN_UPDATED:
+      case AITracingEventType.SPAN_UPDATED:
         this.logger.info(`📝 SPAN_UPDATED`);
         this.logger.info(`   Type: ${span.type}`);
         this.logger.info(`   Name: ${span.name}`);
@@ -299,7 +299,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
         break;
 
       default:
-        throw new Error(`Telemetry event type not implemented: ${(event as any).type}`);
+        throw new Error(`Tracing event type not implemented: ${(event as any).type}`);
     }
   }
 
@@ -312,7 +312,7 @@ export class DefaultConsoleExporter implements AITelemetryExporter {
 // Default Configuration (defined after classes to avoid circular dependencies)
 // ============================================================================
 
-export const aiTelemetryDefaultConfig: AITelemetryConfig = {
+export const aiTracingDefaultConfig: AITracingConfig = {
   serviceName: 'mastra-ai-service',
   sampling: { type: SamplingStrategyType.ALWAYS },
   exporters: [new DefaultConsoleExporter()], // Uses its own fallback logger
@@ -320,11 +320,11 @@ export const aiTelemetryDefaultConfig: AITelemetryConfig = {
 };
 
 // ============================================================================
-// Default AI Telemetry Implementation
+// Default AI Tracing Implementation
 // ============================================================================
 
-export class DefaultAITelemetry extends MastraAITelemetry {
-  constructor(config: AITelemetryConfig = aiTelemetryDefaultConfig) {
+export class DefaultAITracing extends MastraAITracing {
+  constructor(config: AITracingConfig = aiTracingDefaultConfig) {
     super(config);
   }
 
@@ -333,7 +333,7 @@ export class DefaultAITelemetry extends MastraAITelemetry {
   // ============================================================================
 
   protected createSpan<TType extends AISpanType>(options: AISpanOptions<TType>): AISpan<TType> {
-    // Simple span creation - base class handles all telemetry lifecycle automatically
+    // Simple span creation - base class handles all tracing lifecycle automatically
     return new DefaultAISpan<TType>(options, this);
   }
 }

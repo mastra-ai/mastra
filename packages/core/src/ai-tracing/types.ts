@@ -1,11 +1,11 @@
 /**
- * AI Telemetry interfaces
+ * AI Tracing interfaces
  */
 
 import type { MastraError } from '../error';
 import type { RuntimeContext } from '../runtime-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows';
-import type { MastraAITelemetry } from './base';
+import type { MastraAITracing } from './base';
 
 // ============================================================================
 // Core AI-Specific Span Types
@@ -201,8 +201,8 @@ export interface AISpan<TType extends AISpanType> {
   trace: AnyAISpan;
   /** OpenTelemetry-compatible trace ID (32 hex chars) - present on all spans */
   traceId: string;
-  /** Pointer to the AITelemetry instance */
-  aiTelemetry: MastraAITelemetry;
+  /** Pointer to the AITracing instance */
+  aiTracing: MastraAITracing;
 
   // Methods for span lifecycle
   /** End the span */
@@ -242,9 +242,9 @@ export enum SamplingStrategyType {
 }
 
 /**
- * AI Telemetry event types
+ * AI Tracing event types
  */
-export enum AITelemetryEventType {
+export enum AITracingEventType {
   SPAN_STARTED = 'span_started',
   SPAN_UPDATED = 'span_updated',
   SPAN_ENDED = 'span_ended',
@@ -260,19 +260,19 @@ export type SamplingStrategy =
   | { type: SamplingStrategyType.CUSTOM; sampler: (traceContext: AITraceContext) => boolean };
 
 /**
- * Complete AI Telemetry configuration that combines all options
+ * Complete AI Tracing configuration that combines all options
  */
-export interface AITelemetryConfig {
-  /** Service name for telemetry */
+export interface AITracingConfig {
+  /** Service name for tracing */
   serviceName: string;
-  /** Sampling strategy - controls whether telemetry is collected */
+  /** Sampling strategy - controls whether tracing is collected */
   sampling: SamplingStrategy;
   /** Custom exporters */
-  exporters?: AITelemetryExporter[];
+  exporters?: AITracingExporter[];
   /** Custom processors */
   processors?: AISpanProcessor[];
   /** Custom samplers */
-  samplers?: AITelemetrySampler[];
+  samplers?: AITracingSampler[];
 }
 
 // ============================================================================
@@ -280,22 +280,22 @@ export interface AITelemetryConfig {
 // ============================================================================
 
 /**
- * Telemetry events that can be exported
+ * Tracing events that can be exported
  */
-export type AITelemetryEvent =
-  | { type: AITelemetryEventType.SPAN_STARTED; span: AnyAISpan }
-  | { type: AITelemetryEventType.SPAN_UPDATED; span: AnyAISpan }
-  | { type: AITelemetryEventType.SPAN_ENDED; span: AnyAISpan };
+export type AITracingEvent =
+  | { type: AITracingEventType.SPAN_STARTED; span: AnyAISpan }
+  | { type: AITracingEventType.SPAN_UPDATED; span: AnyAISpan }
+  | { type: AITracingEventType.SPAN_ENDED; span: AnyAISpan };
 
 /**
- * Interface for telemetry exporters
+ * Interface for tracing exporters
  */
-export interface AITelemetryExporter {
+export interface AITracingExporter {
   /** Exporter name */
   name: string;
 
-  /** Export telemetry events */
-  exportEvent(event: AITelemetryEvent): Promise<void>;
+  /** Export tracing events */
+  exportEvent(event: AITracingEvent): Promise<void>;
 
   /** Shutdown exporter */
   shutdown(): Promise<void>;
@@ -314,9 +314,9 @@ export interface AISpanProcessor {
 }
 
 /**
- * Interface for telemetry samplers
+ * Interface for tracing samplers
  */
-export interface AITelemetrySampler {
+export interface AITracingSampler {
   /** Sampler name */
   name: string;
   /** Determine if trace should be sampled */
