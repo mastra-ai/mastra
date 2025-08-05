@@ -305,6 +305,37 @@ export class Memory extends MastraMemory {
   }
 
   async deleteThread(threadId: string): Promise<void> {
+    const config = this.getMergedThreadConfig();
+
+    if (config.semanticRecall) {
+      if (!this.vector) {
+        throw new Error(`Tried to update embeddings but this Memory instance doesn't have an attached vector db.`);
+      }
+      const { vector } = this;
+      const storedMessages = await this.storage.getMessages({
+        format: 'v2',
+        threadId,
+      });
+
+      const embeddingTextsAndIds = this.getEmbeddingTextAndIds(storedMessages);
+      const promises: Promise<any>[] = [];
+      storedMessages.forEach(async (message, i) => {
+        if (!message.content || !embeddingTextsAndIds[i]) return;
+
+        const { textForEmbedding } = embeddingTextsAndIds[i];
+        const { dimension } = await this.embedMessageContent(textForEmbedding);
+        const { indexName } = await this.createEmbeddingIndex(dimension);
+
+        const storedVectorIds = message.content?.metadata?.vectorIds;
+
+        if (Array.isArray(storedVectorIds)) {
+          storedVectorIds.forEach(vectorId => {
+            promises.push(vector.deleteVector({ indexName, id: vectorId }));
+          });
+        }
+      });
+    }
+
     await this.storage.deleteThread({ threadId });
   }
 
@@ -1134,11 +1165,62 @@ ${
       throw new Error('All message IDs must be non-empty strings');
     }
 
+    const config = this.getMergedThreadConfig();
+
+    // get vector IDs
+    let storedMessages: MastraMessageV2[] = [];
+    let embeddingTextsAndIds: ({
+      textForEmbedding: string;
+      vectorIds: string[];
+    } | null)[] = [];
+
+    if (config.semanticRecall) {
+      if (!this.vector) {
+        throw new Error(`Tried to update embeddings but this Memory instance doesn't have an attached vector db.`);
+      }
+      storedMessages = await this.storage.getMessages({
+        // TODO: replace with getMessagesById
+        format: 'v2',
+        threadId: '', // query fails silently with empty string thread IDs
+        selectBy: {
+          include: [
+            ...input.map(el => {
+              if (typeof el === 'string') {
+                return { id: el };
+              }
+              return el;
+            }),
+          ],
+        },
+      });
+    }
     // Delete from storage
     await this.storage.deleteMessages(messageIds);
 
-    // TODO: Delete from vector store if semantic recall is enabled
-    // This would require getting the messages first to know their threadId/resourceId
-    // and then querying the vector store to delete associated embeddings
+    // Delete from vector store
+    if (embeddingTextsAndIds.length && this.vector) {
+      const vector = this.vector;
+      let promises: Promise<any>[] = [];
+      storedMessages.forEach(async (message, i) => {
+        if (!embeddingTextsAndIds[i]) return;
+
+        const { textForEmbedding } = embeddingTextsAndIds[i];
+        const { dimension } = await this.embedMessageContent(textForEmbedding);
+        const { indexName } = await this.createEmbeddingIndex(dimension);
+        const vectorIds = message.content?.metadata?.vectorIds;
+        if (Array.isArray(vectorIds)) {
+          vectorIds.forEach(vectorId => {
+            promises.push(
+              vector.deleteVector({
+                indexName,
+                id: vectorId,
+              }),
+            );
+          });
+        }
+      }, []);
+
+      await Promise.all(promises);
+    }
   }
 }

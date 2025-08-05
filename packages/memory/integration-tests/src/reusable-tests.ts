@@ -544,6 +544,65 @@ export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           ),
         ).toBe(true);
       });
+
+      it('should get the same results in thread or resource scope with only one populated thread', async () => {
+        const emptyThread = await memory.saveThread({
+          thread: createTestThread('Semantic Search Scope Empty Thread'),
+        });
+        const populatedThread = await memory.saveThread({
+          thread: createTestThread('Semantic Search Scope Test Thread'),
+        });
+
+        const queryMessage = createTestMessageV2(populatedThread.id, 'The sky is blue today');
+
+        const messagesThread1 = [
+          queryMessage,
+          createTestMessageV2(populatedThread.id, 'Message 2'),
+          createTestMessageV2(populatedThread.id, 'Message 3'),
+        ];
+
+        await memory.saveMessages({ messages: messagesThread1 });
+
+        const searchQuery = 'blue';
+
+        // 1. Search default scope (thread)
+        const threadScopeResult = await memory.rememberMessages({
+          threadId: populatedThread.id,
+          resourceId, // resourceId is defined globally in this file
+          vectorMessageSearch: searchQuery,
+          config: {
+            lastMessages: 0,
+            semanticRecall: {
+              topK: 1,
+              messageRange: 0,
+              scope: 'thread', // Default
+            },
+          },
+        });
+
+        expect(threadScopeResult.messagesV2).toHaveLength(1);
+        expect(threadScopeResult.messages[0].id).toBe(queryMessage.id);
+        expect(threadScopeResult.messages[0].content).toBe(queryMessage.content.content);
+
+        // 2. Search resource scope using
+        const resourceScopeResult = await memory.rememberMessages({
+          threadId: emptyThread.id,
+          resourceId,
+          vectorMessageSearch: searchQuery,
+          config: {
+            lastMessages: 0,
+            semanticRecall: {
+              topK: 1,
+              messageRange: 0,
+              scope: 'resource',
+            },
+          },
+        });
+
+        expect(resourceScopeResult.messages).toHaveLength(1);
+        expect(resourceScopeResult.messages[0].id).toBe(queryMessage.id);
+        expect(resourceScopeResult.messages[0].content).toBe(queryMessage.content.content);
+      });
     });
 
     describe('Message Types and Roles', () => {
@@ -651,11 +710,11 @@ export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const upsertVectorSpy = vi.spyOn(memory.vector, 'upsert');
         const deleteVectorSpy = vi.spyOn(memory.vector, 'deleteVector');
 
-        const thread = await memory.saveThread({
+        const thread1 = await memory.saveThread({
           thread: createTestThread('Message Updates Test Thread 1'),
         });
 
-        const messagesThread = [createTestMessageV2(thread.id, 'The sky is blue today')];
+        const messagesThread = [createTestMessageV2(thread1.id, 'The sky is blue today')];
 
         await memory.saveMessages({ messages: messagesThread });
         expect(upsertVectorSpy).toHaveBeenCalled();
@@ -665,7 +724,7 @@ export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           messages: [
             {
               id: messagesThread[0].id,
-              threadId: thread.id,
+              threadId: thread1.id,
               content: {
                 format: 2,
                 metadata: {
@@ -681,14 +740,14 @@ export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       });
 
       it('should update embeddings when message content is updated', async () => {
-        const thread = await memory.saveThread({
+        const thread1 = await memory.saveThread({
           thread: createTestThread('Message Updates Test Thread 1'),
         });
 
         const messagesThread = [
-          createTestMessageV2(thread.id, 'The sky is blue today'),
-          createTestMessageV2(thread.id, 'Message 2'),
-          createTestMessageV2(thread.id, 'Message 3'),
+          createTestMessageV2(thread1.id, 'The sky is blue today'),
+          createTestMessageV2(thread1.id, 'Message 2'),
+          createTestMessageV2(thread1.id, 'Message 3'),
         ];
 
         await memory.saveMessages({ messages: messagesThread });
@@ -704,13 +763,13 @@ export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           },
         ];
 
-        await memory.updateMessages(createMessageV2Updates(updates, thread.id));
+        await memory.updateMessages(createMessageV2Updates(updates, thread1.id));
 
         // the search should yield the final message instead of the first
         const searchQuery = 'blue';
 
         const threadScopeResult = await memory.rememberMessages({
-          threadId: thread.id,
+          threadId: thread1.id,
           resourceId, // resourceId is defined globally in this file
           vectorMessageSearch: searchQuery,
           config: {
@@ -838,6 +897,103 @@ export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
       it('should throw error when messageId is not provided', async () => {
         await expect(memory.deleteMessages([''])).rejects.toThrow('All message IDs must be non-empty strings');
+      });
+
+      it('should also delete corresponding embeddings', async () => {
+        // 1. Ensure no embeddings exist in the resource beforehand
+        const priorRecallResult = await memory.rememberMessages({
+          threadId: thread.id,
+          resourceId, // resourceId is defined globally in this file
+          vectorMessageSearch: 'any',
+          config: {
+            lastMessages: 0,
+            semanticRecall: {
+              topK: 10,
+              messageRange: 0,
+              scope: 'resource',
+            },
+          },
+        });
+
+        expect(priorRecallResult.messages).toHaveLength(0);
+
+        // 2. Test if deleteMessages removes embeddings
+        const firstThread = await memory.saveThread({
+          thread: createTestThread('Message Embedding Deletion Test Thread 1'),
+        });
+        console.log({ firstThread });
+
+        const searchMessageText = 'The sky is blue today';
+
+        const messageToDelete = createTestMessageV2(firstThread.id, searchMessageText);
+        await memory.saveMessages({
+          messages: [messageToDelete],
+          // to ensure embeddings are saved
+          memoryConfig: {
+            semanticRecall: true,
+          },
+        });
+
+        await memory.deleteMessages([messageToDelete.id]);
+
+        const secondThread = await memory.saveThread({
+          thread: createTestThread('Message Embedding Deletion Test Thread 2'),
+        });
+        console.log({ newThread: secondThread });
+
+        const newThreadMessages = [createTestMessageV2(secondThread.id, 'Oceans are vast and blue')];
+
+        await memory.saveMessages({
+          messages: newThreadMessages,
+          memoryConfig: {
+            semanticRecall: true,
+          },
+        });
+
+        // query in resource scope, passing the original thread ID
+        const recallResult = await memory.rememberMessages({
+          threadId: firstThread.id,
+          resourceId,
+          vectorMessageSearch: searchMessageText,
+          config: {
+            lastMessages: 0,
+            semanticRecall: {
+              topK: 1,
+              messageRange: 0,
+              scope: 'resource',
+            },
+          },
+        });
+
+        console.table(recallResult.messagesV2);
+        expect(recallResult.messages).toHaveLength(1);
+
+        // 3. Test if deleteThread removes embeddings
+        await memory.saveMessages({
+          messages: [messageToDelete],
+          memoryConfig: {
+            semanticRecall: true,
+          },
+        });
+
+        await memory.deleteThread(firstThread.id);
+
+        const recallResult2 = await memory.rememberMessages({
+          threadId: firstThread.id,
+          resourceId,
+          vectorMessageSearch: searchMessageText,
+          config: {
+            lastMessages: 0,
+            semanticRecall: {
+              topK: 1,
+              messageRange: 0,
+              scope: 'resource',
+            },
+          },
+        });
+
+        console.table(recallResult2.messagesV2);
+        expect(recallResult2.messages).toHaveLength(1);
       });
     });
 
