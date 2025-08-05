@@ -1,7 +1,7 @@
+import { createVectorTestSuite } from '@internal/storage-test-utils';
 import type { QueryResult } from '@mastra/core';
 import * as pg from 'pg';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
-import { createVectorTestSuite } from '@internal/storage-test-utils';
 
 import { PgVector } from '.';
 
