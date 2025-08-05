@@ -1,7 +1,9 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import { createLLMScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import { z } from 'zod';
 import { roundToTwoDecimals } from '../../../metrics/llm/utils';
+import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
 import { createExtractPrompt, createReasonPrompt, createScorePrompt } from './prompts';
 
 export const DEFAULT_OPTIONS: Record<'uncertaintyWeight' | 'scale', number> = {
@@ -32,46 +34,39 @@ export function createAnswerRelevancyScorer({
   model: MastraLanguageModel;
   options?: Record<'uncertaintyWeight' | 'scale', number>;
 }) {
-  return createLLMScorer({
+  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
     name: 'Answer Relevancy Scorer',
     description: 'A scorer that evaluates the relevancy of an LLM output to an input',
     judge: {
       model,
       instructions: ANSWER_RELEVANCY_AGENT_INSTRUCTIONS,
     },
-    extract: {
+  })
+    .preprocess({
       description: 'Extract relevant statements from the LLM output',
       outputSchema: extractOutputSchema,
       createPrompt: ({ run }) => {
-        return createExtractPrompt(run.output.text);
+        const assistantMessage = getAssistantMessageFromRunOutput(run.output) ?? '';
+        return createExtractPrompt(assistantMessage);
       },
-    },
-    analyze: {
+    })
+    .analyze({
       description: 'Score the relevance of the statements to the input',
       outputSchema: z.object({ results: z.array(z.object({ result: z.string(), reason: z.string() })) }),
-      createPrompt: ({ run }) => createScorePrompt(JSON.stringify(run.input), run.extractStepResult?.statements || []),
-    },
-    reason: {
-      description: 'Reason about the results',
-      createPrompt: ({ run }) => {
-        return createReasonPrompt({
-          input: run.input?.map(input => input.content).join(', ') || '',
-          output: run.output.text,
-          score: run.score,
-          results: run.analyzeStepResult.results,
-          scale: options.scale,
-        });
+      createPrompt: ({ run, results }) => {
+        const input = getUserMessageFromRunInput(run.input) ?? '';
+        return createScorePrompt(JSON.stringify(input), results.preprocessStepResult?.statements || []);
       },
-    },
-    calculateScore: ({ run }) => {
-      if (!run.analyzeStepResult || run.analyzeStepResult.results.length === 0) {
+    })
+    .generateScore(({ results }) => {
+      if (!results.analyzeStepResult || results.analyzeStepResult.results.length === 0) {
         return 0;
       }
 
-      const numberOfResults = run.analyzeStepResult.results.length;
+      const numberOfResults = results.analyzeStepResult.results.length;
 
       let relevancyCount = 0;
-      for (const { result } of run.analyzeStepResult.results) {
+      for (const { result } of results.analyzeStepResult.results) {
         if (result.trim().toLowerCase() === 'yes') {
           relevancyCount++;
         } else if (result.trim().toLowerCase() === 'unsure') {
@@ -82,6 +77,17 @@ export function createAnswerRelevancyScorer({
       const score = relevancyCount / numberOfResults;
 
       return roundToTwoDecimals(score * options.scale);
-    },
-  });
+    })
+    .generateReason({
+      description: 'Reason about the results',
+      createPrompt: ({ run, results, score }) => {
+        return createReasonPrompt({
+          input: getUserMessageFromRunInput(run.input) ?? '',
+          output: getAssistantMessageFromRunOutput(run.output) ?? '',
+          score,
+          results: results.analyzeStepResult.results,
+          scale: options.scale,
+        });
+      },
+    });
 }

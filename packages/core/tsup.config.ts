@@ -1,13 +1,10 @@
-import { spawn } from 'child_process';
-import { promisify } from 'util';
 import babel from '@babel/core';
+import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
 import type { Options } from 'tsup';
 import treeshakeDecoratorsBabelPlugin from './tools/treeshake-decorators';
 
 type Plugin = NonNullable<Options['plugins']>[number];
-
-const exec = promisify(spawn);
 
 let treeshakeDecorators = {
   name: 'treeshake-decorators',
@@ -67,8 +64,6 @@ export default defineConfig({
   plugins: [treeshakeDecorators],
   sourcemap: true,
   onSuccess: async () => {
-    await exec('pnpm', ['tsc', '-p', 'tsconfig.build.json'], {
-      stdio: 'inherit',
-    });
+    await generateTypes(process.cwd());
   },
 });

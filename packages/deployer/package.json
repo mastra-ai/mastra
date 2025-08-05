@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.12.1",
+  "version": "0.13.0-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -15,7 +15,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -25,7 +25,7 @@
         "default": "./dist/server/index.js"
       },
       "require": {
-        "types": "./dist/server/index.d.cts",
+        "types": "./dist/server/index.d.ts",
         "default": "./dist/server/index.cjs"
       }
     },
@@ -35,7 +35,7 @@
         "default": "./dist/services/index.js"
       },
       "require": {
-        "types": "./dist/services/index.d.cts",
+        "types": "./dist/services/index.d.ts",
         "default": "./dist/services/index.cjs"
       }
     },
@@ -45,7 +45,7 @@
         "default": "./dist/build/index.js"
       },
       "require": {
-        "types": "./dist/build/index.d.cts",
+        "types": "./dist/build/index.d.ts",
         "default": "./dist/build/index.cjs"
       }
     },
@@ -55,7 +55,7 @@
         "default": "./dist/bundler/index.js"
       },
       "require": {
-        "types": "./dist/bundler/index.d.cts",
+        "types": "./dist/bundler/index.d.ts",
         "default": "./dist/bundler/index.cjs"
       }
     },
@@ -65,7 +65,7 @@
         "default": "./dist/build/analyze.js"
       },
       "require": {
-        "types": "./dist/build/analyze.d.cts",
+        "types": "./dist/build/analyze.d.ts",
         "default": "./dist/build/analyze.cjs"
       }
     },
@@ -75,7 +75,7 @@
         "default": "./dist/validator/loader.js"
       },
       "require": {
-        "types": "./dist/validator/loader.d.cts",
+        "types": "./dist/validator/loader.d.ts",
         "default": "./dist/validator/loader.cjs"
       }
     },
@@ -110,9 +110,10 @@
     "find-workspaces": "^0.3.1",
     "fs-extra": "^11.3.0",
     "globby": "^14.1.0",
-    "hono": "^4.8.9",
+    "hono": "^4.8.11",
+    "package-directory": "^8.1.0",
     "resolve-from": "^5.0.0",
-    "rollup": "~4.44.2",
+    "rollup": "~4.46.2",
     "rollup-plugin-esbuild": "^6.2.1",
     "rollup-plugin-node-externals": "^8.0.1",
     "typescript-paths": "^1.5.1",
@@ -137,9 +138,10 @@
     "tsup": "^8.5.0",
     "type-fest": "^4.41.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.12.0-0 <0.13.0-0"
+    "@mastra/core": ">=0.13.0-0 <0.14.0-0"
   }
 }
