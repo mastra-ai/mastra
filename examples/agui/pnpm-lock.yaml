@@ -17,19 +17,19 @@ importers:
     dependencies:
       '@ag-ui/mastra':
         specifier: latest
-        version: 0.0.4(@copilotkit/runtime@1.8.11(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67))(@ibm-cloud/watsonx-ai@1.6.5)(axios@1.9.0)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.52.0)(react@19.1.0)(ws@8.18.2))(@mastra/core@..+packages+core)(zod@3.25.67)
+        version: 0.0.4(@copilotkit/runtime@1.8.11(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67))(@ibm-cloud/watsonx-ai@1.6.5)(axios@1.9.0(debug@4.4.0))(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.52.0)(react@19.1.1)(ws@8.18.2))(@mastra/core@..+packages+core)(zod@3.25.67)
       '@ai-sdk/openai':
         specifier: ^1.3.22
         version: 1.3.22(zod@3.25.67)
       '@copilotkit/react-core':
         specifier: ^1.8.10
-        version: 1.8.11(@types/react@19.1.8)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 1.8.11(@types/react@19.1.9)(graphql@16.11.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@copilotkit/react-ui':
         specifier: ^1.8.10
-        version: 1.8.11(@types/react@19.1.8)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 1.8.11(@types/react@19.1.9)(graphql@16.11.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@copilotkit/runtime':
         specifier: ^1.8.10
-        version: 1.8.11(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67))(@ibm-cloud/watsonx-ai@1.6.5)(axios@1.9.0)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.52.0)(react@19.1.0)(ws@8.18.2)
+        version: 1.8.11(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67))(@ibm-cloud/watsonx-ai@1.6.5)(axios@1.9.0(debug@4.4.0))(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.52.0)(react@19.1.1)(ws@8.18.2)
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
@@ -46,11 +46,11 @@ importers:
         specifier: link:../../packages/cli
         version: link:../../packages/cli
       react:
-        specifier: ^19.1.0
-        version: 19.1.0
+        specifier: ^19.1.1
+        version: 19.1.1
       react-dom:
-        specifier: ^19.1.0
-        version: 19.1.0(react@19.1.0)
+        specifier: ^19.1.1
+        version: 19.1.1(react@19.1.1)
       zod:
         specifier: ^3.25.67
         version: 3.25.67
@@ -59,11 +59,11 @@ importers:
         specifier: ^9.25.0
         version: 9.26.0
       '@types/react':
-        specifier: ^19.1.8
-        version: 19.1.8
+        specifier: ^19.1.9
+        version: 19.1.9
       '@types/react-dom':
-        specifier: ^19.1.6
-        version: 19.1.6(@types/react@19.1.8)
+        specifier: ^19.1.7
+        version: 19.1.7(@types/react@19.1.9)
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.38.0
         version: 8.38.0(@typescript-eslint/parser@8.38.0(eslint@9.31.0)(typescript@5.8.3))(eslint@9.31.0)(typescript@5.8.3)
@@ -1279,13 +1279,13 @@ packages:
   '@types/prop-types@15.7.14':
     resolution: {integrity: sha512-gNMvNH49DJ7OJYv+KAKn0Xp45p8PLl6zo2YnvDIbTd4J6MER2BmWN49TG7n9LvkyihINxeKW8+3bfS2yDC9dzQ==}
 
-  '@types/react-dom@19.1.6':
-    resolution: {integrity: sha512-4hOiT/dwO8Ko0gV1m/TJZYk3y0KBnY9vzDh7W+DH17b2HFSOGgdj33dhihPeuy3l0q23+4e+hoXHV6hCC4dCXw==}
+  '@types/react-dom@19.1.7':
+    resolution: {integrity: sha512-i5ZzwYpqjmrKenzkoLM2Ibzt6mAsM7pxB6BCIouEVVmgiqaMj1TjaK7hnA36hbW5aZv20kx7Lw6hWzPWg0Rurw==}
     peerDependencies:
       '@types/react': ^19.0.0
 
-  '@types/react@19.1.8':
-    resolution: {integrity: sha512-AwAfQ2Wa5bCx9WP8nZL2uMZWod7J7/JSplxbTmBQ5ms6QpqNYm672H0Vu9ZVKVngQ+ii4R/byguVEUZQyeg44g==}
+  '@types/react@19.1.9':
+    resolution: {integrity: sha512-WmdoynAX8Stew/36uTSVMcLJJ1KRh6L3IZRx1PZ7qJtBqT3dYTgyDTx8H1qoRghErydW7xw9mSJ3wS//tCRpFA==}
 
   '@types/retry@0.12.0':
     resolution: {integrity: sha512-wWKOClTTiizcZhXnPY4wikVAwmdYHp8q6DmC+EJUzAMsycb7HB32Kh9RN4+0gExjmPmZSAQjgURXIGATPegAvA==}
@@ -2757,10 +2757,10 @@ packages:
     resolution: {integrity: sha512-8zGqypfENjCIqGhgXToC8aB2r7YrBX+AQAfIPs/Mlk+BtPTztOvTS01NRW/3Eh60J+a48lt8qsCzirQ6loCVfA==}
     engines: {node: '>= 0.8'}
 
-  react-dom@19.1.0:
-    resolution: {integrity: sha512-Xs1hdnE+DyKgeHJeJznQmYMIBG3TKIHJJT95Q58nHLSrElKlGQqDTR2HQ9fx5CN/Gk6Vh/kupBTDLU11/nDk/g==}
+  react-dom@19.1.1:
+    resolution: {integrity: sha512-Dlq/5LAZgF0Gaz6yiqZCf6VCcZs1ghAJyrsu84Q/GT0gV+mCxbfmKNoGRKBYMJ8IEdGPqu49YWXD02GCknEDkw==}
     peerDependencies:
-      react: ^19.1.0
+      react: ^19.1.1
 
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
@@ -2783,8 +2783,8 @@ packages:
     peerDependencies:
       react: '>= 0.14.0'
 
-  react@19.1.0:
-    resolution: {integrity: sha512-FS+XFBNvn3GTAWq26joslQgWNoFu08F4kl0J4CgdNKADkdSGXQyTCnKteIAJy96Br6YbpEU1LSzV5dYtjMkMDg==}
+  react@19.1.1:
+    resolution: {integrity: sha512-w8nqGImo45dmMIfljjMwOGtbmC/mk4CMYhWIicdSflH91J9TyCyczcPFXJzrZ/ZXcgGRFeP6BU0BEJTw6tZdfQ==}
     engines: {node: '>=0.10.0'}
 
   readable-stream@4.7.0:
@@ -3286,11 +3286,11 @@ snapshots:
       '@ag-ui/core': 0.0.35
       '@ag-ui/proto': 0.0.35
 
-  '@ag-ui/mastra@0.0.4(@copilotkit/runtime@1.8.11(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67))(@ibm-cloud/watsonx-ai@1.6.5)(axios@1.9.0)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.52.0)(react@19.1.0)(ws@8.18.2))(@mastra/core@..+packages+core)(zod@3.25.67)':
+  '@ag-ui/mastra@0.0.4(@copilotkit/runtime@1.8.11(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67))(@ibm-cloud/watsonx-ai@1.6.5)(axios@1.9.0(debug@4.4.0))(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.52.0)(react@19.1.1)(ws@8.18.2))(@mastra/core@..+packages+core)(zod@3.25.67)':
     dependencies:
       '@ag-ui/client': 0.0.35
       '@ai-sdk/ui-utils': 1.2.11(zod@3.25.67)
-      '@copilotkit/runtime': 1.8.11(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67))(@ibm-cloud/watsonx-ai@1.6.5)(axios@1.9.0)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.52.0)(react@19.1.0)(ws@8.18.2)
+      '@copilotkit/runtime': 1.8.11(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67))(@ibm-cloud/watsonx-ai@1.6.5)(axios@1.9.0(debug@4.4.0))(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.52.0)(react@19.1.1)(ws@8.18.2)
       '@mastra/client-js': 0.10.14(zod@3.25.67)
       '@mastra/core': link:../../packages/core
       rxjs: 7.8.1
@@ -3491,14 +3491,14 @@ snapshots:
 
   '@cfworker/json-schema@4.1.1': {}
 
-  '@copilotkit/react-core@1.8.11(@types/react@19.1.8)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@copilotkit/react-core@1.8.11(@types/react@19.1.9)(graphql@16.11.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
-      '@copilotkit/runtime-client-gql': 1.8.11(graphql@16.11.0)(react@19.1.0)
+      '@copilotkit/runtime-client-gql': 1.8.11(graphql@16.11.0)(react@19.1.1)
       '@copilotkit/shared': 1.8.11
       '@scarf/scarf': 1.4.0
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
-      react-markdown: 8.0.7(@types/react@19.1.8)(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
+      react-markdown: 8.0.7(@types/react@19.1.9)(react@19.1.1)
       untruncate-json: 0.0.1
     transitivePeerDependencies:
       - '@types/react'
@@ -3506,15 +3506,15 @@ snapshots:
       - graphql
       - supports-color
 
-  '@copilotkit/react-ui@1.8.11(@types/react@19.1.8)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@copilotkit/react-ui@1.8.11(@types/react@19.1.9)(graphql@16.11.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
-      '@copilotkit/react-core': 1.8.11(@types/react@19.1.8)(graphql@16.11.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      '@copilotkit/runtime-client-gql': 1.8.11(graphql@16.11.0)(react@19.1.0)
+      '@copilotkit/react-core': 1.8.11(@types/react@19.1.9)(graphql@16.11.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      '@copilotkit/runtime-client-gql': 1.8.11(graphql@16.11.0)(react@19.1.1)
       '@copilotkit/shared': 1.8.11
-      '@headlessui/react': 2.2.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      react: 19.1.0
-      react-markdown: 8.0.7(@types/react@19.1.8)(react@19.1.0)
-      react-syntax-highlighter: 15.6.1(react@19.1.0)
+      '@headlessui/react': 2.2.3(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      react: 19.1.1
+      react-markdown: 8.0.7(@types/react@19.1.9)(react@19.1.1)
+      react-syntax-highlighter: 15.6.1(react@19.1.1)
       remark-gfm: 3.0.1
       remark-math: 5.1.1
     transitivePeerDependencies:
@@ -3524,18 +3524,18 @@ snapshots:
       - react-dom
       - supports-color
 
-  '@copilotkit/runtime-client-gql@1.8.11(graphql@16.11.0)(react@19.1.0)':
+  '@copilotkit/runtime-client-gql@1.8.11(graphql@16.11.0)(react@19.1.1)':
     dependencies:
       '@copilotkit/shared': 1.8.11
       '@urql/core': 5.1.1(graphql@16.11.0)
-      react: 19.1.0
+      react: 19.1.1
       untruncate-json: 0.0.1
-      urql: 4.2.2(@urql/core@5.1.1(graphql@16.11.0))(react@19.1.0)
+      urql: 4.2.2(@urql/core@5.1.1(graphql@16.11.0))(react@19.1.1)
     transitivePeerDependencies:
       - encoding
       - graphql
 
-  '@copilotkit/runtime@1.8.11(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67))(@ibm-cloud/watsonx-ai@1.6.5)(axios@1.9.0)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.52.0)(react@19.1.0)(ws@8.18.2)':
+  '@copilotkit/runtime@1.8.11(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67))(@ibm-cloud/watsonx-ai@1.6.5)(axios@1.9.0(debug@4.4.0))(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(playwright@1.52.0)(react@19.1.1)(ws@8.18.2)':
     dependencies:
       '@ag-ui/client': 0.0.27
       '@ag-ui/core': 0.0.27
@@ -3544,10 +3544,10 @@ snapshots:
       '@anthropic-ai/sdk': 0.27.3
       '@copilotkit/shared': 1.8.11
       '@graphql-yoga/plugin-defer-stream': 3.13.4(graphql-yoga@5.13.4(graphql@16.11.0))(graphql@16.11.0)
-      '@langchain/community': 0.3.42(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67))(@ibm-cloud/watsonx-ai@1.6.5)(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(axios@1.9.0)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(playwright@1.52.0)(ws@8.18.2)
+      '@langchain/community': 0.3.42(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67))(@ibm-cloud/watsonx-ai@1.6.5)(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(axios@1.9.0(debug@4.4.0))(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(playwright@1.52.0)(ws@8.18.2)
       '@langchain/core': 0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67))
       '@langchain/google-gauth': 0.1.8(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(zod@3.25.67)
-      '@langchain/langgraph-sdk': 0.0.70(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(react@19.1.0)
+      '@langchain/langgraph-sdk': 0.0.70(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(react@19.1.1)
       '@langchain/openai': 0.4.9(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(ws@8.18.2)
       class-transformer: 0.5.1
       class-validator: 0.14.2
@@ -3556,7 +3556,7 @@ snapshots:
       graphql-scalars: 1.24.2(graphql@16.11.0)
       graphql-yoga: 5.13.4(graphql@16.11.0)
       groq-sdk: 0.5.0
-      langchain: 0.3.24(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(axios@1.9.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(ws@8.18.2)
+      langchain: 0.3.24(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(axios@1.9.0(debug@4.4.0))(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(ws@8.18.2)
       openai: 4.98.0(ws@8.18.2)(zod@3.25.67)
       partial-json: 0.1.7
       pino: 9.6.0
@@ -3876,18 +3876,18 @@ snapshots:
       '@floating-ui/core': 1.7.0
       '@floating-ui/utils': 0.2.9
 
-  '@floating-ui/react-dom@2.1.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@floating-ui/react-dom@2.1.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
       '@floating-ui/dom': 1.7.0
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
 
-  '@floating-ui/react@0.26.28(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@floating-ui/react@0.26.28(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
-      '@floating-ui/react-dom': 2.1.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@floating-ui/react-dom': 2.1.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@floating-ui/utils': 0.2.9
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
       tabbable: 6.2.0
 
   '@floating-ui/utils@0.2.9': {}
@@ -3950,15 +3950,15 @@ snapshots:
       '@repeaterjs/repeater': 3.0.6
       tslib: 2.8.1
 
-  '@headlessui/react@2.2.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@headlessui/react@2.2.3(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
-      '@floating-ui/react': 0.26.28(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      '@react-aria/focus': 3.20.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      '@react-aria/interactions': 3.25.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      '@tanstack/react-virtual': 3.13.8(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
-      use-sync-external-store: 1.5.0(react@19.1.0)
+      '@floating-ui/react': 0.26.28(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      '@react-aria/focus': 3.20.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      '@react-aria/interactions': 3.25.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      '@tanstack/react-virtual': 3.13.8(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
+      use-sync-external-store: 1.5.0(react@19.1.1)
 
   '@humanfs/core@0.19.1': {}
 
@@ -3998,7 +3998,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.0
 
-  '@langchain/community@0.3.42(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67))(@ibm-cloud/watsonx-ai@1.6.5)(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(axios@1.9.0)(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(playwright@1.52.0)(ws@8.18.2)':
+  '@langchain/community@0.3.42(@browserbasehq/sdk@2.5.0)(@browserbasehq/stagehand@1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67))(@ibm-cloud/watsonx-ai@1.6.5)(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(axios@1.9.0(debug@4.4.0))(google-auth-library@8.9.0)(ibm-cloud-sdk-core@5.3.2)(ignore@5.3.2)(jsonwebtoken@9.0.2)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(playwright@1.52.0)(ws@8.18.2)':
     dependencies:
       '@browserbasehq/stagehand': 1.14.0(@playwright/test@1.52.0)(deepmerge@4.3.1)(dotenv@16.5.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(zod@3.25.67)
       '@ibm-cloud/watsonx-ai': 1.6.5
@@ -4009,7 +4009,7 @@ snapshots:
       flat: 5.0.2
       ibm-cloud-sdk-core: 5.3.2
       js-yaml: 4.1.0
-      langchain: 0.3.24(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(axios@1.9.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(ws@8.18.2)
+      langchain: 0.3.24(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(axios@1.9.0(debug@4.4.0))(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(ws@8.18.2)
       langsmith: 0.3.28(openai@4.98.0(ws@8.18.2)(zod@3.25.67))
       openai: 4.98.0(ws@8.18.2)(zod@3.25.67)
       uuid: 10.0.0
@@ -4075,7 +4075,7 @@ snapshots:
       - supports-color
       - zod
 
-  '@langchain/langgraph-sdk@0.0.70(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(react@19.1.0)':
+  '@langchain/langgraph-sdk@0.0.70(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(react@19.1.1)':
     dependencies:
       '@types/json-schema': 7.0.15
       p-queue: 6.6.2
@@ -4083,7 +4083,7 @@ snapshots:
       uuid: 9.0.1
     optionalDependencies:
       '@langchain/core': 0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67))
-      react: 19.1.0
+      react: 19.1.1
 
   '@langchain/openai@0.4.9(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(ws@8.18.2)':
     dependencies:
@@ -4134,54 +4134,54 @@ snapshots:
     dependencies:
       playwright: 1.52.0
 
-  '@react-aria/focus@3.20.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@react-aria/focus@3.20.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
-      '@react-aria/interactions': 3.25.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      '@react-aria/utils': 3.28.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      '@react-types/shared': 3.29.0(react@19.1.0)
+      '@react-aria/interactions': 3.25.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      '@react-aria/utils': 3.28.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      '@react-types/shared': 3.29.0(react@19.1.1)
       '@swc/helpers': 0.5.17
       clsx: 2.1.1
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
 
-  '@react-aria/interactions@3.25.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@react-aria/interactions@3.25.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
-      '@react-aria/ssr': 3.9.8(react@19.1.0)
-      '@react-aria/utils': 3.28.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@react-aria/ssr': 3.9.8(react@19.1.1)
+      '@react-aria/utils': 3.28.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@react-stately/flags': 3.1.1
-      '@react-types/shared': 3.29.0(react@19.1.0)
+      '@react-types/shared': 3.29.0(react@19.1.1)
       '@swc/helpers': 0.5.17
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
 
-  '@react-aria/ssr@3.9.8(react@19.1.0)':
+  '@react-aria/ssr@3.9.8(react@19.1.1)':
     dependencies:
       '@swc/helpers': 0.5.17
-      react: 19.1.0
+      react: 19.1.1
 
-  '@react-aria/utils@3.28.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@react-aria/utils@3.28.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
-      '@react-aria/ssr': 3.9.8(react@19.1.0)
+      '@react-aria/ssr': 3.9.8(react@19.1.1)
       '@react-stately/flags': 3.1.1
-      '@react-stately/utils': 3.10.6(react@19.1.0)
-      '@react-types/shared': 3.29.0(react@19.1.0)
+      '@react-stately/utils': 3.10.6(react@19.1.1)
+      '@react-types/shared': 3.29.0(react@19.1.1)
       '@swc/helpers': 0.5.17
       clsx: 2.1.1
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
 
   '@react-stately/flags@3.1.1':
     dependencies:
       '@swc/helpers': 0.5.17
 
-  '@react-stately/utils@3.10.6(react@19.1.0)':
+  '@react-stately/utils@3.10.6(react@19.1.1)':
     dependencies:
       '@swc/helpers': 0.5.17
-      react: 19.1.0
+      react: 19.1.1
 
-  '@react-types/shared@3.29.0(react@19.1.0)':
+  '@react-types/shared@3.29.0(react@19.1.1)':
     dependencies:
-      react: 19.1.0
+      react: 19.1.1
 
   '@repeaterjs/repeater@3.0.6': {}
 
@@ -4274,11 +4274,11 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@tanstack/react-virtual@3.13.8(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@tanstack/react-virtual@3.13.8(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
       '@tanstack/virtual-core': 3.13.8
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
 
   '@tanstack/virtual-core@3.13.8': {}
 
@@ -4340,11 +4340,11 @@ snapshots:
 
   '@types/prop-types@15.7.14': {}
 
-  '@types/react-dom@19.1.6(@types/react@19.1.8)':
+  '@types/react-dom@19.1.7(@types/react@19.1.9)':
     dependencies:
-      '@types/react': 19.1.8
+      '@types/react': 19.1.9
 
-  '@types/react@19.1.8':
+  '@types/react@19.1.9':
     dependencies:
       csstype: 3.1.3
 
@@ -5239,7 +5239,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.9.0)
+      retry-axios: 2.6.0(axios@1.9.0(debug@4.4.0))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -5373,7 +5373,7 @@ snapshots:
 
   kleur@4.1.5: {}
 
-  langchain@0.3.24(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(axios@1.9.0)(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(ws@8.18.2):
+  langchain@0.3.24(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(axios@1.9.0(debug@4.4.0))(openai@4.98.0(ws@8.18.2)(zod@3.25.67))(ws@8.18.2):
     dependencies:
       '@langchain/core': 0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67))
       '@langchain/openai': 0.4.9(@langchain/core@0.3.55(openai@4.98.0(ws@8.18.2)(zod@3.25.67)))(ws@8.18.2)
@@ -6033,26 +6033,26 @@ snapshots:
       iconv-lite: 0.4.24
       unpipe: 1.0.0
 
-  react-dom@19.1.0(react@19.1.0):
+  react-dom@19.1.1(react@19.1.1):
     dependencies:
-      react: 19.1.0
+      react: 19.1.1
       scheduler: 0.26.0
 
   react-is@16.13.1: {}
 
   react-is@18.3.1: {}
 
-  react-markdown@8.0.7(@types/react@19.1.8)(react@19.1.0):
+  react-markdown@8.0.7(@types/react@19.1.9)(react@19.1.1):
     dependencies:
       '@types/hast': 2.3.10
       '@types/prop-types': 15.7.14
-      '@types/react': 19.1.8
+      '@types/react': 19.1.9
       '@types/unist': 2.0.11
       comma-separated-tokens: 2.0.3
       hast-util-whitespace: 2.0.1
       prop-types: 15.8.1
       property-information: 6.5.0
-      react: 19.1.0
+      react: 19.1.1
       react-is: 18.3.1
       remark-parse: 10.0.2
       remark-rehype: 10.1.0
@@ -6066,17 +6066,17 @@ snapshots:
 
   react-refresh@0.17.0: {}
 
-  react-syntax-highlighter@15.6.1(react@19.1.0):
+  react-syntax-highlighter@15.6.1(react@19.1.1):
     dependencies:
       '@babel/runtime': 7.27.1
       highlight.js: 10.7.3
       highlightjs-vue: 1.0.0
       lowlight: 1.20.0
       prismjs: 1.30.0
-      react: 19.1.0
+      react: 19.1.1
       refractor: 3.6.0
 
-  react@19.1.0: {}
+  react@19.1.1: {}
 
   readable-stream@4.7.0:
     dependencies:
@@ -6135,7 +6135,7 @@ snapshots:
 
   resolve-from@4.0.0: {}
 
-  retry-axios@2.6.0(axios@1.9.0):
+  retry-axios@2.6.0(axios@1.9.0(debug@4.4.0)):
     dependencies:
       axios: 1.9.0(debug@4.4.0)
 
@@ -6424,15 +6424,15 @@ snapshots:
 
   urlpattern-polyfill@10.1.0: {}
 
-  urql@4.2.2(@urql/core@5.1.1(graphql@16.11.0))(react@19.1.0):
+  urql@4.2.2(@urql/core@5.1.1(graphql@16.11.0))(react@19.1.1):
     dependencies:
       '@urql/core': 5.1.1(graphql@16.11.0)
-      react: 19.1.0
+      react: 19.1.1
       wonka: 6.3.5
 
-  use-sync-external-store@1.5.0(react@19.1.0):
+  use-sync-external-store@1.5.0(react@19.1.1):
     dependencies:
-      react: 19.1.0
+      react: 19.1.1
 
   utils-merge@1.0.1: {}
 

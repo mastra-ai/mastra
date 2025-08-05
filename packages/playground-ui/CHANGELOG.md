@@ -1,5 +1,21 @@
 # @mastra/playground-ui
 
+## 5.1.18-alpha.2
+
+### Patch Changes
+
+- 0ebfe8a: dependencies updates:
+  - Updated dependency [`motion@^12.23.12` ↗︎](https://www.npmjs.com/package/motion/v/12.23.12) (from `^12.23.9`, in `dependencies`)
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [42dfc48]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+  - @mastra/client-js@0.10.19-alpha.2
+
 ## 5.1.18-alpha.1
 
 ### Patch Changes

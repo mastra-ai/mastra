@@ -1,5 +1,23 @@
 # @mastra/longmemeval
 
+## 0.1.6-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [cb36de0]
+- Updated dependencies [e1a2ef1]
+- Updated dependencies [f082460]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+  - @mastra/memory@0.12.1-alpha.2
+  - @mastra/libsql@0.13.0-alpha.1
+  - @mastra/fastembed@0.10.2-alpha.0
+  - @mastra/rag@1.0.7-alpha.1
+
 ## 0.1.6-alpha.1
 
 ### Patch Changes

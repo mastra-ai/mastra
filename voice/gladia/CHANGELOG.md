@@ -1,5 +1,18 @@
 # @mastra/voice-gladia
 
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+
 ## 0.10.2
 
 ### Patch Changes

@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 0.13.0-alpha.2
+
+### Patch Changes
+
+- cb36de0: dependencies updates:
+  - Updated dependency [`hono@^4.8.11` ↗︎](https://www.npmjs.com/package/hono/v/4.8.11) (from `^4.8.9`, in `dependencies`)
+- a82b851: Exclude getVoice, getScorers from agent trace
+- 41a0a0e: fixed a minor bug where ID generator wasn't being properly bound to instances of MessageList
+- 2871020: update safelyParseJSON to check for value of param when handling parse
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- 5d377e5: Fix tracing of runtimeContext values"
+- Updated dependencies [4a406ec]
+  - @mastra/schema-compat@0.10.6-alpha.0
+
 ## 0.13.0-alpha.1
 
 ### Minor Changes

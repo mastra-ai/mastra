@@ -1,0 +1,16 @@
+{
+  "name": "@internal/types-builder",
+  "version": "0.0.1",
+  "description": "",
+  "type": "module",
+  "main": "src/index.js",
+  "private": true,
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "typescript": "^5.8.3",
+    "globby": "^14.1.0"
+  }
+}

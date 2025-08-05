@@ -1,5 +1,22 @@
 # @mastra/memory
 
+## 0.12.1-alpha.2
+
+### Patch Changes
+
+- e1a2ef1: dependencies updates:
+  - Updated dependency [`@upstash/redis@^1.35.3` ↗︎](https://www.npmjs.com/package/@upstash/redis/v/1.35.3) (from `^1.35.1`, in `dependencies`)
+- f082460: dependencies updates:
+  - Updated dependency [`redis@^5.8.0` ↗︎](https://www.npmjs.com/package/redis/v/5.8.0) (from `^5.7.0`, in `dependencies`)
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+
 ## 0.12.1-alpha.1
 
 ### Patch Changes
