@@ -420,6 +420,9 @@ export class AISDKV5OutputStream {
       sources: this.sources,
       files: this.files,
       response: this.response,
+      content: this.content,
+      totalUsage: this.#modelOutput.totalUsage,
+      // experimental_output: // TODO
     };
   }
 }
