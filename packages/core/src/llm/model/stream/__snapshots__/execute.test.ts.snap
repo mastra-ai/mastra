@@ -8030,6 +8030,7 @@ exports[`V5 tests > generateText > result.sources > should contain sources 1`] =
     },
     "sourceType": "url",
     "title": "Example",
+    "type": "source",
     "url": "https://example.com",
   },
   {
@@ -8041,6 +8042,7 @@ exports[`V5 tests > generateText > result.sources > should contain sources 1`] =
     },
     "sourceType": "url",
     "title": "Example 2",
+    "type": "source",
     "url": "https://example.com/2",
   },
 ]
