@@ -553,40 +553,41 @@ describe('MongoDBVector Integration Tests', () => {
       await deleteIndexAndWait(vectorDB, bugTestIndexName);
     });
 
-    test('filtering by thread_id WITHOUT metadata prefix ignores filter (bug reproduction)', async () => {
+    test('filtering by thread_id WITHOUT metadata prefix works correctly', async () => {
       // This is what Memory.rememberMessages does - passes thread_id directly
-      // This SHOULD filter to only thread-123 documents but currently the filter is ignored
+      // Previously this would ignore the filter, but now it works correctly
       const results = await vectorDB.query({
         indexName: bugTestIndexName,
         queryVector: [1, 0, 0, 0],
         topK: 10,
-        filter: { thread_id: 'thread-123' }, // Bug: Filter is ignored, returns all documents
+        filter: { thread_id: 'thread-123' }, // Now correctly filters by thread_id
       });
 
-      // This test demonstrates the bug - the filter is ignored and returns all documents
-      // Should return 2 documents from thread-123, but returns all 4 documents
-      expect(results).toHaveLength(4); // Bug: Should be 2, but returns 4 (all documents)
+      // Verify the fix works - should return only documents from thread-123
+      expect(results).toHaveLength(2);
+      expect(results.every(r => r.metadata?.thread_id === 'thread-123')).toBe(true);
 
-      // Verify it's returning documents from both threads (filter ignored)
+      // Should NOT contain documents from other threads
       const threadIds = results.map(r => r.metadata?.thread_id);
-      expect(threadIds).toContain('thread-456'); // Bug: Should NOT contain thread-456
+      expect(threadIds).not.toContain('thread-456');
     });
 
-    test('filtering by resource_id WITHOUT metadata prefix ignores filter (bug reproduction)', async () => {
+    test('filtering by resource_id WITHOUT metadata prefix works correctly', async () => {
       // This is what Memory.rememberMessages does with resource scope
       const results = await vectorDB.query({
         indexName: bugTestIndexName,
         queryVector: [0, 1, 0, 0],
         topK: 10,
-        filter: { resource_id: 'resource-123' }, // Bug: Filter is ignored, returns all documents
+        filter: { resource_id: 'resource-123' }, // Now correctly filters by resource_id
       });
 
-      // This test demonstrates the bug - filter is ignored
-      expect(results).toHaveLength(4); // Bug: Should be 2, but returns 4 (all documents)
+      // Verify the fix works - should return only documents from resource-123
+      expect(results).toHaveLength(2);
+      expect(results.every(r => r.metadata?.resource_id === 'resource-123')).toBe(true);
 
-      // Verify it's returning documents from both resources (filter ignored)
+      // Should NOT contain documents from other resources
       const resourceIds = results.map(r => r.metadata?.resource_id);
-      expect(resourceIds).toContain('resource-456'); // Bug: Should NOT contain resource-456
+      expect(resourceIds).not.toContain('resource-456');
     });
 
     test('filtering WITH metadata. prefix works correctly (workaround)', async () => {
