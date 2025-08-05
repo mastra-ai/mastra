@@ -380,9 +380,8 @@ const parseJsonPathKey = (key: string) => {
 // Helper to generate the correct JSON path format for LibSQL
 const getJsonPath = (key: string) => {
   const jsonPathKey = parseJsonPathKey(key);
-  // If the key contains quotes (nested path), use the dot notation with quotes
-  // Otherwise, use simple dot notation
-  return jsonPathKey.includes('"') ? `'$.${jsonPathKey}'` : `'$.${jsonPathKey}'`;
+  // Always use quotes for consistency
+  return `'$.${jsonPathKey}'`;
 };
 
 function escapeLikePattern(str: string): string {
