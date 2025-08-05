@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.10.16-alpha.1",
+  "version": "0.10.19-alpha.2",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -25,7 +25,7 @@
   ],
   "scripts": {
     "build": "npm-run-all --serial build:lib copy-starter-files copy-templates build:playground",
-    "build:lib": "tsup --config tsup.config.js",
+    "build:lib": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm run build:lib --watch --onSuccess \"pnpm run copy-starter-files && pnpm run copy-templates\"",
     "copy-starter-files": "cpy \"src/starter-files/**/*\" \"dist/starter-files\"",
     "copy-templates": "cpy \"src/templates/**/*\" \"dist/templates/\"",
@@ -64,14 +64,14 @@
     "@mastra/loggers": "workspace:^",
     "@mastra/mcp": "workspace:^",
     "@opentelemetry/core": "^2.0.1",
-    "@opentelemetry/instrumentation": "^0.202.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.60.1",
-    "@opentelemetry/exporter-trace-otlp-grpc": "^0.202.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.202.0",
+    "@opentelemetry/instrumentation": "^0.203.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.62.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.203.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.203.0",
     "@opentelemetry/resources": "^2.0.1",
-    "@opentelemetry/sdk-node": "^0.202.0",
+    "@opentelemetry/sdk-node": "^0.203.0",
     "@opentelemetry/sdk-trace-base": "^2.0.1",
-    "@opentelemetry/semantic-conventions": "^1.34.0",
+    "@opentelemetry/semantic-conventions": "^1.36.0",
     "@webcontainer/env": "^1.1.1",
     "commander": "^12.1.0",
     "dotenv": "^16.6.1",
@@ -113,9 +113,10 @@
     "tsup": "^8.5.0",
     "type-fest": "^4.41.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.2-0 <0.12.0-0"
+    "@mastra/core": ">=0.10.2-0 <0.14.0-0"
   }
 }

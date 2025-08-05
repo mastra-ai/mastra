@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-docs-server",
-  "version": "0.13.7-alpha.1",
+  "version": "0.13.9-alpha.2",
   "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
   "type": "module",
   "main": "dist/index.js",
@@ -22,7 +22,7 @@
   },
   "scripts": {
     "prepare-docs": "cross-env PREPARE=true node dist/prepare-docs/prepare.js",
-    "build:cli": "tsup src/stdio.ts src/prepare-docs/prepare.ts --format esm --experimental-dts --treeshake=smallest --splitting",
+    "build:cli": "tsup src/stdio.ts src/prepare-docs/prepare.ts --format esm --no-dts --treeshake=smallest --splitting && tsc -p tsconfig.build.json",
     "pretest": "pnpm turbo build --filter @mastra/mcp-docs-server",
     "test": "vitest run",
     "lint": "eslint ."
@@ -52,7 +52,7 @@
     "@wong2/mcp-cli": "^1.10.0",
     "cross-env": "^7.0.3",
     "eslint": "^9.30.1",
-    "hono": "^4.8.4",
+    "hono": "^4.8.12",
     "tsup": "^8.5.0",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",

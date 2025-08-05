@@ -15,7 +15,7 @@
   "packageManager": "pnpm@10.12.4",
   "dependencies": {
     "mastra": "kitchen-sink-e2e-test",
-    "@ai-sdk/openai": "^1.3.22",
+    "@ai-sdk/openai": "^1.3.23",
     "@mastra/core": "kitchen-sink-e2e-test",
     "@mastra/loggers": "kitchen-sink-e2e-test",
     "zod": "^3.25.56"

@@ -25,13 +25,9 @@ import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { AgentVNextStreamOptions } from './agent.types';
+import type { InputProcessor } from './input-processor';
 
-export type {
-  MastraMessageV2,
-  MastraMessageContentV2,
-  UIMessageWithMetadata,
-  MessageList,
-} from './message-list/index.ts';
+export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from 'ai';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool>;
@@ -60,6 +56,7 @@ export interface AgentConfig<
   evals?: TMetrics;
   memory?: DynamicArgument<MastraMemory>;
   voice?: CompositeVoice;
+  inputProcessors?: DynamicArgument<InputProcessor[]>;
 }
 
 export type AgentMemoryOption = {

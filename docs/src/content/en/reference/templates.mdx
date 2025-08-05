@@ -70,7 +70,7 @@ All templates follow this standardized structure:
           <FileTree.File name="example-agent.ts" />
         </FileTree.Folder>
         <FileTree.Folder name="tools">
-          <FileTree.File name="custom-tool.ts" />
+          <FileTree.File name="example-tool.ts" />
         </FileTree.Folder>
         <FileTree.Folder name="workflows">
           <FileTree.File name="example-workflow.ts" />
@@ -126,8 +126,10 @@ Use the standard Mastra TypeScript configuration:
 Include a `.env.example` file with all required environment variables:
 
 ```bash filename=".env.example"
-# OpenAI API key for LLM operations
+# LLM provider API keys (choose one or more)
 OPENAI_API_KEY=your_openai_api_key_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key_here
 
 # Other service API keys as needed
 OTHER_SERVICE_API_KEY=your_api_key_here
@@ -137,15 +139,17 @@ OTHER_SERVICE_API_KEY=your_api_key_here
 
 #### LLM Provider
 
-Use OpenAI as the default provider unless demonstrating specific integrations:
+We recommend using OpenAI, Anthropic, or Google model providers for templates. Choose the provider that best fits your use case:
 
 ```typescript filename="src/mastra/agents/example-agent.ts"
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
+// Or use: import { anthropic } from '@ai-sdk/anthropic';
+// Or use: import { google } from '@ai-sdk/google';
 
 const agent = new Agent({
   name: 'example-agent',
-  model: openai('gpt-4'),
+  model: openai('gpt-4'), // or anthropic('') or google('')
   instructions: 'Your agent instructions here',
   // ... other configuration
 });
@@ -186,6 +190,8 @@ Detailed explanation of the template's functionality and use case.
 ## Environment Variables
 
 - `OPENAI_API_KEY`: Your OpenAI API key. Get one at [OpenAI Platform](https://platform.openai.com/api-keys)
+- `ANTHROPIC_API_KEY`: Your Anthropic API key. Get one at [Anthropic Console](https://console.anthropic.com/settings/keys)
+- `GOOGLE_GENERATIVE_AI_API_KEY`: Your Google AI API key. Get one at [Google AI Studio](https://makersuite.google.com/app/apikey)
 - `OTHER_API_KEY`: Description of what this key is for
 
 ## Usage

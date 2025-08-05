@@ -11,36 +11,69 @@ Langfuse is an open-source observability platform designed specifically for LLM 
 
 ## Configuration
 
-To use Langfuse with Mastra, you'll need to configure the following environment variables:
+To use Langfuse with Mastra, you can configure it using either environment variables or directly in your Mastra configuration.
+
+### Using Environment Variables
+
+Set the following environment variables:
 
 ```env
-LANGFUSE_PUBLIC_KEY=your_public_key
-LANGFUSE_SECRET_KEY=your_secret_key
-LANGFUSE_BASEURL=https://cloud.langfuse.com  # Optional - defaults to cloud.langfuse.com
+OTEL_EXPORTER_OTLP_ENDPOINT="https://cloud.langfuse.com/api/public/otel/v1/traces" # 🇪🇺 EU data region
+# OTEL_EXPORTER_OTLP_ENDPOINT="https://us.cloud.langfuse.com/api/public/otel/v1/traces" # 🇺🇸 US data region
+
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic ${AUTH_STRING}"
 ```
 
-**Important**: When configuring the telemetry export settings, the `traceName` parameter must be set to `"ai"` for the Langfuse integration to work properly.
+Where `AUTH_STRING` is the base64-encoded combination of your public and secret keys (see below).
+
+### Generating AUTH_STRING
+
+The authorization uses basic auth with your Langfuse API keys. You can generate the base64-encoded auth string using:
+
+```bash
+echo -n "pk-lf-1234567890:sk-lf-1234567890" | base64
+```
+
+For long API keys on GNU systems, you may need to add `-w 0` to prevent auto-wrapping:
+
+```bash
+echo -n "pk-lf-1234567890:sk-lf-1234567890" | base64 -w 0
+```
 
 ## Implementation
 
-Here's how to configure Mastra to use Langfuse:
+Here's how to configure Mastra to use Langfuse with OpenTelemetry:
 
 ```typescript
 import { Mastra } from "@mastra/core";
-import { LangfuseExporter } from "langfuse-vercel";
 
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "ai", // this must be set to "ai" so that the LangfuseExporter thinks it's an AI SDK trace
     enabled: true,
     export: {
-      type: "custom",
-      exporter: new LangfuseExporter({
-        publicKey: process.env.LANGFUSE_PUBLIC_KEY,
-        secretKey: process.env.LANGFUSE_SECRET_KEY,
-        baseUrl: process.env.LANGFUSE_BASEURL,
-      }),
+      type: 'otlp',
+      endpoint: 'https://cloud.langfuse.com/api/public/otel/v1/traces', // or your preferred endpoint
+      headers: {
+        Authorization: `Basic ${AUTH_STRING}`, // Your base64-encoded auth string
+      },
+    },
+  },
+});
+```
+
+Alternatively, if you're using environment variables, you can simplify the configuration:
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ... other config
+  telemetry: {
+    enabled: true,
+    export: {
+      type: 'otlp',
+      // endpoint and headers will be read from OTEL_EXPORTER_OTLP_* env vars
     },
   },
 });

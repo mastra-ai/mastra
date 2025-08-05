@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "0.12.5",
+  "version": "0.13.2-alpha.1",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -12,14 +12,14 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
+    "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",
     "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose exec -T db pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test": "vitest run",
@@ -45,13 +45,14 @@
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
-    "@types/pg": "^8.15.4",
+    "@types/pg": "^8.15.5",
     "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.12.0-0"
+    "@mastra/core": ">=0.13.0-0 <0.14.0-0"
   }
 }

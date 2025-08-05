@@ -1,5 +1,84 @@
 # @mastra/voice-openai
 
+## 0.10.8-alpha.0
+
+### Patch Changes
+
+- 55856ed: dependencies updates:
+  - Updated dependency [`openai@^5.11.0` ↗︎](https://www.npmjs.com/package/openai/v/5.11.0) (from `^5.10.2`, in `dependencies`)
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+
+## 0.10.7
+
+### Patch Changes
+
+- df0bf51: dependencies updates:
+  - Updated dependency [`openai@^5.10.2` ↗︎](https://www.npmjs.com/package/openai/v/5.10.2) (from `^5.10.1`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1
+
+## 0.10.7-alpha.0
+
+### Patch Changes
+
+- df0bf51: dependencies updates:
+  - Updated dependency [`openai@^5.10.2` ↗︎](https://www.npmjs.com/package/openai/v/5.10.2) (from `^5.10.1`, in `dependencies`)
+- Updated dependencies [33dcb07]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1-alpha.0
+
+## 0.10.6
+
+### Patch Changes
+
+- 063cd46: dependencies updates:
+  - Updated dependency [`openai@^5.10.1` ↗︎](https://www.npmjs.com/package/openai/v/5.10.1) (from `^4.104.0`, in `dependencies`)
+- f42c4c2: update peer deps for packages to latest core range
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+
+## 0.10.6-alpha.1
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+  - @mastra/core@0.12.0-alpha.5
+
 ## 0.10.6-alpha.0
 
 ### Patch Changes

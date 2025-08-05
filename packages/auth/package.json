@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth",
-  "version": "0.1.0",
+  "version": "0.1.1-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -15,14 +15,14 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --clean --experimental-dts --treeshake=smallest --splitting --publicDir",
-    "build:watch": "pnpm build --watch",
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },
@@ -41,6 +41,7 @@
     "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
   }
 }

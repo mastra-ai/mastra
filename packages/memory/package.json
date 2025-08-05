@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.11.6-alpha.1",
+  "version": "0.12.1-alpha.2",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,7 +12,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -22,7 +22,7 @@
         "default": "./dist/processors/index.js"
       },
       "require": {
-        "types": "./dist/processors/index.d.cts",
+        "types": "./dist/processors/index.d.ts",
         "default": "./dist/processors/index.cjs"
       }
     },
@@ -30,7 +30,7 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "pnpm run check && tsup --silent src/index.ts src/processors/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
+    "build": "pnpm run check && tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",
     "test:integration": "cd integration-tests && pnpm run test",
     "test:unit": "pnpm vitest run ./src/*",
@@ -41,14 +41,14 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@upstash/redis": "^1.35.1",
+    "@upstash/redis": "^1.35.3",
     "ai": "^4.3.16",
     "js-tiktoken": "^1.0.20",
     "json-schema": "^0.4.0",
     "pg": "^8.16.3",
     "pg-pool": "^3.10.1",
     "postgres": "^3.4.7",
-    "redis": "^5.6.0",
+    "redis": "^5.8.0",
     "async-mutex": "^0.5.0",
     "xxhash-wasm": "^1.1.0",
     "zod": "^3.25.67",
@@ -61,14 +61,15 @@
     "@microsoft/api-extractor": "^7.52.8",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^20.19.0",
-    "@types/pg": "^8.15.4",
+    "@types/pg": "^8.15.5",
     "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.9-0 <0.12.0-0"
+    "@mastra/core": ">=0.13.0-0 <0.14.0-0"
   }
 }

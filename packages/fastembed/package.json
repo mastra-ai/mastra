@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastembed",
-  "version": "0.10.1",
+  "version": "0.10.2-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -12,7 +12,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -22,8 +22,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest",
-    "build:watch": "pnpm build --watch",
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -35,6 +35,7 @@
     "@types/node": "^20.19.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
   }
 }

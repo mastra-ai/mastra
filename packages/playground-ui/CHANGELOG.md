@@ -1,5 +1,125 @@
 # @mastra/playground-ui
 
+## 5.1.18-alpha.2
+
+### Patch Changes
+
+- 0ebfe8a: dependencies updates:
+  - Updated dependency [`motion@^12.23.12` ↗︎](https://www.npmjs.com/package/motion/v/12.23.12) (from `^12.23.9`, in `dependencies`)
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [42dfc48]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+  - @mastra/client-js@0.10.19-alpha.2
+
+## 5.1.18-alpha.1
+
+### Patch Changes
+
+- ea0c5f2: Update to support new scorer api
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+  - @mastra/client-js@0.10.19-alpha.1
+
+## 5.1.18-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+  - @mastra/core@0.12.2-alpha.0
+  - @mastra/client-js@0.10.19-alpha.0
+
+## 5.1.17
+
+### Patch Changes
+
+- d8e8349: dependencies updates:
+  - Updated dependency [`@xyflow/react@^12.8.2` ↗︎](https://www.npmjs.com/package/@xyflow/react/v/12.8.2) (from `^12.8.1`, in `dependencies`)
+- c8924b6: dependencies updates:
+  - Updated dependency [`motion@^12.23.9` ↗︎](https://www.npmjs.com/package/motion/v/12.23.9) (from `^12.23.0`, in `dependencies`)
+- Updated dependencies [6690a16]
+- Updated dependencies [33dcb07]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/client-js@0.10.18
+  - @mastra/core@0.12.1
+
+## 5.1.17-alpha.0
+
+### Patch Changes
+
+- d8e8349: dependencies updates:
+  - Updated dependency [`@xyflow/react@^12.8.2` ↗︎](https://www.npmjs.com/package/@xyflow/react/v/12.8.2) (from `^12.8.1`, in `dependencies`)
+- c8924b6: dependencies updates:
+  - Updated dependency [`motion@^12.23.9` ↗︎](https://www.npmjs.com/package/motion/v/12.23.9) (from `^12.23.0`, in `dependencies`)
+- Updated dependencies [6690a16]
+- Updated dependencies [33dcb07]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/client-js@0.10.18-alpha.0
+  - @mastra/core@0.12.1-alpha.0
+
+## 5.1.16
+
+### Patch Changes
+
+- f873f3a: dependencies updates:
+  - Updated dependency [`zustand@^5.0.6` ↗︎](https://www.npmjs.com/package/zustand/v/5.0.6) (from `^5.0.5`, in `dependencies`)
+- f442224: speech to text using voice config
+- 6336993: Fix workflow input form overflow
+- f42c4c2: update peer deps for packages to latest core range
+- 89d2f4e: add TTS to the playground
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [aa2715b]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [6bd354c]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [b641ba3]
+- Updated dependencies [9802f42]
+- Updated dependencies [1ac8f6b]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+  - @mastra/client-js@0.10.17
+
+## 5.1.16-alpha.2
+
+### Patch Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+  - @mastra/core@0.12.0-alpha.5
+  - @mastra/client-js@0.10.17-alpha.5
+
 ## 5.1.16-alpha.1
 
 ### Patch Changes

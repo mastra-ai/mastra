@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "0.10.8-alpha.1",
+  "version": "0.12.0-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -15,7 +15,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -25,7 +25,7 @@
         "default": "./dist/metrics/judge/index.js"
       },
       "require": {
-        "types": "./dist/metrics/judge/index.d.cts",
+        "types": "./dist/metrics/judge/index.d.ts",
         "default": "./dist/metrics/judge/index.cjs"
       }
     },
@@ -35,7 +35,7 @@
         "default": "./dist/metrics/nlp/index.js"
       },
       "require": {
-        "types": "./dist/metrics/nlp/index.d.cts",
+        "types": "./dist/metrics/nlp/index.d.ts",
         "default": "./dist/metrics/nlp/index.cjs"
       }
     },
@@ -45,7 +45,7 @@
         "default": "./dist/metrics/llm/index.js"
       },
       "require": {
-        "types": "./dist/metrics/llm/index.d.cts",
+        "types": "./dist/metrics/llm/index.d.ts",
         "default": "./dist/metrics/llm/index.cjs"
       }
     },
@@ -55,7 +55,7 @@
         "default": "./dist/scorers/llm/index.js"
       },
       "require": {
-        "types": "./dist/scorers/llm/index.d.cts",
+        "types": "./dist/scorers/llm/index.d.ts",
         "default": "./dist/scorers/llm/index.cjs"
       }
     },
@@ -65,7 +65,7 @@
         "default": "./dist/scorers/code/index.js"
       },
       "require": {
-        "types": "./dist/scorers/code/index.d.cts",
+        "types": "./dist/scorers/code/index.d.ts",
         "default": "./dist/scorers/code/index.cjs"
       }
     },
@@ -73,7 +73,7 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "pnpm check && tsup src/index.ts src/metrics/judge/index.ts src/metrics/llm/index.ts src/metrics/nlp/index.ts src/scorers/llm/index.ts src/scorers/code/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
+    "build": "pnpm check && tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",
     "test": "vitest",
     "lint": "eslint ."
@@ -91,11 +91,11 @@
     "zod": "^3.25.67"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.11.0-0 <0.12.0-0",
+    "@mastra/core": ">=0.13.0-0 <0.14.0-0",
     "ai": "^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "latest",
+    "@ai-sdk/openai": "^1.3.22",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
@@ -108,6 +108,7 @@
     "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
   }
 }

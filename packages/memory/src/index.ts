@@ -4,7 +4,7 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2, UIMessageWithMetadata } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
-import type { StorageGetMessagesArg } from '@mastra/core/storage';
+import type { StorageGetMessagesArg, ThreadSortOptions, PaginationInfo } from '@mastra/core/storage';
 import { embedMany } from 'ai';
 import type { CoreMessage, TextPart } from 'ai';
 import { Mutex } from 'async-mutex';
@@ -15,6 +15,9 @@ import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
+
+// Type for flexible message deletion input
+export type MessageDeleteInput = string[] | { id: string }[];
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -247,8 +250,36 @@ export class Memory extends MastraMemory {
     return this.storage.getThreadById({ threadId });
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    return this.storage.getThreadsByResourceId({ resourceId });
+  async getThreadsByResourceId({
+    resourceId,
+    orderBy,
+    sortDirection,
+  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
+    return this.storage.getThreadsByResourceId({ resourceId, orderBy, sortDirection });
+  }
+
+  async getThreadsByResourceIdPaginated({
+    resourceId,
+    page,
+    perPage,
+    orderBy,
+    sortDirection,
+  }: {
+    resourceId: string;
+    page: number;
+    perPage: number;
+  } & ThreadSortOptions): Promise<
+    PaginationInfo & {
+      threads: StorageThreadType[];
+    }
+  > {
+    return this.storage.getThreadsByResourceIdPaginated({
+      resourceId,
+      page,
+      perPage,
+      orderBy,
+      sortDirection,
+    });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
@@ -945,5 +976,48 @@ ${
     // TODO: Possibly handle updating the vector db here when a message is updated.
 
     return this.storage.updateMessages({ messages });
+  }
+
+  /**
+   * Deletes one or more messages
+   * @param input - Must be an array containing either:
+   *   - Message ID strings
+   *   - Message objects with 'id' properties
+   * @returns Promise that resolves when all messages are deleted
+   */
+  public async deleteMessages(input: MessageDeleteInput): Promise<void> {
+    // Normalize input to array of IDs
+    let messageIds: string[];
+
+    if (!Array.isArray(input)) {
+      throw new Error('Invalid input: must be an array of message IDs or message objects');
+    }
+
+    if (input.length === 0) {
+      return; // No-op for empty array
+    }
+
+    messageIds = input.map(item => {
+      if (typeof item === 'string') {
+        return item;
+      } else if (item && typeof item === 'object' && 'id' in item) {
+        return item.id;
+      } else {
+        throw new Error('Invalid input: array items must be strings or objects with an id property');
+      }
+    });
+
+    // Validate all IDs are non-empty strings
+    const invalidIds = messageIds.filter(id => !id || typeof id !== 'string');
+    if (invalidIds.length > 0) {
+      throw new Error('All message IDs must be non-empty strings');
+    }
+
+    // Delete from storage
+    await this.storage.deleteMessages(messageIds);
+
+    // TODO: Delete from vector store if semantic recall is enabled
+    // This would require getting the messages first to know their threadId/resourceId
+    // and then querying the vector store to delete associated embeddings
   }
 }

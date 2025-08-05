@@ -3,7 +3,7 @@ title: "Reference: createLLMScorer | Scorers | Mastra Docs"
 description: Documentation for creating LLM-based scorers in Mastra, allowing users to define evaluation logic using language models.
 ---
 
-# LLM Scorer
+# createLLMScorer
 
 The `createLLMScorer()` function lets you define custom scorers that use a language model (LLM) as a judge for evaluation. LLM scorers are ideal for tasks where you want to use prompt-based evaluation, such as answer relevancy, faithfulness, or custom prompt-based metrics. LLM scorers integrate seamlessly with the Mastra scoring framework and can be used anywhere built-in scorers are used.
 
@@ -137,6 +137,50 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
     },
   ]}
 />
+
+## Calculate Score Function
+
+The `calculateScore` function converts the LLM's structured analysis into a numerical score. This function receives the results from previous steps but not the score itself (since that's what it calculates).
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "Record<string, any>[]",
+      required: true,
+      description:
+        "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
+    },
+    {
+      name: "output",
+      type: "Record<string, any>",
+      required: true,
+      description:
+        "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
+    },
+    {
+      name: "runtimeContext",
+      type: "object",
+      required: false,
+      description: "Runtime context from the agent or workflow step being evaluated (optional).",
+    },
+    {
+      name: "extractStepResult",
+      type: "object",
+      required: false,
+      description: "Result of the extract step, if defined (optional).",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      required: true,
+      description: "Structured result from the analyze step, conforming to the outputSchema defined in the analyze step.",
+    },
+  ]}
+/>
+
+Returns: `number`  
+The function must return a numerical score, typically in the 0-1 range where 1 represents the best possible score.
 
 ## Reason Object
 <PropertiesTable

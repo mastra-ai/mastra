@@ -75,12 +75,14 @@ export class MongoDBStore extends MastraStorage {
     resourceWorkingMemory: boolean;
     hasColumn: boolean;
     createTable: boolean;
+    deleteMessages: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
       hasColumn: false,
       createTable: false,
+      deleteMessages: false,
     };
   }
 

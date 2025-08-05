@@ -46,15 +46,21 @@ describe('KeywordExtractor', () => {
     expect(typeof result.excerptKeywords).toBe('string');
     expect(result.excerptKeywords.length).toBeGreaterThan(0);
   });
-  it('handles very long input', async () => {
-    const extractor = new KeywordExtractor();
-    const longText = 'A'.repeat(1000);
-    const node = new TextNode({ text: longText });
-    const result = await extractor.extractKeywordsFromNodes(node);
-    expect(result).toHaveProperty('excerptKeywords');
-    expect(typeof result.excerptKeywords).toBe('string');
-    expect(result.excerptKeywords.length).toBeGreaterThan(0);
-  });
+  it(
+    'handles very long input',
+    {
+      timeout: 20_000,
+    },
+    async () => {
+      const extractor = new KeywordExtractor();
+      const longText = 'A'.repeat(1000);
+      const node = new TextNode({ text: longText });
+      const result = await extractor.extractKeywordsFromNodes(node);
+      expect(result).toHaveProperty('excerptKeywords');
+      expect(typeof result.excerptKeywords).toBe('string');
+      expect(result.excerptKeywords.length).toBeGreaterThan(0);
+    },
+  );
 
   it('handles whitespace only input', async () => {
     const extractor = new KeywordExtractor();

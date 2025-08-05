@@ -4,8 +4,11 @@ description: Example of using the Answer Relevancy metric to evaluate response r
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
 # Answer Relevancy Evaluation
+
+<ScorerCallout />
 
 Use `AnswerRelevancyMetric` to evaluate how relevant the response is to the original query. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 

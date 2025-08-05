@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { convertToCoreMessages } from 'ai';
-import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, ToolCallPart, ToolInvocation, UIMessage } from 'ai';
+import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, ToolInvocation, UIMessage } from 'ai';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { MastraMessageV1 } from '../../memory';
 import { isCoreMessage, isUiMessage } from '../../utils';
@@ -34,16 +34,6 @@ export type UIMessageWithMetadata = UIMessage & {
   metadata?: Record<string, unknown>;
 };
 
-function isToolCallMessage(message: CoreMessage): boolean {
-  if (message.role === 'tool') {
-    return true;
-  }
-  if (message.role === 'assistant' && Array.isArray(message.content)) {
-    return message.content.some((part): part is ToolCallPart => part.type === 'tool-call');
-  }
-  return false;
-}
-
 export type MessageInput =
   | UIMessage
   | UIMessageWithMetadata
@@ -70,6 +60,11 @@ export class MessageList {
   private newResponseMessages = new Set<MastraMessageV2>();
   private userContextMessages = new Set<MastraMessageV2>();
 
+  private memoryMessagesPersisted = new Set<MastraMessageV2>();
+  private newUserMessagesPersisted = new Set<MastraMessageV2>();
+  private newResponseMessagesPersisted = new Set<MastraMessageV2>();
+  private userContextMessagesPersisted = new Set<MastraMessageV2>();
+
   private generateMessageId?: IDGenerator;
   private _agentNetworkAppend = false;
 
@@ -82,8 +77,8 @@ export class MessageList {
   }: { threadId?: string; resourceId?: string; generateMessageId?: IDGenerator } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
-      this.generateMessageId = generateMessageId;
     }
+    this.generateMessageId = generateMessageId;
     this._agentNetworkAppend = _agentNetworkAppend || false;
   }
 
@@ -116,6 +111,26 @@ export class MessageList {
       response: this.response,
     };
   }
+  public get getPersisted() {
+    return {
+      remembered: this.rememberedPersisted,
+      input: this.inputPersisted,
+      taggedSystemMessages: this.taggedSystemMessages,
+      response: this.responsePersisted,
+    };
+  }
+  public get clear() {
+    return {
+      input: {
+        v2: () => {
+          const userMessages = Array.from(this.newUserMessages);
+          this.messages = this.messages.filter(m => !this.newUserMessages.has(m));
+          this.newUserMessages.clear();
+          return userMessages;
+        },
+      },
+    };
+  }
   private all = {
     v2: () => this.messages,
     v1: () => convertToV1Messages(this.messages),
@@ -125,11 +140,20 @@ export class MessageList {
       const coreMessages = this.all.core();
 
       // Some LLM providers will throw an error if the first message is a tool call.
-      while (coreMessages[0] && isToolCallMessage(coreMessages[0])) {
-        coreMessages.shift();
-      }
 
       const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
+
+      const needsDefaultUserMessage = !messages.length || messages[0]?.role === 'assistant';
+
+      if (needsDefaultUserMessage) {
+        const defaultMessage: CoreMessage = {
+          role: 'user',
+          content: '.',
+        };
+
+        messages.unshift(defaultMessage);
+      }
+
       return messages;
     },
   };
@@ -139,14 +163,30 @@ export class MessageList {
     ui: () => this.remembered.v2().map(MessageList.toUIMessage),
     core: () => this.convertToCoreMessages(this.remembered.ui()),
   };
+  private rememberedPersisted = {
+    v2: () => this.messages.filter(m => this.memoryMessagesPersisted.has(m)),
+    v1: () => convertToV1Messages(this.rememberedPersisted.v2()),
+    ui: () => this.rememberedPersisted.v2().map(MessageList.toUIMessage),
+    core: () => this.convertToCoreMessages(this.rememberedPersisted.ui()),
+  };
   private input = {
     v2: () => this.messages.filter(m => this.newUserMessages.has(m)),
     v1: () => convertToV1Messages(this.input.v2()),
     ui: () => this.input.v2().map(MessageList.toUIMessage),
     core: () => this.convertToCoreMessages(this.input.ui()),
   };
+  private inputPersisted = {
+    v2: () => this.messages.filter(m => this.newUserMessagesPersisted.has(m)),
+    v1: () => convertToV1Messages(this.inputPersisted.v2()),
+    ui: () => this.inputPersisted.v2().map(MessageList.toUIMessage),
+    core: () => this.convertToCoreMessages(this.inputPersisted.ui()),
+  };
   private response = {
     v2: () => this.messages.filter(m => this.newResponseMessages.has(m)),
+  };
+  private responsePersisted = {
+    v2: () => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
+    ui: () => this.responsePersisted.v2().map(MessageList.toUIMessage),
   };
   public drainUnsavedMessages(): MastraMessageV2[] {
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
@@ -496,12 +536,16 @@ export class MessageList {
   private pushMessageToSource(messageV2: MastraMessageV2, messageSource: MessageSource) {
     if (messageSource === `memory`) {
       this.memoryMessages.add(messageV2);
+      this.memoryMessagesPersisted.add(messageV2);
     } else if (messageSource === `response`) {
       this.newResponseMessages.add(messageV2);
+      this.newResponseMessagesPersisted.add(messageV2);
     } else if (messageSource === `user`) {
       this.newUserMessages.add(messageV2);
+      this.newUserMessagesPersisted.add(messageV2);
     } else if (messageSource === `context`) {
       this.userContextMessages.add(messageV2);
+      this.userContextMessagesPersisted.add(messageV2);
     } else {
       throw new Error(`Missing message source for message ${messageV2}`);
     }

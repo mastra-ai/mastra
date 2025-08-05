@@ -1,5 +1,182 @@
 # @mastra/dane
 
+## 0.0.41-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [cb36de0]
+- Updated dependencies [e1a2ef1]
+- Updated dependencies [f082460]
+- Updated dependencies [e1a2ef1]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+- Updated dependencies [50f80dd]
+  - @mastra/core@0.13.0-alpha.2
+  - @mastra/memory@0.12.1-alpha.2
+  - @mastra/upstash@0.14.0-alpha.1
+  - @mastra/libsql@0.13.0-alpha.1
+  - @mastra/github@1.2.7-alpha.0
+  - @mastra/mcp@0.10.10-alpha.0
+  - @mastra/rag@1.0.7-alpha.1
+
+## 0.0.41-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [7d53af4]
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [351b36e]
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [ccd519c]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/memory@0.12.1-alpha.1
+  - @mastra/core@0.13.0-alpha.1
+  - @mastra/rag@1.0.7-alpha.0
+  - @mastra/upstash@0.14.0-alpha.0
+  - @mastra/libsql@0.13.0-alpha.0
+
+## 0.0.41-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+  - @mastra/core@0.12.2-alpha.0
+  - @mastra/memory@0.12.1-alpha.0
+
+## 0.0.40
+
+### Patch Changes
+
+- Updated dependencies [33dcb07]
+- Updated dependencies [f90797b]
+- Updated dependencies [613eec3]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1
+  - @mastra/mcp@0.10.9
+  - @mastra/rag@1.0.6
+
+## 0.0.40-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [d0d9500]
+  - @mastra/core@0.12.1-alpha.1
+
+## 0.0.40-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [33dcb07]
+- Updated dependencies [f90797b]
+- Updated dependencies [613eec3]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1-alpha.0
+  - @mastra/mcp@0.10.9-alpha.0
+  - @mastra/rag@1.0.6-alpha.0
+
+## 0.0.39
+
+### Patch Changes
+
+- 23247c4: dependencies updates:
+  - Updated dependency [`typescript@^5.8.3` ↗︎](https://www.npmjs.com/package/typescript/v/5.8.3) (from `^5.8.2`, in `dependencies`)
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [24ac5ff]
+- Updated dependencies [674a348]
+- Updated dependencies [fc437d9]
+- Updated dependencies [674a348]
+- Updated dependencies [3f89307]
+- Updated dependencies [b5a6da2]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [a3ca14c]
+- Updated dependencies [b92bc89]
+- Updated dependencies [f42c4c2]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+- Updated dependencies [ad8a1d8]
+  - @mastra/core@0.12.0
+  - @mastra/libsql@0.12.0
+  - @mastra/memory@0.12.0
+  - @mastra/rag@1.0.5
+  - @mastra/upstash@0.13.0
+  - @mastra/github@1.2.6
+  - @mastra/mcp@0.10.8
+
+## 0.0.39-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [f42c4c2]
+  - @mastra/memory@0.12.0-alpha.3
+  - @mastra/libsql@0.12.0-alpha.2
+  - @mastra/upstash@0.13.0-alpha.2
+  - @mastra/github@1.2.6-alpha.0
+  - @mastra/mcp@0.10.8-alpha.0
+  - @mastra/rag@1.0.5-alpha.1
+  - @mastra/core@0.12.0-alpha.5
+
+## 0.0.39-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ad0a58b]
+  - @mastra/core@0.12.0-alpha.4
+
+## 0.0.39-alpha.3
+
+### Patch Changes
+
+- @mastra/core@0.12.0-alpha.3
+
+## 0.0.39-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [27cc97a]
+- Updated dependencies [41daa63]
+- Updated dependencies [254a36b]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [ff9c125]
+- Updated dependencies [b92bc89]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0-alpha.2
+  - @mastra/memory@0.11.6-alpha.2
+  - @mastra/libsql@0.11.3-alpha.1
+  - @mastra/upstash@0.12.4-alpha.1
+
 ## 0.0.39-alpha.1
 
 ### Patch Changes

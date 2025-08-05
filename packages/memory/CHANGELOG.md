@@ -1,5 +1,132 @@
 # @mastra/memory
 
+## 0.12.1-alpha.2
+
+### Patch Changes
+
+- e1a2ef1: dependencies updates:
+  - Updated dependency [`@upstash/redis@^1.35.3` ↗︎](https://www.npmjs.com/package/@upstash/redis/v/1.35.3) (from `^1.35.1`, in `dependencies`)
+- f082460: dependencies updates:
+  - Updated dependency [`redis@^5.8.0` ↗︎](https://www.npmjs.com/package/redis/v/5.8.0) (from `^5.7.0`, in `dependencies`)
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+
+## 0.12.1-alpha.1
+
+### Patch Changes
+
+- 7d53af4: dependencies updates:
+  - Updated dependency [`redis@^5.7.0` ↗︎](https://www.npmjs.com/package/redis/v/5.7.0) (from `^5.6.0`, in `dependencies`)
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- e202b82: Add getThreadsByResourceIdPaginated to the Memory Class
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+  - @mastra/core@0.12.2-alpha.0
+
+## 0.12.0
+
+### Minor Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+
+### Patch Changes
+
+- 674a348: dependencies updates:
+  - Updated dependency [`@upstash/redis@^1.35.1` ↗︎](https://www.npmjs.com/package/@upstash/redis/v/1.35.1) (from `^1.35.0`, in `dependencies`)
+- cda801d: Added the ability to pass in metadata for UIMessage and MastraMessageV2 in client-js and agent.stream/generate
+- ff9c125: enhance thread retrieval with sorting options in libsql and pg
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- ad8a1d8: Fix inheriting storage from Mastra instance in Memory
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+
+## 0.12.0-alpha.3
+
+### Minor Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+
+### Patch Changes
+
+- @mastra/core@0.12.0-alpha.5
+
+## 0.11.6-alpha.2
+
+### Patch Changes
+
+- ff9c125: enhance thread retrieval with sorting options in libsql and pg
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- Updated dependencies [27cc97a]
+- Updated dependencies [41daa63]
+- Updated dependencies [254a36b]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [ff9c125]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0-alpha.2
+
 ## 0.11.6-alpha.1
 
 ### Patch Changes

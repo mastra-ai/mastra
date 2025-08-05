@@ -1,5 +1,32 @@
 # create-mastra
 
+## 0.10.19-alpha.2
+
+## 0.10.19-alpha.1
+
+## 0.10.19-alpha.0
+
+## 0.10.15
+
+### Patch Changes
+
+- ad04455: Missed changeset in last release, needed to include create-mastra
+
+## 0.10.15-alpha.0
+
+### Patch Changes
+
+- ad04455: Missed changeset in last release, needed to include create-mastra
+
+## 0.10.14
+
+### Patch Changes
+
+- f442224: speech to text using voice config
+- d8dec5e: add a cta to invite to deploy to cloud
+- 6336993: Fix workflow input form overflow
+- 89d2f4e: add TTS to the playground
+
 ## 0.10.14-alpha.1
 
 ### Patch Changes

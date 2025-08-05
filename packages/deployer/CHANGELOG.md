@@ -1,5 +1,200 @@
 # @mastra/deployer
 
+## 0.13.0-alpha.2
+
+### Patch Changes
+
+- cb36de0: dependencies updates:
+  - Updated dependency [`hono@^4.8.11` ↗︎](https://www.npmjs.com/package/hono/v/4.8.11) (from `^4.8.9`, in `dependencies`)
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+  - @mastra/server@0.13.0-alpha.2
+
+## 0.13.0-alpha.1
+
+### Patch Changes
+
+- 7b8172f: dependencies updates:
+  - Updated dependency [`rollup@~4.46.2` ↗︎](https://www.npmjs.com/package/rollup/v/4.46.2) (from `~4.44.2`, in `dependencies`)
+- 35c5798: Add support for transpilePackages option
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+  - @mastra/server@0.13.0-alpha.1
+
+## 0.12.2-alpha.0
+
+### Patch Changes
+
+- e202b82: Add getThreadsByResourceIdPaginated to the Memory Class
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+  - @mastra/core@0.12.2-alpha.0
+  - @mastra/server@0.12.2-alpha.0
+
+## 0.12.1
+
+### Patch Changes
+
+- 07fe7a2: Improve lodash imports
+- Updated dependencies [33dcb07]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1
+  - @mastra/server@0.12.1
+
+## 0.12.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [d0d9500]
+  - @mastra/core@0.12.1-alpha.1
+  - @mastra/server@0.12.1-alpha.1
+
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- 07fe7a2: Improve lodash imports
+- Updated dependencies [33dcb07]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1-alpha.0
+  - @mastra/server@0.12.1-alpha.0
+
+## 0.12.0
+
+### Minor Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+
+### Patch Changes
+
+- 832691b: dependencies updates:
+  - Updated dependency [`@babel/core@^7.28.0` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.28.0) (from `^7.27.7`, in `dependencies`)
+- 557bb9d: dependencies updates:
+  - Updated dependency [`esbuild@^0.25.8` ↗︎](https://www.npmjs.com/package/esbuild/v/0.25.8) (from `^0.25.5`, in `dependencies`)
+- 27cc97a: dependencies updates:
+  - Updated dependency [`hono@^4.8.9` ↗︎](https://www.npmjs.com/package/hono/v/4.8.9) (from `^4.8.4`, in `dependencies`)
+- bc6b44a: Extract tools import from `createHonoServer`; the function now receives tools via a prop on the `options` parameter.
+- a77c823: include PATCH method in default CORS configuration
+- ff9c125: enhance thread retrieval with sorting options in libsql and pg
+- 09bca64: Log warning when telemetry is enabled but not loaded
+- 9802f42: Added types and tests to ensure client-js and hono endpoints can save memory messages where the input is either a v1 or v2 mastra message
+- d5cc460: This change implements a fix to sourcemap mappings being off due to `removeDeployer` Babel plugin missing source map config.
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- Updated dependencies [510e2c8]
+- Updated dependencies [2f72fb2]
+- Updated dependencies [27cc97a]
+- Updated dependencies [3f89307]
+- Updated dependencies [9eda7d4]
+- Updated dependencies [9d49408]
+- Updated dependencies [41daa63]
+- Updated dependencies [ad0a58b]
+- Updated dependencies [254a36b]
+- Updated dependencies [2ecf658]
+- Updated dependencies [7a7754f]
+- Updated dependencies [fc92d80]
+- Updated dependencies [e0f73c6]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [23a6a7c]
+- Updated dependencies [cda801d]
+- Updated dependencies [a77c823]
+- Updated dependencies [ff9c125]
+- Updated dependencies [09bca64]
+- Updated dependencies [9802f42]
+- Updated dependencies [f42c4c2]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0
+  - @mastra/server@0.12.0
+
+## 0.12.0-alpha.5
+
+### Minor Changes
+
+- f42c4c2: update peer deps for packages to latest core range
+
+### Patch Changes
+
+- Updated dependencies [f42c4c2]
+  - @mastra/server@0.12.0-alpha.5
+  - @mastra/core@0.12.0-alpha.5
+
+## 0.12.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ad0a58b]
+  - @mastra/core@0.12.0-alpha.4
+  - @mastra/server@0.12.0-alpha.4
+
+## 0.12.0-alpha.3
+
+### Patch Changes
+
+- 9802f42: Added types and tests to ensure client-js and hono endpoints can save memory messages where the input is either a v1 or v2 mastra message
+- Updated dependencies [9802f42]
+  - @mastra/server@0.12.0-alpha.3
+  - @mastra/core@0.12.0-alpha.3
+
+## 0.12.0-alpha.2
+
+### Patch Changes
+
+- 27cc97a: dependencies updates:
+  - Updated dependency [`hono@^4.8.9` ↗︎](https://www.npmjs.com/package/hono/v/4.8.9) (from `^4.8.4`, in `dependencies`)
+- ff9c125: enhance thread retrieval with sorting options in libsql and pg
+- d5cc460: This change implements a fix to sourcemap mappings being off due to `removeDeployer` Babel plugin missing source map config.
+- b8efbb9: feat: add flexible deleteMessages method to memory API
+  - Added `memory.deleteMessages(input)` method that accepts multiple input types:
+    - Single message ID as string: `deleteMessages('msg-123')`
+    - Array of message IDs: `deleteMessages(['msg-1', 'msg-2'])`
+    - Message object with id property: `deleteMessages({ id: 'msg-123' })`
+    - Array of message objects: `deleteMessages([{ id: 'msg-1' }, { id: 'msg-2' }])`
+  - Implemented in all storage adapters (LibSQL, PostgreSQL, Upstash, InMemory)
+  - Added REST API endpoint: `POST /api/memory/messages/delete`
+  - Updated client SDK: `thread.deleteMessages()` accepts all input types
+  - Updates thread timestamps when messages are deleted
+  - Added comprehensive test coverage and documentation
+
+- Updated dependencies [27cc97a]
+- Updated dependencies [41daa63]
+- Updated dependencies [254a36b]
+- Updated dependencies [0b89602]
+- Updated dependencies [4d37822]
+- Updated dependencies [ff9c125]
+- Updated dependencies [b8efbb9]
+- Updated dependencies [71466e7]
+- Updated dependencies [0c99fbe]
+  - @mastra/core@0.12.0-alpha.2
+  - @mastra/server@0.12.0-alpha.2
+
 ## 0.12.0-alpha.1
 
 ### Patch Changes
