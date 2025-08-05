@@ -1,8 +1,9 @@
 import type { LanguageModel } from '@mastra/core/llm';
-import { createLLMScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 
 import { z } from 'zod';
-import { roundToTwoDecimals } from '../../utils';
+import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput, roundToTwoDecimals } from '../../utils';
 import {
   createHallucinationAnalyzePrompt,
   createHallucinationExtractPrompt,
@@ -12,6 +13,7 @@ import {
 
 export interface HallucinationMetricOptions {
   scale?: number;
+  context: string[];
 }
 
 export function createHallucinationScorer({
@@ -21,39 +23,40 @@ export function createHallucinationScorer({
   model: LanguageModel;
   options?: HallucinationMetricOptions;
 }) {
-  return createLLMScorer({
+  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
     name: 'Hallucination Scorer',
     description: 'A scorer that evaluates the hallucination of an LLM output to an input',
     judge: {
       model,
       instructions: HALLUCINATION_AGENT_INSTRUCTIONS,
     },
-    extract: {
+  })
+    .preprocess({
       description: 'Extract all claims from the given output',
       outputSchema: z.object({
         claims: z.array(z.string()),
       }),
       createPrompt: ({ run }) => {
-        const prompt = createHallucinationExtractPrompt({ output: run.output.text });
+        const prompt = createHallucinationExtractPrompt({ output: getAssistantMessageFromRunOutput(run.output) ?? '' });
         return prompt;
       },
-    },
-    analyze: {
+    })
+    .analyze({
       description: 'Score the relevance of the statements to the input',
       outputSchema: z.object({
         verdicts: z.array(z.object({ statement: z.string(), verdict: z.string(), reason: z.string() })),
       }),
-      createPrompt: ({ run }) => {
+      createPrompt: ({ results }) => {
         const prompt = createHallucinationAnalyzePrompt({
-          claims: run.extractStepResult.claims,
-          context: run.additionalContext?.context || [],
+          claims: results.preprocessStepResult.claims,
+          context: options?.context || [],
         });
         return prompt;
       },
-    },
-    calculateScore: ({ run }) => {
-      const totalStatements = run.analyzeStepResult.verdicts.length;
-      const contradictedStatements = run.analyzeStepResult.verdicts.filter(v => v.verdict === 'yes').length;
+    })
+    .generateScore(({ results }) => {
+      const totalStatements = results.analyzeStepResult.verdicts.length;
+      const contradictedStatements = results.analyzeStepResult.verdicts.filter(v => v.verdict === 'yes').length;
 
       if (totalStatements === 0) {
         return 0;
@@ -62,20 +65,19 @@ export function createHallucinationScorer({
       const score = (contradictedStatements / totalStatements) * (options?.scale || 1);
 
       return roundToTwoDecimals(score);
-    },
-    reason: {
+    })
+    .generateReason({
       description: 'Reason about the results',
-      createPrompt: ({ run }) => {
+      createPrompt: ({ run, results, score }) => {
         const prompt = createHallucinationReasonPrompt({
-          input: run.input?.map(input => input.content).join(', ') || '',
-          output: run.output.text,
-          context: run?.additionalContext?.context || [],
-          score: run.score,
+          input: getUserMessageFromRunInput(run.input) ?? '',
+          output: getAssistantMessageFromRunOutput(run.output) ?? '',
+          context: options?.context || [],
+          score,
           scale: options?.scale || 1,
-          verdicts: run.analyzeStepResult?.verdicts || [],
+          verdicts: results.analyzeStepResult?.verdicts || [],
         });
         return prompt;
       },
-    },
-  });
+    });
 }

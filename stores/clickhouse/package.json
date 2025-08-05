@@ -1,6 +1,6 @@
 {
   "name": "@mastra/clickhouse",
-  "version": "0.12.3",
+  "version": "0.13.0-alpha.1",
   "description": "Clickhouse provider for Mastra - includes db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@clickhouse/client": "^1.11.2"
+    "@clickhouse/client": "^1.12.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -45,6 +45,6 @@
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.13.0-0"
+    "@mastra/core": ">=0.13.0-0 <0.14.0-0"
   }
 }

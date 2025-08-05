@@ -19,14 +19,14 @@ export function createSampleScore({
     updatedAt: new Date(),
     runId: randomUUID(),
     reason: 'Sample reason',
-    extractStepResult: {
-      text: 'Sample extract step result',
+    preprocessStepResult: {
+      text: 'Sample preprocess step result',
     },
+    preprocessPrompt: 'Sample preprocess prompt',
     analyzeStepResult: {
       text: 'Sample analyze step result',
     },
     score: 0.8,
-    extractPrompt: 'Sample extract prompt',
     analyzePrompt: 'Sample analyze prompt',
     reasonPrompt: 'Sample reason prompt',
     scorer: {

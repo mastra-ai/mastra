@@ -1,5 +1,19 @@
 # @mastra/deployer
 
+## 0.13.0-alpha.1
+
+### Patch Changes
+
+- 7b8172f: dependencies updates:
+  - Updated dependency [`rollup@~4.46.2` ↗︎](https://www.npmjs.com/package/rollup/v/4.46.2) (from `~4.44.2`, in `dependencies`)
+- 35c5798: Add support for transpilePackages option
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+  - @mastra/server@0.13.0-alpha.1
+
 ## 0.12.2-alpha.0
 
 ### Patch Changes
