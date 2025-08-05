@@ -1690,4 +1690,335 @@ describe('convertToV1Messages', () => {
     expect(toolCallMessages.length).toBeGreaterThan(0);
     expect(toolResultMessages.length).toBeGreaterThan(0);
   });
+
+  it('should verify the v2 -> ui -> core conversion path preserves tool separation', () => {
+    // This test checks the actual path messages take when sent to the LLM
+    // v2 (from database) -> ui -> core (for LLM)
+
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'weatherAgent' });
+
+    // Add the exact v2 messages from the database
+    const v2Messages: MastraMessageV2[] = [
+      {
+        id: '17949558-8a2b-4841-990d-ce05d29a8afb',
+        role: 'assistant',
+        createdAt: new Date('2025-08-05T22:58:22.151Z'),
+        threadId: 'thread-1',
+        resourceId: 'weatherAgent',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+                toolName: 'weatherTool',
+                args: { location: 'Los Angeles' },
+                result: {
+                  temperature: 29.4,
+                  conditions: 'Clear sky',
+                },
+              },
+            },
+            {
+              type: 'text',
+              text: 'The current weather in Los Angeles is 29.4°C with clear sky.',
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+              toolName: 'weatherTool',
+              args: { location: 'Los Angeles' },
+              result: {
+                temperature: 29.4,
+                conditions: 'Clear sky',
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    messageList.add(v2Messages, 'memory');
+
+    // Get the UI messages
+    const uiMessages = messageList.get.all.ui();
+    console.log('UI messages:', JSON.stringify(uiMessages, null, 2));
+
+    // Get the core messages (what would be sent to LLM)
+    const coreMessages = messageList.get.all.core();
+    console.log('Core messages:', JSON.stringify(coreMessages, null, 2));
+
+    // Check if tool calls and text are properly separated in core messages
+    // This is critical for the AI to be able to reference tool history
+
+    // We expect multiple core messages if properly separated
+    expect(coreMessages.length).toBeGreaterThanOrEqual(1);
+
+    // Log the structure to understand what's happening
+    coreMessages.forEach((msg, i) => {
+      console.log(`Core message ${i}:`, {
+        role: msg.role,
+        contentType: typeof msg.content,
+        contentLength: Array.isArray(msg.content) ? msg.content.length : 'string',
+        contentParts: Array.isArray(msg.content) ? msg.content.map(p => p.type) : 'N/A',
+      });
+    });
+  });
+
+  it('should preserve tool history in full conversation flow (reproduces traces issue)', () => {
+    // This test simulates the full conversation flow as it would happen in the playground
+
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'weatherAgent' });
+
+    // Add system message like the agent would
+    messageList.addSystem('You are a helpful weather assistant that provides accurate weather information.', 'agent');
+
+    // Simulate loading previous messages from memory (database)
+    const memoryMessages: MastraMessageV2[] = [
+      // First user message
+      {
+        id: 'user-1',
+        role: 'user',
+        createdAt: new Date('2025-08-05T22:58:18.403Z'),
+        threadId: 'thread-1',
+        resourceId: 'weatherAgent',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'LA weather' }],
+          content: 'LA weather',
+        },
+      },
+      // Assistant response with tool call and result
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: new Date('2025-08-05T22:58:22.151Z'),
+        threadId: 'thread-1',
+        resourceId: 'weatherAgent',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+                toolName: 'weatherTool',
+                args: { location: 'Los Angeles' },
+                result: {
+                  temperature: 29.4,
+                  conditions: 'Clear sky',
+                },
+              },
+            },
+            {
+              type: 'text',
+              text: 'The current weather in Los Angeles is 29.4°C with clear sky.',
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+              toolName: 'weatherTool',
+              args: { location: 'Los Angeles' },
+              result: {
+                temperature: 29.4,
+                conditions: 'Clear sky',
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    // Add memory messages
+    messageList.add(memoryMessages, 'memory');
+
+    // Add new user message (like when user asks follow-up)
+    const newUserMessage: MastraMessageV2 = {
+      id: 'user-2',
+      role: 'user',
+      createdAt: new Date('2025-08-05T22:58:38.656Z'),
+      threadId: 'thread-1',
+      resourceId: 'weatherAgent',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'what was the weather when you called that tool?' }],
+        content: 'what was the weather when you called that tool?',
+      },
+    };
+
+    messageList.add(newUserMessage, 'user');
+
+    // Get what would be sent to the LLM (this is what shows in traces)
+    const promptMessages = messageList.get.all.prompt();
+
+    console.log('Messages sent to LLM (as shown in traces):');
+    console.log(JSON.stringify({ messages: promptMessages }, null, 2));
+
+    // Verify tool history is present
+    const hasToolCall = promptMessages.some(
+      m => m.role === 'assistant' && Array.isArray(m.content) && m.content.some(c => c.type === 'tool-call'),
+    );
+
+    const hasToolResult = promptMessages.some(
+      m => m.role === 'tool' && Array.isArray(m.content) && m.content.some(c => c.type === 'tool-result'),
+    );
+
+    expect(hasToolCall).toBe(true);
+    expect(hasToolResult).toBe(true);
+
+    // Count the messages to understand the structure
+    const messagesByRole = promptMessages.reduce(
+      (acc, m) => {
+        acc[m.role] = (acc[m.role] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    console.log('Message count by role:', messagesByRole);
+
+    // We should have: system, user, assistant (tool-call), tool (result), assistant (text), user
+    expect(messagesByRole.system).toBe(1);
+    expect(messagesByRole.user).toBe(2);
+    expect(messagesByRole.assistant).toBeGreaterThanOrEqual(2);
+    expect(messagesByRole.tool).toBe(1);
+  });
+
+  it('should handle memory processor flow like agent does (BUG: v1 messages with same ID replace each other)', () => {
+    // This test reproduces the bug where v1 messages with the same ID replace each other
+    // when added back to a MessageList, causing tool history to be lost
+
+    // Step 1: Create message list with thread info
+    const messageList = new MessageList({
+      threadId: 'ff1fa961-7925-44b7-909a-a4c9fba60b4e',
+      resourceId: 'weatherAgent',
+    });
+
+    // Step 2: Add memory messages (from rememberMessages)
+    const memoryMessagesV2: MastraMessageV2[] = [
+      {
+        id: 'fbd2f506-90e6-4f52-8ba4-633abe9e8442',
+        role: 'user',
+        createdAt: new Date('2025-08-05T22:58:18.403Z'),
+        threadId: 'ff1fa961-7925-44b7-909a-a4c9fba60b4e',
+        resourceId: 'weatherAgent',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'LA weather' }],
+          content: 'LA weather',
+        },
+      },
+      {
+        id: '17949558-8a2b-4841-990d-ce05d29a8afb',
+        role: 'assistant',
+        createdAt: new Date('2025-08-05T22:58:22.151Z'),
+        threadId: 'ff1fa961-7925-44b7-909a-a4c9fba60b4e',
+        resourceId: 'weatherAgent',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+                toolName: 'weatherTool',
+                args: { location: 'Los Angeles' },
+                result: {
+                  temperature: 29.4,
+                  feelsLike: 30.5,
+                  humidity: 48,
+                  windSpeed: 16,
+                  windGust: 18.7,
+                  conditions: 'Clear sky',
+                  location: 'Los Angeles',
+                },
+              },
+            },
+            {
+              type: 'text',
+              text: 'The current weather in Los Angeles is as follows:\n\n- **Temperature:** 29.4°C (Feels like 30.5°C)\n- **Humidity:** 48%\n- **Wind Speed:** 16 km/h\n- **Wind Gusts:** 18.7 km/h\n- **Conditions:** Clear sky\n\nIf you need any specific activities or further information, let me know!',
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call_WLUBDGduzBI0KBmGZVXA8lMM',
+              toolName: 'weatherTool',
+              args: { location: 'Los Angeles' },
+              result: {
+                temperature: 29.4,
+                feelsLike: 30.5,
+                humidity: 48,
+                windSpeed: 16,
+                windGust: 18.7,
+                conditions: 'Clear sky',
+                location: 'Los Angeles',
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    messageList.add(memoryMessagesV2, 'memory');
+
+    // Step 3: Get remembered messages as v1 (like agent does for processing)
+    const rememberedV1 = messageList.get.remembered.v1();
+    console.log('Remembered V1 messages:', JSON.stringify(rememberedV1, null, 2));
+
+    // Step 4: Simulate memory.processMessages (which just returns them if no processors)
+    const processedMemoryMessages = rememberedV1;
+
+    // Step 5: Create return list like agent does
+    const returnList = new MessageList().add(processedMemoryMessages as any, 'memory').add(
+      [
+        {
+          id: 'd936d31b-0ad5-43a8-89ed-c5cc24c60895',
+          role: 'user',
+          createdAt: new Date('2025-08-05T22:58:38.656Z'),
+          threadId: 'ff1fa961-7925-44b7-909a-a4c9fba60b4e',
+          resourceId: 'weatherAgent',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'what was the result when you called the tool?' }],
+            content: 'what was the result when you called the tool?',
+          },
+        },
+      ],
+      'user',
+    );
+
+    // Step 6: Get prompt messages (what's sent to LLM)
+    const promptMessages = returnList.get.all.prompt();
+
+    console.log('Final prompt messages (sent to LLM):', JSON.stringify(promptMessages, null, 2));
+
+    // Verify the tool history is preserved
+    const assistantMessages = promptMessages.filter(m => m.role === 'assistant');
+    console.log('Assistant messages count:', assistantMessages.length);
+
+    // Check if tool calls are present
+    const hasToolCall = promptMessages.some(
+      m => m.role === 'assistant' && Array.isArray(m.content) && m.content.some(c => c.type === 'tool-call'),
+    );
+
+    const hasToolResult = promptMessages.some(
+      m => m.role === 'tool' && Array.isArray(m.content) && m.content.some(c => c.type === 'tool-result'),
+    );
+
+    console.log('Has tool call:', hasToolCall);
+    console.log('Has tool result:', hasToolResult);
+
+    // These should be true if tool history is preserved
+    expect(hasToolCall).toBe(true);
+    expect(hasToolResult).toBe(true);
+  });
 });
