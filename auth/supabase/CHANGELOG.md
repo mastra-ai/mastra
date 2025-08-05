@@ -1,5 +1,11 @@
 # @mastra/auth-supabase
 
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+
 ## 0.10.2
 
 ### Patch Changes
