@@ -577,11 +577,6 @@ export class Memory extends MastraMemory {
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    // let embeddingTexts: {
-    //   textForEmbedding: string;
-    //   message: (typeof messages)[number];
-    // }[] = [];
-
     let embeddingTextsAndIds: ({
       textForEmbedding: string;
       vectorIds: string[];
@@ -596,9 +591,6 @@ export class Memory extends MastraMemory {
         message.content.metadata ||= {};
         message.content.metadata.vectorIds = embeddingTextsAndIds[i].vectorIds;
       });
-
-      // console.log('\n Message objects being saved with vectors:')
-      // console.table(updatedMessages.map((msg) => ({ ...msg, content: JSON.stringify(msg.content) })));
     }
 
     const result = this.storage.saveMessages({
@@ -619,9 +611,7 @@ export class Memory extends MastraMemory {
         const { textForEmbedding, vectorIds } = el;
         const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
 
-        // if (!indexName === `undefined`) {
         indexName ||= await this.createEmbeddingIndex(dimension).then(result => result.indexName);
-        // }
 
         await this.vector.upsert({
           indexName,
@@ -1004,65 +994,6 @@ ${
           (acc: Record<string, (typeof messages)[number]>, msg) => Object.assign(acc, { [msg.id]: msg }),
           {},
         );
-        // // update embeddings
-        // embeddingTextsAndIds.forEach(async (el, i) => {
-        // const message = updatedMessages[i];
-        // if (!el || !message?.content) return;
-
-        //   const storedMessage = storedMessagesById[message.id];
-        //   if (!storedMessage) {
-        //     throw new Error(`Message with id ${message.id} not retrieved from storage`);
-        //   }
-
-        // const { textForEmbedding, vectorIds } = el;
-        //   // const textForEmbedding = this.prepMessageForEmbedding(message);
-        //   // if (!textForEmbedding) return;
-
-        //   const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
-        //   const indexName = await this.createEmbeddingIndex(dimension).then(result => result.indexName);
-
-        //   // storedMessage.content ||= {};
-        //   // storedMessage.content.metadata ||= {};
-        //   // storedMessage.content.metadata.vectorChunkCount ||= 0;
-
-        //   // const vectorChunkCount = Number(storedMessage.content.metadata.vectorChunkCount);
-        //   // const storedChunkCount: number = Number.isNaN(vectorChunkCount) ? 0 : vectorChunkCount;
-
-        //   // delete embeddings that won't be replaced in the upsert
-        //   const storedVectorIds = storedMessage.content?.metadata?.vectorIds;
-
-        //   if (Array.isArray(storedVectorIds)) {
-        //     storedVectorIds.forEach((vectorId) => {
-        //       promises.push(vector.deleteVector({ indexName, id: vectorId }));
-        //     });
-        //     // for (let i = chunks.length; i < storedChunkCount; i += 1) {
-        //     //   promises.push(this.vector!.deleteVector({ indexName, id: `${message.id}:${i}` }));
-        //     // }
-        //   }
-
-        //   message.content.metadata ||= {};
-        //   message.content.metadata.vectorIds = vectorIds;
-
-        //   promises.push(
-        //     vector.upsert({
-        //       indexName,
-        //       vectors: embeddings,
-        //       ids: this.getMessageEmbeddingIds(message.id, chunks.length),
-        //       metadata: chunks.map(() => ({
-        //         message_id: message.id,
-        //         thread_id: message.threadId,
-        //         resource_id: storedMessage.resourceId,
-        //       })),
-        //     }),
-        //   );
-        // });
-        // await Promise.all(promises);
-
-        // updatedMessages = messages.map(message => {
-        //   // remove createdAt so that storage.updateMessages doesn't invalidate stored dates
-        //   const { createdAt, ...rest } = deepMerge(storedMessagesById[message.id]!, message);
-        //   return rest;
-        // });
       }
 
       const updatedMessages = messages.map((message, i) => {
@@ -1076,9 +1007,6 @@ ${
             },
           },
         });
-        // message.content.metadata ||= {};
-        // message.content.metadata.vectorIds = embeddingTextsAndIds[i].vectorIds;
-        // delete message.createdAt;
       });
       const result = this.storage.updateMessages({ messages: updatedMessages });
 
@@ -1107,9 +1035,6 @@ ${
               promises.push(vector.deleteVector({ indexName, id: vectorId }));
             });
           }
-
-          // message.content.metadata ||= {};
-          // message.content.metadata.vectorIds = vectorIds;
 
           promises.push(
             vector.upsert({
@@ -1170,20 +1095,6 @@ ${
         .trim();
       if (joined) textForEmbedding = joined;
     }
-    // }
-    // else if (MessageList.isMastraMessageV1(message)) {
-    //   if (message.content && typeof message.content === 'string' && message.content.trim() !== '') {
-    //     textForEmbedding = message.content;
-    //   } else if (message.content && Array.isArray(message.content) && message.content.length > 0) {
-    //     // Extract text from all text parts, concatenate
-    //     const joined = message.content
-    //       .filter(part => part.type === 'text')
-    //       .map(part => part.text)
-    //       .join(' ')
-    //       .trim();
-    //     if (joined) textForEmbedding = joined;
-    //   }
-    // }
 
     return textForEmbedding;
   }
