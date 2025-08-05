@@ -1,4 +1,4 @@
-import { createMetadataFilteringTest } from '@internal/storage-test-utils';
+import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 import { MongoDBVector } from './';
 
@@ -624,33 +624,28 @@ describe('MongoDBVector Integration Tests', () => {
   });
 });
 
-// Use the shared test suite for metadata filtering
-// This ensures MongoDB handles metadata filters correctly for the Memory system
-describe('MongoDB Vector Store', () => {
-  const vectorDB = new MongoDBVector({ uri, dbName });
+// Use the shared test suite with factory pattern
+const vectorDB = new MongoDBVector({ uri, dbName });
 
-  beforeAll(async () => {
+createVectorTestSuite({
+  vector: vectorDB,
+  connect: async () => {
     await vectorDB.connect();
     await waitForAtlasSearchReady(vectorDB);
-  });
-
-  afterAll(async () => {
+  },
+  disconnect: async () => {
     await vectorDB.disconnect();
-  });
-
-  createMetadataFilteringTest({
-    vector: vectorDB,
-    createIndex: async (indexName: string) => {
-      await vectorDB.createIndex({ indexName, dimension: 4, metric: 'cosine' });
-      await vectorDB.waitForIndexReady({ indexName });
-    },
-    deleteIndex: async (indexName: string) => {
-      try {
-        await vectorDB.deleteIndex({ indexName });
-      } catch (error) {
-        console.error(`Error deleting index ${indexName}:`, error);
-      }
-    },
-    waitForIndexing: () => new Promise(resolve => setTimeout(resolve, 5000)),
-  });
+  },
+  createIndex: async (indexName: string) => {
+    await vectorDB.createIndex({ indexName, dimension: 4, metric: 'cosine' });
+    await vectorDB.waitForIndexReady({ indexName });
+  },
+  deleteIndex: async (indexName: string) => {
+    try {
+      await vectorDB.deleteIndex({ indexName });
+    } catch (error) {
+      console.error(`Error deleting index ${indexName}:`, error);
+    }
+  },
+  waitForIndexing: () => new Promise(resolve => setTimeout(resolve, 5000)),
 });

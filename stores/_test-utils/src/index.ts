@@ -1,2 +1,2 @@
 export * from './factory';
-export * from './domains/vector';
+export * from './vector-factory';

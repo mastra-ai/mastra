@@ -1,5 +1,5 @@
-import type { MastraVector } from '@mastra/core/vector';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import type { VectorTestConfig } from '../../vector-factory';
 
 /**
  * Shared test suite for metadata field filtering in vector stores.
@@ -14,12 +14,7 @@ export function createMetadataFilteringTest({
   createIndex,
   deleteIndex,
   waitForIndexing = () => new Promise(resolve => setTimeout(resolve, 5000)),
-}: {
-  vector: MastraVector<any>;
-  createIndex: (indexName: string) => Promise<void>;
-  deleteIndex: (indexName: string) => Promise<void>;
-  waitForIndexing?: () => Promise<void>;
-}) {
+}: VectorTestConfig) {
   describe('Metadata Field Filtering for Memory System', () => {
     const testIndexName = `metadata_filter_test_${Date.now()}`;
 
