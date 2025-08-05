@@ -1,6 +1,6 @@
+import { createMetadataFilteringTest } from '@internal/storage-test-utils';
 import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 import { MongoDBVector } from './';
-import { createMetadataFilteringTest } from '@internal/storage-test-utils';
 
 // Give tests enough time to complete database operations
 vi.setConfig({ testTimeout: 300000, hookTimeout: 300000 });
