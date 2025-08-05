@@ -277,8 +277,6 @@ export class AISDKV5OutputStream {
   transformResponse(response: any, isMessages: boolean = false) {
     const newResponse = { ...response };
     newResponse.messages = response.messages.map((message: any) => {
-      console.log('transform message', JSON.stringify(message, null, 2));
-
       let newContent = message.content.map((part: any) => {
         if (part.type === 'file') {
           if (isMessages) {
@@ -289,8 +287,6 @@ export class AISDKV5OutputStream {
               providerOptions: part.providerOptions,
             };
           }
-
-          console.log('inputFile', part);
           const transformedFile = convertFullStreamChunkToAISDKv5({
             chunk: {
               type: 'file',

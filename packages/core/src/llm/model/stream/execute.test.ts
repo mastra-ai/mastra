@@ -12,6 +12,7 @@ import { optionsTests as optionsTestsV5 } from './ai-sdk/v5/test-utils/options';
 import { resultObjectTests as resultObjectTestsV5 } from './ai-sdk/v5/test-utils/result-object';
 import { telemetryTests as telemetryTestsV5 } from './ai-sdk/v5/test-utils/telemetry';
 import { textStreamTests as textStreamTestsV5 } from './ai-sdk/v5/test-utils/textStream';
+import { toolsTests as toolsTestsV5 } from './ai-sdk/v5/test-utils/tools';
 import { toUIMessageStreamTests } from './ai-sdk/v5/test-utils/toUIMessageStream';
 import { execute } from './execute';
 
@@ -43,6 +44,8 @@ describe('V4 tests', () => {
 });
 
 describe('V5 tests', () => {
+  toolsTestsV5({ executeFn: execute, runId });
+
   telemetryTestsV5({ executeFn: execute, runId });
 
   optionsTestsV5({ executeFn: execute, runId });

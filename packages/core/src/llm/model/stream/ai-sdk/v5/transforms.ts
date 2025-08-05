@@ -40,6 +40,20 @@ export function convertFullStreamChunkToMastra(value: any, ctx: { runId: string 
         result: value.result,
       },
     };
+  } else if (value.type === 'tool-error') {
+    return {
+      type: 'tool-error',
+      runId: ctx.runId,
+      from: 'AGENT',
+      payload: {
+        id: value.id,
+        providerMetadata: value.providerMetadata,
+        toolCallId: value.toolCallId,
+        toolName: value.toolName,
+        args: value.args,
+        error: value.error,
+      },
+    };
   } else if (value.type === 'tool-input-delta') {
     return {
       type: 'tool-call-delta',
@@ -392,6 +406,16 @@ export function convertFullStreamChunkToAISDKv5({
       providerExecuted: chunk.payload.providerExecuted,
       toolName: chunk.payload.toolName,
       output: chunk.payload.result,
+    };
+  } else if (chunk.type === 'tool-error') {
+    return {
+      type: 'tool-error',
+      error: chunk.payload.error,
+      input: chunk.payload.args,
+      toolCallId: chunk.payload.toolCallId,
+      providerMetadata: chunk.payload.providerMetadata,
+      providerExecuted: chunk.payload.providerExecuted,
+      toolName: chunk.payload.toolName,
     };
   } else if (chunk.type === 'error') {
     return {

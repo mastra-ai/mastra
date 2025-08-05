@@ -223,8 +223,6 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
             }
           }
 
-          console.log({ block });
-
           processBlock();
 
           break;

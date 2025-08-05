@@ -597,8 +597,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     const _runStep = (step: Step<any, any, any, any>, spanName: string, attributes?: Record<string, string>) => {
       return async (data: any) => {
-        console.log('step.execute', data);
-
         const telemetry = this.mastra?.getTelemetry();
         const span = executionContext.executionSpan;
         if (!telemetry || !span) {

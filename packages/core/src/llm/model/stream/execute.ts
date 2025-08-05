@@ -25,6 +25,7 @@ const toolCallInpuSchema = z.object({
 
 const toolCallOutputSchema = toolCallInpuSchema.extend({
   result: z.any(),
+  error: z.any().optional(),
 });
 
 const llmIterationOutputSchema = z.object({
@@ -63,14 +64,10 @@ function createAgentWorkflow({
       outputSchema: toolCallOutputSchema,
       execute: async ({ inputData, getStepResult }) => {
         const tool =
-          tools?.[inputData.toolName] || Object.values(tools || {})?.find(tool => tool.name === inputData.toolName);
+          tools?.[inputData.toolName] || Object.values(tools || {})?.find(tool => tool.id === inputData.toolName);
 
         if (!tool) {
           throw new Error(`Tool ${inputData.toolName} not found`);
-        }
-
-        if (!tool.execute) {
-          return inputData;
         }
 
         const initialResult = getStepResult({
@@ -78,6 +75,26 @@ function createAgentWorkflow({
         } as any);
 
         const messageList = MessageList.fromArray(initialResult.messages.user);
+
+        if (tool && 'onInputAvailable' in tool) {
+          try {
+            await tool?.onInputAvailable?.({
+              toolCallId: inputData.toolCallId,
+              input: inputData.args,
+              messages: messageList.get.all?.ui()?.map(message => ({
+                role: message.role,
+                content: message.content,
+              })) as any,
+              abortSignal: options?.abortSignal,
+            });
+          } catch (error) {
+            console.error('Error calling onInputAvailable', error);
+          }
+        }
+
+        if (!tool.execute) {
+          return inputData;
+        }
 
         const tracer = getTracer({
           isEnabled: experimental_telemetry?.isEnabled,
@@ -120,7 +137,10 @@ function createAgentWorkflow({
             message: (error as Error)?.message ?? error,
           });
           span.recordException(error as Error);
-          throw error;
+          return {
+            error: error as Error,
+            ...inputData,
+          };
         }
       },
     });
@@ -144,10 +164,6 @@ function createAgentWorkflow({
       execute: async ({ inputData }) => {
         const messagesToUse = inputData.messages.all;
         const messageList = MessageList.fromArray(messagesToUse);
-        console.log('messages_to_use', JSON.stringify(messagesToUse, null, 2));
-        console.log('message_list', JSON.stringify(messageList.get.all.core(), null, 2));
-        console.log('message_list_ui', JSON.stringify(messageList.get.all.aiV5.ui(), null, 2));
-        console.log('message_list_model', JSON.stringify(messageList.get.all.model(), null, 2));
 
         const runState = new AgenticRunState({
           _internal: _internal!,
@@ -308,6 +324,31 @@ function createAgentWorkflow({
             }
 
             switch (chunk.type) {
+              case 'tool-call-input-streaming-start': {
+                const tool =
+                  tools?.[chunk.payload.toolName] ||
+                  Object.values(tools || {})?.find(tool => tool.id === chunk.payload.toolName);
+
+                if (tool && 'onInputStart' in tool) {
+                  try {
+                    await tool?.onInputStart?.({
+                      toolCallId: chunk.payload.toolCallId,
+                      messages: messageList.get.all?.ui()?.map(message => ({
+                        role: message.role,
+                        content: message.content,
+                      })) as any,
+                      abortSignal: options?.abortSignal,
+                    });
+                  } catch (error) {
+                    console.error('Error calling onInputStart', error);
+                  }
+                }
+
+                controller.enqueue(chunk);
+
+                break;
+              }
+
               case 'error':
                 runState.setState({
                   hasErrored: true,
@@ -457,6 +498,26 @@ function createAgentWorkflow({
                   runState.setState({
                     hasToolCallStreaming: true,
                   });
+                }
+
+                const tool =
+                  tools?.[chunk.payload.toolName] ||
+                  Object.values(tools || {})?.find(tool => tool.id === chunk.payload.toolName);
+
+                if (tool && 'onInputDelta' in tool) {
+                  try {
+                    await tool?.onInputDelta?.({
+                      inputTextDelta: chunk.payload.argsTextDelta,
+                      toolCallId: chunk.payload.toolCallId,
+                      messages: messageList.get.all?.ui()?.map(message => ({
+                        role: message.role,
+                        content: message.content,
+                      })) as any,
+                      abortSignal: options?.abortSignal,
+                    });
+                  } catch (error) {
+                    console.error('Error calling onInputDelta', error);
+                  }
                 }
                 controller.enqueue(chunk);
                 break;
@@ -659,6 +720,54 @@ function createAgentWorkflow({
         const messageList = MessageList.fromArray(initialResult.messages.all || []);
 
         if (inputData?.every(toolCall => toolCall?.result === undefined)) {
+          const errorResults = inputData.filter(toolCall => toolCall?.error);
+
+          console.log('inputData', inputData);
+          console.log('errorResults', JSON.stringify(errorResults, null, 2));
+
+          const toolResultMessageId = experimental_generateMessageId?.() || _internal?.generateId?.();
+
+          if (errorResults?.length) {
+            errorResults.forEach(toolCall => {
+              const chunk = {
+                type: 'tool-error',
+                runId: runId,
+                from: 'AGENT',
+                payload: {
+                  error: toolCall.error,
+                  args: toolCall.args,
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  result: toolCall.result,
+                  providerMetadata: toolCall.providerMetadata,
+                },
+              };
+              controller.enqueue(chunk);
+            });
+
+            messageList.add(
+              {
+                id: toolResultMessageId,
+                role: 'tool',
+                content: errorResults.map(toolCall => {
+                  console.log('toolCall', JSON.stringify(toolCall, null, 2));
+                  return {
+                    type: 'tool-result',
+                    args: toolCall.args,
+                    toolCallId: toolCall.toolCallId,
+                    toolName: toolCall.toolName,
+                    result: {
+                      tool_execution_error: toolCall.error?.message ?? toolCall.error,
+                    },
+                  };
+                }),
+              },
+              'response',
+            );
+
+            console.log('messageList TOOL ERROR', JSON.stringify(messageList.get.all.v2(), null, 2));
+          }
+
           initialResult.stepResult.isContinued = false;
           return bail(initialResult);
         }
