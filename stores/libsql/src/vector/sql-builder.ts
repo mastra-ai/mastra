@@ -59,7 +59,7 @@ const validateJsonArray = (key: string) => {
    AND json_type(json_extract(metadata, ${jsonPath})) = 'array'`;
 };
 
-const pattern = /json_extract\(metadata, '\$\."[^"]*"(\."[^"]*")*'\)/g;
+const pattern = /json_extract\(metadata, '\$\.(?:"[^"]*"(?:\."[^"]*")*|[^']+)'\)/g;
 
 function buildElemMatchConditions(value: any) {
   const conditions = Object.entries(value).map(([field, fieldValue]) => {
