@@ -93,6 +93,7 @@ describe('MongoDBVector Integration Tests', () => {
   let vectorDB: MongoDBVector;
   const testIndexName = 'my_vectors';
   const testIndexName2 = 'my_vectors_2';
+  const emptyIndexName = 'empty-index';
 
   beforeAll(async () => {
     vectorDB = new MongoDBVector({ uri, dbName });
@@ -114,6 +115,7 @@ describe('MongoDBVector Integration Tests', () => {
 
     await createIndexAndWait(vectorDB, testIndexName, 4, 'cosine');
     await createIndexAndWait(vectorDB, testIndexName2, 4, 'cosine');
+    await createIndexAndWait(vectorDB, emptyIndexName, 4, 'cosine');
   }, 500000);
 
   afterAll(async () => {
@@ -124,6 +126,11 @@ describe('MongoDBVector Integration Tests', () => {
     }
     try {
       await vectorDB.deleteIndex({ indexName: testIndexName2 });
+    } catch (error) {
+      console.error('Failed to delete test collection:', error);
+    }
+    try {
+      await vectorDB.deleteIndex({ indexName: emptyIndexName });
     } catch (error) {
       console.error('Failed to delete test collection:', error);
     }
@@ -481,6 +488,30 @@ describe('MongoDBVector Integration Tests', () => {
     it('should handle invalid dimension vectors', async () => {
       const invalidVector = [1, 2, 3]; // 3D vector for 4D index
       await expect(vectorDB.upsert({ indexName: testIndexName, vectors: [invalidVector] })).rejects.toThrow();
+    });
+    it('should return empty results and not throw when semantic search filter matches zero documents', async () => {
+      // Use a valid embedding vector matching your test index dimension
+      const testEmbedding = [0.1, 0.2, 0.3, 0.4]; // Adjust dimension as needed
+
+      // Should not throw, should return an empty array
+      let error: unknown = null;
+      let results: any[] = [];
+      try {
+        results = await vectorDB.query({
+          indexName: emptyIndexName,
+          queryVector: testEmbedding,
+          topK: 2,
+          filter: {
+            'metadata.label': 'test_filter_validation',
+          },
+        });
+      } catch (e) {
+        error = e;
+      }
+
+      expect(error).toBeNull();
+      expect(Array.isArray(results)).toBe(true);
+      expect(results.length).toBe(0);
     });
   });
 });

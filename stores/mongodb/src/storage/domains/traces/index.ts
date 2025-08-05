@@ -103,13 +103,13 @@ export class TracesStorageMongoDB extends TracesStorage {
         name: row.name,
         scope: row.scope,
         kind: row.kind,
-        status: safelyParseJSON(row.status as string),
-        events: safelyParseJSON(row.events as string),
-        links: safelyParseJSON(row.links as string),
-        attributes: safelyParseJSON(row.attributes as string),
+        status: typeof row.status === 'string' ? safelyParseJSON(row.status) : row.status,
+        events: typeof row.events === 'string' ? safelyParseJSON(row.events) : row.events,
+        links: typeof row.links === 'string' ? safelyParseJSON(row.links) : row.links,
+        attributes: typeof row.attributes === 'string' ? safelyParseJSON(row.attributes) : row.attributes,
         startTime: row.startTime,
         endTime: row.endTime,
-        other: safelyParseJSON(row.other as string),
+        other: typeof row.other === 'string' ? safelyParseJSON(row.other) : row.other,
         createdAt: row.createdAt,
       })) as Trace[];
 

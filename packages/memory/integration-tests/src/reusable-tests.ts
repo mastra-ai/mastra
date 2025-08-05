@@ -26,14 +26,17 @@ interface WorkerTestConfig {
   memoryOptionsForWorker?: SharedMemoryConfig['options'];
 }
 
-const createTestThread = (title: string, metadata = {}) => ({
-  id: randomUUID(),
-  title,
-  resourceId,
-  metadata,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-});
+const createTestThread = (title: string, metadata = {}, i = 0) => {
+  const now = Date.now();
+  return {
+    id: randomUUID(),
+    title,
+    resourceId,
+    metadata,
+    createdAt: new Date(now + i),
+    updatedAt: new Date(now + i),
+  };
+};
 
 let messageCounter = 0;
 const createTestMessage = (
@@ -776,6 +779,111 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
         expect(result.messages).toHaveLength(messagesBatches.flat().length);
       });
+    });
+  });
+
+  describe('Thread Pagination', () => {
+    it('should return paginated threads with correct metadata', async () => {
+      // Create multiple test threads (25 threads)
+      await Promise.all(
+        Array.from({ length: 25 }, (_, i) =>
+          memory.saveThread({
+            thread: createTestThread(`Paginated Thread ${i + 1}`, {}, i),
+          }),
+        ),
+      );
+
+      // Get first page
+      const result = await memory.getThreadsByResourceIdPaginated({
+        resourceId,
+        page: 0,
+        perPage: 10,
+        orderBy: 'createdAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(result.threads).toHaveLength(10);
+      expect(result.total).toBe(25);
+      expect(result.page).toBe(0);
+      expect(result.perPage).toBe(10);
+      expect(result.hasMore).toBe(true);
+
+      // Verify threads are retrieved in latest-first order
+      expect(result.threads[0].title).toBe('Paginated Thread 25');
+      expect(result.threads[9].title).toBe('Paginated Thread 16');
+    });
+
+    it('should handle edge cases (empty results, last page)', async () => {
+      // Empty result set
+      const emptyResult = await memory.getThreadsByResourceIdPaginated({
+        resourceId: 'non-existent-resource',
+        page: 0,
+        perPage: 10,
+        orderBy: 'createdAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(emptyResult.threads).toHaveLength(0);
+      expect(emptyResult.total).toBe(0);
+      expect(emptyResult.hasMore).toBe(false);
+
+      // Create 5 threads and test final page
+      await Promise.all(
+        Array.from({ length: 5 }, (_, i) =>
+          memory.saveThread({
+            thread: createTestThread(`Edge Case Thread ${i + 1}`, {}, i),
+          }),
+        ),
+      );
+
+      const lastPageResult = await memory.getThreadsByResourceIdPaginated({
+        resourceId,
+        page: 0,
+        perPage: 10,
+        orderBy: 'createdAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(lastPageResult.threads).toHaveLength(5);
+      expect(lastPageResult.total).toBe(5);
+      expect(lastPageResult.hasMore).toBe(false);
+    });
+
+    it('should handle page boundaries correctly', async () => {
+      // Test page boundaries (create 15 threads, perPage=7 makes 3 pages)
+      await Promise.all(
+        Array.from({ length: 15 }, (_, i) =>
+          memory.saveThread({
+            thread: createTestThread(`Boundary Thread ${i + 1}`, {}, i),
+          }),
+        ),
+      );
+
+      // Test second page
+      const page2Result = await memory.getThreadsByResourceIdPaginated({
+        resourceId,
+        page: 1,
+        perPage: 7,
+        orderBy: 'createdAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(page2Result.threads).toHaveLength(7);
+      expect(page2Result.page).toBe(1);
+      expect(page2Result.hasMore).toBe(true);
+
+      // Test third page (final page)
+      const page3Result = await memory.getThreadsByResourceIdPaginated({
+        resourceId,
+        page: 2,
+        perPage: 7,
+        orderBy: 'createdAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(page3Result.threads).toHaveLength(1);
+      expect(page3Result.page).toBe(2);
+      expect(page3Result.hasMore).toBe(false);
     });
   });
 

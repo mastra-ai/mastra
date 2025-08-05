@@ -1,5 +1,51 @@
 # @mastra/deployer
 
+## 0.13.0-alpha.1
+
+### Patch Changes
+
+- 7b8172f: dependencies updates:
+  - Updated dependency [`rollup@~4.46.2` ↗︎](https://www.npmjs.com/package/rollup/v/4.46.2) (from `~4.44.2`, in `dependencies`)
+- 35c5798: Add support for transpilePackages option
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+  - @mastra/server@0.13.0-alpha.1
+
+## 0.12.2-alpha.0
+
+### Patch Changes
+
+- e202b82: Add getThreadsByResourceIdPaginated to the Memory Class
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+  - @mastra/core@0.12.2-alpha.0
+  - @mastra/server@0.12.2-alpha.0
+
+## 0.12.1
+
+### Patch Changes
+
+- 07fe7a2: Improve lodash imports
+- Updated dependencies [33dcb07]
+- Updated dependencies [d0d9500]
+- Updated dependencies [d30b1a0]
+- Updated dependencies [bff87f7]
+- Updated dependencies [b4a8df0]
+  - @mastra/core@0.12.1
+  - @mastra/server@0.12.1
+
+## 0.12.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [d0d9500]
+  - @mastra/core@0.12.1-alpha.1
+  - @mastra/server@0.12.1-alpha.1
+
 ## 0.12.1-alpha.0
 
 ### Patch Changes

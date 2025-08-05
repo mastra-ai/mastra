@@ -23,6 +23,14 @@ const exec = util.promisify(child_process.exec);
 export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google' | 'cerebras';
 export type Components = 'agents' | 'workflows' | 'tools';
 
+export const getAISDKPackageVersion = (llmProvider: LLMProvider) => {
+  switch (llmProvider) {
+    case 'cerebras':
+      return '^0.2.14';
+    default:
+      return '^1.0.0';
+  }
+};
 export const getAISDKPackage = (llmProvider: LLMProvider) => {
   switch (llmProvider) {
     case 'openai':
@@ -55,7 +63,7 @@ export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
     modelItem = `groq('llama-3.3-70b-versatile')`;
   } else if (llmProvider === 'google') {
     providerImport = `import { google } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `google('gemini-2.5-pro-exp-03-25')`;
+    modelItem = `google('gemini-2.5-pro')`;
   } else if (llmProvider === 'cerebras') {
     providerImport = `import { cerebras } from '${getAISDKPackage(llmProvider)}';`;
     modelItem = `cerebras('llama-3.3-70b')`;

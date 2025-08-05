@@ -1,5 +1,26 @@
 # @mastra/clickhouse
 
+## 0.13.0-alpha.1
+
+### Patch Changes
+
+- 3e9c2ff: dependencies updates:
+  - Updated dependency [`@clickhouse/client@^1.12.0` ↗︎](https://www.npmjs.com/package/@clickhouse/client/v/1.12.0) (from `^1.11.2`, in `dependencies`)
+
+## 0.13.0-alpha.0
+
+### Minor Changes
+
+- ea0c5f2: Add store support to new score api
+
+### Patch Changes
+
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+
 ## 0.12.3
 
 ### Patch Changes
