@@ -190,9 +190,6 @@ export class SemanticMarkdownTransformer extends TextTransformer {
       this.splitText({ text }).forEach(chunk => {
         const metadata = {
           ..._metadatas[i],
-          // Add semantic-specific metadata
-          tokenCount: this.countTokens(chunk),
-          chunkingStrategy: 'semantic-markdown',
         };
 
         if (this.addStartIndex) {
