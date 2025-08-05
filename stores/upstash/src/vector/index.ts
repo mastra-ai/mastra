@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { MastraVector } from '@mastra/core/vector';
 import type {
@@ -43,7 +44,7 @@ export class UpstashVector extends MastraVector<UpstashVectorFilter> {
     ids,
     sparseVectors,
   }: UpstashUpsertVectorParams): Promise<string[]> {
-    const generatedIds = ids || vectors.map(() => crypto.randomUUID());
+    const generatedIds = ids || vectors.map(() => randomUUID());
 
     const points = vectors.map((vector, index) => ({
       id: generatedIds[index]!,
