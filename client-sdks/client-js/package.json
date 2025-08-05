@@ -13,7 +13,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -27,7 +27,7 @@
   "homepage": "https://github.com/mastra-ai/mastra/tree/main/client-sdks/client-js#readme",
   "license": "Apache-2.0",
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
+    "build": "tsup --config tsup.config.ts",
     "dev": "pnpm build --watch",
     "test": "vitest run && pnpm run test:integration",
     "test:unit": "vitest run",
@@ -50,10 +50,12 @@
     "@babel/preset-env": "^7.28.0",
     "@babel/preset-typescript": "^7.27.1",
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@tsconfig/recommended": "^1.0.9",
     "@types/json-schema": "^7.0.15",
     "@types/node": "^20.19.0",
     "ai": "^4.3.19",
+    "globby": "^14.1.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
