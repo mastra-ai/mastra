@@ -1,5 +1,5 @@
-import { defineConfig } from 'tsup';
 import { generateTypes } from '@internal/types-builder';
+import { defineConfig } from 'tsup';
 
 export default defineConfig({
   entry: [

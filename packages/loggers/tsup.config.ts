@@ -1,5 +1,5 @@
-import { defineConfig } from 'tsup';
 import { generateTypes } from '@internal/types-builder';
+import { defineConfig } from 'tsup';
 
 export default defineConfig({
   entry: ['src/index.ts', 'src/file/index.ts', 'src/upstash/index.ts', 'src/http/index.ts'],

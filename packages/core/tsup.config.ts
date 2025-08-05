@@ -1,6 +1,6 @@
 import babel from '@babel/core';
-import { defineConfig } from 'tsup';
 import { generateTypes } from '@internal/types-builder';
+import { defineConfig } from 'tsup';
 import type { Options } from 'tsup';
 import treeshakeDecoratorsBabelPlugin from './tools/treeshake-decorators';
 
