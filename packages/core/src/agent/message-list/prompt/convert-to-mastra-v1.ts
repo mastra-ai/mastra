@@ -81,13 +81,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
             role: 'user',
             ...fields,
             type: 'text',
-            content:
-              Array.isArray(userContent) &&
-              userContent.length === 1 &&
-              userContent[0]?.type === `text` &&
-              typeof content !== `undefined`
-                ? content
-                : userContent,
+            content: userContent,
           });
         }
         break;
@@ -143,13 +137,11 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
                 }
               }
 
-              const isSingleTextPart = v1Content.length === 1 && v1Content[0]?.type === 'text';
-
               pushOrCombine({
                 role: 'assistant',
                 ...getFields(),
                 type: 'text',
-                content: isSingleTextPart ? v1Content[0].text : v1Content,
+                content: v1Content,
               });
               contentBuffer = [];
             }
