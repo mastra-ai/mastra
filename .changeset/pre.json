@@ -72,9 +72,22 @@
     "@mastra/inngest": "0.11.8"
   },
   "changesets": [
+    "@mastra_deployer-6436-dependencies",
+    "@mastra_deployer-cloudflare-6436-dependencies",
+    "@mastra_memory-6429-dependencies",
+    "angry-regions-mix",
     "bright-foxes-smile",
+    "clever-parents-listen",
+    "cuddly-snails-wonder",
+    "eight-symbols-shop",
+    "lazy-camels-end",
     "many-parts-design",
+    "mighty-mssql-features",
     "plain-gifts-relax",
-    "plenty-baths-learn"
+    "plenty-baths-learn",
+    "ready-adults-write",
+    "seven-parts-share",
+    "smooth-hairs-tie",
+    "tall-snails-jog"
   ]
 }

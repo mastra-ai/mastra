@@ -11,12 +11,12 @@ import { Tabs } from "nextra/components";
 The Examples section is a short list of example projects demonstrating basic AI engineering with Mastra, including text generation, structured output, streaming responses, retrieval‐augmented generation (RAG), and voice.
 
 <CardItems
-  titles={["Agent", "Workflow", "legacyWorkflow", "Memory", "RAG", "Evals", "Scorers (Experimental)", "Voice"]}
+  titles={["Agent", "Workflow", "Tool", "legacyWorkflow", "Memory", "RAG", "Evals", "Scorers (Experimental)", "Voice"]}
   items={{
     Agent: [
-      { title: "Giving a System Prompt", href: "/examples/agents/system-prompt" },
-      { title: "Workflow as Tools", href: "/examples/agents/workflow-as-tools" },
-      { title: "Using a Tool", href: "/examples/agents/using-a-tool" },
+      { title: "Calling Agents", href: "/examples/agents/calling-agents" },
+      { title: "Agent System Prompt", href: "/examples/agents/system-prompt" },
+      { title: "Agents with Tools", href: "/examples/tools/using-a-tool" },
       { title: "Hierarchical Multi-Agent System", href: "/examples/agents/hierarchical-multi-agent" },
       { title: "Multi-Agent Workflow", href: "/examples/agents/multi-agent-workflow" },
       { title: "Bird Checker", href: "/examples/agents/bird-checker" },
@@ -36,6 +36,9 @@ The Examples section is a short list of example projects demonstrating basic AI 
       { title: "Tool as Step", href: "/examples/workflows/tool-as-step" },
       { title: "Human in the Loop", href: "/examples/workflows/human-in-the-loop" },
       { title: "Inngest Workflow", href: "/examples/workflows/inngest-workflow" }
+    ],
+    Tool: [
+      { title: "Tools with Workflows", href: "/examples/tools/workflow-as-tools" }
     ],
     legacyWorkflow: [
       { title: "Creating a Workflow", href: "/examples/workflows_legacy/creating-a-workflow" },

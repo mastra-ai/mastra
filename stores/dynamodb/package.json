@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dynamodb",
-  "version": "0.13.3",
+  "version": "0.14.0-alpha.0",
   "description": "DynamoDB storage adapter for Mastra",
   "type": "module",
   "main": "dist/index.js",

@@ -1,5 +1,21 @@
 # @mastra/evals
 
+## 0.12.0-alpha.0
+
+### Minor Changes
+
+- ea0c5f2: Add store support to new score api
+- ea0c5f2: Update evals to use updated scorer API
+
+### Patch Changes
+
+- 351b36e: update evals and rag ai sdk package versions
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+
 ## 0.11.0
 
 ### Minor Changes

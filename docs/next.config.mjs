@@ -730,6 +730,21 @@ export default withGT(
         destination: "/examples/workflows/agent-as-step",
         permanent: true,
       },
+      {
+        source: "/examples/agents/workflow-as-tools",
+        destination: "/examples/tools/workflow-as-tools",
+        permanent: true,
+      },
+      {
+        source: "/examples/agents/multi-agent-workflow",
+        destination: "/examples/agents/hierarchical-multi-agent",
+        permanent: true,
+      },
+      {
+        source: "/examples/agents/bird-checker",
+        destination: "/examples/agents/image-analysis",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),
