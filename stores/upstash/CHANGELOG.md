@@ -1,5 +1,21 @@
 # @mastra/upstash
 
+## 0.14.0-alpha.1
+
+### Patch Changes
+
+- e1a2ef1: dependencies updates:
+  - Updated dependency [`@upstash/redis@^1.35.3` ↗︎](https://www.npmjs.com/package/@upstash/redis/v/1.35.3) (from `^1.35.1`, in `dependencies`)
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- 50f80dd: Fix dynamic require of crypto in upstash store
+- Updated dependencies [cb36de0]
+- Updated dependencies [a82b851]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [4a406ec]
+- Updated dependencies [5d377e5]
+  - @mastra/core@0.13.0-alpha.2
+
 ## 0.14.0-alpha.0
 
 ### Minor Changes
