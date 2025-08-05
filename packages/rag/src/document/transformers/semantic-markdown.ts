@@ -10,7 +10,6 @@ interface MarkdownNode {
   depth: number;
   content: string;
   length: number;
-  startIndex?: number;
 }
 
 export class SemanticMarkdownTransformer extends TextTransformer {
@@ -55,7 +54,6 @@ export class SemanticMarkdownTransformer extends TextTransformer {
     let currentTitle = '';
     let currentDepth = 0;
     let inCodeBlock = false;
-    let currentStartIndex = 0;
 
     const headerRegex = /^(#+)\s+(.+)$/;
 
@@ -78,7 +76,6 @@ export class SemanticMarkdownTransformer extends TextTransformer {
             content: currentContent.trim(),
             depth: currentDepth,
             length: this.countTokens(currentContent.trim()),
-            startIndex: currentStartIndex,
           });
         }
         currentContent = ''; // Always reset for the new section
@@ -86,7 +83,6 @@ export class SemanticMarkdownTransformer extends TextTransformer {
         // Start new section
         currentDepth = headerMatch[1]!.length;
         currentTitle = headerMatch[2]!;
-        currentStartIndex = i;
       } else {
         currentContent += line + '\n';
       }
@@ -99,7 +95,6 @@ export class SemanticMarkdownTransformer extends TextTransformer {
         content: currentContent.trim(),
         depth: currentDepth,
         length: this.countTokens(currentContent.trim()),
-        startIndex: currentStartIndex,
       });
     }
 
@@ -168,13 +163,6 @@ export class SemanticMarkdownTransformer extends TextTransformer {
           ..._metadatas[i],
           tokenCount: this.countTokens(chunk),
         };
-
-        if (this.addStartIndex) {
-          const startIndex = text.indexOf(chunk);
-          if (startIndex !== -1) {
-            metadata.startIndex = startIndex;
-          }
-        }
 
         documents.push(
           new Document({
