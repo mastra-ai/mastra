@@ -22,7 +22,7 @@ export class NoOpAISpan<TType extends AISpanType = any> implements AISpan<TType>
     this.type = options.type;
     this.metadata = options.metadata;
     this.trace = options.parent ? options.parent.trace : (this as any);
-    this.traceId = options.parent ? options.parent.trace.traceId : 'no-op-trace';
+    this.traceId = 'no-op-trace';
     this.startTime = new Date();
     this.aiTracing = aiTracing;
   }

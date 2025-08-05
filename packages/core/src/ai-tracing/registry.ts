@@ -1,11 +1,11 @@
 /**
- * Tracing Registry for Mastra
+ * AI Tracing Registry for Mastra
  *
- * Provides a global registry for tracing instances, replacing the singleton
- * pattern with a more flexible multi-instance approach.
+ * Provides a global registry for AI tracing instances.
  */
 
 import type { MastraAITracing } from './base';
+import { SamplingStrategyType } from './types';
 
 // ============================================================================
 // Global AI Tracing Registry
@@ -74,35 +74,35 @@ const aiTracingRegistry = new AITracingRegistry();
 // ============================================================================
 
 /**
- * Register a tracing instance globally
+ * Register an AI tracing instance globally
  */
 export function registerAITracing(name: string, instance: MastraAITracing, isDefault = false): void {
   aiTracingRegistry.register(name, instance, isDefault);
 }
 
 /**
- * Get a tracing instance from the registry
+ * Get an AI tracing instance from the registry
  */
 export function getAITracing(name?: string): MastraAITracing | undefined {
   return aiTracingRegistry.get(name);
 }
 
 /**
- * Unregister a tracing instance
+ * Unregister an AI tracing instance
  */
 export function unregisterAITracing(name: string): boolean {
   return aiTracingRegistry.unregister(name);
 }
 
 /**
- * Clear all tracing instances
+ * Clear all AI tracing instances
  */
 export function clearAITracingRegistry(): void {
   aiTracingRegistry.clear();
 }
 
 /**
- * Check if tracing is available and enabled
+ * Check if AI tracing is available and enabled
  */
 export function hasAITracing(name?: string): boolean {
   const tracing = getAITracing(name);
@@ -112,5 +112,5 @@ export function hasAITracing(name?: string): boolean {
   const sampling = config.sampling;
 
   // Check if sampling allows tracing
-  return sampling.type !== 'never';
+  return sampling.type !== SamplingStrategyType.NEVER;
 }

@@ -73,8 +73,6 @@ export interface AgentRunMetadata extends AIBaseMetadata {
   availableTools?: string[];
   /** Maximum steps allowed */
   maxSteps?: number;
-  /** Current step number */
-  currentStep?: number;
 }
 
 /**
@@ -113,7 +111,6 @@ export interface LLMGenerationMetadata extends AIBaseMetadata {
  */
 export interface ToolCallMetadata extends AIBaseMetadata {
   toolId?: string;
-  toolType?: string;
   success?: boolean;
 }
 
@@ -121,22 +118,14 @@ export interface ToolCallMetadata extends AIBaseMetadata {
  * MCP Tool Call metadata
  */
 export interface MCPToolCallMetadata extends AIBaseMetadata {
-  /** Name of the MCP tool/function */
-  toolName: string;
+  /** Id of the MCP tool/function */
+  toolId: string;
   /** MCP server identifier */
   mcpServer: string;
   /** MCP server version */
   serverVersion?: string;
-  /** Tool schema/signature */
-  toolSchema?: any;
-  /** MCP-specific error type if tool failed */
-  mcpErrorType?: string;
   /** Whether tool execution was successful */
   success?: boolean;
-  /** MCP protocol version */
-  protocolVersion?: string;
-  /** Connection status to MCP server */
-  connectionStatus?: 'connected' | 'disconnected' | 'error';
 }
 
 /**
@@ -227,6 +216,20 @@ export interface AISpan<TType extends AISpanType> {
  */
 export type AnyAISpan = AISpan<keyof AISpanTypeMap>;
 
+/**
+ * Options for span creation
+ */
+export interface AISpanOptions<TType extends AISpanType> {
+  /** Span name */
+  name: string;
+  /** Span type */
+  type: TType;
+  /** Span metadata */
+  metadata: AISpanTypeMap[TType];
+  /** Parent span */
+  parent?: AISpan<any>;
+}
+
 // ============================================================================
 // Configuration Types
 // ============================================================================
@@ -242,12 +245,11 @@ export enum SamplingStrategyType {
 }
 
 /**
- * AI Tracing event types
+ * Context for TraceSampling
  */
-export enum AITracingEventType {
-  SPAN_STARTED = 'span_started',
-  SPAN_UPDATED = 'span_updated',
-  SPAN_ENDED = 'span_ended',
+export interface AITraceContext {
+  runtimeContext?: RuntimeContext;
+  attributes?: Record<string, any>;
 }
 
 /**
@@ -271,13 +273,20 @@ export interface AITracingConfig {
   exporters?: AITracingExporter[];
   /** Custom processors */
   processors?: AISpanProcessor[];
-  /** Custom samplers */
-  samplers?: AITracingSampler[];
 }
 
 // ============================================================================
 // Exporter and Processor Interfaces
 // ============================================================================
+
+/**
+ * AI Tracing event types
+ */
+export enum AITracingEventType {
+  SPAN_STARTED = 'span_started',
+  SPAN_UPDATED = 'span_updated',
+  SPAN_ENDED = 'span_ended',
+}
 
 /**
  * Tracing events that can be exported
@@ -311,36 +320,4 @@ export interface AISpanProcessor {
   process(span: AnyAISpan): AnyAISpan | null;
   /** Shutdown processor */
   shutdown(): Promise<void>;
-}
-
-/**
- * Interface for tracing samplers
- */
-export interface AITracingSampler {
-  /** Sampler name */
-  name: string;
-  /** Determine if trace should be sampled */
-  shouldSample(traceContext: AITraceContext): boolean;
-}
-
-/**
- * Options for span creation
- */
-export interface AISpanOptions<TType extends AISpanType> {
-  /** Span name */
-  name: string;
-  /** Span type */
-  type: TType;
-  /** Span metadata */
-  metadata: AISpanTypeMap[TType];
-  /** Parent span */
-  parent?: AISpan<any>;
-}
-
-/**
- * Context for TraceSampling
- */
-export interface AITraceContext {
-  runtimeContext?: RuntimeContext;
-  attributes?: Record<string, any>;
 }

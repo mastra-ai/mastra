@@ -13,7 +13,6 @@ import type {
   AISpanType,
   AITracingExporter,
   AISpanProcessor,
-  AITracingSampler,
   AITracingEvent,
   AITraceContext,
   AISpanTypeMap,
@@ -33,12 +32,11 @@ export abstract class MastraAITracing extends MastraBase {
   protected config: AITracingConfig;
 
   constructor(config: AITracingConfig) {
-    const serviceName = config.serviceName || 'mastra-ai-tracing';
-    super({ component: RegisteredLogger.AI_TELEMETRY, name: serviceName });
+    super({ component: RegisteredLogger.AI_TELEMETRY, name: config.serviceName });
 
     this.config = config;
 
-    this.logger.debug(`AI Tracing initialized [service=${serviceName}] [sampling=${this.config.sampling.type}]`);
+    this.logger.debug(`AI Tracing initialized [service=${config.serviceName}] [sampling=${this.config.sampling.type}]`);
   }
 
   // ============================================================================
@@ -53,16 +51,12 @@ export abstract class MastraAITracing extends MastraBase {
     return this.config.processors || [];
   }
 
-  protected get samplers(): AITracingSampler[] {
-    return this.config.samplers || [];
-  }
-
   // ============================================================================
   // Public API - Single type-safe span creation method
   // ============================================================================
 
   /**
-   * Start a new span with full type safety
+   * Start a new span of a specific AISpanType
    */
   startSpan<TType extends AISpanType>(
     type: TType,
@@ -114,7 +108,7 @@ export abstract class MastraAITracing extends MastraBase {
   protected abstract createSpan<TType extends AISpanType>(options: AISpanOptions<TType>): AISpan<TType>;
 
   // ============================================================================
-  // Configuration Management - Following Mastra patterns
+  // Configuration Management
   // ============================================================================
 
   /**
@@ -125,7 +119,7 @@ export abstract class MastraAITracing extends MastraBase {
   }
 
   // ============================================================================
-  // Plugin Access - Following Mastra patterns
+  // Plugin Access
   // ============================================================================
 
   /**
@@ -143,13 +137,6 @@ export abstract class MastraAITracing extends MastraBase {
   }
 
   /**
-   * Get all samplers
-   */
-  getSamplers(): readonly AITracingSampler[] {
-    return [...this.samplers];
-  }
-
-  /**
    * Get the logger instance (for exporters and other components)
    */
   getLogger() {
@@ -161,7 +148,7 @@ export abstract class MastraAITracing extends MastraBase {
   // ============================================================================
 
   /**
-   * Automatically wire up tracing lifecycle for any span
+   * Automatically wires up AI tracing lifecycle events for any span
    * This ensures all spans emit events regardless of implementation
    */
   private wireSpanLifecycle<TType extends AISpanType>(span: AISpan<TType>): void {
@@ -186,16 +173,9 @@ export abstract class MastraAITracing extends MastraBase {
   // ============================================================================
 
   /**
-   * Check if a trace should be sampled
+   * Check if an AI trace should be sampled
    */
   protected shouldSample(traceContext: AITraceContext): boolean {
-    // Check custom samplers first
-    for (const sampler of this.samplers) {
-      if (!sampler.shouldSample(traceContext)) {
-        return false;
-      }
-    }
-
     // Check built-in sampling strategy
     const { sampling } = this.config;
 
@@ -308,28 +288,28 @@ export abstract class MastraAITracing extends MastraBase {
   // ============================================================================
 
   /**
-   * Initialize tracing (called by Mastra during component registration)
+   * Initialize AI tracing (called by Mastra during component registration)
    */
   async init(): Promise<void> {
-    this.logger.debug(`Tracing initialization started [name=${this.name}]`);
+    this.logger.debug(`AI Tracing initialization started [name=${this.name}]`);
 
-    // Any initialization logic for the tracing system
+    // Any initialization logic for the AI tracing system
     // This could include setting up queues, starting background processes, etc.
 
-    this.logger.info(`Tracing initialized successfully [name=${this.name}]`);
+    this.logger.info(`AI Tracing initialized successfully [name=${this.name}]`);
   }
 
   /**
-   * Shutdown tracing and clean up resources
+   * Shutdown AI tracing and clean up resources
    */
   async shutdown(): Promise<void> {
-    this.logger.debug(`Tracing shutdown started [name=${this.name}]`);
+    this.logger.debug(`AI Tracing shutdown started [name=${this.name}]`);
 
     // Shutdown all components
     const shutdownPromises = [...this.exporters.map(e => e.shutdown()), ...this.processors.map(p => p.shutdown())];
 
     await Promise.allSettled(shutdownPromises);
 
-    this.logger.info(`Tracing shutdown completed [name=${this.name}]`);
+    this.logger.info(`AI Tracing shutdown completed [name=${this.name}]`);
   }
 }
