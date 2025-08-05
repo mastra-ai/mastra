@@ -255,7 +255,7 @@ describe('LibSQLVector', () => {
         const metadata = [
           { type: 'a', value: 1 },
           { type: 'b', value: 2 },
-          { type: 'a', value: 3 },
+          { type: 'c', value: 3 },
         ];
         await vectorDB.upsert({ indexName, vectors, metadata });
       });
@@ -285,7 +285,7 @@ describe('LibSQLVector', () => {
       it('should handle filters correctly', async () => {
         const results = await vectorDB.query({ indexName, queryVector: [1, 0, 0], topK: 10, filter: { type: 'a' } });
 
-        expect(results).toHaveLength(2);
+        expect(results).toHaveLength(1);
         results.forEach(result => {
           expect(result?.metadata?.type).toBe('a');
         });
