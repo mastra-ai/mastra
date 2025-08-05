@@ -1308,7 +1308,7 @@ importers:
         specifier: ^16.6.1
         version: 16.6.1
       hono:
-        specifier: ^4.8.11
+        specifier: ^4.8.12
         version: 4.8.12
       hono-openapi:
         specifier: ^0.4.8
@@ -1523,7 +1523,7 @@ importers:
         specifier: ^14.1.0
         version: 14.1.0
       hono:
-        specifier: ^4.8.11
+        specifier: ^4.8.12
         version: 4.8.12
       package-directory:
         specifier: ^8.1.0
@@ -1801,7 +1801,7 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       hono:
-        specifier: ^4.8.11
+        specifier: ^4.8.12
         version: 4.8.12
       hono-mcp-server-sse-transport:
         specifier: 0.0.7
@@ -1883,7 +1883,7 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       hono:
-        specifier: ^4.8.11
+        specifier: ^4.8.12
         version: 4.8.12
       tsup:
         specifier: ^8.5.0
@@ -1941,7 +1941,7 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       hono:
-        specifier: ^4.8.11
+        specifier: ^4.8.12
         version: 4.8.12
       tsup:
         specifier: ^8.5.0
@@ -3788,7 +3788,7 @@ importers:
         specifier: 7.1.0
         version: 7.1.0
       hono:
-        specifier: ^4.8.11
+        specifier: ^4.8.12
         version: 4.8.12
       inngest-cli:
         specifier: 1.8.2
