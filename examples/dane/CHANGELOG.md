@@ -1,5 +1,40 @@
 # @mastra/dane
 
+## 0.0.41
+
+### Patch Changes
+
+- Updated dependencies [cb36de0]
+- Updated dependencies [d0496e6]
+- Updated dependencies [7d53af4]
+- Updated dependencies [e1a2ef1]
+- Updated dependencies [f082460]
+- Updated dependencies [e1a2ef1]
+- Updated dependencies [a82b851]
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [351b36e]
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [2871020]
+- Updated dependencies [9e792ef]
+- Updated dependencies [ccd519c]
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+- Updated dependencies [4a406ec]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [5d377e5]
+- Updated dependencies [50f80dd]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0
+  - @mastra/memory@0.12.1
+  - @mastra/upstash@0.14.0
+  - @mastra/rag@1.0.7
+  - @mastra/libsql@0.13.0
+  - @mastra/mcp@0.10.10
+  - @mastra/github@1.2.7
+
 ## 0.0.41-alpha.3
 
 ### Patch Changes

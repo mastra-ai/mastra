@@ -1,5 +1,28 @@
 # @mastra/voice-openai
 
+## 0.10.8
+
+### Patch Changes
+
+- 55856ed: dependencies updates:
+  - Updated dependency [`openai@^5.11.0` ↗︎](https://www.npmjs.com/package/openai/v/5.11.0) (from `^5.10.2`, in `dependencies`)
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [cb36de0]
+- Updated dependencies [d0496e6]
+- Updated dependencies [a82b851]
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [41a0a0e]
+- Updated dependencies [2871020]
+- Updated dependencies [94f4812]
+- Updated dependencies [e202b82]
+- Updated dependencies [e00f6a0]
+- Updated dependencies [4a406ec]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [5d377e5]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0
+
 ## 0.10.8-alpha.0
 
 ### Patch Changes
