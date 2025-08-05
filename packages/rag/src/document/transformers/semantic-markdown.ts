@@ -9,8 +9,8 @@ interface MarkdownNode {
   title: string;
   depth: number;
   content: string;
-  length: number; // Token count
-  startIndex?: number; // Original position in document
+  length: number;
+  startIndex?: number;
 }
 
 export class SemanticMarkdownTransformer extends TextTransformer {
@@ -170,8 +170,6 @@ export class SemanticMarkdownTransformer extends TextTransformer {
         };
 
         if (this.addStartIndex) {
-          // For semantic chunking, start index is less meaningful since we merge sections
-          // But we can provide it for compatibility
           const startIndex = text.indexOf(chunk);
           if (startIndex !== -1) {
             metadata.startIndex = startIndex;
@@ -202,9 +200,6 @@ export class SemanticMarkdownTransformer extends TextTransformer {
     return this.createDocuments(texts, metadatas);
   }
 
-  /**
-   * Static factory method following tiktoken pattern
-   */
   static fromTikToken({
     encodingName = 'cl100k_base',
     modelName,
@@ -222,7 +217,6 @@ export class SemanticMarkdownTransformer extends TextTransformer {
       throw new Error('Could not load tiktoken encoding. Please install it with `npm install js-tiktoken`.');
     }
 
-    // Use tiktoken for length function
     const tikTokenCounter = (text: string): number => {
       const allowed =
         options.allowedSpecial === 'all' ? 'all' : options.allowedSpecial ? Array.from(options.allowedSpecial) : [];
