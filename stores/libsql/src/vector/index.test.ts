@@ -1,3 +1,4 @@
+import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 
 import { LibSQLVector } from './index.js';
@@ -1669,4 +1670,24 @@ describe('LibSQLVector', () => {
       await vectorDB.deleteIndex({ indexName: duplicateIndexName });
     });
   });
+});
+
+// Use the shared test suite with factory pattern
+const libSQLVectorDB = new LibSQLVector({
+  connectionUrl: 'file::memory:?cache=shared',
+});
+
+createVectorTestSuite({
+  vector: libSQLVectorDB,
+  createIndex: async (indexName: string) => {
+    await libSQLVectorDB.createIndex({ indexName, dimension: 4, metric: 'cosine' });
+  },
+  deleteIndex: async (indexName: string) => {
+    try {
+      await libSQLVectorDB.deleteIndex({ indexName });
+    } catch (error) {
+      console.error(`Error deleting index ${indexName}:`, error);
+    }
+  },
+  waitForIndexing: () => new Promise(resolve => setTimeout(resolve, 100)),
 });
