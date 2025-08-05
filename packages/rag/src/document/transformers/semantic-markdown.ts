@@ -118,47 +118,23 @@ export class SemanticMarkdownTransformer extends TextTransformer {
     const deepest = Math.max(...workingSections.map(s => s.depth));
 
     for (let depth = deepest; depth > 0; depth--) {
-      let i = 0;
-      while (i < workingSections.length) {
-        const current = workingSections[i]!;
-        if (current.depth !== depth) {
-          i++;
-          continue;
-        }
+      for (let j = 1; j < workingSections.length; j++) {
+        const current = workingSections[j]!;
 
-        let mergeTargetIndex = -1;
-        for (let j = i - 1; j >= 0; j--) {
-          const potentialTarget = workingSections[j]!;
-          if (potentialTarget.depth < current.depth) {
-            mergeTargetIndex = j;
-            break;
-          }
-          if (potentialTarget.depth === current.depth) {
-            mergeTargetIndex = j;
-            break;
-          }
-        }
+        if (current.depth === depth) {
+          const prev = workingSections[j - 1]!;
 
-        if (mergeTargetIndex !== -1) {
-          const targetNode = workingSections[mergeTargetIndex]!;
-          const combinedLength = targetNode.length + current.length;
-
-          if (combinedLength < this.joinThreshold) {
+          if (prev.length + current.length < this.joinThreshold && prev.depth <= current.depth) {
             const title = `${'#'.repeat(current.depth)} ${current.title}`;
-            const formattedContent = `\n\n${title}\n${current.content}`;
-            targetNode.content += formattedContent;
-            targetNode.length += this.countTokens(formattedContent);
+            const formattedTitle = `\n\n${title}`;
 
-            if (targetNode.depth === current.depth) {
-              targetNode.title = targetNode.title ? `${targetNode.title} & ${current.title}` : current.title;
-            }
+            prev.content += `${formattedTitle}\n${current.content}`;
 
-            workingSections.splice(i, 1);
-          } else {
-            i++;
+            prev.length = this.countTokens(prev.content);
+
+            workingSections.splice(j, 1);
+            j--;
           }
-        } else {
-          i++;
         }
       }
     }
@@ -190,6 +166,7 @@ export class SemanticMarkdownTransformer extends TextTransformer {
       this.splitText({ text }).forEach(chunk => {
         const metadata = {
           ..._metadatas[i],
+          tokenCount: this.countTokens(chunk),
         };
 
         if (this.addStartIndex) {
