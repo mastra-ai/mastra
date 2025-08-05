@@ -77,8 +77,8 @@ export class MessageList {
   }: { threadId?: string; resourceId?: string; generateMessageId?: IDGenerator } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
-      this.generateMessageId = generateMessageId;
     }
+    this.generateMessageId = generateMessageId;
     this._agentNetworkAppend = _agentNetworkAppend || false;
   }
 

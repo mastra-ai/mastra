@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.10.19-alpha.1",
+  "version": "0.10.19-alpha.2",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -113,9 +113,10 @@
     "tsup": "^8.5.0",
     "type-fest": "^4.41.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.2-0 <0.13.0-0"
+    "@mastra/core": ">=0.10.2-0 <0.14.0-0"
   }
 }

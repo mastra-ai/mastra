@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mem0",
-  "version": "0.1.6",
+  "version": "0.1.7-alpha.0",
   "description": "Mem0 is a memory-based AI platform that allows you to store, search your memories based on the user's query.",
   "type": "module",
   "keywords": [],
@@ -18,7 +18,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -42,13 +42,14 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
     "vitest": "^3.2.4",
-    "zod": "^3.25.67"
+    "zod": "^3.25.67",
+    "@internal/types-builder": "workspace:*"
   },
   "dependencies": {
     "mem0ai": "^2.1.36"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.7-0 <0.13.0-0",
+    "@mastra/core": ">=0.10.7-0 <0.14.0-0",
     "zod": "^3.0.0"
   }
 }

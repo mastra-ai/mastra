@@ -7,109 +7,169 @@ import { GithubLink } from "@/components/github-link";
 
 # Hierarchical Multi-Agent System
 
-This example demonstrates how to create a hierarchical multi-agent system where agents interact through tool functions, with one agent coordinating the work of others.
+When building complex AI applications, you often need multiple specialized agents to collaborate on different aspects of a task. A hierarchical multi-agent system enables one agent to act as a supervisor, coordinating the work of other agents, each focused on their own area of expertise. This structure allows agents to delegate, collaborate, and produce more advanced outputs than any single agent alone.
 
-The system consists of three agents:
+In this example, this system consists of three agents:
 
-1. A Publisher agent (supervisor) that orchestrates the process
-2. A Copywriter agent that writes the initial content
-3. An Editor agent that refines the content
+1. A [**Copywriter agent**](#copywriter-agent) that writes the initial content.
+2. A [**Editor agent**](#editor-agent) that refines the content.
+3. A [**Publisher agent**](#publisher-agent) that supervises and coordinates the other agents.
 
-First, define the Copywriter agent and its tool:
+## Prerequisites
 
-```ts showLineNumbers copy
+This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your `.env` file.
+
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+## Copywriter agent
+
+This `copywriterAgent` is responsible for writing the initial blog post content based on a given topic.
+
+```typescript filename="src/mastra/agents/example-copywriter-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
-import { anthropic } from "@ai-sdk/anthropic";
+import { Agent } from "@mastra/core/agent";
 
-const copywriterAgent = new Agent({
-  name: "Copywriter",
+export const copywriterAgent = new Agent({
+  name: "copywriter-agent",
   instructions: "You are a copywriter agent that writes blog post copy.",
-  model: anthropic("claude-3-5-sonnet-20241022"),
+  model: openai("gpt-4o")
 });
+```
 
-const copywriterTool = createTool({
+## Copywriter tool
+
+The `copywriterTool` provides an interface to call the `copywriterAgent` and passes in the `topic`.
+
+```typescript filename="src/mastra/tools/example-copywriter-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const copywriterTool = createTool({
   id: "copywriter-agent",
   description: "Calls the copywriter agent to write blog post copy.",
   inputSchema: z.object({
-    topic: z.string().describe("Blog post topic"),
+    topic: z.string()
   }),
   outputSchema: z.object({
-    copy: z.string().describe("Blog post copy"),
+    copy: z.string()
   }),
-  execute: async ({ context }) => {
-    const result = await copywriterAgent.generate(
-      `Create a blog post about ${context.topic}`,
-    );
-    return { copy: result.text };
-  },
+  execute: async ({ context, mastra }) => {
+    const { topic } = context;
+
+    const agent = mastra!.getAgent("copywriterAgent");
+    const result = await agent!.generate(`Create a blog post about ${topic}`);
+
+    return {
+      copy: result.text
+    };
+  }
 });
 ```
 
-Next, define the Editor agent and its tool:
+## Editor agent
 
-```ts showLineNumbers copy
-const editorAgent = new Agent({
+This `editorAgent` takes the initial copy and refines it to improve quality and readability.
+
+```typescript filename="src/mastra/agents/example-editor-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const editorAgent = new Agent({
   name: "Editor",
   instructions: "You are an editor agent that edits blog post copy.",
-  model: openai("gpt-4o-mini"),
+  model: openai("gpt-4o-mini")
 });
+```
 
-const editorTool = createTool({
+## Editor tool
+
+The `editorTool` provides an interface to call the `editorAgent` and passes in the `copy`.
+
+```typescript filename="src/mastra/tools/example-editor-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const editorTool = createTool({
   id: "editor-agent",
   description: "Calls the editor agent to edit blog post copy.",
   inputSchema: z.object({
-    copy: z.string().describe("Blog post copy"),
+    copy: z.string()
   }),
   outputSchema: z.object({
-    copy: z.string().describe("Edited blog post copy"),
+    copy: z.string()
   }),
-  execute: async ({ context }) => {
-    const result = await editorAgent.generate(
-      `Edit the following blog post only returning the edited copy: ${context.copy}`,
-    );
-    return { copy: result.text };
-  },
+  execute: async ({ context, mastra }) => {
+    const { copy } = context;
+
+    const agent = mastra!.getAgent("editorAgent");
+    const result = await agent.generate(`Edit the following blog post only returning the edited copy: ${copy}`);
+
+    return {
+      copy: result.text
+    };
+  }
 });
 ```
 
-Finally, create the Publisher agent that coordinates the others:
+## Publisher agent
 
-```ts showLineNumbers copy
-const publisherAgent = new Agent({
+This `publisherAgent` coordinates the entire process by calling the `copywriterTool` first, then the `editorTool`.
+
+```typescript filename="src/mastra/agents/example-publisher-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+import { copywriterTool } from "../tools/example-copywriter-tool";
+import { editorTool } from "../tools/example-editor-tool";
+
+export const publisherAgent = new Agent({
   name: "publisherAgent",
   instructions:
     "You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.",
-  model: anthropic("claude-3-5-sonnet-20241022"),
-  tools: { copywriterTool, editorTool },
-});
-
-const mastra = new Mastra({
-  agents: { publisherAgent },
+  model: openai("gpt-4o-mini"),
+  tools: { copywriterTool, editorTool }
 });
 ```
 
-To use the entire system:
+## Registering the agents
 
-```ts showLineNumbers copy
-async function main() {
-  const agent = mastra.getAgent("publisherAgent");
-  const result = await agent.generate(
-    "Write a blog post about React JavaScript frameworks. Only return the final edited copy.",
-  );
-  console.log(result.text);
-}
+All three agents are registered in the main Mastra instance so they can be accessed by each other.
 
-main();
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+import { publisherAgent } from "./agents/example-publisher-agent";
+import { copywriterAgent } from "./agents/example-copywriter-agent";
+import { editorAgent } from "./agents/example-editor-agent";
+
+export const mastra = new Mastra({
+  agents: { copywriterAgent, editorAgent, publisherAgent }
+});
 ```
 
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
+## Example usage
+
+Use `getAgent()` to retrieve a reference to the agent, then call `generate()` with a prompt.
+
+```typescript filename="src/test-publisher-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("publisherAgent");
+
+const response = await agent.generate("Write a blog post about React JavaScript frameworks. Only return the final edited copy.");
+
+console.log(response.text);
+```
 
 <GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent"
-  }
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/agents/hierarchical-multi-agent"
 />
+
+## Related
+
+- [Calling Agents](./calling-agents.mdx#from-the-command-line)
