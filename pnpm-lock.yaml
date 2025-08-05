@@ -3380,7 +3380,7 @@ importers:
   voice/openai:
     dependencies:
       openai:
-        specifier: ^5.10.2
+        specifier: ^5.11.0
         version: 5.11.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@6.0.3))(zod@3.25.76)
       zod:
         specifier: ^3.25.67
