@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 5.1.18-alpha.3
+
+### Patch Changes
+
+- f5853be: Added a preview button that opens a modal, rendering the markdown in the working memory text area
+
 ## 5.1.18-alpha.2
 
 ### Patch Changes
