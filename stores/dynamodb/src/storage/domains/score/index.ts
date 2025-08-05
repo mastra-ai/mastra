@@ -58,13 +58,16 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
       traceId: score.traceId || '',
       runId: score.runId,
       scorer: typeof score.scorer === 'string' ? score.scorer : JSON.stringify(score.scorer),
-      extractStepResult:
-        typeof score.extractStepResult === 'string' ? score.extractStepResult : JSON.stringify(score.extractStepResult),
+      preprocessStepResult:
+        typeof score.preprocessStepResult === 'string'
+          ? score.preprocessStepResult
+          : JSON.stringify(score.preprocessStepResult),
       analyzeStepResult:
         typeof score.analyzeStepResult === 'string' ? score.analyzeStepResult : JSON.stringify(score.analyzeStepResult),
       score: score.score,
       reason: score.reason,
-      extractPrompt: score.extractPrompt,
+      preprocessPrompt: score.preprocessPrompt,
+      generateScorePrompt: score.generateScorePrompt,
       analyzePrompt: score.analyzePrompt,
       reasonPrompt: score.reasonPrompt,
       input: typeof score.input === 'string' ? score.input : JSON.stringify(score.input),
