@@ -152,20 +152,27 @@ export class MDocument {
     }
   }
 
-  private async chunkBy<K extends ChunkStrategy>(strategy: K, options?: StrategyOptions[K]): Promise<void> {
-    const strategyMap: { [S in ChunkStrategy]: (options?: StrategyOptions[S]) => Promise<void> } = {
-      recursive: options => this.chunkRecursive(options),
-      character: options => this.chunkCharacter(options),
-      token: options => this.chunkToken(options),
-      markdown: options => this.chunkMarkdown(options),
-      html: options => this.chunkHTML(options),
-      json: options => this.chunkJSON(options),
-      latex: options => this.chunkLatex(options),
-      sentence: options => this.chunkSentence(options),
-      'semantic-markdown': options => this.chunkSemanticMarkdown(options),
-    };
+  private _strategyMap?: { [S in ChunkStrategy]: (options?: StrategyOptions[S]) => Promise<void> };
 
-    const chunkingFunc = strategyMap[strategy];
+  private get strategyMap() {
+    if (!this._strategyMap) {
+      this._strategyMap = {
+        recursive: options => this.chunkRecursive(options),
+        character: options => this.chunkCharacter(options),
+        token: options => this.chunkToken(options),
+        markdown: options => this.chunkMarkdown(options),
+        html: options => this.chunkHTML(options),
+        json: options => this.chunkJSON(options),
+        latex: options => this.chunkLatex(options),
+        sentence: options => this.chunkSentence(options),
+        'semantic-markdown': options => this.chunkSemanticMarkdown(options),
+      };
+    }
+    return this._strategyMap;
+  }
+
+  private async chunkBy<K extends ChunkStrategy>(strategy: K, options?: StrategyOptions[K]): Promise<void> {
+    const chunkingFunc = this.strategyMap[strategy];
     if (chunkingFunc) {
       await chunkingFunc(options);
     } else {
