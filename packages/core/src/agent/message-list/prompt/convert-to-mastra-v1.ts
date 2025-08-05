@@ -355,7 +355,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
         }
 
         if (content && !isLastMessage) {
-          pushOrCombine({ role: 'assistant', ...fields, type: 'text', content: content });
+          pushOrCombine({ role: 'assistant', ...fields, type: 'text', content: content || '' });
         }
 
         break;
