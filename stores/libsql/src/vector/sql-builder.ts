@@ -73,13 +73,14 @@ function buildElemMatchConditions(value: any) {
       // Nested field with operators (count: { $gt: 20 })
       const { sql, values } = buildCondition(field, fieldValue, '');
       // Replace the field path with elem.value path
-      const elemSql = sql.replace(pattern, `json_extract(elem.value, '$."${field}"')`);
+      const jsonPath = parseJsonPathKey(field);
+      const elemSql = sql.replace(pattern, `json_extract(elem.value, '$.${jsonPath}')`);
       return { sql: elemSql, values };
     } else {
-      const parsedFieldKey = parseFieldKey(field);
+      const jsonPath = parseJsonPathKey(field);
       // Simple field equality (warehouse: 'A')
       return {
-        sql: `json_extract(elem.value, '$."${parsedFieldKey}"') = ?`,
+        sql: `json_extract(elem.value, '$.${jsonPath}') = ?`,
         values: [fieldValue],
       };
     }

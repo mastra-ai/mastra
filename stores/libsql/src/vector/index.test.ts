@@ -285,7 +285,7 @@ describe('LibSQLVector', () => {
       it('should handle filters correctly', async () => {
         const results = await vectorDB.query({ indexName, queryVector: [1, 0, 0], topK: 10, filter: { type: 'a' } });
 
-        expect(results).toHaveLength(1);
+        expect(results).toHaveLength(2);
         results.forEach(result => {
           expect(result?.metadata?.type).toBe('a');
         });
