@@ -97,7 +97,6 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
       }
 
       case 'assistant': {
-        const hasToolInvocationsInParts = message.content.parts?.some(part => part.type === 'tool-invocation') ?? false;
         if (message.content.parts != null) {
           let currentStep = 0;
           let blockHasToolInvocations = false;
@@ -226,7 +225,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
 
           // Check if there are toolInvocations that weren't processed from parts
           const toolInvocations = message.content.toolInvocations;
-          if (toolInvocations && toolInvocations.length > 0 && !hasToolInvocationsInParts) {
+          if (toolInvocations && toolInvocations.length > 0) {
             // Find tool invocations that weren't already processed from parts
             const processedToolCallIds = new Set<string>();
             for (const part of message.content.parts) {
@@ -298,7 +297,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
           break;
         }
 
-        const toolInvocations = message.content.toolInvocations?.filter(ti => ti.toolName !== 'updateWorkingMemory');
+        const toolInvocations = message.content.toolInvocations;
 
         if (toolInvocations == null || toolInvocations.length === 0) {
           pushOrCombine({ role: 'assistant', ...fields, content: content || '', type: 'text' });
@@ -355,7 +354,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
           }
         }
 
-        if (content && (!inputParts || inputParts.length === 0)) {
+        if (content && !isLastMessage) {
           pushOrCombine({ role: 'assistant', ...fields, type: 'text', content: content });
         }
 

@@ -498,13 +498,93 @@ describe('convertToV1Messages', () => {
 
     const result = convertToV1Messages([testMessage]);
 
+    const sharedFields = {
+      id: testMessage.id,
+      createdAt: testMessage.createdAt,
+      resourceId: testMessage.resourceId,
+      threadId: testMessage.threadId,
+    };
+
     // The actual behavior:
     // 1. text
     // 2. tool-call (from parts)
     // 3. tool-result (from parts)
-    // Only 3 deduplicated messages are received
-    // Total: 3 messages
-    expect(result.length).toBe(3);
+    // 4. tool-call (both array invocations grouped together since same step)
+    // 5. tool-result (both array results grouped together)
+    // Total: 5 messages
+    expect(result.length).toBe(5);
+    expect(result).toEqual([
+      expect.objectContaining({
+        ...sharedFields,
+        role: 'assistant',
+        type: 'text',
+        content: 'Multiple tools test',
+      }),
+      expect.objectContaining({
+        ...sharedFields,
+        role: 'assistant',
+        type: 'tool-call',
+        content: [
+          expect.objectContaining({
+            type: 'tool-call',
+            toolCallId: 'tool-in-parts-1',
+            toolName: 'searchTool',
+            args: { query: 'best restaurants' },
+          }),
+        ],
+      }),
+      expect.objectContaining({
+        ...sharedFields,
+        role: 'tool',
+        type: 'tool-result',
+        content: [
+          expect.objectContaining({
+            type: 'tool-result',
+            toolCallId: 'tool-in-parts-1',
+            toolName: 'searchTool',
+            result: { results: ['Restaurant A', 'Restaurant B'] },
+          }),
+        ],
+      }),
+      expect.objectContaining({
+        ...sharedFields,
+        role: 'assistant',
+        type: 'tool-call',
+        content: [
+          expect.objectContaining({
+            type: 'tool-call',
+            toolCallId: 'tool-in-array-1',
+            toolName: 'reservationTool',
+            args: { restaurant: 'Restaurant A', time: '19:00' },
+          }),
+          expect.objectContaining({
+            type: 'tool-call',
+            toolCallId: 'tool-in-array-2',
+            toolName: 'mapsTool',
+            args: { destination: 'Restaurant A' },
+          }),
+        ],
+      }),
+      expect.objectContaining({
+        ...sharedFields,
+        role: 'tool',
+        type: 'tool-result',
+        content: [
+          expect.objectContaining({
+            type: 'tool-result',
+            toolCallId: 'tool-in-array-1',
+            toolName: 'reservationTool',
+            result: { confirmed: true, reservationId: 'RES123' },
+          }),
+          expect.objectContaining({
+            type: 'tool-result',
+            toolCallId: 'tool-in-array-2',
+            toolName: 'mapsTool',
+            result: { distance: '2.5km', duration: '10 minutes' },
+          }),
+        ],
+      }),
+    ]);
 
     // Verify no duplicate tool calls
     const toolCallContents: string[] = [];
@@ -518,10 +598,12 @@ describe('convertToV1Messages', () => {
       }
     });
 
-    // Should have 1 unique tool call (only from parts, toolInvocations ignored due to if/else logic)
-    expect(toolCallContents.length).toBe(1);
-    expect(new Set(toolCallContents).size).toBe(1);
-    // toolInvocations array is not processed when parts contain tool-invocations
+    // Should have 3 unique tool calls
+    expect(toolCallContents.length).toBe(3);
+    expect(new Set(toolCallContents).size).toBe(3);
+    expect(toolCallContents).toContain('tool-in-parts-1');
+    expect(toolCallContents).toContain('tool-in-array-1');
+    expect(toolCallContents).toContain('tool-in-array-2');
   });
 
   it('should handle weather tool message with text before and after tool invocation', () => {
