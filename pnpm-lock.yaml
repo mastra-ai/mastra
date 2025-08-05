@@ -820,7 +820,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.0
-        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1201,7 +1201,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.0
-        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
+        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1248,11 +1248,11 @@ importers:
         specifier: ^16.6.1
         version: 16.6.1
       hono:
-        specifier: ^4.8.9
-        version: 4.8.9
+        specifier: ^4.8.11
+        version: 4.8.12
       hono-openapi:
         specifier: ^0.4.8
-        version: 0.4.8(hono@4.8.9)(openapi-types@12.1.3)(zod@3.25.76)
+        version: 0.4.8(hono@4.8.12)(openapi-types@12.1.3)(zod@3.25.76)
       json-schema:
         specifier: ^0.4.0
         version: 0.4.0
@@ -1460,8 +1460,8 @@ importers:
         specifier: ^14.1.0
         version: 14.1.0
       hono:
-        specifier: ^4.8.9
-        version: 4.8.9
+        specifier: ^4.8.11
+        version: 4.8.12
       package-directory:
         specifier: ^8.1.0
         version: 8.1.0
@@ -1486,10 +1486,10 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.9)
+        version: 1.17.1(hono@4.8.12)
       '@hono/swagger-ui':
         specifier: ^0.5.2
-        version: 0.5.2(hono@4.8.9)
+        version: 0.5.2(hono@4.8.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1522,7 +1522,7 @@ importers:
         version: 2.1.0
       hono-openapi:
         specifier: ^0.4.8
-        version: 0.4.8(hono@4.8.9)(openapi-types@12.1.3)(zod@3.25.76)
+        version: 0.4.8(hono@4.8.12)(openapi-types@12.1.3)(zod@3.25.76)
       rollup-plugin-visualizer:
         specifier: ^5.14.0
         version: 5.14.0(rollup@4.46.2)
@@ -1567,8 +1567,8 @@ importers:
         version: 3.25.76
     devDependencies:
       '@ai-sdk/openai':
-        specifier: latest
-        version: 2.0.0(zod@3.25.76)
+        specifier: ^1.3.22
+        version: 1.3.23(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1700,7 +1700,7 @@ importers:
         version: 1.3.23(zod@3.25.76)
       '@hono/node-server':
         specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.9)
+        version: 1.17.1(hono@4.8.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1708,8 +1708,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@mendable/firecrawl-js':
-        specifier: ^1.29.2
-        version: 1.29.2
+        specifier: ^1.29.3
+        version: 1.29.3
       '@microsoft/api-extractor':
         specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.9)
@@ -1723,11 +1723,11 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       hono:
-        specifier: ^4.8.9
-        version: 4.8.9
+        specifier: ^4.8.11
+        version: 4.8.12
       hono-mcp-server-sse-transport:
         specifier: 0.0.7
-        version: 0.0.7(@modelcontextprotocol/sdk@1.13.3)(hono@4.8.9)
+        version: 0.0.7(@modelcontextprotocol/sdk@1.13.3)(hono@4.8.12)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
@@ -1782,7 +1782,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.9)
+        version: 1.17.1(hono@4.8.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1805,8 +1805,8 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       hono:
-        specifier: ^4.8.9
-        version: 4.8.9
+        specifier: ^4.8.11
+        version: 4.8.12
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
@@ -1837,7 +1837,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.9)
+        version: 1.17.1(hono@4.8.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1860,8 +1860,8 @@ importers:
         specifier: ^9.30.1
         version: 9.31.0(jiti@2.4.2)
       hono:
-        specifier: ^4.8.9
-        version: 4.8.9
+        specifier: ^4.8.11
+        version: 4.8.12
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(jiti@2.4.2)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.0)
@@ -1921,8 +1921,8 @@ importers:
   packages/memory:
     dependencies:
       '@upstash/redis':
-        specifier: ^1.35.1
-        version: 1.35.1
+        specifier: ^1.35.3
+        version: 1.35.3
       ai:
         specifier: ^4.3.16
         version: 4.3.19(react@19.1.0)(zod@3.25.76)
@@ -2336,11 +2336,11 @@ importers:
         version: 3.25.76
     devDependencies:
       '@ai-sdk/cohere':
-        specifier: latest
-        version: 2.0.0(zod@3.25.76)
+        specifier: ^1.2.10
+        version: 1.2.10(zod@3.25.76)
       '@ai-sdk/openai':
-        specifier: latest
-        version: 2.0.0(zod@3.25.76)
+        specifier: ^1.3.22
+        version: 1.3.23(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -2532,8 +2532,8 @@ importers:
   stores/clickhouse:
     dependencies:
       '@clickhouse/client':
-        specifier: ^1.11.2
-        version: 1.11.2
+        specifier: ^1.12.0
+        version: 1.12.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3068,8 +3068,8 @@ importers:
   stores/upstash:
     dependencies:
       '@upstash/redis':
-        specifier: ^1.35.1
-        version: 1.35.1
+        specifier: ^1.35.3
+        version: 1.35.3
       '@upstash/vector':
         specifier: ^1.2.2
         version: 1.2.2
@@ -3554,13 +3554,13 @@ importers:
     dependencies:
       '@inngest/realtime':
         specifier: ^0.3.1
-        version: 0.3.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.9)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)(typescript@5.8.3)
+        version: 0.3.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.12)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)(typescript@5.8.3)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
       inngest:
         specifier: ^3.40.1
-        version: 3.40.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.9)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
+        version: 3.40.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.12)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
       zod:
         specifier: ^3.25.67
         version: 3.25.76
@@ -3570,7 +3570,7 @@ importers:
         version: 1.3.23(zod@3.25.76)
       '@hono/node-server':
         specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.9)
+        version: 1.17.1(hono@4.8.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3602,8 +3602,8 @@ importers:
         specifier: 7.1.0
         version: 7.1.0
       hono:
-        specifier: ^4.8.9
-        version: 4.8.9
+        specifier: ^4.8.11
+        version: 4.8.12
       inngest-cli:
         specifier: 1.8.2
         version: 1.8.2(encoding@0.1.13)
@@ -3637,11 +3637,11 @@ packages:
     peerDependencies:
       zod: ^3.0.0
 
-  '@ai-sdk/cohere@2.0.0':
-    resolution: {integrity: sha512-nn4iNkwYm3d32nYCpss+oS5urjxwyRXeqiBuONSYcIZ4VguLirykZ8cpl6ebtjaQJ08JKzljVf2xVHbPZw+rnw==}
+  '@ai-sdk/cohere@1.2.10':
+    resolution: {integrity: sha512-OaUwd5xj4bxSO8hdCbX1a5uUlTouU8FcodSuRON6xDSsmjZIvQL4O2G1XzcidxiQVL8JQuA+M0tHZOwGxSL96A==}
     engines: {node: '>=18'}
     peerDependencies:
-      zod: ^3.25.76 || ^4
+      zod: ^3.0.0
 
   '@ai-sdk/google@1.2.21':
     resolution: {integrity: sha512-CbkZ4EYHfxLQzk5dr8Tw/37gug/61EzWelZruKiebEjzAlKSmKQ7625GeLu5w6NibWa5f9cOpEmTxm4kUD8w5Q==}
@@ -3654,12 +3654,6 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
-
-  '@ai-sdk/openai@2.0.0':
-    resolution: {integrity: sha512-G0WY5K81JwGpuX9HEmP2VTdt3N9m43qPnGT4fWkXcpu6Y2B05nnjs8k1r/csCJd8+TkYC6esjBABQYHxdMOejQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4
 
   '@ai-sdk/provider-utils@2.1.10':
     resolution: {integrity: sha512-4GZ8GHjOFxePFzkl3q42AU0DQOtTQ5w09vmaWUf/pKFXJPizlnzKSUkF0f+VkapIUfDugyMqPMT1ge8XQzVI7Q==}
@@ -3676,22 +3670,12 @@ packages:
     peerDependencies:
       zod: ^3.23.8
 
-  '@ai-sdk/provider-utils@3.0.0':
-    resolution: {integrity: sha512-BoQZtGcBxkeSH1zK+SRYNDtJPIPpacTeiMZqnG4Rv6xXjEwM0FH4MGs9c+PlhyEWmQCzjRM2HAotEydFhD4dYw==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4
-
   '@ai-sdk/provider@1.0.9':
     resolution: {integrity: sha512-jie6ZJT2ZR0uVOVCDc9R2xCX5I/Dum/wEK28lx21PJx6ZnFAN9EzD2WsPhcDWfCgGx3OAZZ0GyM3CEobXpa9LA==}
     engines: {node: '>=18'}
 
   '@ai-sdk/provider@1.1.3':
     resolution: {integrity: sha512-qZMxYJ0qqX/RfnuIaab+zp8UAeJn/ygXXAffR5I4N0n1IrvA6qBsjc8hXLmBiMV2zoXlifkacF7sEFnYnjBcqg==}
-    engines: {node: '>=18'}
-
-  '@ai-sdk/provider@2.0.0':
-    resolution: {integrity: sha512-6o7Y2SeO9vFKB8lArHXehNuusnpddKPk7xqL7T2/b+OvXMRIXUO1rR4wcv1hAFUAT9avGZshty3Wlua/XA7TvA==}
     engines: {node: '>=18'}
 
   '@ai-sdk/react@1.2.12':
@@ -4913,11 +4897,11 @@ packages:
     resolution: {integrity: sha512-Lbt0/Q9W9BJtGz1IITdmeqal7y1zp9EaxOEMvsTEDhOxKf/0F/M1d0gJmHEU0puQzYPp9zJsIWC2yJjbgy3Y3Q==}
     engines: {node: '>=18.17.0'}
 
-  '@clickhouse/client-common@1.11.2':
-    resolution: {integrity: sha512-H4ECHqaipzMgiZKqpb1Z4N3Ofq+lVTCn8I59XsSynqrsfR4jWZD3PipXVvIzMpDmTMvrlJWrOwAdm0DMNiMQbA==}
+  '@clickhouse/client-common@1.12.0':
+    resolution: {integrity: sha512-cyI4n7u9jK30d9q1q0ceQ7IwJ/MtTs5HxoQfc8yHpN+ok5wqaU2jAtq5hpa1z7C7sS1pDy/ZOFmOzg1v1F683g==}
 
-  '@clickhouse/client@1.11.2':
-    resolution: {integrity: sha512-ZE7Q1qxsDNXCkGPf1zqmhpZpwAKxKT+1s4Z432J1Mb2Gm26Y4tG/sJoug81AfAJTt6s7taO2vzNBAKfSR3SStg==}
+  '@clickhouse/client@1.12.0':
+    resolution: {integrity: sha512-vJUSX8THhTzlVn0WxPukVjOgNRaSoY02ubQkB0LpqNoHFxXuF5jQZZAYvGZWpBGbYQ/4gfPrqu8g4TX5UKeNxA==}
     engines: {node: '>=16'}
 
   '@cloudflare/workerd-darwin-64@1.20250712.0':
@@ -6506,8 +6490,8 @@ packages:
       '@mastra/core': ^0.10.0-alpha.0
       ai: ^4.0.0
 
-  '@mendable/firecrawl-js@1.29.2':
-    resolution: {integrity: sha512-Yv3lyCbGTm8hRSrRzRi2eqJFXZNyTuL1y34tABSSxNPqlvL7HJV+f1zPnhksZ48gPcn/OJm/E68MDnSfTYXKzA==}
+  '@mendable/firecrawl-js@1.29.3':
+    resolution: {integrity: sha512-+uvDktesJmVtiwxMtimq+3f5bKlsan4T7TokxOI7DbxFkApwrRNss5GYEXbInveMTz8LpGth/9Ch5BTwCqrpfA==}
     engines: {node: '>=22.0.0'}
 
   '@microsoft/api-extractor-model@7.30.6':
@@ -9370,8 +9354,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@upstash/redis@1.35.1':
-    resolution: {integrity: sha512-sIMuAMU9IYbE2bkgDby8KLoQKRiBMXn0moXxqLvUmQ7VUu2CvulZLtK8O0x3WQZFvvZhU5sRC2/lOVZdGfudkA==}
+  '@upstash/redis@1.35.3':
+    resolution: {integrity: sha512-hSjv66NOuahW3MisRGlSgoszU2uONAY2l5Qo3Sae8OT3/Tng9K+2/cBRuyPBX8egwEGcNNCF9+r0V6grNnhL+w==}
 
   '@upstash/vector@1.2.2':
     resolution: {integrity: sha512-ptQ9xnxtKqmpNK52PCcHCszlPOLxIBfjsv7ty8RoF95pkjctS9rSjTQ3Pl9bx5VFbpDj+0dMXw88WLt6swDkgQ==}
@@ -11742,8 +11726,8 @@ packages:
       zod-openapi:
         optional: true
 
-  hono@4.8.9:
-    resolution: {integrity: sha512-ERIxkXMRhUxGV7nS/Af52+j2KL60B1eg+k6cPtgzrGughS+espS9KQ7QO0SMnevtmRlBfAcN0mf1jKtO6j/doA==}
+  hono@4.8.12:
+    resolution: {integrity: sha512-MQSKk1Mg7b74k8l+A025LfysnLtXDKkE4pLaSsYRQC5iy85lgZnuyeQ1Wynair9mmECzoLu+FtJtqNZSoogBDQ==}
     engines: {node: '>=16.9.0'}
 
   hpagent@1.2.0:
@@ -16177,10 +16161,10 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/cohere@2.0.0(zod@3.25.76)':
+  '@ai-sdk/cohere@1.2.10(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.0(zod@3.25.76)
+      '@ai-sdk/provider': 1.1.3
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
       zod: 3.25.76
 
   '@ai-sdk/google@1.2.21(zod@3.25.76)':
@@ -16193,12 +16177,6 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 1.1.3
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
-      zod: 3.25.76
-
-  '@ai-sdk/openai@2.0.0(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.0(zod@3.25.76)
       zod: 3.25.76
 
   '@ai-sdk/provider-utils@2.1.10(zod@3.25.76)':
@@ -16217,23 +16195,11 @@ snapshots:
       secure-json-parse: 2.7.0
       zod: 3.25.76
 
-  '@ai-sdk/provider-utils@3.0.0(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 2.0.0
-      '@standard-schema/spec': 1.0.0
-      eventsource-parser: 3.0.3
-      zod: 3.25.76
-      zod-to-json-schema: 3.24.6(zod@3.25.76)
-
   '@ai-sdk/provider@1.0.9':
     dependencies:
       json-schema: 0.4.0
 
   '@ai-sdk/provider@1.1.3':
-    dependencies:
-      json-schema: 0.4.0
-
-  '@ai-sdk/provider@2.0.0':
     dependencies:
       json-schema: 0.4.0
 
@@ -18389,11 +18355,11 @@ snapshots:
     dependencies:
       csstype: 3.1.3
 
-  '@clickhouse/client-common@1.11.2': {}
+  '@clickhouse/client-common@1.12.0': {}
 
-  '@clickhouse/client@1.11.2':
+  '@clickhouse/client@1.12.0':
     dependencies:
-      '@clickhouse/client-common': 1.11.2
+      '@clickhouse/client-common': 1.12.0
 
   '@cloudflare/workerd-darwin-64@1.20250712.0':
     optional: true
@@ -19080,13 +19046,13 @@ snapshots:
 
   '@hey-api/client-fetch@0.3.4': {}
 
-  '@hono/node-server@1.17.1(hono@4.8.9)':
+  '@hono/node-server@1.17.1(hono@4.8.12)':
     dependencies:
-      hono: 4.8.9
+      hono: 4.8.12
 
-  '@hono/swagger-ui@0.5.2(hono@4.8.9)':
+  '@hono/swagger-ui@0.5.2(hono@4.8.12)':
     dependencies:
-      hono: 4.8.9
+      hono: 4.8.12
 
   '@hookform/resolvers@3.10.0(react-hook-form@7.59.0(react@19.1.0))':
     dependencies:
@@ -19276,11 +19242,11 @@ snapshots:
       '@types/node': 20.19.9
       typescript: 5.8.3
 
-  '@inngest/realtime@0.3.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.9)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)(typescript@5.8.3)':
+  '@inngest/realtime@0.3.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.12)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)(typescript@5.8.3)':
     dependencies:
       '@standard-schema/spec': 1.0.0
       debug: 4.4.1(supports-color@8.1.1)
-      inngest: 3.40.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.9)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
+      inngest: 3.40.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.12)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
       react: 19.1.0
       zod: 3.25.76
     transitivePeerDependencies:
@@ -19818,7 +19784,7 @@ snapshots:
       - aws-crt
       - encoding
 
-  '@mendable/firecrawl-js@1.29.2':
+  '@mendable/firecrawl-js@1.29.3':
     dependencies:
       axios: 1.11.0(debug@4.4.1)
       typescript-event-target: 1.1.1
@@ -20116,7 +20082,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
+  '@opentelemetry/auto-instrumentations-node@0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -20165,7 +20131,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.3.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.3(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -21246,7 +21212,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -23334,7 +23300,7 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.9.2':
     optional: true
 
-  '@upstash/redis@1.35.1':
+  '@upstash/redis@1.35.3':
     dependencies:
       uncrypto: 0.1.3
 
@@ -26242,20 +26208,20 @@ snapshots:
 
   highlightjs-vue@1.0.0: {}
 
-  hono-mcp-server-sse-transport@0.0.7(@modelcontextprotocol/sdk@1.13.3)(hono@4.8.9):
+  hono-mcp-server-sse-transport@0.0.7(@modelcontextprotocol/sdk@1.13.3)(hono@4.8.12):
     dependencies:
       '@modelcontextprotocol/sdk': 1.13.3
-      hono: 4.8.9
+      hono: 4.8.12
 
-  hono-openapi@0.4.8(hono@4.8.9)(openapi-types@12.1.3)(zod@3.25.76):
+  hono-openapi@0.4.8(hono@4.8.12)(openapi-types@12.1.3)(zod@3.25.76):
     dependencies:
       json-schema-walker: 2.0.0
       openapi-types: 12.1.3
     optionalDependencies:
-      hono: 4.8.9
+      hono: 4.8.12
       zod: 3.25.76
 
-  hono@4.8.9: {}
+  hono@4.8.12: {}
 
   hpagent@1.2.0: {}
 
@@ -26414,7 +26380,7 @@ snapshots:
       - encoding
       - supports-color
 
-  inngest@3.40.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.9)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3):
+  inngest@3.40.1(encoding@0.1.13)(express@5.1.0)(hono@4.8.12)(next@15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3):
     dependencies:
       '@bufbuild/protobuf': 2.5.2
       '@inngest/ai': 0.1.4
@@ -26440,7 +26406,7 @@ snapshots:
       zod: 3.22.5
     optionalDependencies:
       express: 5.1.0
-      hono: 4.8.9
+      hono: 4.8.12
       next: 15.3.4(@opentelemetry/api@1.9.0)(@playwright/test@1.53.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       typescript: 5.8.3
     transitivePeerDependencies:
