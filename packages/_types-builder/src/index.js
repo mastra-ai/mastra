@@ -3,6 +3,7 @@ import { promisify } from 'util';
 import { globby } from 'globby';
 import fs from 'fs/promises';
 import path from 'path';
+import { statSync } from 'fs';
 
 const exec = promisify(originalExec);
 const rgxFrom = /(?<=from )['|"](.*)['|"]/gm;
@@ -30,6 +31,17 @@ export async function generateTypes(rootDir) {
         }
 
         modified = true;
+
+        // if the import is a directory, append /index.js to it, else just add .js
+        try {
+          // console.log('statfsSync', path.join(path.dirname(fullPath), p));
+          if (statSync(path.join(path.dirname(fullPath), p)).isDirectory()) {
+            return `'${p}/index.js'`;
+          }
+        } catch {
+          // do nothing
+        }
+
         return `'${p}.js'`;
       });
 
