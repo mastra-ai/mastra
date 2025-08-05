@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.13.0-alpha.3
+
+### Patch Changes
+
+- d0496e6: dependencies updates:
+  - Updated dependency [`hono@^4.8.12` ↗︎](https://www.npmjs.com/package/hono/v/4.8.12) (from `^4.8.11`, in `dependencies`)
+- Updated dependencies [d0496e6]
+  - @mastra/core@0.13.0-alpha.3
+  - @mastra/server@0.13.0-alpha.3
+
 ## 0.13.0-alpha.2
 
 ### Patch Changes
