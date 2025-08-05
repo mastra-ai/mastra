@@ -15,33 +15,17 @@ function parseJSON(jsonString: string): any {
 }
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  let input = undefined;
-  let output = undefined;
-  let preprocessStepResult = undefined;
-  let analyzeStepResult = undefined;
-
-  if (row.input) {
-    input = parseJSON(row.input);
-  }
-
-  if (row.output) {
-    output = parseJSON(row.output);
-  }
-
-  if (row.preprocessStepResult) {
-    preprocessStepResult = parseJSON(row.preprocessStepResult);
-  }
-
-  if (row.analyzeStepResult) {
-    analyzeStepResult = parseJSON(row.analyzeStepResult);
-  }
-
   return {
     ...row,
-    input,
-    output,
-    preprocessStepResult,
-    analyzeStepResult,
+    input: parseJSON(row.input),
+    scorer: parseJSON(row.scorer),
+    preprocessStepResult: parseJSON(row.preprocessStepResult),
+    analyzeStepResult: parseJSON(row.analyzeStepResult),
+    metadata: parseJSON(row.metadata),
+    output: parseJSON(row.output),
+    additionalContext: parseJSON(row.additionalContext),
+    runtimeContext: parseJSON(row.runtimeContext),
+    entity: parseJSON(row.entity),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   } as ScoreRowData;
@@ -98,16 +82,33 @@ export class ScoresMSSQL extends ScoresStorage {
       // Generate ID like other storage implementations
       const scoreId = crypto.randomUUID();
 
-      const { input, output, preprocessStepResult, analyzeStepResult, ...rest } = score;
+      const {
+        scorer,
+        preprocessStepResult,
+        analyzeStepResult,
+        metadata,
+        input,
+        output,
+        additionalContext,
+        runtimeContext,
+        entity,
+        ...rest
+      } = score;
+
       await this.operations.insert({
         tableName: TABLE_SCORERS,
         record: {
           id: scoreId,
           ...rest,
-          input: JSON.stringify(input),
-          output: JSON.stringify(output),
+          input: JSON.stringify(input) || '',
+          output: JSON.stringify(output) || '',
           preprocessStepResult: preprocessStepResult ? JSON.stringify(preprocessStepResult) : null,
           analyzeStepResult: analyzeStepResult ? JSON.stringify(analyzeStepResult) : null,
+          metadata: metadata ? JSON.stringify(metadata) : null,
+          additionalContext: additionalContext ? JSON.stringify(additionalContext) : null,
+          runtimeContext: runtimeContext ? JSON.stringify(runtimeContext) : null,
+          entity: entity ? JSON.stringify(entity) : null,
+          scorer: scorer ? JSON.stringify(scorer) : null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },

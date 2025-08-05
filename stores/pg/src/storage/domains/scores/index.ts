@@ -1,24 +1,23 @@
 import type { PaginationInfo, StoragePagination } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData } from '@mastra/core/scores';
-import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import { safelyParseJSON, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  let input = undefined;
-
-  if (row.input) {
-    try {
-      input = JSON.parse(row.input);
-    } catch {
-      input = row.input;
-    }
-  }
   return {
     ...row,
-    input,
+    input: safelyParseJSON(row.input),
+    scorer: safelyParseJSON(row.scorer),
+    preprocessStepResult: safelyParseJSON(row.preprocessStepResult),
+    analyzeStepResult: safelyParseJSON(row.analyzeStepResult),
+    metadata: safelyParseJSON(row.metadata),
+    output: safelyParseJSON(row.output),
+    additionalContext: safelyParseJSON(row.additionalContext),
+    runtimeContext: safelyParseJSON(row.runtimeContext),
+    entity: safelyParseJSON(row.entity),
     createdAt: row.createdAtZ || row.createdAt,
     updatedAt: row.updatedAtZ || row.updatedAt,
   } as ScoreRowData;
@@ -99,7 +98,7 @@ export class ScoresPG extends ScoresStorage {
           perPage: pagination.perPage,
           hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
         },
-        scores: result,
+        scores: result.map(transformScoreRow),
       };
     } catch (error) {
       throw new MastraError(
@@ -118,13 +117,33 @@ export class ScoresPG extends ScoresStorage {
       // Generate ID like other storage implementations
       const scoreId = crypto.randomUUID();
 
-      const { input, ...rest } = score;
+      const {
+        scorer,
+        preprocessStepResult,
+        analyzeStepResult,
+        metadata,
+        input,
+        output,
+        additionalContext,
+        runtimeContext,
+        entity,
+        ...rest
+      } = score;
+
       await this.operations.insert({
         tableName: TABLE_SCORERS,
         record: {
           id: scoreId,
           ...rest,
-          input: JSON.stringify(input),
+          input: JSON.stringify(input) || '',
+          output: JSON.stringify(output) || '',
+          scorer: scorer ? JSON.stringify(scorer) : null,
+          preprocessStepResult: preprocessStepResult ? JSON.stringify(preprocessStepResult) : null,
+          analyzeStepResult: analyzeStepResult ? JSON.stringify(analyzeStepResult) : null,
+          metadata: metadata ? JSON.stringify(metadata) : null,
+          additionalContext: additionalContext ? JSON.stringify(additionalContext) : null,
+          runtimeContext: runtimeContext ? JSON.stringify(runtimeContext) : null,
+          entity: entity ? JSON.stringify(entity) : null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
@@ -179,7 +198,7 @@ export class ScoresPG extends ScoresStorage {
           perPage: pagination.perPage,
           hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
         },
-        scores: result,
+        scores: result.map(transformScoreRow),
       };
     } catch (error) {
       throw new MastraError(
@@ -231,7 +250,7 @@ export class ScoresPG extends ScoresStorage {
           perPage: pagination.perPage,
           hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
         },
-        scores: result,
+        scores: result.map(transformScoreRow),
       };
     } catch (error) {
       throw new MastraError(
