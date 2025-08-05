@@ -1,5 +1,31 @@
 # @mastra/core
 
+## 0.13.0
+
+### Minor Changes
+
+- ea0c5f2: Update scorer api
+
+### Patch Changes
+
+- cb36de0: dependencies updates:
+  - Updated dependency [`hono@^4.8.11` ↗︎](https://www.npmjs.com/package/hono/v/4.8.11) (from `^4.8.9`, in `dependencies`)
+- d0496e6: dependencies updates:
+  - Updated dependency [`hono@^4.8.12` ↗︎](https://www.npmjs.com/package/hono/v/4.8.12) (from `^4.8.11`, in `dependencies`)
+- a82b851: Exclude getVoice, getScorers from agent trace
+- 41a0a0e: fixed a minor bug where ID generator wasn't being properly bound to instances of MessageList
+- 2871020: update safelyParseJSON to check for value of param when handling parse
+- 94f4812: lazy initialize Run's `AbortController`
+- e202b82: Add getThreadsByResourceIdPaginated to the Memory Class
+- e00f6a0: Fixed an issue where converting from v2->v1 messages would not properly split text and tool call parts into multiple messages
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- b0e43c1: Fixed an issue where branching workflow steps maintained "suspended" status even after they've been successfully resumed and executed.
+- 5d377e5: Fix tracing of runtimeContext values"
+- 1fb812e: Fixed a bug in parallel workflow execution where resuming only one of multiple suspended parallel steps incorrectly completed the entire parallel block. The fix ensures proper execution and state management when resuming from suspension in parallel workflows.
+- 35c5798: Add support for transpilePackages option
+- Updated dependencies [4a406ec]
+  - @mastra/schema-compat@0.10.6
+
 ## 0.13.0-alpha.3
 
 ### Patch Changes
