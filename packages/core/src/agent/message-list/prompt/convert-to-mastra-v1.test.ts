@@ -752,7 +752,7 @@ describe('convertToV1Messages', () => {
 
     // Verify user question
     expect(result[4].role).toBe('user');
-    expect(result[4].content).toBe('ok what is humidity ?');
+    expect(result[4].content).toEqual([{ type: 'text', text: 'ok what is humidity ?' }]);
 
     // Verify assistant can reference the humidity from tool history
     expect(result[5].role).toBe('assistant');
@@ -1011,37 +1011,28 @@ describe('convertToV1Messages', () => {
 
     const result = convertToV1Messages(messages);
 
-    // Should have 5 messages:
+    // Should have 4 messages because the two consecutive assistant text messages are combined:
     // 1. Assistant text ("Let me check...")
     // 2. Assistant tool-call
     // 3. Tool result
-    // 4. Assistant text ("It's 20°C...")
-    // 5. Assistant text ("Would you like me...")
-    expect(result.length).toBe(5);
+    // 4. Assistant text ("It's 20°C..." + "Would you like me...")
+    expect(result.length).toBe(4);
 
-    // Verify the text messages after the tool call
-    const fourthMessage = result[3];
-    expect(fourthMessage.role).toBe('assistant');
-    expect(fourthMessage.type).toBe('text');
-    if (Array.isArray(fourthMessage.content)) {
-      const textPart = fourthMessage.content[0];
-      if (textPart && textPart.type === 'text') {
-        expect(textPart.text).toContain("It's 20°C");
+    // Verify the combined text message
+    const lastMessage = result[result.length - 1];
+    expect(lastMessage.role).toBe('assistant');
+    expect(lastMessage.type).toBe('text');
+    expect(Array.isArray(lastMessage.content)).toBe(true);
+    if (Array.isArray(lastMessage.content)) {
+      expect(lastMessage.content.length).toBe(2);
+      const firstPart = lastMessage.content[0];
+      const secondPart = lastMessage.content[1];
+      expect(firstPart.type).toBe('text');
+      expect(secondPart.type).toBe('text');
+      if (firstPart.type === 'text' && secondPart.type === 'text') {
+        expect(firstPart.text).toContain("It's 20°C and sunny in Paris!");
+        expect(secondPart.text).toContain('Would you like me to check another city?');
       }
-    } else {
-      expect(fourthMessage.content).toContain("It's 20°C");
-    }
-
-    const fifthMessage = result[4];
-    expect(fifthMessage.role).toBe('assistant');
-    expect(fifthMessage.type).toBe('text');
-    if (Array.isArray(fifthMessage.content)) {
-      const textPart2 = fifthMessage.content[0];
-      if (textPart2 && textPart2.type === 'text') {
-        expect(textPart2.text).toContain('Would you like me');
-      }
-    } else {
-      expect(fifthMessage.content).toContain('Would you like me');
     }
   });
 
