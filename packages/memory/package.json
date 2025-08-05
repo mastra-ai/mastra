@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.12.1-alpha.0",
+  "version": "0.12.1-alpha.1",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -41,7 +41,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@upstash/redis": "^1.35.1",
+    "@upstash/redis": "^1.35.3",
     "ai": "^4.3.16",
     "js-tiktoken": "^1.0.20",
     "json-schema": "^0.4.0",

@@ -9,4 +9,7 @@ export const mastra = new Mastra({
     port: process.env.MASTRA_PORT ? parseInt(process.env.MASTRA_PORT) : 3000,
     apiRoutes: [testRoute, allRoute],
   },
+  bundler: {
+    transpilePackages: ['@inner/hello-world'],
+  },
 });

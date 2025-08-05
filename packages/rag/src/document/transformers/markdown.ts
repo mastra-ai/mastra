@@ -1,6 +1,7 @@
 import { Document } from '../schema';
 
 import { Language } from '../types';
+import type { BaseChunkOptions } from '../types';
 
 import { RecursiveCharacterTransformer } from './character';
 
@@ -16,18 +17,9 @@ interface HeaderType {
 }
 
 export class MarkdownTransformer extends RecursiveCharacterTransformer {
-  constructor(
-    options: {
-      chunkSize?: number;
-      chunkOverlap?: number;
-      lengthFunction?: (text: string) => number;
-      keepSeparator?: boolean | 'start' | 'end';
-      addStartIndex?: boolean;
-      stripWhitespace?: boolean;
-    } = {},
-  ) {
+  constructor(options: BaseChunkOptions = {}) {
     const separators = RecursiveCharacterTransformer.getSeparatorsForLanguage(Language.MARKDOWN);
-    super({ separators, isSeparatorRegex: true, options });
+    super({ ...options, separators, isSeparatorRegex: true });
   }
 }
 

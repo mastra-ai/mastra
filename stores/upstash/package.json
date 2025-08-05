@@ -1,6 +1,6 @@
 {
   "name": "@mastra/upstash",
-  "version": "0.13.0",
+  "version": "0.14.0-alpha.0",
   "description": "Upstash provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -28,7 +28,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@upstash/redis": "^1.35.1",
+    "@upstash/redis": "^1.35.3",
     "@upstash/vector": "^1.2.2"
   },
   "devDependencies": {

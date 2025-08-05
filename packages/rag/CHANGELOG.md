@@ -1,5 +1,17 @@
 # @mastra/rag
 
+## 1.0.7-alpha.0
+
+### Patch Changes
+
+- 351b36e: update evals and rag ai sdk package versions
+- ccd519c: Add sentence chunking strategy and strategy-specific parameter validation for all existing strategies.
+- Updated dependencies [ea0c5f2]
+- Updated dependencies [b0e43c1]
+- Updated dependencies [1fb812e]
+- Updated dependencies [35c5798]
+  - @mastra/core@0.13.0-alpha.1
+
 ## 1.0.6
 
 ### Patch Changes
