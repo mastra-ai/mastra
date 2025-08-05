@@ -23,7 +23,7 @@
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "ai": "^4.3.16",
-    "exa-js": "^1.8.23",
+    "exa-js": "^1.8.26",
     "zod": "^3.25.67"
   },
   "devDependencies": {
