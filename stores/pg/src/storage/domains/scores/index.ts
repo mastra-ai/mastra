@@ -98,7 +98,7 @@ export class ScoresPG extends ScoresStorage {
           perPage: pagination.perPage,
           hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
         },
-        scores: result,
+        scores: result.map(transformScoreRow),
       };
     } catch (error) {
       throw new MastraError(
@@ -135,9 +135,9 @@ export class ScoresPG extends ScoresStorage {
         record: {
           id: scoreId,
           ...rest,
-          output: JSON.stringify(output),
+          input: JSON.stringify(input) || '',
+          output: JSON.stringify(output) || '',
           scorer: scorer ? JSON.stringify(scorer) : null,
-          input: input ? JSON.stringify(input) : null,
           preprocessStepResult: preprocessStepResult ? JSON.stringify(preprocessStepResult) : null,
           analyzeStepResult: analyzeStepResult ? JSON.stringify(analyzeStepResult) : null,
           metadata: metadata ? JSON.stringify(metadata) : null,
@@ -198,7 +198,7 @@ export class ScoresPG extends ScoresStorage {
           perPage: pagination.perPage,
           hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
         },
-        scores: result,
+        scores: result.map(transformScoreRow),
       };
     } catch (error) {
       throw new MastraError(
@@ -250,7 +250,7 @@ export class ScoresPG extends ScoresStorage {
           perPage: pagination.perPage,
           hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
         },
-        scores: result,
+        scores: result.map(transformScoreRow),
       };
     } catch (error) {
       throw new MastraError(

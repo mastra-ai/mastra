@@ -100,8 +100,8 @@ export class ScoresMSSQL extends ScoresStorage {
         record: {
           id: scoreId,
           ...rest,
-          input: input ? JSON.stringify(input) : null,
-          output: JSON.stringify(output),
+          input: JSON.stringify(input) || '',
+          output: JSON.stringify(output) || '',
           preprocessStepResult: preprocessStepResult ? JSON.stringify(preprocessStepResult) : null,
           analyzeStepResult: analyzeStepResult ? JSON.stringify(analyzeStepResult) : null,
           metadata: metadata ? JSON.stringify(metadata) : null,
