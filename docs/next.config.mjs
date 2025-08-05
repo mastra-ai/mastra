@@ -127,8 +127,8 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/docs/deployment/deployment",
-        destination: "/docs/deployment/serverless-platforms",
+        source: "/:locale/docs/deployment/deployment",
+        destination: "/:locale/docs/deployment/serverless-platforms",
         permanent: true,
       },
       {
@@ -728,6 +728,21 @@ export default withGT(
       {
         source: "/examples/workflows/agent-and-tool-interop",
         destination: "/examples/workflows/agent-as-step",
+        permanent: true,
+      },
+      {
+        source: "/examples/agents/workflow-as-tools",
+        destination: "/examples/tools/workflow-as-tools",
+        permanent: true,
+      },
+      {
+        source: "/examples/agents/multi-agent-workflow",
+        destination: "/examples/agents/hierarchical-multi-agent",
+        permanent: true,
+      },
+      {
+        source: "/examples/agents/bird-checker",
+        destination: "/examples/agents/image-analysis",
         permanent: true,
       },
     ],

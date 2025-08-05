@@ -1,5 +1,25 @@
 # @mastra/core
 
+## 0.13.0-alpha.1
+
+### Minor Changes
+
+- ea0c5f2: Update scorer api
+
+### Patch Changes
+
+- b0e43c1: Fixed an issue where branching workflow steps maintained "suspended" status even after they've been successfully resumed and executed.
+- 1fb812e: Fixed a bug in parallel workflow execution where resuming only one of multiple suspended parallel steps incorrectly completed the entire parallel block. The fix ensures proper execution and state management when resuming from suspension in parallel workflows.
+- 35c5798: Add support for transpilePackages option
+
+## 0.12.2-alpha.0
+
+### Patch Changes
+
+- 94f4812: lazy initialize Run's `AbortController`
+- e202b82: Add getThreadsByResourceIdPaginated to the Memory Class
+- e00f6a0: Fixed an issue where converting from v2->v1 messages would not properly split text and tool call parts into multiple messages
+
 ## 0.12.1
 
 ### Patch Changes
