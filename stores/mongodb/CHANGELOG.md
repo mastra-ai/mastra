@@ -1,5 +1,11 @@
 # @mastra/mongodb
 
+## 0.13.0-alpha.3
+
+### Patch Changes
+
+- 94baf89: fixed an issue where mongodb vector adapter would not properly use metadata filters
+
 ## 0.13.0-alpha.2
 
 ### Patch Changes
