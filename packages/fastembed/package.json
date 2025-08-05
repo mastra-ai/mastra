@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastembed",
-  "version": "0.10.1",
+  "version": "0.10.2-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",

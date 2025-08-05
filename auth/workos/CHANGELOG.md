@@ -1,5 +1,13 @@
 # @mastra/auth-workos
 
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- 4a406ec: fixes TypeScript declaration file imports to ensure proper ESM compatibility
+- Updated dependencies [4a406ec]
+  - @mastra/auth@0.1.1-alpha.0
+
 ## 0.10.2
 
 ### Patch Changes
