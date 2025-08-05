@@ -28,7 +28,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@upstash/redis": "^1.35.1",
+    "@upstash/redis": "^1.35.3",
     "@upstash/vector": "^1.2.2"
   },
   "devDependencies": {
