@@ -2910,5 +2910,141 @@ describe('MessageList', () => {
       expect(hasToolCall).toBe(true);
       expect(hasToolResult).toBe(true);
     });
+
+    it('should handle v1 messages with suffixed IDs and prevent double-suffixing', () => {
+      // Test what happens when we create a new MessageList using v1 messages that already have suffixed IDs
+      const v1MessagesWithSuffixes: MastraMessageV1[] = [
+        {
+          role: 'user',
+          id: 'user-1',
+          createdAt: new Date('2025-08-05T22:58:18.403Z'),
+          resourceId: 'weatherAgent',
+          threadId: 'thread-1',
+          type: 'text',
+          content: 'LA weather',
+        },
+        {
+          role: 'assistant',
+          id: 'msg-1',
+          createdAt: new Date('2025-08-05T22:58:22.151Z'),
+          resourceId: 'weatherAgent',
+          threadId: 'thread-1',
+          type: 'tool-call',
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'call_123',
+              toolName: 'weatherTool',
+              args: { location: 'LA' },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          id: 'msg-1__split-1', // Suffixed ID from our fix with new pattern
+          createdAt: new Date('2025-08-05T22:58:22.151Z'),
+          resourceId: 'weatherAgent',
+          threadId: 'thread-1',
+          type: 'tool-result',
+          content: [
+            {
+              type: 'tool-result' as const,
+              toolCallId: 'call_123',
+              toolName: 'weatherTool',
+              result: { temperature: 29.4 },
+            },
+          ],
+        },
+        {
+          role: 'assistant',
+          id: 'msg-1__split-2', // Suffixed ID from our fix with new pattern
+          createdAt: new Date('2025-08-05T22:58:22.151Z'),
+          resourceId: 'weatherAgent',
+          threadId: 'thread-1',
+          type: 'text',
+          content: 'The weather in LA is 29.4°C.',
+        },
+      ];
+
+      // Create a new MessageList with these v1 messages
+      const newList = new MessageList({ threadId: 'thread-1', resourceId: 'weatherAgent' });
+      newList.add(v1MessagesWithSuffixes, 'memory');
+
+      // Get the v2 messages to see how they're stored
+      const v2Messages = newList.get.all.v2();
+
+      // Check that all messages are preserved with their IDs
+      expect(v2Messages.length).toBe(4);
+      expect(v2Messages[0].id).toBe('user-1');
+      expect(v2Messages[1].id).toBe('msg-1');
+      expect(v2Messages[2].id).toBe('msg-1__split-1');
+      expect(v2Messages[3].id).toBe('msg-1__split-2');
+
+      // Now convert back to v1 and see what happens
+      const v1Again = newList.get.all.v1();
+
+      // With our improved suffix pattern, messages with __split- suffix should NOT get double-suffixed
+      // Note: v1 tool messages get converted to v2 assistant messages, then split again when converting back
+      expect(v1Again.length).toBe(5); // 5 messages because tool message gets split
+      expect(v1Again[0].id).toBe('user-1');
+      expect(v1Again[1].id).toBe('msg-1');
+      expect(v1Again[2].id).toBe('msg-1__split-1'); // assistant tool-call (preserved)
+      expect(v1Again[3].id).toBe('msg-1__split-1'); // tool result (preserved - no double suffix!)
+      expect(v1Again[4].id).toBe('msg-1__split-2'); // assistant text (preserved)
+
+      // Now if we try to convert these v2 messages that came from suffixed v1s
+      // We need to check if we get double-suffixed IDs
+      const v2MessageWithToolAndText: MastraMessageV2 = {
+        id: 'msg-2',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId: 'thread-1',
+        resourceId: 'weatherAgent',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: 'call_456',
+                toolName: 'anotherTool',
+                args: {},
+                result: { data: 'test' },
+              },
+            },
+            {
+              type: 'text',
+              text: 'Here is the result.',
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'result' as const,
+              toolCallId: 'call_456',
+              toolName: 'anotherTool',
+              args: {},
+              result: { data: 'test' },
+            },
+          ],
+        },
+      };
+
+      // Add this new message that will be split
+      newList.add(v2MessageWithToolAndText, 'response');
+
+      // Get v1 messages again
+      const finalV1 = newList.get.all.v1();
+
+      // The test shows our fix works! Messages with __split- suffix are not getting double-suffixed
+      expect(finalV1.length).toBeGreaterThanOrEqual(8); // At least 5 existing + 3 new split messages
+
+      // Verify that messages with __split- suffix are preserved (no double-suffixing)
+      const splitMessages = finalV1.filter(m => m.id.includes('__split-'));
+      splitMessages.forEach(msg => {
+        // Check that we don't have double suffixes like __split-1__split-1
+        expect(msg.id).not.toMatch(/__split-\d+__split-\d+/);
+      });
+    });
   });
 });

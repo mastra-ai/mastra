@@ -11,6 +11,9 @@ const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
   // Track how many times each ID has been used to create unique IDs for split messages
   const idUsageCount = new Map<string, number>();
 
+  // Pattern to detect if an ID already has our split suffix
+  const SPLIT_SUFFIX_PATTERN = /__split-\d+$/;
+
   return (msg: MastraMessageV1) => {
     const previousMessage = v1Messages.at(-1);
     if (
@@ -28,12 +31,21 @@ const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
       }
     } else {
       // When pushing a new message, check if we need to deduplicate the ID
-      const baseId = msg.id;
+      let baseId = msg.id;
+
+      // Check if this ID already has a split suffix and extract the base ID
+      const hasSplitSuffix = SPLIT_SUFFIX_PATTERN.test(baseId);
+      if (hasSplitSuffix) {
+        // This ID already has a split suffix, don't add another one
+        v1Messages.push(msg);
+        return;
+      }
+
       const currentCount = idUsageCount.get(baseId) || 0;
 
-      // If we've seen this ID before, append a suffix
+      // If we've seen this ID before, append our unique split suffix
       if (currentCount > 0) {
-        msg.id = `${baseId}-${currentCount}`;
+        msg.id = `${baseId}__split-${currentCount}`;
       }
 
       // Increment the usage count for this base ID

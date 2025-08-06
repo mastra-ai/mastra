@@ -519,10 +519,10 @@ describe('convertToV1Messages', () => {
     expect(result[0].id).toBe(testMessage.id);
 
     // Split messages should have suffixes
-    expect(result[1].id).toBe(`${testMessage.id}-1`);
-    expect(result[2].id).toBe(`${testMessage.id}-2`);
-    expect(result[3].id).toBe(`${testMessage.id}-3`);
-    expect(result[4].id).toBe(`${testMessage.id}-4`);
+    expect(result[1].id).toBe(`${testMessage.id}__split-1`);
+    expect(result[2].id).toBe(`${testMessage.id}__split-2`);
+    expect(result[3].id).toBe(`${testMessage.id}__split-3`);
+    expect(result[4].id).toBe(`${testMessage.id}__split-4`);
 
     expect(result).toEqual([
       expect.objectContaining({
@@ -1563,9 +1563,9 @@ describe('convertToV1Messages', () => {
             }),
           ]),
         }),
-        // 3. Tool returns result (with ${id}-1 suffix due to message splitting)
+        // 3. Tool returns result (with ${id}__split-1 suffix due to message splitting)
         expect.objectContaining({
-          id: '17949558-8a2b-4841-990d-ce05d29a8afb-1',
+          id: '17949558-8a2b-4841-990d-ce05d29a8afb__split-1',
           role: 'tool',
           type: 'tool-result',
           content: expect.arrayContaining([
@@ -1581,9 +1581,9 @@ describe('convertToV1Messages', () => {
             }),
           ]),
         }),
-        // 4. Assistant provides text response (SEPARATE from tool call/result, with ${id}-2 suffix due to message splitting)
+        // 4. Assistant provides text response (SEPARATE from tool call/result, with ${id}__split-2 suffix due to message splitting)
         expect.objectContaining({
-          id: '17949558-8a2b-4841-990d-ce05d29a8afb-2',
+          id: '17949558-8a2b-4841-990d-ce05d29a8afb__split-2',
           role: 'assistant',
           type: 'text',
           content: expect.arrayContaining([
