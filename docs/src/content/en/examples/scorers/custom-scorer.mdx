@@ -1,13 +1,13 @@
 ---
-title: "Example: Custom LLM Judge | Scorers | Mastra Docs"
-description: Example of creating a custom LLM-based scorer using createScorer with prompt objects.
+title: "Example: Custom Judge | Scorers | Mastra Docs"
+description: Example of creating a custom based scorer using createScorer with prompt objects.
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# Custom LLM Judge Scorer
+# Custom Judge Scorer
 
-This example shows how to create a custom LLM-based scorer using `createScorer` with prompt objects. We'll build a "Gluten Checker" that evaluates whether a recipe contains gluten, using a language model as the judge.
+This example shows how to create a custom scorer using `createScorer` with prompt objects. We'll build a "Gluten Checker" that evaluates whether a recipe contains gluten, using a language model as the judge.
 
 ## Installation
 
@@ -17,9 +17,9 @@ npm install @mastra/core
 
 > For complete API documentation and configuration options, see [`createScorer`](/reference/scorers/create-scorer).
 
-## Create a custom LLM scorer
+## Create a custom scorer
 
-A custom LLM scorer in Mastra uses `createScorer` with four core components:
+A custom scorer in Mastra uses `createScorer` with four core components:
 
 1. [**Judge Configuration**](#judge-configuration)
 2. [**Analysis Step**](#analysis-step)
