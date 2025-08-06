@@ -1724,13 +1724,7 @@ describe('agent', () => {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
-      // Should have two keys, one with suffix
-      const keys = Object.keys(tools);
-      expect(keys.length).toBe(2);
-
-      expect(keys[0]).toBe('a'.repeat(63));
-      expect(keys[1]).toBe('a'.repeat(62) + '1');
+      await expect(userAgent['convertTools']({ runtimeContext: new RuntimeContext() })).rejects.toThrow(/same name/i);
     });
 
     it('should sanitize tool names with invalid characters', async () => {

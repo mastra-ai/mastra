@@ -1355,11 +1355,20 @@ export class Agent<
         }
         newKey = newKey.slice(0, 63);
 
-        let suffix = 1;
-        while (tools[newKey]) {
-          newKey = newKey.slice(0, 62);
-          newKey += suffix;
-          suffix += 1;
+        if (tools[newKey]) {
+          const mastraError = new MastraError({
+            id: 'AGENT_TOOL_NAME_COLLISION',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+              toolName: newKey,
+            },
+            text: `Two or more tools resolve to the same name "${newKey}". Please rename one of the tools to avoid this collision.`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
         }
 
         tools[newKey] = tools[key];
