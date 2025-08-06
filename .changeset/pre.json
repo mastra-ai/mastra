@@ -72,5 +72,12 @@
     "@mastra/voice-speechify": "0.10.7",
     "@mastra/inngest": "0.11.9"
   },
-  "changesets": []
+  "changesets": [
+    "fluffy-cameras-greet",
+    "great-worms-brake",
+    "green-buttons-swim",
+    "pink-apes-turn",
+    "red-walls-punch",
+    "silver-cycles-listen"
+  ]
 }
