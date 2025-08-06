@@ -874,7 +874,7 @@ importers:
         version: link:../mcp
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.0
-        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1261,7 +1261,7 @@ importers:
         version: 1.9.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.62.0
-        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+        version: 0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))
       '@opentelemetry/core':
         specifier: ^2.0.1
         version: 2.0.1(@opentelemetry/api@1.9.0)
@@ -1548,8 +1548,8 @@ importers:
         version: 3.25.76
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.12)
+        specifier: ^1.18.1
+        version: 1.18.1(hono@4.8.12)
       '@hono/swagger-ui':
         specifier: ^0.5.2
         version: 0.5.2(hono@4.8.12)
@@ -1774,8 +1774,8 @@ importers:
         specifier: ^1.3.22
         version: 1.3.23(zod@3.25.76)
       '@hono/node-server':
-        specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.12)
+        specifier: ^1.18.1
+        version: 1.18.1(hono@4.8.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1859,8 +1859,8 @@ importers:
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.12)
+        specifier: ^1.18.1
+        version: 1.18.1(hono@4.8.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1914,8 +1914,8 @@ importers:
         version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.12)
+        specifier: ^1.18.1
+        version: 1.18.1(hono@4.8.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3752,8 +3752,8 @@ importers:
         specifier: ^1.3.22
         version: 1.3.23(zod@3.25.76)
       '@hono/node-server':
-        specifier: ^1.17.1
-        version: 1.17.1(hono@4.8.12)
+        specifier: ^1.18.1
+        version: 1.18.1(hono@4.8.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -5986,8 +5986,8 @@ packages:
     resolution: {integrity: sha512-2iEXxLNf3HQWPJC04XYaZZSqtx+gLg2dxi8oEgrYDhoBGPlaEgpao73rVjdng0YzlB4YkCkZV8p8VkhVnIaKHQ==}
     deprecated: Starting with v0.73.0, this package is bundled directly inside @hey-api/openapi-ts.
 
-  '@hono/node-server@1.17.1':
-    resolution: {integrity: sha512-SY79W/C+2b1MyAzmIcV32Q47vO1b5XwLRwj8S9N6Jr5n1QCkIfAIH6umOSgqWZ4/v67hg6qq8Ha5vZonVidGsg==}
+  '@hono/node-server@1.18.1':
+    resolution: {integrity: sha512-O3puG/b7owYYmoQ2XPBf3SxBz6Dhk5VmWFhbaBU8/5wcUaXUPS0goxaI2Zfyg+Cu14ILJHEU7IFRw7miFxuXxg==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
@@ -19212,7 +19212,7 @@ snapshots:
 
   '@hey-api/client-fetch@0.3.4': {}
 
-  '@hono/node-server@1.17.1(hono@4.8.12)':
+  '@hono/node-server@1.18.1(hono@4.8.12)':
     dependencies:
       hono: 4.8.12
 
@@ -20248,7 +20248,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
+  '@opentelemetry/auto-instrumentations-node@0.62.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.0.1(@opentelemetry/api@1.9.0))':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
@@ -20297,7 +20297,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.3.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.3(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resources': 2.0.1(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -21378,7 +21378,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.0.1(@opentelemetry/api@1.9.0)
