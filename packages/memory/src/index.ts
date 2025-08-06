@@ -1193,6 +1193,8 @@ ${
           ],
         },
       });
+
+      embeddingTextsAndIds = this.getEmbeddingTextAndIds(storedMessages);
     }
     // Delete from storage
     await this.storage.deleteMessages(messageIds);
