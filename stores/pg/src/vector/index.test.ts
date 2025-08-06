@@ -1,3 +1,4 @@
+import { createVectorTestSuite } from '@internal/storage-test-utils';
 import type { QueryResult } from '@mastra/core';
 import * as pg from 'pg';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
@@ -536,7 +537,7 @@ describe('PgVector', () => {
           const metadata = [
             { type: 'a', value: 1 },
             { type: 'b', value: 2 },
-            { type: 'a', value: 3 },
+            { type: 'c', value: 3 },
           ];
           await vectorDB.upsert({ indexName, vectors, metadata });
         });
@@ -2704,5 +2705,25 @@ describe('PgVector', () => {
       expect(db['pool'].options.connectionTimeoutMillis).toBe(2000);
       expect(db['pool'].options.ssl).toBe(false);
     });
+  });
+});
+
+// Metadata filtering tests for Memory system
+describe('PgVector Metadata Filtering', () => {
+  const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+  const metadataVectorDB = new PgVector({ connectionString });
+
+  createVectorTestSuite({
+    vector: metadataVectorDB,
+    createIndex: async (indexName: string) => {
+      // Using dimension 4 as required by the metadata filtering test vectors
+      await metadataVectorDB.createIndex({ indexName, dimension: 4 });
+    },
+    deleteIndex: async (indexName: string) => {
+      await metadataVectorDB.deleteIndex({ indexName });
+    },
+    waitForIndexing: async () => {
+      // PG doesn't need to wait for indexing
+    },
   });
 });

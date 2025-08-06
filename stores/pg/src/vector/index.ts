@@ -171,7 +171,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     topK = 10,
     filter,
     includeVector = false,
-    minScore = 0,
+    minScore = -1,
     ef,
     probes,
   }: PgQueryVectorParams): Promise<QueryResult[]> {
