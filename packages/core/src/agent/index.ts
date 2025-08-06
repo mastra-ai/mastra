@@ -1334,13 +1334,28 @@ export class Agent<
       runtimeContext,
     });
 
-    return {
+    let allTools = {
       ...assignedTools,
       ...memoryTools,
       ...toolsetTools,
       ...clientsideTools,
       ...workflowTools,
     };
+
+    for (const key of Object.keys(allTools)) {
+      if (allTools[key] && (key.length > 63 || key.match(/[^a-zA-Z0-9_\.\-]/))) {
+        let newKey = key.replace(/[^a-zA-Z0-9_\.\-]/g, '_');
+        if (!newKey[0]!.match(/[a-zA-Z_]/)) {
+          newKey = '_' + newKey;
+        }
+        newKey = newKey.slice(0, 63);
+
+        allTools[newKey] = allTools[key];
+        delete allTools[key];
+      }
+    }
+
+    return allTools;
   }
 
   /**
