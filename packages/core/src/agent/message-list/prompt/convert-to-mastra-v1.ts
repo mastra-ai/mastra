@@ -30,17 +30,31 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
   const v1Messages: MastraMessageV1[] = [];
   const pushOrCombine = makePushOrCombine(v1Messages);
 
+  // Track how many times each ID has been used
+  const idUsageCount = new Map<string, number>();
+
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i];
     const isLastMessage = i === messages.length - 1;
     if (!message?.content) continue;
     const { content, experimental_attachments: inputAttachments = [], parts: inputParts } = message.content;
     const { role } = message;
-    const fields = {
-      id: message.id,
-      createdAt: message.createdAt,
-      resourceId: message.resourceId!,
-      threadId: message.threadId!,
+
+    // Get unique ID by checking if we've used this ID before
+    const getFields = () => {
+      const baseId = message.id;
+      const currentCount = idUsageCount.get(baseId) || 0;
+      const id = currentCount > 0 ? `${baseId}-${currentCount}` : baseId;
+
+      // Increment the usage count for next time
+      idUsageCount.set(baseId, currentCount + 1);
+
+      return {
+        id,
+        createdAt: message.createdAt,
+        resourceId: message.resourceId!,
+        threadId: message.threadId!,
+      };
     };
 
     const experimental_attachments = [...inputAttachments];
@@ -64,7 +78,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
             : { type: 'text', text: content || '' };
           pushOrCombine({
             role: 'user',
-            ...fields,
+            ...getFields(),
             type: 'text',
             // @ts-ignore
             content: userContent,
@@ -82,7 +96,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
             : textParts;
           pushOrCombine({
             role: 'user',
-            ...fields,
+            ...getFields(),
             type: 'text',
             content:
               Array.isArray(userContent) &&
@@ -148,7 +162,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
 
             pushOrCombine({
               role: 'assistant',
-              ...fields,
+              ...getFields(),
               type: content.some(c => c.type === `tool-call`) ? 'tool-call' : 'text',
               // content: content,
               content:
@@ -172,7 +186,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
             if (invocationsWithResults.length > 0) {
               pushOrCombine({
                 role: 'tool',
-                ...fields,
+                ...getFields(),
                 type: 'tool-result',
                 content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
                   const { toolCallId, toolName, result } = toolInvocation;
@@ -259,7 +273,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
                 // Create tool-call message for all invocations (calls and results)
                 pushOrCombine({
                   role: 'assistant',
-                  ...fields,
+                  ...getFields(),
                   type: 'tool-call',
                   content: [
                     ...stepInvocations.map(({ toolCallId, toolName, args }) => ({
@@ -277,7 +291,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
                 if (invocationsWithResults.length > 0) {
                   pushOrCombine({
                     role: 'tool',
-                    ...fields,
+                    ...getFields(),
                     type: 'tool-result',
                     content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
                       const { toolCallId, toolName, result } = toolInvocation;
@@ -300,7 +314,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
         const toolInvocations = message.content.toolInvocations;
 
         if (toolInvocations == null || toolInvocations.length === 0) {
-          pushOrCombine({ role: 'assistant', ...fields, content: content || '', type: 'text' });
+          pushOrCombine({ role: 'assistant', ...getFields(), content: content || '', type: 'text' });
           break;
         }
 
@@ -320,7 +334,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
           // assistant message with tool calls
           pushOrCombine({
             role: 'assistant',
-            ...fields,
+            ...getFields(),
             type: 'tool-call',
             content: [
               ...(isLastMessage && content && i === 0 ? [{ type: 'text' as const, text: content }] : []),
@@ -339,7 +353,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
           if (invocationsWithResults.length > 0) {
             pushOrCombine({
               role: 'tool',
-              ...fields,
+              ...getFields(),
               type: 'tool-result',
               content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
                 const { toolCallId, toolName, result } = toolInvocation;
@@ -355,7 +369,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
         }
 
         if (content && !isLastMessage) {
-          pushOrCombine({ role: 'assistant', ...fields, type: 'text', content: content || '' });
+          pushOrCombine({ role: 'assistant', ...getFields(), type: 'text', content: content || '' });
         }
 
         break;
