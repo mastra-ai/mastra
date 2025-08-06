@@ -48,7 +48,7 @@ export class AgentNetwork extends MastraBase {
       name: config.name,
       instructions: this.getInstructions(),
       model: this.#model,
-      tools: this.getTools() as unknown as Record<string, ToolAction>,
+      tools: this.getTools() as Record<string, ToolAction>,
     });
   }
 

@@ -162,7 +162,7 @@ export class CoreToolBuilder extends MastraBase {
             errors: error.validationErrors,
             args,
           });
-          return error as any;
+          return error;
         }
         // Use validated/transformed data
         args = data;
