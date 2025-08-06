@@ -61,7 +61,7 @@ async function simpleTTSTest() {
   console.log('🚀 Starting Simple TTS Test...\n');
 
   const voice = new GeminiLiveVoice({
-    apiKey: process.env.GOOGLE_API_KEY || "AIzaSyCmOPkFVqWBZAib9r-EG9N5h1_IIOwWvoc",
+    apiKey: process.env.GOOGLE_API_KEY,
     model: "gemini-2.0-flash-exp",
     speaker: "Puck",
     debug: true,
