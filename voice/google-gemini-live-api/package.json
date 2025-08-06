@@ -25,11 +25,15 @@
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
+    "test:simple": "npx tsx src/test.ts simple",
+    "test:comprehensive": "npx tsx src/test.ts comprehensive",
+    "test:tts": "npx tsx src/test.ts",
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
   "dependencies": {
     "@google/genai": "latest",
+    "google-auth-library": "^10.2.1",
     "ws": "^8.18.3",
     "zod": "^3.25.67"
   },
@@ -40,6 +44,7 @@
     "@types/ws": "^8.18.1",
     "eslint": "^9.30.1",
     "tsup": "^8.5.0",
+    "tsx": "latest",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   },

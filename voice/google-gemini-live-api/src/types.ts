@@ -6,10 +6,13 @@
  * Available Gemini Live API models
  */
 export type GeminiVoiceModel = 
+  | 'gemini-2.0-flash-exp'
+  | 'gemini-2.0-flash-exp-image-generation'
   | 'gemini-2.0-flash-live-001'
-  | 'gemini-2.5-flash-preview-native-audio-dialog'
+  | 'gemini-live-2.5-flash-preview-native-audio'
   | 'gemini-2.5-flash-exp-native-audio-thinking-dialog'
-  | 'gemini-live-2.5-flash-preview';
+  | 'gemini-live-2.5-flash-preview'
+  | 'gemini-2.6.flash-preview-tts';
 
 /**
  * Available voice options for Gemini Live API
@@ -72,12 +75,24 @@ export interface GeminiLiveVoiceConfig {
   project?: string;
   /** Google Cloud region (defaults to us-central1) */
   location?: string;
+  /** 
+   * Path to service account JSON key file for Vertex AI authentication.
+   * If not provided, will use Application Default Credentials (ADC).
+   */
+  serviceAccountKeyFile?: string;
+  /** 
+   * Service account email for impersonation.
+   * Useful when you want to use a specific service account without a key file.
+   */
+  serviceAccountEmail?: string;
   /** System instructions for the model */
   instructions?: string;
   /** Tools available to the model */
   tools?: GeminiToolConfig[];
   /** Session configuration */
   sessionConfig?: GeminiSessionConfig;
+  /** Audio configuration for input/output */
+  audioConfig?: Partial<AudioConfig>;
   /** Enable debug logging */
   debug?: boolean;
 }
@@ -108,7 +123,10 @@ export interface GeminiLiveEventMap {
   /** Error events - compatible with base VoiceEventMap */
   error: { message: string; code?: string; details?: unknown };
   /** Session state changes */
-  session: { state: 'connecting' | 'connected' | 'disconnected' | 'error' };
+  session: { 
+    state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'error' | 'updated';
+    config?: Record<string, unknown>; // Configuration data when state is 'updated'
+  };
   /** Tool calls from the model */
   toolCall: { name: string; args: Record<string, any>; id: string };
   /** Voice activity detection events */
@@ -133,8 +151,8 @@ export interface GeminiLiveEventMap {
  */
 export interface GeminiLiveMessage {
   type: string;
-  data?: any;
-  metadata?: Record<string, any>;
+  data?: unknown;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -161,4 +179,83 @@ export interface VideoConfig {
   format: 'jpeg' | 'png';
   /** Frame rate */
   frameRate: number;
+}
+
+// Define message types for Gemini Live API based on official documentation
+// https://ai.google.dev/api/live
+
+export interface GeminiLiveServerMessage {
+  // Server messages may have a usageMetadata field but will otherwise include 
+  // exactly one of the other fields from BidiGenerateContentServerMessage
+  usageMetadata?: {
+    promptTokenCount?: number;
+    cachedContentTokenCount?: number;
+    responseTokenCount?: number;
+    toolUsePromptTokenCount?: number;
+    thoughtsTokenCount?: number;
+    totalTokenCount?: number;
+    promptTokensDetails?: Array<{
+      modality?: string;
+      tokenCount?: number;
+    }>;
+    cacheTokensDetails?: Array<{
+      modality?: string;
+      tokenCount?: number;
+    }>;
+    responseTokensDetails?: Array<{
+      modality?: string;
+      tokenCount?: number;
+    }>;
+  };
+  
+  // Setup completion message
+  setup?: {
+    sessionHandle?: string;
+  };
+  
+  // Setup complete message (alternative format)
+  setupComplete?: Record<string, unknown>;
+  
+  // Server content (model responses)
+  serverContent?: {
+    modelTurn?: {
+      parts?: Array<{
+        text?: string;
+        inlineData?: {
+          mimeType?: string;
+          data?: string;
+        };
+      }>;
+    };
+    turnComplete?: boolean;
+  };
+  
+  // Tool call requests
+  toolCall?: {
+    name?: string;
+    args?: Record<string, unknown>;
+    id?: string;
+  };
+  
+  // Session end
+  sessionEnd?: {
+    reason?: string;
+  };
+  
+  // Error messages
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+}
+
+// Auth options for Google Auth client for Vertex AI
+export interface AuthOptions {
+  scopes: string[];
+  projectId?: string;
+  keyFilename?: string;
+  clientOptions?: {
+    subject?: string;
+  };
 }
