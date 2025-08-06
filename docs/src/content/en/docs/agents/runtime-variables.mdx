@@ -114,3 +114,25 @@ async function fetchWeather(
   };
 }
 ```
+
+## Defining Context Type Globally
+Runtime context type can be defined for entire projects using module declarations:
+```typescript filename="src/runtime-context.d.ts"
+export * from '@mastra/core/runtime-context';
+
+declare module '@mastra/core/runtime-context' {
+  interface RuntimeContextInterface {
+    "temperature-scale": "fahrenheit" | "celsius",
+  }
+}
+```
+This provides type safety without explicit type arguments when instantiating RuntimeContext.
+
+Module declarations can be combined with type arguments to add properties to specific context objects:
+```ts
+import { RuntimeContext, RuntimeContextInterface } from '@mastra/core/runtime-context';
+
+const weatherContext = new RuntimeContext<RuntimeContextInterface & { "temperature": number }>();
+weatherContext.set("temperature-scale", "celsius");
+weatherContext.set("temperature", 22);
+const temperature: number = weatherContext.get("temperature");
