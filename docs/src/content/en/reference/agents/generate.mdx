@@ -34,7 +34,23 @@ const response = await agent.generate("message for agent");
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-const response = await agent.generate("message for agent", {
+const response = await agent.generate([
+  { role: "user", content: "message for agent" },
+  {
+    role: "user",
+    content: [
+      {
+        type: "text",
+        text: "message for agent"
+      },
+      {
+        type: "image",
+        imageUrl: "https://example.com/image.jpg",
+        mimeType: "image/jpeg"
+      }
+    ]
+  }
+], {
   temperature: 0.7,
   maxSteps: 3,
   memory: {
