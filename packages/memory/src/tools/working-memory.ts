@@ -25,7 +25,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
       if (!thread) {
         thread = await memory.createThread({
           threadId,
-          resourceId: resourceId || thread?.resourceId,
+          resourceId: resourceId || thread!.resourceId,
           memoryConfig,
         });
       }
