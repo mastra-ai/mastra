@@ -116,7 +116,7 @@ export function TemplatesList({ templates, linkComponent, className }: Templates
               target="_blank"
               rel="noopener noreferrer"
             >
-              <span className="flex items-center gap-[0.5rem]  px-[0.5rem] py-[0.25rem] rounded bg:surface1 group-hover:bg-surface2 text-icon3 transition-colors group-hover:text-icon5 ">
+              <span className="flex items-center gap-[0.5rem]  px-[0.5rem] py-[0.25rem] rounded bg-surface1 group-hover:bg-surface2 text-icon3 transition-colors group-hover:text-icon5 ">
                 <GithubIcon /> {getRepoName(template.githubUrl)}
               </span>
             </a>
