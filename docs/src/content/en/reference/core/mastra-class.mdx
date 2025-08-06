@@ -88,6 +88,12 @@ The constructor accepts an optional `Config` object to customize its behavior an
       defaultValue: "Console logger with INFO level",
     },
     {
+      name: "idGenerator",
+      type: "() => string",
+      description: "Custom ID generator function. Used by agents, workflows, memory, and other components to generate unique identifiers.",
+      isOptional: true,
+    },
+    {
       name: "workflows",
       type: "Record<string, Workflow>",
       description:
@@ -120,7 +126,7 @@ The constructor accepts an optional `Config` object to customize its behavior an
         "Server configuration including port, host, timeout, API routes, middleware, CORS settings, and build options for Swagger UI, API request logging, and OpenAPI docs.",
       isOptional: true,
       defaultValue:
-        "{ port: 4111, host: localhost,  cors: { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false } }",
+        "{ port: 4111, host: localhost,  cors: { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false } }",
     },
     {
       name: "mcpServers",

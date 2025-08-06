@@ -1,0 +1,169 @@
+---
+title: "Example: Content Similarity | Scorers | Mastra Docs"
+description: Example of using the Content Similarity scorer to evaluate text similarity between content.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Content Similarity Scorer
+
+Use `createContentSimilarityScorer` to evaluate how similar the response is to a reference based on content overlap.
+
+## Installation
+
+```bash copy
+npm install @mastra/evals
+```
+
+> For complete API documentation and configuration options, see [`createContentSimilarityScorer`](/reference/scorers/content-similarity).
+
+## High similarity example
+
+In this example, the response closely resembles the query in both structure and meaning. Minor differences in tense and phrasing do not significantly affect the overall similarity.
+
+```typescript filename="src/example-high-similarity.ts" showLineNumbers copy
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createContentSimilarityScorer();
+
+const query = "The quick brown fox jumps over the lazy dog.";
+const response = "A quick brown fox jumped over a lazy dog.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### High similarity output
+
+The output receives a high score because the response preserves the intent and content of the query with only subtle wording changes.
+
+```typescript
+{
+  score: 0.7761194029850746,
+  analyzeStepResult: {
+    similarity: 0.7761194029850746
+  },
+}
+```
+
+## Moderate similarity example
+
+In this example, the response shares some conceptual overlap with the query but diverges in structure and wording. Key elements remain present, but the phrasing introduces moderate variation.
+
+```typescript filename="src/example-moderate-similarity.ts" showLineNumbers copy
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createContentSimilarityScorer();
+
+const query = "A brown fox quickly leaps across a sleeping dog.";
+const response = "The quick brown fox jumps over the lazy dog.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### Moderate similarity output
+
+The output receives a mid-range score because the response captures the general idea of the query, though it differs enough in wording to reduce overall similarity.
+
+```typescript
+{
+  score: 0.40540540540540543,
+  analyzeStepResult: {
+    similarity: 0.40540540540540543
+  }
+}
+```
+
+## Low similarity example
+
+In this example, the response and query are unrelated in meaning, despite having a similar grammatical structure. There is little to no shared content overlap.
+
+```typescript filename="src/example-low-similarity.ts" showLineNumbers copy
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createContentSimilarityScorer();
+
+const query = "The cat sleeps on the windowsill.";
+const response = "The quick brown fox jumps over the lazy dog.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### Low similarity output
+
+The output receives a low score because the response does not align with the content or intent of the query.
+
+```typescript
+{
+  score: 0.25806451612903225,
+  analyzeStepResult: {
+    similarity: 0.25806451612903225
+  },
+}
+```
+
+## Scorer configuration
+
+`ContentSimilarityScorer` does not accept any options. It is always created with default settings:
+
+```typescript showLineNumbers copy
+const scorer = createContentSimilarityScorer();
+```
+
+## Understanding the results
+
+`.run()` returns a result in the following shape:
+
+```typescript
+{
+  runId: string,
+  extractStepResult: {
+    processedInput: string,
+    processedOutput: string
+  },
+  analyzeStepResult: {
+    similarity: number
+  },
+  score: number
+}
+```
+
+### score
+A similarity score between 0 and 1:
+
+- **1.0**: Perfect match – content is nearly identical.
+- **0.7–0.9**: High similarity – minor differences in word choice or structure.
+- **0.4–0.6**: Moderate similarity – general overlap with noticeable variation.
+- **0.1–0.3**: Low similarity – few common elements or shared meaning.
+- **0.0**: No similarity – completely different content.
+
+### runId
+The unique identifier for this scorer run.
+
+### extractStepResult
+Object with processed input and output strings after normalization:
+- **processedInput**: The normalized input string.
+- **processedOutput**: The normalized output string.
+
+### analyzeStepResult
+Object with the similarity score:
+- **similarity**: The computed similarity value between 0 and 1.
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/content-similarity"
+/>

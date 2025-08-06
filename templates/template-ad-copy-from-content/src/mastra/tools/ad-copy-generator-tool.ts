@@ -103,7 +103,7 @@ Generate the following ad copy variations:
 
 1. HEADLINES (5 variations):
    - Short punchy headlines (25-40 characters)
-   - Medium headlines (40-60 characters)  
+   - Medium headlines (40-60 characters)
    - Long descriptive headlines (60-90 characters)
 
 2. BODY COPY (4 variations):

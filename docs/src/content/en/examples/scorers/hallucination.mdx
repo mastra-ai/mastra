@@ -1,0 +1,203 @@
+---
+title: "Example: Hallucination | Scorers | Mastra Docs"
+description: Example of using the Hallucination scorer to evaluate factual contradictions in responses.
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# Hallucination Scorer
+
+Use `createHallucinationScorer` to evaluate whether the response contradicts any part of the provided context.
+
+## Installation
+
+```bash copy
+npm install @mastra/evals
+```
+
+> For complete API documentation and configuration options, see [`createHallucinationScorer`](/reference/scorers/hallucination).
+
+## No hallucination example
+
+In this example, the response is fully aligned with the provided context. All claims are factually correct and directly supported by the source material, resulting in a low hallucination score.
+
+```typescript filename="src/example-no-hallucination.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [
+    "The iPhone was first released in 2007.",
+    "Steve Jobs unveiled it at Macworld.",
+    "The original model had a 3.5-inch screen."
+  ]
+});
+
+const query = "When was the first iPhone released?";
+const response = "The iPhone was first released in 2007, when Steve Jobs unveiled it at Macworld. The original iPhone featured a 3.5-inch screen.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### No hallucination output
+
+The response receives a score of 0 because there are no contradictions. Every statement is consistent with the context, and no new or fabricated information has been introduced.
+
+```typescript
+{
+  score: 0,
+  reason: 'The score is 0 because none of the statements from the context were contradicted by the output.'
+}
+```
+
+## Mixed hallucination example
+
+In this example, the response includes both accurate and inaccurate claims. Some details align with the context, while others directly contradict it—such as inflated numbers or incorrect locations. These contradictions increase the hallucination score.
+
+```typescript filename="src/example-mixed-hallucination.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [
+    "The first Star Wars movie was released in 1977.",
+    "It was directed by George Lucas.",
+    "The film earned $775 million worldwide.",
+    "The movie was filmed in Tunisia and England."
+  ]
+});
+
+const query = "Tell me about the first Star Wars movie.";
+const response = "The first Star Wars movie came out in 1977 and was directed by George Lucas. It made over $1 billion at the box office and was filmed entirely in California.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+### Mixed hallucination output
+
+The Scorer assigns a mid-range score because parts of the response conflict with the context. While some facts are correct, others are inaccurate or fabricated, reducing overall reliability.
+
+```typescript
+{
+  score: 0.5,
+  reason: 'The score is 0.5 because two out of four statements from the output were contradicted by claims in the context, indicating a balance of accurate and inaccurate information.'
+}
+```
+
+## Complete hallucination example
+
+In this example, the response contradicts every key fact in the context. None of the claims can be verified, and all presented details are factually incorrect.
+
+```typescript filename="src/example-complete-hallucination.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { createHallucinationScorer } from "@mastra/evals/scorers/llm";
+
+const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [
+    "The Wright brothers made their first flight in 1903.",
+    "The flight lasted 12 seconds.",
+    "It covered a distance of 120 feet."
+  ]
+});
+
+const query = "When did the Wright brothers first fly?";
+const response = "The Wright brothers achieved their historic first flight in 1908. The flight lasted about 2 minutes and covered nearly a mile.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+
+```
+
+### Complete hallucination output
+
+The Scorer assigns a score of 1 because every statement in the response conflicts with the context. The details are fabricated or inaccurate across the board.
+
+```typescript
+{
+  score: 1,
+  reason: 'The score is 1.0 because all three statements from the output directly contradict the context: the first flight was in 1903, not 1908; it lasted 12 seconds, not about 2 minutes; and it covered 120 feet, not nearly a mile.'
+}
+```
+
+## Configuration
+
+You can adjust how the `HallucinationScorer` scores responses by configuring optional parameters. For example, `scale` sets the maximum possible score returned by the scorer.
+
+```typescript
+const scorer = createHallucinationScorer({ model: openai("gpt-4o-mini"), options: {
+  context: [""],
+  scale: 1
+});
+```
+
+> See [HallucinationScorer](/reference/scorers/hallucination.mdx) for a full list of configuration options.
+
+## Understanding the results
+
+`.run()` returns a result in the following shape:
+
+```typescript
+{
+  runId: string,
+  extractStepResult: { claims: string[] },
+  extractPrompt: string,
+  analyzeStepResult: {
+    verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }>
+  },
+  analyzePrompt: string,
+  score: number,
+  reason: string,
+  reasonPrompt: string
+}
+```
+
+### score
+A hallucination score between 0 and 1:
+
+- **0.0**: No hallucination — all claims match the context.
+- **0.3–0.4**: Low hallucination — a few contradictions.
+- **0.5–0.6**: Mixed hallucination — several contradictions.
+- **0.7–0.8**: High hallucination — many contradictions.
+- **0.9–1.0**: Complete hallucination — most or all claims contradict the context.
+
+### runId
+The unique identifier for this scorer run.
+
+### extractStepResult
+Object with extracted claims from the output:
+- **claims**: Array of factual statements to be checked against the context.
+
+### extractPrompt
+The prompt sent to the LLM for the extract step.
+
+### analyzeStepResult
+Object with verdicts for each claim:
+- **verdicts**: Array of objects with `statement`, `verdict` ('yes' or 'no'), and a `reason` for each claim.
+
+### analyzePrompt
+The prompt sent to the LLM for the analyze step.
+
+### reasonPrompt
+The prompt sent to the LLM for the reason step.
+
+### reason
+Detailed explanation of the score and identified contradictions.
+
+<GithubLink
+  marginTop='mt-16'
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/scorers/hallucination"
+/>

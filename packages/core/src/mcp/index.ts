@@ -125,7 +125,7 @@ export abstract class MCPServerBase extends MastraBase {
       this._id = slugify(config.id);
       this.idWasSet = true;
     } else {
-      this._id = randomUUID();
+      this._id = this.mastra?.generateId() || randomUUID();
     }
 
     this.description = config.description;

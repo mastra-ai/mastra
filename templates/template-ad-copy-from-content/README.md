@@ -28,6 +28,13 @@ A Mastra template that generates compelling ad copy and promotional images from 
    # For web content extraction (optional - only needed for URL input type)
    BROWSERBASE_API_KEY=your_browserbase_api_key
    BROWSERBASE_PROJECT_ID=your_browserbase_project_id
+
+   # For AWS S3 cloud storage (required for image generation)
+   AWS_REGION=us-east-1
+   AWS_ACCESS_KEY_ID=your_aws_access_key_id
+   AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+   S3_BUCKET_NAME=mastra-generated-images
+   S3_PUBLIC_URL_BASE=https://your-bucket-name.s3.amazonaws.com
    ```
 
 3. **Run the application**:
@@ -61,7 +68,6 @@ const pdfResult = await mastra.runWorkflow('ad-copy-generation-workflow', {
   platform: 'linkedin',
   campaignType: 'awareness',
   tone: 'authoritative',
-  brandColors: ['#1E3A8A', '#FFFFFF'],
 });
 
 // Generate ad copy from website URL
@@ -114,12 +120,11 @@ const pdfContent = await mastra.getTool('pdf-content-extractor').execute({
 
 ### Workflows
 
-**Ad Copy Generation Workflow**: End-to-end process that:
+**Ad Copy Generation Workflow**: Simplified end-to-end process that:
 
 1. Extracts content (from PDF, website URL, or text)
-2. Generates multiple ad copy variations
-3. Creates promotional images
-4. Provides campaign recommendations
+2. Generates optimized ad copy (headline, body, CTA)
+3. Creates a promotional image and uploads to S3
 
 ## Platform Support
 
@@ -141,35 +146,36 @@ const pdfContent = await mastra.getTool('pdf-content-extractor').execute({
 
 The workflow generates:
 
-### Ad Copy Variations
+### Ad Copy
 
-- 5+ headline variations (short, medium, long)
-- 4+ body copy variations (short, medium, long, bullets)
-- 6+ call-to-action variations
-- 3+ complete ad set combinations
+- Single optimized headline
+- Compelling body copy
+- Effective call-to-action
 
-### Images
+### Image
 
-- Platform-optimized promotional images
-- Multiple style variations
-- Brand-consistent visual elements
-
-### Recommendations
-
-- Platform-specific best practices
-- A/B testing suggestions
-- Performance optimization tips
+- One promotional image uploaded to S3
+- Platform-optimized dimensions
+- Style-consistent visual design
 
 ## Advanced Configuration
 
-### Custom Brand Colors
+### Expected Output Structure
 
 ```typescript
 const result = await mastra.runWorkflow('ad-copy-generation-workflow', {
-  // ... other params
-  brandColors: ['#FF6B6B', '#4ECDC4', '#45B7D1'],
-  imageStyle: 'modern',
+  // ... input params
 });
+
+// Result structure:
+{
+  adCopy: {
+    headline: "Your optimized headline",
+    body: "Compelling body copy for your ad",
+    cta: "Call to action"
+  },
+  imageUrl: "https://your-bucket.s3.amazonaws.com/generated-images/uuid.jpg" // Optional
+}
 ```
 
 ### Specific Focus Areas
@@ -195,15 +201,40 @@ To modify or extend this template:
 
 ## Environment Variables
 
+### Required
+
 - `OPENAI_API_KEY`: Required for AI generation (OpenAI GPT-4)
+
+### Optional (based on features used)
+
 - `BROWSERBASE_API_KEY`: Required for web content extraction (BrowserBase)
 - `BROWSERBASE_PROJECT_ID`: Required for web content extraction (BrowserBase)
-- Additional API keys may be needed for external integrations
+
+### AWS S3 Cloud Storage (required for image generation)
+
+- `AWS_REGION`: AWS region (default: 'us-east-1')
+- `AWS_ACCESS_KEY_ID`: AWS access key ID
+- `AWS_SECRET_ACCESS_KEY`: AWS secret access key
+- `S3_BUCKET_NAME`: S3 bucket name for storing generated images (default: 'mastra-generated-images')
+- `S3_PUBLIC_URL_BASE`: Public URL base for accessing uploaded images
+
+### AWS S3 Setup Example
+
+```env
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+S3_BUCKET_NAME=mastra-generated-images
+S3_PUBLIC_URL_BASE=https://mastra-generated-images.s3.amazonaws.com
+```
+
+**Note**: Make sure your S3 bucket is configured for public read access for the generated images to be accessible via the public URLs.
 
 ## Dependencies
 
 - `@mastra/core`: Core Mastra framework
 - `@ai-sdk/openai`: OpenAI integration
+- `@aws-sdk/client-s3`: S3-compatible cloud storage (for image uploads)
 - `@browserbasehq/stagehand`: Web browsing and content extraction
 - `pdf2json`: PDF text extraction
 - `ai`: AI SDK for image generation

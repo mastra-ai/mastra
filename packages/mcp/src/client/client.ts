@@ -74,6 +74,7 @@ type StdioServerDefinition = BaseServerOptions & {
   url?: never; // Exclude 'url' for Stdio
   requestInit?: never; // Exclude HTTP options for Stdio
   eventSourceInit?: never; // Exclude HTTP options for Stdio
+  authProvider?: never; // Exclude HTTP options for Stdio
   reconnectionOptions?: never; // Exclude Streamable HTTP specific options
   sessionId?: never; // Exclude Streamable HTTP specific options
 };
@@ -89,6 +90,7 @@ type HttpServerDefinition = BaseServerOptions & {
   // Include relevant options from SDK HTTP transport types
   requestInit?: StreamableHTTPClientTransportOptions['requestInit'];
   eventSourceInit?: SSEClientTransportOptions['eventSourceInit'];
+  authProvider?: StreamableHTTPClientTransportOptions['authProvider'];
   reconnectionOptions?: StreamableHTTPClientTransportOptions['reconnectionOptions'];
   sessionId?: StreamableHTTPClientTransportOptions['sessionId'];
 };
@@ -237,7 +239,7 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit } = this.serverConfig;
+    const { requestInit, eventSourceInit, authProvider } = this.serverConfig;
 
     this.log('debug', `Attempting to connect to URL: ${url}`);
 
@@ -251,6 +253,7 @@ export class InternalMastraMCPClient extends MastraBase {
         const streamableTransport = new StreamableHTTPClientTransport(url, {
           requestInit,
           reconnectionOptions: this.serverConfig.reconnectionOptions,
+          authProvider: authProvider,
         });
         await this.client.connect(streamableTransport, {
           timeout:
@@ -269,7 +272,7 @@ export class InternalMastraMCPClient extends MastraBase {
       this.log('debug', 'Falling back to deprecated HTTP+SSE transport...');
       try {
         // Fallback to SSE transport
-        const sseTransport = new SSEClientTransport(url, { requestInit, eventSourceInit });
+        const sseTransport = new SSEClientTransport(url, { requestInit, eventSourceInit, authProvider });
         await this.client.connect(sseTransport, { timeout: this.serverConfig.timeout ?? this.timeout });
         this.transport = sseTransport;
         this.log('debug', 'Successfully connected using deprecated HTTP+SSE transport.');

@@ -68,7 +68,7 @@ Send a few messages and notice that it remembers information across turns:
 
 Mastra organizes memory into threads, which are records that identify specific conversation histories, using two identifiers:
 
-1.  **`threadId`**: A specific conversation id (e.g., `support_123`).
+1.  **`threadId`**: A globally unique conversation id (e.g., `support_123`). Thread IDs must be unique across all resources.
 2.  **`resourceId`**: The user or entity id that owns each thread (e.g., `user_123`, `org_456`).
 
 The `resourceId` is particularly important for [resource-scoped working memory](./working-memory.mdx#resource-scoped-memory), which allows memory to persist across all conversation threads for the same user.
@@ -81,6 +81,8 @@ const response = await myMemoryAgent.stream("Hello, my name is Alice.", {
 ```
 
 **Important:** without these ID's your agent will not use memory, even if memory is properly configured. The playground handles this for you, but you need to add ID's yourself when using memory in your application.
+
+> **Thread ID Uniqueness:** Each thread ID must be globally unique across all resources. A thread is permanently associated with the resource that created it. If you need to have similar thread names for different resources (e.g., a "general" thread for multiple users), include the resource ID in the thread ID: `${resourceId}-general` or `user_alice_general`.
 
 ### Thread Title Generation
 

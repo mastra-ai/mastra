@@ -26,14 +26,17 @@ interface WorkerTestConfig {
   memoryOptionsForWorker?: SharedMemoryConfig['options'];
 }
 
-const createTestThread = (title: string, metadata = {}) => ({
-  id: randomUUID(),
-  title,
-  resourceId,
-  metadata,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-});
+const createTestThread = (title: string, metadata = {}, i = 0) => {
+  const now = Date.now();
+  return {
+    id: randomUUID(),
+    title,
+    resourceId,
+    metadata,
+    createdAt: new Date(now + i),
+    updatedAt: new Date(now + i),
+  };
+};
 
 let messageCounter = 0;
 const createTestMessage = (
@@ -593,6 +596,118 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       });
     });
 
+    describe('Message Deletion', () => {
+      it('should delete a message successfully', async () => {
+        const messages = [
+          createTestMessage(thread.id, 'Message 1'),
+          createTestMessage(thread.id, 'Message 2'),
+          createTestMessage(thread.id, 'Message 3'),
+        ];
+        const savedMessages = await memory.saveMessages({ messages });
+        const messageToDelete = savedMessages[1];
+
+        // Delete the middle message
+        await memory.deleteMessages([messageToDelete.id]);
+
+        // Verify message is deleted
+        const remainingMessages = await memory.query({
+          threadId: thread.id,
+          selectBy: { last: 10 },
+        });
+
+        expect(remainingMessages.messages).toHaveLength(2);
+        expect(remainingMessages.messages.map(m => m.content)).toEqual(['Message 1', 'Message 3']);
+        expect(remainingMessages.messages.find(m => m.id === messageToDelete.id)).toBeUndefined();
+      });
+
+      it('should handle deleting non-existent message gracefully', async () => {
+        const nonExistentId = randomUUID();
+
+        // Should not throw when deleting non-existent message
+        await expect(memory.deleteMessages([nonExistentId])).resolves.not.toThrow();
+      });
+
+      it('should update thread updatedAt timestamp after deletion', async () => {
+        const message = createTestMessage(thread.id, 'Test message');
+        await memory.saveMessages({ messages: [message] });
+
+        const threadBefore = await memory.getThreadById({ threadId: thread.id });
+        const updatedAtBefore = threadBefore?.updatedAt;
+
+        // Wait a bit to ensure timestamp difference
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        await memory.deleteMessages([message.id]);
+
+        const threadAfter = await memory.getThreadById({ threadId: thread.id });
+        const updatedAtAfter = threadAfter?.updatedAt;
+
+        expect(updatedAtAfter).toBeDefined();
+        expect(updatedAtBefore).toBeDefined();
+        expect(new Date(updatedAtAfter!).getTime()).toBeGreaterThan(new Date(updatedAtBefore!).getTime());
+      });
+
+      it('should handle deletion of messages with different content types', async () => {
+        const textMessage = createTestMessage(thread.id, 'Simple text');
+        const complexMessage = createTestMessage(
+          thread.id,
+          [
+            { type: 'text', text: 'Complex content' },
+            { type: 'text', text: 'More content' },
+          ],
+          'assistant',
+        );
+
+        const savedMessages = await memory.saveMessages({ messages: [textMessage, complexMessage] });
+
+        // Delete the complex message
+        await memory.deleteMessages([savedMessages[1].id]);
+
+        const remainingMessages = await memory.query({
+          threadId: thread.id,
+          selectBy: { last: 10 },
+        });
+
+        expect(remainingMessages.messages).toHaveLength(1);
+        expect(remainingMessages.messages[0].content).toBe('Simple text');
+      });
+
+      it('should not affect other threads when deleting a message', async () => {
+        // Create another thread
+        const otherThread = await memory.saveThread({
+          thread: createTestThread('Other Thread'),
+        });
+
+        // Add messages to both threads
+        const message1 = createTestMessage(thread.id, 'Thread 1 message');
+        const message2 = createTestMessage(otherThread.id, 'Thread 2 message');
+
+        await memory.saveMessages({ messages: [message1, message2] });
+
+        // Delete message from first thread
+        await memory.deleteMessages([message1.id]);
+
+        // Verify first thread has no messages
+        const thread1Messages = await memory.query({
+          threadId: thread.id,
+          selectBy: { last: 10 },
+        });
+        expect(thread1Messages.messages).toHaveLength(0);
+
+        // Verify second thread still has its message
+        const thread2Messages = await memory.query({
+          threadId: otherThread.id,
+          selectBy: { last: 10 },
+        });
+        expect(thread2Messages.messages).toHaveLength(1);
+        expect(thread2Messages.messages[0].content).toBe('Thread 2 message');
+      });
+
+      it('should throw error when messageId is not provided', async () => {
+        await expect(memory.deleteMessages([''])).rejects.toThrow('All message IDs must be non-empty strings');
+      });
+    });
+
     describe('Resource Validation', () => {
       it('should allow access with correct resourceId', async () => {
         const messages = [createTestMessage(thread.id, 'Test message')];
@@ -664,6 +779,111 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
         expect(result.messages).toHaveLength(messagesBatches.flat().length);
       });
+    });
+  });
+
+  describe('Thread Pagination', () => {
+    it('should return paginated threads with correct metadata', async () => {
+      // Create multiple test threads (25 threads)
+      await Promise.all(
+        Array.from({ length: 25 }, (_, i) =>
+          memory.saveThread({
+            thread: createTestThread(`Paginated Thread ${i + 1}`, {}, i),
+          }),
+        ),
+      );
+
+      // Get first page
+      const result = await memory.getThreadsByResourceIdPaginated({
+        resourceId,
+        page: 0,
+        perPage: 10,
+        orderBy: 'createdAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(result.threads).toHaveLength(10);
+      expect(result.total).toBe(25);
+      expect(result.page).toBe(0);
+      expect(result.perPage).toBe(10);
+      expect(result.hasMore).toBe(true);
+
+      // Verify threads are retrieved in latest-first order
+      expect(result.threads[0].title).toBe('Paginated Thread 25');
+      expect(result.threads[9].title).toBe('Paginated Thread 16');
+    });
+
+    it('should handle edge cases (empty results, last page)', async () => {
+      // Empty result set
+      const emptyResult = await memory.getThreadsByResourceIdPaginated({
+        resourceId: 'non-existent-resource',
+        page: 0,
+        perPage: 10,
+        orderBy: 'createdAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(emptyResult.threads).toHaveLength(0);
+      expect(emptyResult.total).toBe(0);
+      expect(emptyResult.hasMore).toBe(false);
+
+      // Create 5 threads and test final page
+      await Promise.all(
+        Array.from({ length: 5 }, (_, i) =>
+          memory.saveThread({
+            thread: createTestThread(`Edge Case Thread ${i + 1}`, {}, i),
+          }),
+        ),
+      );
+
+      const lastPageResult = await memory.getThreadsByResourceIdPaginated({
+        resourceId,
+        page: 0,
+        perPage: 10,
+        orderBy: 'createdAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(lastPageResult.threads).toHaveLength(5);
+      expect(lastPageResult.total).toBe(5);
+      expect(lastPageResult.hasMore).toBe(false);
+    });
+
+    it('should handle page boundaries correctly', async () => {
+      // Test page boundaries (create 15 threads, perPage=7 makes 3 pages)
+      await Promise.all(
+        Array.from({ length: 15 }, (_, i) =>
+          memory.saveThread({
+            thread: createTestThread(`Boundary Thread ${i + 1}`, {}, i),
+          }),
+        ),
+      );
+
+      // Test second page
+      const page2Result = await memory.getThreadsByResourceIdPaginated({
+        resourceId,
+        page: 1,
+        perPage: 7,
+        orderBy: 'createdAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(page2Result.threads).toHaveLength(7);
+      expect(page2Result.page).toBe(1);
+      expect(page2Result.hasMore).toBe(true);
+
+      // Test third page (final page)
+      const page3Result = await memory.getThreadsByResourceIdPaginated({
+        resourceId,
+        page: 2,
+        perPage: 7,
+        orderBy: 'createdAt',
+        sortDirection: 'DESC',
+      });
+
+      expect(page3Result.threads).toHaveLength(1);
+      expect(page3Result.page).toBe(2);
+      expect(page3Result.hasMore).toBe(false);
     });
   });
 

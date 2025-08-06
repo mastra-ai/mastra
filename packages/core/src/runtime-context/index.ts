@@ -86,4 +86,12 @@ export class RuntimeContext<Mapping extends RuntimeContextInterface = RuntimeCon
   public forEach(callbackfn: (value: unknown, key: string, map: Map<string, unknown>) => void): void {
     this.registry.forEach(callbackfn);
   }
+
+  /**
+   * Custom JSON serialization method
+   * Converts the internal Map to a plain object for proper JSON serialization
+   */
+  public toJSON(): Record<string, any> {
+    return Object.fromEntries(this.registry);
+  }
 }
