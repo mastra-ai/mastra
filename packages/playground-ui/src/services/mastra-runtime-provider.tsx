@@ -151,8 +151,8 @@ export function MastraRuntimeProvider({
               ...message,
               content: [
                 ...(reasoning ? [{ type: 'reasoning', text: reasoning }] : []),
-                ...(typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : []),
                 ...toolInvocationsAsContentParts,
+                ...(typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : []),
                 ...attachmentsAsContentParts,
               ],
             };
