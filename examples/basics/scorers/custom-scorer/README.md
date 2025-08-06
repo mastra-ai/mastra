@@ -1,6 +1,6 @@
 # Custom LLM Scorer Example
 
-This example demonstrates how to create a custom LLM Scorer in Mastra to check recipes for gluten content.
+This example demonstrates how to create a custom Scorer in Mastra to check recipes for gluten content.
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ This example demonstrates how to create a custom LLM Scorer in Mastra to check r
 
    ```bash
    git clone https://github.com/mastra-ai/mastra
-   cd examples/basics/scorers/custom-llm-scorer
+   cd examples/basics/scorers/custom-scorer
    ```
 
 2. Copy the environment variables file and add your OpenAI API key:
@@ -41,22 +41,10 @@ This example demonstrates how to create a custom LLM Scorer in Mastra to check r
    pnpm start
    ```
 
-5. Run the playground to test Live Scorers:
-
-   ```bash
-   pnpm mastra:start
-   ```
-
-   - Navigate to Agents -> chef-agent
-   - Ask for a recipe about rice krispy squares
-   - Ask for a recipe about Mac and Cheese
-   - Navigate to Scorers -> Gluten Checker and confirm the scores for the two prompts
-
 ## Overview
 
-This example shows how to create a custom LLM-based scorer to evaluate recipes for gluten content. It demonstrates:
+This example shows how to create a custom scorer to evaluate recipes for gluten content. It demonstrates:
 
-- Using a custom scorer with an agent
 - Evaluating recipe responses
 - Identifying gluten sources
 - Providing detailed feedback
