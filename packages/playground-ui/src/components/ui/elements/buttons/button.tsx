@@ -27,7 +27,7 @@ export const Button = ({ className, as, variant = 'outline', ...props }: ButtonP
           'cursor-not-allowed opacity-50': props.disabled,
           'bg-surface5 hover:bg-surface6': variant === 'primary',
           'min-h-[2rem]': variant === 'ghost',
-          'min-h-[2.5rem] ': variant !== 'ghost',
+          'min-h-[2.5rem]': variant !== 'ghost',
           'border-[rgba(255,255,255,0.15)]': variant === 'outline',
         },
       )}
