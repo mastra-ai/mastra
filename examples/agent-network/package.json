@@ -6,7 +6,8 @@
   "main": "index.js",
   "version": "0.0.1",
   "scripts": {
-    "start": "npx bun src/index.ts"
+    "start": "npx bun src/index.ts",
+    "dev": "mastra dev"
   },
   "keywords": [],
   "author": "",
@@ -19,6 +20,7 @@
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
+    "mastra": "latest",
     "zod": "^3.25.67"
   },
   "pnpm": {
@@ -27,7 +29,8 @@
       "@mastra/core": "link:../../packages/core",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/loggers": "link:../../packages/loggers",
-      "@mastra/memory": "link:../../packages/memory"
+      "@mastra/memory": "link:../../packages/memory",
+      "mastra": "link:../../packages/cli"
     }
   },
   "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39"
