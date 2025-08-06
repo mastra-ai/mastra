@@ -1,7 +1,5 @@
 import { InputField, type InputFieldProps } from '@/components/ui/elements';
 
-import { InputField, type InputFieldProps } from '@/components/ui/elements';
-
 export function SearchField(props: InputFieldProps) {
   return (
     <InputField

@@ -1,12 +1,13 @@
 import { Header, HeaderTitle, MainContentLayout, TemplatesTools, TemplatesList } from '@mastra/playground-ui';
-import { useTemplates } from '@/domains/templates/use-templates';
+import { useMastraTemplates } from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router';
 
 import { useState } from 'react';
 
 export default function Templates() {
-  const { data: templates, tags, providers } = useTemplates();
+  const { data } = useMastraTemplates();
+  const { templates, tags, providers } = data ?? { templates: [], tags: [], providers: [] };
   const [selectedTag, setSelectedTag] = useState<string>('all');
   const [selectedProvider, setSelectedProvider] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');

@@ -1,4 +1,4 @@
-import { useTemplates } from '@/domains/templates/use-templates';
+import { useTemplateRepo } from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
 import { Breadcrumb, Crumb, GithubIcon, Header, MainContentLayout } from '@mastra/playground-ui';
 import { Link, useParams } from 'react-router';
@@ -10,8 +10,7 @@ import { PackageOpenIcon } from 'lucide-react';
 
 export default function Template() {
   const { templateSlug } = useParams()! as { templateSlug: string };
-  const { data: templates } = useTemplates();
-  const template = templates.find(t => t.slug === templateSlug);
+  const { data: template, isLoading } = useTemplateRepo({ repoOrSlug: templateSlug, owner: 'mastra-ai' });
   const [isInstalling, setIsInstalling] = useState(false);
   const [currentLogs, setCurrentLogs] = useState<string>(``);
 
@@ -48,13 +47,17 @@ export default function Template() {
           </Crumb>
 
           <Crumb as={Link} to={`/templates/${template?.slug}`} isCurrent>
-            {template?.title || 'Not found'}
+            {isLoading ? 'Loading...' : template?.title || 'Not found'}
           </Crumb>
         </Breadcrumb>
       </Header>
       <div className={cn('max-w-[80rem] w-full px-[3rem] mx-auto grid gap-y-[1rem] h-full overflow-y-scroll')}>
         <div className={cn(``)}>
-          {template ? (
+          {isLoading ? (
+            <div className="p-[1.5rem] ">
+              <p>Loading...</p>
+            </div>
+          ) : template ? (
             <div className="p-[1.5rem] ">
               <h2 className="text-[1.5rem] mt-[2rem] ">{template.title}</h2>
               <div className="grid grid-cols-[1fr_1fr]  gap-x-[6rem] mt-[2rem] ">
@@ -84,7 +87,7 @@ export default function Template() {
                       <dd>{template.tools.map(tool => tool).join(', ')}</dd>
                     </>
                   )}
-                  {template?.tools && template.tools.length > 0 && (
+                  {template?.agents && template.agents.length > 0 && (
                     <>
                       <dt>Agents</dt>
                       <dd>{template.agents.map(agent => agent).join(', ')}</dd>
