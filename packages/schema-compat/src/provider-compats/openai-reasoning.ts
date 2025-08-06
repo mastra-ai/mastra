@@ -26,7 +26,11 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
   isReasoningModel(): boolean {
     // there isn't a good way to automatically detect reasoning models besides doing this.
     // in the future when o5 is released this compat wont apply and we'll want to come back and update this class + our tests
-    return this.getModel().modelId.includes(`o3`) || this.getModel().modelId.includes(`o4`);
+    return (
+      this.getModel().modelId.includes(`o3`) ||
+      this.getModel().modelId.includes(`o4`) ||
+      this.getModel().modelId.includes(`o1`)
+    );
   }
 
   shouldApply(): boolean {

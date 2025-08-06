@@ -51,19 +51,16 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
     newMemory: z
       .string()
       .optional()
-      .nullable()
       .describe(`The ${config.workingMemory?.schema ? 'JSON' : 'Markdown'} formatted working memory content to store`),
     searchString: z
       .string()
       .optional()
-      .nullable()
       .describe(
         "The working memory string to find. Will be replaced with the newMemory string. If this is omitted or doesn't exist, the newMemory string will be appended to the end of your working memory. Replacing single lines at a time is encouraged for greater accuracy. If updateReason is not 'append-new-memory', this search string must be provided or the tool call will be rejected.",
       ),
     updateReason: z
       .enum(['append-new-memory', 'clarify-existing-memory', 'replace-irrelevant-memory'])
       .optional()
-      .nullable()
       .describe(
         "The reason you're updating working memory. Passing any value other than 'append-new-memory' requires a searchString to be provided. Defaults to append-new-memory",
       ),
