@@ -2895,8 +2895,6 @@ describe('MessageList', () => {
       const promptMessages = returnList.get.all.prompt();
 
       // Verify the tool history is preserved
-      const assistantMessages = promptMessages.filter(m => m.role === 'assistant');
-
       // Check if tool calls are present
       const hasToolCall = promptMessages.some(
         m => m.role === 'assistant' && Array.isArray(m.content) && m.content.some(c => c.type === 'tool-call'),

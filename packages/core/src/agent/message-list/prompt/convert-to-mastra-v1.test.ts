@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import type { MastraMessageV1 } from '../../../memory/types';
 import type { MastraMessageV2 } from '../../message-list';
 import { MessageList } from '../../message-list';
-import type { MastraMessageV1 } from '../../../memory/types';
 import { convertToV1Messages } from './convert-to-mastra-v1';
 
 describe('convertToV1Messages', () => {
@@ -1751,9 +1751,6 @@ describe('convertToV1Messages', () => {
     ];
 
     messageList.add(v2Messages, 'memory');
-
-    // Get the UI messages
-    const uiMessages = messageList.get.all.ui();
 
     // Get the core messages (what would be sent to LLM)
     const coreMessages = messageList.get.all.core();
