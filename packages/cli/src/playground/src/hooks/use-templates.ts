@@ -33,7 +33,7 @@ async function getMastraTemplateRepos(): Promise<{ templates: Template[]; tags: 
       description: 'Get weather information of any city.',
       longDescription: 'One Agent, one Workflow and one Tool to bring you the weather in your city.',
       imageURL: '',
-      tags: ['agent', 'workflow', 'tool'],
+      tags: ['Agent', 'Workflow', 'Tool'],
       useCase: '',
       supportedProviders: ['openai', 'anthropic', 'google', 'groq'],
     },
