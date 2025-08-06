@@ -14,7 +14,6 @@ import {
 } from '@mastra/core/agent/input-processor/processors';
 import { MCPClient } from '@mastra/mcp';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
-import { z } from 'zod';
 
 const memory = new Memory();
 
@@ -218,44 +217,4 @@ export const evalAgent = new Agent({
       scorer: answerRelevance,
     },
   },
-});
-
-const authorSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  expertise: z.string(),
-  background: z.string(),
-  writingStyle: z.object({
-    voice: z.string(),
-    tone: z.string(),
-    sentenceStructure: z.string().optional(),
-    dialogueStyle: z.string().optional(),
-    descriptiveApproach: z.string().optional(),
-    pacing: z.string().optional(),
-    signatureTechniques: z.array(z.string()).optional(),
-  }),
-  personalityTraits: z.object({
-    worldview: z.string().optional(),
-    emotionalRange: z.string().optional(),
-    intellectualApproach: z.string().optional(),
-    creativityStyle: z.string().optional(),
-    conflictPreference: z.string().optional(),
-  }),
-  similarAuthors: z.array(z.string()).optional(),
-});
-
-export const authorAgent = new Agent({
-  name: 'Author Persona Agent',
-  instructions: `You are an expert at creating detailed author personas and writing styles. Your role is to develop compelling, authentic author profiles that will guide the novel writing process.
-  `,
-  model: openai('gpt-4.1'),
-  memory: new Memory({
-    options: {
-      workingMemory: {
-        enabled: true,
-        scope: 'thread',
-        schema: authorSchema,
-      },
-    },
-  }),
 });
