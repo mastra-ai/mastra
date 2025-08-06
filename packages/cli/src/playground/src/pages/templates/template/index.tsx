@@ -10,7 +10,7 @@ import { PackageOpenIcon } from 'lucide-react';
 
 export default function Template() {
   const { templateSlug } = useParams()! as { templateSlug: string };
-  const { data: template } = useTemplateRepo({ repoOrSlug: templateSlug, owner: 'mastra-ai' });
+  const { data: template, isLoading } = useTemplateRepo({ repoOrSlug: templateSlug, owner: 'mastra-ai' });
   const [isInstalling, setIsInstalling] = useState(false);
   const [currentLogs, setCurrentLogs] = useState<string>(``);
 
@@ -47,13 +47,17 @@ export default function Template() {
           </Crumb>
 
           <Crumb as={Link} to={`/templates/${template?.slug}`} isCurrent>
-            {template?.title || 'Not found'}
+            {isLoading ? 'Loading...' : template?.title || 'Not found'}
           </Crumb>
         </Breadcrumb>
       </Header>
       <div className={cn('max-w-[80rem] w-full px-[3rem] mx-auto grid gap-y-[1rem] h-full overflow-y-scroll')}>
         <div className={cn(``)}>
-          {template ? (
+          {isLoading ? (
+            <div className="p-[1.5rem] ">
+              <p>Loading...</p>
+            </div>
+          ) : template ? (
             <div className="p-[1.5rem] ">
               <h2 className="text-[1.5rem] mt-[2rem] ">{template.title}</h2>
               <div className="grid grid-cols-[1fr_1fr]  gap-x-[6rem] mt-[2rem] ">
