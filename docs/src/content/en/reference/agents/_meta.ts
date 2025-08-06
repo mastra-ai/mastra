@@ -13,11 +13,9 @@ const meta = {
   getDescription: "getDescription()",
   getInstructions: "getInstructions()",
   getLLM: "getLLM()",
-  hasOwnMemory: "hasOwnMemory()",
   getDefaultGenerateOptions: "getDefaultGenerateOptions()",
   getDefaultStreamOptions: "getDefaultStreamOptions()",
   getDefaultVNextStreamOptions: "getDefaultVNextStreamOptions()",
-  generateTitleFromUserMessage: "generateTitleFromUserMessage()",
 };
 
 export default meta;
