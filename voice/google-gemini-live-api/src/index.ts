@@ -73,4 +73,10 @@ export type {
   GeminiVoiceName,
   GeminiSessionConfig,
   GeminiToolConfig,
+  GeminiLiveEventMap,
+  GeminiLiveMessage,
+  AudioConfig,
+  VideoConfig,
+  GeminiLiveServerMessage,
+  AuthOptions,
 } from './types';

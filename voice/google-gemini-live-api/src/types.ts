@@ -125,7 +125,7 @@ export interface GeminiLiveEventMap {
   /** Session state changes */
   session: { 
     state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'error' | 'updated';
-    config?: Record<string, unknown>; // Configuration data when state is 'updated'
+    config?: Record<string, unknown>; // Configuration data when state is 'updated' or 'connected'
   };
   /** Tool calls from the model */
   toolCall: { name: string; args: Record<string, any>; id: string };
@@ -142,6 +142,10 @@ export interface GeminiLiveEventMap {
   };
   /** Session resumption handle */
   sessionHandle: { handle: string; expiresAt: Date };
+  /** Session expiring warning */
+  sessionExpiring: { expiresIn: number; sessionId?: string };
+  /** Turn completion event */
+  turnComplete: { timestamp: number };
   /** Allow any additional string keys for extensibility */
   [key: string]: unknown;
 }
@@ -258,4 +262,26 @@ export interface AuthOptions {
   clientOptions?: {
     subject?: string;
   };
+}
+
+export enum GeminiLiveErrorCode {
+  CONNECTION_FAILED = 'connection_failed',
+  AUTHENTICATION_FAILED = 'authentication_failed',
+  API_KEY_MISSING = 'api_key_missing',
+  PROJECT_ID_MISSING = 'project_id_missing',
+  WEBSOCKET_ERROR = 'websocket_error',
+  AUDIO_PROCESSING_ERROR = 'audio_processing_error',
+  AUDIO_STREAM_ERROR = 'audio_stream_error',
+  SPEAKER_STREAM_ERROR = 'speaker_stream_error',
+  TRANSCRIPTION_TIMEOUT = 'transcription_timeout',
+  TRANSCRIPTION_FAILED = 'transcription_failed',
+  TOOL_EXECUTION_ERROR = 'tool_execution_error',
+  TOOL_NOT_FOUND = 'tool_not_found',
+  SESSION_CONFIG_UPDATE_FAILED = 'session_config_update_failed',
+  SESSION_RESUMPTION_FAILED = 'session_resumption_failed',
+  INVALID_AUDIO_FORMAT = 'invalid_audio_format',
+  STREAM_LIMIT_EXCEEDED = 'stream_limit_exceeded',
+  NOT_CONNECTED = 'not_connected',
+  INVALID_STATE = 'invalid_state',
+  UNKNOWN_ERROR = 'unknown_error'
 }
