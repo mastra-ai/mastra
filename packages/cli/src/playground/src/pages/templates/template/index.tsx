@@ -1,4 +1,4 @@
-import { useTemplates } from '@/domains/templates/use-templates';
+import { useTemplateRepo } from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
 import { Breadcrumb, Crumb, GithubIcon, Header, MainContentLayout } from '@mastra/playground-ui';
 import { Link, useParams } from 'react-router';
@@ -10,8 +10,7 @@ import { PackageOpenIcon } from 'lucide-react';
 
 export default function Template() {
   const { templateSlug } = useParams()! as { templateSlug: string };
-  const { data: templates } = useTemplates();
-  const template = templates.find(t => t.slug === templateSlug);
+  const { data: template } = useTemplateRepo({ repoOrSlug: templateSlug, owner: 'mastra-ai' });
   const [isInstalling, setIsInstalling] = useState(false);
   const [currentLogs, setCurrentLogs] = useState<string>(``);
 
@@ -84,7 +83,7 @@ export default function Template() {
                       <dd>{template.tools.map(tool => tool).join(', ')}</dd>
                     </>
                   )}
-                  {template?.tools && template.tools.length > 0 && (
+                  {template?.agents && template.agents.length > 0 && (
                     <>
                       <dt>Agents</dt>
                       <dd>{template.agents.map(agent => agent).join(', ')}</dd>
