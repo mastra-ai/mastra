@@ -170,6 +170,7 @@ export class Telemetry {
       const span = this.tracer.startSpan(context.spanName);
 
       function handleError(error: unknown) {
+        debugger;
         span.recordException(error as Error);
         span.setStatus({
           code: SpanStatusCode.ERROR,

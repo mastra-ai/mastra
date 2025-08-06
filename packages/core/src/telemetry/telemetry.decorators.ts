@@ -68,6 +68,7 @@ function enhanceStreamingArgumentsWithTelemetry(
         span.setStatus({ code: SpanStatusCode.OK });
         span.end();
       } catch (error) {
+        debugger;
         console.warn('Telemetry capture failed:', error);
         span.setAttribute(`${spanName}.result`, '[Telemetry Capture Error]');
         span.setStatus({ code: SpanStatusCode.ERROR });
@@ -204,6 +205,7 @@ export function withSpan(options: {
         // Return regular results
         return result;
       } catch (error) {
+        debugger;
         span.setStatus({
           code: SpanStatusCode.ERROR,
           message: error instanceof Error ? error.message : 'Unknown error',
