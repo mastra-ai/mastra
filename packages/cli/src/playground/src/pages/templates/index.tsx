@@ -1,18 +1,7 @@
-import {
-  AgentIcon,
-  GithubIcon,
-  Header,
-  HeaderTitle,
-  MainContentLayout,
-  McpServerIcon,
-  ToolsIcon,
-  TemplatesTools,
-  TemplatesList,
-} from '@mastra/playground-ui';
+import { Header, HeaderTitle, MainContentLayout, TemplatesTools, TemplatesList } from '@mastra/playground-ui';
 import { useTemplates } from '@/domains/templates/use-templates';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router';
-import { NetworkIcon, WorkflowIcon } from 'lucide-react';
 
 import { useState } from 'react';
 
