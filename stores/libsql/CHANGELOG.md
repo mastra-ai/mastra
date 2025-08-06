@@ -1,5 +1,13 @@
 # @mastra/libsql
 
+## 0.13.1-alpha.0
+
+### Patch Changes
+
+- 8888b57: Fix LibSQL vector metadata filtering for Memory system - corrected JSON path syntax for simple fields and changed default minScore to -1 to include all similarity results
+- Updated dependencies [cd0042e]
+  - @mastra/core@0.13.1-alpha.0
+
 ## 0.13.0
 
 ### Minor Changes
