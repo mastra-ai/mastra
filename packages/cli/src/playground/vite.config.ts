@@ -28,8 +28,8 @@ export default defineConfig(({ mode }) => {
 
   if (mode === 'development') {
     // Use environment variable for the target port, fallback to 4111
-    const targetPort = process.env.MASTRA_DEV_PORT || '4111';
-    const targetHost = process.env.MASTRA_DEV_HOST || 'localhost';
+    const targetPort = process.env.PORT || '4111';
+    const targetHost = process.env.HOST || 'localhost';
 
     return {
       ...commonConfig,

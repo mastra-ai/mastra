@@ -199,10 +199,6 @@ export async function dev({
     );
   }
 
-  // Set environment variables for playground development
-  process.env.MASTRA_DEV_PORT = portToUse.toString();
-  process.env.MASTRA_DEV_HOST = serverOptions?.host ?? 'localhost';
-
   await bundler.prepare(dotMastraPath);
 
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
