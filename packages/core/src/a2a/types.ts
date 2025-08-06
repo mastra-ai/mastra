@@ -74,3 +74,50 @@ export interface TaskContext {
   // - logger instance
   // - AbortSignal linked to cancellation
 }
+
+// === Error Types (Standard and A2A)
+
+/** Error code for JSON Parse Error (-32700). Invalid JSON was received by the server. */
+export const ErrorCodeParseError = -32700;
+export type ErrorCodeParseError = typeof ErrorCodeParseError;
+/** Error code for Invalid Request (-32600). The JSON sent is not a valid Request object. */
+export const ErrorCodeInvalidRequest = -32600;
+export type ErrorCodeInvalidRequest = typeof ErrorCodeInvalidRequest;
+/** Error code for Method Not Found (-32601). The method does not exist / is not available. */
+export const ErrorCodeMethodNotFound = -32601;
+export type ErrorCodeMethodNotFound = typeof ErrorCodeMethodNotFound;
+/** Error code for Invalid Params (-32602). Invalid method parameter(s). */
+export const ErrorCodeInvalidParams = -32602;
+export type ErrorCodeInvalidParams = typeof ErrorCodeInvalidParams;
+/** Error code for Internal Error (-32603). Internal JSON-RPC error. */
+export const ErrorCodeInternalError = -32603;
+export type ErrorCodeInternalError = typeof ErrorCodeInternalError;
+
+/** Error code for Task Not Found (-32001). The specified task was not found. */
+export const ErrorCodeTaskNotFound = -32001;
+export type ErrorCodeTaskNotFound = typeof ErrorCodeTaskNotFound;
+/** Error code for Task Not Cancelable (-32002). The specified task cannot be canceled. */
+export const ErrorCodeTaskNotCancelable = -32002;
+export type ErrorCodeTaskNotCancelable = typeof ErrorCodeTaskNotCancelable;
+/** Error code for Push Notification Not Supported (-32003). Push Notifications are not supported for this operation or agent. */
+export const ErrorCodePushNotificationNotSupported = -32003;
+export type ErrorCodePushNotificationNotSupported = typeof ErrorCodePushNotificationNotSupported;
+/** Error code for Unsupported Operation (-32004). The requested operation is not supported by the agent. */
+export const ErrorCodeUnsupportedOperation = -32004;
+export type ErrorCodeUnsupportedOperation = typeof ErrorCodeUnsupportedOperation;
+
+/**
+ * Union of all well-known A2A and standard JSON-RPC error codes defined in this schema.
+ * Use this type for checking against specific error codes. A server might theoretically
+ * use other codes within the valid JSON-RPC ranges.
+ */
+export type KnownErrorCode =
+  | typeof ErrorCodeParseError
+  | typeof ErrorCodeInvalidRequest
+  | typeof ErrorCodeMethodNotFound
+  | typeof ErrorCodeInvalidParams
+  | typeof ErrorCodeInternalError
+  | typeof ErrorCodeTaskNotFound
+  | typeof ErrorCodeTaskNotCancelable
+  | typeof ErrorCodePushNotificationNotSupported
+  | typeof ErrorCodeUnsupportedOperation;
