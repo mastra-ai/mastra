@@ -1,5 +1,14 @@
 # @mastra/longmemeval
 
+## 0.1.7-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [8888b57]
+- Updated dependencies [cd0042e]
+  - @mastra/libsql@0.13.1-alpha.0
+  - @mastra/core@0.13.1-alpha.0
+
 ## 0.1.6
 
 ### Patch Changes

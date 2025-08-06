@@ -1,5 +1,13 @@
 # @mastra/pg
 
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- 3e49b7a: Fix PostgreSQL vector metadata filtering for Memory system - changed default minScore to -1 to include all similarity results and added comprehensive metadata filtering tests
+- Updated dependencies [cd0042e]
+  - @mastra/core@0.13.1-alpha.0
+
 ## 0.13.2
 
 ### Patch Changes
