@@ -1334,31 +1334,40 @@ export class Agent<
       runtimeContext,
     });
 
-    let allTools = {
+    return this.formatTools({
       ...assignedTools,
       ...memoryTools,
       ...toolsetTools,
       ...clientsideTools,
       ...workflowTools,
-    };
+    });
+  }
 
+  private formatTools(tools: Record<string, CoreTool>): Record<string, CoreTool> {
     const INVALID_CHAR_REGEX = /[^a-zA-Z0-9_\-]/;
     const STARTING_CHAR_REGEX = /[a-zA-Z_]/;
 
-    for (const key of Object.keys(allTools)) {
-      if (allTools[key] && (key.length > 63 || key.match(INVALID_CHAR_REGEX) || !key[0]!.match(STARTING_CHAR_REGEX))) {
+    for (const key of Object.keys(tools)) {
+      if (tools[key] && (key.length > 63 || key.match(INVALID_CHAR_REGEX) || !key[0]!.match(STARTING_CHAR_REGEX))) {
         let newKey = key.replace(INVALID_CHAR_REGEX, '_');
         if (!newKey[0]!.match(STARTING_CHAR_REGEX)) {
           newKey = '_' + newKey;
         }
         newKey = newKey.slice(0, 63);
 
-        allTools[newKey] = allTools[key];
-        delete allTools[key];
+        let suffix = 1;
+        while (tools[newKey]) {
+          newKey = newKey.slice(0, 62);
+          newKey += suffix;
+          suffix += 1;
+        }
+
+        tools[newKey] = tools[key];
+        delete tools[key];
       }
     }
 
-    return allTools;
+    return tools;
   }
 
   /**

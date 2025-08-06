@@ -1693,6 +1693,46 @@ describe('agent', () => {
   });
 
   describe('agent tool handling', () => {
+    it('should handle tool name collisions caused by formatting', async () => {
+      // Create two tool names that will collide after truncation to 63 chars
+      const base = 'a'.repeat(63);
+      const toolName1 = base + 'X'; // 64 chars
+      const toolName2 = base + 'Y'; // 64 chars, but will be truncated to same as toolName1
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'Test tool name collision.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 1, completionTokens: 1 },
+            text: 'ok',
+          }),
+        }),
+        tools: {
+          [toolName1]: {
+            id: toolName1,
+            description: 'Tool 1',
+            inputSchema: z.object({}),
+            execute: async () => {},
+          },
+          [toolName2]: {
+            id: toolName2,
+            description: 'Tool 2',
+            inputSchema: z.object({}),
+            execute: async () => {},
+          },
+        },
+      });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      // Should have two keys, one with suffix
+      const keys = Object.keys(tools);
+      expect(keys.length).toBe(2);
+
+      expect(keys[0]).toBe('a'.repeat(63));
+      expect(keys[1]).toBe('a'.repeat(62) + '1');
+    });
+
     it('should sanitize tool names with invalid characters', async () => {
       const badName = 'bad!@#tool$name';
       const userAgent = new Agent({
@@ -1743,7 +1783,7 @@ describe('agent', () => {
         },
       });
       const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
-      expect(Object.keys(tools).some(k => k.startsWith('_'))).toBe(true);
+      expect(Object.keys(tools)).toContain('_1tool');
       expect(Object.keys(tools)).not.toContain(badStart);
     });
 
