@@ -1,4 +1,4 @@
-import type { MemoryConfig, StorageThreadType } from '@mastra/core';
+import type { MemoryConfig } from '@mastra/core';
 import { createTool } from '@mastra/core';
 import { z } from 'zod';
 
@@ -84,7 +84,7 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
       if (!thread) {
         thread = await memory.createThread({
           threadId,
-          resourceId: resourceId || (thread as unknown as StorageThreadType)?.resourceId,
+          resourceId: resourceId || thread!.resourceId,
           memoryConfig: config,
         });
       }
