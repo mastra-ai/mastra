@@ -1,4 +1,4 @@
-import type { Schema, LanguageModelV1 } from 'ai';
+import type { Schema } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import { z, ZodOptional, ZodObject, ZodArray, ZodUnion, ZodString, ZodNumber, ZodDate, ZodDefault, ZodNull } from 'zod';
 import type { ZodTypeAny } from 'zod';
