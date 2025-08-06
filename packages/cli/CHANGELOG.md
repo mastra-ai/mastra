@@ -1,5 +1,13 @@
 # mastra
 
+## 0.10.20
+
+### Patch Changes
+
+- Updated dependencies [cd0042e]
+  - @mastra/core@0.13.1
+  - @mastra/deployer@0.13.1
+
 ## 0.10.20-alpha.0
 
 ### Patch Changes

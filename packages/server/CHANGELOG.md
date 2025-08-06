@@ -1,5 +1,12 @@
 # @mastra/deployer
 
+## 0.13.1
+
+### Patch Changes
+
+- Updated dependencies [cd0042e]
+  - @mastra/core@0.13.1
+
 ## 0.13.1-alpha.0
 
 ### Patch Changes
