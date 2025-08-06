@@ -127,8 +127,8 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/docs/deployment/deployment",
-        destination: "/docs/deployment/serverless-platforms",
+        source: "/:locale/docs/deployment/deployment",
+        destination: "/:locale/docs/deployment/serverless-platforms",
         permanent: true,
       },
       {
