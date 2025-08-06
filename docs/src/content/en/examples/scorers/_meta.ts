@@ -1,4 +1,5 @@
 const meta = {
+  "custom-scorer": "Custom Scorer",
   "answer-relevancy": "Answer Relevancy",
   bias: "Bias",
   completeness: "Completeness",
@@ -9,7 +10,5 @@ const meta = {
   "textual-difference": "Textual Difference",
   "tone-consistency": "Tone Consistency",
   toxicity: "Toxicity",
-  "custom-llm-judge-eval": "LLM as a Judge",
-  "custom-native-javascript-eval": "Native JavaScript",
 };
 export default meta;
