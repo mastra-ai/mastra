@@ -7,31 +7,45 @@ import type { MastraMessageV1 } from '../../../memory/types';
 import type { MastraMessageContentV2, MastraMessageV2 } from '../../message-list';
 import { attachmentsToParts } from './attachments-to-parts';
 
-const makePushOrCombine = (v1Messages: MastraMessageV1[]) => (msg: MastraMessageV1) => {
-  const previousMessage = v1Messages.at(-1);
-  if (
-    msg.role === previousMessage?.role &&
-    Array.isArray(previousMessage.content) &&
-    Array.isArray(msg.content) &&
-    // we were creating new messages for tool calls before and not appending to the assistant message
-    // so don't append here so everything works as before
-    (msg.role !== `assistant` || (msg.role === `assistant` && msg.content.at(-1)?.type !== `tool-call`))
-  ) {
-    for (const part of msg.content) {
-      // @ts-ignore needs type gymnastics? msg.content and previousMessage.content are the same type here since both are arrays
-      // I'm not sure what's adding `never` to the union but this code definitely works..
-      previousMessage.content.push(part);
+const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
+  // Track how many times each ID has been used to create unique IDs for split messages
+  const idUsageCount = new Map<string, number>();
+
+  return (msg: MastraMessageV1) => {
+    const previousMessage = v1Messages.at(-1);
+    if (
+      msg.role === previousMessage?.role &&
+      Array.isArray(previousMessage.content) &&
+      Array.isArray(msg.content) &&
+      // we were creating new messages for tool calls before and not appending to the assistant message
+      // so don't append here so everything works as before
+      (msg.role !== `assistant` || (msg.role === `assistant` && msg.content.at(-1)?.type !== `tool-call`))
+    ) {
+      for (const part of msg.content) {
+        // @ts-ignore needs type gymnastics? msg.content and previousMessage.content are the same type here since both are arrays
+        // I'm not sure what's adding `never` to the union but this code definitely works..
+        previousMessage.content.push(part);
+      }
+    } else {
+      // When pushing a new message, check if we need to deduplicate the ID
+      const baseId = msg.id;
+      const currentCount = idUsageCount.get(baseId) || 0;
+
+      // If we've seen this ID before, append a suffix
+      if (currentCount > 0) {
+        msg.id = `${baseId}-${currentCount}`;
+      }
+
+      // Increment the usage count for this base ID
+      idUsageCount.set(baseId, currentCount + 1);
+
+      v1Messages.push(msg);
     }
-  } else {
-    v1Messages.push(msg);
-  }
+  };
 };
 export function convertToV1Messages(messages: Array<MastraMessageV2>) {
   const v1Messages: MastraMessageV1[] = [];
   const pushOrCombine = makePushOrCombine(v1Messages);
-
-  // Track how many times each ID has been used
-  const idUsageCount = new Map<string, number>();
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i];
@@ -40,21 +54,11 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
     const { content, experimental_attachments: inputAttachments = [], parts: inputParts } = message.content;
     const { role } = message;
 
-    // Get unique ID by checking if we've used this ID before
-    const getFields = () => {
-      const baseId = message.id;
-      const currentCount = idUsageCount.get(baseId) || 0;
-      const id = currentCount > 0 ? `${baseId}-${currentCount}` : baseId;
-
-      // Increment the usage count for next time
-      idUsageCount.set(baseId, currentCount + 1);
-
-      return {
-        id,
-        createdAt: message.createdAt,
-        resourceId: message.resourceId!,
-        threadId: message.threadId!,
-      };
+    const fields = {
+      id: message.id,
+      createdAt: message.createdAt,
+      resourceId: message.resourceId!,
+      threadId: message.threadId!,
     };
 
     const experimental_attachments = [...inputAttachments];
@@ -78,7 +82,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
             : { type: 'text', text: content || '' };
           pushOrCombine({
             role: 'user',
-            ...getFields(),
+            ...fields,
             type: 'text',
             // @ts-ignore
             content: userContent,
@@ -96,7 +100,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
             : textParts;
           pushOrCombine({
             role: 'user',
-            ...getFields(),
+            ...fields,
             type: 'text',
             content:
               Array.isArray(userContent) &&
@@ -162,7 +166,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
 
             pushOrCombine({
               role: 'assistant',
-              ...getFields(),
+              ...fields,
               type: content.some(c => c.type === `tool-call`) ? 'tool-call' : 'text',
               // content: content,
               content:
@@ -186,7 +190,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
             if (invocationsWithResults.length > 0) {
               pushOrCombine({
                 role: 'tool',
-                ...getFields(),
+                ...fields,
                 type: 'tool-result',
                 content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
                   const { toolCallId, toolName, result } = toolInvocation;
@@ -273,7 +277,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
                 // Create tool-call message for all invocations (calls and results)
                 pushOrCombine({
                   role: 'assistant',
-                  ...getFields(),
+                  ...fields,
                   type: 'tool-call',
                   content: [
                     ...stepInvocations.map(({ toolCallId, toolName, args }) => ({
@@ -291,7 +295,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
                 if (invocationsWithResults.length > 0) {
                   pushOrCombine({
                     role: 'tool',
-                    ...getFields(),
+                    ...fields,
                     type: 'tool-result',
                     content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
                       const { toolCallId, toolName, result } = toolInvocation;
@@ -314,7 +318,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
         const toolInvocations = message.content.toolInvocations;
 
         if (toolInvocations == null || toolInvocations.length === 0) {
-          pushOrCombine({ role: 'assistant', ...getFields(), content: content || '', type: 'text' });
+          pushOrCombine({ role: 'assistant', ...fields, content: content || '', type: 'text' });
           break;
         }
 
@@ -334,7 +338,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
           // assistant message with tool calls
           pushOrCombine({
             role: 'assistant',
-            ...getFields(),
+            ...fields,
             type: 'tool-call',
             content: [
               ...(isLastMessage && content && i === 0 ? [{ type: 'text' as const, text: content }] : []),
@@ -353,7 +357,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
           if (invocationsWithResults.length > 0) {
             pushOrCombine({
               role: 'tool',
-              ...getFields(),
+              ...fields,
               type: 'tool-result',
               content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
                 const { toolCallId, toolName, result } = toolInvocation;
@@ -369,7 +373,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
         }
 
         if (content && !isLastMessage) {
-          pushOrCombine({ role: 'assistant', ...getFields(), type: 'text', content: content || '' });
+          pushOrCombine({ role: 'assistant', ...fields, type: 'text', content: content || '' });
         }
 
         break;

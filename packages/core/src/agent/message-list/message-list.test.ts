@@ -2868,7 +2868,6 @@ describe('MessageList', () => {
 
       // Step 3: Get remembered messages as v1 (like agent does for processing)
       const rememberedV1 = messageList.get.remembered.v1();
-      console.log('Remembered V1 messages:', JSON.stringify(rememberedV1, null, 2));
 
       // Step 4: Simulate memory.processMessages (which just returns them if no processors)
       const processedMemoryMessages = rememberedV1;
@@ -2895,11 +2894,8 @@ describe('MessageList', () => {
       // Step 6: Get prompt messages (what's sent to LLM)
       const promptMessages = returnList.get.all.prompt();
 
-      console.log('Final prompt messages (sent to LLM):', JSON.stringify(promptMessages, null, 2));
-
       // Verify the tool history is preserved
       const assistantMessages = promptMessages.filter(m => m.role === 'assistant');
-      console.log('Assistant messages count:', assistantMessages.length);
 
       // Check if tool calls are present
       const hasToolCall = promptMessages.some(
@@ -2909,9 +2905,6 @@ describe('MessageList', () => {
       const hasToolResult = promptMessages.some(
         m => m.role === 'tool' && Array.isArray(m.content) && m.content.some(c => c.type === 'tool-result'),
       );
-
-      console.log('Has tool call:', hasToolCall);
-      console.log('Has tool result:', hasToolResult);
 
       // These should be true if tool history is preserved
       expect(hasToolCall).toBe(true);

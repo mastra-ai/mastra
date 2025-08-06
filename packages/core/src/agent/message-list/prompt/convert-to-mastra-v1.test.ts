@@ -1563,9 +1563,9 @@ describe('convertToV1Messages', () => {
             }),
           ]),
         }),
-        // 3. Tool returns result
+        // 3. Tool returns result (with ${id}-1 suffix due to message splitting)
         expect.objectContaining({
-          id: '17949558-8a2b-4841-990d-ce05d29a8afb',
+          id: '17949558-8a2b-4841-990d-ce05d29a8afb-1',
           role: 'tool',
           type: 'tool-result',
           content: expect.arrayContaining([
@@ -1581,9 +1581,9 @@ describe('convertToV1Messages', () => {
             }),
           ]),
         }),
-        // 4. Assistant provides text response (SEPARATE from tool call/result)
+        // 4. Assistant provides text response (SEPARATE from tool call/result, with ${id}-2 suffix due to message splitting)
         expect.objectContaining({
-          id: '17949558-8a2b-4841-990d-ce05d29a8afb',
+          id: '17949558-8a2b-4841-990d-ce05d29a8afb-2',
           role: 'assistant',
           type: 'text',
           content: expect.arrayContaining([
@@ -1695,8 +1695,6 @@ describe('convertToV1Messages', () => {
     const toolCallMessages = resultV1.filter(m => m.type === 'tool-call');
     const toolResultMessages = resultV1.filter(m => m.type === 'tool-result');
 
-    console.log('Result v1 messages:', JSON.stringify(resultV1, null, 2));
-
     expect(toolCallMessages.length).toBeGreaterThan(0);
     expect(toolResultMessages.length).toBeGreaterThan(0);
   });
@@ -1756,27 +1754,15 @@ describe('convertToV1Messages', () => {
 
     // Get the UI messages
     const uiMessages = messageList.get.all.ui();
-    console.log('UI messages:', JSON.stringify(uiMessages, null, 2));
 
     // Get the core messages (what would be sent to LLM)
     const coreMessages = messageList.get.all.core();
-    console.log('Core messages:', JSON.stringify(coreMessages, null, 2));
 
     // Check if tool calls and text are properly separated in core messages
     // This is critical for the AI to be able to reference tool history
 
     // We expect multiple core messages if properly separated
     expect(coreMessages.length).toBeGreaterThanOrEqual(1);
-
-    // Log the structure to understand what's happening
-    coreMessages.forEach((msg, i) => {
-      console.log(`Core message ${i}:`, {
-        role: msg.role,
-        contentType: typeof msg.content,
-        contentLength: Array.isArray(msg.content) ? msg.content.length : 'string',
-        contentParts: Array.isArray(msg.content) ? msg.content.map(p => p.type) : 'N/A',
-      });
-    });
   });
 
   it('should preserve tool history in full conversation flow (reproduces traces issue)', () => {
@@ -1868,9 +1854,6 @@ describe('convertToV1Messages', () => {
     // Get what would be sent to the LLM (this is what shows in traces)
     const promptMessages = messageList.get.all.prompt();
 
-    console.log('Messages sent to LLM (as shown in traces):');
-    console.log(JSON.stringify({ messages: promptMessages }, null, 2));
-
     // Verify tool history is present
     const hasToolCall = promptMessages.some(
       m => m.role === 'assistant' && Array.isArray(m.content) && m.content.some(c => c.type === 'tool-call'),
@@ -1891,8 +1874,6 @@ describe('convertToV1Messages', () => {
       },
       {} as Record<string, number>,
     );
-
-    console.log('Message count by role:', messagesByRole);
 
     // We should have: system, user, assistant (tool-call), tool (result), assistant (text), user
     expect(messagesByRole.system).toBe(1);
