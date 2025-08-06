@@ -1342,10 +1342,13 @@ export class Agent<
       ...workflowTools,
     };
 
+    const INVALID_CHAR_REGEX = /[^a-zA-Z0-9_\-]/;
+    const STARTING_CHAR_REGEX = /[a-zA-Z_]/;
+
     for (const key of Object.keys(allTools)) {
-      if (allTools[key] && (key.length > 63 || key.match(/[^a-zA-Z0-9_\.\-]/) || !key[0]!.match(/[a-zA-Z_]/))) {
-        let newKey = key.replace(/[^a-zA-Z0-9_\.\-]/g, '_');
-        if (!newKey[0]!.match(/[a-zA-Z_]/)) {
+      if (allTools[key] && (key.length > 63 || key.match(INVALID_CHAR_REGEX) || !key[0]!.match(STARTING_CHAR_REGEX))) {
+        let newKey = key.replace(INVALID_CHAR_REGEX, '_');
+        if (!newKey[0]!.match(STARTING_CHAR_REGEX)) {
           newKey = '_' + newKey;
         }
         newKey = newKey.slice(0, 63);
