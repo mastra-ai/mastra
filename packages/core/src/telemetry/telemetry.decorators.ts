@@ -205,7 +205,6 @@ export function withSpan(options: {
         // Return regular results
         return result;
       } catch (error) {
-        debugger;
         span.setStatus({
           code: SpanStatusCode.ERROR,
           message: error instanceof Error ? error.message : 'Unknown error',
