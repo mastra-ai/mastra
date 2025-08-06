@@ -6,19 +6,17 @@ import type { ZodObject } from 'zod';
 export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
   const hasSchema = !!memoryConfig?.workingMemory?.schema;
 
-  let inputSchema;
-
-  if (hasSchema) {
-    inputSchema = memoryConfig.workingMemory?.schema as ZodObject<any, any, any>;
-  } else {
-    inputSchema = z.object({
-      memory: z
-        .string()
-        .describe(
-          `The ${hasSchema ? 'JSON' : 'Markdown'} formatted working memory content to store. This MUST be a string. Never pass an object.`,
-        ),
-    });
-  }
+  const inputSchema = z.object({
+    memory: hasSchema
+      ? (memoryConfig.workingMemory?.schema as ZodObject<any, any, any>).describe(
+          `The JSON formatted working memory content to store.`,
+        )
+      : z
+          .string()
+          .describe(
+            `The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.`,
+          ),
+  });
 
   return createTool({
     id: 'update-working-memory',
@@ -44,7 +42,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
         throw new Error(`Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`);
       }
 
-      const workingMemory = hasSchema ? JSON.stringify(context) : context.memory;
+      const workingMemory = typeof context.memory === 'string' ? context.memory : JSON.stringify(context.memory);
 
       // Use the new updateWorkingMemory method which handles both thread and resource scope
       await memory.updateWorkingMemory({
