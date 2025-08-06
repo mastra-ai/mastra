@@ -17,6 +17,9 @@
  *    or
  *    npx tsx test.ts
  * 
+ * 3. Tool Integration Test:
+ *    npx tsx test.ts tools
+ * 
  * ENVIRONMENT SETUP:
  * 
  * 1. Set your API key:
@@ -41,6 +44,12 @@
  * - Event monitoring
  * - Session management
  * 
+ * Tool Integration Test:
+ * - Tool registration and execution
+ * - Tool calling during conversation
+ * - Tool result handling
+ * - Error handling for tools
+ * 
  * OUTPUT:
  * - Console logs with emojis for easy reading
  * - Audio files saved as PCM format for verification
@@ -51,6 +60,8 @@
  */
 
 import { GeminiLiveVoice } from './gemini-live-voice';
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 
@@ -216,12 +227,138 @@ async function runTTSTest() {
   }
 }
 
+/**
+ * Tool Integration Test for Gemini Live API
+ */
+async function toolIntegrationTest() {
+  console.log('🔧 Starting Tool Integration Test...\n');
+
+  // Create test tools
+  const weatherTool = createTool({
+    id: 'getWeather',
+    description: 'Get the current weather for a location',
+    inputSchema: z.object({
+      location: z.string().describe('The city and state, e.g. San Francisco, CA'),
+    }),
+    outputSchema: z.object({
+      temperature: z.number(),
+      conditions: z.string(),
+      message: z.string(),
+    }),
+    execute: async ({ context }) => {
+      console.log('🌤️ Weather tool called with:', context);
+      // Simulate weather API call
+      const mockWeather = {
+        temperature: 72,
+        conditions: 'sunny',
+        message: `The current temperature in ${context.location} is 72°F with sunny conditions.`
+      };
+      return mockWeather;
+    },
+  });
+
+  const calculatorTool = createTool({
+    id: 'calculate',
+    description: 'Perform basic mathematical calculations',
+    inputSchema: z.object({
+      operation: z.enum(['add', 'subtract', 'multiply', 'divide']).describe('The mathematical operation to perform'),
+      a: z.number().describe('First number'),
+      b: z.number().describe('Second number'),
+    }),
+    outputSchema: z.object({
+      result: z.number(),
+      message: z.string(),
+    }),
+    execute: async ({ context }) => {
+      console.log('🧮 Calculator tool called with:', context);
+      let result: number;
+      switch (context.operation) {
+        case 'add':
+          result = context.a + context.b;
+          break;
+        case 'subtract':
+          result = context.a - context.b;
+          break;
+        case 'multiply':
+          result = context.a * context.b;
+          break;
+        case 'divide':
+          if (context.b === 0) {
+            throw new Error('Division by zero');
+          }
+          result = context.a / context.b;
+          break;
+        default:
+          throw new Error(`Unknown operation: ${context.operation}`);
+      }
+      return {
+        result,
+        message: `${context.a} ${context.operation} ${context.b} = ${result}`
+      };
+    },
+  });
+
+  const voice = new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    model: "gemini-2.0-flash-exp",
+    speaker: "Puck",
+    debug: true,
+  });
+
+  try {
+    // Add tools to the voice instance
+    voice.addTools({
+      getWeather: weatherTool,
+      calculate: calculatorTool,
+    });
+
+    console.log('✅ Tools added to voice instance');
+
+    await voice.connect();
+    console.log('✅ Connected:', voice.isConnected());
+
+    // Set up event listeners
+    voice.on('speaking', ({ audio, audioData, sampleRate }) => {
+      console.log('🎵 Audio received:', { sampleRate, audioLength: audioData?.length });
+    });
+
+    voice.on('writing', ({ text, role }) => {
+      console.log(`📝 ${role}:`, text);
+    });
+
+    voice.on('toolCall', ({ name, args, id }) => {
+      console.log('🔧 Tool call detected:', { name, args, id });
+    });
+
+    voice.on('error', (error) => {
+      console.error('❌ Error:', error);
+    });
+
+    // Test tool integration with a conversation
+    console.log('\n🤖 Starting conversation with tools...');
+    await voice.speak('Hello! I can help you with weather information and calculations. Try asking me about the weather in San Francisco or ask me to calculate 15 plus 27.');
+    
+    // Wait for response
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    console.log('\n✅ Tool integration test completed!');
+
+  } catch (error) {
+    console.error('❌ Tool integration test failed:', error instanceof Error ? error.message : String(error));
+  } finally {
+    await voice.disconnect();
+    console.log('🔧 Tool integration test finished!');
+  }
+}
+
 // Check command line arguments to determine which test to run
 const args = process.argv.slice(2);
 const testType = args[0] || 'comprehensive';
 
 if (testType === 'simple') {
   simpleTTSTest().catch(console.error);
+} else if (testType === 'tools') {
+  toolIntegrationTest().catch(console.error);
 } else {
   runTTSTest().catch(console.error);
 }
