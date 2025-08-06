@@ -71,48 +71,31 @@ export class NewAgentNetwork extends MastraBase {
     this.#mastra = mastra;
   }
 
-  // private async saveMessage({
-  //   message,
-  //   thread,
-  //   memory,
-  // }: {
-  //   message: string | CoreMessage | AiMessageType | UIMessageWithMetadata;
-  //   thread: StorageThreadType;
-  //   memory: MastraMemory;
-  // }) {
-  //   if (typeof message === 'string') {
-  //     await memory?.saveMessages({
-  //       messages: [
-  //         {
-  //           id: this.#mastra?.generateId() || randomUUID(),
-  //           type: 'text',
-  //           role: 'user',
-  //           content: { parts: [{ type: 'text', text: message }], format: 2 },
-  //           createdAt: new Date(),
-  //           threadId: thread?.id,
-  //           resourceId: thread?.resourceId,
-  //         },
-  //       ] as MastraMessageV2[],
-  //       format: 'v2',
-  //     });
-  //   } else {
-  //     const newContent
-  //     await memory?.saveMessages({
-  //       messages: [
-  //         {
-  //           id: this.#mastra?.generateId() || randomUUID(),
-  //           type: 'text',
-  //           role: 'user',
-  //           content: message.,
-  //           createdAt: new Date(),
-  //           threadId: thread?.id,
-  //           resourceId: thread?.resourceId,
-  //         },
-  //       ] as MastraMessageV2[],
-  //       format: 'v2',
-  //     });
-  //   }
-  // }
+  private getMessageFromMessages(
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+  ) {
+    let message = '';
+    if (typeof messages === 'string') {
+      message = messages;
+    } else {
+      const lastMessage = messages[messages.length - 1];
+      if (typeof lastMessage === 'string') {
+        message = lastMessage;
+      } else if (lastMessage?.content) {
+        const lastMessageContent = lastMessage.content;
+        if (typeof lastMessageContent === 'string') {
+          message = lastMessageContent;
+        } else if (Array.isArray(lastMessageContent)) {
+          const lastPart = lastMessageContent[lastMessageContent.length - 1];
+          if (lastPart?.type === 'text') {
+            message = lastPart.text;
+          }
+        }
+      }
+    }
+
+    return message;
+  }
 
   private async beforeRun({
     runtimeContext,
@@ -361,25 +344,7 @@ export class NewAgentNetwork extends MastraBase {
       messages,
     });
 
-    let message = '';
-    if (typeof messages === 'string') {
-      message = messages;
-    } else {
-      const lastMessage = messages[messages.length - 1];
-      if (typeof lastMessage === 'string') {
-        message = lastMessage;
-      } else if (lastMessage?.content) {
-        const lastMessageContent = lastMessage.content;
-        if (typeof lastMessageContent === 'string') {
-          message = lastMessageContent;
-        } else if (Array.isArray(lastMessageContent)) {
-          const lastPart = lastMessageContent[lastMessageContent.length - 1];
-          if (lastPart?.type === 'text') {
-            message = lastPart.text;
-          }
-        }
-      }
-    }
+    const message = this.getMessageFromMessages(messages);
 
     const result = await run.start({
       inputData: {
@@ -473,25 +438,7 @@ export class NewAgentNetwork extends MastraBase {
       messages,
     });
 
-    let message = '';
-    if (typeof messages === 'string') {
-      message = messages;
-    } else {
-      const lastMessage = messages[messages.length - 1];
-      if (typeof lastMessage === 'string') {
-        message = lastMessage;
-      } else if (lastMessage?.content) {
-        const lastMessageContent = lastMessage.content;
-        if (typeof lastMessageContent === 'string') {
-          message = lastMessageContent;
-        } else if (Array.isArray(lastMessageContent)) {
-          const lastPart = lastMessageContent[lastMessageContent.length - 1];
-          if (lastPart?.type === 'text') {
-            message = lastPart.text;
-          }
-        }
-      }
-    }
+    const message = this.getMessageFromMessages(messages);
 
     return run.stream({
       inputData: {
@@ -1095,25 +1042,7 @@ export class NewAgentNetwork extends MastraBase {
       messages,
     });
 
-    let message = '';
-    if (typeof messages === 'string') {
-      message = messages;
-    } else {
-      const lastMessage = messages[messages.length - 1];
-      if (typeof lastMessage === 'string') {
-        message = lastMessage;
-      } else if (lastMessage?.content) {
-        const lastMessageContent = lastMessage.content;
-        if (typeof lastMessageContent === 'string') {
-          message = lastMessageContent;
-        } else if (Array.isArray(lastMessageContent)) {
-          const lastPart = lastMessageContent[lastMessageContent.length - 1];
-          if (lastPart?.type === 'text') {
-            message = lastPart.text;
-          }
-        }
-      }
-    }
+    const message = this.getMessageFromMessages(messages);
 
     const result = await run.start({
       inputData: {
@@ -1162,25 +1091,7 @@ export class NewAgentNetwork extends MastraBase {
       messages,
     });
 
-    let message = '';
-    if (typeof messages === 'string') {
-      message = messages;
-    } else {
-      const lastMessage = messages[messages.length - 1];
-      if (typeof lastMessage === 'string') {
-        message = lastMessage;
-      } else if (lastMessage?.content) {
-        const lastMessageContent = lastMessage.content;
-        if (typeof lastMessageContent === 'string') {
-          message = lastMessageContent;
-        } else if (Array.isArray(lastMessageContent)) {
-          const lastPart = lastMessageContent[lastMessageContent.length - 1];
-          if (lastPart?.type === 'text') {
-            message = lastPart.text;
-          }
-        }
-      }
-    }
+    const message = this.getMessageFromMessages(messages);
 
     return run.stream({
       inputData: {
