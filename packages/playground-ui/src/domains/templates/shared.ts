@@ -1,3 +1,3 @@
 export function getRepoName(githubUrl: string) {
-  return githubUrl.split('/').pop();
+  return githubUrl.replace(/\/$/, '').split('/').pop();
 }
