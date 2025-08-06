@@ -71,9 +71,7 @@ export class NewAgentNetwork extends MastraBase {
     this.#mastra = mastra;
   }
 
-  private getMessageFromMessages(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
-  ) {
+  private getLastMessage(messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]) {
     let message = '';
     if (typeof messages === 'string') {
       message = messages;
@@ -344,7 +342,7 @@ export class NewAgentNetwork extends MastraBase {
       messages,
     });
 
-    const message = this.getMessageFromMessages(messages);
+    const message = this.getLastMessage(messages);
 
     const result = await run.start({
       inputData: {
@@ -438,7 +436,7 @@ export class NewAgentNetwork extends MastraBase {
       messages,
     });
 
-    const message = this.getMessageFromMessages(messages);
+    const message = this.getLastMessage(messages);
 
     return run.stream({
       inputData: {
@@ -1042,7 +1040,7 @@ export class NewAgentNetwork extends MastraBase {
       messages,
     });
 
-    const message = this.getMessageFromMessages(messages);
+    const message = this.getLastMessage(messages);
 
     const result = await run.start({
       inputData: {
@@ -1091,7 +1089,7 @@ export class NewAgentNetwork extends MastraBase {
       messages,
     });
 
-    const message = this.getMessageFromMessages(messages);
+    const message = this.getLastMessage(messages);
 
     return run.stream({
       inputData: {
