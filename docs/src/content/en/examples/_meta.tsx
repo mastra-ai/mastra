@@ -10,6 +10,9 @@ const meta = {
   workflows: {
     title: "Workflows",
   },
+  tools: {
+    title: "Tools",
+  },
   workflows_legacy: {
     title: "Workflows (Legacy)",
     display: "hidden",

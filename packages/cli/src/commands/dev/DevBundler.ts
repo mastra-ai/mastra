@@ -52,9 +52,11 @@ export class DevBundler extends Bundler {
     const envFiles = await this.getEnvFiles();
 
     let sourcemapEnabled = false;
+    let transpilePackages: string[] = [];
     try {
       const bundlerOptions = await getBundlerOptions(entryFile, outputDirectory);
       sourcemapEnabled = !!bundlerOptions?.sourcemap;
+      transpilePackages = bundlerOptions?.transpilePackages ?? [];
     } catch (error) {
       this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
     }
@@ -65,7 +67,7 @@ export class DevBundler extends Bundler {
       {
         'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       },
-      { sourcemap: sourcemapEnabled },
+      { sourcemap: sourcemapEnabled, transpilePackages },
     );
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
 

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -12,7 +12,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -37,12 +37,12 @@
     "zod": "^3.25.67"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.10.0-0 <0.13.0-0",
+    "@mastra/core": ">=0.10.0-0 <0.14.0-0",
     "ai": "^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/cohere": "latest",
-    "@ai-sdk/openai": "latest",
+    "@ai-sdk/cohere": "^1.2.10",
+    "@ai-sdk/openai": "^1.3.22",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
@@ -53,7 +53,8 @@
     "eslint": "^9.30.1",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
   },
   "keywords": [
     "rag",
