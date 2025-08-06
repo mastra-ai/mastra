@@ -1693,6 +1693,87 @@ describe('agent', () => {
   });
 
   describe('agent tool handling', () => {
+    it('should sanitize tool names with invalid characters', async () => {
+      const badName = 'bad!@#tool$name';
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'Test tool name sanitization.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 1, completionTokens: 1 },
+            text: 'ok',
+          }),
+        }),
+        tools: {
+          [badName]: {
+            id: badName,
+            description: 'Tool with bad chars',
+            inputSchema: z.object({}),
+            execute: async () => {},
+          },
+        },
+      });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      expect(Object.keys(tools)).toContain('bad___tool_name');
+      expect(Object.keys(tools)).not.toContain(badName);
+    });
+
+    it('should prefix tool names that do not start with a letter or underscore', async () => {
+      const badStart = '1tool';
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'Test tool name prefix.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 1, completionTokens: 1 },
+            text: 'ok',
+          }),
+        }),
+        tools: {
+          [badStart]: {
+            id: badStart,
+            description: 'Tool with bad start',
+            inputSchema: z.object({}),
+            execute: async () => {},
+          },
+        },
+      });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      expect(Object.keys(tools).some(k => k.startsWith('_'))).toBe(true);
+      expect(Object.keys(tools)).not.toContain(badStart);
+    });
+
+    it('should truncate tool names longer than 63 characters', async () => {
+      const longName = 'a'.repeat(70);
+      const userAgent = new Agent({
+        name: 'User agent',
+        instructions: 'Test tool name truncation.',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 1, completionTokens: 1 },
+            text: 'ok',
+          }),
+        }),
+        tools: {
+          [longName]: {
+            id: longName,
+            description: 'Tool with long name',
+            inputSchema: z.object({}),
+            execute: async () => {},
+          },
+        },
+      });
+      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext() });
+      expect(Object.keys(tools).some(k => k.length === 63)).toBe(true);
+      expect(Object.keys(tools)).not.toContain(longName);
+    });
+
     it('should accept and execute both Mastra and Vercel tools in Agent constructor', async () => {
       const mastraExecute = vi.fn().mockResolvedValue({ result: 'mastra' });
       const vercelExecute = vi.fn().mockResolvedValue({ result: 'vercel' });

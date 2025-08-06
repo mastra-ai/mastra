@@ -1343,7 +1343,7 @@ export class Agent<
     };
 
     for (const key of Object.keys(allTools)) {
-      if (allTools[key] && (key.length > 63 || key.match(/[^a-zA-Z0-9_\.\-]/))) {
+      if (allTools[key] && (key.length > 63 || key.match(/[^a-zA-Z0-9_\.\-]/) || !key[0]!.match(/[a-zA-Z_]/))) {
         let newKey = key.replace(/[^a-zA-Z0-9_\.\-]/g, '_');
         if (!newKey[0]!.match(/[a-zA-Z_]/)) {
           newKey = '_' + newKey;
