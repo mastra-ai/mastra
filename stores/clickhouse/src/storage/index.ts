@@ -105,12 +105,14 @@ export class ClickhouseStore extends MastraStorage {
     resourceWorkingMemory: boolean;
     hasColumn: boolean;
     createTable: boolean;
+    deleteMessages: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
+      deleteMessages: false,
     };
   }
 

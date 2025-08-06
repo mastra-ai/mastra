@@ -134,7 +134,7 @@ export class WorkflowInstance<
     this.#retryConfig = retryConfig;
     this.#mastra = mastra;
 
-    this.#runId = runId ?? crypto.randomUUID();
+    this.#runId = runId ?? (this.#mastra?.generateId() || crypto.randomUUID());
 
     this.#onFinish = onFinish;
 

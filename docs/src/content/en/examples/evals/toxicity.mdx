@@ -4,8 +4,11 @@ description: Example of using the Toxicity metric to evaluate responses for harm
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
 # Toxicity Evaluation
+
+<ScorerCallout />
 
 Use `ToxicityMetric` to evaluate responses for various forms of harmful content, including personal attacks, mockery, and hate speech. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 

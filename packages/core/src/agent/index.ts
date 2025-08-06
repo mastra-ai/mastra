@@ -14,26 +14,28 @@ import type { MastraLLMBase } from '../llm/model';
 import type {
   GenerateObjectWithMessagesArgs,
   GenerateTextWithMessagesArgs,
+  GenerateReturn,
   GenerateObjectResult,
   GenerateTextResult,
-  GenerateReturn,
   StreamTextWithMessagesArgs,
   StreamObjectWithMessagesArgs,
   StreamReturn,
   ToolSet,
   OriginalStreamTextOnFinishEventArg,
   OriginalStreamObjectOnFinishEventArg,
+  TripwireProperties,
 } from '../llm/model/base.types';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { RuntimeContext } from '../runtime-context';
-import type { MastraScorers } from '../scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, MastraScorers } from '../scores';
 import { runScorer } from '../scores/hooks';
 import { MastraAgentStream } from '../stream/MastraAgentStream';
 import type { ChunkType } from '../stream/MastraAgentStream';
 import { InstrumentClass } from '../telemetry';
+import { Telemetry } from '../telemetry/telemetry';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
@@ -42,9 +44,12 @@ import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import type { AgentVNextStreamOptions } from './agent.types';
+import type { InputProcessor } from './input-processor';
+import { runInputProcessors } from './input-processor/runner';
 import { MessageList } from './message-list';
-import type { MessageInput } from './message-list';
+import type { MessageInput, UIMessageWithMetadata } from './message-list';
 import { SaveQueueManager } from './save-queue';
+import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -56,10 +61,10 @@ import type {
   AgentMemoryOption,
 } from './types';
 export type { ChunkType, MastraAgentStream } from '../stream/MastraAgentStream';
-
+export * from './input-processor';
+export { TripWire };
 export { MessageList };
 export * from './types';
-type IDGenerator = () => string;
 
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
   if (value instanceof Promise) {
@@ -90,6 +95,7 @@ function resolveThreadIdFromArgs(args: {
     '__primitive',
     '__registerMastra',
     '__registerPrimitives',
+    '__runInputProcessors',
     '__setTools',
     '__setLogger',
     '__setTelemetry',
@@ -102,6 +108,8 @@ function resolveThreadIdFromArgs(args: {
     'getDefaultGenerateOptions',
     'getDefaultStreamOptions',
     'getDescription',
+    'getScorers',
+    'getVoice',
   ],
 })
 export class Agent<
@@ -124,6 +132,7 @@ export class Agent<
   evals: TMetrics;
   #scorers: DynamicArgument<MastraScorers>;
   #voice: CompositeVoice;
+  #inputProcessors?: DynamicArgument<InputProcessor[]>;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -196,6 +205,10 @@ export class Agent<
       this.#voice = new DefaultVoice();
     }
 
+    if (config.inputProcessors) {
+      this.#inputProcessors = config.inputProcessors;
+    }
+
     // @ts-ignore Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
@@ -216,7 +229,7 @@ export class Agent<
     if (typeof this.#memory !== 'function') {
       resolvedMemory = this.#memory;
     } else {
-      const result = this.#memory({ runtimeContext });
+      const result = this.#memory({ runtimeContext, mastra: this.#mastra });
       resolvedMemory = await Promise.resolve(result);
 
       if (!resolvedMemory) {
@@ -235,10 +248,14 @@ export class Agent<
       }
     }
 
-    if (resolvedMemory && !resolvedMemory.hasOwnStorage && this.#mastra) {
-      const storage = this.#mastra.getStorage();
-      if (storage) {
-        resolvedMemory.setStorage(storage);
+    if (this.#mastra && resolvedMemory) {
+      resolvedMemory.__registerMastra(this.#mastra);
+
+      if (!resolvedMemory.hasOwnStorage) {
+        const storage = this.#mastra.getStorage();
+        if (storage) {
+          resolvedMemory.setStorage(storage);
+        }
       }
     }
 
@@ -269,7 +286,7 @@ export class Agent<
   }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow>> {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
-      workflowRecord = await Promise.resolve(this.#workflows({ runtimeContext }));
+      workflowRecord = await Promise.resolve(this.#workflows({ runtimeContext, mastra: this.#mastra }));
     } else {
       workflowRecord = this.#workflows ?? {};
     }
@@ -290,7 +307,7 @@ export class Agent<
       return this.#scorers;
     }
 
-    const result = this.#scorers({ runtimeContext });
+    const result = this.#scorers({ runtimeContext, mastra: this.#mastra });
     return resolveMaybePromise(result, scorers => {
       if (!scorers) {
         const mastraError = new MastraError({
@@ -350,7 +367,7 @@ export class Agent<
       return this.#instructions;
     }
 
-    const result = this.#instructions({ runtimeContext });
+    const result = this.#instructions({ runtimeContext, mastra: this.#mastra });
     return resolveMaybePromise(result, instructions => {
       if (!instructions) {
         const mastraError = new MastraError({
@@ -382,7 +399,7 @@ export class Agent<
       return this.#defaultGenerateOptions;
     }
 
-    const result = this.#defaultGenerateOptions({ runtimeContext });
+    const result = this.#defaultGenerateOptions({ runtimeContext, mastra: this.#mastra });
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
@@ -410,7 +427,7 @@ export class Agent<
       return this.#defaultStreamOptions;
     }
 
-    const result = this.#defaultStreamOptions({ runtimeContext });
+    const result = this.#defaultStreamOptions({ runtimeContext, mastra: this.#mastra });
     return resolveMaybePromise(result, options => {
       if (!options) {
         const mastraError = new MastraError({
@@ -441,7 +458,7 @@ export class Agent<
       return this.#defaultVNextStreamOptions as AgentVNextStreamOptions<Output, StructuredOutput>;
     }
 
-    const result = this.#defaultVNextStreamOptions({ runtimeContext }) as
+    const result = this.#defaultVNextStreamOptions({ runtimeContext, mastra: this.#mastra }) as
       | AgentVNextStreamOptions<Output, StructuredOutput>
       | Promise<AgentVNextStreamOptions<Output, StructuredOutput>>;
     return resolveMaybePromise(result, options => {
@@ -492,7 +509,7 @@ export class Agent<
       return ensureToolProperties(this.#tools) as TTools;
     }
 
-    const result = this.#tools({ runtimeContext });
+    const result = this.#tools({ runtimeContext, mastra: this.#mastra });
 
     return resolveMaybePromise(result, tools => {
       if (!tools) {
@@ -550,7 +567,7 @@ export class Agent<
     // If model is provided, resolve it; otherwise use the agent's model
     const modelToUse = model
       ? typeof model === 'function'
-        ? model({ runtimeContext })
+        ? model({ runtimeContext, mastra: this.#mastra })
         : model
       : this.getModel({ runtimeContext });
 
@@ -597,7 +614,7 @@ export class Agent<
       return this.model;
     }
 
-    const result = this.model({ runtimeContext });
+    const result = this.model({ runtimeContext, mastra: this.#mastra });
     return resolveMaybePromise(result, model => {
       if (!model) {
         const mastraError = new MastraError({
@@ -712,7 +729,7 @@ export class Agent<
     return cleanedText;
   }
 
-  getMostRecentUserMessage(messages: Array<UIMessage>) {
+  getMostRecentUserMessage(messages: Array<UIMessage | UIMessageWithMetadata>) {
     const userMessages = messages.filter(message => message.role === 'user');
     return userMessages.at(-1);
   }
@@ -929,6 +946,75 @@ export class Agent<
       );
     }
     return convertedMemoryTools;
+  }
+
+  private async __runInputProcessors({
+    runtimeContext,
+    messageList,
+  }: {
+    runtimeContext: RuntimeContext;
+    messageList: MessageList;
+  }): Promise<{
+    messageList: MessageList;
+    tripwireTriggered: boolean;
+    tripwireReason: string;
+  }> {
+    let tripwireTriggered = false;
+    let tripwireReason = '';
+
+    if (this.#inputProcessors) {
+      const processors =
+        typeof this.#inputProcessors === 'function'
+          ? await this.#inputProcessors({ runtimeContext })
+          : this.#inputProcessors;
+
+      // Create traced version of runInputProcessors similar to workflow _runStep pattern
+      const tracedRunInputProcessors = (processors: any[], messageList: MessageList) => {
+        const telemetry = this.#mastra?.getTelemetry();
+        if (!telemetry) {
+          return runInputProcessors(processors, messageList, undefined);
+        }
+
+        return telemetry.traceMethod(
+          async (data: { processors: any[]; messageList: MessageList }) => {
+            return runInputProcessors(data.processors, data.messageList, telemetry);
+          },
+          {
+            spanName: `agent.${this.name}.inputProcessors`,
+            attributes: {
+              'agent.name': this.name,
+              'inputProcessors.count': processors.length.toString(),
+              'inputProcessors.names': processors.map(p => p.name).join(','),
+            },
+          },
+        )({ processors, messageList });
+      };
+
+      try {
+        messageList = await tracedRunInputProcessors(processors, messageList);
+      } catch (error) {
+        if (error instanceof TripWire) {
+          tripwireTriggered = true;
+          tripwireReason = error.message;
+        } else {
+          throw new MastraError(
+            {
+              id: 'AGENT_INPUT_PROCESSOR_ERROR',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+              text: `[Agent:${this.name}] - Input processor error`,
+            },
+            error,
+          );
+        }
+      }
+    }
+
+    return {
+      messageList,
+      tripwireTriggered,
+      tripwireReason,
+    };
   }
 
   private async getMemoryMessages({
@@ -1307,7 +1393,6 @@ export class Agent<
     toolsets,
     clientTools,
     runtimeContext,
-    generateMessageId,
     saveQueueManager,
     writableStream,
   }: {
@@ -1319,9 +1404,8 @@ export class Agent<
     memoryConfig?: MemoryConfig;
     context?: CoreMessage[];
     runId?: string;
-    messages: string | string[] | CoreMessage[] | AiMessageType[];
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
     runtimeContext: RuntimeContext;
-    generateMessageId: undefined | IDGenerator;
     saveQueueManager: SaveQueueManager;
     writableStream?: WritableStream<ChunkType>;
   }) {
@@ -1367,7 +1451,7 @@ export class Agent<
         const messageList = new MessageList({
           threadId,
           resourceId,
-          generateMessageId,
+          generateMessageId: this.#mastra?.generateId?.bind(this.#mastra),
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
@@ -1379,10 +1463,20 @@ export class Agent<
 
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
+          const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
+            runtimeContext,
+            messageList,
+          });
           return {
             messageObjects: messageList.get.all.prompt(),
             convertedTools,
+            threadExists: false,
+            thread: undefined,
             messageList,
+            ...(tripwireTriggered && {
+              tripwire: true,
+              tripwireReason,
+            }),
           };
         }
         if (!threadId || !resourceId) {
@@ -1395,7 +1489,7 @@ export class Agent<
               threadId: threadId || '',
               resourceId: resourceId || '',
             },
-            text: `A resourceId must be provided when passing a threadId and using Memory. Saw threadId ${threadId} but resourceId is ${resourceId}`,
+            text: `A resourceId and a threadId must be provided when using Memory. Saw threadId "${threadId}" and resourceId "${resourceId}"`,
           });
           this.logger.trackException(mastraError);
           this.logger.error(mastraError.toString());
@@ -1433,22 +1527,22 @@ export class Agent<
             title: thread.title,
             memoryConfig,
             resourceId,
+            saveThread: false,
           });
         }
 
-        let [memoryMessages, memorySystemMessage] =
-          thread.id && memory
-            ? await Promise.all([
-                this.getMemoryMessages({
-                  resourceId,
-                  threadId: threadObject.id,
-                  vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
-                  memoryConfig,
-                  runtimeContext,
-                }),
-                memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
-              ])
-            : [[], null];
+        let [memoryMessages, memorySystemMessage] = existingThread
+          ? await Promise.all([
+              this.getMemoryMessages({
+                resourceId,
+                threadId: threadObject.id,
+                vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
+                memoryConfig,
+                runtimeContext,
+              }),
+              memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
+            ])
+          : [[], null];
 
         this.logger.debug('Fetched messages from memory', {
           threadId: threadObject.id,
@@ -1505,6 +1599,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           // add new user messages to the list AFTER remembered messages to make ordering more reliable
           .add(messages, 'user');
 
+        const { tripwireTriggered, tripwireReason } = await this.__runInputProcessors({
+          runtimeContext,
+          messageList,
+        });
+
         const systemMessage =
           [...messageList.getSystemMessages(), ...messageList.getSystemMessages('memory')]
             ?.map(m => m.content)
@@ -1523,6 +1622,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const processedList = new MessageList({
           threadId: threadObject.id,
           resourceId,
+          generateMessageId: this.#mastra?.generateId?.bind(this.#mastra),
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
@@ -1539,6 +1639,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           messageList,
           // add old processed messages + new input messages
           messageObjects: processedList,
+          ...(tripwireTriggered && {
+            tripwire: true,
+            tripwireReason,
+          }),
+          threadExists: !!existingThread,
         };
       },
       after: async ({
@@ -1549,7 +1654,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         outputText,
         runId,
         messageList,
-        toolCallsCollection,
+        threadExists,
         structuredOutput = false,
       }: {
         runId: string;
@@ -1559,7 +1664,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
         messageList: MessageList;
-        toolCallsCollection: Map<string, any>;
+        threadExists: boolean;
         structuredOutput?: boolean;
       }) => {
         const resToLog = {
@@ -1587,6 +1692,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         const messageListResponses = new MessageList({
           threadId,
           resourceId,
+          generateMessageId: this.#mastra?.generateId?.bind(this.#mastra),
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
@@ -1622,7 +1728,22 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               ];
             }
             if (responseMessages) {
-              messageList.add(responseMessages, 'response');
+              // Remove IDs from response messages to ensure the custom ID generator is used
+              const messagesWithoutIds = responseMessages.map((m: any) => {
+                const { id, ...messageWithoutId } = m;
+                return messageWithoutId;
+              });
+              messageList.add(messagesWithoutIds, 'response');
+            }
+
+            if (!threadExists) {
+              await memory.createThread({
+                threadId: thread.id,
+                metadata: thread.metadata,
+                title: thread.title,
+                memoryConfig,
+                resourceId: thread.resourceId,
+              });
             }
 
             // Parallelize title generation and message saving
@@ -1680,20 +1801,30 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             this.logger.error(mastraError.toString());
             throw mastraError;
           }
+        } else {
+          let responseMessages = result.response.messages;
+          if (!responseMessages && result.object) {
+            responseMessages = [
+              {
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'text',
+                    text: outputText, // outputText contains the stringified object
+                  },
+                ],
+              },
+            ];
+          }
+          if (responseMessages) {
+            messageList.add(responseMessages, 'response');
+          }
         }
-
-        const outputForScoring = {
-          text: result?.text,
-          object: result?.object,
-          usage: result?.usage,
-          toolCalls: Array.from(toolCallsCollection.values()),
-        };
 
         await this.#runScorers({
           messageList,
           runId,
           outputText,
-          output: outputForScoring,
           instructions,
           runtimeContext,
           structuredOutput,
@@ -1706,14 +1837,12 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     messageList,
     runId,
     outputText,
-    output,
     instructions,
     runtimeContext,
     structuredOutput,
   }: {
     messageList: MessageList;
     runId: string;
-    output: Record<string, any>;
     outputText: string;
     instructions: string;
     runtimeContext: RuntimeContext;
@@ -1724,7 +1853,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     const input = userInputMessages
       .map(message => (typeof message.content === 'string' ? message.content : ''))
       .join('\n');
-    const runIdToUse = runId || crypto.randomUUID();
+    const runIdToUse = runId || this.#mastra?.generateId() || randomUUID();
 
     if (Object.keys(this.evals || {}).length > 0) {
       for (const metric of Object.values(this.evals || {})) {
@@ -1741,14 +1870,23 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
 
     const scorers = await this.getScorers({ runtimeContext });
 
+    const scorerInput: ScorerRunInputForAgent = {
+      inputMessages: messageList.getPersisted.input.ui(),
+      rememberedMessages: messageList.getPersisted.remembered.ui(),
+      systemMessages: messageList.getSystemMessages(),
+      taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
+    };
+
+    const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.ui();
+
     if (Object.keys(scorers || {}).length > 0) {
       for (const [id, scorerObject] of Object.entries(scorers)) {
         runScorer({
           scorerId: id,
           scorerObject: scorerObject,
           runId,
-          input: userInputMessages,
-          output,
+          input: scorerInput,
+          output: scorerOutput,
           runtimeContext,
           entity: {
             id: this.id,
@@ -1767,7 +1905,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
     ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
     options: AgentGenerateOptions<Output, ExperimentalOutput>,
   ): Promise<{
     before: () => Promise<
@@ -1779,7 +1917,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               experimental_output?: never;
             },
         'runId'
-      > & { runId: string }
+      > & { runId: string } & TripwireProperties
     >;
     after: (args: {
       result: GenerateReturn<any, Output, ExperimentalOutput>;
@@ -1793,7 +1931,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
     ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
     options: AgentStreamOptions<Output, ExperimentalOutput>,
   ): Promise<{
     before: () => Promise<
@@ -1805,7 +1943,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               experimental_output?: never;
             },
         'runId'
-      > & { runId: string }
+      > & { runId: string } & TripwireProperties
     >;
     after: (args: {
       result: OriginalStreamTextOnFinishEventArg<any> | OriginalStreamObjectOnFinishEventArg<ExperimentalOutput>;
@@ -1819,7 +1957,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
     ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
     options: (AgentGenerateOptions<Output, ExperimentalOutput> | AgentStreamOptions<Output, ExperimentalOutput>) & {
       writableStream?: WritableStream<ChunkType>;
     },
@@ -1834,7 +1972,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                   experimental_output?: never;
                 },
             'runId'
-          > & { runId: string }
+          > & { runId: string } & TripwireProperties
         >)
       | (() => Promise<
           Omit<
@@ -1845,7 +1983,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
                   experimental_output?: never;
                 },
             'runId'
-          > & { runId: string }
+          > & { runId: string } & TripwireProperties
         >);
     after:
       | ((args: { result: GenerateReturn<any, Output, ExperimentalOutput>; outputText: string }) => Promise<void>)
@@ -1871,10 +2009,11 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       ...args
     } = options;
 
-    const generateMessageId =
-      `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
-        ? (args.experimental_generateMessageId as IDGenerator)
-        : undefined;
+    // Currently not being used, but should be kept around for now in case it's needed later
+    // const generateMessageId =
+    //   `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
+    //     ? (args.experimental_generateMessageId as IDGenerator)
+    //     : undefined;
 
     const threadFromArgs = resolveThreadIdFromArgs({ threadId: args.threadId, memory: args.memory });
     const resourceId = args.memory?.resource || resourceIdFromArgs;
@@ -1885,9 +2024,31 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         `[Agent:${this.name}] - No memory is configured but resourceId and threadId were passed in args. This will not work.`,
       );
     }
-    const runId = args.runId || randomUUID();
+    const runId = args.runId || this.#mastra?.generateId() || randomUUID();
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
+
+    // Set thread ID and resource ID context for telemetry
+    const activeSpan = Telemetry.getActiveSpan();
+    const baggageEntries: Record<string, { value: string }> = {};
+
+    if (threadFromArgs?.id) {
+      if (activeSpan) {
+        activeSpan.setAttribute('threadId', threadFromArgs.id);
+      }
+      baggageEntries.threadId = { value: threadFromArgs.id };
+    }
+
+    if (resourceId) {
+      if (activeSpan) {
+        activeSpan.setAttribute('resourceId', resourceId);
+      }
+      baggageEntries.resourceId = { value: resourceId };
+    }
+
+    if (Object.keys(baggageEntries).length > 0) {
+      Telemetry.setBaggage(baggageEntries);
+    }
 
     const memory = await this.getMemory({ runtimeContext });
     const saveQueueManager = new SaveQueueManager({
@@ -1906,20 +2067,20 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
       toolsets,
       clientTools,
       runtimeContext,
-      generateMessageId,
       saveQueueManager,
       writableStream,
     });
 
     let messageList: MessageList;
     let thread: StorageThreadType | null | undefined;
+    let threadExists: boolean;
 
-    const toolCallsCollection = new Map();
     return {
       llm,
       before: async () => {
         const beforeResult = await before();
         const { messageObjects, convertedTools } = beforeResult;
+        threadExists = beforeResult.threadExists || false;
         messageList = beforeResult.messageList;
         thread = beforeResult.thread;
 
@@ -1938,6 +2099,17 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           runtimeContext,
           onStepFinish: async (props: any) => {
             if (savePerStep) {
+              if (!threadExists && memory && thread) {
+                await memory.createThread({
+                  threadId,
+                  title: thread.title,
+                  metadata: thread.metadata,
+                  resourceId: thread.resourceId,
+                  memoryConfig,
+                });
+                threadExists = true;
+              }
+
               await this.saveStepMessages({
                 saveQueueManager,
                 result: props,
@@ -1948,14 +2120,12 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
               });
             }
 
-            if (props.finishReason === 'tool-calls') {
-              for (const toolCall of props.toolCalls) {
-                toolCallsCollection.set(toolCall.toolCallId, toolCall);
-              }
-            }
-
             return onStepFinish?.({ ...props, runId });
           },
+          ...(beforeResult.tripwire && {
+            tripwire: beforeResult.tripwire,
+            tripwireReason: beforeResult.tripwireReason,
+          }),
           ...args,
         } as any;
 
@@ -1980,23 +2150,23 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           memoryConfig,
           runId,
           messageList,
-          toolCallsCollection,
           structuredOutput,
+          threadExists,
         });
       },
     };
   }
 
   async generate(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, undefined>>;
   async generate<OUTPUT extends ZodSchema | JSONSchema7>(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
     args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
   ): Promise<GenerateObjectResult<OUTPUT>>;
   async generate<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
     args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
       output?: never;
       experimental_output?: EXPERIMENTAL_OUTPUT;
@@ -2006,7 +2176,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     const defaultGenerateOptions = await this.getDefaultGenerateOptions({
@@ -2018,7 +2188,41 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions);
-    const { experimental_output, output, ...llmOptions } = await before();
+    const beforeResult = await before();
+
+    // Check for tripwire and return early if triggered
+    if (beforeResult.tripwire) {
+      const tripwireResult = {
+        text: '',
+        object: undefined,
+        usage: { totalTokens: 0, promptTokens: 0, completionTokens: 0 },
+        finishReason: 'other',
+        response: {
+          id: randomUUID(),
+          timestamp: new Date(),
+          modelId: 'tripwire',
+          messages: [],
+        },
+        responseMessages: [],
+        toolCalls: [],
+        toolResults: [],
+        warnings: undefined,
+        request: {
+          body: JSON.stringify({ messages: [] }),
+        },
+        experimental_output: undefined,
+        steps: undefined,
+        experimental_providerMetadata: undefined,
+        tripwire: true,
+        tripwireReason: beforeResult.tripwireReason,
+      };
+
+      return tripwireResult as unknown as OUTPUT extends undefined
+        ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT>
+        : GenerateObjectResult<OUTPUT>;
+    }
+
+    const { experimental_output, output, ...llmOptions } = beforeResult;
 
     if (!output || experimental_output) {
       const result = await llm.__text({
@@ -2061,21 +2265,21 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
   ): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
   ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>>;
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
       output?: never;
       experimental_output?: EXPERIMENTAL_OUTPUT;
@@ -2096,22 +2300,83 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
     streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
   > {
-    const defaultStreamOptions = await this.getDefaultStreamOptions({
-      runtimeContext: streamOptions.runtimeContext,
-    });
+    const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions.runtimeContext });
+
     const mergedStreamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {
       ...defaultStreamOptions,
       ...streamOptions,
     };
 
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions);
-    const { onFinish, runId, output, experimental_output, ...llmOptions } = await before();
+    const beforeResult = await before();
+
+    // Check for tripwire and return early if triggered
+    if (beforeResult.tripwire) {
+      // Return a promise that resolves immediately with empty result
+      const emptyResult = {
+        textStream: (async function* () {
+          // Empty async generator - yields nothing
+        })(),
+        fullStream: Promise.resolve('').then(() => {
+          const emptyStream = new (globalThis as any).ReadableStream({
+            start(controller: any) {
+              controller.close();
+            },
+          });
+          return emptyStream;
+        }),
+        text: Promise.resolve(''),
+        usage: Promise.resolve({ totalTokens: 0, promptTokens: 0, completionTokens: 0 }),
+        finishReason: Promise.resolve('other'),
+        tripwire: true,
+        tripwireReason: beforeResult.tripwireReason,
+        response: {
+          id: randomUUID(),
+          timestamp: new Date(),
+          modelId: 'tripwire',
+          messages: [],
+        },
+        toolCalls: Promise.resolve([]),
+        toolResults: Promise.resolve([]),
+        warnings: Promise.resolve(undefined),
+        request: {
+          body: JSON.stringify({ messages: [] }),
+        },
+        experimental_output: undefined,
+        steps: undefined,
+        experimental_providerMetadata: undefined,
+        toAIStream: () =>
+          Promise.resolve('').then(() => {
+            const emptyStream = new (globalThis as any).ReadableStream({
+              start(controller: any) {
+                controller.close();
+              },
+            });
+            return emptyStream;
+          }),
+        get experimental_partialOutputStream() {
+          return (async function* () {
+            // Empty async generator for partial output stream
+          })();
+        },
+        pipeDataStreamToResponse: () => Promise.resolve(),
+        pipeTextStreamToResponse: () => Promise.resolve(),
+        toDataStreamResponse: () => new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+        toTextStreamResponse: () => new Response('', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+      };
+
+      return emptyResult as unknown as
+        | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
+        | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>;
+    }
+
+    const { onFinish, runId, output, experimental_output, ...llmOptions } = beforeResult;
 
     if (!output || experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
@@ -2175,7 +2440,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     Output extends ZodSchema | undefined = undefined,
     StructuredOutput extends ZodSchema | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
     streamOptions?: AgentVNextStreamOptions<Output, StructuredOutput>,
   ): MastraAgentStream<
     Output extends ZodSchema
@@ -2493,7 +2758,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     if (typeof instructions === 'string') {
       return instructions;
     } else {
-      const result = instructions({ runtimeContext });
+      const result = instructions({ runtimeContext, mastra: this.#mastra });
       return resolveMaybePromise(result, resolvedInstructions => {
         return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
       });

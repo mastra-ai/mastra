@@ -131,7 +131,7 @@ export default function Scorer() {
           </Crumb>
 
           <Crumb as={Link} to={`/scorers/${scorerId}`} isCurrent>
-            {isLoading ? <Skeleton className="w-20 h-4" /> : scorer?.scorer.name || 'Not found'}
+            {isLoading ? <Skeleton className="w-20 h-4" /> : scorer?.scorer.config.name || 'Not found'}
           </Crumb>
         </Breadcrumb>
       </Header>
@@ -435,9 +435,10 @@ function ScoreDetails({
   };
 
   const prompts: Record<string, string | undefined> = {
-    extractPrompt: score?.extractPrompt,
+    preprocessPrompt: score?.preprocessPrompt,
     analyzePrompt: score?.analyzePrompt,
-    reasonPrompt: score?.reasonPrompt,
+    generateScorePrompt: score?.generateScorePrompt,
+    generateReasonPrompt: score?.generateReasonPrompt,
   };
 
   console.log('Score details:', JSON.stringify(score, null, 2));
@@ -496,14 +497,11 @@ function ScoreDetails({
             </section>
             <section className="border border-border1 rounded-lg">
               <h3 className="p-[1rem] px-[1.5rem] border-b border-border1">Input</h3>
-              {(score.input || []).map((input: any, index: number) => (
-                <div
-                  key={index}
-                  className="border-b border-border1 last:border-b-0 py-[1rem] px-[1.5rem] text-[0.875rem] text-icon4 break-all"
-                >
-                  {input && <CodeMirrorBlock value={JSON.stringify(input, null, 2)} />}
+              {score.input && (
+                <div className="py-[1rem] px-[1.5rem] text-[0.875rem] text-icon4 break-all">
+                  <CodeMirrorBlock value={JSON.stringify(score.input, null, 2)} />
                 </div>
-              ))}
+              )}
             </section>
             <section className="border border-border1 rounded-lg">
               <div className="border-b border-border1 last:border-b-0">
@@ -527,7 +525,7 @@ function ScoreDetails({
                 </div>
                 <div className="text-icon4 text-[0.875rem] p-[1.5rem] py-[1rem] break-all">
                   {score.output?.text && <MarkdownRenderer>{score.output.text}</MarkdownRenderer>}
-                  {score.output?.object && <CodeMirrorBlock value={JSON.stringify(score.output.object, null, 2)} />}
+                  {score.output && <CodeMirrorBlock value={JSON.stringify(score.output, null, 2)} />}
                 </div>
               </div>
             </section>
@@ -544,7 +542,7 @@ function ScoreDetails({
                         <span className="text-icon5 font-bold text-[0.875rem]">{key}</span>
                       </div>
                       <div className="text-icon4 text-[0.875rem] py-[1rem] font-mono break-all mx-[1.5rem]">
-                        {value && <pre>{value}</pre>}
+                        {value && <pre className="text-wrap">{value}</pre>}
                       </div>
                     </Fragment>
                   ) : null,

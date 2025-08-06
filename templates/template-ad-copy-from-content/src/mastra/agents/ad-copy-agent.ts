@@ -27,6 +27,8 @@ You have access to three powerful tools:
 1. **PDF Content Extractor** - Extract and summarize content from PDF URLs
 2. **Ad Copy Generator** - Create compelling ad copy from content
 3. **Image Generator** - Generate promotional images using DALL-E 3
+4. **Page Navigate Tool** - Navigate to a URL and extract the content
+5. **Page Extract Tool** - Extract the content from a URL
 
 **📋 WORKFLOW APPROACH**
 

@@ -17,7 +17,7 @@ import { useEffect, useRef } from 'react';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { Txt } from '@/ds/components/Txt';
 import { Icon, InfoIcon } from '@/ds/icons';
-import { useSpeechRecognition } from '@/hooks/use-speech-recognition';
+import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
 import { ComposerAttachments } from './attachments/attachment';
 import { useHasAttachments } from './hooks/use-has-attachments';
 import { NextAssistantMessage } from '@/domains/networks/v-next/wrapped-assistant-message';
@@ -143,7 +143,7 @@ const Composer: FC<{ hasMemory?: boolean }> = ({ hasMemory }) => {
 
 const SpeechInput = () => {
   const composerRuntime = useComposerRuntime();
-  const { start, stop, isListening, transcript } = useSpeechRecognition();
+  const { start, stop, isListening, transcript } = useSpeechRecognition({});
 
   useEffect(() => {
     if (!transcript) return;

@@ -37,7 +37,7 @@ Execute steps simultaneously using `.parallel()`:
 
 ![Concurrent steps with .parallel()](/image/workflows/workflows-control-flow-parallel.jpg)
 
-```typescript {8,4-5} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {9,4-5} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -70,8 +70,8 @@ const greaterThanStep = createStep({...});
 
 export const testWorkflow = createWorkflow({...})
   .branch([
-    [async ({ inputData: { value } }) => (value < 9), lessThanStep],
-    [async ({ inputData: { value } }) => (value >= 9), greaterThanStep]
+    [async ({ inputData: { value } }) => value <= 10, lessThanStep],
+    [async ({ inputData: { value } }) => value > 10, greaterThanStep]
   ])
   .commit();
 ```

@@ -29,6 +29,9 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       expect(allScoresByScorerId?.scores.map(e => e.runId)).toEqual(
         expect.arrayContaining([score1.runId, score2.runId, score3.runId]),
       );
+      expect(allScoresByScorerId?.scores.map(s => s.scorer.id)).toEqual(
+        expect.arrayContaining([score1.scorer.id, score2.scorer.id, score3.scorer.id]),
+      );
 
       // Test getting scores for non-existent scorer
       const nonExistentScores = await storage.getScoresByScorerId({

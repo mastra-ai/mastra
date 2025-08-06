@@ -1,0 +1,218 @@
+---
+title: "Reference: MastraScorer | Scorers | Mastra Docs"
+description: Documentation for the MastraScorer base class in Mastra, which provides the foundation for all custom and built-in scorers.
+---
+
+# MastraScorer
+
+The `MastraScorer` class is the base class for all scorers in Mastra. It provides a standard `.run()` method for evaluating input/output pairs and supports multi-step scoring workflows. Most users will use `createScorer` or `createLLMScorer`, but advanced users can subclass or instantiate `MastraScorer` directly for full control.
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      required: true,
+      description: "Name of the scorer.",
+    },
+    {
+      name: "description",
+      type: "string",
+      required: true,
+      description: "Description of what the scorer does.",
+    },
+    {
+      name: "extract",
+      type: "function",
+      required: false,
+      description: "Optional extraction step. See extract step signature below.",
+    },
+    {
+      name: "analyze",
+      type: "function",
+      required: true,
+      description: "Main scoring logic. See analyze step signature below.",
+    },
+    {
+      name: "reason",
+      type: "function",
+      required: false,
+      description: "Optional reason/explanation step. See reason step signature below.",
+    },
+    {
+      name: "metadata",
+      type: "object",
+      required: false,
+      description: "Optional metadata for the scorer.",
+    },
+    {
+      name: "isLLMScorer",
+      type: "boolean",
+      required: false,
+      description: "(Internal) Used to distinguish LLM scorers.",
+    },
+  ]}
+/>
+
+## Step Function Signatures
+
+### extract
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "Record<string, any>[]",
+      required: false,
+      description: "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
+    },
+    {
+      name: "output",
+      type: "Record<string, any>",
+      required: true,
+      description: "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
+    },
+  ]}
+/>
+Returns: `{ results: any }`  
+The method must return an object with a `results` property. The value of `results` will be passed to the analyze function as `extractStepResult`.
+
+### analyze
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "Record<string, any>[]",
+      required: true,
+      description: "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
+    },
+    {
+      name: "output",
+      type: "Record<string, any>",
+      required: true,
+      description: "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
+    },
+    {
+      name: "extractStepResult",
+      type: "object",
+      required: false,
+      description: "Result of the extract step, if defined (optional).",
+    },
+  ]}
+/>
+Returns: `{ score: number, results?: any }`  
+The method must return an object with a `score` property (required). Optionally, it may return a `results` property. The value of `results` will be passed to the reason function as `analyzeStepResult`.
+
+### reason
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "Record<string, any>[]",
+      required: true,
+      description: "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
+    },
+    {
+      name: "output",
+      type: "Record<string, any>",
+      required: true,
+      description: "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
+    },
+    {
+      name: "score",
+      type: "number",
+      required: true,
+      description: "Score computed by the analyze step.",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      required: true,
+      description: "Result of the analyze step.",
+    },
+    {
+      name: "extractStepResult",
+      type: "object",
+      required: false,
+      description: "Result of the extract step, if defined (optional).",  
+    },
+  ]}
+/>
+Returns: `{ reason: string }`  
+The method must return an object with a `reason` property, which should be a string explaining the score.
+
+All step functions can be async.
+
+## .run() Input
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      required: false,
+      description: "The id of the run (optional).",
+    },
+    {
+      name: "input",
+      type: "Record<string, any>[]",
+      required: true,
+      description: "An array of records. This should contain user messages or the data to be evaluated.",
+    },
+    {
+      name: "output",
+      type: "Record<string, any>",
+      required: true,
+      description: "A record. This should contain the output to be evaluated.",
+    },
+    {
+      name: "additionalContext",
+      type: "Record<string, any>",
+      required: false,
+      description: "Additional context for the run (optional).",
+    },
+    {
+      name: "runtimeContext",
+      type: "Record<string, any>",
+      required: false,
+      description: "Runtime context for the run (optional).",
+    },
+  ]}
+/>
+
+## .run() Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "The id of the run (optional).",
+    },
+    {
+      name: "extractStepResult",
+      type: "object",
+      description: "Result of the extract step, if defined (optional).",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "Result of the analyze step (custom structure defined by your scorer).",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "Score computed by your analyze function.",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "Reason/explanation for the score, if defined (optional).",
+    },
+  ]}
+/>
+
+## Integration
+
+MastraScorer instances can be used for agents and workflow steps

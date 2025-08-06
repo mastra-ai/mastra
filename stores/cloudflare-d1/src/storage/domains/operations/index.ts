@@ -112,16 +112,14 @@ export class StoreOperationsD1 extends StoreOperations {
         sql,
         params: formattedParams,
       });
-
-      if (!response.result) {
-        return first ? null : [];
-      }
+      const result = response.result || [];
+      const results = result.flatMap(r => r.results || []);
 
       if (first) {
-        return response.result[0] || null;
+        return results[0] || null;
       }
 
-      return response.result;
+      return results;
     } catch (error) {
       throw new MastraError(
         {

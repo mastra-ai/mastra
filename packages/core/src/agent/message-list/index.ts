@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { convertToCoreMessages } from 'ai';
-import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, ToolCallPart, ToolInvocation, UIMessage } from 'ai';
+import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, ToolInvocation, UIMessage } from 'ai';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { MastraMessageV1 } from '../../memory';
 import { isCoreMessage, isUiMessage } from '../../utils';
@@ -29,17 +29,18 @@ export type MastraMessageV2 = {
   type?: string;
 };
 
-function isToolCallMessage(message: CoreMessage): boolean {
-  if (message.role === 'tool') {
-    return true;
-  }
-  if (message.role === 'assistant' && Array.isArray(message.content)) {
-    return message.content.some((part): part is ToolCallPart => part.type === 'tool-call');
-  }
-  return false;
-}
+// Extend UIMessage to include optional metadata field
+export type UIMessageWithMetadata = UIMessage & {
+  metadata?: Record<string, unknown>;
+};
 
-export type MessageInput = UIMessage | Message | MastraMessageV1 | CoreMessage | MastraMessageV2;
+export type MessageInput =
+  | UIMessage
+  | UIMessageWithMetadata
+  | Message
+  | MastraMessageV1
+  | CoreMessage
+  | MastraMessageV2;
 type MessageSource = 'memory' | 'response' | 'user' | 'system' | 'context';
 type MemoryInfo = { threadId: string; resourceId?: string };
 
@@ -59,6 +60,11 @@ export class MessageList {
   private newResponseMessages = new Set<MastraMessageV2>();
   private userContextMessages = new Set<MastraMessageV2>();
 
+  private memoryMessagesPersisted = new Set<MastraMessageV2>();
+  private newUserMessagesPersisted = new Set<MastraMessageV2>();
+  private newResponseMessagesPersisted = new Set<MastraMessageV2>();
+  private userContextMessagesPersisted = new Set<MastraMessageV2>();
+
   private generateMessageId?: IDGenerator;
   private _agentNetworkAppend = false;
 
@@ -71,8 +77,8 @@ export class MessageList {
   }: { threadId?: string; resourceId?: string; generateMessageId?: IDGenerator } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
-      this.generateMessageId = generateMessageId;
     }
+    this.generateMessageId = generateMessageId;
     this._agentNetworkAppend = _agentNetworkAppend || false;
   }
 
@@ -105,6 +111,26 @@ export class MessageList {
       response: this.response,
     };
   }
+  public get getPersisted() {
+    return {
+      remembered: this.rememberedPersisted,
+      input: this.inputPersisted,
+      taggedSystemMessages: this.taggedSystemMessages,
+      response: this.responsePersisted,
+    };
+  }
+  public get clear() {
+    return {
+      input: {
+        v2: () => {
+          const userMessages = Array.from(this.newUserMessages);
+          this.messages = this.messages.filter(m => !this.newUserMessages.has(m));
+          this.newUserMessages.clear();
+          return userMessages;
+        },
+      },
+    };
+  }
   private all = {
     v2: () => this.messages,
     v1: () => convertToV1Messages(this.messages),
@@ -114,11 +140,20 @@ export class MessageList {
       const coreMessages = this.all.core();
 
       // Some LLM providers will throw an error if the first message is a tool call.
-      while (coreMessages[0] && isToolCallMessage(coreMessages[0])) {
-        coreMessages.shift();
-      }
 
       const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
+
+      const needsDefaultUserMessage = !messages.length || messages[0]?.role === 'assistant';
+
+      if (needsDefaultUserMessage) {
+        const defaultMessage: CoreMessage = {
+          role: 'user',
+          content: '.',
+        };
+
+        messages.unshift(defaultMessage);
+      }
+
       return messages;
     },
   };
@@ -128,14 +163,30 @@ export class MessageList {
     ui: () => this.remembered.v2().map(MessageList.toUIMessage),
     core: () => this.convertToCoreMessages(this.remembered.ui()),
   };
+  private rememberedPersisted = {
+    v2: () => this.messages.filter(m => this.memoryMessagesPersisted.has(m)),
+    v1: () => convertToV1Messages(this.rememberedPersisted.v2()),
+    ui: () => this.rememberedPersisted.v2().map(MessageList.toUIMessage),
+    core: () => this.convertToCoreMessages(this.rememberedPersisted.ui()),
+  };
   private input = {
     v2: () => this.messages.filter(m => this.newUserMessages.has(m)),
     v1: () => convertToV1Messages(this.input.v2()),
     ui: () => this.input.v2().map(MessageList.toUIMessage),
     core: () => this.convertToCoreMessages(this.input.ui()),
   };
+  private inputPersisted = {
+    v2: () => this.messages.filter(m => this.newUserMessagesPersisted.has(m)),
+    v1: () => convertToV1Messages(this.inputPersisted.v2()),
+    ui: () => this.inputPersisted.v2().map(MessageList.toUIMessage),
+    core: () => this.convertToCoreMessages(this.inputPersisted.ui()),
+  };
   private response = {
     v2: () => this.messages.filter(m => this.newResponseMessages.has(m)),
+  };
+  private responsePersisted = {
+    v2: () => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
+    ui: () => this.responsePersisted.v2().map(MessageList.toUIMessage),
   };
   public drainUnsavedMessages(): MastraMessageV2[] {
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
@@ -217,7 +268,7 @@ export class MessageList {
       m => MessageList.cacheKeyFromContent(m.content) === MessageList.cacheKeyFromContent(message.content),
     );
   }
-  private static toUIMessage(m: MastraMessageV2): UIMessage {
+  private static toUIMessage(m: MastraMessageV2): UIMessageWithMetadata {
     const experimentalAttachments: UIMessage['experimental_attachments'] = m.content.experimental_attachments
       ? [...m.content.experimental_attachments]
       : [];
@@ -258,7 +309,7 @@ export class MessageList {
     }
 
     if (m.role === `user`) {
-      return {
+      const uiMessage: UIMessageWithMetadata = {
         id: m.id,
         role: m.role,
         content: m.content.content || contentString,
@@ -266,8 +317,13 @@ export class MessageList {
         parts,
         experimental_attachments: experimentalAttachments,
       };
+      // Preserve metadata if present
+      if (m.content.metadata) {
+        uiMessage.metadata = m.content.metadata;
+      }
+      return uiMessage;
     } else if (m.role === `assistant`) {
-      return {
+      const uiMessage: UIMessageWithMetadata = {
         id: m.id,
         role: m.role,
         content: m.content.content || contentString,
@@ -277,9 +333,14 @@ export class MessageList {
         toolInvocations:
           `toolInvocations` in m.content ? m.content.toolInvocations?.filter(t => t.state === 'result') : undefined,
       };
+      // Preserve metadata if present
+      if (m.content.metadata) {
+        uiMessage.metadata = m.content.metadata;
+      }
+      return uiMessage;
     }
 
-    return {
+    const uiMessage: UIMessageWithMetadata = {
       id: m.id,
       role: m.role,
       content: m.content.content || contentString,
@@ -287,6 +348,11 @@ export class MessageList {
       parts,
       experimental_attachments: experimentalAttachments,
     };
+    // Preserve metadata if present
+    if (m.content.metadata) {
+      uiMessage.metadata = m.content.metadata;
+    }
+    return uiMessage;
   }
   private getMessageById(id: string) {
     return this.messages.find(m => m.id === id);
@@ -470,12 +536,16 @@ export class MessageList {
   private pushMessageToSource(messageV2: MastraMessageV2, messageSource: MessageSource) {
     if (messageSource === `memory`) {
       this.memoryMessages.add(messageV2);
+      this.memoryMessagesPersisted.add(messageV2);
     } else if (messageSource === `response`) {
       this.newResponseMessages.add(messageV2);
+      this.newResponseMessagesPersisted.add(messageV2);
     } else if (messageSource === `user`) {
       this.newUserMessages.add(messageV2);
+      this.newUserMessagesPersisted.add(messageV2);
     } else if (messageSource === `context`) {
       this.userContextMessages.add(messageV2);
+      this.userContextMessagesPersisted.add(messageV2);
     } else {
       throw new Error(`Missing message source for message ${messageV2}`);
     }
@@ -693,7 +763,10 @@ export class MessageList {
     if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
     return message;
   }
-  private vercelUIMessageToMastraMessageV2(message: UIMessage, messageSource: MessageSource): MastraMessageV2 {
+  private vercelUIMessageToMastraMessageV2(
+    message: UIMessage | UIMessageWithMetadata,
+    messageSource: MessageSource,
+  ): MastraMessageV2 {
     const content: MastraMessageContentV2 = {
       format: 2,
       parts: message.parts,
@@ -704,6 +777,11 @@ export class MessageList {
     if (message.annotations) content.annotations = message.annotations;
     if (message.experimental_attachments) {
       content.experimental_attachments = message.experimental_attachments;
+    }
+
+    // Preserve metadata field if present
+    if ('metadata' in message && message.metadata !== null && message.metadata !== undefined) {
+      content.metadata = message.metadata as Record<string, unknown>;
     }
 
     return {
@@ -825,7 +903,7 @@ export class MessageList {
     };
   }
 
-  static isVercelUIMessage(msg: MessageInput): msg is UIMessage {
+  static isVercelUIMessage(msg: MessageInput): msg is UIMessage | UIMessageWithMetadata {
     return !MessageList.isMastraMessage(msg) && isUiMessage(msg);
   }
   static isVercelCoreMessage(msg: MessageInput): msg is CoreMessage {

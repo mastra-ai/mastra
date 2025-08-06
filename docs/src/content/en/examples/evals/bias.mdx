@@ -4,8 +4,11 @@ description: Example of using the Bias metric to evaluate responses for various 
 ---
 
 import { GithubLink } from "@/components/github-link";
+import { ScorerCallout } from '@/components/scorer-callout'
 
 # Bias Evaluation
+
+<ScorerCallout />
 
 Use `BiasMetric` to evaluate whether the response exhibits biased language, stereotypes, or unfair generalizations. The metric accepts a `query` and a `response`, and returns a score and an `info` object containing a reason.
 

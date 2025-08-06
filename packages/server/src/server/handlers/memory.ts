@@ -2,6 +2,7 @@ import { generateEmptyFromSchema } from '@mastra/core';
 import type { StorageGetMessagesArg } from '@mastra/core';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
+import type { ThreadSortOptions } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 
@@ -94,7 +95,9 @@ export async function getThreadsHandler({
   resourceId,
   networkId,
   runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'networkId' | 'runtimeContext'>) {
+  orderBy,
+  sortDirection,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'networkId' | 'runtimeContext'> & ThreadSortOptions) {
   try {
     const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
 
@@ -104,10 +107,50 @@ export async function getThreadsHandler({
 
     validateBody({ resourceId });
 
-    const threads = await memory.getThreadsByResourceId({ resourceId: resourceId! });
+    const threads = await memory.getThreadsByResourceId({
+      resourceId: resourceId!,
+      orderBy,
+      sortDirection,
+    });
     return threads;
   } catch (error) {
     return handleError(error, 'Error getting threads');
+  }
+}
+
+export async function getThreadsPaginatedHandler({
+  mastra,
+  agentId,
+  resourceId,
+  networkId,
+  runtimeContext,
+  page,
+  perPage,
+  orderBy,
+  sortDirection,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'networkId' | 'runtimeContext'> & {
+  page: number;
+  perPage: number;
+} & ThreadSortOptions) {
+  try {
+    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+
+    if (!memory) {
+      throw new HTTPException(400, { message: 'Memory is not initialized' });
+    }
+
+    validateBody({ resourceId });
+
+    const result = await memory.getThreadsByResourceIdPaginated({
+      resourceId: resourceId!,
+      page,
+      perPage,
+      orderBy,
+      sortDirection,
+    });
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error getting paginated threads');
   }
 }
 
@@ -450,12 +493,43 @@ interface SearchResponse {
 }
 
 /**
- * Handler to search messages in a thread.
- * @param searchQuery - the text to search for
- * @param resourceId - the resource id (user/org) to validate thread ownership
- * @param threadId - the thread id to search within
- * @param limit - maximum number of results to return (default: 20)
+ * Handler to delete one or more messages.
+ * @param messageIds - Can be a single ID, array of IDs, or objects with ID property
  */
+export async function deleteMessagesHandler({
+  mastra,
+  agentId,
+  messageIds,
+  networkId,
+  runtimeContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'> & {
+  messageIds: string | string[] | { id: string } | { id: string }[];
+}) {
+  try {
+    if (messageIds === undefined || messageIds === null) {
+      throw new HTTPException(400, { message: 'messageIds is required' });
+    }
+
+    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    if (!memory) {
+      throw new HTTPException(400, { message: 'Memory is not initialized' });
+    }
+
+    // Delete the messages - let the memory method handle validation
+    await memory.deleteMessages(messageIds as any);
+
+    // Count messages for response
+    let count = 1;
+    if (Array.isArray(messageIds)) {
+      count = messageIds.length;
+    }
+
+    return { success: true, message: `${count} message${count === 1 ? '' : 's'} deleted successfully` };
+  } catch (error) {
+    return handleError(error, 'Error deleting messages');
+  }
+}
+
 export async function searchMemoryHandler({
   mastra,
   agentId,
