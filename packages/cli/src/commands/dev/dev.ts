@@ -186,6 +186,23 @@ export async function dev({
 
   const bundler = new DevBundler(env);
   bundler.__setLogger(logger);
+
+  // Get the port to use before prepare to set environment variables
+  const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
+  let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
+  if (!portToUse || isNaN(Number(portToUse))) {
+    const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
+    portToUse = String(
+      await getPort({
+        port: portList,
+      }),
+    );
+  }
+
+  // Set environment variables for playground development
+  process.env.MASTRA_DEV_PORT = portToUse.toString();
+  process.env.MASTRA_DEV_HOST = serverOptions?.host ?? 'localhost';
+
   await bundler.prepare(dotMastraPath);
 
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
@@ -195,19 +212,6 @@ export async function dev({
   // spread loadedEnv into process.env
   for (const [key, value] of loadedEnv.entries()) {
     process.env[key] = value;
-  }
-
-  const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
-
-  let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
-  if (!portToUse || isNaN(Number(portToUse))) {
-    const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
-
-    portToUse = String(
-      await getPort({
-        port: portList,
-      }),
-    );
   }
 
   await startServer(join(dotMastraPath, 'output'), Number(portToUse), loadedEnv, startOptions);
