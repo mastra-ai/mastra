@@ -1,19 +1,28 @@
 import type { MemoryConfig } from '@mastra/core';
 import { createTool } from '@mastra/core';
-import { z } from 'zod';
+import { z, ZodObject } from 'zod';
 
 export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
-  return createTool({
-    id: 'update-working-memory',
-    description:
-      'Update the working memory with new information. Always pass data as string to the memory field. Never pass an object.',
-    inputSchema: z.object({
+  const hasSchema = !!memoryConfig?.workingMemory?.schema;
+
+  let inputSchema;
+
+  if (hasSchema) {
+    inputSchema = memoryConfig.workingMemory?.schema as ZodObject<any, any, any>;
+  } else {
+    inputSchema = z.object({
       memory: z
         .string()
         .describe(
-          `The ${!!memoryConfig?.workingMemory?.schema ? 'JSON' : 'Markdown'} formatted working memory content to store. This MUST be a string. Never pass an object.`,
+          `The ${hasSchema ? 'JSON' : 'Markdown'} formatted working memory content to store. This MUST be a string. Never pass an object.`,
         ),
-    }),
+    });
+  }
+
+  return createTool({
+    id: 'update-working-memory',
+    description: `Update the working memory with new information. Any data not included will be overwritten.${hasSchema ? ' Always pass data as string to the memory field. Never pass an object.' : ''}`,
+    inputSchema,
     execute: async params => {
       const { context, threadId, memory, resourceId } = params;
       if (!threadId || !memory || !resourceId) {
@@ -34,13 +43,13 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
         throw new Error(`Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`);
       }
 
-      const workingMemory = context.memory;
+      const workingMemory = hasSchema ? JSON.stringify(context) : context.memory;
 
       // Use the new updateWorkingMemory method which handles both thread and resource scope
       await memory.updateWorkingMemory({
         threadId,
         resourceId,
-        workingMemory: workingMemory,
+        workingMemory,
         memoryConfig,
       });
 
