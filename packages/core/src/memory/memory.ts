@@ -6,7 +6,7 @@ import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
-import type { CoreTool } from '../tools';
+import type { ToolAction } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 
@@ -155,7 +155,7 @@ export abstract class MastraMemory extends MastraBase {
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.
    */
-  public getTools(_config?: MemoryConfig): Record<string, CoreTool> {
+  public getTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
     return {};
   }
 
