@@ -10,6 +10,7 @@ overrides:
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/loggers': link:../../packages/loggers
   '@mastra/memory': link:../../packages/memory
+  mastra: link:../../packages/cli
 
 importers:
 
@@ -36,6 +37,9 @@ importers:
       '@mastra/memory':
         specifier: link:../../packages/memory
         version: link:../../packages/memory
+      mastra:
+        specifier: link:../../packages/cli
+        version: link:../../packages/cli
       zod:
         specifier: ^3.25.67
         version: 3.25.67
