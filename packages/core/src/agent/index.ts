@@ -879,71 +879,29 @@ export class Agent<
     const memoryTools = memory?.getTools?.();
 
     if (memoryTools) {
-      const memoryToolEntries = await Promise.all(
-        Object.entries(memoryTools).map(async ([k, tool]) => {
-          return [
-            k,
-            {
-              description: tool.description,
-              parameters: tool.parameters,
-              execute:
-                typeof tool?.execute === 'function'
-                  ? async (args: any, options: any) => {
-                      try {
-                        this.logger.debug(`[Agent:${this.name}] - Executing memory tool ${k}`, {
-                          name: k,
-                          description: tool.description,
-                          args,
-                          runId,
-                          threadId,
-                          resourceId,
-                        });
-                        return (
-                          tool?.execute?.(
-                            {
-                              context: args,
-                              mastra: mastraProxy as MastraUnion | undefined,
-                              memory,
-                              runId,
-                              threadId,
-                              resourceId,
-                              logger: this.logger,
-                              agentName: this.name,
-                              runtimeContext,
-                            },
-                            options,
-                          ) ?? undefined
-                        );
-                      } catch (err) {
-                        const mastraError = new MastraError(
-                          {
-                            id: 'AGENT_MEMORY_TOOL_EXECUTION_FAILED',
-                            domain: ErrorDomain.AGENT,
-                            category: ErrorCategory.USER,
-                            details: {
-                              agentName: this.name,
-                              runId: runId || '',
-                              threadId: threadId || '',
-                              resourceId: resourceId || '',
-                            },
-                            text: `[Agent:${this.name}] - Failed memory tool execution`,
-                          },
-                          err,
-                        );
-                        this.logger.trackException(mastraError);
-                        this.logger.error(mastraError.toString());
-                        throw mastraError;
-                      }
-                    }
-                  : undefined,
-            },
-          ] as [string, CoreTool];
-        }),
+      this.logger.debug(
+        `[Agent:${this.name}] - Adding tools from memory ${Object.keys(memoryTools || {}).join(', ')}`,
+        {
+          runId,
+        },
       );
-
-      convertedMemoryTools = Object.fromEntries(
-        memoryToolEntries.filter((entry): entry is [string, CoreTool] => Boolean(entry)),
-      );
+      for (const [toolName, tool] of Object.entries(memoryTools)) {
+        const toolObj = tool;
+        const options = {
+          name: toolName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: mastraProxy as MastraUnion | undefined,
+          memory,
+          agentName: this.name,
+          runtimeContext,
+          model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
+        };
+        const convertedToCoreTool = makeCoreTool(toolObj, options);
+        convertedMemoryTools[toolName] = convertedToCoreTool;
+      }
     }
     return convertedMemoryTools;
   }
