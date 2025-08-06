@@ -37,8 +37,8 @@ export function InputField({
       className={cn(
         'grid gap-[.5rem] ',
         {
-          'grid-rows-[auto_1fr]': !labelIsHidden,
-          'grid-rows-[auto_1fr_auto]': helpMsg,
+          'grid-rows-[auto_1fr]': !labelIsHidden && !helpMsg,
+          'grid-rows-[auto_1fr_auto]': !labelIsHidden && helpMsg,
         },
         className,
       )}
