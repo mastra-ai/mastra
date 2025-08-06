@@ -135,47 +135,6 @@ const response = await agent.generate("message for agent", {
       description: "Maximum number of retries. Set to 0 to disable retries.",
     },
     {
-      name: "memoryOptions",
-      type: "MemoryConfig",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.options` instead. Configuration options for memory management.",
-      properties: [
-        {
-          parameters: [{
-            name: "lastMessages",
-            type: "number | false",
-            isOptional: true,
-            description: "Number of recent messages to include in context, or false to disable."
-          }]
-        },
-        {
-          parameters: [{
-            name: "semanticRecall",
-            type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
-            isOptional: true,
-            description: "Enable semantic recall to find relevant past messages. Can be a boolean or detailed configuration."
-          }]
-        },
-        {
-          parameters: [{
-            name: "workingMemory",
-            type: "WorkingMemory",
-            isOptional: true,
-            description: "Configuration for working memory functionality."
-          }]
-        },
-        {
-          parameters: [{
-            name: "threads",
-            type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
-            isOptional: true,
-            description: "Thread-specific configuration, including automatic title generation."
-          }]
-        }
-      ]
-    },
-    {
       name: "onStepFinish",
       type: "GenerateTextOnStepFinishCallback<any> | never",
       isOptional: true,
@@ -183,11 +142,10 @@ const response = await agent.generate("message for agent", {
         "Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output",
     },
     {
-      name: "resourceId",
+      name: "runId",
       type: "string",
       isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.resource` instead. Identifier for the user or resource interacting with the agent. Must be provided if threadId is provided.",
+      description: "Unique ID for this generation run. Useful for tracking and debugging purposes.",
     },
     {
       name: "telemetry",
@@ -236,13 +194,6 @@ const response = await agent.generate("message for agent", {
       isOptional: true,
       description:
         "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
-    },
-    {
-      name: "threadId",
-      type: "string",
-      isOptional: true,
-      description:
-        "**Deprecated.** Use `memory.thread` instead. Identifier for the conversation thread. Allows for maintaining context across multiple interactions. Must be provided if resourceId is provided.",
     },
     {
       name: "toolChoice",
@@ -305,7 +256,7 @@ const response = await agent.generate("message for agent", {
       name: "providerOptions",
       type: "Record<string, Record<string, JSONValue>>",
       isOptional: true,
-      description: "Additional provider-specific options that are passed through to the underlying LLM provider. The structure is `{ providerName: { optionKey: value } }`. For example: `{ openai: { reasoningEffort: 'high' }, anthropic: { maxTokens: 1000 } }`.",
+      description: "Additional provider-specific options that are passed through to the underlying LLM provider. The structure is `{ providerName: { optionKey: value } }`. Since Mastra extends AI SDK, see the [AI SDK documentation](https://sdk.vercel.ai/docs/providers/ai-sdk-providers) for complete provider options.",
       properties: [
         {
           parameters: [{
@@ -340,12 +291,6 @@ const response = await agent.generate("message for agent", {
           }]
         }
       ]
-    },
-    {
-      name: "runId",
-      type: "string",
-      isOptional: true,
-      description: "Unique ID for this generation run. Useful for tracking and debugging purposes.",
     },
     {
       name: "runtimeContext",
@@ -412,22 +357,19 @@ const response = await agent.generate("message for agent", {
       name: "text",
       type: "string",
       isOptional: true,
-      description:
-        "The generated text response. Present when output is 'text' (no schema provided).",
+      description: "The generated text response. Present when output is 'text' (no schema provided).",
     },
     {
       name: "object",
       type: "object",
       isOptional: true,
-      description:
-        "The generated structured response. Present when a schema is provided via `output` or `experimental_output`.",
+      description: "The generated structured response. Present when a schema is provided via `output` or `experimental_output`.",
     },
     {
       name: "toolCalls",
       type: "Array<ToolCall>",
       isOptional: true,
-      description:
-        "The tool calls made during the generation process. Present in both text and object modes.",
+      description: "The tool calls made during the generation process. Present in both text and object modes.",
       properties: [
         {
           parameters: [{
