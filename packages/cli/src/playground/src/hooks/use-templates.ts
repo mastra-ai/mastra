@@ -36,6 +36,9 @@ async function getMastraTemplateRepos(): Promise<{ templates: Template[]; tags: 
       tags: ['Agent', 'Workflow', 'Tool'],
       useCase: '',
       supportedProviders: ['openai', 'anthropic', 'google', 'groq'],
+      agents: ['weatherAgent'],
+      tools: ['weatherTool'],
+      workflows: ['weatherWorkflow'],
     },
     ...templates,
   ];
