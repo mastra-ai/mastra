@@ -1,16 +1,16 @@
 ---
-title: "Reference: getTools() | Agents | Mastra Docs"
-description: "Documentation for the `.getTools()` method in Mastra agents, which retrieves the tools that the agent can use."
+title: "Reference: getScorers() | Agents | Mastra Docs"
+description: "Documentation for the `.getScorers()` method in Mastra agents, which retrieves the scoring configuration."
 ---
 
-# getTools()
+# getScorers()
 
-The `.getTools()` method retrieves the tools configured for an agent, resolving them if they're a function. These tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
+The `.getScorers()` method retrieves the scoring configuration configured for an agent, resolving it if it's a function. This method provides access to the scoring system used for evaluating agent responses and performance.
 
 ## Usage example
 
 ```typescript showLineNumbers copy
-const tools = await agent.getTools();
+const scorers = await agent.getScorers();
 ```
 
 ## Parameters
@@ -30,7 +30,7 @@ const tools = await agent.getTools();
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-const tools = await agent.getTools({
+const scorers = await agent.getScorers({
   runtimeContext: new RuntimeContext()
 });
 ```
@@ -54,9 +54,9 @@ const tools = await agent.getTools({
 <PropertiesTable
   content={[
     {
-      name: "tools",
-      type: "TTools | Promise<TTools>",
-      description: "The tools configured for the agent, either as a direct object or a promise that resolves to the tools.",
+      name: "scorers",
+      type: "MastraScorers | Promise<MastraScorers>",
+      description: "The scoring configuration configured for the agent, either as a direct object or a promise that resolves to the scorers.",
     },
   ]}
 />
