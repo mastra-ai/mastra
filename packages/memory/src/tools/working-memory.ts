@@ -16,8 +16,8 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
     }),
     execute: async params => {
       const { context, threadId, memory, resourceId } = params;
-      if (!threadId || !memory) {
-        throw new Error('Thread ID and Memory instance are required for working memory updates');
+      if (!threadId || !memory || !resourceId) {
+        throw new Error('Thread ID, Memory instance, and resourceId are required for working memory updates');
       }
 
       let thread = await memory.getThreadById({ threadId });
@@ -25,7 +25,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
       if (!thread) {
         thread = await memory.createThread({
           threadId,
-          resourceId: resourceId || thread!.resourceId,
+          resourceId,
           memoryConfig,
         });
       }
@@ -39,7 +39,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
       // Use the new updateWorkingMemory method which handles both thread and resource scope
       await memory.updateWorkingMemory({
         threadId,
-        resourceId: resourceId || thread?.resourceId,
+        resourceId,
         workingMemory: workingMemory,
         memoryConfig,
       });
@@ -75,8 +75,8 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
     }),
     execute: async params => {
       const { context, threadId, memory, resourceId } = params;
-      if (!threadId || !memory) {
-        throw new Error('Thread ID and Memory instance are required for working memory updates');
+      if (!threadId || !memory || !resourceId) {
+        throw new Error('Thread ID, Memory instance, and resourceId are required for working memory updates');
       }
 
       let thread = await memory.getThreadById({ threadId });
@@ -84,7 +84,7 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
       if (!thread) {
         thread = await memory.createThread({
           threadId,
-          resourceId: resourceId || thread!.resourceId,
+          resourceId,
           memoryConfig: config,
         });
       }
@@ -123,7 +123,7 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
       // Use the new updateWorkingMemory method which handles both thread and resource scope
       const result = await memory.__experimental_updateWorkingMemoryVNext({
         threadId,
-        resourceId: resourceId || thread?.resourceId,
+        resourceId,
         workingMemory: workingMemory,
         searchString: context.searchString,
         memoryConfig: config,
