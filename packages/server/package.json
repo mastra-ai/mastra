@@ -45,7 +45,7 @@
         "default": "./dist/server/a2a/store.js"
       },
       "require": {
-        "types": "./dist/server/a2a/store.d.cts",
+        "types": "./dist/server/a2a/store.d.ts",
         "default": "./dist/server/a2a/store.cjs"
       }
     },
