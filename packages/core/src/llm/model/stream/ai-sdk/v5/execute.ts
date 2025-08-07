@@ -46,7 +46,8 @@ export function executeV5({
       try {
         const stream = await model.doStream({
           ...toolsAndToolChoice,
-          prompt: messages.get.all.model(),
+          // TODO: fix prompt type
+          prompt: messages.get.all.aiV5.model() as any,
           providerOptions: providerMetadata,
           abortSignal: options?.abortSignal,
         });

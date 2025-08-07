@@ -1,7 +1,7 @@
 import { generateEmptyFromSchema } from '@mastra/core';
-import type { CoreTool, MastraMessageV1 } from '@mastra/core';
+import type { CoreTool } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MastraMessageV1, MastraMessageV2, MastraMessageV3 } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, SharedMemoryConfig, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
@@ -87,7 +87,12 @@ export class Memory extends MastraMemory {
     threadConfig,
   }: StorageGetMessagesArg & {
     threadConfig?: MemoryConfig;
-  }): Promise<{ messages: CoreMessage[]; uiMessages: UIMessage[]; messagesV2: MastraMessageV2[] }> {
+  }): Promise<{
+    messages: CoreMessage[];
+    uiMessages: UIMessage[];
+    messagesV2: MastraMessageV2[];
+    messagesV3: MastraMessageV3[];
+  }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
     const vectorResults: {
@@ -199,10 +204,13 @@ export class Memory extends MastraMemory {
         return v1Messages as CoreMessage[];
       },
       get uiMessages() {
-        return list.get.all.ui();
+        return list.get.all.aiV4.ui();
       },
       get messagesV2() {
         return list.get.all.v2();
+      },
+      get messagesV3() {
+        return list.get.all.v3();
       },
     };
   }
@@ -609,6 +617,7 @@ export class Memory extends MastraMemory {
     }
 
     if (format === `v1`) return new MessageList().add(await result, 'memory').get.all.v1(); // for backwards compat convert to v1 message format
+    if (format === `v2`) return new MessageList().add(await result, 'memory').get.all.v2(); // for backwards compat convert to v2 message format
     return result;
   }
   protected updateMessageToHideWorkingMemory(message: MastraMessageV1): MastraMessageV1 | null {

@@ -43,14 +43,13 @@ import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import type { AgentVNextStreamOptions } from './agent.types';
 import { MessageList } from './message-list';
-import type { MessageInput } from './message-list';
+import type { MessageInput, MessageListAddInput } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import type {
   AgentConfig,
   MastraLanguageModel,
   AgentGenerateOptions,
   AgentStreamOptions,
-  AiMessageType,
   ToolsetsInput,
   ToolsInput,
   AgentMemoryOption,
@@ -58,6 +57,7 @@ import type {
 export type { ChunkType, MastraAgentStream } from '../stream/MastraAgentStream';
 
 export { MessageList };
+export type { MastraMessageV1, MastraMessageV2, MastraMessageV3 } from './message-list';
 export * from './types';
 type IDGenerator = () => string;
 
@@ -668,7 +668,7 @@ export class Agent<
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ runtimeContext, model });
 
-    const normMessage = new MessageList().add(message, 'user').get.all.ui().at(-1);
+    const normMessage = new MessageList().add(message, 'user').get.all.aiV4.ui().at(-1);
     if (!normMessage) {
       throw new Error(`Could not generate title from input ${JSON.stringify(message)}`);
     }
@@ -725,7 +725,7 @@ export class Agent<
   ) {
     try {
       if (userMessage) {
-        const normMessage = new MessageList().add(userMessage, 'user').get.all.ui().at(-1);
+        const normMessage = new MessageList().add(userMessage, 'user').get.all.aiV4.ui().at(-1);
         if (normMessage) {
           return await this.generateTitleFromUserMessage({
             message: normMessage,
@@ -1319,7 +1319,7 @@ export class Agent<
     memoryConfig?: MemoryConfig;
     context?: CoreMessage[];
     runId?: string;
-    messages: string | string[] | CoreMessage[] | AiMessageType[];
+    messages: MessageListAddInput;
     runtimeContext: RuntimeContext;
     generateMessageId: undefined | IDGenerator;
     saveQueueManager: SaveQueueManager;
@@ -1503,7 +1503,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             'memory',
           )
           // add new user messages to the list AFTER remembered messages to make ordering more reliable
-          .add(messages, 'user');
+          .add(messages as Parameters<typeof messageList.add>[0], 'user');
 
         const systemMessage =
           [...messageList.getSystemMessages(), ...messageList.getSystemMessages('memory')]
@@ -1590,8 +1590,8 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
           // @ts-ignore Flag for agent network messages
           _agentNetworkAppend: this._agentNetworkAppend,
         })
-          .add(result.response.messages, 'response')
-          .get.all.core();
+          .add(result.response?.messages || [], 'response')
+          .get.all.aiV4.core();
 
         const usedWorkingMemory = messageListResponses?.some(
           m => m.role === 'tool' && m?.content?.some(c => c?.toolName === 'updateWorkingMemory'),
@@ -1607,7 +1607,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
         if (memory && resourceId && thread) {
           try {
             // Add LLM response messages to the list
-            let responseMessages = result.response.messages;
+            let responseMessages = result.response?.messages;
             if (!responseMessages && result.object) {
               responseMessages = [
                 {
@@ -1631,7 +1631,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
             // Add title generation to promises if needed
             if (thread.title?.startsWith('New Thread')) {
               const config = memory.getMergedThreadConfig(memoryConfig);
-              const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
+              const userMessage = this.getMostRecentUserMessage(messageList.get.all.aiV4.ui());
 
               const {
                 shouldGenerate,
@@ -1720,7 +1720,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     structuredOutput?: boolean;
   }) {
     const agentName = this.name;
-    const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
+    const userInputMessages = messageList.get.all.aiV4.ui().filter(m => m.role === 'user');
     const input = userInputMessages
       .map(message => (typeof message.content === 'string' ? message.content : ''))
       .join('\n');
@@ -1767,7 +1767,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
     ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: MessageListAddInput,
     options: AgentGenerateOptions<Output, ExperimentalOutput>,
   ): Promise<{
     before: () => Promise<
@@ -1793,7 +1793,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
     ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: MessageListAddInput,
     options: AgentStreamOptions<Output, ExperimentalOutput>,
   ): Promise<{
     before: () => Promise<
@@ -1819,7 +1819,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     Output extends ZodSchema | JSONSchema7 | undefined = undefined,
     ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: MessageListAddInput,
     options: (AgentGenerateOptions<Output, ExperimentalOutput> | AgentStreamOptions<Output, ExperimentalOutput>) & {
       writableStream?: WritableStream<ChunkType>;
     },
@@ -1988,15 +1988,15 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
   }
 
   async generate(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: MessageListAddInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, undefined>>;
   async generate<OUTPUT extends ZodSchema | JSONSchema7>(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: MessageListAddInput,
     args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
   ): Promise<GenerateObjectResult<OUTPUT>>;
   async generate<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: MessageListAddInput,
     args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
       output?: never;
       experimental_output?: EXPERIMENTAL_OUTPUT;
@@ -2006,7 +2006,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: MessageListAddInput,
     generateOptions: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<OUTPUT extends undefined ? GenerateTextResult<any, EXPERIMENTAL_OUTPUT> : GenerateObjectResult<OUTPUT>> {
     const defaultGenerateOptions = await this.getDefaultGenerateOptions({
@@ -2061,21 +2061,21 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: MessageListAddInput,
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
   ): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: MessageListAddInput,
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
   ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>>;
   async stream<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: MessageListAddInput,
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
       output?: never;
       experimental_output?: EXPERIMENTAL_OUTPUT;
@@ -2096,7 +2096,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: MessageListAddInput,
     streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
@@ -2175,7 +2175,7 @@ Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conv
     Output extends ZodSchema | undefined = undefined,
     StructuredOutput extends ZodSchema | undefined = undefined,
   >(
-    messages: string | string[] | CoreMessage[] | AiMessageType[],
+    messages: MessageListAddInput,
     streamOptions?: AgentVNextStreamOptions<Output, StructuredOutput>,
   ): MastraAgentStream<
     Output extends ZodSchema

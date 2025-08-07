@@ -708,7 +708,7 @@ describe('agent', () => {
     messageList.add(toolResultTwo_Core, 'memory');
     messageList.add(toolCallThree_Core, 'memory');
 
-    const finalCoreMessages = messageList.get.all.core();
+    const finalCoreMessages = messageList.get.all.aiV4.core();
 
     // Expected: toolCallThree (orphaned assistant call) should be gone.
     // toolResultOne assumes the tool call was completed, so should be present
@@ -779,7 +779,7 @@ describe('agent', () => {
     messageList.add(emptyAssistant_Core, 'memory');
     messageList.add(userMessage_Core, 'memory');
 
-    const finalCoreMessages = messageList.get.all.core();
+    const finalCoreMessages = messageList.get.all.aiV4.core();
 
     // Expected:
     // 1. Assistant message with tool-1 call.

@@ -18,7 +18,7 @@ import { z } from 'zod';
 import { filterToolCallsByName, filterToolResultsByName, generateConversationHistory } from './test-utils';
 
 function v2ToCoreMessages(messages: MastraMessageV2[] | UIMessage[]): CoreMessage[] {
-  return new MessageList().add(messages, 'memory').get.all.core();
+  return new MessageList().add(messages, 'memory').get.all.aiV4.model();
 }
 
 let memory: Memory;
@@ -84,7 +84,7 @@ describe('Memory with Processors', () => {
     const result = memory.processMessages({
       messages: new MessageList({ threadId: thread.id, resourceId })
         .add(queryResult.uiMessages, 'memory')
-        .get.all.core(),
+        .get.all.aiV4.model(),
       processors: [new TokenLimiter(250)], // Limit to 250 tokens
     });
 
@@ -114,7 +114,7 @@ describe('Memory with Processors', () => {
     const allMessagesResult = memory.processMessages({
       messages: new MessageList({ threadId: thread.id, resourceId })
         .add(allMessagesQuery.uiMessages, 'memory')
-        .get.all.core(),
+        .get.all.aiV4.model(),
       processors: [new TokenLimiter(3000)], // High limit that should exceed total tokens
     });
 
@@ -437,7 +437,7 @@ describe('Memory with Processors', () => {
     });
     const list2 = new MessageList({ threadId }).add(weatherQueryResult.messagesV2, 'memory');
     const weatherFilteredResult = memory.processMessages({
-      messages: list2.get.all.core(),
+      messages: list2.get.all.aiV4.model(),
       processors: [new ToolCallFilter({ exclude: ['get_weather'] })],
     });
 
@@ -458,7 +458,7 @@ describe('Memory with Processors', () => {
     });
     const list3 = new MessageList({ threadId }).add(tokenLimitQuery.messages, 'memory');
     const tokenLimitedResult = memory.processMessages({
-      messages: list3.get.all.core(),
+      messages: list3.get.all.aiV4.model(),
       processors: [new TokenLimiter(100)], // Small limit to only get a subset
     });
 
@@ -472,7 +472,7 @@ describe('Memory with Processors', () => {
     });
     const list4 = new MessageList({ threadId }).add(combinedQuery.messages, 'memory');
     const combinedResult = memory.processMessages({
-      messages: list4.get.all.core(),
+      messages: list4.get.all.aiV4.model(),
       processors: [new ToolCallFilter({ exclude: ['get_weather', 'calculator'] }), new TokenLimiter(500)],
     });
 

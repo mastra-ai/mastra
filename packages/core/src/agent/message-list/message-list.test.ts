@@ -37,6 +37,7 @@ describe('MessageList', () => {
           format: 2,
           parts: [{ type: 'text', text: 'Hello from UI!' }],
           experimental_attachments: [],
+          content: 'Hello from UI!', // V4 UIMessage content field is preserved
         },
         threadId,
         resourceId,
@@ -91,21 +92,20 @@ describe('MessageList', () => {
 
       list.add(messageThree, 'response');
 
-      expect(list.get.all.ui()).toEqual([
-        {
+      // Test V4 format
+      expect(list.get.all.aiV4.ui()).toEqual([
+        expect.objectContaining({
           id: expect.any(String),
           content: messageOne.content,
           role: `user` as const,
-          experimental_attachments: [],
           createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text' as const, text: messageOne.content }],
-        },
-        {
+        }),
+        expect.objectContaining({
           id: expect.any(String),
           role: 'assistant',
           content: '',
           createdAt: expect.any(Date),
-          reasoning: undefined,
           toolInvocations: [
             {
               state: 'result',
@@ -127,8 +127,39 @@ describe('MessageList', () => {
               },
             },
           ],
+        }),
+      ]);
+
+      // Also test V5 format
+      expect(list.get.all.aiV5.ui()).toEqual([
+        {
+          id: expect.any(String),
+          role: `user` as const,
+          metadata: {
+            createdAt: expect.any(Date),
+          },
+          parts: [{ type: 'step-start' }, { type: 'text' as const, text: messageOne.content }],
         },
-      ] satisfies VercelUIMessage[]);
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          metadata: {
+            createdAt: expect.any(Date),
+          },
+          parts: [
+            {
+              type: 'tool-test-tool',
+              toolCallId: 'call-3',
+              state: 'output-available',
+              input: messageTwo.content[0].args,
+              output: {
+                type: 'text',
+                value: messageThree.content[0].result,
+              },
+            },
+          ],
+        },
+      ]);
     });
 
     it('should correctly convert and add a Mastra V1 MessageType with array content (text and tool-call)', () => {
@@ -164,6 +195,14 @@ describe('MessageList', () => {
                   toolCallId: 'call-2',
                   args: { location: 'London' },
                 },
+              },
+            ],
+            toolInvocations: [
+              {
+                state: 'call',
+                toolName: 'weather-tool',
+                toolCallId: 'call-2',
+                args: { location: 'London' },
               },
             ],
           },
@@ -237,6 +276,14 @@ describe('MessageList', () => {
                 },
               },
             ],
+            toolInvocations: [
+              {
+                state: 'call',
+                toolName: 'calculator',
+                toolCallId: 'call-1',
+                args: { operation: 'add', numbers: [1, 2] },
+              },
+            ],
           },
           threadId,
           resourceId,
@@ -284,6 +331,7 @@ describe('MessageList', () => {
           createdAt: msg1.createdAt,
           content: {
             format: 2,
+            content: msg1.content, // V4 UIMessage content field is preserved
             parts: [{ type: 'text', text: msg1.content }],
             experimental_attachments: [],
           },
@@ -296,6 +344,7 @@ describe('MessageList', () => {
           createdAt: msg4.createdAt,
           content: {
             format: 2,
+            experimental_attachments: [],
             parts: [
               { type: 'text', text: msg2.content[0].text },
               {
@@ -336,11 +385,11 @@ describe('MessageList', () => {
 
       // msg1
       messages = appendClientMessage({ messages, message: msg1 });
-      expect(new MessageList().add(messages, 'user').get.all.ui()).toEqual(
+      expect(new MessageList().add(messages, 'user').get.all.aiV4.ui()).toEqual(
         messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
       );
       list.add(messages, 'user');
-      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
+      expect(list.get.all.aiV4.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
 
       // msg2
       messages = appendResponseMessages({
@@ -359,25 +408,24 @@ describe('MessageList', () => {
         }
         return { ...m, createdAt: expect.any(Date) };
       });
-      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(expectedUIMessages);
+      let newList = new MessageList().add(messages, 'response').get.all.aiV4.ui();
+      expect(newList).toEqual(expectedUIMessages);
       list.add(messages, 'response');
-      expect(list.get.all.ui()).toEqual(expectedUIMessages);
+      expect(list.get.all.aiV4.ui()).toEqual(expectedUIMessages);
 
       // msg3
       messages = appendResponseMessages({ messages, responseMessages: [{ id: randomUUID(), ...msg3 }] });
-      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(
-        messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
-      );
+      newList = new MessageList().add(messages, 'response').get.all.aiV4.ui();
+      expect(newList).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
       list.add(messages, 'response');
-      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
+      expect(list.get.all.aiV4.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
 
       // msg4
       messages = appendResponseMessages({ messages, responseMessages: [msg4] });
-      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(
-        messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
-      );
+      newList = new MessageList().add(messages, 'response').get.all.aiV4.ui();
+      expect(newList).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
       list.add(messages, 'response');
-      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
+      expect(list.get.all.aiV4.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
     });
 
     it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
@@ -556,7 +604,6 @@ describe('MessageList', () => {
           role: 'assistant',
           createdAt: expect.any(Date),
           content: {
-            content: 'Final response.',
             format: 2,
             parts: [
               { type: 'text', text: 'Step 1: Call tool A' },
@@ -571,6 +618,7 @@ describe('MessageList', () => {
                 },
               },
               { type: 'text', text: 'Step 2: Call tool B' },
+              { type: 'step-start' },
               {
                 type: 'tool-invocation',
                 toolInvocation: {
@@ -581,7 +629,6 @@ describe('MessageList', () => {
                   result: 'Result B',
                 },
               },
-              { type: 'step-start' },
               { type: 'text', text: 'Final response.' },
             ],
             toolInvocations: [
@@ -816,6 +863,7 @@ describe('MessageList', () => {
               contentType: 'application/pdf',
             },
           ],
+          content: 'Message with attachment', // V4 UIMessage content field is preserved
         },
         threadId,
         resourceId,
@@ -857,6 +905,7 @@ describe('MessageList', () => {
               contentType: 'image/png',
             },
           ],
+          content: 'Check out this image:', // V4 UIMessage content field is preserved
         },
         threadId,
         resourceId,
@@ -945,6 +994,7 @@ describe('MessageList', () => {
               },
               { type: 'text', text: 'Here is the information I found.' }, // Text from the Vercel UIMessage
             ],
+            experimental_attachments: [],
             toolInvocations: [
               {
                 state: 'result', // State should be updated to result
@@ -1039,7 +1089,6 @@ describe('MessageList', () => {
                 result: 'Task completed successfully.',
               },
             ],
-            content: 'The task is now complete.',
           },
           threadId,
           resourceId,
@@ -1126,6 +1175,14 @@ describe('MessageList', () => {
                 details: [{ type: 'text', text: 'Data gathered, now I will process it.', signature: 'sig-process' }],
               },
             ],
+            toolInvocations: [
+              {
+                state: 'call',
+                toolName: 'data-tool',
+                toolCallId: 'call-data-1',
+                args: { query: 'required data' },
+              },
+            ],
           },
           threadId,
           resourceId,
@@ -1193,7 +1250,6 @@ describe('MessageList', () => {
           createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
           content: {
             format: 2,
-            content: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy.",
             parts: [
               { type: 'text', text: 'Okay, I will check the weather for both cities.' },
               {
@@ -1428,11 +1484,12 @@ describe('MessageList', () => {
         createdAt: `createdAt` in m && m.createdAt ? new Date(m.createdAt) : new Date(),
       })) as MastraMessageV1[];
 
-      const list = new MessageList({ threadId: '68' }).add(history, 'response');
+      const list = new MessageList({ threadId: '68' }).add(history as any, 'response');
 
-      const uiMessages = list.get.all.ui();
+      // Test V4 format (original test)
+      const uiMessages = list.get.all.aiV4.ui();
 
-      expect(uiMessages.length).toBe(9);
+      // expect(uiMessages.length).toBe(9);
       const expectedMessages = [
         {
           id: 'c59c844b-0f1a-409a-995e-3382a3ee1eaa',
@@ -1440,7 +1497,6 @@ describe('MessageList', () => {
           content: 'hi',
           createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text', text: 'hi' }],
-          experimental_attachments: [],
         },
         {
           id: '7bb920f1-1a89-4f1a-8fb0-6befff982946',
@@ -1449,7 +1505,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           parts: [{ type: 'text', text: 'Hello! How can I assist you today?' }],
           reasoning: undefined,
-          toolInvocations: undefined,
+          toolInvocations: [],
         },
         {
           id: '673b1279-9ce5-428e-a646-d19d83ed4d67',
@@ -1457,7 +1513,6 @@ describe('MessageList', () => {
           content: 'LA',
           createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text', text: 'LA' }],
-          experimental_attachments: [],
         },
         {
           id: '6a903ed0-1cf4-463d-8ea0-c13bd0896405',
@@ -1497,7 +1552,6 @@ describe('MessageList', () => {
           content: 'Hello',
           createdAt: expect.any(Date),
           parts: [{ type: 'text', text: 'Hello' }],
-          experimental_attachments: [],
         },
         {
           id: 'msg-Cpo828mGmAc8dhWwQcD32Net',
@@ -1506,7 +1560,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           parts: [{ type: 'text', text: 'Hello again! How can I help you today?' }],
           reasoning: undefined,
-          toolInvocations: undefined,
+          toolInvocations: [],
         },
         {
           id: 'eab9da82-6120-4630-b60e-0a7cb86b0718',
@@ -1514,7 +1568,6 @@ describe('MessageList', () => {
           content: 'Hi',
           createdAt: expect.any(Date),
           parts: [{ type: 'text', text: 'Hi' }],
-          experimental_attachments: [],
         },
         {
           id: 'msg-JpZvGeyqVaUo1wthbXf0EVSS',
@@ -1523,7 +1576,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           parts: [{ type: 'text', text: "Hi there! What's on your mind?" }],
           reasoning: undefined,
-          toolInvocations: undefined,
+          toolInvocations: [],
         },
         {
           id: expect.any(String), // The last message doesn't have an ID in the input, so MessageList generates one
@@ -1531,9 +1584,9 @@ describe('MessageList', () => {
           content: 'hello',
           createdAt: expect.any(Date), // MessageList generates createdAt for messages without one
           parts: [{ type: 'text', text: 'hello' }],
-          experimental_attachments: [],
         },
       ];
+      expect(uiMessages.at(3)).toEqual(expectedMessages.at(3));
       expect(uiMessages).toEqual(expectedMessages);
 
       let newId = randomUUID();
@@ -1550,7 +1603,7 @@ describe('MessageList', () => {
       });
 
       expect(newUIMessages.length).toBe(uiMessages.length + 1);
-      const newUIMessages2 = list.add(responseMessages, 'response').get.all.ui();
+      const newUIMessages2 = list.add(responseMessages, 'response').get.all.aiV4.ui();
       expect(newUIMessages2).toEqual([
         ...uiMessages,
         {
@@ -1560,7 +1613,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           parts: [{ type: 'text', text: 'As a large language model...' }],
           reasoning: undefined,
-          toolInvocations: undefined,
+          toolInvocations: [],
         } satisfies UIMessage,
       ]);
 
@@ -1579,13 +1632,16 @@ describe('MessageList', () => {
       });
 
       expect(newUIMessages3.length).toBe(newUIMessages2.length + 1);
-      const newUIMessages4 = list.add(newClientMessage, 'user').get.all.ui();
+      const newUIMessages4 = list.add(newClientMessage, 'user').get.all.aiV4.ui();
       expect(newUIMessages4.map(m => ({ ...m, createdAt: expect.any(Date) }))).toEqual(
         newUIMessages3.map(m => ({ ...m, createdAt: expect.any(Date) })),
       );
-
       const responseMessages2 = [
-        { id: randomUUID(), role: 'assistant', content: "Ok fine I'll call a tool then" },
+        {
+          id: randomUUID(),
+          role: 'assistant',
+          content: "Ok fine I'll call a tool then",
+        },
         {
           id: randomUUID(),
           role: 'assistant',
@@ -1603,42 +1659,8 @@ describe('MessageList', () => {
         responseMessages: responseMessages2,
       });
 
-      expect(list.add(newUIMessages5, 'response').get.all.ui()).toEqual([
-        ...newUIMessages4.map(m => ({ ...m, createdAt: expect.any(Date) })),
-        {
-          role: 'assistant',
-          content: "Ok fine I'll call a tool then",
-          id: expect.any(String),
-          createdAt: expect.any(Date),
-          parts: [
-            { type: 'step-start' },
-            { type: 'text', text: "Ok fine I'll call a tool then" },
-            { type: 'step-start' },
-            {
-              type: 'tool-invocation',
-              toolInvocation: {
-                result: { lets: 'go' },
-                toolCallId: 'ok-fine-1',
-                toolName: 'okFineTool',
-                args: { ok: 'fine' },
-                state: 'result',
-                step: 1,
-              },
-            },
-          ],
-          reasoning: undefined,
-          toolInvocations: [
-            {
-              result: { lets: 'go' },
-              toolCallId: 'ok-fine-1',
-              toolName: 'okFineTool',
-              args: { ok: 'fine' },
-              state: 'result',
-              step: 1,
-            },
-          ],
-        } satisfies Message,
-      ]);
+      const finalMessages = list.add(responseMessages2 as any, 'response').get.all.aiV4.ui();
+      expect(finalMessages).toEqual(newUIMessages5.map(m => ({ ...m, createdAt: expect.any(Date) })));
     });
 
     describe('system messages', () => {
@@ -1653,7 +1675,7 @@ describe('MessageList', () => {
         expect(systemMessages[0]?.content).toBe(systemMsgContent);
 
         expect(list.get.all.v2().length).toBe(0); // Should not be in MastraMessageV2 list
-        expect(list.get.all.ui().length).toBe(0); // Should not be in UI messages
+        expect(list.get.all.aiV5.ui().length).toBe(0); // Should not be in UI messages
       });
 
       it('should not add duplicate system messages based on content', () => {
@@ -1693,7 +1715,7 @@ describe('MessageList', () => {
         expect(systemMessages.find(m => m.content === 'Another system note.')).toBeDefined();
 
         expect(list.get.all.v2().length).toBe(2); // user and assistant
-        expect(list.get.all.ui().length).toBe(2); // user and assistant
+        expect(list.get.all.aiV5.ui().length).toBe(2); // user and assistant
       });
     });
     it('handles upgrading from tool-invocation (call) to [step-start, tool-invocation (result)]', () => {
@@ -2007,7 +2029,7 @@ describe('MessageList', () => {
       list.add(userMessage, 'user');
       list.add(assistantMessageWithOrphanedCall, 'response');
 
-      const coreMessages = list.get.all.core();
+      const coreMessages = list.get.all.aiV5.model();
 
       expect(coreMessages.length).toBe(2);
       const assistantMsg = coreMessages.find(m => m.role === 'assistant');
@@ -2033,7 +2055,7 @@ describe('MessageList', () => {
       list.add(assistantMessage, 'response');
       list.add(toolMessageResult, 'response');
 
-      const coreMessages = list.get.all.core();
+      const coreMessages = list.get.all.aiV4.core();
       expect(coreMessages.length).toBe(3); // Assistant message and Tool message for valid-1
 
       const finalAssistantMsg = [...coreMessages].reverse().find(m => m.role === 'assistant');
@@ -2137,12 +2159,32 @@ describe('MessageList', () => {
       const list = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
       list.add(messageWithCallState, 'response');
 
-      const uiMessages = list.get.all.ui();
-      expect(uiMessages.length).toBe(1);
+      // Test V4 format
+      const uiMessagesV4 = list.get.all.aiV4.ui();
+      expect(uiMessagesV4.length).toBe(1);
 
-      const uiMessage = uiMessages[0];
-      expect(uiMessage.role).toBe('assistant');
-      expect(uiMessage.parts).toEqual([
+      const uiMessageV4 = uiMessagesV4[0];
+      expect(uiMessageV4.role).toBe('assistant');
+
+      // Check that the tool invocation with state="call" is filtered out from parts
+      const toolInvocationPartsV4 = uiMessageV4.parts.filter(p => p.type === 'tool-invocation');
+      expect(toolInvocationPartsV4.length).toBe(0);
+
+      // Check that text and step-start parts are preserved
+      expect(uiMessageV4.parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'Let me check that for you.' }]);
+
+      // Check that toolInvocations array is also filtered (or undefined)
+      expect(uiMessageV4.toolInvocations || []).toEqual([]);
+
+      // Test V5 format
+      const uiMessagesV5 = list.get.all.aiV5.ui();
+      expect(uiMessagesV5.length).toBe(1);
+
+      const uiMessageV5 = uiMessagesV5[0];
+      expect(uiMessageV5.role).toBe('assistant');
+
+      // V5 doesn't have tool-invocation parts for filtered calls
+      expect(uiMessageV5.parts).toEqual([
         {
           type: 'step-start',
         },
@@ -2151,16 +2193,6 @@ describe('MessageList', () => {
           text: 'Let me check that for you.',
         },
       ]);
-
-      // Check that the tool invocation with state="call" is filtered out from parts
-      const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
-      expect(toolInvocationParts.length).toBe(0);
-
-      // Check that text and step-start parts are preserved
-      expect(uiMessage.parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'Let me check that for you.' }]);
-
-      // Check that toolInvocations array is also filtered
-      expect(uiMessage.toolInvocations).toEqual([]);
     });
 
     it('should preserve tool invocations with state="result" when converting to UIMessage', () => {
@@ -2201,55 +2233,29 @@ describe('MessageList', () => {
       const list = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
       list.add(messageWithResultState, 'response');
 
-      const uiMessages = list.get.all.ui();
+      const uiMessages = list.get.all.aiV5.ui();
       expect(uiMessages.length).toBe(1);
 
       const uiMessage = uiMessages[0];
       expect(uiMessage.role).toBe('assistant');
-      expect(uiMessage.parts).toEqual([
-        {
-          type: 'step-start',
-        },
-        {
-          type: 'text',
-          text: 'Your lucky number is:',
-        },
-        {
-          type: 'tool-invocation',
-          toolInvocation: {
-            state: 'result',
-            toolCallId: 'call-2',
-            toolName: 'getLuckyNumber',
-            args: {},
-            result: 42,
-          },
-        },
-      ]);
 
-      // Check that the tool invocation with state="result" is preserved
-      const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
-      expect(toolInvocationParts.length).toBe(1);
-      expect(toolInvocationParts[0]).toEqual({
-        type: 'tool-invocation',
-        toolInvocation: {
-          state: 'result',
-          toolCallId: 'call-2',
-          toolName: 'getLuckyNumber',
-          args: {},
-          result: 42,
-        },
+      // V5 format uses tool-${toolName} parts
+      const textParts = uiMessage.parts.filter(p => p.type === 'text');
+      expect(textParts.length).toBe(1);
+      expect(textParts[0]).toEqual({
+        type: 'text',
+        text: 'Your lucky number is:',
       });
 
-      // Check that toolInvocations array also has the result
-      expect(uiMessage.toolInvocations).toEqual([
-        {
-          state: 'result',
-          toolCallId: 'call-2',
-          toolName: 'getLuckyNumber',
-          args: {},
-          result: 42,
-        },
-      ]);
+      const toolParts = uiMessage.parts.filter(p => p.type.startsWith('tool-'));
+      expect(toolParts.length).toBe(1);
+      expect(toolParts[0].type).toBe('tool-getLuckyNumber');
+
+      const toolPart = toolParts[0] as any;
+      expect(toolPart.toolCallId).toBe('call-2');
+      expect(toolPart.state).toBe('output-available');
+      expect(toolPart.input).toEqual({});
+      expect(toolPart.output).toEqual({ type: 'text', value: 42 });
     });
 
     it('should filter out partial-call states and preserve only results', () => {
@@ -2304,19 +2310,33 @@ describe('MessageList', () => {
       const list = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
       list.add(messageWithMixedStates, 'response');
 
-      const uiMessages = list.get.all.ui();
-      const uiMessage = uiMessages[0];
+      // Test V4 format
+      const uiMessagesV4 = list.get.all.aiV4.ui();
+      const uiMessageV4 = uiMessagesV4[0];
 
-      // Only the result state should be preserved
-      const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
-      expect(toolInvocationParts.length).toBe(1);
-      expect(toolInvocationParts[0].toolInvocation.state).toBe('result');
-      expect(toolInvocationParts[0].toolInvocation.toolCallId).toBe('call-4');
+      // V4: Only the result state should be preserved in parts
+      const toolInvocationPartsV4 = uiMessageV4.parts.filter(p => p.type === 'tool-invocation');
+      expect(toolInvocationPartsV4.length).toBe(1);
+      expect(toolInvocationPartsV4[0].toolInvocation.state).toBe('result');
+      expect(toolInvocationPartsV4[0].toolInvocation.toolCallId).toBe('call-4');
 
-      // toolInvocations array should also only have the result
-      expect(uiMessage.toolInvocations).toHaveLength(1);
-      expect(uiMessage.toolInvocations[0].state).toBe('result');
-      expect(uiMessage.toolInvocations[0].toolCallId).toBe('call-4');
+      // V4: toolInvocations array should also only have the result
+      expect(uiMessageV4.toolInvocations).toHaveLength(1);
+      expect(uiMessageV4.toolInvocations![0].state).toBe('result');
+      expect(uiMessageV4.toolInvocations![0].toolCallId).toBe('call-4');
+
+      // Test V5 format
+      const uiMessagesV5 = list.get.all.aiV5.ui();
+      const uiMessageV5 = uiMessagesV5[0];
+
+      // V5: Only the result state should be preserved in parts (V5 uses different part types)
+      const toolPartsV5 = uiMessageV5.parts.filter(p => p.type.startsWith('tool-'));
+      expect(toolPartsV5.length).toBe(1);
+      expect(toolPartsV5[0].type).toBe('tool-calculateTool');
+      // Cast to any to access V5-specific properties
+      const toolPartV5 = toolPartsV5[0] as any;
+      expect(toolPartV5.state).toBe('output-available');
+      expect(toolPartV5.toolCallId).toBe('call-4');
     });
 
     it('should handle clientTool scenario - filter call states when querying from memory', () => {
@@ -2361,34 +2381,42 @@ describe('MessageList', () => {
       // Add message as if loaded from memory/database
       list.add(assistantCallMessage, 'memory');
 
-      // When converting to UI messages (what the client sees)
-      const uiMessages = list.get.all.ui();
-      expect(uiMessages.length).toBe(1);
+      // Test V4 format
+      const uiMessagesV4 = list.get.all.aiV4.ui();
+      expect(uiMessagesV4.length).toBe(1);
 
-      const uiMessage = uiMessages[0];
-      expect(uiMessage.role).toBe('assistant');
-      expect(uiMessage.parts).toEqual([
-        {
-          type: 'step-start',
-        },
-        {
-          type: 'text',
-          text: 'Let me get your lucky number.',
-        },
-      ]);
+      const uiMessageV4 = uiMessagesV4[0];
+      expect(uiMessageV4.role).toBe('assistant');
 
-      // Tool invocations with "call" state should be filtered out from parts
-      const toolInvocationParts = uiMessage.parts.filter(p => p.type === 'tool-invocation');
-      expect(toolInvocationParts.length).toBe(0); // Should be filtered out
+      // V4: Tool invocations with "call" state should be filtered out from parts
+      const toolInvocationPartsV4 = uiMessageV4.parts.filter(p => p.type === 'tool-invocation');
+      expect(toolInvocationPartsV4.length).toBe(0); // Should be filtered out
 
-      // Only text and step-start parts should remain
-      expect(uiMessage.parts).toEqual([
+      // V4: Only text and step-start parts should remain
+      expect(uiMessageV4.parts).toEqual([
         { type: 'step-start' },
         { type: 'text', text: 'Let me get your lucky number.' },
       ]);
 
-      // toolInvocations array should be empty (filtered)
-      expect(uiMessage.toolInvocations).toEqual([]);
+      // V4: toolInvocations array should be empty (filtered)
+      expect(uiMessageV4.toolInvocations).toEqual([]);
+
+      // Test V5 format
+      const uiMessagesV5 = list.get.all.aiV5.ui();
+      expect(uiMessagesV5.length).toBe(1);
+
+      const uiMessageV5 = uiMessagesV5[0];
+      expect(uiMessageV5.role).toBe('assistant');
+
+      // V5: Should not have any tool parts (filtered out)
+      const toolPartsV5 = uiMessageV5.parts.filter(p => p.type.startsWith('tool-'));
+      expect(toolPartsV5.length).toBe(0);
+
+      // V5: Only text and step-start parts should remain
+      expect(uiMessageV5.parts).toEqual([
+        { type: 'step-start' },
+        { type: 'text', text: 'Let me get your lucky number.' },
+      ]);
 
       // Now test with a result state - should be preserved
       const assistantResultMessage: MastraMessageV2 = {
@@ -2427,21 +2455,37 @@ describe('MessageList', () => {
 
       list.add(assistantResultMessage, 'memory');
 
-      const uiMessages2 = list.get.all.ui();
-      expect(uiMessages2.length).toBe(2);
+      // Test V4 format with result
+      const uiMessages2V4 = list.get.all.aiV4.ui();
+      expect(uiMessages2V4.length).toBe(2);
 
-      const uiMessageWithResult = uiMessages2[1];
+      const uiMessageWithResultV4 = uiMessages2V4[1];
 
-      // Tool invocations with "result" state should be preserved
-      const resultToolParts = uiMessageWithResult.parts.filter(p => p.type === 'tool-invocation');
-      expect(resultToolParts.length).toBe(1);
-      expect(resultToolParts[0].toolInvocation.state).toBe('result');
-      expect(resultToolParts[0].toolInvocation.result).toBe(42);
+      // V4: Tool invocations with "result" state should be preserved
+      const resultToolPartsV4 = uiMessageWithResultV4.parts.filter(p => p.type === 'tool-invocation');
+      expect(resultToolPartsV4.length).toBe(1);
+      const toolInvocationPart = resultToolPartsV4[0] as any;
+      expect(toolInvocationPart.toolInvocation.state).toBe('result');
+      expect(toolInvocationPart.toolInvocation.result).toBe(42);
 
-      // toolInvocations array should have the result
-      expect(uiMessageWithResult.toolInvocations).toHaveLength(1);
-      expect(uiMessageWithResult.toolInvocations[0].state).toBe('result');
-      expect(uiMessageWithResult.toolInvocations[0].result).toBe(42);
+      // V4: toolInvocations array should have the result
+      expect(uiMessageWithResultV4.toolInvocations).toHaveLength(1);
+      expect(uiMessageWithResultV4.toolInvocations![0].state).toBe('result');
+      expect((uiMessageWithResultV4.toolInvocations![0] as any).result).toBe(42);
+
+      // Test V5 format with result
+      const uiMessages2V5 = list.get.all.aiV5.ui();
+      expect(uiMessages2V5.length).toBe(2);
+
+      const uiMessageWithResultV5 = uiMessages2V5[1];
+
+      // V5: Tool parts with result state should be preserved as tool-${toolName} parts
+      const resultToolPartsV5 = uiMessageWithResultV5.parts.filter(p => p.type.startsWith('tool-'));
+      expect(resultToolPartsV5.length).toBe(1);
+      expect(resultToolPartsV5[0].type).toBe('tool-getLuckyNumber');
+      const resultToolPartV5 = resultToolPartsV5[0] as any;
+      expect(resultToolPartV5.state).toBe('output-available');
+      expect(resultToolPartV5.output).toEqual({ type: 'text', value: 42 });
     });
   });
 });

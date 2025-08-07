@@ -95,7 +95,7 @@ class AgenticLoop {
                 type: 'regular',
                 tools: this.tools,
               },
-              prompt: messageList.get.all.core() as any,
+              prompt: messageList.get.all.aiV4.model() as any,
             });
 
             return stream.stream as any;
@@ -162,7 +162,7 @@ class AgenticLoop {
           );
         }
 
-        const messages = messageList.get.all.core();
+        const messages = messageList.get.all.aiV4.model();
 
         const usage = await agentStream.usage;
 
@@ -223,7 +223,7 @@ class AgenticLoop {
 
         return {
           ...initialResult,
-          messages: messageList.get.all.core(),
+          messages: messageList.get.all.aiV4.model(),
         };
       })
       .commit();
@@ -241,7 +241,7 @@ class AgenticLoop {
       messageList.add(prompt, 'user');
     }
 
-    const messages = messageList.get.all.core();
+    const messages = messageList.get.all.aiV5.model();
 
     const runId = crypto.randomUUID();
 

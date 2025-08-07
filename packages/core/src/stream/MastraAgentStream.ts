@@ -1,5 +1,6 @@
 import { ReadableStream, TransformStream, TextEncoderStream, TextDecoderStream } from 'stream/web';
 import type { DataStreamOptions, DataStreamWriter, LanguageModelV1StreamPart, StreamData } from 'ai';
+import { formatDataStreamPart } from 'ai';
 import {
   consumeStream,
   getErrorMessage,
@@ -10,6 +11,7 @@ import {
 import type { ConsumeStreamOptions } from '../llm/model/stream/ai-sdk/v4/compat';
 import { DefaultGeneratedFileWithType } from '../llm/model/stream/ai-sdk/v4/file';
 import type { ChunkType } from './types';
+export type { ChunkType } from './types';
 
 function convertFullStreamChunkToAISDKv4({
   chunk,

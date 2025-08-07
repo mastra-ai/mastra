@@ -276,10 +276,16 @@ export class AISDKV5OutputStream {
 
   transformResponse(response: any, isMessages: boolean = false) {
     const newResponse = { ...response };
-    const hasTools = response.messages.some((message: any) =>
-      message.content.some((part: any) => part.type === 'tool-result'),
+    const hasTools = response.messages.some(
+      (message: any) =>
+        Array.isArray(message.content) && message.content.some((part: any) => part.type === 'tool-result'),
     );
     newResponse.messages = response.messages.map((message: any) => {
+      // Handle string content
+      if (typeof message.content === 'string') {
+        return message;
+      }
+
       let newContent = message.content.map((part: any) => {
         if (part.type === 'file') {
           if (isMessages) {

@@ -1,7 +1,7 @@
 import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel, UIMessage } from 'ai';
 
 import { MessageList } from '../agent/message-list';
-import type { MastraMessageV2 } from '../agent/message-list';
+import type { MastraMessageV2, MastraMessageV3 } from '../agent/message-list';
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -286,11 +286,12 @@ export abstract class MastraMemory extends MastraBase {
    * @param threadId - The unique identifier of the thread
    * @returns Promise resolving to array of messages and uiMessages
    */
-  abstract query({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: UIMessage[] }>;
+  abstract query({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<{
+    messages: CoreMessage[];
+    uiMessages: UIMessage[];
+    messagesV2: MastraMessageV2[];
+    messagesV3: MastraMessageV3[];
+  }>;
 
   /**
    * Helper method to create a new thread

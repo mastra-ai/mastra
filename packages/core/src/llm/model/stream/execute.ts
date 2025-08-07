@@ -83,7 +83,10 @@ function createAgentWorkflow({
             await tool?.onInputAvailable?.({
               toolCallId: inputData.toolCallId,
               input: inputData.args,
-              messages: messageList.get.all?.ui()?.map(message => ({
+              messages: (model.specificationVersion === 'v1'
+                ? messageList.get.all.aiV4.ui()
+                : messageList.get.all.aiV5.ui()
+              )?.map(message => ({
                 role: message.role,
                 parts: message.parts,
               })) as any,
@@ -117,8 +120,10 @@ function createAgentWorkflow({
           const result = await tool.execute(inputData.args, {
             abortSignal: options?.abortSignal,
             toolCallId: inputData.toolCallId,
-            messages: messageList.get.all
-              ?.ui()
+            messages: (model.specificationVersion === 'v1'
+              ? messageList.get.all.aiV4.ui()
+              : messageList.get.all.aiV5.ui()
+            )
               ?.filter(message => message.role === 'user')
               ?.map(message => ({
                 role: message.role,
@@ -186,7 +191,7 @@ function createAgentWorkflow({
               runId,
               providerMetadata,
               providerOptions,
-              inputMessages: messageList.get.all.core() as any,
+              inputMessages: messageList.get.all.aiV4.core() as any,
               tools,
               toolChoice,
               _internal,
@@ -219,7 +224,7 @@ function createAgentWorkflow({
               model,
               runId,
               providerMetadata,
-              inputMessages: messageList.get.all.core() as any,
+              inputMessages: messageList.get.all.aiV5.model() as any,
               tools,
               toolChoice,
               _internal,
@@ -336,7 +341,10 @@ function createAgentWorkflow({
                   try {
                     await tool?.onInputStart?.({
                       toolCallId: chunk.payload.toolCallId,
-                      messages: messageList.get.all?.ui()?.map(message => ({
+                      messages: (model.specificationVersion === 'v1'
+                        ? messageList.get.all.aiV4.ui()
+                        : messageList.get.all.aiV5.ui()
+                      )?.map(message => ({
                         role: message.role,
                         parts: message.parts,
                       })) as any,
@@ -512,7 +520,10 @@ function createAgentWorkflow({
                     await tool?.onInputDelta?.({
                       inputTextDelta: chunk.payload.argsTextDelta,
                       toolCallId: chunk.payload.toolCallId,
-                      messages: messageList.get.all?.ui()?.map(message => ({
+                      messages: (model.specificationVersion === 'v1'
+                        ? messageList.get.all.aiV4.ui()
+                        : messageList.get.all.aiV5.ui()
+                      )?.map(message => ({
                         role: message.role,
                         parts: message.parts,
                       })) as any,
@@ -1145,12 +1156,9 @@ export function execute(props: ExecuteParams) {
     initMessages.push({ role: 'user', content: prompt });
   }
 
-  const messageList = MessageList.fromArray(initMessages, {
-    threadId,
-    resourceId,
-  });
+  const messageList = MessageList.fromArray(initMessages);
 
-  const allCoreMessages = messageList.get.all.core() as LanguageModelV1Prompt;
+  const allCoreMessages = messageList.get.all.aiV4.core() as LanguageModelV1Prompt;
 
   let _internalToUse = _internal
     ? {
