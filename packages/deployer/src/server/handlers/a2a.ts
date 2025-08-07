@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import type { Mastra } from '@mastra/core';
 import type { MessageSendParams, TaskQueryParams, TaskIdParams } from '@mastra/core/a2a';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import {
   getAgentCardByIdHandler as getOriginalAgentCardByIdHandler,
   getAgentExecutionHandler as getOriginalAgentExecutionHandler,
@@ -9,7 +10,6 @@ import {
 
 import type { Context } from 'hono';
 import { stream } from 'hono/streaming';
-import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 
 export async function getAgentCardByIdHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
