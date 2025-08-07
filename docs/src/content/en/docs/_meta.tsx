@@ -22,6 +22,7 @@ const meta = {
   auth: <Tag text="experimental">Auth</Tag>,
   observability: { title: "Observability" },
   evals: { title: "Evals" },
+  scorers: <Tag text="experimental">Scorers</Tag>,
   frameworks: { title: "Frameworks" },
   voice: { title: "Voice" },
   community: "Community",

@@ -3,7 +3,11 @@ title: "Create a custom eval"
 description: "Mastra allows you to create your own evals, here is how."
 ---
 
+import { ScorerCallout } from '@/components/scorer-callout'
+
 # Create a Custom Eval
+
+<ScorerCallout />
 
 Create a custom eval by extending the `Metric` class and implementing the `measure` method. This gives you full control over how scores are calculated and what information is returned. For LLM-based evaluations, extend the `MastraAgentJudge` class to define how the model reasons and scores output.
 

@@ -37,7 +37,7 @@ jobs:
         run: pnpm install
 
       - name: Build core dependencies
-        run: pnpm turbo build --filter "@mastra/core" --filter "@mastra/server" --filter "@mastra/deployer"
+        run: pnpm turbo build --filter "@mastra/core" --filter "@mastra/server" --filter "@mastra/deployer" --filter "mastra"
 
       - name: Run Client JS tests
         run: pnpm --filter "@mastra/client-js" test

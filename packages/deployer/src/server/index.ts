@@ -141,7 +141,7 @@ export async function createHonoServer(
   } else {
     const corsConfig = {
       origin: '*',
-      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       credentials: false,
       maxAge: 3600,
       ...server?.cors,

@@ -1,10 +1,19 @@
 import { openai } from '@ai-sdk/openai';
+import { google } from '@ai-sdk/google';
 import { jsonSchema, tool } from 'ai';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
+import { Agent, InputProcessor } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
+import {
+  PIIDetector,
+  LanguageDetector,
+  PromptInjectionDetector,
+  ModerationInputProcessor,
+} from '@mastra/core/agent/input-processor/processors';
+import { MCPClient } from '@mastra/mcp';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
 
 const memory = new Memory();
 
@@ -83,6 +92,46 @@ export const dynamicAgent = new Agent({
   },
 });
 
+const vegetarianProcessor: InputProcessor = {
+  name: 'eat-more-tofu',
+  process: async ({ messages }) => {
+    messages.push({
+      id: crypto.randomUUID(),
+      createdAt: new Date(),
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Make the suggested recipe, but remove any meat and add tofu instead' }],
+      },
+    });
+
+    return messages;
+  },
+};
+
+const piiDetector = new PIIDetector({
+  model: google('gemini-2.0-flash-001'),
+  redactionMethod: 'mask',
+  preserveFormat: true,
+  includeDetections: true,
+});
+
+const languageDetector = new LanguageDetector({
+  model: google('gemini-2.0-flash-001'),
+  targetLanguages: ['en'],
+  strategy: 'translate',
+});
+
+const promptInjectionDetector = new PromptInjectionDetector({
+  model: google('gemini-2.0-flash-001'),
+  strategy: 'block',
+});
+
+const moderationDetector = new ModerationInputProcessor({
+  model: google('gemini-2.0-flash-001'),
+  strategy: 'block',
+});
+
 export const chefAgentResponses = new Agent({
   name: 'Chef Agent Responses',
   instructions: `
@@ -91,10 +140,81 @@ export const chefAgentResponses = new Agent({
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
     `,
   model: openai.responses('gpt-4o'),
-  tools: {
-    web_search_preview: openai.tools.webSearchPreview(),
+  tools: async () => {
+    return {
+      web_search_preview: openai.tools.webSearchPreview(),
+    };
   },
   workflows: {
     myWorkflow,
+  },
+  inputProcessors: [
+    // piiDetector,
+    // vegetarianProcessor,
+    languageDetector,
+    // promptInjectionDetector,
+    // moderationDetector,
+    {
+      name: 'no-soup-for-you',
+      process: async ({ messages, abort }) => {
+        const hasSoup = messages.some(msg => {
+          for (const part of msg.content.parts) {
+            if (part.type === 'text' && part.text.includes('soup')) {
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (hasSoup) {
+          abort('No soup for you!');
+        }
+
+        return messages;
+      },
+    },
+    {
+      name: 'remove-spinach',
+      process: async ({ messages }) => {
+        for (const message of messages) {
+          for (const part of message.content.parts) {
+            if (part.type === 'text' && part.text.includes('spinach')) {
+              part.text = part.text.replaceAll('spinach', '');
+            }
+          }
+        }
+
+        return messages;
+      },
+    },
+  ],
+});
+
+const answerRelevance = createAnswerRelevancyScorer({
+  model: openai('gpt-4o'),
+});
+
+console.log(`answerRelevance`, answerRelevance);
+
+export const evalAgent = new Agent({
+  name: 'Eval Agent',
+  instructions: `
+    You are a helpful assistant with a weather tool.
+    `,
+  model: openai('gpt-4o'),
+  tools: {
+    weatherInfo,
+  },
+  memory: new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+      },
+    },
+  }),
+  scorers: {
+    answerRelevance: {
+      scorer: answerRelevance,
+    },
   },
 });

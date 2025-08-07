@@ -78,4 +78,22 @@ export class MemoryThread extends BaseResource {
     });
     return this.request(`/api/memory/threads/${this.threadId}/messages/paginated?${query.toString()}`);
   }
+
+  /**
+   * Deletes one or more messages from the thread
+   * @param messageIds - Can be a single message ID (string), array of message IDs,
+   *                     message object with id property, or array of message objects
+   * @returns Promise containing deletion result
+   */
+  deleteMessages(
+    messageIds: string | string[] | { id: string } | { id: string }[],
+  ): Promise<{ success: boolean; message: string }> {
+    const query = new URLSearchParams({
+      agentId: this.agentId,
+    });
+    return this.request(`/api/memory/messages/delete?${query.toString()}`, {
+      method: 'POST',
+      body: { messageIds },
+    });
+  }
 }

@@ -166,10 +166,17 @@ export abstract class Bundler extends MastraBundler {
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: string[],
+    sourcemapEnabled: boolean = false,
   ) {
-    const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node', {
-      'process.env.NODE_ENV': JSON.stringify('production'),
-    });
+    const inputOptions: InputOptions = await getInputOptions(
+      mastraEntryFile,
+      analyzedBundleInfo,
+      'node',
+      {
+        'process.env.NODE_ENV': JSON.stringify('production'),
+      },
+      { sourcemap: sourcemapEnabled },
+    );
     const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
@@ -248,6 +255,7 @@ export abstract class Bundler extends MastraBundler {
         join(outputDirectory, this.analyzeOutputDir),
         'node',
         this.logger,
+        sourcemap,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -386,6 +394,7 @@ export abstract class Bundler extends MastraBundler {
         mastraEntryFile,
         analyzedBundleInfo,
         toolsPaths,
+        sourcemap,
       );
 
       const bundler = await this.createBundler(

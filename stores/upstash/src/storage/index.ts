@@ -65,6 +65,7 @@ export class UpstashStore extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: false,
       createTable: false,
+      deleteMessages: true,
     };
   }
 
@@ -279,6 +280,10 @@ export class UpstashStore extends MastraStorage {
     })[];
   }): Promise<MastraMessageV2[]> {
     return this.stores.memory.updateMessages(args);
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

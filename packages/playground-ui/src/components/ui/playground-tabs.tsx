@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList as TabListPrimitive, TabsTrigger } from './tabs';
+import { cn } from '@/lib/utils';
 
 export interface PlaygroundTabsProps<T extends string> {
   children: React.ReactNode;
   defaultTab: T;
   value?: T;
   onValueChange?: (value: T) => void;
+  className?: string;
 }
 
 export const PlaygroundTabs = <T extends string>({
@@ -13,6 +15,7 @@ export const PlaygroundTabs = <T extends string>({
   defaultTab,
   value,
   onValueChange,
+  className,
 }: PlaygroundTabsProps<T>) => {
   const [internalTab, setInternalTab] = useState<T>(defaultTab);
 
@@ -29,7 +32,7 @@ export const PlaygroundTabs = <T extends string>({
   };
 
   return (
-    <Tabs value={currentTab} onValueChange={handleTabChange} className="h-full">
+    <Tabs value={currentTab} onValueChange={handleTabChange} className={cn('h-full', className)}>
       {children}
     </Tabs>
   );
@@ -37,12 +40,13 @@ export const PlaygroundTabs = <T extends string>({
 
 export interface TabListProps {
   children: React.ReactNode;
+  className?: string;
 }
 
-export const TabList = ({ children }: TabListProps) => {
+export const TabList = ({ children, className }: TabListProps) => {
   return (
-    <div className="w-full overflow-x-auto">
-      <TabListPrimitive className="border-b-sm border-border1 flex min-w-full shrink-0">{children}</TabListPrimitive>
+    <div className={cn('w-full overflow-x-auto', className)}>
+      <TabListPrimitive className="border-b border-border1 flex min-w-full shrink-0">{children}</TabListPrimitive>
     </div>
   );
 };
