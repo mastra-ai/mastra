@@ -377,7 +377,7 @@ export const checkFileExists = createTool({
   outputSchema: z.object({
     exists: z.boolean().describe("Whether the file or directory exists"),
     path: z.string().describe("The path that was checked"),
-    type: z.enum(["file", "dir"]).optional().describe(
+    type: z.nativeEnum(FileType).optional().describe(
       "The type if the path exists",
     ),
   }).or(z.object({
@@ -486,6 +486,7 @@ export const watchDirectory = createTool({
     watchStarted: z.boolean().describe(
       "Whether the watch was started successfully",
     ),
+    path: z.string().describe("The path that was watched"),
     events: z.array(z.object({
       type: z.nativeEnum(FilesystemEventType).describe(
         "The type of filesystem event (WRITE, CREATE, DELETE, etc.)",

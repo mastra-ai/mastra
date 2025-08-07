@@ -8,6 +8,6 @@ export const mastra = new Mastra({
   storage: new LibSQLStore({ url: "file:../../mastra.db" }),
   logger: new PinoLogger({
     name: "Mastra",
-    level: process.env.ENV === "production" ? "info" : "debug",
+    level: process.env.NODE_ENV === "production" ? "info" : "debug",
   }),
 });
