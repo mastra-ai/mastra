@@ -2001,6 +2001,9 @@ importers:
 
   packages/memory:
     dependencies:
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../schema-compat
       '@upstash/redis':
         specifier: ^1.35.3
         version: 1.35.3

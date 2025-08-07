@@ -1,26 +1,33 @@
 import type { MemoryConfig } from '@mastra/core';
 import { createTool } from '@mastra/core';
-import { z } from 'zod';
-import type { ZodObject } from 'zod';
+import { z, type ZodTypeAny } from 'zod';
+import { ZodObject } from 'zod';
+import { convertSchemaToZod } from '@mastra/schema-compat';
+import type { Schema } from 'ai';
 
 export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
-  const hasSchema = !!memoryConfig?.workingMemory?.schema;
+  const schema = memoryConfig?.workingMemory?.schema;
 
-  const inputSchema = z.object({
-    memory: hasSchema
-      ? (memoryConfig.workingMemory?.schema as ZodObject<any, any, any>).describe(
-          `The JSON formatted working memory content to store.`,
-        )
-      : z
-          .string()
-          .describe(
-            `The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.`,
-          ),
+  let inputSchema: ZodTypeAny = z.object({
+    memory: z
+      .string()
+      .describe(`The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.`),
   });
+
+  if (schema) {
+    inputSchema = z.object({
+      memory:
+        schema instanceof ZodObject
+          ? schema
+          : convertSchemaToZod({ jsonSchema: schema } as Schema).describe(
+              `The JSON formatted working memory content to store.`,
+            ),
+    });
+  }
 
   return createTool({
     id: 'update-working-memory',
-    description: `Update the working memory with new information. Any data not included will be overwritten.${hasSchema ? ' Always pass data as string to the memory field. Never pass an object.' : ''}`,
+    description: `Update the working memory with new information. Any data not included will be overwritten.${schema ? ' Always pass data as string to the memory field. Never pass an object.' : ''}`,
     inputSchema,
     execute: async params => {
       const { context, threadId, memory, resourceId } = params;
