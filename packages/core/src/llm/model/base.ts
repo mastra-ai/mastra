@@ -35,7 +35,7 @@ export abstract class MastraLLMBase extends MastraBase {
 
   abstract __text<Tools extends ToolSet, Z extends ZodSchema | JSONSchema7 | undefined>(
     input: GenerateTextWithMessagesArgs<Tools, Z>,
-  ): Promise<GenerateTextResult<Tools, Z extends ZodSchema ? z.infer<Z> : unknown>>;
+  ): Promise<GenerateTextResult<Tools, Z>>;
 
   abstract __textObject<Z extends ZodSchema | JSONSchema7>(
     input: GenerateObjectWithMessagesArgs<Z>,
@@ -57,7 +57,7 @@ export abstract class MastraLLMBase extends MastraBase {
 
   abstract __stream<Tools extends ToolSet, Z extends ZodSchema | JSONSchema7 | undefined = undefined>(
     input: StreamTextWithMessagesArgs<Tools, Z>,
-  ): StreamTextResult<Tools, Z extends ZodSchema ? z.infer<Z> : unknown>;
+  ): StreamTextResult<Tools, Z>;
 
   abstract __streamObject<Z extends ZodSchema | JSONSchema7>(
     input: StreamObjectWithMessagesArgs<Z>,

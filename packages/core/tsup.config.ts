@@ -56,6 +56,7 @@ export default defineConfig({
     'src/telemetry/otel-vendor.ts',
     'src/test-utils/llm-mock.ts',
     'src/agent/input-processor/processors/index.ts',
+    'src/zod-to-json.ts',
   ],
   format: ['esm', 'cjs'],
   clean: true,

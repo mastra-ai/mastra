@@ -571,7 +571,7 @@ export class Agent<
       : this.getModel({ runtimeContext });
 
     return resolveMaybePromise(modelToUse, resolvedModel => {
-      const llm = new MastraLLM({ model: resolvedModel, mastra: this.#mastra });
+      const llm = new MastraLLM({ model: resolvedModel, mastra: this.#mastra }) as MastraLLMBase;
 
       // Apply stored primitives if available
       if (this.#primitives) {
