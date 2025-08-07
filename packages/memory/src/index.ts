@@ -584,7 +584,7 @@ export class Memory extends MastraMemory {
 
     let updatedMessages = v2Messages;
     if (this.vector && config.semanticRecall) {
-      embeddingTextsAndIds = this.getEmbeddingTextAndIds(v2Messages);
+      embeddingTextsAndIds = this.getEmbeddingTextAndVectorIds(v2Messages);
 
       updatedMessages.forEach((message, i) => {
         if (!embeddingTextsAndIds[i]) return;
@@ -611,7 +611,7 @@ export class Memory extends MastraMemory {
         const { textForEmbedding, vectorIds } = el;
         const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
 
-        indexName ||= await this.createEmbeddingIndex(dimension).then(result => result.indexName);
+        indexName ||= (await this.createEmbeddingIndex(dimension)).indexName;
 
         await this.vector.upsert({
           indexName,
@@ -961,7 +961,7 @@ ${
 
     const config = this.getMergedThreadConfig();
     try {
-      let embeddingTextsAndIds: ({
+      let embeddingTextsAndVectorIds: ({
         textForEmbedding: string;
         vectorIds: string[];
       } | null)[] = [];
@@ -973,7 +973,7 @@ ${
         if (!this.vector) {
           throw new Error(`Tried to update embeddings but this Memory instance doesn't have an attached vector db.`);
         }
-        embeddingTextsAndIds = this.getEmbeddingTextAndIds(messages);
+        embeddingTextsAndVectorIds = this.getEmbeddingTextAndVectorIds(messages);
         // fetch all passed messages to get stored vector chunk count
         storedMessages = (
           await this.storage.getMessages({
@@ -999,33 +999,33 @@ ${
       const updatedMessages = messages.map((message, i) => {
         // remove createdAt so that storage.updateMessages doesn't invalidate stored dates
         const { createdAt, ...rest } = message;
-        if (!message.content || !embeddingTextsAndIds[i]) return rest;
+        if (!message.content || !embeddingTextsAndVectorIds[i]) return rest;
         return deepMerge(rest, {
           content: {
             metadata: {
-              vectorIds: embeddingTextsAndIds[i].vectorIds,
+              vectorIds: embeddingTextsAndVectorIds[i].vectorIds,
             },
           },
         });
       });
       const result = this.storage.updateMessages({ messages: updatedMessages });
 
-      if (embeddingTextsAndIds.length && this.vector) {
+      if (embeddingTextsAndVectorIds.length && this.vector) {
         const vector = this.vector;
         const promises: Promise<void | string[]>[] = [];
         // update embeddings
-        embeddingTextsAndIds.forEach(async (el, i) => {
-          const message = messages[i];
-          if (!el || !message?.content) return;
+        embeddingTextsAndVectorIds.forEach(async (textAndVectorId, embeddingIndex) => {
+          const message = messages[embeddingIndex];
+          if (!textAndVectorId || !message?.content) return;
 
           const storedMessage = storedMessagesById[message.id];
           if (!storedMessage) {
             throw new Error(`Message with id ${message.id} not retrieved from storage`);
           }
 
-          const { textForEmbedding, vectorIds } = el;
+          const { textForEmbedding, vectorIds } = textAndVectorId;
           const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
-          const indexName = await this.createEmbeddingIndex(dimension).then(result => result.indexName);
+          const indexName = (await this.createEmbeddingIndex(dimension)).indexName;
 
           // delete embeddings that won't be replaced in the upsert
           const storedVectorIds = storedMessage.content?.metadata?.vectorIds;
@@ -1058,11 +1058,7 @@ ${
     }
   }
 
-  protected getMessageEmbeddingIds(messageId: string, chunkCount: number): string[] {
-    return new Array(chunkCount).fill(null).map((_, chunkIndex) => `${messageId}:${chunkIndex}`);
-  }
-
-  protected getEmbeddingTextAndIds(messages: DeepPartial<MastraMessageV2>[]): ({
+  protected getEmbeddingTextAndVectorIds(messages: DeepPartial<MastraMessageV2>[]): ({
     textForEmbedding: string;
     vectorIds: string[];
   } | null)[] {

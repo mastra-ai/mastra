@@ -8,6 +8,7 @@ import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';
 import type { PostgresConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
+import { embedMany } from 'ai';
 import type { ToolResultPart, TextPart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -646,6 +647,8 @@ export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestCo
     });
 
     describe('Message Updates', () => {
+      const repeat = (text: string, count: number) => Array(count).fill(text).join('\n');
+
       it('should not update embeddings if message text is not passed', async () => {
         if (!memory.vector) return;
         const upsertVectorSpy = vi.spyOn(memory.vector, 'upsert');
@@ -687,7 +690,7 @@ export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
         const messagesThread = [
           createTestMessageV2(thread.id, 'The sky is blue today'),
-          createTestMessageV2(thread.id, 'Message 2'),
+          createTestMessageV2(thread.id, 'Lush, green fields'), // if the search returns this message, one of the updates likely failed
           createTestMessageV2(thread.id, 'Message 3'),
         ];
 
@@ -726,6 +729,126 @@ export function getReusableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(threadScopeResult.messagesV2).toHaveLength(1);
         expect(threadScopeResult.messagesV2[0].id).toBe(updates[1].id);
         expect(threadScopeResult.messagesV2[0].content.content).toBe(updates[1].text);
+      });
+
+      it('should update all embeddings for messages with multiple chunks', async () => {
+        const thread1 = await memory.createThread({
+          resourceId,
+          title: 'Chunked Message Update Thread',
+        });
+
+        const originalContent = repeat('The quick brown fox jumps over the lazy dog', 1000);
+        const firstMessage = createTestMessageV2(thread1.id, originalContent);
+        await memory.saveMessages({
+          format: 'v2',
+          messages: [
+            firstMessage,
+            createTestMessageV2(thread1.id, repeat('This is a long message to test chunking with', 1000)), // insert a duplicate, which will be returned by the query if firstMessage's embeddings aren't updated
+          ],
+        });
+
+        const updatedContent = repeat('This is a long message to test chunk updates with', 1000);
+
+        // replace firstMessage's content with the text we'll query for later
+        await memory.updateMessages(
+          createMessageV2Updates(
+            [
+              {
+                id: firstMessage.id,
+                text: updatedContent,
+              },
+            ],
+            thread1.id,
+          ),
+        );
+
+        const recall = await memory.rememberMessages({
+          threadId: thread1.id,
+          resourceId,
+          vectorMessageSearch: updatedContent,
+          config: {
+            lastMessages: 0,
+            semanticRecall: {
+              topK: 1,
+              messageRange: 0,
+            },
+          },
+        });
+
+        expect(recall.messagesV2[0]?.content.content).toEqual(updatedContent);
+      });
+
+      it.skip('should remove excess embeddings when an updated message has fewer chunks', async () => {
+        const thread1 = await memory.createThread({
+          resourceId,
+          title: 'Chunked Message Update Thread',
+        });
+
+        const initialContent = repeat('This is a long message to test chunking with', 1000);
+        const initialMessage = createTestMessageV2(thread1.id, initialContent);
+        const saveResult = await memory.saveMessages({
+          format: 'v2',
+          messages: [initialMessage],
+        });
+
+        const originalVectorIds = saveResult[0]?.content.metadata?.vectorIds;
+        if (!Array.isArray(originalVectorIds)) {
+          throw new Error(`Vector IDs should be an array; received ${JSON.stringify(originalVectorIds)}`);
+        }
+        // check the original message has multiple embeddings
+        expect(originalVectorIds.length).toBeGreaterThan(1);
+
+        const updatedContent = 'Message 1';
+
+        // replace firstMessage's content with the text we'll query for later
+        const updateResult = await memory.updateMessages(
+          createMessageV2Updates(
+            [
+              {
+                id: initialMessage.id,
+                text: updatedContent,
+              },
+            ],
+            thread1.id,
+          ),
+        );
+
+        const updatedVectorIds = updateResult[0].content.metadata?.vectorIds;
+        if (!Array.isArray(updatedVectorIds)) {
+          throw new Error(`Updated vector IDs should be an array; received ${JSON.stringify(updatedVectorIds)}`);
+        }
+
+        expect(updatedVectorIds).toHaveLength(1);
+
+        // search for embeddings matching the original message text
+        // @ts-expect-error
+        const chunks = memory.chunkText(initialContent);
+        if (!memory.embedder || !memory.vector) {
+          throw new Error('Memory needs an embedding model and vector store');
+        }
+
+        const embeddingResults = await embedMany({
+          values: chunks,
+          model: memory.embedder,
+          maxRetries: 3,
+        });
+
+        // TODO: replace this logic
+        const dimensions = embeddingResults.embeddings[0].length;
+        const { indexSeparator } = memory.vector;
+        const defaultDimensions = 1536;
+        const isDefault = dimensions === defaultDimensions;
+        const usedDimensions = dimensions ?? defaultDimensions;
+        const separator = indexSeparator ?? '_';
+        const indexName = isDefault
+          ? `memory${separator}messages`
+          : `memory${separator}messages${separator}${usedDimensions}`;
+        const recall = await memory.vector.query({
+          indexName,
+          queryVector: embeddingResults.embeddings[0],
+        });
+
+        expect(recall).toHaveLength(1);
       });
     });
 
