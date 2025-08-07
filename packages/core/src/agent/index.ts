@@ -1303,7 +1303,7 @@ export class Agent<
   }
 
   private formatTools(tools: Record<string, CoreTool>): Record<string, CoreTool> {
-    const INVALID_CHAR_REGEX = /[^a-zA-Z0-9_\-]/;
+    const INVALID_CHAR_REGEX = /[^a-zA-Z0-9_\-]/g;
     const STARTING_CHAR_REGEX = /[a-zA-Z_]/;
 
     for (const key of Object.keys(tools)) {
