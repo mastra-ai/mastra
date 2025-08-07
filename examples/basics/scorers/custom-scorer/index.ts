@@ -17,7 +17,7 @@ const result1 = await glutenCheckerScorer.run({
 });
 console.log('Metric Result:', {
   score: result1.score,
-  glutenSources: result1.analyzeStepResult.glutenSources,
+  glutenSources: result1.analyzeStepResult?.glutenSources,
   reason: result1.reason,
 });
 
@@ -35,6 +35,6 @@ const result2 = await glutenCheckerScorer.run({
 });
 console.log('Metric Result:', {
   score: result2.score,
-  glutenSources: result2.analyzeStepResult.glutenSources,
+  glutenSources: result2.analyzeStepResult?.glutenSources,
   reason: result2.reason,
 });

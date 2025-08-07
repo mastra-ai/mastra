@@ -1,5 +1,12 @@
 # @mastra/schema-compat
 
+## 0.10.7-alpha.0
+
+### Patch Changes
+
+- dd94a26: Dont rely on the full language model for schema compat
+- 2fff911: Fix vnext working memory tool schema when model is incompatible with schema
+
 ## 0.10.6
 
 ### Patch Changes

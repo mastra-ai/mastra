@@ -157,7 +157,7 @@ export class CloudflareDeployer extends Deployer {
     serverFile: string,
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
-    toolsPaths: string[],
+    toolsPaths: (string | string[])[],
   ) {
     const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths);
 
@@ -176,7 +176,7 @@ process.versions.node = '${process.versions.node}';
     return inputOptions;
   }
 
-  async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+  async bundle(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
   }
 
@@ -188,7 +188,7 @@ process.versions.node = '${process.versions.node}';
     throw new Error('tagWorker method is no longer supported. Use the Cloudflare dashboard or API directly.');
   }
 
-  async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+  async lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     await super.lint(entryFile, outputDirectory, toolsPaths);
 
     const hasLibsql = (await this.deps.checkDependencies(['@mastra/libsql'])) === `ok`;

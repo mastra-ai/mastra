@@ -1,5 +1,36 @@
 # @mastra/dane
 
+## 0.0.43-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [8388649]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [2fff911]
+- Updated dependencies [1be6004]
+  - @mastra/core@0.13.2-alpha.0
+  - @mastra/memory@0.12.2-alpha.0
+  - @mastra/rag@1.0.8-alpha.0
+
+## 0.0.42
+
+### Patch Changes
+
+- Updated dependencies [8888b57]
+- Updated dependencies [cd0042e]
+  - @mastra/libsql@0.13.1
+  - @mastra/core@0.13.1
+
+## 0.0.42-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [8888b57]
+- Updated dependencies [cd0042e]
+  - @mastra/libsql@0.13.1-alpha.0
+  - @mastra/core@0.13.1-alpha.0
+
 ## 0.0.41
 
 ### Patch Changes

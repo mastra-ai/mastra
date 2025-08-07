@@ -1,5 +1,16 @@
 # @mastra/memory
 
+## 0.12.2-alpha.0
+
+### Patch Changes
+
+- 2fff911: Fix vnext working memory tool schema when model is incompatible with schema
+- Updated dependencies [8388649]
+- Updated dependencies [dd94a26]
+- Updated dependencies [3ba6772]
+- Updated dependencies [2fff911]
+  - @mastra/core@0.13.2-alpha.0
+
 ## 0.12.1
 
 ### Patch Changes

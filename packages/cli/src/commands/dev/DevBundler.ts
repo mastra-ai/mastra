@@ -45,7 +45,11 @@ export class DevBundler extends Bundler {
     });
   }
 
-  async watch(entryFile: string, outputDirectory: string, toolsPaths: string[]): ReturnType<typeof createWatcher> {
+  async watch(
+    entryFile: string,
+    outputDirectory: string,
+    toolsPaths: (string | string[])[],
+  ): ReturnType<typeof createWatcher> {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
 
