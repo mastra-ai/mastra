@@ -174,9 +174,6 @@ async function runSingleInputTest(
     const toolCall = response.toolCalls.find(tc => tc.toolName === toolName);
     const toolResult = response.toolResults.find(tr => tr.toolCallId === toolCall?.toolCallId);
 
-    console.log(`toolResult`, toolResult);
-    console.log(`response`, response.text);
-
     if (toolResult?.result?.success) {
       return {
         modelName: model.modelId,
@@ -200,7 +197,6 @@ async function runSingleInputTest(
       };
     }
   } catch (e: any) {
-    console.log(`errrrorr`, e);
     let status: Result['status'] = 'error';
     if (e.message.includes('does not support zod type:')) {
       status = 'expected-error';
