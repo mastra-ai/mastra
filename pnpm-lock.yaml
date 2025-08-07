@@ -293,6 +293,9 @@ importers:
         specifier: ^3.25.67
         version: 3.25.76
     devDependencies:
+      '@babel/types':
+        specifier: ^7.28.2
+        version: 7.28.2
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -305,6 +308,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.9)
+      '@types/babel__core':
+        specifier: ^7.20.5
+        version: 7.20.5
       '@types/node':
         specifier: ^20.17.57
         version: 20.19.9

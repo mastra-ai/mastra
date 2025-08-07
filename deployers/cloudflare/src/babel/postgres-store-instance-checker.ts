@@ -1,5 +1,6 @@
 import type { NodePath, PluginObj } from '@babel/core';
-import * as t from '@babel/types';
+import * as babel from '@babel/core';
+import type { NewExpression } from '@babel/types';
 
 /**
  * Babel plugin that enforces singleton PostgresStore instances in Cloudflare Workers.
@@ -20,7 +21,8 @@ import * as t from '@babel/types';
  * const store2 = new PostgresStore(); // Error thrown here
  */
 export function postgresStoreInstanceChecker(): PluginObj {
-  const instances: { path: NodePath<t.NewExpression>; location: string }[] = [];
+  const t = babel.types;
+  const instances: { path: NodePath<NewExpression>; location: string }[] = [];
 
   return {
     name: 'postgresstore-instance-checker',

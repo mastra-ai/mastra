@@ -1,5 +1,5 @@
-import type { NodePath, PluginObj } from '@babel/core';
-import * as t from '@babel/types';
+import type { PluginObj } from '@babel/core';
+import * as babel from '@babel/core';
 
 /**
  * Babel plugin that transforms Mastra exports for Cloudflare Workers compatibility.
@@ -25,11 +25,12 @@ import * as t from '@babel/types';
 export function mastraInstanceWrapper(): PluginObj {
   const exportName = 'mastra';
   const className = 'Mastra';
+  const t = babel.types;
 
   return {
     name: 'wrap-mastra',
     visitor: {
-      ExportNamedDeclaration(path: NodePath<t.ExportNamedDeclaration>) {
+      ExportNamedDeclaration(path) {
         if (t.isVariableDeclaration(path.node?.declaration)) {
           for (const declaration of path.node.declaration.declarations) {
             if (
