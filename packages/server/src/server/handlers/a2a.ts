@@ -12,7 +12,7 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { z } from 'zod';
 import { convertToCoreMessage, normalizeError, createSuccessResponse, createErrorResponse } from '../a2a/protocol';
-import { InMemoryTaskStore } from '../a2a/store';
+import type { InMemoryTaskStore } from '../a2a/store';
 import { applyUpdateToTask, createTaskContext, loadOrCreateTask } from '../a2a/tasks';
 import type { Context } from '../types';
 

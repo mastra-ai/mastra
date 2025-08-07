@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import type { Message, Task, MessageSendParams } from '@mastra/core/a2a';
+import type { Task, MessageSendParams } from '@mastra/core/a2a';
 import { MastraA2AError } from '@mastra/core/a2a';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
@@ -7,7 +7,6 @@ import { Mastra } from '@mastra/core/mastra';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import type { MastraStorage } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { convertToCoreMessage } from '../a2a/protocol';
 import { InMemoryTaskStore } from '../a2a/store';
 import {
   getAgentCardByIdHandler,
@@ -234,7 +233,6 @@ describe('A2A Handler', () => {
 
     it('should handle errors from agent.generate and save failed state', async () => {
       const requestId = 'test-request-id';
-      const taskId = 'test-task-id';
       const messageId = 'test-message-id';
       const agentId = 'test-agent';
       const userMessage = 'Hello, agent!';
