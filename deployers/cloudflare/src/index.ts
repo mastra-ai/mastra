@@ -101,6 +101,10 @@ export class CloudflareDeployer extends Deployer {
     import { AvailableHooks, registerHook } from '@mastra/core/hooks';
     import { TABLE_EVALS } from '@mastra/core/storage';
     import { checkEvalStorageFields } from '@mastra/core/utils';
+    import { telemetry } from '#telemetry-config';
+    import { instrument } from '@microlabs/otel-cf-workers';
+
+    globalThis.___MASTRA_TELEMETRY___ = true;
 
     registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
       evaluate({
@@ -140,12 +144,37 @@ export class CloudflareDeployer extends Deployer {
       }
     });
 
-    export default {
-      fetch: async (request, env, context) => {
-        const app = await createHonoServer(mastra, { tools: getToolExports(tools) });
-        return app.fetch(request, env, context);
+    const handler = async (request, env, context) => {
+      const app = await createHonoServer(mastra, { tools: getToolExports(tools) });
+      return app.fetch(request, env, context);
+    };
+
+    // Create config function for Cloudflare Workers telemetry
+    const config = (env) => {
+      const telemetryConfig = {
+        service: {
+          name: telemetry.serviceName || 'mastra-cloudflare-worker',
+        },
+      };
+
+
+      // Configure export
+        // Configure export
+      if (telemetry.export) {
+        telemetryConfig.exporter = {
+          url: telemetry.export.endpoint,
+          headers: telemetry.export.headers || {},
+        };
       }
-    }
+
+      return telemetryConfig;
+    };
+
+    export default telemetry.enabled !== false ? instrument({
+      fetch: handler,
+    }, config) : {
+      fetch: handler,
+    };
 `;
   }
   async prepare(outputDirectory: string): Promise<void> {
