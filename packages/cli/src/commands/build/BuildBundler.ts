@@ -93,7 +93,7 @@ export class BuildBundler extends Bundler {
     `;
   }
 
-  async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
+  async lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     await super.lint(entryFile, outputDirectory, toolsPaths);
   }
 }
