@@ -41,6 +41,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@mastra/schema-compat": "workspace:*",
     "@upstash/redis": "^1.35.3",
     "ai": "^4.3.16",
     "js-tiktoken": "^1.0.20",
